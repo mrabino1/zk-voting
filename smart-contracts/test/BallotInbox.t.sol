@@ -10,19 +10,21 @@ import {IdentityCommitment} from "../src/IdentityCommitment.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
-/// @notice Ballot inbox: MockVerifier happy path, once-only ballot, voting window.
+/// @notice Ballot inbox: MockVerifier happy path, per-election once-only ballot, voting window.
 ///
-/// Product rule: one accepted ballot per voting identity per election.
-/// The Merkle leaf is an identity commitment, not a wallet; `msg.sender` is
-/// typically the relayer. Uniqueness is the spent nullifier, not the submitter.
-/// A person may change their mind off-chain, but a second accepted on-chain
-/// ballot is impossible — this is nullifier / double-vote rejection, not
-/// last-vote-counts (the first ciphertext is not superseded).
+/// Product rule: **one accepted ballot per voting identity per individual election**.
+/// This is not a lifetime / once-ever ban: the same person may cast a first vote
+/// in every election they are eligible for. Uniqueness is the spent nullifier
+/// keyed by `(electionId, nullifier)`, not the submitter wallet. The Merkle leaf
+/// is an identity commitment; `msg.sender` is typically the relayer.
 ///
-/// Nullifier scope: BallotInbox keys spentness by `(electionId, nullifier)` only.
-/// Circuits bind `nullifier = Hash(nullifierSecret, electionId)` with no question
-/// index, so a multi-question election still spends one election-scoped nullifier.
-/// Distinct per-question nullifiers would be different field values and would both
+/// Same election: a second `submitVote` (including a mind-change / different
+/// ciphertext) reverts `NullifierUsed` — not last-vote-counts.
+/// Different elections: first vote in each can succeed (nullifiers are
+/// election-scoped: `Hash(nullifierSecret, electionId)`).
+///
+/// Circuits do not bind a question index. `questionCount > 1` still spends one
+/// election-scoped nullifier. Distinct per-question nullifier fields would both
 /// be accepted today; the inbox has no per-question spent map.
 contract BallotInboxTest is Deployer {
     uint256 internal electionId;
@@ -57,9 +59,9 @@ contract BallotInboxTest is Deployer {
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(enc)));
     }
 
-    /// @notice First `submitVote` with nullifier N is accepted; a second call with
-    ///         the same nullifier reverts `NullifierUsed` (once-only / double-vote).
-    function testOnceOnly_doubleVoteSameNullifierReverts() public {
+    /// @notice Same identity + same election + second submit → `NullifierUsed`.
+    ///         One vote per individual election, not a lifetime ban.
+    function testPerElection_sameIdentitySecondSubmitReverts() public {
         warpOpen(election);
         submitVote(electionId, election, nullifier);
         assertEq(inbox.acceptedBallots(electionId), 1);
@@ -70,15 +72,19 @@ contract BallotInboxTest is Deployer {
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
 
-    /// @dev Kept so existing CI / grep for "DoubleVote" still hits a test name.
+    /// @dev Historical name: same-election double-vote rejection.
     function testDoubleVoteSameNullifierReverts() public {
-        testOnceOnly_doubleVoteSameNullifierReverts();
+        testPerElection_sameIdentitySecondSubmitReverts();
     }
 
-    /// @notice Same identity, different choice/ciphertext, same nullifier: still
-    ///         rejected. Off-chain mind-change does not authorize a second accept;
-    ///         the first ballot hash is not superseded (not last-vote-counts).
-    function testOnceOnly_sameIdentityDifferentCiphertextStillRejected() public {
+    function testOnceOnly_doubleVoteSameNullifierReverts() public {
+        testPerElection_sameIdentitySecondSubmitReverts();
+    }
+
+    /// @notice Mind-change does not allow a second accept **within the same election**.
+    ///         Different ciphertext, same nullifier: still `NullifierUsed`; first
+    ///         ballot hash is not superseded (not last-vote-counts).
+    function testPerElection_mindChangeSameElectionStillRejected() public {
         warpOpen(election);
         bytes memory firstChoice = abi.encodePacked("elgamal-choice-A", nullifier);
         bytes memory mindChange = abi.encodePacked("elgamal-choice-B-mind-change", nullifier);
@@ -90,13 +96,18 @@ contract BallotInboxTest is Deployer {
         assertEq(inbox.acceptedBallots(electionId), 1);
 
         _expectNullifierUsed(electionId, election, nullifier, mindChange);
-        assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot");
+        assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot in this election");
         assertEq(inbox.ballotHashOf(electionId, nullifier), stored, "first ballot must not be superseded");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
 
-    /// @notice Different nullifiers (different voting identities) can both succeed.
-    function testOnceOnly_differentVotersDistinctNullifiersBothSucceed() public {
+    function testOnceOnly_sameIdentityDifferentCiphertextStillRejected() public {
+        testPerElection_mindChangeSameElectionStillRejected();
+    }
+
+    /// @notice Different nullifiers (different voting identities) in the **same**
+    ///         election can both succeed.
+    function testPerElection_differentVotersDistinctNullifiersBothSucceed() public {
         warpOpen(election);
         uint256 n1 = uint256(keccak256("voter-identity-1"));
         uint256 n2 = uint256(keccak256("voter-identity-2"));
@@ -108,12 +119,72 @@ contract BallotInboxTest is Deployer {
     }
 
     function testDistinctNullifiersCountSeparately() public {
-        testOnceOnly_differentVotersDistinctNullifiersBothSucceed();
+        testPerElection_differentVotersDistinctNullifiersBothSucceed();
     }
 
-    /// @notice Current circuit formula is election-scoped, not per-question.
-    ///         `questionCount > 1` does not give the same identity a second accept.
-    function testOnceOnly_multiQuestionElectionStillOneBallotPerNullifier() public {
+    /// @notice Same identity + **different** elections: first vote in each succeeds.
+    ///         Nullifiers are election-scoped (`Hash(nullifierSecret, electionId)`),
+    ///         not a global once-ever ban.
+    function testPerElection_sameIdentityFirstVoteInEachElectionSucceeds() public {
+        uint256 trapdoor = uint256(keccak256("trapdoor-person"));
+        uint256 secret = uint256(keccak256("nullifierSecret-person"));
+        uint256 leaf = IdentityCommitment.toLeaf(trapdoor, secret);
+
+        (uint256 idA, address elA) = createElection();
+        (uint256 idB, address elB) = createElection();
+        assertTrue(idA != idB);
+
+        registerVoter(idA, leaf);
+        registerVoter(idB, leaf);
+        freezeRoll(elA);
+        freezeRoll(elB);
+        warpOpen(elA);
+        warpOpen(elB);
+
+        uint256 nA = IdentityCommitment.nullifier(secret, idA);
+        uint256 nB = IdentityCommitment.nullifier(secret, idB);
+        assertTrue(nA != nB, "nullifier binds electionId; not a lifetime spent key");
+
+        submitVote(idA, elA, nA);
+        submitVote(idB, elB, nB);
+        assertEq(inbox.acceptedBallots(idA), 1, "first vote in election A");
+        assertEq(inbox.acceptedBallots(idB), 1, "first vote in election B is not banned by A");
+        assertTrue(inbox.nullifierUsed(idA, nA));
+        assertTrue(inbox.nullifierUsed(idB, nB));
+        assertFalse(inbox.nullifierUsed(idA, nB), "B's nullifier is not spent in A");
+        assertFalse(inbox.nullifierUsed(idB, nA), "A's nullifier is not spent in B");
+
+        _expectNullifierUsed(idA, elA, nA, Fixtures.encryptedBallot(nA));
+        _expectNullifierUsed(idB, elB, nB, Fixtures.encryptedBallot(nB));
+        assertEq(inbox.acceptedBallots(idA), 1);
+        assertEq(inbox.acceptedBallots(idB), 1);
+    }
+
+    /// @notice Inbox mapping isolation: the same field value may be spent once in
+    ///         election A and once in election B. Spentness is not global.
+    function testNullifiersIsolatedPerElection() public {
+        (uint256 idB, address elB) = createElection();
+        registerVoter(idB, Fixtures.identityCommitment(uint256(57)));
+        freezeRoll(elB);
+
+        warpOpen(election);
+        warpOpen(elB);
+
+        submitVote(electionId, election, nullifier);
+        submitVote(idB, elB, nullifier);
+
+        assertTrue(inbox.nullifierUsed(electionId, nullifier));
+        assertTrue(inbox.nullifierUsed(idB, nullifier));
+        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(inbox.acceptedBallots(idB), 1);
+    }
+
+    function testOnceOnly_identityCommitmentNullifierIsElectionScoped() public {
+        testPerElection_sameIdentityFirstVoteInEachElectionSucceeds();
+    }
+
+    /// @notice `questionCount > 1` still one accept per identity **in that election**.
+    function testPerElection_multiQuestionStillOneBallotPerNullifier() public {
         ElectionParams memory p = defaultParams();
         p.questionCount = 2;
         (uint256 id, address el) = createElection(p);
@@ -133,10 +204,13 @@ contract BallotInboxTest is Deployer {
         assertEq(inbox.ballotHashOf(id, n), bytes32(Fixtures.ballotHash(q1)));
     }
 
-    /// @notice If two identities produce distinct nullifier fields, both succeed
-    ///         even when `questionCount == 2`. Per-question uniqueness is not a
-    ///         separate inbox mapping — only the nullifier field is spent.
-    function testOnceOnly_distinctNullifiersSucceedWhenQuestionCountIsTwo() public {
+    function testOnceOnly_multiQuestionElectionStillOneBallotPerNullifier() public {
+        testPerElection_multiQuestionStillOneBallotPerNullifier();
+    }
+
+    /// @notice Distinct nullifier fields both succeed in one multi-question election.
+    ///         There is no per-question spent map — and no lifetime ban.
+    function testPerElection_distinctNullifiersSucceedWhenQuestionCountIsTwo() public {
         ElectionParams memory p = defaultParams();
         p.questionCount = 2;
         (uint256 id, address el) = createElection(p);
@@ -147,18 +221,6 @@ contract BallotInboxTest is Deployer {
         submitVote(id, el, uint256(keccak256("q2-n1")));
         submitVote(id, el, uint256(keccak256("q2-n2")));
         assertEq(inbox.acceptedBallots(id), 2);
-    }
-
-    /// @notice Solidity stand-in matches the circuit: Hash(nullifierSecret, electionId).
-    function testOnceOnly_identityCommitmentNullifierIsElectionScoped() public {
-        warpOpen(election);
-        uint256 secret = uint256(keccak256("nullifierSecret-55"));
-        uint256 n = IdentityCommitment.nullifier(secret, electionId);
-        assertTrue(n != IdentityCommitment.nullifier(secret, electionId + 1), "nullifier binds electionId");
-
-        submitVote(electionId, election, n);
-        _expectNullifierUsed(electionId, election, n, Fixtures.encryptedBallot(n));
-        assertEq(inbox.acceptedBallots(electionId), 1);
     }
 
     function testVotingBeforeStartReverts() public {
@@ -180,23 +242,6 @@ contract BallotInboxTest is Deployer {
         warpOpen(el);
         assertFalse(IElection(el).rollFrozen());
         expectSubmitVoteRevert(id, el, uint256(keccak256("unfrozen")));
-    }
-
-    function testNullifiersIsolatedPerElection() public {
-        (uint256 idB, address elB) = createElection();
-        registerVoter(idB, Fixtures.identityCommitment(uint256(57)));
-        freezeRoll(elB);
-
-        warpOpen(election);
-        warpOpen(elB);
-
-        submitVote(electionId, election, nullifier);
-        submitVote(idB, elB, nullifier);
-
-        assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertTrue(inbox.nullifierUsed(idB, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.acceptedBallots(idB), 1);
     }
 
     function _submitVote(uint256 id, address el, uint256 n, bytes memory enc) internal {

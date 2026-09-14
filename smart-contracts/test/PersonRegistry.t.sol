@@ -52,8 +52,8 @@ contract PersonRegistryTest is Test {
     }
 
     /// @notice One ETH address is bound to at most one person. Orthogonal to
-    ///         ballot uniqueness (votes are keyed by identity-commitment nullifiers;
-    ///         `msg.sender` on `submitVote` is typically the relayer).
+    ///         ballot uniqueness (votes are keyed by identity-commitment nullifiers
+    ///         **per election**; `msg.sender` on `submitVote` is typically the relayer).
     function testOneAddressBoundToOnePerson_secondPersonCannotClaimIt() public {
         vm.prank(registrar);
         registry.verifyAddress(personA, addrA);

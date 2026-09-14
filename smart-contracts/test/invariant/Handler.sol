@@ -112,8 +112,8 @@ contract Handler is Deployer, Ghost {
         _tryVote(electionSeed, nullifier, encryptedBallot);
     }
 
-    /// @notice Once-only / double-vote: retry a spent nullifier with a (possibly
-    ///         different) ciphertext. Must revert; the handler records a bug if not.
+    /// @notice Same-election double-vote: retry a spent nullifier with a (possibly
+    ///         different) ciphertext. Must revert; does not ban other elections.
     function doubleVote(uint256 electionSeed, uint256 spentIndex, bytes calldata encryptedBallot) public {
         _tryDoubleVote(electionSeed, spentIndex, encryptedBallot);
     }
