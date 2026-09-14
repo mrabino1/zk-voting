@@ -226,7 +226,7 @@
     const typeOpts = ASPECT_TYPES.map(
       ([value, label]) => `<option value="${esc(value)}"${value === type ? " selected" : ""}>${esc(label)}</option>`
     ).join("");
-    const showMax = type === "MULTI_CHOICE" ? "" : " hidden";
+    const maxHidden = type === "MULTI_CHOICE" ? "" : " hidden";
     return `<article class="aspect-card" data-index="${index}">
       <header>
         <h3>Question ${index + 1}</h3>
@@ -242,7 +242,7 @@
           <input class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
         </div>
       </div>
-      <div class="field aspect-max${showMax}">
+      <div class="field aspect-max"${maxHidden}>
         <label class="field-label">Max selections</label>
         <input class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
       </div>
