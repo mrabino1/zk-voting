@@ -245,7 +245,7 @@ The Node side is the human product. It should feel operationally familiar to any
 ### What it is responsible for
 
 - **Voter UI:** registration intake, identity/document collection as required by the jurisdiction, status (“registered”, “eligible”, “disqualified”, “ballot accepted”), ballot UI, confirmation.
-- **Official UI:** create a jurisdiction and an election, define questions and options, manage the roll, record disqualifications with a reason code and evidence reference, freeze the roll, open/close voting, publish the tally.
+- **Official UI:** create a jurisdiction and an election, choose plurality or ranked-choice (IRV), define questions and ordered options, manage the roll, record disqualifications with a reason code and evidence reference, freeze the roll, open/close voting, publish the tally (including an IRV round transcript).
 - **Public UI:** election calendar, certified parameters (chain, contract addresses, merkle roots, proving-key hashes), **hourly** published ballot counts (never a live precinct tick), final results and verifier artifacts.
 - **API:** the same jobs as HTTP, so a jurisdiction’s own systems or a kiosk can be wired in without scraping the frontend.
 - **Proof client:** help the browser or a local helper build the witness for registration, vote, and (when needed) eligibility refresh. The Node may **orchestrate** proving; it must not be the only place a proof can be produced.
@@ -342,7 +342,7 @@ npm workspaces (Node 22):
 
 | Package | Role |
 | --- | --- |
-| `@zk-voting/types` | JSDoc types: `ElectionParams`, `VoteEnvelope`, `Block`, `Jurisdiction`; reason codes and election states matching Solidity |
+| `@zk-voting/types` | JSDoc types: `ElectionParams`, `VoteEnvelope`, `Block`, `Jurisdiction`, `BallotMethod`, `QuestionType`; reason codes and election states matching Solidity |
 | `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; `encodePacked` mock; Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
 | `@zk-voting/chain-client` | `getFactory`, `createElection`, `submitVote` through viem `writeContract` / `encodeFunctionData`, else `fetch` JSON-RPC `eth_call` wrappers for views |
 
@@ -490,11 +490,15 @@ An election is not only “choose one candidate.” Officials and voters need to
 
 Each **Election** contains one or more **questions**:
 
-- `SINGLE_CHOICE` — one option
+- `SINGLE_CHOICE` — one option (plurality unless the election default is `ranked_choice`)
 - `MULTI_CHOICE` — up to *k* options
 - `YES_NO`
-- `RANKED` — if the jurisdiction wants it (later)
+- `RANKED` — ordered options; voters rank them; tally is instant-runoff (IRV)
 - `MEASURE` / `ARTICLE` — labeled text plus options
+
+Ballot method is **election-level or per-question**: `plurality` (default, first past the post) or `ranked_choice` (IRV). Clerks pick the flavor when creating or editing a ballot (before roll freeze). RANKED questions always use IRV; YES_NO stays plurality.
+
+The Node stores an IRV **round transcript** (aggregate first-preference counts per round, eliminated candidate, winner) with the tally. Individual rankings are not published. On-chain v1 does **not** add a Solidity method enum; the method lives in the canonical ballot JSON hashed into `ballotSpecHash`. The Groth16 tally circuit remains the concatenated per-option count vector (first-round preferences for ranked questions).
 
 Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar).
 

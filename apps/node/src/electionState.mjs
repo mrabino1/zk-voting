@@ -39,6 +39,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     maxParticipants: election.maxParticipants,
     treeDepth: election.treeDepth,
     ballotSpecHash: election.ballotSpecHash,
+    ballotMethod: election.ballotMethod || 'plurality',
     questionCount: election.questionCount,
     questions: election.questions,
     jurisdictionId: election.jurisdictionId,
@@ -63,7 +64,12 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     state,
     stateName: STATE_NAMES[state],
     tally: election.tally
-      ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
+      ? {
+          counts: election.tally.counts,
+          postedAt: election.tally.postedAt,
+          ballotMethod: election.tally.ballotMethod || election.ballotMethod || 'plurality',
+          ...(Array.isArray(election.tally.questions) ? { questions: election.tally.questions } : {}),
+        }
       : null,
     createdAt: election.createdAt,
     disclosure: disclosurePublicView(now, interval),

@@ -12,6 +12,7 @@ import { toBytes32 } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import { publicVoteRecord } from './store.mjs';
+import { extractRankingPayload } from './ballot.mjs';
 
 function toEncryptedHex(encryptedBallot) {
   if (typeof encryptedBallot === 'string' && encryptedBallot.startsWith('0x')) {
@@ -186,6 +187,8 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     });
   }
 
+  const rankingPayload = extractRankingPayload(election, body, parsed.encryptedBallot);
+
   const vote = await store.acceptVote(
     {
       nullifier: parsed.nullifier,
@@ -194,7 +197,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       relayer: 'node',
       acceptedAt: ts,
     },
-    { encryptedBallot: parsed.encryptedBallot },
+    { encryptedBallot: parsed.encryptedBallot, rankingPayload },
   );
 
   await explorer.recordVote(

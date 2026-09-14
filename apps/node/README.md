@@ -91,11 +91,12 @@ Passkey rpName is always **Republic**.
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
+PATCH /api/elections/:id           (clerk; before roll freeze; ballot method + questions)
 GET  /api/elections/:id
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator)
+POST /api/elections/:id/tally       (tally operator; IRV when the ballot is ranked_choice)
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods
@@ -119,6 +120,11 @@ GET  /api/explorer/txs/:hash
 POST /api/explorer/ingest
 GET  /api/config
 ```
+
+Ballot methods: `plurality` (default) and `ranked_choice` (IRV). RANKED questions
+carry ordered options; voters rank them; `POST /tally` with no `counts` computes
+the IRV winner and round transcript. On-chain v1 may keep the method only inside
+`ballotSpecHash`.
 
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools.

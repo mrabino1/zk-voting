@@ -172,6 +172,13 @@ struct ElectionParams {
 }
 ```
 
+`ballotSpecHash` is keccak256 of the canonical ballot JSON, which includes
+the election `ballotMethod` (`plurality` | `ranked_choice`) and per-question
+types (`YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED`, …). On-chain v1
+does **not** add a method enum to `ElectionParams`; IRV lives in that hash
+and in the Node tally transcript. `submitTally` still posts a concatenated
+per-option count vector (first-round first preferences for ranked questions).
+
 ### `IElectionFactory`
 
 ```solidity
@@ -435,11 +442,12 @@ the DealPunchList "organizations". Elections are the "rooms".
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk)
+PATCH /api/elections/:id           (clerk; before roll freeze)
 GET  /api/elections/:id
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
-POST /api/elections/:id/tally
+POST /api/elections/:id/tally        (plurality counts, or IRV from ranked envelopes)
 GET  /api/me
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish

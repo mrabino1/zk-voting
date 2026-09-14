@@ -108,6 +108,43 @@
     );
   }
 
+  const DEFAULT_PLURALITY_QUESTIONS = `[
+  {
+    "type": "YES_NO",
+    "prompt": "Shall the measure be adopted?",
+    "options": ["No", "Yes"]
+  }
+]`;
+
+  const DEFAULT_RANKED_QUESTIONS = `[
+  {
+    "type": "RANKED",
+    "prompt": "Rank the candidates for this office.",
+    "options": [
+      { "id": "a", "label": "Alex Rivera" },
+      { "id": "b", "label": "Morgan Chen" },
+      { "id": "c", "label": "Sam Okonkwo" }
+    ]
+  }
+]`;
+
+  function isoLocal(unix) {
+    const d = new Date(Number(unix) * 1000);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      "T" +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes())
+    );
+  }
+
   function toUnix(datetimeLocal) {
     const ms = new Date(datetimeLocal).getTime();
     if (Number.isNaN(ms)) throw new Error("Invalid datetime");
@@ -260,10 +297,19 @@
       const rows = asList(data, ["elections", "items"]);
       const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election")];
       for (const sel of selects) fillSelect(sel, rows, electionIdOf, electionLabel);
+      const editable = rows.filter((row) => !row.rollFrozen);
+      const editSel = $("e-edit");
+      const keep = editSel.value;
+      editSel.innerHTML =
+        '<option value="">Create new…</option>' +
+        editable
+          .map((row) => `<option value="${esc(electionIdOf(row))}">${esc(electionLabel(row))}</option>`)
+          .join("");
+      if (keep && [...editSel.options].some((o) => o.value === keep)) editSel.value = keep;
       if (rows[0]) wireExplorerLinks(electionIdOf(rows[0]));
     } catch (err) {
-      for (const id of ["f-election", "r-election", "d-election", "t-election"]) {
-        $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
+      for (const id of ["f-election", "r-election", "d-election", "t-election", "e-edit"]) {
+        if ($(id)) $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
       }
     }
   }
@@ -335,14 +381,116 @@
       cutoffTime,
       maxParticipants: Number($("e-max").value || 0),
       treeDepth: Number($("e-depth").value),
+      ballotMethod: $("e-method").value || "plurality",
       questions,
       jurisdictionId: $("e-jurisdiction").value,
     };
+    const editId = $("e-id").value.trim();
     try {
-      const created = await request("/api/elections", { method: "POST", body });
-      const id = pick(created, ["election.id", "id"]) || "";
-      flash($("flash-election"), "ok", "Created election" + (id ? " " + id : "") + ". Freeze the roll before opening.");
+      const created = editId
+        ? await request("/api/elections/" + encodeURIComponent(editId), { method: "PATCH", body })
+        : await request("/api/elections", { method: "POST", body });
+      const id = pick(created, ["election.id", "id"]) || editId || "";
+      flash(
+        $("flash-election"),
+        "ok",
+        (editId ? "Updated election " : "Created election ") +
+          (id || "") +
+          ". Freeze the roll before opening."
+      );
+      $("e-id").value = "";
+      $("e-edit").value = "";
+      $("btn-save-election").textContent = "Create election";
       await loadElections();
+    } catch (err) {
+      flash($("flash-election"), "err", errText(err));
+    }
+  });
+
+  $("e-method").addEventListener("change", () => {
+    const current = $("e-questions").value.trim();
+    const plurality = DEFAULT_PLURALITY_QUESTIONS.trim();
+    const ranked = DEFAULT_RANKED_QUESTIONS.trim();
+    if ($("e-method").value === "ranked_choice" && (current === plurality || current === "")) {
+      $("e-questions").value = DEFAULT_RANKED_QUESTIONS;
+      $("e-q-type").value = "RANKED";
+      $("e-q-options").value = "Alex Rivera\nMorgan Chen\nSam Okonkwo";
+    } else if ($("e-method").value === "plurality" && current === ranked) {
+      $("e-questions").value = DEFAULT_PLURALITY_QUESTIONS;
+      $("e-q-type").value = "YES_NO";
+      $("e-q-options").value = "Yes\nNo";
+    }
+  });
+
+  $("btn-add-question").addEventListener("click", () => {
+    let questions;
+    try {
+      questions = JSON.parse($("e-questions").value);
+      if (!Array.isArray(questions)) questions = [];
+    } catch {
+      flash($("flash-election"), "err", "Questions JSON is invalid; fix it before appending.");
+      return;
+    }
+    const type = $("e-q-type").value;
+    const prompt = $("e-q-prompt").value.trim() || (type === "RANKED" ? "Rank the candidates." : "New question");
+    const optionLines = $("e-q-options")
+      .value.split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    let options;
+    if (type === "YES_NO" && optionLines.length === 0) options = ["Yes", "No"];
+    else {
+      options = optionLines.map((line, i) => {
+        const letter = String.fromCharCode(97 + i);
+        return { id: letter, label: line };
+      });
+    }
+    const question = { type, prompt, options };
+    if (type === "RANKED") question.ballotMethod = "ranked_choice";
+    questions.push(question);
+    $("e-questions").value = JSON.stringify(questions, null, 2);
+    $("e-q-prompt").value = "";
+    flash($("flash-election"), "ok", "Appended " + type + " question. Option order is the printed ballot order.");
+  });
+
+  $("e-q-type").addEventListener("change", () => {
+    if ($("e-q-type").value === "RANKED" && $("e-q-options").value.trim() === "Yes\nNo") {
+      $("e-q-options").value = "Alex Rivera\nMorgan Chen\nSam Okonkwo";
+    }
+  });
+
+  $("btn-reset-election").addEventListener("click", () => {
+    $("e-id").value = "";
+    $("e-edit").value = "";
+    $("e-title").value = "";
+    $("e-uri").value = "";
+    $("e-method").value = "plurality";
+    $("e-questions").value = DEFAULT_PLURALITY_QUESTIONS;
+    $("btn-save-election").textContent = "Create election";
+    defaultTimes();
+  });
+
+  $("e-edit").addEventListener("change", async () => {
+    const id = $("e-edit").value;
+    if (!id) {
+      $("btn-reset-election").click();
+      return;
+    }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(id));
+      const election = data.election || data;
+      $("e-id").value = String(election.id);
+      $("e-title").value = election.title || "";
+      $("e-uri").value = election.metadataURI || "";
+      $("e-method").value = election.ballotMethod === "ranked_choice" ? "ranked_choice" : "plurality";
+      if (election.jurisdictionId) $("e-jurisdiction").value = election.jurisdictionId;
+      if (election.startTime) $("e-start").value = isoLocal(election.startTime);
+      if (election.cutoffTime) $("e-cutoff").value = isoLocal(election.cutoffTime);
+      if (election.maxParticipants != null) $("e-max").value = String(election.maxParticipants);
+      if (election.treeDepth) $("e-depth").value = String(election.treeDepth);
+      $("e-questions").value = JSON.stringify(election.questions || [], null, 2);
+      $("btn-save-election").textContent = "Save ballot";
+      flash($("flash-election"), "ok", "Loaded election " + id + " for edit.");
     } catch (err) {
       flash($("flash-election"), "err", errText(err));
     }
@@ -494,17 +642,25 @@
   $("form-tally").addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = $("t-election").value;
-    let counts;
-    try {
-      counts = JSON.parse($("t-counts").value);
-      if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
-        throw new Error("Counts must be a JSON array of non-negative integers.");
-      }
-    } catch (err) {
-      flash($("flash-tally"), "err", err.message || "Counts JSON is invalid.");
+    if (!id) {
+      flash($("flash-tally"), "err", "Choose an election.");
       return;
     }
-    const body = { counts };
+    const raw = $("t-counts").value.trim();
+    const body = {};
+    if (raw) {
+      let counts;
+      try {
+        counts = JSON.parse(raw);
+        if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
+          throw new Error("Counts must be a JSON array of non-negative integers.");
+        }
+      } catch (err) {
+        flash($("flash-tally"), "err", err.message || "Counts JSON is invalid.");
+        return;
+      }
+      body.counts = counts;
+    }
     const proofRaw = $("t-proof").value.trim();
     if (proofRaw) {
       try {
@@ -515,8 +671,39 @@
       }
     }
     try {
-      await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
-      flash($("flash-tally"), "ok", "Tally posted. Sum(counts) must equal accepted ballots.");
+      const result = await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
+      const method = pick(result, ["election.tally.ballotMethod"]) || "plurality";
+      const winner = pick(result, ["election.tally.questions.0.winnerLabel"]);
+      flash(
+        $("flash-tally"),
+        "ok",
+        method === "ranked_choice"
+          ? "IRV posted. Winner: " + (winner || "none") + ". Round transcript is on the results page."
+          : "Tally posted. Sum(counts) must equal accepted ballots."
+      );
+      wireExplorerLinks(id);
+    } catch (err) {
+      flash($("flash-tally"), "err", errText(err));
+    }
+  });
+
+  $("btn-irv").addEventListener("click", async () => {
+    const id = $("t-election").value;
+    if (!id) {
+      flash($("flash-tally"), "err", "Choose an election.");
+      return;
+    }
+    try {
+      const result = await request("/api/elections/" + encodeURIComponent(id) + "/tally", {
+        method: "POST",
+        body: { computeFromBallots: true },
+      });
+      const winner = pick(result, ["election.tally.questions.0.winnerLabel"]);
+      flash(
+        $("flash-tally"),
+        "ok",
+        "IRV computed from accepted ballots. Winner: " + (winner || "none") + "."
+      );
       wireExplorerLinks(id);
     } catch (err) {
       flash($("flash-tally"), "err", errText(err));

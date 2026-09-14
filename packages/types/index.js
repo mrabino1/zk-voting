@@ -75,6 +75,33 @@ const REASON_CODE_LABELS = Object.freeze({
 });
 
 /**
+ * Ballot counting flavor. On-chain v1 does not add a Solidity enum;
+ * the method is part of the canonical ballot JSON hashed into
+ * `ballotSpecHash`.
+ *
+ * @enum {string}
+ */
+const BallotMethod = Object.freeze({
+  PLURALITY: "plurality",
+  RANKED_CHOICE: "ranked_choice",
+});
+
+/**
+ * Question / aspect kinds on a ballot. `RANKED` implies IRV unless
+ * `ballotMethod` is set explicitly. Unknown clerk labels tally as plurality.
+ *
+ * @enum {string}
+ */
+const QuestionType = Object.freeze({
+  YES_NO: "YES_NO",
+  SINGLE_CHOICE: "SINGLE_CHOICE",
+  MULTI_CHOICE: "MULTI_CHOICE",
+  RANKED: "RANKED",
+  MEASURE: "MEASURE",
+  ARTICLE: "ARTICLE",
+});
+
+/**
  * @typedef {Object} ElectionParams
  * @property {string} title Human-readable title. Not the ballot spec.
  * @property {string} metadataURI URI of the canonical ballot JSON / extra metadata.
@@ -90,6 +117,50 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ * @property {"plurality"|"ranked_choice"} [ballotMethod] Counting flavor. Default
+ *   `plurality`. `ranked_choice` is instant-runoff. On-chain v1 may omit this
+ *   field and keep it only inside `ballotSpecHash`.
+ */
+
+/**
+ * One question / aspect on a ballot.
+ *
+ * @typedef {Object} BallotQuestion
+ * @property {string} id
+ * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"RANKED"|"MEASURE"|"ARTICLE"|string} type
+ * @property {"plurality"|"ranked_choice"} [ballotMethod]
+ * @property {string} prompt
+ * @property {string} [description]
+ * @property {number} [maxSelections]
+ * @property {{id: string, label: string}[]} options Ordered options. For RANKED
+ *   this is the printed candidate order, not the voter's ranking.
+ */
+
+/**
+ * Instant-runoff round. Counts are aggregate; individual rankings stay in the
+ * operator envelope on the Node demo path.
+ *
+ * @typedef {Object} IrvRound
+ * @property {number} round
+ * @property {Record<string, number>} counts First-preference among remaining.
+ * @property {number} continuing
+ * @property {number} exhausted
+ * @property {string[]} remaining
+ * @property {string|null} eliminated
+ * @property {string|null} winner
+ * @property {boolean} [tieBroken]
+ */
+
+/**
+ * @typedef {Object} IrvQuestionTally
+ * @property {string} questionId
+ * @property {string} [prompt]
+ * @property {"ranked_choice"|"plurality"} ballotMethod
+ * @property {string|null} [winner]
+ * @property {string} [winnerLabel]
+ * @property {IrvRound[]} [rounds]
+ * @property {boolean} [tieBroken]
+ * @property {number} [exhausted]
  */
 
 /**
@@ -262,6 +333,8 @@ module.exports = {
   ReasonCode,
   REASON_CODE_LABELS,
   AUTH_METHOD_TYPES,
+  BallotMethod,
+  QuestionType,
   reasonCodeLabel,
   electionStateLabel,
 };

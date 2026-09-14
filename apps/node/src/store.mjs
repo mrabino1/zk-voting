@@ -464,6 +464,7 @@ export class Store {
       maxParticipants: params.maxParticipants,
       treeDepth: params.treeDepth,
       ballotSpecHash: params.ballotSpecHash,
+      ballotMethod: params.ballotMethod || 'plurality',
       questions: params.questions,
       questionCount: params.questions.length,
       jurisdictionId: params.jurisdictionId,
@@ -757,12 +758,16 @@ export class Store {
     };
     this.data.votes.push(record);
     if (envelope) {
-      this.data.envelopes.push({
+      const env = {
         electionId: record.electionId,
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
         encryptedBallot: envelope.encryptedBallot,
-      });
+      };
+      if (Array.isArray(envelope.rankingPayload)) {
+        env.rankingPayload = envelope.rankingPayload;
+      }
+      this.data.envelopes.push(env);
     }
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
@@ -794,13 +799,37 @@ export class Store {
     return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
   }
 
-  async setTally(id, counts) {
+  async setTally(id, counts, extra = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
-      counts: counts.map((n) => Number(n)),
+      counts: (counts || []).map((n) => Number(n)),
       postedAt: new Date().toISOString(),
+      ballotMethod: extra.ballotMethod || election.ballotMethod || 'plurality',
     };
+    if (Array.isArray(extra.questions) && extra.questions.length) {
+      election.tally.questions = extra.questions;
+    }
+    await this.persist();
+    return election;
+  }
+
+  async updateElection(id, patch) {
+    const election = this.requireElection(id);
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll frozen; ballot locked', { code: 'ROLL_FROZEN' });
+    }
+    if (election.tally) throw new HttpError(409, 'already tallied');
+    if (patch.title != null) election.title = String(patch.title);
+    if (patch.metadataURI != null) election.metadataURI = String(patch.metadataURI);
+    if (patch.startTime != null) election.startTime = Number(patch.startTime);
+    if (patch.cutoffTime != null) election.cutoffTime = Number(patch.cutoffTime);
+    if (patch.ballotMethod) election.ballotMethod = patch.ballotMethod;
+    if (Array.isArray(patch.questions)) {
+      election.questions = patch.questions;
+      election.questionCount = patch.questions.length;
+    }
+    if (patch.ballotSpecHash) election.ballotSpecHash = patch.ballotSpecHash;
     await this.persist();
     return election;
   }

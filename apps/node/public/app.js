@@ -204,6 +204,8 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     disqualificationRoot: raw.disqualificationRoot || null,
     description: raw.description || raw.summary || "",
     questions,
+    ballotMethod: raw.ballotMethod || params.ballotMethod || "plurality",
+    tally: raw.tally || null,
   };
 }
 
@@ -219,10 +221,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       cutoffTime: now + 86400 * 12,
       participantCount: 1840,
       maxParticipants: 0,
-      questionCount: 2,
+      questionCount: 3,
       rollFrozen: true,
       ballotSpecHash: "0x" + "ab".repeat(32),
-      description: "Mayor is not on this ballot. Council at-large and one ordinance.",
+      description: "Mayor is ranked-choice (IRV). Council at-large and one ordinance.",
       questions: SAMPLE_QUESTIONS,
     },
     {
@@ -280,7 +282,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       cutoffTime: now + 86400 * 21,
       participantCount: 40,
       maxParticipants: 0,
-      questionCount: 2,
+      questionCount: 3,
       rollFrozen: false,
       description: "Registration is open. The clerk has not frozen the roll.",
       questions: SAMPLE_QUESTIONS,
@@ -503,6 +505,20 @@ function renderHome(main, route, bundle) {
                   {},
                   h("span", { class: "lbl", text: "Questions" }),
                   h("span", { text: String(election.questionCount || election.questions?.length || "—") })
+                ),
+                h(
+                  "li",
+                  {},
+                  h("span", { class: "lbl", text: "Method" }),
+                  h(
+                    "span",
+                    {
+                      text:
+                        String(election.ballotMethod || "").toLowerCase() === "ranked_choice"
+                          ? "Ranked choice (IRV)"
+                          : "Plurality",
+                    }
+                  )
                 )
               ),
               election.description ? h("p", { text: election.description }) : null,
@@ -518,6 +534,9 @@ function renderHome(main, route, bundle) {
                       : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
                 canRegister
                   ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+                  : null,
+                election.state >= 3
+                  ? h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
                   : null
               )
             );
@@ -686,6 +705,90 @@ function renderNotFound(main, route) {
   );
 }
 
+function renderResults(main, election, source) {
+  const st = electionStateInfo(election.state);
+  const tally = election.tally;
+  const irvQuestions = Array.isArray(tally?.questions) ? tally.questions.filter((q) => q.ballotMethod === "ranked_choice") : [];
+  const children = [
+    h(
+      "div",
+      { class: "page-head" },
+      h("p", { class: "kicker", text: election.jurisdiction }),
+      h("h1", { text: "Results" }),
+      h("p", { class: "lede", text: election.title }),
+      h(
+        "p",
+        { class: "cluster" },
+        h("span", { class: `status-pill ${st.className}`, text: st.label }),
+        h(
+          "span",
+          {
+            class: "status-pill",
+            text: election.ballotMethod === "ranked_choice" ? "Ranked choice (IRV)" : "Plurality",
+          }
+        )
+      )
+    ),
+  ];
+  if (!tally) {
+    children.push(
+      h(
+        "div",
+        { class: "notice notice-warn" },
+        h("p", { text: "A certified tally has not been posted yet. Individual rankings are never shown here." })
+      )
+    );
+  } else {
+    children.push(
+      h(
+        "section",
+        { class: "panel" },
+        h("h2", { text: "Posted counts" }),
+        h("p", { class: "field-hint", text: "For ranked questions these are first-round first preferences. The IRV transcript is below." }),
+        h("p", { class: "hex", text: JSON.stringify(tally.counts) }),
+        h("p", { class: "field-hint", text: tally.postedAt ? `Posted ${tally.postedAt}` : "" })
+      )
+    );
+    for (const q of irvQuestions) {
+      children.push(
+        h(
+          "section",
+          { class: "panel" },
+          h("h2", { text: q.prompt || q.questionId }),
+          h("p", { text: q.winnerLabel || q.winner ? `Winner: ${q.winnerLabel || q.winner}` : "No winner (exhausted or empty)." }),
+          q.tieBroken ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." }) : null,
+          h(
+            "div",
+            { class: "table-wrap" },
+            h(
+              "table",
+              { class: "irv-rounds" },
+              h("thead", {}, h("tr", {}, h("th", { text: "Round" }), h("th", { text: "Continuing" }), h("th", { text: "Exhausted" }), h("th", { text: "Eliminated" }), h("th", { text: "Counts" }))),
+              h(
+                "tbody",
+                {},
+                ...(q.rounds || []).map((round) =>
+                  h(
+                    "tr",
+                    {},
+                    h("td", { text: String(round.round) }),
+                    h("td", { text: String(round.continuing) }),
+                    h("td", { text: String(round.exhausted) }),
+                    h("td", { text: round.eliminated || (round.winner ? "—" : "—") }),
+                    h("td", { text: JSON.stringify(round.counts) })
+                  )
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+  }
+  children.push(h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Back to elections" })));
+  main.replaceChildren(...children);
+}
+
 async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
@@ -712,6 +815,11 @@ async function renderRoute(route) {
     } else if (route.name === "vote") {
       setTitle("Ballot");
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "results") {
+      setTitle("Results");
+      const { election, source } = await loadElection(route.params.id);
+      if (!election) renderNotFound(main, route);
+      else renderResults(main, election, source);
     } else {
       setTitle("Not found");
       renderNotFound(main, route);

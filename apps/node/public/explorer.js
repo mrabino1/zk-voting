@@ -580,6 +580,9 @@
         <dt>State</dt><dd>${esc(pick(election, ["stateName", "state", "status"]) ?? "—")}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
         <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
+        ${pick(election, ["tally.questions.0.winnerLabel"])
+          ? `<dt>IRV winner</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
+          : ""}
       </dl>
       <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed.</p>
     </section>

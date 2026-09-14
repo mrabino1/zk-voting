@@ -43,6 +43,12 @@ export function configRouter(deps) {
           oneActiveEthAddress: true,
           note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
         },
+        ballot: {
+          methods: ['plurality', 'ranked_choice'],
+          defaultMethod: 'plurality',
+          questionTypes: ['YES_NO', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'RANKED', 'MEASURE', 'ARTICLE'],
+          note: 'ranked_choice is instant-runoff (IRV). On-chain v1 may keep the method inside ballotSpecHash; ElectionParams has no method enum.',
+        },
       });
     }),
   );
