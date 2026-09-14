@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#13294b" />
+    <meta name="robots" content="noindex" />
+    <title>Back office · Republic</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+  </head>
+  <body>
+    <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <div class="nfp-banner" role="note">
+      NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
+    </div>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="Republic home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
+              <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M10 26 V10 h8.5 a5 5 0 0 1 0 10 H10 m8.5 0 L26 26"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Republic</span>
+            <span class="brand-sub">Office of civic elections</span>
+          </span>
+        </a>
+        <nav class="nav-main" aria-label="Primary">
+          <ul>
+            <li><a href="/">Elections</a></li>
+            <li><a href="/register">Register</a></li>
+            <li><a href="/back-office" aria-current="page">Back office</a></li>
+            <li><a href="/explorer">Explorer</a></li>
+            <li><a href="/admin">Admin</a></li>
+          </ul>
+        </nav>
+        <span class="office-badge">Not for profit</span>
+      </div>
+    </header>
+
+    <main id="main" class="site-main" tabindex="-1">
+      <header class="page-head">
+        <p class="kicker">Election officials</p>
+        <h1>Back office</h1>
+        <p class="lede">
+          Clerks stand up elections. Registrars insert identity commitments (never names).
+          Disqualification officers apply the public reason catalog. Tally operators post counts.
+          Choice plaintext never appears here.
+        </p>
+        <p class="session-line" id="me-line">Checking session…</p>
+      </header>
+
+      <nav class="local-nav" aria-label="Back-office sections">
+        <a href="#clerk" class="active">Clerk</a>
+        <a href="#registrar">Registrar</a>
+        <a href="#disqualify">Disqualification</a>
+        <a href="#tally">Tally</a>
+        <a href="#notices">Notifications</a>
+      </nav>
+
+      <section class="panel" id="clerk" aria-labelledby="clerk-heading">
+        <header>
+          <h2 id="clerk-heading">Election clerk</h2>
+          <span class="pill" id="role-clerk">clerk</span>
+        </header>
+        <p class="field-hint">Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited.</p>
+        <form id="form-election" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="e-jurisdiction">Jurisdiction <span class="req">*</span></label>
+            <select id="e-jurisdiction" name="jurisdictionId" required></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="e-title">Title <span class="req">*</span></label>
+            <input id="e-title" name="title" required maxlength="200" placeholder="General election 2026" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="e-uri">Metadata URI</label>
+            <input id="e-uri" name="metadataURI" placeholder="ipfs://… or https://…" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="e-start">Start (inclusive) <span class="req">*</span></label>
+              <input id="e-start" name="startTime" type="datetime-local" required />
+            </div>
+            <div class="field">
+              <label class="field-label" for="e-cutoff">Cutoff (exclusive) <span class="req">*</span></label>
+              <input id="e-cutoff" name="cutoffTime" type="datetime-local" required />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="e-max">Max participants</label>
+              <input id="e-max" name="maxParticipants" type="number" min="0" step="1" value="0" />
+              <span class="field-hint">0 = unbounded roll.</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="e-depth">Merkle tree depth</label>
+              <select id="e-depth" name="treeDepth">
+                <option value="16">16</option>
+                <option value="18">18</option>
+                <option value="20" selected>20</option>
+                <option value="24">24</option>
+                <option value="28">28</option>
+                <option value="32">32 (~4e9 leaves)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="e-questions">Questions JSON <span class="req">*</span></label>
+            <textarea id="e-questions" name="questions" required spellcheck="false">[
+  {
+    "type": "YES_NO",
+    "prompt": "Shall the measure be adopted?",
+    "options": ["No", "Yes"]
+  }
+]</textarea>
+            <span class="field-hint">Array of questions (SINGLE_CHOICE, MULTI_CHOICE, YES_NO, MEASURE). The Node hashes the ballot spec.</span>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Create election</button>
+          </div>
+          <div class="flash" id="flash-election" role="status"></div>
+        </form>
+
+        <hr class="hr-office" />
+        <h3>Freeze roll</h3>
+        <p class="field-hint">Locks eligible and disqualification roots. Late disqualifications revert unless the election opted into late updates.</p>
+        <form id="form-freeze" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="f-election">Election <span class="req">*</span></label>
+            <select id="f-election" name="electionId" required></select>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Freeze roll</button>
+          </div>
+          <div class="flash" id="flash-freeze" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" id="registrar" aria-labelledby="reg-heading">
+        <header>
+          <h2 id="reg-heading">Registrar</h2>
+          <span class="pill" id="role-registrar">registrar</span>
+        </header>
+        <p class="field-hint">Insert an identity commitment (hex uint). Never a wallet address, never a legal name.</p>
+        <form id="form-register" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="r-election">Election <span class="req">*</span></label>
+            <select id="r-election" name="electionId" required></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="r-commit">Identity commitment <span class="req">*</span></label>
+            <input id="r-commit" name="identityCommitment" required spellcheck="false" placeholder="0x… (hex uint)" />
+            <span class="field-hint">Hex integer. The leaf is this commitment, not the smart-account address.</span>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Add commitment</button>
+          </div>
+          <div class="flash" id="flash-register" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" id="disqualify" aria-labelledby="dq-heading">
+        <header>
+          <h2 id="dq-heading">Disqualification officer</h2>
+          <span class="pill" id="role-dq">disqualification_officer</span>
+        </header>
+        <p class="field-hint">Registered ≠ allowed to vote. Reason <strong>codes</strong> are public. Evidence stays off-chain; only its hash is posted.</p>
+        <form id="form-dq" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="d-election">Election <span class="req">*</span></label>
+            <select id="d-election" name="electionId" required></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="d-commit">Identity commitment <span class="req">*</span></label>
+            <input id="d-commit" name="identityCommitment" required spellcheck="false" placeholder="0x…" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="d-reason">Reason code <span class="req">*</span></label>
+            <select id="d-reason" name="reasonCode" required>
+              <option value="1">1 — NOT_OF_AGE</option>
+              <option value="2">2 — NOT_RESIDENT</option>
+              <option value="3">3 — NOT_CITIZEN_OR_MEMBER</option>
+              <option value="4">4 — DUPLICATE_IDENTITY</option>
+              <option value="5">5 — DECEASED</option>
+              <option value="6">6 — MOVED_OUT</option>
+              <option value="7">7 — DISTRICT_MISMATCH</option>
+              <option value="8">8 — ALREADY_VOTED</option>
+              <option value="9">9 — COURT_ORDER</option>
+              <option value="10">10 — INELIGIBLE_STATUS</option>
+              <option value="11">11 — FRAUD_HOLD</option>
+              <option value="12">12 — EXPIRED_OR_SUSPENDED</option>
+              <option value="13">13 — SANCTION_OR_PROHIBITION</option>
+              <option value="14">14 — OTHER</option>
+            </select>
+            <span class="field-hint">Catalog matches README / ReasonCodes.sol.</span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="d-evidence">Evidence hash <span class="req">*</span></label>
+            <input id="d-evidence" name="evidenceHash" required spellcheck="false" placeholder="0x" maxlength="66" />
+            <span class="field-hint">Hex hash of the sealed file (bytes32 preferred). Do not paste the file.</span>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Record disqualification</button>
+            <button class="btn btn-secondary" type="button" id="btn-revoke">Revoke instead</button>
+          </div>
+          <div class="flash" id="flash-dq" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" id="tally" aria-labelledby="tally-heading">
+        <header>
+          <h2 id="tally-heading">Tally operator</h2>
+          <span class="pill" id="role-tally">tally_operator</span>
+        </header>
+        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots. You cannot invent votes. The election must be past cutoff.</p>
+        <form id="form-tally" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="t-election">Election <span class="req">*</span></label>
+            <select id="t-election" name="electionId" required></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="t-counts">Counts JSON array <span class="req">*</span></label>
+            <textarea id="t-counts" name="counts" required spellcheck="false">[0, 0]</textarea>
+            <span class="field-hint">Example: two YES_NO options → <code>[noCount, yesCount]</code> as non-negative integers.</span>
+          </div>
+          <details>
+            <summary>Optional Groth16 proof (mock path may omit)</summary>
+            <div class="field" style="margin-top:0.6rem">
+              <label class="field-label" for="t-proof">Proof JSON</label>
+              <textarea id="t-proof" name="proof" spellcheck="false" placeholder='{"a":["0","0"],"b":[["0","0"],["0","0"]],"c":["0","0"]}'></textarea>
+            </div>
+          </details>
+          <div class="actions">
+            <button class="btn" type="submit">Post counts</button>
+            <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
+            <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
+          </div>
+          <div class="flash" id="flash-tally" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" id="notices" aria-labelledby="notices-heading">
+        <header>
+          <h2 id="notices-heading">Notifications</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-notices">Refresh</button>
+        </header>
+        <p class="field-hint">From <code>/api/me</code> (unread count) and <code>/api/notifications</code>.</p>
+        <ul class="notice-list" id="notice-list">
+          <li class="empty">Loading…</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-nfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+      <p class="footer-meta">
+        Product name Republic. Choice is never printed here.
+        <a href="/explorer">L2 explorer</a>
+        · AGPL-3.0-or-later
+      </p>
+    </footer>
+    <script src="/back-office.js" defer></script>
+  </body>
+</html>
