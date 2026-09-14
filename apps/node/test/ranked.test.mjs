@@ -67,13 +67,14 @@ function hexJson(obj) {
   return `0x${Buffer.from(JSON.stringify(obj), 'utf8').toString('hex')}`;
 }
 
-function voteBody(electionId, nullifier, answers) {
+function voteBody(electionId, nullifier, answers, identityCommitment) {
   const payload = { answers };
   return {
     proof: { accept: true },
     publicInputs: { nullifier, electionId },
     encryptedBallot: hexJson(payload),
     answers,
+    identityCommitment,
   };
 }
 
@@ -191,24 +192,25 @@ describe('Ranked-choice ballots and IRV tally', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '1', electionId: id },
         encryptedBallot: '0xc0ffee',
+        identityCommitment: '0x51',
       },
     });
     assert.equal(missing.status, 400);
     assert.equal(missing.json.code, 'RANKING_REQUIRED');
 
     const dup = await api('POST', `/api/elections/${id}/vote`, {
-      body: voteBody(id, '2', [{ questionId: 'q-office', ranking: ['a', 'a'] }]),
+      body: voteBody(id, '2', [{ questionId: 'q-office', ranking: ['a', 'a'] }], '0x51'),
     });
     assert.equal(dup.status, 400);
     assert.equal(dup.json.code, 'RANKING_INVALID');
 
     const unknown = await api('POST', `/api/elections/${id}/vote`, {
-      body: voteBody(id, '3', [{ questionId: 'q-office', ranking: ['z'] }]),
+      body: voteBody(id, '3', [{ questionId: 'q-office', ranking: ['z'] }], '0x51'),
     });
     assert.equal(unknown.status, 400);
 
     const ok = await api('POST', `/api/elections/${id}/vote`, {
-      body: voteBody(id, '4', [{ questionId: 'q-office', ranking: ['b', 'c', 'a'] }]),
+      body: voteBody(id, '4', [{ questionId: 'q-office', ranking: ['b', 'c', 'a'] }], '0x51'),
     });
     assert.equal(ok.status, 201, ok.json?.error);
     assert.equal(ok.json.vote.choice, undefined);
@@ -245,7 +247,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     ];
     for (let i = 0; i < stacks.length; i += 1) {
       const v = await api('POST', `/api/elections/${id}/vote`, {
-        body: voteBody(id, 200 + i, [{ questionId: 'q-office', ranking: stacks[i] }]),
+        body: voteBody(id, 200 + i, [{ questionId: 'q-office', ranking: stacks[i] }], '0x61'),
       });
       assert.equal(v.status, 201, v.json?.error);
     }
@@ -297,6 +299,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '9', electionId: id },
         encryptedBallot: '0xab',
+        identityCommitment: '0x71',
       },
     });
     assert.equal(v.status, 201, v.json?.error);
