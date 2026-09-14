@@ -38,6 +38,11 @@ export function configRouter(deps) {
         origins: deps.config.origins,
         chainConfigured: deps.chain.isConfigured(),
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
+        identity: {
+          methods: ['passkey', 'web3', 'smart_card'],
+          oneActiveEthAddress: true,
+          note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
+        },
       });
     }),
   );

@@ -9,7 +9,7 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 ## Layout
 
 - `src/ElectionFactory.sol` — unlimited elections, start + cutoff, `maxParticipants == 0` unlimited roll
-- `src/VoterRegistry.sol` / `DisqualificationRegistry.sol` / `BallotInbox.sol` / `Tally.sol`
+- `src/VoterRegistry.sol` / `PersonRegistry.sol` / `DisqualificationRegistry.sol` / `BallotInbox.sol` / `Tally.sol`
 - `src/account/` — passkey AA + `RepublicPaymaster`
 - `src/l2/` — `RollupSettlement`, mailbox, L1 tally mirror
 - `src/zk/` — `MockVerifier` (tests) and structural `VoteVerifier`

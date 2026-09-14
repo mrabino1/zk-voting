@@ -386,6 +386,75 @@
     }
   });
 
+  $("form-person-key").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = $("p-user").value.trim();
+    const raw = $("p-key").value.trim();
+    if (!id || !raw) {
+      flash($("flash-person-key"), "err", "Person id and key are required.");
+      return;
+    }
+    const body = raw.startsWith("0x") && raw.length === 66 ? { personKeyHash: raw } : { personKey: raw };
+    try {
+      await request("/api/persons/" + encodeURIComponent(id) + "/person-key", { method: "POST", body });
+      flash($("flash-person-key"), "ok", "Person key bound. The Node stored a hash, not a legal name.");
+    } catch (err) {
+      flash($("flash-person-key"), "err", errText(err));
+    }
+  });
+
+  $("form-person-method").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = $("pm-user").value.trim();
+    const type = $("pm-type").value;
+    const fp = $("pm-fp").value.trim();
+    const looksPem = fp.includes("-----BEGIN");
+    const body = {
+      type,
+      address: $("pm-addr").value.trim() || undefined,
+      credentialId: $("pm-cred").value.trim() || undefined,
+    };
+    if (fp) {
+      if (looksPem) body.certificate = fp;
+      else body.fingerprint = fp;
+    }
+    try {
+      await request("/api/persons/" + encodeURIComponent(id) + "/methods", { method: "POST", body });
+      flash($("flash-person-method"), "ok", "Authenticator attested to this person. It cannot be bound to a second person.");
+    } catch (err) {
+      flash($("flash-person-method"), "err", errText(err));
+    }
+  });
+
+  $("form-person-eth").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = $("pe-user").value.trim();
+    const address = $("pe-addr").value.trim();
+    try {
+      await request("/api/persons/" + encodeURIComponent(id) + "/eth-accounts", {
+        method: "POST",
+        body: { address, source: "registrar" },
+      });
+      flash($("flash-person-eth"), "ok", "Address verified internally. First verified address becomes active automatically.");
+    } catch (err) {
+      flash($("flash-person-eth"), "err", errText(err));
+    }
+  });
+
+  $("btn-person-active").addEventListener("click", async () => {
+    const id = $("pe-user").value.trim();
+    const address = $("pe-addr").value.trim();
+    try {
+      const data = await request("/api/persons/" + encodeURIComponent(id) + "/eth-accounts/active", {
+        method: "POST",
+        body: { address },
+      });
+      flash($("flash-person-eth"), "ok", "Active Ethereum address is now " + (data.activeEthAddress || address) + ".");
+    } catch (err) {
+      flash($("flash-person-eth"), "err", errText(err));
+    }
+  });
+
   async function submitDisqualify(revoke) {
     const id = $("d-election").value;
     let identityCommitment;

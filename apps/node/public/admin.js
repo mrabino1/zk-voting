@@ -229,14 +229,14 @@
     const tbody = $("table-users").querySelector("tbody");
     const select = $("g-user");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="empty">No users (or not authorized).</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No users (or not authorized).</td></tr>';
       select.innerHTML = '<option value="">None loaded</option>';
       return;
     }
     tbody.innerHTML = rows
       .map(
         (row) =>
-          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td class="hash">${esc(row.id)}</td></tr>`
+          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || "—")}</td><td>${row.personKeyBound ? "bound" : "—"}</td><td class="hash">${esc(row.id)}</td></tr>`
       )
       .join("");
     select.innerHTML =
@@ -256,7 +256,7 @@
           ? "Sign in as platform_admin to list users and grant officers."
           : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
-        `<tr><td colspan="3" class="empty">${esc(msg)}</td></tr>`;
+        `<tr><td colspan="6" class="empty">${esc(msg)}</td></tr>`;
       $("g-user").innerHTML = `<option value="">${esc(msg)}</option>`;
     }
   }

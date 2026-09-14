@@ -353,6 +353,30 @@ a {
   margin: 1rem 0;
 }
 
+.method-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+}
+
+.method-tabs button {
+  appearance: none;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.45rem 0.85rem;
+  border: 2px solid var(--navy);
+  background: transparent;
+  color: var(--navy);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+
+.method-tabs button[aria-selected="true"] {
+  background: var(--navy);
+  color: var(--cream);
+}
+
 .btn,
 button.btn,
 a.btn {

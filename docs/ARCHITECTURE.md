@@ -82,6 +82,14 @@ Hasher note: production circuits use Poseidon. Solidity trees in v1 use a
 swappable `IHasher`. Tests may use keccak256 via `KeccakHasher` so Foundry
 tests do not need a trusted setup. The interface is identical.
 
+### Person (unique) vs one active Ethereum address
+
+A Node user is one **person**. They may bind passkey, Web3 wallet, and
+smart-card digital ID. Several ETH addresses can be internally verified;
+exactly one is **active** (gasless ops). Authenticators and addresses cannot
+belong to two people. The vote leaf stays `identityCommitment`. Details:
+[`IDENTITY.md`](./IDENTITY.md).
+
 ---
 
 ## Monorepo layout (owners)
@@ -94,6 +102,7 @@ zk-voting/
   system_actions.sh
   package.json                       (workspaces)
   docs/ARCHITECTURE.md               (this file)
+  docs/IDENTITY.md
   smart-contracts/                   (Foundry)
     foundry.toml
     src/
@@ -102,6 +111,7 @@ zk-voting/
       Election.sol
       JurisdictionRegistry.sol
       VoterRegistry.sol
+      PersonRegistry.sol
       DisqualificationRegistry.sol
       BallotInbox.sol
       TallyVerifier.sol
@@ -209,6 +219,20 @@ function merklePath(uint256 electionId, uint256 leafIndex) /* test helper, not p
 `register` is called by `REGISTRAR_ROLE` or by a voter UserOp after the Node
 has approved documents off-chain. The **leaf is the identity commitment**,
 never the wallet address, never a name.
+
+### `PersonRegistry`
+
+```solidity
+function verifyAddress(bytes32 personId, address account) external;
+function setActive(bytes32 personId, address account) external;
+function isVerified(bytes32 personId, address account) external view returns (bool);
+function activeAddress(bytes32 personId) external view returns (address);
+function personOf(address account) external view returns (bytes32);
+```
+
+`personId` is bytes32 (never a legal name). A person may have many internally
+verified addresses and **exactly one** active address. `personOf` is globally
+unique (`AlreadyOwned`). This is not the vote leaf; see [`IDENTITY.md`](./IDENTITY.md).
 
 ### `IDisqualificationRegistry`
 
@@ -328,6 +352,7 @@ to L1 for court-grade records.
 - `ElectionFactory.t.sol` — unbounded creates, clone isolation, access.
 - `ElectionLifecycle.t.sol` — start/cutoff, freeze, cap, states.
 - `VoterRegistry.t.sol` — insert, cap, duplicates.
+- `PersonRegistry.t.sol` — many verified addresses, one active, cannot steal.
 - `Disqualification.t.sol` — codes, revoke, frozen roll.
 - `BallotInbox.t.sol` — happy path with MockVerifier, double-vote, window.
 - `PrivacyUnlinkability.t.sol` — asserting wallet address ≠ leaf; nullifier
@@ -424,8 +449,24 @@ GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
 POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
-GET  /api/config                    (includes hourly disclosure policy)
+GET  /api/config                    (includes hourly disclosure + identity policy)
+GET  /api/identity/methods
+POST /api/identity/web3/challenge
+POST /api/identity/web3/verify
+POST /api/identity/smart-card/challenge
+POST /api/identity/smart-card/verify
+GET  /api/me/identity
+POST /api/me/eth-accounts            (many internally verified; first becomes active)
+POST /api/me/eth-accounts/active
+POST /api/persons/:id/person-key     (registrar; keccak256 civil-file token)
+POST /api/persons/:id/methods
+POST /api/persons/:id/eth-accounts
+POST /api/persons/:id/eth-accounts/active
 ```
+
+A person identifies with a **passkey, Web3 wallet, or smart-card digital ID**.
+Many ETH addresses may be verified internally; only one is active. The
+Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 
 ### Pages (SPA, Vite + React, served by Express)
 
@@ -435,7 +476,7 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 
 - `/` — voter home (consumer)
 - `/vote/:id` — ballot (passkey)
-- `/register` — intake
+- `/register` — intake (passkey / Web3 / smart-card; one active ETH address)
 - `/admin` — platform admin (hosts, keys, jurisdictions)
 - `/back-office` — clerks / registrars / disqualification officers
 - `/explorer` — Republic L2 block explorer (every block's outcomes)

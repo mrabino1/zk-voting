@@ -3,8 +3,9 @@
 **Republic** Node — civic public good, not a commercial product.
 
 This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
-(product name Republic): JSON HTTP API, WebAuthn passkeys, a gasless vote
-relayer, an L2 block-explorer backend, and a static host for the React SPA.
+(product name Republic): JSON HTTP API, WebAuthn passkeys, Web3 and smart-card
+person identity, a gasless vote relayer, an L2 block-explorer backend, and a
+static host for the React SPA.
 
 There is no token. There is no paid tier. Do not commercialize this software.
 See `/NOT_FOR_PROFIT.md` at the repo root.
@@ -40,7 +41,7 @@ Node **22+**. From this directory:
 npm install
 npm start          # node src/server.mjs   (PORT=3000)
 npm run dev        # node --watch src/server.mjs
-npm test           # node --test test/api.test.mjs
+npm test           # NODE_ENV=test node --test test/*.test.mjs
 ```
 
 From the monorepo root:
@@ -76,7 +77,8 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
-| `NODE_ENV` | _unset_ | `test` enables dev login and sets disclosure interval to 0 |
+| `ALLOW_SMART_CARD_MOCK` | off (`1` in tests) | Self-service smart-card `{ mock: true }` (kiosk demo). Production uses registrar attest |
+| `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 
 Passkey rpName is always **Republic**.
@@ -95,6 +97,18 @@ POST /api/elections/:id/vote        (relays proof; no passkey identity on the ba
 POST /api/elections/:id/disqualify  (disqualification officer)
 POST /api/elections/:id/tally       (tally operator)
 GET  /api/me
+GET  /api/me/identity
+GET  /api/identity/methods
+POST /api/identity/web3/challenge
+POST /api/identity/web3/verify
+POST /api/identity/smart-card/challenge
+POST /api/identity/smart-card/verify
+POST /api/me/eth-accounts
+POST /api/me/eth-accounts/active
+POST /api/persons/:id/person-key     (registrar / platform_admin)
+POST /api/persons/:id/methods
+POST /api/persons/:id/eth-accounts
+POST /api/persons/:id/eth-accounts/active
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin

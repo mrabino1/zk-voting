@@ -9,6 +9,13 @@ import path from 'node:path';
 
 import { isDisclosed } from './disclosure.mjs';
 import { HttpError } from './http.mjs';
+import {
+  ensurePersonFields,
+  isAuthMethodType,
+  normalizeEthAddress,
+  normalizeFingerprint,
+  sameEthAddress,
+} from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isRole } from './roles.mjs';
 import { isValidReasonCode } from './reasonCodes.mjs';
@@ -29,7 +36,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 1,
+      version: 2,
       nextElectionId: 1,
     },
     users: [],
@@ -68,6 +75,17 @@ export class Store {
       data = emptyData();
     }
     const store = new Store(filePath, data);
+    for (const user of store.data.users) {
+      ensurePersonFields(user);
+      for (const cred of user.credentials) {
+        store._addAuthMethodUnchecked(user, {
+          type: 'passkey',
+          credentialId: cred.id,
+          label: 'Passkey',
+          verifiedBy: 'self',
+        });
+      }
+    }
     await store.seed(config);
     await store.persist();
     return store;
@@ -96,6 +114,10 @@ export class Store {
           role: 'platform_admin',
           createdAt: new Date().toISOString(),
           credentials: [],
+          authMethods: [],
+          ethAccounts: [],
+          activeEthAddress: null,
+          personKeyHash: null,
         });
       }
     }
@@ -129,13 +151,15 @@ export class Store {
   }
 
   getUser(id) {
-    return this.data.users.find((u) => u.id === id) || null;
+    const user = this.data.users.find((u) => u.id === id) || null;
+    return user ? ensurePersonFields(user) : null;
   }
 
   getUserByHandle(handle) {
     const h = String(handle || '').trim().toLowerCase();
     if (!h) return null;
-    return this.data.users.find((u) => u.handle.toLowerCase() === h) || null;
+    const user = this.data.users.find((u) => u.handle.toLowerCase() === h) || null;
+    return user ? ensurePersonFields(user) : null;
   }
 
   createUser({ handle, role = 'voter' }) {
@@ -143,13 +167,17 @@ export class Store {
     if (!trimmed) throw new HttpError(400, 'handle required');
     if (!isRole(role)) throw new HttpError(400, 'invalid role');
     if (this.getUserByHandle(trimmed)) throw new HttpError(409, 'handle taken');
-    const user = {
+    const user = ensurePersonFields({
       id: randomUUID(),
       handle: trimmed,
       role,
       createdAt: new Date().toISOString(),
       credentials: [],
-    };
+      authMethods: [],
+      ethAccounts: [],
+      activeEthAddress: null,
+      personKeyHash: null,
+    });
     this.data.users.push(user);
     return user;
   }
@@ -209,13 +237,19 @@ export class Store {
       throw new HttpError(409, 'credential already registered');
     }
     user.credentials.push(credential);
+    this._addAuthMethodUnchecked(user, {
+      type: 'passkey',
+      credentialId: credential.id,
+      label: 'Passkey',
+      verifiedBy: 'self',
+    });
     return credential;
   }
 
   findCredential(credentialId) {
     for (const user of this.data.users) {
       const cred = (user.credentials || []).find((c) => c.id === credentialId);
-      if (cred) return { user, credential: cred };
+      if (cred) return { user: ensurePersonFields(user), credential: cred };
     }
     return null;
   }
@@ -224,6 +258,146 @@ export class Store {
     const found = this.findCredential(credentialId);
     if (found) found.credential.counter = counter;
     await this.persist();
+  }
+
+  findUserByEthAddress(address) {
+    let addr;
+    try {
+      addr = normalizeEthAddress(address);
+    } catch {
+      return null;
+    }
+    for (const user of this.data.users) {
+      ensurePersonFields(user);
+      if (sameEthAddress(user.activeEthAddress, addr)) return user;
+      if (user.ethAccounts.some((a) => sameEthAddress(a.address, addr))) return user;
+    }
+    return null;
+  }
+
+  findUserByPersonKeyHash(hash) {
+    const key = String(hash || '').toLowerCase();
+    if (!key) return null;
+    const user = this.data.users.find((u) => String(u.personKeyHash || '').toLowerCase() === key) || null;
+    return user ? ensurePersonFields(user) : null;
+  }
+
+  findUserByAuthMethod({ type, credentialId, address, fingerprint }) {
+    for (const user of this.data.users) {
+      ensurePersonFields(user);
+      const hit = user.authMethods.find((m) => {
+        if (type && m.type !== type) return false;
+        if (credentialId && m.credentialId === credentialId) return true;
+        if (address && sameEthAddress(m.address, address)) return true;
+        if (fingerprint && String(m.fingerprint || '').toLowerCase() === String(fingerprint).toLowerCase()) {
+          return true;
+        }
+        return false;
+      });
+      if (hit) return { user, method: hit };
+    }
+    return null;
+  }
+
+  _addAuthMethodUnchecked(user, fields) {
+    ensurePersonFields(user);
+    const type = fields.type;
+    if (!isAuthMethodType(type)) throw new HttpError(400, 'invalid auth method type');
+    const existing = this.findUserByAuthMethod({
+      type,
+      credentialId: fields.credentialId,
+      address: fields.address,
+      fingerprint: fields.fingerprint,
+    });
+    if (existing && existing.user.id !== user.id) {
+      throw new HttpError(409, 'authenticator already bound to another person', {
+        code: 'METHOD_OWNED',
+      });
+    }
+    if (existing && existing.user.id === user.id) return existing.method;
+    const method = {
+      id: randomUUID(),
+      type,
+      verified: true,
+      verifiedBy: fields.verifiedBy || 'self',
+      verifiedAt: new Date().toISOString(),
+      label: fields.label || null,
+      credentialId: fields.credentialId || null,
+      address: fields.address || null,
+      fingerprint: fields.fingerprint || null,
+      subject: fields.subject || null,
+      issuer: fields.issuer || null,
+    };
+    user.authMethods.push(method);
+    return method;
+  }
+
+  async addAuthMethod(userId, fields) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const method = this._addAuthMethodUnchecked(user, fields);
+    await this.persist();
+    return { user, method };
+  }
+
+  async addEthAccount(userId, { address, source = 'web3', methodId = null }) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const addr = normalizeEthAddress(address);
+    const owner = this.findUserByEthAddress(addr);
+    if (owner && owner.id !== user.id) {
+      throw new HttpError(409, 'Ethereum address already bound to another person', {
+        code: 'ADDRESS_OWNED',
+      });
+    }
+    const existing = user.ethAccounts.find((a) => sameEthAddress(a.address, addr));
+    if (existing) {
+      return { user, account: existing, created: false };
+    }
+    const account = {
+      address: addr,
+      source: String(source || 'web3'),
+      verified: true,
+      verifiedAt: new Date().toISOString(),
+      methodId: methodId || null,
+    };
+    user.ethAccounts.push(account);
+    if (!user.activeEthAddress) user.activeEthAddress = addr;
+    await this.persist();
+    return { user, account, created: true };
+  }
+
+  async setActiveEthAddress(userId, address) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const addr = normalizeEthAddress(address);
+    const account = user.ethAccounts.find((a) => sameEthAddress(a.address, addr) && a.verified);
+    if (!account) {
+      throw new HttpError(400, 'address is not an internally verified account of this person', {
+        code: 'NOT_VERIFIED',
+      });
+    }
+    user.activeEthAddress = addr;
+    await this.persist();
+    return user;
+  }
+
+  async setPersonKeyHash(userId, personKeyHash) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const key = String(personKeyHash || '').trim().toLowerCase();
+    if (!key || !/^0x[0-9a-f]{64}$/.test(key)) {
+      throw new HttpError(400, 'personKeyHash must be keccak256 hex (bytes32)');
+    }
+    const other = this.findUserByPersonKeyHash(key);
+    if (other && other.id !== user.id) {
+      throw new HttpError(409, 'person key already bound to another account', {
+        code: 'PERSON_KEY_OWNED',
+      });
+    }
+    user.personKeyHash = key;
+    await this.persist();
+    return user;
   }
 
   listJurisdictions() {

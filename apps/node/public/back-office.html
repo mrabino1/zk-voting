@@ -70,6 +70,7 @@
       <nav class="local-nav" aria-label="Back-office sections">
         <a href="#clerk" class="active">Clerk</a>
         <a href="#registrar">Registrar</a>
+        <a href="#person">Person identity</a>
         <a href="#disqualify">Disqualification</a>
         <a href="#tally">Tally</a>
         <a href="#notices">Notifications</a>
@@ -174,6 +175,88 @@
             <button class="btn" type="submit">Add commitment</button>
           </div>
           <div class="flash" id="flash-register" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" id="person" aria-labelledby="person-heading">
+        <header>
+          <h2 id="person-heading">Person identity</h2>
+          <span class="pill">one person · one active ETH</span>
+        </header>
+        <p class="field-hint">
+          A person is unique. Attest a passkey, Web3 wallet, or smart-card digital ID. Many Ethereum
+          addresses may be internally verified; only one is active. The election Merkle leaf remains an
+          identity commitment — never the active address, never a legal name. Person keys are keccak256
+          of a civil-file token; this form does not store a name.
+        </p>
+
+        <h3>Bind person key</h3>
+        <form id="form-person-key" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="p-user">Person (user id) <span class="req">*</span></label>
+            <input id="p-user" name="personId" required spellcheck="false" placeholder="Node user UUID" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="p-key">Civil-file token or hash <span class="req">*</span></label>
+            <input id="p-key" name="personKey" required spellcheck="false" placeholder="token (hashed here) or 0x… bytes32" />
+            <span class="field-hint">If the value is not a 32-byte hex, the Node stores keccak256(utf8).</span>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Bind person key</button>
+          </div>
+          <div class="flash" id="flash-person-key" role="status"></div>
+        </form>
+
+        <hr class="hr-office" />
+        <h3>Attest authenticator</h3>
+        <form id="form-person-method" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="pm-user">Person (user id) <span class="req">*</span></label>
+            <input id="pm-user" name="personId" required spellcheck="false" placeholder="Node user UUID" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-type">Method <span class="req">*</span></label>
+            <select id="pm-type" name="type" required>
+              <option value="passkey">passkey</option>
+              <option value="web3">web3 wallet</option>
+              <option value="smart_card">smart card digital ID</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-addr">ETH address (web3)</label>
+            <input id="pm-addr" name="address" spellcheck="false" placeholder="0x…" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-cred">Credential id (passkey)</label>
+            <input id="pm-cred" name="credentialId" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-fp">Smart-card fingerprint</label>
+            <input id="pm-fp" name="fingerprint" spellcheck="false" placeholder="0x… or PEM" />
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Attest method</button>
+          </div>
+          <div class="flash" id="flash-person-method" role="status"></div>
+        </form>
+
+        <hr class="hr-office" />
+        <h3>Verify Ethereum address / set active</h3>
+        <form id="form-person-eth" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="pe-user">Person (user id) <span class="req">*</span></label>
+            <input id="pe-user" name="personId" required spellcheck="false" placeholder="Node user UUID" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pe-addr">Ethereum address <span class="req">*</span></label>
+            <input id="pe-addr" name="address" required spellcheck="false" placeholder="0x…" />
+            <span class="field-hint">Verified internally. Does not become active until you set it.</span>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Verify address</button>
+            <button class="btn btn-secondary" type="button" id="btn-person-active">Set as the one active address</button>
+          </div>
+          <div class="flash" id="flash-person-eth" role="status"></div>
         </form>
       </section>
 

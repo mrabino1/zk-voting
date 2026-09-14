@@ -66,6 +66,8 @@ prf.eval(saltIdentity) ──► HKDF ──► (identityTrapdoor, nullifierSecr
 
 The commitment is the **Merkle leaf** `VoterRegistry.register` inserts. It is not the smart-account address, not the credential id, and not a name.
 
+A person may also bind a **Web3 wallet** or a **smart-card digital ID**. Those authenticators identify the same person. Several ETH addresses can be verified internally; only one is active. Details: [`IDENTITY.md`](./IDENTITY.md).
+
 At vote time the circuit (`circuits/vote.circom`) proves knowledge of trapdoor + secret whose leaf is in the **eligible** tree, and reveals
 
 ```text
@@ -132,6 +134,18 @@ POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
 POST /api/elections/:id/register    (after passkey; commitment, not name)
 POST /api/elections/:id/vote        (relays UserOp / proof)
+GET  /api/identity/methods
+POST /api/identity/web3/challenge
+POST /api/identity/web3/verify
+POST /api/identity/smart-card/challenge
+POST /api/identity/smart-card/verify
+GET  /api/me/identity
+POST /api/me/eth-accounts
+POST /api/me/eth-accounts/active
+POST /api/persons/:id/person-key     (registrar)
+POST /api/persons/:id/methods
+POST /api/persons/:id/eth-accounts
+POST /api/persons/:id/eth-accounts/active
 ```
 
 Relying party id, origins, and attestation policy are jurisdiction / host configuration. Production (`master`) must pin RP id to the public site. `test/unstable` may use localhost.

@@ -22,5 +22,8 @@ export function publicUser(user) {
     role: user.role,
     createdAt: user.createdAt,
     credentialCount: Array.isArray(user.credentials) ? user.credentials.length : 0,
+    authMethodCount: Array.isArray(user.authMethods) ? user.authMethods.length : 0,
+    activeEthAddress: user.activeEthAddress || null,
+    personKeyBound: Boolean(user.personKeyHash),
   };
 }

@@ -4,6 +4,7 @@ import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
+import { publicIdentity } from '../identity.mjs';
 
 function expandedRoles(role) {
   if (role === 'platform_admin') {
@@ -47,6 +48,7 @@ export function meRouter(deps) {
           name: user.handle,
           roles,
           elections,
+          identity: publicIdentity(req.user),
         }
       : null;
     return {
@@ -55,6 +57,7 @@ export function meRouter(deps) {
       me,
       roles,
       elections,
+      identity: req.user ? publicIdentity(req.user) : null,
       unreadCount: notifications.filter((n) => !n.read).length,
     };
   }

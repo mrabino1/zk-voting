@@ -20,6 +20,7 @@ import { authRouter } from './routes/auth.mjs';
 import { electionsRouter } from './routes/elections.mjs';
 import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
+import { identityRouter } from './routes/identity.mjs';
 import { meRouter } from './routes/me.mjs';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -118,6 +119,7 @@ export async function createApp(overrides = {}) {
   app.use('/api/auth', authRouter(deps));
   app.use('/api/elections', electionsRouter(deps));
   app.use('/api/explorer', explorerRouter(deps));
+  app.use('/api', identityRouter(deps));
   app.use('/api', meRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', configRouter(deps));

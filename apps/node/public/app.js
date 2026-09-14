@@ -568,11 +568,11 @@ function renderHome(main, route, bundle) {
         h(
           "article",
           {},
-          h("h3", { text: "1. Passkey, not a seed phrase" }),
+          h("h3", { text: "1. One person, several ways to prove it" }),
           h(
             "p",
             {
-              text: "You create a resident WebAuthn credential on this device. User verification is required. The Ethereum key never appears as a mnemonic. A WebAuthn PRF value wraps the key in IndexedDB.",
+              text: "Identify yourself with a passkey, a Web3 wallet, or a smart-card digital ID. You may verify several Ethereum addresses internally; only one is active. The vote Merkle leaf is still an identity commitment, never that address and never a seed phrase.",
             }
           )
         ),
@@ -647,6 +647,17 @@ function renderDeviceStatus(walletRecord, me, store) {
         ? [h("code", { text: walletRecord.address }), " ", h("span", { class: "field-hint", text: `(${walletRecord.addressScheme})` })]
         : "—"
     ),
+    h("dt", { text: "Active Ethereum address" }),
+    h("dd", { class: me?.identity?.activeEthAddress ? "hex" : "", text: me?.identity?.activeEthAddress || "—" }),
+    h("dt", { text: "Verified methods" }),
+    h(
+      "dd",
+      {
+        text: me?.identity?.authMethods?.length
+          ? me.identity.authMethods.map((m) => m.type).join(", ")
+          : "—",
+      }
+    ),
     h("dt", { text: "Local roll receipts" }),
     h("dd", { text: String(nReg) }),
     h("dt", { text: "Local ballot receipts" }),
@@ -663,7 +674,7 @@ function renderDeviceStatus(walletRecord, me, store) {
     h(
       "div",
       { class: "toolbar" },
-      h("a", { class: "btn", href: "/register", "data-nav": "", text: walletRecord ? "Review registration" : "Create a passkey" })
+      h("a", { class: "btn", href: "/register", "data-nav": "", text: walletRecord ? "Review identity" : "Identify yourself" })
     )
   );
 }

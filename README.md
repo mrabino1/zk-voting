@@ -104,7 +104,7 @@ The properties we are aiming for:
 
 Zero-knowledge does **not** mean “nobody is in charge.” Someone still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, **counting and eligibility checks are not a second trust sink**.
 
-Privacy construction (implementation): WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Passkeys](./docs/PASSKEYS.md) and [ARCHITECTURE](./docs/ARCHITECTURE.md).
+Privacy construction (implementation): a person uniquely identifies with a **passkey**, a **Web3 wallet**, or a **smart-card digital ID**. Several ETH addresses may be verified internally; only one is active. WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the active wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Person identity](./docs/IDENTITY.md), [Passkeys](./docs/PASSKEYS.md), and [ARCHITECTURE](./docs/ARCHITECTURE.md).
 
 ---
 
@@ -123,6 +123,7 @@ Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` unt
 | Republic L2 (`l2/`) | Own sequencer + prover, chainId **27427**, L1 `RollupSettlement` |
 | Block explorer | Node `/explorer` + API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 | Passkeys | WebAuthn PRF; see [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
+| Person identity | Passkey / Web3 / smart card; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 
 ---
@@ -144,6 +145,7 @@ zk-voting/
     OPERATOR.md
     BLOCK_EXPLORER.md
     PASSKEYS.md
+    IDENTITY.md
     L2.md
   apps/
     node/                      DealPunchList-style Node app (API + SPA)
@@ -219,7 +221,9 @@ export REPUBLIC_CHAIN_ID=27427
 
 With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`. Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour that contained the vote has closed. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
-### Passkeys
+### Passkeys and person identity
+
+A person identifies with a **passkey**, a **Web3 wallet**, or a **smart-card digital ID**. Many Ethereum addresses can be verified internally; **exactly one** is active. The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
 
 Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF → wrap/derive secp256k1 smart-account key; **separate** PRF domain → `(trapdoor, nullifierSecret)`. UserOps are bundled; `RepublicPaymaster` sponsors register/vote. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
@@ -278,6 +282,8 @@ The contract set covers:
 | --- | --- |
 | `JurisdictionRegistry` | Who may create elections, which chain roles exist, which reason codes are valid. |
 | `VoterRegistry` | Commitments to registered persons (identity commitments / public keys), per jurisdiction. Registration is not a vote. |
+| `PersonRegistry` | One person (`bytes32` id, never a name): many internally verified ETH addresses, exactly one active. Not the vote leaf. |
+| `DisqualificationRegistry` | Registered persons who **must not** be able to vote in a given election (or on a given question), with reason codes, effective times, and issuer. |
 | `DisqualificationRegistry` | Registered persons who **must not** be able to vote in a given election (or on a given question), with reason codes, effective times, and issuer. |
 | `Election` / `Poll` | Parameters: questions (“aspects”), options, open/close, eligible-set root, disqualification-set root, voting rules. |
 | `ElectionFactory` | Unbounded elections via EIP-1167 clones. `maxParticipants = 0` means unlimited voters. |
@@ -388,7 +394,9 @@ Registration is a **legal and operational** process that **ends** in an on-chain
 
 Typical intake (jurisdiction-configurable, not all required for every election):
 
-- Legal name, date of birth, address / residency evidence
+- **Passkey, Web3 wallet, or smart-card digital ID** (a person may verify all three)
+- Several Ethereum addresses verified internally; **exactly one active** (the roll leaf is still the identity commitment, never that address)
+- Legal name, date of birth, address / residency evidence (clerk file; not on chain)
 - Citizenship or membership evidence
 - Government ID or an approved identity attestation
 - District / precinct / constituency
@@ -566,7 +574,7 @@ These three fight each other. The design chooses explicitly:
 
 If a jurisdiction needs a fully public roll (some do), that is a configuration: commitments can be replaced or accompanied by identified records. ZK voting still hides the **ballot**.
 
-Unlinkability: the passkey smart-account address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Dashboards delay vote proofs by one hour. Details: [`docs/PASSKEYS.md`](./docs/PASSKEYS.md), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+Unlinkability: the active Ethereum address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Dashboards delay vote proofs by one hour. Details: [`docs/IDENTITY.md`](./docs/IDENTITY.md), [`docs/PASSKEYS.md`](./docs/PASSKEYS.md), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
 ---
 
@@ -679,7 +687,9 @@ Dates are not committed.
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
 | **L2** | Republic L2 (chainId **27427**) by default; Lighter and other EVM L2s as portable venues. Execution off L1, security anchored to Ethereum. |
-| **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. |
+| **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. One of three ways to identify a person (with Web3 wallet and smart-card digital ID). |
+| **Person** | One Node user. Uniquely identified. Authenticators and ETH addresses cannot be shared across people. |
+| **Active Ethereum address** | The single ETH address currently registered for that person’s gasless ops. Other verified addresses stay internal. Not the Merkle leaf. |
 
 ---
 

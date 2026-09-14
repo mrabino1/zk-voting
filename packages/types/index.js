@@ -11,6 +11,8 @@
 
 "use strict";
 
+const AUTH_METHOD_TYPES = Object.freeze(["passkey", "web3", "smart_card"]);
+
 /** Republic L2 chain id (see docs/L2.md). */
 const REPUBLIC_CHAIN_ID = 27427;
 
@@ -88,6 +90,47 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ */
+
+/**
+ * How this person proved who they are. A person may hold every type.
+ *
+ * @typedef {Object} AuthMethod
+ * @property {string} id
+ * @property {"passkey"|"web3"|"smart_card"} type
+ * @property {boolean} verified
+ * @property {"self"|"registrar"} [verifiedBy]
+ * @property {string} [verifiedAt] ISO-8601
+ * @property {string} [label]
+ * @property {string} [credentialId] passkey
+ * @property {string} [address] checksummed web3 address
+ * @property {string} [fingerprint] smart-card digest
+ * @property {string} [subject]
+ * @property {string} [issuer]
+ */
+
+/**
+ * Internally verified Ethereum account. Many per person; at most one is active.
+ *
+ * @typedef {Object} EthAccount
+ * @property {string} address Checksummed EOA or smart-account address.
+ * @property {string} [source] passkey | web3 | registrar
+ * @property {boolean} verified
+ * @property {boolean} active Exactly one verified account is active per person.
+ * @property {string} [verifiedAt]
+ */
+
+/**
+ * Public person record. The vote Merkle leaf is still an identityCommitment,
+ * never `activeEthAddress`.
+ *
+ * @typedef {Object} PersonIdentity
+ * @property {string} personId Node user id (UUID).
+ * @property {boolean} personKeyBound Registrar bound a keccak256 civil-file token.
+ * @property {AuthMethod[]} authMethods
+ * @property {EthAccount[]} ethAccounts
+ * @property {string|null} activeEthAddress
+ * @property {number} verifiedEthAddressCount
  */
 
 /**
@@ -218,6 +261,7 @@ module.exports = {
   ElectionState,
   ReasonCode,
   REASON_CODE_LABELS,
+  AUTH_METHOD_TYPES,
   reasonCodeLabel,
   electionStateLabel,
 };

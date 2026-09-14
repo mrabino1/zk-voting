@@ -55,6 +55,8 @@ export function getConfig(overrides = {}) {
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
     allowDevLogin: process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_LOGIN === '1',
+    allowSmartCardMock:
+      process.env.NODE_ENV === 'test' || process.env.ALLOW_SMART_CARD_MOCK === '1',
     sessionCookie: 'republic.sid',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     quiet: process.env.NODE_ENV === 'test',
