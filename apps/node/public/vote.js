@@ -98,7 +98,7 @@ export async function renderVote(main, ctx) {
   const [{ election, source }, me, publicRecord] = await Promise.all([
     loadElection(electionId),
     loadMe(),
-    wallet.getPublicRecord(),
+    wallet.getPublicRecord().catch(() => null),
   ]);
 
   if (!election) {
