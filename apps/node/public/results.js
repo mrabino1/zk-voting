@@ -126,7 +126,7 @@ function questionBlock(question, h) {
         h(
           "thead",
           {},
-          h("tr", {}, h("th", { text: "Option" }), h("th", { text: "Count" }), h("th", { text: "Share" }), h("th", { text: "Share of counted" }))
+          h("tr", {}, h("th", { text: "Option" }), h("th", { text: "Count" }), h("th", { text: "Share" }), h("th", { class: "visually-hidden", text: "Share bar" }))
         ),
         h("tbody", {}, ...question.options.map((opt) => optionRow(opt, question, h)))
       )
