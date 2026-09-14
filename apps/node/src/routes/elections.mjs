@@ -10,6 +10,7 @@ import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { buildAuditorPack } from '../auditorPack.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -186,6 +187,15 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/artifacts',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(buildAuditorPack(election, deps));
+    }),
+  );
+
+  router.get(
     '/:id/envelopes',
     requireAuth,
     requireRole('tally_operator'),
@@ -293,10 +303,16 @@ export function electionsRouter(deps) {
         accepted: true,
         published: result.published,
         nextPublishAt: result.nextPublishAt,
+        superseded: Boolean(result.superseded),
+        generation: result.generation || 1,
         vote: result.vote,
         message: result.published
-          ? 'Ballot accepted. Choice is not stored in the clear.'
-          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.',
+          ? result.superseded
+            ? 'Replacement ballot accepted. The previous ballotHash for this nullifier no longer counts. Choice is not stored in the clear.'
+            : 'Ballot accepted. Choice is not stored in the clear.'
+          : result.superseded
+            ? 'Replacement ballot accepted for relay. The previous ballotHash for this nullifier no longer counts. Public proof waits until this hour closes. Choice is not stored in the clear.'
+            : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.',
         nfp: true,
       });
     }),

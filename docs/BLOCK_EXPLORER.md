@@ -32,7 +32,7 @@ These are **meant** to be public. The explorer should render them in plain langu
 | --- | --- |
 | Blocks | Number, hash, parent, timestamp, state root, sequencer address, tx count. |
 | Registration | `identityCommitment` (field element / bytes32) inserted into the election tree. Leaf **index** if the contract emits it. Never a legal name. |
-| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour that contained the vote has closed**. Timestamp is the hour boundary, not the minute they voted. |
+| Vote accepted | `electionId`, `nullifier`, `ballotHash`, `generation`, relayer address — **only after the hour that contained the vote has closed**. Timestamp is the hour boundary, not the minute they voted. A later ballot for the same nullifier is `VoteSuperseded` / generation > 1; only the last hash counts. |
 | Disqualification | `identityCommitment`, `electionId`, **reason code** (and label, e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revoke events. |
 | Roll freeze | Eligible root, disqualification root, clerk, time. |
 | Tally | Per-option **counts** (after a valid tally proof), `countsHash`, operator. |
@@ -43,7 +43,7 @@ Live **counts that are safe to show** before tally: number registered, number di
 
 ### Hourly disclosure (polling-place unlinkability)
 
-Votes are accepted immediately so a nullifier cannot be reused. Proof of those votes is public only once the UTC hour that contained them has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
+Votes are accepted immediately so a nullifier’s **current** ballot is unique. A replacement ciphertext for the same nullifier is last-ballot-counts (the old hash cannot be replayed). Proof of those votes is public only once the UTC hour that contained them has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
 
 - At 14:23, only events with timestamp `< 14:00` are public. A 14:05 vote appears at 15:00.
 - All votes from that hour are lumped into **one** disclosure block. Public timestamp is the hour end. Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.
@@ -73,7 +73,7 @@ A coercer who watches the explorer learns that **someone** registered a commitme
 ## Indexing rules
 
 1. Prefer **contract events** (`VoterRegistered`, `VoteAccepted`, `Disqualified`, `TallyPosted`, `ElectionCreated`, rollup `submitBatch`) over calldata guesswork.
-2. For `VoteAccepted`, store `nullifier` + `ballotHash` + `relayer`. Do not ABI-decode `encryptedBallot` into an option enum in the UI.
+2. For `VoteAccepted` / `VoteSuperseded`, store `nullifier` + `ballotHash` + `generation` + `relayer`. Do not ABI-decode `encryptedBallot` into an option enum in the UI.
 3. Treat `msg.sender` as **relayer** for inbox calls. Label it that way.
 4. `identityCommitment` is shown as hex / decimal field element, not as a resolved person. Clerk tools that resolve commitments to files are **restricted** (back-office), not `/explorer`.
 5. After cutoff, the explorer still serves historical blocks. Tallies do not rewrite earlier vote rows.

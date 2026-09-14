@@ -32,9 +32,10 @@ contract VotingInvariant is StdInvariant, Test {
         excludeSender(address(0));
     }
 
-    /// @notice A nullifier is used at most once per election.
+    /// @notice A nullifier counts at most once per election (last ballot wins).
+    ///         Same-ciphertext replay is still a revert and is not recorded.
     function invariant_nullifierUnique() public view {
-        assertEq(handler.duplicateNullifiers(), 0, "nullifier spent twice");
+        assertEq(handler.duplicateNullifiers(), 0, "nullifier counted twice");
         uint256 n = handler.trackedElectionCount();
         uint256 ghostAccepted;
         for (uint256 i; i < n; ++i) {
@@ -45,8 +46,15 @@ contract VotingInvariant is StdInvariant, Test {
                 uint256 nullifier = handler.nullifierAt(electionId, j);
                 assertTrue(handler.nullifierUsed(electionId, nullifier), "ghost nullifier missing");
                 assertTrue(handler.getInbox().nullifierUsed(electionId, nullifier), "chain missing spent nullifier");
+                bytes32 current = handler.getInbox().ballotHashOf(electionId, nullifier);
+                assertFalse(
+                    handler.getInbox().ballotHashSuperseded(electionId, nullifier, current),
+                    "current ballotHash marked superseded"
+                );
+                assertGe(handler.getInbox().voteGeneration(electionId, nullifier), 1);
             }
             assertEq(handler.getInbox().acceptedBallots(electionId), handler.acceptedByElection(electionId));
+            assertEq(handler.getInbox().acceptedBallots(electionId), used, "acceptedBallots != unique nullifiers");
         }
         assertEq(handler.votesAccepted(), ghostAccepted);
     }

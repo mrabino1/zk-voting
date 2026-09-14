@@ -38,11 +38,14 @@ function stable(value) {
 
 function votePayload(payload) {
   const src = payload && typeof payload === 'object' ? payload : {};
+  const generation = Number(src.generation || 1);
   return {
     nullifier: payloadNullifier(src),
     ballotHash: src.ballotHash,
     electionId: src.electionId != null ? String(src.electionId) : undefined,
     relayer: src.relayer || 'node',
+    generation: Number.isFinite(generation) && generation > 0 ? generation : 1,
+    previousBallotHash: src.previousBallotHash || undefined,
   };
 }
 
@@ -59,6 +62,17 @@ function sameNullifier(a, b) {
     .replace(/^0x/, '');
   if (!x || !y) return false;
   return x === y || x.endsWith(y) || y.endsWith(x);
+}
+
+function sameHash(a, b) {
+  const x = String(a || '')
+    .toLowerCase()
+    .replace(/^0x/, '');
+  const y = String(b || '')
+    .toLowerCase()
+    .replace(/^0x/, '');
+  if (!x || !y) return false;
+  return x === y;
 }
 
 export class Explorer {
@@ -175,16 +189,45 @@ export class Explorer {
   async recordVote(payload, now, intervalSeconds) {
     const body = votePayload(payload);
     await this.refresh();
-    if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) {
-      return { duplicate: true, published: Boolean(this.findByNullifier(body.nullifier)) };
+    this.chain.sealed = this.chain.sealed || [];
+
+    const sealedIdx = this.chain.sealed.findIndex((item) =>
+      sameNullifier(payloadNullifier(item.payload || {}), body.nullifier),
+    );
+    if (sealedIdx >= 0) {
+      const prev = votePayload(this.chain.sealed[sealedIdx].payload);
+      if (sameHash(prev.ballotHash, body.ballotHash)) {
+        return { duplicate: true, published: false };
+      }
+      this.chain.sealed[sealedIdx] = {
+        receivedAt: now,
+        payload: {
+          ...body,
+          previousBallotHash: prev.ballotHash,
+          generation: Number(prev.generation || 1) + 1,
+        },
+      };
+      await this.persist();
+      return { supersededSealed: true, published: false };
     }
+
+    const existing = this.findByNullifier(body.nullifier);
+    if (existing && sameHash(existing.ballotHash, body.ballotHash)) {
+      return { duplicate: true, published: Boolean(existing) };
+    }
+
+    const generation = existing ? Number(existing.generation || 1) + 1 : Number(body.generation || 1);
+    const enriched = {
+      ...body,
+      previousBallotHash: existing ? existing.ballotHash : body.previousBallotHash,
+      generation,
+    };
+
     const interval = Number(intervalSeconds) || 0;
     if (!interval || interval <= 0) {
-      return this.append('vote', body, { timestamp: now });
+      return this.append(generation > 1 ? 'vote_superseded' : 'vote', enriched, { timestamp: now });
     }
-    await this.refresh();
-    this.chain.sealed = this.chain.sealed || [];
-    this.chain.sealed.push({ receivedAt: now, payload: body });
+    this.chain.sealed.push({ receivedAt: now, payload: enriched });
     await this.persist();
     return { sealed: true, published: false };
   }
@@ -213,9 +256,12 @@ export class Explorer {
     const published = [];
     const buckets = [...groups.keys()].sort((a, b) => a - b);
     for (const bucket of buckets) {
-      const items = groups.get(bucket).filter(
-        (item) => !this.findByNullifier(payloadNullifier(item.payload)),
-      );
+      const items = groups.get(bucket).filter((item) => {
+        const p = votePayload(item.payload);
+        const existing = this.findByNullifier(p.nullifier);
+        if (!existing) return true;
+        return !sameHash(existing.ballotHash, p.ballotHash);
+      });
       if (!items.length) continue;
       items.sort((a, b) =>
         payloadNullifier(a.payload).localeCompare(payloadNullifier(b.payload), 'en'),
@@ -260,17 +306,18 @@ export class Explorer {
     for (const row of rows) {
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
-      if (isDelayedPublicType(type)) {
+      if (isDelayedPublicType(type) || type === 'vote_superseded') {
         const payload = votePayload(row.payload);
         if (!payload.nullifier) continue;
-        if (this.findByNullifier(payload.nullifier)) continue;
+        const existing = this.findByNullifier(payload.nullifier);
+        if (existing && sameHash(existing.ballotHash, payload.ballotHash)) continue;
         if (l2Delayed) {
           await this.refresh();
           this.chain.sealed = (this.chain.sealed || []).filter(
             (item) => !sameNullifier(payloadNullifier(item.payload || {}), payload.nullifier),
           );
           await this.persist();
-          await this.append('vote', payload, { timestamp: blockTs || now });
+          await this.append(existing ? 'vote_superseded' : 'vote', payload, { timestamp: blockTs || now });
           imported += 1;
         } else {
           await this.recordVote(payload, now, intervalSeconds);
@@ -334,6 +381,7 @@ export class Explorer {
   findByNullifier(value) {
     const needle = String(value || '').toLowerCase();
     if (!needle) return null;
+    let best = null;
     for (const tx of Object.values(this.chain.txs)) {
       const presented = this.presentTx(tx);
       const n = String(presented.nullifier || '').toLowerCase();
@@ -343,10 +391,17 @@ export class Explorer {
           n.endsWith(needle.replace(/^0x/, '')) ||
           needle.endsWith(n.replace(/^0x/, '')))
       ) {
-        return presented;
+        if (
+          !best ||
+          Number(presented.generation || 1) > Number(best.generation || 1) ||
+          (Number(presented.generation || 1) === Number(best.generation || 1) &&
+            Number(presented.timestamp || 0) >= Number(best.timestamp || 0))
+        ) {
+          best = presented;
+        }
       }
     }
-    return null;
+    return best;
   }
 
   search(q) {

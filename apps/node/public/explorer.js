@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const FORBIDDEN_KEYS =
     /^(choice|option|optionid|options?selected|vote|plaintext|selected|ballotplaintext|candidate|selection|voteplaintext)$/i;
-  const TX_TYPES = ["REGISTER", "VOTE", "DISQUALIFY", "TALLY", "BATCH"];
+  const TX_TYPES = ["REGISTER", "VOTE", "VOTE_SUPERSEDED", "DISQUALIFY", "TALLY", "BATCH"];
   const LIMIT = 25;
 
   async function request(path) {
@@ -221,8 +221,9 @@
   }
 
   function txSummary(tx) {
-    if (tx.type === "VOTE") {
-      return `nullifier ${shortHex(tx.nullifier)} · ballotHash ${shortHex(tx.ballotHash)}`;
+    if (tx.type === "VOTE" || tx.type === "VOTE_SUPERSEDED") {
+      const gen = tx.generation && Number(tx.generation) > 1 ? ` · gen ${tx.generation}` : "";
+      return `nullifier ${shortHex(tx.nullifier)} · ballotHash ${shortHex(tx.ballotHash)}${gen}`;
     }
     if (tx.type === "REGISTER") {
       return "commitment " + shortHex(tx.identityCommitment);

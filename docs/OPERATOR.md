@@ -93,6 +93,16 @@ forge test --match-path test/invariant/*
 
 From repo root: `npm run test:contracts`, `npm run test:fuzz`, `npm run test:invariant`.
 
+### Independent auditor (no Node private DB)
+
+```bash
+npm run test:auditor
+npm run auditor -- verify --file bundle.json
+node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
+```
+
+Public HTTP: `GET /api/elections/:id/artifacts`. Docs: [`docs/AUDITOR.md`](./AUDITOR.md).
+
 ### Node
 
 ```bash

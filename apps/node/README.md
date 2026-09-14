@@ -25,11 +25,15 @@ Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
 `apps/node/data/` is the demo / operator cache (gitignored). Native addons such
 as `better-sqlite3` are **not** used.
 
-Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
-The Node never writes a passkey user id onto the same record as an encrypted
-ballot or a choice. The UI must not print “I voted for X”. Public dashboards
+Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt, generation }`.
+Last-ballot-counts: a later ciphertext for the same nullifier replaces the stored
+ballot; unique-voter `acceptedBallots` does not increase. The Node never writes a
+passkey user id onto the same record as an encrypted ballot or a choice. The UI
+must not print “I voted for X” (receipts are hashes only). Public dashboards
 and the explorer show vote proofs only after the hour that contained the vote
 has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
+Independent auditors use `GET /api/elections/:id/artifacts` or `tools/auditor`
+(see `/docs/AUDITOR.md`) — never `apps/node/data/`.
 
 ---
 
@@ -70,6 +74,7 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
+| `ELECTION_FACTORY_ADDRESS` | _empty_ | Published on `GET /api/config` and auditor artifacts |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
 | `RP_ID` | `localhost` | WebAuthn rpID |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
@@ -96,6 +101,7 @@ POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
 POST /api/elections/:id/tally       (tally operator)
+GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods

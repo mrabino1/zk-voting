@@ -146,4 +146,33 @@ contract VoteFuzz is Deployer {
             assertEq(inbox.acceptedBallots(id), 1);
         }
     }
+
+    function testFuzz_lastBallotCounts(uint256 nullifier, bytes calldata firstBallot, bytes calldata secondBallot)
+        public
+    {
+        vm.assume(firstBallot.length > 0 && firstBallot.length <= 256);
+        vm.assume(secondBallot.length > 0 && secondBallot.length <= 256);
+        vm.assume(keccak256(firstBallot) != keccak256(secondBallot));
+        vm.assume(nullifier != 0);
+        vm.warp(startTime);
+
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        uint256[] memory firstInputs = voteInputs(electionId, election, nullifier, firstBallot);
+        vm.prank(relayer);
+        inbox.submitVote(electionId, a, b, c, firstInputs, firstBallot);
+
+        uint256[] memory secondInputs = voteInputs(electionId, election, nullifier, secondBallot);
+        vm.prank(relayer);
+        inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
+
+        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(secondBallot));
+        assertTrue(inbox.ballotHashSuperseded(electionId, nullifier, keccak256(firstBallot)));
+        assertEq(inbox.voteGeneration(electionId, nullifier), 2);
+
+        vm.prank(relayer);
+        vm.expectRevert();
+        inbox.submitVote(electionId, a, b, c, firstInputs, firstBallot);
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(secondBallot));
+    }
 }

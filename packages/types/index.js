@@ -145,7 +145,8 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string|bigint} electionId Election id (uint256).
  * @property {string} root Eligible-set Merkle root (bytes32 / uint256 hex).
  * @property {string} disqRoot Disqualification-set Merkle root.
- * @property {string} nullifier Unique per (voter, election). Spent on accept.
+ * @property {string} nullifier Unique per (voter, election). Identifies the voter
+ *   for last-ballot-counts; a later ballotHash for the same nullifier supersedes.
  * @property {string} ballotHash Hash / commitment of `encryptedBallot`.
  * @property {string} [identityCommitment] Optional; MUST NOT be required to
  *   submit a vote. Present only in clerk-side debug tooling, never in the

@@ -37,6 +37,14 @@ export function configRouter(deps) {
         chainId: deps.config.chainId,
         origins: deps.config.origins,
         chainConfigured: deps.chain.isConfigured(),
+        addresses: {
+          factory: deps.config.electionFactoryAddress || null,
+          ballotInbox: deps.config.ballotInboxAddress || null,
+        },
+        coercion: {
+          policy: 'last-ballot-counts',
+          receiptsProveChoice: false,
+        },
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
         identity: {
           methods: ['passkey', 'web3', 'smart_card'],

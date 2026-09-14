@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IElection} from "../src/interfaces/IElection.sol";
+import {BallotInbox} from "../src/BallotInbox.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -94,5 +95,42 @@ contract BallotInboxTest is Deployer {
         submitVote(electionId, election, uint256(keccak256("n1")));
         submitVote(electionId, election, uint256(keccak256("n2")));
         assertEq(inbox.acceptedBallots(electionId), 2);
+    }
+
+    function testLastBallotCountsDoesNotIncreaseAccepted() public {
+        warpOpen(election);
+        bytes memory first = Fixtures.encryptedBallot(nullifier);
+        bytes memory second = abi.encodePacked(first, "revote");
+        submitVoteWithBallot(electionId, election, nullifier, first);
+        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(inbox.voteGeneration(electionId, nullifier), 1);
+
+        vm.expectEmit(true, true, false, true, address(inbox));
+        emit VoteSuperseded(electionId, nullifier, keccak256(first), keccak256(second), 2, relayer);
+        submitVoteWithBallot(electionId, election, nullifier, second);
+
+        assertTrue(inbox.nullifierUsed(electionId, nullifier));
+        assertEq(inbox.acceptedBallots(electionId), 1, "revote must not mint a second voter");
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(second));
+        assertEq(inbox.voteGeneration(electionId, nullifier), 2);
+        assertTrue(inbox.ballotHashSuperseded(electionId, nullifier, keccak256(first)));
+        assertFalse(inbox.ballotHashSuperseded(electionId, nullifier, keccak256(second)));
+    }
+
+    function testSupersededBallotHashCannotReplay() public {
+        warpOpen(election);
+        bytes memory first = Fixtures.encryptedBallot(nullifier);
+        bytes memory second = abi.encodePacked("later-ballot", nullifier);
+        submitVoteWithBallot(electionId, election, nullifier, first);
+        submitVoteWithBallot(electionId, election, nullifier, second);
+
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        uint256[] memory inputs = voteInputs(electionId, election, nullifier, first);
+        vm.prank(relayer);
+        vm.expectRevert(BallotInbox.BallotHashSuperseded.selector);
+        inbox.submitVote(electionId, a, b, c, inputs, first);
+
+        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(second));
     }
 }

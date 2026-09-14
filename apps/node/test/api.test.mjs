@@ -249,6 +249,7 @@ describe('Republic Node API', () => {
     assert.deepEqual(Object.keys(json.vote).sort(), [
       'ballotHash',
       'electionId',
+      'generation',
       'nullifier',
       'relayer',
     ]);
@@ -276,8 +277,12 @@ describe('Republic Node API', () => {
         'acceptedAt',
         'ballotHash',
         'electionId',
+        'generation',
+        'lastAcceptedAt',
         'nullifier',
+        'previousBallotHash',
         'relayer',
+        'supersededHashes',
       ]);
     }
     for (const env of snap.envelopes) {

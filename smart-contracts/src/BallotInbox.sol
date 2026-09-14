@@ -14,6 +14,12 @@ import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 /// @notice Accepts gasless vote proofs. `msg.sender` is the relayer/bundler.
 /// @dev There is NO function that takes a voter address. The passkey smart
 ///      account is not an argument; unlinkability depends on that.
+///
+///      Coercion slice (not MACI): last ballot for a nullifier counts. A voter
+///      may submit a new proof + ciphertext in the voting window. The previous
+///      `ballotHash` is marked superseded and cannot be replayed. Unique
+///      nullifiers still increment `acceptedBallots` once. Same-ciphertext
+///      resubmission still reverts `NullifierUsed` (double-spend of that ballot).
 contract BallotInbox is IBallotInbox {
     error ZeroAddress();
     error UnknownElection();
@@ -27,6 +33,7 @@ contract BallotInbox is IBallotInbox {
     error ElectionIdMismatch();
     error BallotHashMismatch();
     error NullifierUsed();
+    error BallotHashSuperseded();
     error InvalidProof();
     error AlreadyTallied();
 
@@ -35,6 +42,8 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => bool)) private _nullifierUsed;
     mapping(uint256 => uint256) private _acceptedBallots;
     mapping(uint256 => mapping(uint256 => bytes32)) private _ballotHashOf;
+    mapping(uint256 => mapping(uint256 => uint32)) private _generation;
+    mapping(uint256 => mapping(uint256 => mapping(bytes32 => bool))) private _superseded;
 
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
@@ -61,12 +70,15 @@ contract BallotInbox is IBallotInbox {
         _requireNotTallied(electionId);
         _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
 
-        uint256 nullifier = publicInputs[2];
-        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
-
         if (!IGroth16Verifier(verifier).verifyProof(a, b, c, publicInputs)) revert InvalidProof();
 
-        _recordAcceptance(electionId, nullifier, bytes32(publicInputs[3]));
+        uint256 nullifier = publicInputs[2];
+        bytes32 ballotHash = bytes32(publicInputs[3]);
+        if (_nullifierUsed[electionId][nullifier]) {
+            _supersede(electionId, nullifier, ballotHash);
+        } else {
+            _recordAcceptance(electionId, nullifier, ballotHash);
+        }
     }
 
     /// @inheritdoc IBallotInbox
@@ -82,6 +94,20 @@ contract BallotInbox is IBallotInbox {
     /// @inheritdoc IBallotInbox
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32) {
         return _ballotHashOf[electionId][nullifier];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function voteGeneration(uint256 electionId, uint256 nullifier) external view returns (uint32) {
+        return _generation[electionId][nullifier];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function ballotHashSuperseded(uint256 electionId, uint256 nullifier, bytes32 ballotHash)
+        external
+        view
+        returns (bool)
+    {
+        return _superseded[electionId][nullifier][ballotHash];
     }
 
     function _requireNotTallied(uint256 electionId) internal view {
@@ -134,9 +160,28 @@ contract BallotInbox is IBallotInbox {
     function _recordAcceptance(uint256 electionId, uint256 nullifier, bytes32 ballotHash) internal {
         _nullifierUsed[electionId][nullifier] = true;
         _ballotHashOf[electionId][nullifier] = ballotHash;
+        _generation[electionId][nullifier] = 1;
         unchecked {
             _acceptedBallots[electionId] += 1;
         }
+        emit VoteAccepted(electionId, nullifier, ballotHash, msg.sender);
+    }
+
+    /// @dev Replace the current ballot for this nullifier. Unique-voter count
+    ///      (`acceptedBallots`) does not increase. A coercer who captured the
+    ///      first ciphertext cannot replay it after the voter overwrites.
+    function _supersede(uint256 electionId, uint256 nullifier, bytes32 ballotHash) internal {
+        bytes32 current = _ballotHashOf[electionId][nullifier];
+        if (ballotHash == current) revert NullifierUsed();
+        if (_superseded[electionId][nullifier][ballotHash]) revert BallotHashSuperseded();
+
+        _superseded[electionId][nullifier][current] = true;
+        _ballotHashOf[electionId][nullifier] = ballotHash;
+        uint32 gen;
+        unchecked {
+            gen = ++_generation[electionId][nullifier];
+        }
+        emit VoteSuperseded(electionId, nullifier, current, ballotHash, gen, msg.sender);
         emit VoteAccepted(electionId, nullifier, ballotHash, msg.sender);
     }
 }

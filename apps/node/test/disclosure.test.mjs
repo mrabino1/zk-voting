@@ -160,6 +160,7 @@ describe('hourly polling-place unlinkability', () => {
     assert.deepEqual(Object.keys(v2.json.vote).sort(), [
       'ballotHash',
       'electionId',
+      'generation',
       'nullifier',
       'relayer',
     ]);
