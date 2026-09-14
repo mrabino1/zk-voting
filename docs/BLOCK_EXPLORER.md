@@ -6,7 +6,7 @@ Republic needs a **public, election-grade explorer** because the Node is not the
 
 This is not a general-purpose ETH explorer white-label. It is indexed around election outcomes on Republic L2 (chainId **27427**) and, when used, L1 settlement / tally-mirror transactions.
 
-UI: Node SPA `/explorer`. HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`. Backend reads L2 JSON-RPC (`eth_getBlockByNumber`, `eth_getLogs`) plus the factory / registry / inbox / tally / rollup ABIs.
+UI: Node page `/explorer` (`public/explorer.html` + `explorer.js`, vanilla JS). HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`, `GET /api/explorer/search`, `GET /api/explorer/nullifiers/:value`, `GET /api/explorer/elections/:id`. Backend is the JSON log `apps/node/data/l2-chain.json` (Node appends + sequencer `POST /api/explorer/ingest`). The civic sequencer also exposes `eth_getBlockByNumber` on **:8546**. This explorer does **not** ABI-decode generic EVM logs.
 
 ---
 
@@ -72,7 +72,7 @@ A coercer who watches the explorer learns that **someone** registered a commitme
 
 ## Indexing rules
 
-1. Prefer **contract events** (`VoterRegistered`, `VoteAccepted`, `Disqualified`, `TallyPosted`, `ElectionCreated`, rollup `submitBatch`) over calldata guesswork.
+1. Prefer **typed civic outcomes** already on the JSON log (`register`, `vote`, `disqualify`, `tally`, `roll_frozen`, …). On an EVM, prefer contract events (`VoterRegistered`, `VoteAccepted`, `Disqualified`, `TallyPosted`, `ElectionCreated`, rollup `submitBatch`) over calldata guesswork. The Node explorer today indexes the civic JSON log, not decoded EVM receipts.
 2. For `VoteAccepted`, store `nullifier` + `ballotHash` + `relayer`. Do not ABI-decode `encryptedBallot` into an option enum in the UI.
 3. Treat `msg.sender` as **relayer** for inbox calls. Label it that way.
 4. `identityCommitment` is shown as hex / decimal field element, not as a resolved person. Clerk tools that resolve commitments to files are **restricted** (back-office), not `/explorer`.

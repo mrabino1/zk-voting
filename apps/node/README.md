@@ -5,7 +5,7 @@
 This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
 (product name Republic): JSON HTTP API, WebAuthn passkeys, Web3 and smart-card
 person identity, a gasless vote relayer, an L2 block-explorer backend, and a
-static host for the React SPA.
+static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
 
 There is no token. There is no paid tier. Do not commercialize this software.
 See `/NOT_FOR_PROFIT.md` at the repo root.
@@ -57,8 +57,11 @@ npm test -w apps/node
 
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
-The process serves `public/` and `dist/` if present. Unknown GET routes that are
+The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
+Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`.
+Admin / back-office / explorer are separate HTML files. `/elections/:id/results` is
+**not** implemented on the voter router yet.
 
 ---
 
@@ -72,7 +75,7 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
 | `RP_ID` | `localhost` | WebAuthn rpID |
-| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
+| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |

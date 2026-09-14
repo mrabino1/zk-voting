@@ -38,7 +38,7 @@ const LOADING_SHELL = `<!DOCTYPE html>
 <body>
   <p class="nfp">NOT FOR PROFIT</p>
   <h1>Republic</h1>
-  <p class="muted">The UI is loading. This Node process serves the civic voting API and will host the React SPA from <code>public/</code> or <code>dist/</code> when present.</p>
+  <p class="muted">The UI is loading. This Node process serves the civic voting API and vanilla JS pages from <code>public/</code> (or <code>dist/</code> if present).</p>
   <p class="muted">Product: zk-voting · civic public good, not a commercial product.</p>
 </body>
 </html>
