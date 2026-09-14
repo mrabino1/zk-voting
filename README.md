@@ -268,7 +268,9 @@ The Node side is the human product. It should feel operationally familiar to any
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
 | Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
 
-SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+SPA routes (Vite + React, served by Express): `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode` (same election), `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+
+Public election ids are UUID v4. On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`.
 
 ---
 

@@ -38,7 +38,8 @@ const PUBLIC_INPUT_KEYS = Object.freeze([
  * @param {string|number|bigint} input.disqRoot Disqualification Merkle root.
  * @param {string|number|bigint} input.nullifier Vote nullifier.
  * @param {string|number|bigint} input.ballotHash Commitment of the ciphertext.
- * @param {string|number|bigint} input.electionId Election id.
+ * @param {string|number|bigint} input.electionId On-chain uint256 election id
+ *   (not the public UUID used in `/vote/:id`).
  * @returns {bigint[]} Length 5.
  */
 function serializePublicInputs(input) {

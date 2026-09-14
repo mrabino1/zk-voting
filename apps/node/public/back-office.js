@@ -160,7 +160,10 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
-    return title + " · #" + electionIdOf(row) + (state ? " · " + state : "");
+    const short = pick(row, ["shortCode"]);
+    const id = electionIdOf(row);
+    const ref = short ? short : String(id).slice(0, 8);
+    return title + " · " + ref + (state ? " · " + state : "");
   }
 
   function markRole(el, ok) {
@@ -341,7 +344,12 @@
     try {
       const created = await request("/api/elections", { method: "POST", body });
       const id = pick(created, ["election.id", "id"]) || "";
-      flash($("flash-election"), "ok", "Created election" + (id ? " " + id : "") + ". Freeze the roll before opening.");
+      const short = pick(created, ["election.shortCode", "shortCode"]) || "";
+      const onChain = pick(created, ["election.onChainElectionId", "onChainElectionId"]) || "";
+      const bits = ["Created election " + id];
+      if (short) bits.push("short /v/" + short);
+      if (onChain) bits.push("on-chain id " + onChain);
+      flash($("flash-election"), "ok", bits.join(" · ") + ". Freeze the roll before opening.");
       await loadElections();
     } catch (err) {
       flash($("flash-election"), "err", errText(err));

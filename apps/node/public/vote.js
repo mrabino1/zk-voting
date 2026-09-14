@@ -92,6 +92,7 @@ export async function renderVote(main, ctx) {
     formatTime,
     electionStateInfo,
     electionId,
+    chainElectionId,
     SAMPLE_QUESTIONS: sampleQs,
   } = ctx;
 
@@ -140,7 +141,18 @@ export async function renderVote(main, ctx) {
       h(
         "ul",
         { class: "meta-list" },
-        h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { text: String(election.id) })),
+        h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: String(election.id) })),
+        election.shortCode
+          ? h(
+              "li",
+              {},
+              h("span", { class: "lbl", text: "Short link" }),
+              h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
+            )
+          : null,
+        election.onChainElectionId
+          ? h("li", {}, h("span", { class: "lbl", text: "On-chain id" }), h("span", { text: String(election.onChainElectionId) }))
+          : null,
         h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
         h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
         election.ballotSpecHash
@@ -321,6 +333,7 @@ export async function renderVote(main, ctx) {
 
     try {
       const auth = await wallet.authorizeBallot({ electionId: election.id, ballotBytes });
+      const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
       const dummyRoot = election.eligibleRoot || "0x" + "00".repeat(32);
       const body = {
         electionId: String(election.id),
@@ -347,7 +360,7 @@ export async function renderVote(main, ctx) {
             ["0x0", "0x0"],
           ],
           c: ["0x0", "0x0"],
-          publicInputs: [dummyRoot, auth.nullifier, auth.ballotHash, String(election.id)],
+          publicInputs: [dummyRoot, auth.nullifier, auth.ballotHash, onChainId],
         },
       };
 

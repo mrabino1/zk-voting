@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
 import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import { parseOnChainElectionId } from '../electionIds.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
@@ -121,6 +122,12 @@ export function electionsRouter(deps) {
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
       }
+      let onChainElectionId = null;
+      try {
+        onChainElectionId = parseOnChainElectionId(body.onChainElectionId);
+      } catch (err) {
+        throw new HttpError(err.status || 400, err.message);
+      }
       const election = await store.createElection({
         title,
         metadataURI: String(body.metadataURI || ''),
@@ -137,20 +144,26 @@ export function electionsRouter(deps) {
         tallyOperator: body.tallyOperator || '',
         verifier: body.verifier || '',
         lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
+        onChainElectionId,
         createdBy: req.user.id,
       });
       await explorer.append('election_created', {
         electionId: String(election.id),
+        shortCode: election.shortCode,
+        onChainElectionId: String(election.onChainElectionId),
         title: election.title,
         jurisdictionId: election.jurisdictionId,
         startTime: election.startTime,
         cutoffTime: election.cutoffTime,
       });
+      const dto = presentElection(election, deps);
       res.status(201).json({
         ok: true,
         id: election.id,
         electionId: election.id,
-        election: presentElection(election, deps),
+        shortCode: election.shortCode,
+        onChainElectionId: election.onChainElectionId,
+        election: dto,
         nfp: true,
       });
     }),
@@ -195,13 +208,13 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(409, 'envelopes available after cutoff', { code: 'NOT_CLOSED' });
       }
-      const envelopes = store.listEnvelopes(req.params.id);
+      const envelopes = store.listEnvelopes(election.id);
       for (const env of envelopes) {
         if ('userId' in env || 'choice' in env) {
           throw new HttpError(500, 'privacy invariant violated');
         }
       }
-      res.json({ electionId: String(req.params.id), envelopes, nfp: true });
+      res.json({ electionId: String(election.id), envelopes, nfp: true });
     }),
   );
 
@@ -210,10 +223,10 @@ export function electionsRouter(deps) {
     requireAuth,
     requireRole('clerk', 'registrar', 'disqualification_officer'),
     asyncHandler(async (req, res) => {
-      store.requireElection(req.params.id);
+      const election = store.requireElection(req.params.id);
       res.json({
-        electionId: String(req.params.id),
-        registrations: store.listRegistrations(req.params.id),
+        electionId: String(election.id),
+        registrations: store.listRegistrations(election.id),
         nfp: true,
       });
     }),

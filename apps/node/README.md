@@ -59,6 +59,13 @@ npm test -w apps/node
 
 The process serves `public/` and `dist/` if present. Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
+`GET /v/:shortCode` and `GET /e/:shortCode` 302 to `/vote/<uuid>` when the code
+resolves.
+
+New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
+`GET /api/elections/:id` accepts UUID, short code, or `onChainElectionId`.
+On-chain / circuit `electionId` stays the factory `uint256`, stored as
+`onChainElectionId` on the Node record.
 
 ---
 
@@ -89,9 +96,11 @@ Passkey rpName is always **Republic**.
 
 ```
 GET  /health
+GET  /v/:shortCode                  (302 → /vote/<uuid>)
+GET  /e/:shortCode                  (302 → /vote/<uuid>)
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
-GET  /api/elections/:id
+GET  /api/elections/:id             (UUID, shortCode, or onChainElectionId)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)

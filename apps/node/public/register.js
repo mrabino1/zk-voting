@@ -17,6 +17,7 @@ export async function renderRegister(main, ctx) {
     recordRegistration,
     formatTime,
     electionStateInfo,
+    electionRefEquals,
     route,
   } = ctx;
 
@@ -27,6 +28,9 @@ export async function renderRegister(main, ctx) {
   ]);
 
   const preselect = route.query.get("election") || "";
+  const matchPre = electionRefEquals
+    ? elections.find((e) => electionRefEquals(e, preselect))
+    : elections.find((e) => e.id === preselect);
   const state = {
     busy: false,
     error: "",
@@ -34,7 +38,7 @@ export async function renderRegister(main, ctx) {
     record: publicRecord,
     identity: me?.identity || me?.me?.identity || null,
     methodTab: "passkey",
-    selected: preselect && elections.some((e) => e.id === preselect) ? preselect : elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
+    selected: matchPre?.id || elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
   };
 
   const root = h("div", { class: "register-page" });

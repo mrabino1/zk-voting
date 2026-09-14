@@ -5,6 +5,7 @@
 import { keccak256, toHex } from 'viem';
 
 import { HttpError, stripBallotPii } from './http.mjs';
+import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32 } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
@@ -24,14 +25,24 @@ export function hashBallot(encryptedBallot) {
   return keccak256(toEncryptedHex(encryptedBallot));
 }
 
-function asInputList(publicInputs, electionId, { root, nullifier, ballotHash }) {
-  if (Array.isArray(publicInputs) && publicInputs.length >= 4) {
-    return publicInputs.slice(0, 4);
+function asInputList(publicInputs, onChainId, { root, nullifier, ballotHash }) {
+  if (Array.isArray(publicInputs) && publicInputs.length >= 5) {
+    const copy = publicInputs.slice(0, 5);
+    copy[4] = onChainId;
+    return copy;
   }
-  return [root || toBytes32(0), nullifier, ballotHash, electionId];
+  if (Array.isArray(publicInputs) && publicInputs.length >= 4) {
+    const copy = publicInputs.slice(0, 4);
+    copy[3] = onChainId;
+    return copy;
+  }
+  return [root || toBytes32(0), nullifier, ballotHash, onChainId];
 }
 
-export function parseVoteBody(body, electionId) {
+export function parseVoteBody(body, election) {
+  const electionId = typeof election === 'object' && election ? String(election.id) : String(election);
+  const onChainId =
+    typeof election === 'object' && election ? chainElectionId(election) : String(election);
   if (!body || typeof body !== 'object') {
     throw new HttpError(400, 'JSON body required');
   }
@@ -72,13 +83,19 @@ export function parseVoteBody(body, electionId) {
   if (nullifier == null || nullifier === '') {
     throw new HttpError(400, 'nullifier required');
   }
-  if (eid != null && String(eid) !== String(electionId)) {
-    throw new HttpError(400, 'electionId mismatch');
+  if (eid != null && eid !== '') {
+    const matches =
+      typeof election === 'object' && election
+        ? electionMatchesRef(election, eid)
+        : String(eid) === String(electionId);
+    if (!matches) {
+      throw new HttpError(400, 'electionId mismatch');
+    }
   }
   if (ballotHash == null || ballotHash === '') {
     ballotHash = hashBallot(encryptedBallot);
   }
-  const inputs = asInputList(publicInputs, electionId, { root, nullifier, ballotHash });
+  const inputs = asInputList(publicInputs, onChainId, { root, nullifier, ballotHash });
   return {
     proof: stripBallotPii(proof),
     root,
@@ -111,7 +128,7 @@ export function assertVoteWindow(election, now = Math.floor(Date.now() / 1000)) 
  */
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
   const election = store.requireElection(electionId);
-  const parsed = parseVoteBody(body, election.id);
+  const parsed = parseVoteBody(body, election);
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
@@ -121,7 +138,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
 
   if (chain.isConfigured()) {
     await chain.submitVote({
-      electionId: election.id,
+      electionId: chainElectionId(election),
       proof: parsed.proof,
       publicInputs: parsed.publicInputs,
       encryptedBallot: parsed.encryptedBallot,

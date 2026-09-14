@@ -188,6 +188,27 @@ may also create (bootstrap).
 
 Events: `ElectionCreated(uint256 indexed id, address election, bytes32 jurisdictionId, uint64 start, uint64 cutoff)`.
 
+### Election identifiers (off-chain vs on-chain)
+
+These are **two different ids**. Do not put a UUID into a `uint256` circuit
+input or `BallotInbox.submitVote`.
+
+| Field | Where | Shape |
+| --- | --- | --- |
+| `id` | Node API, SPA `/vote/:id`, clerk links | UUID v4 (canonical public id) |
+| `shortCode` | `/v/:shortCode`, `/e/:shortCode`, optional API `:id` | 10 url-safe chars, unique per Node |
+| `onChainElectionId` | `ElectionFactory`, registries, BallotInbox, Groth16 `electionId` | `uint256`, factory `++electionCount` |
+
+`GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
+on-chain id (and any leftover non-UUID fixture ids). Short HTTP routes
+302 to `/vote/<uuid>`. New elections mint both UUID and short code; the
+Node stores `onChainElectionId` as the mapping. Local demos allocate a
+sequential integer so proofs still have a uint256 when the factory is not
+invoked. When a clerk already created on chain, `POST /api/elections` may
+send `onChainElectionId` to record that mapping.
+
+The factory is **not** changed: it still returns `(uint256 electionId, address)`.
+
 ### `IElection`
 
 Minimal proxy that owns per-election roots and points at inbox/registry.
@@ -435,7 +456,7 @@ the DealPunchList "organizations". Elections are the "rooms".
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk)
-GET  /api/elections/:id
+GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
@@ -475,7 +496,8 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 (WebAuthn PRF wraps the Ethereum key; no seed phrase shown).
 
 - `/` — voter home (consumer)
-- `/vote/:id` — ballot (passkey)
+- `/vote/:id` — ballot (passkey). `:id` is a UUID v4, or a short code / legacy id that the Node resolves to that UUID.
+- `/v/:shortCode`, `/e/:shortCode` — same election (Node 302s to `/vote/<uuid>`)
 - `/register` — intake (passkey / Web3 / smart-card; one active ETH address)
 - `/admin` — platform admin (hosts, keys, jurisdictions)
 - `/back-office` — clerks / registrars / disqualification officers

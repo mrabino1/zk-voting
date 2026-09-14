@@ -143,6 +143,23 @@ export function formatTime(value) {
   }
 }
 
+export function electionRefEquals(election, ref) {
+  if (!election || ref == null || ref === "") return false;
+  const r = String(ref);
+  if (String(election.id) === r) return true;
+  if (election.shortCode && String(election.shortCode) === r) return true;
+  if (election.onChainElectionId != null && String(election.onChainElectionId) === r) return true;
+  if (Array.isArray(election.aliases) && election.aliases.some((a) => String(a) === r)) return true;
+  return false;
+}
+
+export function chainElectionId(election) {
+  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== "") {
+    return String(election.onChainElectionId);
+  }
+  return String(election?.id ?? "");
+}
+
 export function unixSeconds(value) {
   if (value == null || value === "") return null;
   let n = Number(value);
@@ -185,6 +202,15 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
   return {
     ...raw,
     id,
+    shortCode: raw.shortCode || raw.short_code || null,
+    onChainElectionId:
+      raw.onChainElectionId != null
+        ? String(raw.onChainElectionId)
+        : raw.on_chain_election_id != null
+          ? String(raw.on_chain_election_id)
+          : null,
+    aliases: Array.isArray(raw.aliases) ? raw.aliases.map((a) => String(a)) : [],
+    links: raw.links || null,
     title: raw.title || params.title || `Election ${id}`,
     jurisdiction:
       raw.jurisdiction ||
@@ -210,7 +236,10 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
 export function sampleElections(now = Math.floor(Date.now() / 1000)) {
   return [
     {
-      id: "1",
+      id: "3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01",
+      shortCode: "nbrdge2k3m",
+      onChainElectionId: "1",
+      aliases: ["1"],
       title: "City of Northbridge General Municipal Election",
       jurisdiction: "City of Northbridge",
       jurisdictionId: "northbridge",
@@ -226,7 +255,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: SAMPLE_QUESTIONS,
     },
     {
-      id: "2",
+      id: "7a8b9c0d-1e2f-4a3b-9c4d-5e6f70819202",
+      shortCode: "ctymeas4n8",
+      onChainElectionId: "2",
+      aliases: ["2"],
       title: "County Measure A — Public Library Bond",
       jurisdiction: "Northbridge County",
       jurisdictionId: "northbridge-county",
@@ -241,7 +273,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
-      id: "3",
+      id: "4b5c6d7e-8f90-41a2-a3b4-c5d6e7f80903",
+      shortCode: "schbrd5p2q",
+      onChainElectionId: "3",
+      aliases: ["3"],
       title: "School Board, District 4",
       jurisdiction: "Northbridge Unified School District",
       jurisdictionId: "nusd",
@@ -256,7 +291,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: [SAMPLE_QUESTIONS[1]],
     },
     {
-      id: "4",
+      id: "90ab12cd-34ef-4a56-8b78-90abcdef0404",
+      shortCode: "stref6q3r4",
+      onChainElectionId: "4",
+      aliases: ["4"],
       title: "Statewide special referendum — transit authority",
       jurisdiction: "State of example",
       jurisdictionId: "state-ex",
@@ -271,7 +309,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
-      id: "5",
+      id: "11223344-5566-4777-8899-aabbccdde505",
+      shortCode: "wrkcbd7s4t",
+      onChainElectionId: "5",
+      aliases: ["5"],
       title: "Workers’ cooperative board (annual)",
       jurisdiction: "Northbridge Food Cooperative",
       jurisdictionId: "nfc",
@@ -342,10 +383,18 @@ export function reasonLabel(code) {
   return REASON_CODES[n] || String(code);
 }
 
+function voterKeys(election) {
+  const keys = [String(election.id)];
+  if (election.shortCode) keys.push(String(election.shortCode));
+  if (election.onChainElectionId != null) keys.push(String(election.onChainElectionId));
+  for (const a of election.aliases || []) keys.push(String(a));
+  return keys;
+}
+
 function voterStatusForElection(election, me, store) {
-  const id = String(election.id);
-  if (store.votes[id]) return { key: "recorded", label: "Ballot recorded", className: "status-recorded" };
-  const remote = me?.elections?.[id] || me?.statuses?.[id];
+  const keys = voterKeys(election);
+  if (keys.some((k) => store.votes[k])) return { key: "recorded", label: "Ballot recorded", className: "status-recorded" };
+  const remote = keys.map((k) => me?.elections?.[k] || me?.statuses?.[k]).find(Boolean);
   if (remote) {
     const status = String(remote.status || remote).toLowerCase();
     if (status.includes("disqual")) {
@@ -362,7 +411,7 @@ function voterStatusForElection(election, me, store) {
   if (me?.disqualified || me?.isDisqualified) {
     return { key: "disqualified", label: "Disqualified", className: "status-disqualified" };
   }
-  if (store.registrations[id]) {
+  if (keys.some((k) => store.registrations[k])) {
     if (election.state === 2) return { key: "eligible", label: "Eligible on this device", className: "status-eligible" };
     return { key: "registered", label: "Registered on this device", className: "status-eligible" };
   }
@@ -392,7 +441,7 @@ export async function loadElection(id) {
   } catch {
     /* fall through */
   }
-  const sample = sampleElections().find((e) => e.id === String(id));
+  const sample = sampleElections().find((e) => electionRefEquals(e, id));
   if (sample) return { election: sample, source: "sample" };
   return { election: null, source: "missing" };
 }
@@ -437,6 +486,8 @@ function ctx() {
     wallet,
     formatTime,
     electionStateInfo,
+    electionRefEquals,
+    chainElectionId,
     normalizeElection,
     loadElections,
     loadElection,
@@ -485,6 +536,14 @@ function renderHome(main, route, bundle) {
                 { class: "meta-list" },
                 h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
                 h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+                election.shortCode
+                  ? h(
+                      "li",
+                      {},
+                      h("span", { class: "lbl", text: "Short link" }),
+                      h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
+                    )
+                  : null,
                 h(
                   "li",
                   {},
