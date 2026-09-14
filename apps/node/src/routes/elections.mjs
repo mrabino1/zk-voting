@@ -55,6 +55,24 @@ function expectedCountLength(questions) {
   return questions.reduce((n, q) => n + Math.max(q.options?.length || 0, 1), 0);
 }
 
+async function revokeHandler(req, store, explorer) {
+  const { identityCommitment, evidenceHash } = req.body || {};
+  if (identityCommitment == null || identityCommitment === '') {
+    throw new HttpError(400, 'identityCommitment required');
+  }
+  const { election, record } = await store.revokeDisqualification(req.params.id, {
+    identityCommitment,
+    evidenceHash,
+    issuer: req.user.handle,
+  });
+  await explorer.append('revoke', {
+    electionId: String(election.id),
+    identityCommitment: record.identityCommitment,
+    evidenceHash: record.revokeEvidenceHash,
+  });
+  return election;
+}
+
 export function electionsRouter(deps) {
   const { store, explorer, chain } = deps;
   const router = Router();
@@ -96,8 +114,7 @@ export function electionsRouter(deps) {
       }
       const questions = normalizeQuestions(body.questions);
       const ballotSpecHash =
-        body.ballotSpecHash ||
-        keccak256(stringToHex(stableStringify({ title, questions })));
+        body.ballotSpecHash || keccak256(stringToHex(stableStringify({ title, questions })));
       const jurisdictionId = String(body.jurisdictionId || 'demo');
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
@@ -252,7 +269,6 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
-      // Do not pass req.user into the relay. Proof authorizes the ballot.
       const result = await relayVote({
         store,
         explorer,
@@ -319,20 +335,7 @@ export function electionsRouter(deps) {
     requireAuth,
     requireRole('disqualification_officer'),
     asyncHandler(async (req, res) => {
-      const { identityCommitment, evidenceHash } = req.body || {};
-      if (identityCommitment == null || identityCommitment === '') {
-        throw new HttpError(400, 'identityCommitment required');
-      }
-      const { election, record } = await store.revokeDisqualification(req.params.id, {
-        identityCommitment,
-        evidenceHash,
-        issuer: req.user.handle,
-      });
-      await explorer.append('revoke', {
-        electionId: String(election.id),
-        identityCommitment: record.identityCommitment,
-        evidenceHash: record.revokeEvidenceHash,
-      });
+      const election = await revokeHandler(req, store, explorer);
       res.json({ ok: true, election: publicElection(election), nfp: true });
     }),
   );
@@ -342,20 +345,7 @@ export function electionsRouter(deps) {
     requireAuth,
     requireRole('disqualification_officer'),
     asyncHandler(async (req, res) => {
-      const { identityCommitment, evidenceHash } = req.body || {};
-      if (identityCommitment == null || identityCommitment === '') {
-        throw new HttpError(400, 'identityCommitment required');
-      }
-      const { election, record } = await store.revokeDisqualification(req.params.id, {
-        identityCommitment,
-        evidenceHash,
-        issuer: req.user.handle,
-      });
-      await explorer.append('revoke', {
-        electionId: String(election.id),
-        identityCommitment: record.identityCommitment,
-        evidenceHash: record.revokeEvidenceHash,
-      });
+      const election = await revokeHandler(req, store, explorer);
       res.json({ ok: true, election: publicElection(election), nfp: true });
     }),
   );

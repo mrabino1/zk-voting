@@ -73,8 +73,6 @@ export function parseVoteBody(body, electionId) {
   if (eid != null && String(eid) !== String(electionId)) {
     throw new HttpError(400, 'electionId mismatch');
   }
-  // ballotHash is a commitment from the proof / client. It is not required to
-  // equal keccak(encryptedBallot); the ciphertext is opaque.
   if (ballotHash == null || ballotHash === '') {
     ballotHash = hashBallot(encryptedBallot);
   }

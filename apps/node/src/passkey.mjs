@@ -105,9 +105,7 @@ export function createPasskeyService(config, store) {
   async function finishRegister({ body, user, handle }) {
     const userName = (user?.handle || handle || body?.handle || '').trim();
     const chal = challengeFromClientData(body);
-    const pending =
-      take(chal) ||
-      (userName ? take(`reg:${userName.toLowerCase()}`) : null);
+    const pending = take(chal) || (userName ? take(`reg:${userName.toLowerCase()}`) : null);
     if (!pending || pending.type !== 'register') {
       throw new HttpError(400, 'no registration challenge');
     }

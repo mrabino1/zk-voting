@@ -52,8 +52,7 @@ export function republicChain(chainId, rpc) {
 function asBigInt(value) {
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(value);
-  const s = String(value);
-  return BigInt(s);
+  return BigInt(String(value));
 }
 
 function dummyPoints() {

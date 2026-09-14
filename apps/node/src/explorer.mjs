@@ -85,10 +85,6 @@ export class Explorer {
     return this.chain.blocks[this.chain.blocks.length - 1].hash;
   }
 
-  /**
-   * Produce one block with one tx (demo sequencer). Types: election_created,
-   * register, vote, disqualify, revoke, roll_frozen, tally.
-   */
   async append(type, payload) {
     await this.refresh();
     const number = this.headNumber() + 1;
@@ -170,7 +166,12 @@ export class Explorer {
     for (const tx of Object.values(this.chain.txs)) {
       const presented = this.presentTx(tx);
       const n = String(presented.nullifier || '').toLowerCase();
-      if (n && (n === needle || n.endsWith(needle.replace(/^0x/, '')) || needle.endsWith(n.replace(/^0x/, '')))) {
+      if (
+        n &&
+        (n === needle ||
+          n.endsWith(needle.replace(/^0x/, '')) ||
+          needle.endsWith(n.replace(/^0x/, '')))
+      ) {
         return presented;
       }
     }

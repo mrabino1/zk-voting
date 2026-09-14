@@ -88,13 +88,13 @@ export class Store {
       }
     }
     if (this.data.jurisdictions.length === 0) {
-        this.data.jurisdictions.push({
-          id: 'demo',
-          name: 'Demo jurisdiction',
-          metadataURI: '',
-          officers: [],
-          createdAt: new Date().toISOString(),
-        });
+      this.data.jurisdictions.push({
+        id: 'demo',
+        name: 'Demo jurisdiction',
+        metadataURI: '',
+        officers: [],
+        createdAt: new Date().toISOString(),
+      });
     }
   }
 
