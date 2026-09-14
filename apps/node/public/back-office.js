@@ -304,12 +304,12 @@
     const root = $("ballot-builder");
     if (!root) return;
     const next = [];
-    root.querySelectorAll("[data-q]").forEach((card) => {
+    root.querySelectorAll(".q-card[data-q]").forEach((card) => {
       const qi = Number(card.getAttribute("data-q"));
       const options = [];
-      card.querySelectorAll("[data-opt]").forEach((optEl) => {
+      card.querySelectorAll(".opt-card[data-opt]").forEach((optEl) => {
         const links = [];
-        optEl.querySelectorAll("[data-link]").forEach((row) => {
+        optEl.querySelectorAll(".link-row[data-link]").forEach((row) => {
           links.push({
             label: row.querySelector('[data-f="link-label"]').value,
             url: row.querySelector('[data-f="link-url"]').value,
@@ -447,19 +447,32 @@
     root.dataset.wired = "1";
     root.addEventListener("input", () => {
       if (ballotLocked) return;
-      readBuilderFromDom();
-      setJsonFromBuilder();
+      try {
+        readBuilderFromDom();
+        setJsonFromBuilder();
+      } catch (err) {
+        flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+      }
     });
     root.addEventListener("change", () => {
       if (ballotLocked) return;
-      readBuilderFromDom();
-      setJsonFromBuilder();
+      try {
+        readBuilderFromDom();
+        setJsonFromBuilder();
+      } catch (err) {
+        flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+      }
     });
     root.addEventListener("click", (event) => {
       const btn = event.target.closest("[data-act]");
       if (!btn || ballotLocked) return;
       event.preventDefault();
-      readBuilderFromDom();
+      try {
+        readBuilderFromDom();
+      } catch (err) {
+        flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+        return;
+      }
       const act = btn.getAttribute("data-act");
       const qi = Number(btn.getAttribute("data-q"));
       const oi = Number(btn.getAttribute("data-opt"));
@@ -502,7 +515,12 @@
 
   $("btn-add-question").addEventListener("click", () => {
     if (ballotLocked) return;
-    readBuilderFromDom();
+    try {
+      readBuilderFromDom();
+    } catch (err) {
+      flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+      return;
+    }
     ballotQuestions.push(blankQuestion(ballotQuestions.length));
     renderBuilder();
   });
@@ -573,9 +591,9 @@
       flash($("flash-election"), "err", "This ballot is frozen.");
       return;
     }
-    readBuilderFromDom();
-    const questions = compactQuestions(ballotQuestions);
     try {
+      readBuilderFromDom();
+      const questions = compactQuestions(ballotQuestions);
       await request("/api/elections/" + encodeURIComponent(editingElectionId), {
         method: "PATCH",
         body: {
@@ -755,9 +773,9 @@
 
   $("form-election").addEventListener("submit", async (event) => {
     event.preventDefault();
-    readBuilderFromDom();
     let questions;
     try {
+      readBuilderFromDom();
       questions = compactQuestions(ballotQuestions);
       if (!questions.length) throw new Error("Add at least one question.");
       $("e-questions").value = JSON.stringify(questions, null, 2);
