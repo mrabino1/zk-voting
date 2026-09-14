@@ -77,11 +77,12 @@ function spaFallback(config) {
 }
 
 export async function createApp(overrides = {}) {
-  const config = getConfig(overrides);
+  const { passkeyHooks, ...configOverrides } = overrides;
+  const config = getConfig(configOverrides);
   const store = await Store.open(config);
   const explorer = await Explorer.open(config);
   const chain = createChain(config);
-  const passkeys = createPasskeyService(config, store);
+  const passkeys = createPasskeyService(config, store, passkeyHooks);
   const deps = { config, store, explorer, chain, passkeys };
 
   const app = express();

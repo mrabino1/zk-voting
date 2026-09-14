@@ -876,6 +876,95 @@ th {
   border-color: var(--navy);
 }
 
+.session-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--cream);
+  font-size: 0.9rem;
+}
+
+.session-chip {
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.session-chrome .session-chrome-btn,
+a.session-chrome-btn {
+  min-height: 2.4rem;
+  padding: 0.35rem 0.85rem;
+  background: transparent;
+  color: var(--cream);
+  border-color: var(--gold);
+}
+
+.session-chrome .session-chrome-btn:hover,
+a.session-chrome-btn:hover {
+  background: var(--navy-deep);
+  color: var(--cream);
+}
+
+.sign-in-panel {
+  margin: 0 0 1.5rem;
+}
+
+.sign-in-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+
+.sign-in-handle,
+.sign-in-dev {
+  margin: 0.75rem 0 0;
+}
+
+.sign-in-handle summary,
+.sign-in-dev summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+
+.sign-in-handle input,
+.sign-in-dev input {
+  margin-top: 0.35rem;
+}
+
+.sign-in-dev .form-grid {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.flash {
+  border-radius: var(--radius);
+  padding: 0.65rem 0.8rem;
+  margin: 0.5rem 0 0;
+  display: none;
+}
+
+.flash.show {
+  display: block;
+}
+
+.flash.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 2px solid var(--ok);
+}
+
+.flash.err {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+}
+
 .hr {
   border: 0;
   border-top: 1px solid var(--line);
