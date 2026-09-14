@@ -459,6 +459,10 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
    The vote proof shows membership in that set (or non-membership in the disqualification set plus membership in the registry), so a disqualified person **cannot** produce an accepting proof.
 
+   **Node path today:** `apps/node` rebuilds `eligibleRoot` from that intersection and the vote relay rejects currently-disqualified (and unregistered) commitments when `CHAIN_RPC` is unset. Freeze snapshots those roots for the open window.
+
+   **Remaining ZK gap:** the vote circuit still only *binds* `disqRoot`; it does not prove non-membership. `MockVerifier` still accepts any proof. Do not treat a local demo accept as circuit-enforced exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
 4. **Visibility.**
 
    - **Public:** that a disqualification exists, which election it applies to, reason **code**, issuer role, timestamps.
