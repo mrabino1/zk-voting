@@ -454,9 +454,11 @@ function ctx() {
 function renderHome(main, route, bundle) {
   const { elections, source, me, walletRecord, store } = bundle;
   const openCount = elections.filter((e) => e.state === 2).length;
-  const walletLine = walletRecord
-    ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
-    : "No passkey on this device yet.";
+  const walletLine = walletRecord?.staleWrap
+    ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
+    : walletRecord
+      ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
+      : "No passkey on this device yet.";
 
   const list =
     elections.length === 0
@@ -636,7 +638,7 @@ function renderDeviceStatus(walletRecord, me, store) {
   const nVote = Object.keys(store.votes).length;
   const rows = [
     h("dt", { text: "Passkey" }),
-    h("dd", { text: walletRecord ? "Present" : "Not created" }),
+    h("dd", { text: walletRecord?.staleWrap ? "v1 wrap — reset required" : walletRecord ? "Present" : "Not created" }),
     h("dt", { text: "Identity commitment" }),
     h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || "—" }),
     h("dt", { text: "Local address" }),

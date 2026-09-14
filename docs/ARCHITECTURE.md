@@ -487,13 +487,16 @@ No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
 ### Passkey wallet (Inertia-style)
 
 1. Create WebAuthn credential (`residentKey: required`, `extensions.prf`).
-2. `prf.eval` first output → HKDF → encrypt a generated secp256k1 key
+2. `prf.eval` **account** salt → HKDF → encrypt a generated secp256k1 key
    (or derive it). Store wrapped key in IndexedDB + server credential id.
-3. Signing a UserOp: get PRF, unwrap key, sign, immediately drop plaintext
+3. `prf.eval` **identity** salt → HKDF → `(identityTrapdoor, nullifierSecret)`.
+   Separate domain from the account key ([`PASSKEYS.md`](./PASSKEYS.md)).
+4. Signing a UserOp: get account PRF, unwrap key, sign, immediately drop plaintext
    key from memory.
-4. Fallback if PRF is unavailable: still create the passkey for login, and
+5. Fallback if PRF is unavailable: still create the passkey for login, and
    keep an encrypted key wrapped with a key derived from the assertion
-   signature (documented as weaker). Never display a mnemonic.
+   signature (documented as weaker). Never display a mnemonic. Never use
+   that account key as the trapdoor.
 
 ---
 

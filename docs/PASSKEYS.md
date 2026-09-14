@@ -83,6 +83,40 @@ Use **domain-separated salts** so account HKDF and identity HKDF cannot be swapp
 
 Do not reuse the Ethereum private key as `identityTrapdoor`. That would make every on-chain account signature a potential identity leak.
 
+### SPA construction (`apps/node/public/passkey-wallet.js`)
+
+The browser wallet implements those two domains. After create, it **re-evals** PRF with salts derived from the new `credentialId` (create-time `prf.eval` only enables the extension; that output is discarded).
+
+Exact HKDF-SHA-256 (WebCrypto; equivalent to HKDF-Extract then Expand, L = 32):
+
+```text
+saltAccount  = HKDF(ikm = credentialId, salt = "republic:account:v1",  info = decimal chain id)
+saltIdentity = HKDF(ikm = credentialId, salt = "republic:identity:v1", info = jurisdictionId)
+
+prf.eval({ first: saltAccount, second: saltIdentity })
+
+account wrap key = HKDF(ikm = prf.first,  salt = "republic:account:v1",  info = "republic-secp256k1-wrap")
+(trapdoor || nullifierSecret) = HKDF(ikm = prf.second, salt = "republic:identity:v1", info = "trapdoor+nullifier", L = 64)
+```
+
+If the authenticator returns `first` but not `second`, the wallet runs a **second assertion** with `eval.first = saltIdentity`. It will not fold identity into the account seed.
+
+`jurisdictionId` is bound when the wallet is provisioned (selected election, else `demo`) and stored on the IndexedDB record so later votes re-derive the same leaf. Default chain id is Republic L2 `27427`. Login work can reuse `prfEvalSaltsForCredential` / `buildPrfEvalExtension` without changing this file’s wrap path.
+
+#### IndexedDB v1 → v2 (breaking demo reset)
+
+Wallet store `republic-wallet` is **version 2**. Record field `version` is `2`, `identityScheme` is `prf-hkdf-identity-v2`.
+
+v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) **cannot** be unwrapped under the new salts. The SPA refuses to sign or register from a v1 record and asks the voter to **reset the device wallet** and create a new passkey. The local address and identity commitment change; any prior demo roll row will not match. There is no silent in-place identity regeneration, because v1’s PRF salt was not domain-separated.
+
+#### Intentional demo deviations that remain
+
+- Commitment hasher is still **keccak256(trapdoor || nullifierSecret)** in the SPA; production circuits use Poseidon (`circuits/`).
+- Account “address” is still `SHA-256(seed)[0:20]` (`republic-local-address`), not secp256k1/keccak.
+- UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
+- When PRF is missing, account wrap and identity still use **two** HKDF domains of the credential id (not the same bytes). That path is weaker than authenticator PRF and is demo-only.
+- Node HTTP still stores credential ids only; it does not see PRF output or trapdoors.
+
 ---
 
 ## Gasless L2
