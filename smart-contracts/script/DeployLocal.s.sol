@@ -53,7 +53,7 @@ abstract contract RepublicStackScript is Script {
         _log("PAYMASTER", address(s.paymaster));
     }
 
-    /// @dev Factory first, then modules that take `factory`, then `wireModules`.
+    /// @dev Factory first, then modules that take `factory`, then `setModules`.
     function _deployElectionStack(address admin) internal returns (RepublicStack memory s) {
         s.hasher = new KeccakHasher();
         s.verifier = new MockVerifier();
