@@ -54,6 +54,11 @@ describe("L1 env skip", () => {
     assert.equal(parsed.privateKey, "");
   });
 
+  test("explicit empty env does not inherit process.env L1_*", () => {
+    assert.equal(l1SkipReason({ env: {} }), "L1 env unset");
+    assert.equal(l1Configured({ env: {} }), false);
+  });
+
   test("does not treat L2 PRIVATE_KEY as a publisher key", () => {
     const env = { PRIVATE_KEY: "0x" + "ab".repeat(32) };
     assert.equal(readL1Env(env).privateKey, "");
@@ -138,6 +143,52 @@ describe("postTallyHash", () => {
     assert.equal(result.status, "already_posted");
     assert.equal(result.alreadyPosted, true);
     assert.equal(result.posted, false);
+  });
+
+  test("AlreadyPosted via custom-error selector (viem ABI miss)", async () => {
+    const walletClient = {
+      writeContract: async () => {
+        const err = new Error(
+          'The contract function "postResult" reverted with the following signature:\n0xe9f155db',
+        );
+        err.shortMessage =
+          'The contract function "postResult" reverted with the following signature:\n0xe9f155db';
+        err.cause = { signature: "0xe9f155db", data: "0xe9f155db" };
+        throw err;
+      },
+    };
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: "0x" + "22".repeat(20),
+      walletClient,
+      electionId: 7,
+      counts: [1, 1],
+    });
+    assert.equal(result.status, "already_posted");
+    assert.equal(result.alreadyPosted, true);
+  });
+
+  test("short-circuits when resultHashOf is already set (no write)", async () => {
+    const writes = [];
+    const existing = computeTallyHash([1, 1]);
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: "0x" + "22".repeat(20),
+      walletClient: {
+        writeContract: async (req) => {
+          writes.push(req);
+          return "0x" + "cd".repeat(32);
+        },
+      },
+      publicClient: {
+        readContract: async () => existing,
+      },
+      electionId: 7,
+      counts: [1, 1],
+    });
+    assert.equal(result.status, "already_posted");
+    assert.equal(result.resultHash, existing);
+    assert.equal(writes.length, 0);
   });
 });
 

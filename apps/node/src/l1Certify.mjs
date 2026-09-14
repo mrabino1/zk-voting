@@ -11,6 +11,7 @@ const {
   postTallyHash,
   publicCertification,
   readResultHash,
+  alreadyPostedError,
   ZERO_HASH,
 } = require('@zk-voting/chain-client');
 
@@ -80,6 +81,20 @@ export function createL1Certifier(config, hooks = {}) {
           electionId: String(electionId),
         });
       } catch (err) {
+        if (alreadyPostedError(err)) {
+          return publicCertification({
+            posted: false,
+            skipped: false,
+            alreadyPosted: true,
+            status: 'already_posted',
+            reason: 'AlreadyPosted',
+            resultHash: hash,
+            totalBallots,
+            l2StateRoot: l2StateRoot || ZERO_HASH,
+            electionId: String(electionId),
+            mirror: options.mirrorAddress || null,
+          });
+        }
         return publicCertification({
           posted: false,
           skipped: false,

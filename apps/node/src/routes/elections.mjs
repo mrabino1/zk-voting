@@ -421,6 +421,8 @@ export function electionsRouter(deps) {
           resultHash: countsHash,
         });
         await store.setTallyL1(tallied.id, l1Certification);
+        const recorded = store.requireElection(tallied.id).tally?.l1 || l1Certification;
+        l1Certification = recorded;
         if (l1Certification.posted || l1Certification.alreadyPosted) {
           await explorer.append('l1_certify', {
             electionId: String(tallied.id),
@@ -477,7 +479,7 @@ export function electionsRouter(deps) {
         return;
       }
       const counts = election.tally.counts;
-      const l1Certification = await l1.certifyTally({
+      let l1Certification = await l1.certifyTally({
         electionId: election.id,
         counts,
         totalBallots: election.acceptedBallots,
@@ -485,6 +487,7 @@ export function electionsRouter(deps) {
         l2StateRoot: req.body?.l2StateRoot,
       });
       await store.setTallyL1(election.id, l1Certification);
+      l1Certification = store.requireElection(election.id).tally?.l1 || l1Certification;
       if (l1Certification.posted || l1Certification.alreadyPosted) {
         await explorer.append('l1_certify', {
           electionId: String(election.id),

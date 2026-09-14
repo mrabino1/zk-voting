@@ -107,7 +107,13 @@ const L1_TALLY_MIRROR_ABI = [
       { name: "l2StateRoot", indexed: false, type: "bytes32" },
     ],
   },
+  { type: "error", name: "AlreadyPosted", inputs: [] },
+  { type: "error", name: "NotAuthorized", inputs: [] },
+  { type: "error", name: "ZeroAddress", inputs: [] },
 ];
+
+/** `keccak256("AlreadyPosted()")` — viem emits this when the ABI used to send the tx omitted the error. */
+const ALREADY_POSTED_SELECTOR = "0xe9f155db";
 
 const ROLLUP_SETTLEMENT_VIEW_ABI = [
   {
@@ -172,6 +178,11 @@ function sumCounts(counts) {
   return counts.reduce((acc, n) => acc + toBigInt(n), 0n);
 }
 
+function coalesceStr(explicit, fallback) {
+  if (explicit !== undefined && explicit !== null) return String(explicit).trim();
+  return fallback ? String(fallback).trim() : "";
+}
+
 /**
  * Read L1 env without throwing. Empty strings mean "not configured".
  * Does **not** fall back to the L2 prover `PRIVATE_KEY`.
@@ -195,12 +206,15 @@ function readL1Env(env = process.env) {
 }
 
 function normalizeL1Options(opts = {}) {
-  const env = readL1Env(opts.env || process.env);
+  const env = readL1Env(Object.prototype.hasOwnProperty.call(opts, "env") ? opts.env : process.env);
   return {
-    rpcUrl: opts.rpcUrl || opts.l1Rpc || env.rpcUrl,
-    mirrorAddress: opts.mirrorAddress || opts.tallyMirrorAddress || env.mirrorAddress,
-    privateKey: opts.privateKey || env.privateKey,
-    settlementAddress: opts.settlementAddress || env.settlementAddress,
+    rpcUrl: coalesceStr(opts.rpcUrl !== undefined ? opts.rpcUrl : opts.l1Rpc, env.rpcUrl),
+    mirrorAddress: coalesceStr(
+      opts.mirrorAddress !== undefined ? opts.mirrorAddress : opts.tallyMirrorAddress,
+      env.mirrorAddress,
+    ),
+    privateKey: coalesceStr(opts.privateKey, env.privateKey),
+    settlementAddress: coalesceStr(opts.settlementAddress, env.settlementAddress),
     chainId: opts.chainId || env.chainId || 0,
     walletClient: opts.walletClient,
     publicClient: opts.publicClient,
@@ -209,12 +223,7 @@ function normalizeL1Options(opts = {}) {
   };
 }
 
-/**
- * @param {object} [opts]
- * @returns {string|null} Human-readable skip reason, or null if writes can proceed.
- */
-function l1SkipReason(opts = {}) {
-  const n = normalizeL1Options(opts);
+function skipReasonFromNormalized(n) {
   const missing = [];
   if (!n.mirrorAddress) missing.push("L1_TALLY_MIRROR_ADDRESS");
   if (!n.walletClient) {
@@ -224,6 +233,14 @@ function l1SkipReason(opts = {}) {
   if (missing.length === 0) return null;
   if (missing.length >= 3) return "L1 env unset";
   return `L1 env incomplete (missing ${missing.join(", ")})`;
+}
+
+/**
+ * @param {object} [opts]
+ * @returns {string|null} Human-readable skip reason, or null if writes can proceed.
+ */
+function l1SkipReason(opts = {}) {
+  return skipReasonFromNormalized(normalizeL1Options(opts));
 }
 
 function l1Configured(opts = {}) {
@@ -313,9 +330,25 @@ async function readSettlementStateRoot(opts = {}) {
   return asBytes32(raw);
 }
 
+function collectErrorText(err) {
+  const parts = [];
+  let cur = err;
+  for (let i = 0; i < 6 && cur; i += 1) {
+    if (typeof cur === "string") {
+      parts.push(cur);
+      break;
+    }
+    for (const key of ["shortMessage", "message", "details", "signature", "data", "reason"]) {
+      if (cur[key] != null) parts.push(String(cur[key]));
+    }
+    cur = cur.cause;
+  }
+  return parts.join(" ");
+}
+
 function alreadyPostedError(err) {
-  const msg = String(err && (err.shortMessage || err.message || err) || "");
-  return /AlreadyPosted/i.test(msg);
+  const blob = collectErrorText(err);
+  return /AlreadyPosted/i.test(blob) || blob.toLowerCase().includes(ALREADY_POSTED_SELECTOR);
 }
 
 /**
@@ -331,7 +364,7 @@ function alreadyPostedError(err) {
  */
 async function postTallyHash(opts = {}) {
   const n = normalizeL1Options(opts);
-  const skip = l1SkipReason(n);
+  const skip = skipReasonFromNormalized(n);
   if (skip) {
     return {
       posted: false,
@@ -360,6 +393,31 @@ async function postTallyHash(opts = {}) {
     }
   }
   l2StateRoot = asBytes32(l2StateRoot);
+
+  if (n.rpcUrl || n.publicClient) {
+    try {
+      const existing = await readResultHash(n.mirrorAddress, electionId, n);
+      if (!isZeroHash(existing)) {
+        return {
+          posted: false,
+          skipped: false,
+          alreadyPosted: true,
+          status: "already_posted",
+          reason: "AlreadyPosted",
+          resultHash: existing,
+          requestedHash: resultHash,
+          totalBallots: totalBallots.toString(),
+          l2StateRoot,
+          electionId: electionId.toString(),
+          mirror: padAddress(n.mirrorAddress),
+          settlement: n.settlementAddress ? padAddress(n.settlementAddress) : null,
+          chainId: n.chainId || null,
+        };
+      }
+    } catch {
+      // Mirror may be unreachable; attempt postResult and classify the revert.
+    }
+  }
 
   const args = {
     electionId,
@@ -483,4 +541,6 @@ module.exports = {
   readResultHash,
   readSettlementStateRoot,
   postTallyHash,
+  alreadyPostedError,
+  ALREADY_POSTED_SELECTOR,
 };

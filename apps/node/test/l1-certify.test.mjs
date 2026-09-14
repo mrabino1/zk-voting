@@ -9,6 +9,7 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../src/server.mjs';
 import { createL1Certifier, computeTallyHash } from '../src/l1Certify.mjs';
 import { getConfig } from '../src/config.mjs';
+import { mergeTallyL1 } from '../src/store.mjs';
 
 function applyCookies(res, jar) {
   const list = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
@@ -155,6 +156,24 @@ describe('L1 certifier unit', () => {
   });
 });
 
+describe('mergeTallyL1', () => {
+  test('does not clobber a posted record with a later failed retry', () => {
+    const prev = { status: 'posted', posted: true, txHash: '0xabc', chainId: 31337 };
+    const next = mergeTallyL1(prev, { status: 'failed', error: 'rpc down' });
+    assert.equal(next.status, 'posted');
+    assert.equal(next.txHash, '0xabc');
+    assert.equal(next.lastError, 'rpc down');
+  });
+
+  test('already_posted keeps the original txHash', () => {
+    const prev = { status: 'posted', posted: true, txHash: '0xabc', mirror: '0x1' };
+    const next = mergeTallyL1(prev, { status: 'already_posted', alreadyPosted: true, txHash: null });
+    assert.equal(next.status, 'already_posted');
+    assert.equal(next.txHash, '0xabc');
+    assert.equal(next.mirror, '0x1');
+  });
+});
+
 describe('L1 certification HTTP', () => {
   test('POST /tally skips L1 when env unset', async () => {
     const fx = await tallyFixture();
@@ -226,6 +245,52 @@ describe('L1 certification HTTP', () => {
 
       const health = await api(fx.base, 'GET', '/health');
       assert.equal(health.json.l1CertificationConfigured, true);
+    } finally {
+      await closeFixture(fx);
+    }
+  });
+
+  test('AlreadyPosted retry keeps the original L1 tx hash', async () => {
+    let calls = 0;
+    const fx = await tallyFixture({
+      l1Hooks: {
+        postFn: async (args) => {
+          calls += 1;
+          if (calls === 1) {
+            return {
+              posted: true,
+              status: 'posted',
+              txHash: `0x${'ab'.repeat(32)}`,
+              resultHash: args.resultHash,
+              mirror: '0x' + '22'.repeat(20),
+              chainId: 31337,
+            };
+          }
+          const err = new Error(
+            'The contract function "postResult" reverted with the following signature:\n0xe9f155db',
+          );
+          err.cause = { signature: '0xe9f155db' };
+          throw err;
+        },
+      },
+    });
+    try {
+      const first = await api(fx.base, 'POST', `/api/elections/${fx.electionId}/tally`, {
+        jar: fx.jar,
+        body: { counts: [1, 0] },
+      });
+      assert.equal(first.status, 200, first.json?.error);
+      assert.equal(first.json.l1Certification.status, 'posted');
+
+      const retry = await api(fx.base, 'POST', `/api/elections/${fx.electionId}/certify-l1`, {
+        jar: fx.jar,
+        body: {},
+      });
+      assert.equal(retry.status, 200);
+      assert.equal(retry.json.l1Certification.status, 'already_posted');
+      assert.equal(retry.json.l1Certification.txHash, `0x${'ab'.repeat(32)}`);
+      assert.equal(retry.json.election.tally.l1.txHash, `0x${'ab'.repeat(32)}`);
+      assert.equal(calls, 2);
     } finally {
       await closeFixture(fx);
     }

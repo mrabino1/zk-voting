@@ -23,6 +23,7 @@ const {
   postTallyHash,
   publicCertification,
   readL1Env,
+  alreadyPostedError,
 } = require('@zk-voting/chain-client');
 
 function argValue(flag) {
@@ -137,6 +138,23 @@ Optional: L1_SETTLEMENT_ADDRESS  L1_CHAIN_ID  TOTAL_BALLOTS  L2_STATE_ROOT  DATA
 }
 
 main().catch((err) => {
+  if (alreadyPostedError(err)) {
+    console.log(
+      JSON.stringify(
+        {
+          nfp: true,
+          ...publicCertification({
+            status: 'already_posted',
+            alreadyPosted: true,
+            reason: 'AlreadyPosted',
+          }),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   console.error(err);
   process.exit(1);
 });

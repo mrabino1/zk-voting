@@ -171,7 +171,7 @@ L1TallyMirror.setPublisher(publisher, true);
 
 1. Close the poll (cutoff passed). Tally operator posts counts. Sum must equal accepted ballots.
 2. If the three required L1 vars are set, `POST /api/elections/:id/tally` also calls `postResult`. The JSON includes `l1Certification` (`posted` / `skipped` / `failed` / `already_posted`). A failed L1 tx **does not** roll back the Node tally.
-3. Retry without re-tallying:
+3. Retry without re-tallying. `AlreadyPosted` is success (`already_posted`); the Node keeps the original L1 tx hash.
 
 ```bash
 # HTTP (tally_operator session)
