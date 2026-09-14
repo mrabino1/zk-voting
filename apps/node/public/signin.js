@@ -181,7 +181,7 @@ function renderForm(state, opts, statusEl) {
         onClick: () => runAction(state, statusEl, "passkey", () => signInWithPasskey(state.handle)),
       }),
       el("button", {
-        class: "btn btn-secondary",
+        class: "btn",
         type: "button",
         "data-signin": "wallet",
         disabled: busy,
@@ -313,6 +313,7 @@ export function mountSignInPanel(root, extra = {}) {
     state.user = next.user;
     state.identity = next.identity;
     state.allowDevLogin = next.allowDevLogin;
+    if (!next.user) setStatus(statusEl, "", "");
     paint();
     return next;
   };
