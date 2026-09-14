@@ -531,6 +531,8 @@ async function nullifierUsed(inboxAddress, electionId, nullifier, opts = {}) {
   return decodeUintWord(raw) !== 0n;
 }
 
+const l1 = require("./l1");
+
 module.exports = {
   REPUBLIC_CHAIN_ID,
   FACTORY_ABI,
@@ -548,4 +550,5 @@ module.exports = {
   serializePublicInputs,
   encodePacked,
   padAddress,
+  ...l1,
 };

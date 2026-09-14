@@ -696,13 +696,26 @@ export class Store {
     return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
   }
 
-  async setTally(id, counts) {
+  async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
       counts: counts.map((n) => Number(n)),
       postedAt: new Date().toISOString(),
+      countsHash: extras.countsHash || null,
+      l1: extras.l1 || null,
     };
+    await this.persist();
+    return election;
+  }
+
+  async setTallyL1(id, l1) {
+    const election = this.requireElection(id);
+    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
+    election.tally.l1 = l1;
+    if (l1?.resultHash && !election.tally.countsHash) {
+      election.tally.countsHash = l1.resultHash;
+    }
     await this.persist();
     return election;
   }

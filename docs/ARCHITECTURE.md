@@ -341,7 +341,22 @@ Only the Republic prover/sequencer addresses. Batches are public; anyone
 can re-derive `dataHash` from posted calldata.
 
 `src/l2/L1TallyMirror.sol` — copies a tallied election result hash from L2
-to L1 for court-grade records.
+to L1 for court-grade records:
+
+```solidity
+function postResult(
+    uint256 electionId,
+    bytes32 resultHash,      // keccak256(abi.encodePacked(counts)) == Tally countsHash
+    uint256 totalBallots,
+    bytes32 l2StateRoot      // RollupSettlement.stateRoot() when known; else 0
+) external;
+function resultHashOf(uint256 electionId) external view returns (bytes32);
+```
+
+Only `admin` or `publishers[msg.sender]`. A second post for the same election
+reverts `AlreadyPosted`. The Node (`POST /api/elections/:id/tally` and
+`POST /api/elections/:id/certify-l1`) and `script/CertifyL1.s.sol` call this
+when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
 
 ---
 
@@ -359,6 +374,7 @@ to L1 for court-grade records.
   uniqueness; msg.sender is relayer.
 - `Paymaster.t.sol` — gasless path.
 - `RollupSettlement.t.sol` — batch progression.
+- `L1TallyMirror.t.sol` — `postResult`, publisher ACL, AlreadyPosted, packed counts hash.
 - `fuzz/FactoryFuzz.t.sol` — random params, start < cutoff, etc.
 - `fuzz/VoteFuzz.t.sol` — random nullifiers, windows, caps.
 - `invariant/VotingInvariant.t.sol` + `invariant/Handler.sol`
@@ -389,6 +405,7 @@ Invariants: `forge test --match-path test/invariant/*`.
 - `DeployL1.s.sol` — Ethereum (or sepolia) settlement + optional factory.
 - `DeployL2.s.sol` — Republic L2: factory + election stack + paymaster.
 - `CreateElection.s.sol` — given factory address + JSON params, create one.
+- `CertifyL1.s.sol` — `L1TallyMirror.postResult` from `COUNTS` / `RESULT_HASH`. Wrapper: `script/certify_l1.sh` (no-op if L1 env unset).
 
 Broadcast JSON is gitignored. Scripts print addresses to stdout as
 `name=0x...` for the Node app to ingest.
@@ -439,7 +456,9 @@ GET  /api/elections/:id
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
-POST /api/elections/:id/tally
+POST /api/elections/:id/tally       (tally operator; L1 postResult if env set)
+POST /api/elections/:id/certify-l1  (retry L1; no-op if L1 env unset)
+GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/me
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
@@ -449,7 +468,7 @@ GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
 POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
-GET  /api/config                    (includes hourly disclosure + identity policy)
+GET  /api/config                    (includes hourly disclosure + identity policy + l1CertificationConfigured)
 GET  /api/identity/methods
 POST /api/identity/web3/challenge
 POST /api/identity/web3/verify

@@ -61,6 +61,9 @@ cd smart-contracts && forge test --match-path 'test/invariant/*'
 
 # Node API (when apps/node tests exist)
 npm test -w apps/node
+
+# Shared JS packages (L1 tally-hash client, etc.)
+npm run test:packages
 ```
 
 Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer and solc **0.8.24** are set in `smart-contracts/foundry.toml`.

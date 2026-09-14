@@ -210,7 +210,7 @@ npm run l2:sequencer        # node l2/sequencer/index.mjs
 npm run l2:prover           # node l2/prover/index.mjs
 ```
 
-Genesis **chainId 27427**, 2s blocks, one sequencer. May proxy EVM to Anvil in dev. Settlement: L1 `RollupSettlement.submitBatch`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md).
+Genesis **chainId 27427**, 2s blocks, one sequencer. May proxy EVM to Anvil in dev. Settlement: L1 `RollupSettlement.submitBatch`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the hash on L1 when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ```bash
 export REPUBLIC_RPC_URL=http://127.0.0.1:8545
@@ -668,7 +668,7 @@ Dates are not committed.
 5. **First proving path** — eligible vote on a single yes/no question on L2 test deployment (MockVerifier locally).
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof.
 7. **Multi-question ballots** — “aspects.”
-8. **L1 certification** — tally or tally hash on Ethereum mainnet.
+8. **L1 certification** — tally or tally hash on Ethereum mainnet. **In-tree (testnet-friendly):** after Node tally, `L1TallyMirror.postResult` when L1 env is set; graceful no-op otherwise. See [`docs/OPERATOR.md`](./docs/OPERATOR.md). Production mainnet still needs a jurisdiction to pin addresses on `master`.
 9. **Coercion-resistance upgrades** and independent auditor tooling.
 
 ---

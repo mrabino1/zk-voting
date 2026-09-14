@@ -71,6 +71,11 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
+| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postResult`. Unset → tally still works (no-op certify) |
+| `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
+| `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
+| `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
+| `L1_CHAIN_ID` | RPC | Optional override |
 | `RP_ID` | `localhost` | WebAuthn rpID |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
@@ -95,7 +100,9 @@ GET  /api/elections/:id
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator)
+POST /api/elections/:id/tally       (tally operator; attempts L1 certify if env set)
+POST /api/elections/:id/certify-l1  (retry L1 postResult; no-op if env unset)
+GET  /api/elections/:id/l1
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods
@@ -126,6 +133,11 @@ reason codes, CORS open for local tools.
 Without `CHAIN_RPC`, votes that pass the election window and nullifier check are
 accepted in the local store so the explorer and SPA can run a demo. Those
 accepts still wait for hourly public disclosure unless the interval is `0`.
+
+Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
+`POST /tally` still records counts. `l1Certification.status` is `skipped`.
+Operator details: [`docs/OPERATOR.md`](../../docs/OPERATOR.md). `npm run certify:l1`
+from the repo root is the same no-op unless those vars are set.
 
 ---
 

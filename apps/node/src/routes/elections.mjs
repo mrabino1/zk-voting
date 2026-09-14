@@ -10,6 +10,7 @@ import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { computeTallyHash } from '../l1Certify.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -75,7 +76,7 @@ async function revokeHandler(req, store, explorer) {
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain, config } = deps;
+  const { store, explorer, chain, config, l1 } = deps;
   const router = Router();
 
   router.get(
@@ -397,13 +398,109 @@ export function electionsRouter(deps) {
       if (expected && nums.length !== expected) {
         throw new HttpError(400, `counts length must be ${expected}`, { expected });
       }
-      const tallied = await store.setTally(election.id, nums);
+      const countsHash = computeTallyHash(nums);
+      const tallied = await store.setTally(election.id, nums, { countsHash });
       await explorer.append('tally', {
         electionId: String(tallied.id),
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
+        countsHash,
       });
-      res.json({ ok: true, election: presentElection(tallied, deps), nfp: true });
+      let l1Certification = {
+        status: 'skipped',
+        posted: false,
+        skipped: true,
+        reason: 'L1 certifier not wired',
+        resultHash: countsHash,
+      };
+      if (l1 && typeof l1.certifyTally === 'function') {
+        l1Certification = await l1.certifyTally({
+          electionId: tallied.id,
+          counts: nums,
+          totalBallots: tallied.acceptedBallots,
+          resultHash: countsHash,
+        });
+        await store.setTallyL1(tallied.id, l1Certification);
+        if (l1Certification.posted || l1Certification.alreadyPosted) {
+          await explorer.append('l1_certify', {
+            electionId: String(tallied.id),
+            resultHash: l1Certification.resultHash,
+            txHash: l1Certification.txHash,
+            chainId: l1Certification.chainId,
+            mirror: l1Certification.mirror,
+          });
+        }
+      }
+      const fresh = store.requireElection(tallied.id);
+      res.json({
+        ok: true,
+        election: presentElection(fresh, deps),
+        l1Certification,
+        nfp: true,
+      });
+    }),
+  );
+
+  router.get(
+    '/:id/l1',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const configured = Boolean(l1 && typeof l1.isConfigured === 'function' && l1.isConfigured());
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        tallied: Boolean(election.tally),
+        countsHash: election.tally?.countsHash || null,
+        l1Certification: election.tally?.l1 || null,
+        l1Configured: configured,
+        skipReason: configured ? null : l1?.skipReason?.() || 'L1 env unset',
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/certify-l1',
+    requireAuth,
+    requireRole('tally_operator'),
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      if (!election.tally) {
+        throw new HttpError(409, 'tally first (POST /api/elections/:id/tally)', { code: 'NOT_TALLIED' });
+      }
+      if (!l1 || typeof l1.certifyTally !== 'function') {
+        res.json({
+          ok: true,
+          skipped: true,
+          l1Certification: { status: 'skipped', reason: 'L1 certifier not wired' },
+          nfp: true,
+        });
+        return;
+      }
+      const counts = election.tally.counts;
+      const l1Certification = await l1.certifyTally({
+        electionId: election.id,
+        counts,
+        totalBallots: election.acceptedBallots,
+        resultHash: election.tally.countsHash || computeTallyHash(counts),
+        l2StateRoot: req.body?.l2StateRoot,
+      });
+      await store.setTallyL1(election.id, l1Certification);
+      if (l1Certification.posted || l1Certification.alreadyPosted) {
+        await explorer.append('l1_certify', {
+          electionId: String(election.id),
+          resultHash: l1Certification.resultHash,
+          txHash: l1Certification.txHash,
+          chainId: l1Certification.chainId,
+          mirror: l1Certification.mirror,
+        });
+      }
+      const status = l1Certification.status === 'failed' ? 502 : 200;
+      res.status(status).json({
+        ok: l1Certification.status !== 'failed',
+        election: presentElection(store.requireElection(election.id), deps),
+        l1Certification,
+        nfp: true,
+      });
     }),
   );
 

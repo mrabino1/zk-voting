@@ -133,6 +133,67 @@ WebAuthn with PRF wraps a secp256k1 smart-account key. The Merkle leaf is Poseid
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in SQLite. If the chain rejects a proof, the UI reports failure.
 
+## L1 certification (tally hash on Ethereum)
+
+After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postResult`. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`.
+
+`RollupSettlement` is the batch-root contract. When `L1_SETTLEMENT_ADDRESS` is set, the Node/script reads `stateRoot()` and attaches it as `l2StateRoot`. That is optional court context, not a substitute for the tally hash.
+
+### When L1 env is unset
+
+This is the default. The Node **still tallies**. Certification is a documented no-op (`status: "skipped"`, reason `L1 env unset`). CI must **not** set mainnet keys. `GET /api/config` reports `l1CertificationConfigured: false`.
+
+### Env (Node process)
+
+| Variable | Required to post | Purpose |
+| --- | --- | --- |
+| `L1_RPC` (alias `L1_RPC_URL`) | yes | Ethereum JSON-RPC (Sepolia / Anvil). Not Republic L2. |
+| `L1_TALLY_MIRROR_ADDRESS` (alias `TALLY_MIRROR`) | yes | `L1TallyMirror` from `DeployL1.s.sol` / `DeployLocal.s.sol` |
+| `L1_PUBLISHER_PRIVATE_KEY` (alias `L1_PRIVATE_KEY`) | yes | Key that is `admin` or `setPublisher`'d on the mirror. **Not** the L2 prover `PRIVATE_KEY`. |
+| `L1_SETTLEMENT_ADDRESS` (alias `SETTLEMENT`) | no | `RollupSettlement` — attach current L2 state root |
+| `L1_CHAIN_ID` | no | Defaults to whatever the RPC reports |
+
+Deploy the mirror (Anvil or Sepolia):
+
+```bash
+cd smart-contracts
+forge script script/DeployL1.s.sol --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
+# stdout includes TALLY_MIRROR=0x… and SETTLEMENT=0x…
+```
+
+Grant a dedicated publisher if the broadcaster is not the mirror admin:
+
+```solidity
+L1TallyMirror.setPublisher(publisher, true);
+```
+
+### After Node tally
+
+1. Close the poll (cutoff passed). Tally operator posts counts. Sum must equal accepted ballots.
+2. If the three required L1 vars are set, `POST /api/elections/:id/tally` also calls `postResult`. The JSON includes `l1Certification` (`posted` / `skipped` / `failed` / `already_posted`). A failed L1 tx **does not** roll back the Node tally.
+3. Retry without re-tallying:
+
+```bash
+# HTTP (tally_operator session)
+curl -X POST http://127.0.0.1:3000/api/elections/1/certify-l1
+
+# Public record
+curl http://127.0.0.1:3000/api/elections/1/l1
+
+# CLI against L1 (no Node auth). Unset env → exit 0 no-op.
+npm run certify:l1 -- --election-id 1 --counts 2,0
+npm run certify:l1 -- --election-id 1 --from-store
+
+# Foundry (same no-op wrapper if env unset)
+./smart-contracts/script/certify_l1.sh
+# or, when env is set:
+# COUNTS=2,0 ELECTION_ID=1 ./smart-contracts/script/certify_l1.sh
+```
+
+Back office: **Post counts**, then **Certify hash on L1** if you skipped or failed.
+
+Do not put mainnet publisher keys in CI, Compose files committed to git, or `test/unstable` sample env.
+
 ## Disqualification operations
 
 Only `DISQUALIFICATION_OFFICER_ROLE` (and the jurisdiction’s bound officers) may write `DisqualificationRegistry`. Every mark has a **reason code** from the public catalog, an evidence **hash**, issuer, and timestamp. No silent deletes: revocation is an event. After `rollFrozen`, new marks revert unless the election was created with `lateUpdateAllowed` (default false, discouraged).

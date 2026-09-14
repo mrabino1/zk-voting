@@ -12,7 +12,9 @@
   ],
   "scripts": {
     "build": "npm run build -w apps/node",
-    "test": "npm run test -w apps/node && npm run test:l2 && npm run test:contracts",
+    "test": "npm run test -w apps/node && npm run test:packages && npm run test:l2 && npm run test:contracts",
+    "test:packages": "npm test -w @zk-voting/chain-client",
+    "certify:l1": "node apps/node/scripts/certify-l1.mjs",
     "test:l2": "node --test l2/test/*.test.mjs",
     "test:contracts": "cd smart-contracts && forge test --via-ir",
     "test:fuzz": "cd smart-contracts && forge test --via-ir --match-path 'test/fuzz/*' --fuzz-runs 256",

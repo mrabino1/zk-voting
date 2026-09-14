@@ -120,6 +120,7 @@
     if (t.includes("register")) return "REGISTER";
     if (t === "vote" || t.includes("vote")) return "VOTE";
     if (t.includes("disqual") || t === "revoke") return "DISQUALIFY";
+    if (t.includes("certif") || t === "l1_certify") return "L1";
     if (t.includes("tally")) return "TALLY";
     return "BATCH";
   }
@@ -158,6 +159,11 @@
       out.evidenceHash = pick(tx, ["evidenceHash", "evidence_hash", "payload.evidenceHash"]);
     } else if (type === "TALLY") {
       out.counts = pick(tx, ["counts", "tally", "payload.counts"]);
+      out.countsHash = pick(tx, ["countsHash", "payload.countsHash"]);
+    } else if (type === "L1") {
+      out.resultHash = pick(tx, ["resultHash", "payload.resultHash", "countsHash"]);
+      out.txHash = pick(tx, ["txHash", "payload.txHash"]);
+      out.mirror = pick(tx, ["mirror", "payload.mirror"]);
     } else {
       out.batchIndex = pick(tx, ["batchIndex", "batch_index"]);
       out.dataHash = pick(tx, ["dataHash", "data_hash"]);
@@ -570,6 +576,13 @@
     const txs = [...byHash.values()];
     const title = pick(election, ["title", "name"]) || "Election " + id;
     const tally = pick(election, ["tally.counts", "tally", "counts"]);
+    const l1 = pick(election, ["tally.l1"]);
+    let l1Label = "not posted";
+    if (l1) {
+      l1Label = l1.status || "unknown";
+      if (l1.txHash) l1Label += " · " + l1.txHash;
+      else if (l1.reason) l1Label += " · " + l1.reason;
+    }
     $("view").innerHTML = `<section class="panel">
       <header>
         <h2>${esc(title)}</h2>
@@ -580,6 +593,8 @@
         <dt>State</dt><dd>${esc(pick(election, ["stateName", "state", "status"]) ?? "—")}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
         <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
+        <dt>Tally hash</dt><dd class="hash">${esc(pick(election, ["tally.countsHash"]) || "—")}</dd>
+        <dt>L1 certification</dt><dd>${esc(l1Label)}</dd>
       </dl>
       <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed.</p>
     </section>

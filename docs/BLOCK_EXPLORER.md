@@ -15,7 +15,7 @@ UI: Node SPA `/explorer`. HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/b
 | Need | Why a normal wallet explorer is not enough |
 | --- | --- |
 | Audit a poll | Must group **electionId**, roots, nullifiers, reason codes — not just ERC-20 transfers. |
-| Public verifiability | Anyone can check inbox size, used nullifiers, freeze events, tally posts, rollup `dataHash`. |
+| Public verifiability | Anyone can check inbox size, used nullifiers, freeze events, tally posts, L1 tally-hash certification, rollup `dataHash`. |
 | Disqualification transparency | Mass purges cannot hide: reason **codes** are first-class rows. |
 | Privacy of choice | A naive “decode calldata” UI must **not** display option ids as “the vote”. |
 | Relayer reality | `tx.from` is usually the **bundler**, not the voter. Showing “from = voter EOA” would be a lie. |

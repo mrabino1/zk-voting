@@ -57,7 +57,12 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     state,
     stateName: STATE_NAMES[state],
     tally: election.tally
-      ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
+      ? {
+          counts: election.tally.counts,
+          postedAt: election.tally.postedAt,
+          countsHash: election.tally.countsHash || null,
+          l1: election.tally.l1 || null,
+        }
       : null,
     createdAt: election.createdAt,
     disclosure: disclosurePublicView(now, interval),

@@ -52,6 +52,13 @@ export function getConfig(overrides = {}) {
     ballotInboxAddress: process.env.BALLOT_INBOX_ADDRESS || '',
     electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || '',
     relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY || '',
+    l1Rpc: process.env.L1_RPC || process.env.L1_RPC_URL || '',
+    l1TallyMirrorAddress:
+      process.env.L1_TALLY_MIRROR_ADDRESS || process.env.TALLY_MIRROR_ADDRESS || process.env.TALLY_MIRROR || '',
+    l1PublisherPrivateKey: process.env.L1_PUBLISHER_PRIVATE_KEY || process.env.L1_PRIVATE_KEY || '',
+    l1SettlementAddress:
+      process.env.L1_SETTLEMENT_ADDRESS || process.env.SETTLEMENT_ADDRESS || process.env.SETTLEMENT || '',
+    l1ChainId: Number(process.env.L1_CHAIN_ID || 0),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
     allowDevLogin: process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_LOGIN === '1',

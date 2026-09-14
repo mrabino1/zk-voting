@@ -16,6 +16,7 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
+      l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
       disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
     });
   });
@@ -37,6 +38,8 @@ export function configRouter(deps) {
         chainId: deps.config.chainId,
         origins: deps.config.origins,
         chainConfigured: deps.chain.isConfigured(),
+        l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
+        l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
         identity: {
           methods: ['passkey', 'web3', 'smart_card'],

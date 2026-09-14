@@ -91,6 +91,9 @@ If `L1_RPC`, `SETTLEMENT_ADDRESS`, and `PRIVATE_KEY` are all set, the prover
 submits `submitBatch` with [viem](https://viem.sh). Otherwise it writes
 `l2/data/proofs/batch-N.json`.
 
+Tally **hash** certification is a separate operator step (`L1TallyMirror.postResult`),
+not `submitBatch`. See [`docs/OPERATOR.md`](../docs/OPERATOR.md).
+
 This is **not** a proving-as-a-service company. The jurisdiction that runs an
 election runs the prover.
 
