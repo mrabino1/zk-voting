@@ -169,6 +169,9 @@ struct ElectionParams {
     address verifier;         // IGroth16Verifier
     uint8 questionCount;
     bytes32 jurisdictionId;
+    bytes32 tallyPubKeyX;      // P-256 X; 0 = no encryption key (legacy)
+    bytes32 tallyPubKeyY;
+    uint8 tallyScheme;        // 0=SUM_ONLY 1=OPENS_BALLOTS
 }
 ```
 
@@ -262,6 +265,9 @@ function submitVote(
 
 function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 function acceptedBallots(uint256 electionId) external view returns (uint256);
+function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32);
+function ballotRoot(uint256 electionId) external view returns (bytes32);
+function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
 ```
 
 Rejects when: verifier returns false; nullifier used; outside window; roll not frozen;
@@ -294,12 +300,37 @@ function submitTally(
     uint256[2][2] calldata b,
     uint256[2] calldata c
 ) external;
+function submitOpenedTally(
+    uint256 electionId,
+    uint256[] calldata counts,
+    uint256[] calldata openings, // option index per accepted ballot
+    uint256[2] a, uint256[2][2] b, uint256[2] c
+) external;
 function tally(uint256 electionId) external view returns (uint256[] memory);
 ```
 
-Tally operator only. Must prove `sum(counts) == acceptedBallots` (circuit)
-and option bounds. Mock path: if MockVerifier.accept, also require
-`sum(counts) == inbox.acceptedBallots(electionId)`.
+Tally operator only. After cutoff.
+
+**`tallyScheme == 0` (SUM_ONLY, default / legacy demo):** any `counts` with
+`sum(counts) == inbox.acceptedBallots(electionId)` may be posted. Invented
+partitions that only match the sum **succeed**. Existing Foundry tests use this
+path.
+
+**`tallyScheme == 1` (OPENS_BALLOTS):** `submitTally` reverts (`OpeningsRequired`).
+`submitOpenedTally` requires `openings.length == acceptedBallots` and
+`histogram(openings) == counts`. Invented vectors that only match the sum
+**revert**. Off-chain (Node) the operator key decrypts P-256 ECIES envelopes
+and derives those openings. The on-chain check does not itself decrypt; it
+binds the posted histogram to an openings vector and to `ballotRoot`.
+
+Public inputs for `Tally.sol` are **TALLY_SOL_MOCK_V1** (`TallyPublicInputs.sol`):
+`[version=1, electionId, acceptedCount, countsHash, ballotRoot, openingsHash]`.
+That is **not** the same array as `circuits/tally.circom` (`[total, electionId, counts…, acceptedCount]` for the default `Tally(8,4)`). MockVerifier remains the local path until a translating Groth16 wrapper exists.
+
+Demo tally encryption is **threshold-1** (a single operator key on the Node).
+Labeled **NON-PRODUCTION**. Not a guardian ceremony. Production is still
+homomorphic / mixnet decryption proofs. Do not pretend MACI coercion-resistance
+is done.
 
 ### Incremental Merkle tree
 
@@ -351,6 +382,7 @@ to L1 for court-grade records.
 
 - `ElectionFactory.t.sol` — unbounded creates, clone isolation, access.
 - `ElectionLifecycle.t.sol` — start/cutoff, freeze, cap, states.
+- `Tally.t.sol` — SUM_ONLY vs OPENS_BALLOTS; invented partitions fail when openings are required.
 - `VoterRegistry.t.sol` — insert, cap, duplicates.
 - `PersonRegistry.t.sol` — many verified addresses, one active, cannot steal.
 - `Disqualification.t.sol` — codes, revoke, frozen roll.
@@ -398,8 +430,12 @@ Broadcast JSON is gitignored. Scripts print addresses to stdout as
 ## Circuits
 
 `circuits/vote.circom` — membership + nullifier + ballot commitment.
-`circuits/tally.circom` — sum of encrypted ballots / plaintext homomorphic
-sum for the mock path.
+`circuits/tally.circom` — plaintext histogram of opened option indices
+(`Tally(nBallots, nOptions)`). Public signals are **CIRCOM_TALLY_V1** (outputs
+first): `[total, electionId, counts…, acceptedCount]`. Solidity `Tally.sol`
+uses a separately versioned mock instance (`TallyPublicInputs`). Do not wire a
+generated circuit verifier to `Tally.sol` without a translator. MockVerifier
+is the local path.
 `circuits/README.md` — how to run `circom` + snarkjs when the trusted setup
 is available. Until then, MockVerifier is the local path.
 
@@ -440,6 +476,7 @@ POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
 POST /api/elections/:id/tally
+GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
 GET  /api/me
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish

@@ -35,6 +35,8 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => bool)) private _nullifierUsed;
     mapping(uint256 => uint256) private _acceptedBallots;
     mapping(uint256 => mapping(uint256 => bytes32)) private _ballotHashOf;
+    mapping(uint256 => bytes32[]) private _ballotHashList;
+    mapping(uint256 => bytes32) private _ballotRoot;
 
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
@@ -82,6 +84,16 @@ contract BallotInbox is IBallotInbox {
     /// @inheritdoc IBallotInbox
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32) {
         return _ballotHashOf[electionId][nullifier];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function ballotRoot(uint256 electionId) external view returns (bytes32) {
+        return _ballotRoot[electionId];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32) {
+        return _ballotHashList[electionId][index];
     }
 
     function _requireNotTallied(uint256 electionId) internal view {
@@ -134,6 +146,8 @@ contract BallotInbox is IBallotInbox {
     function _recordAcceptance(uint256 electionId, uint256 nullifier, bytes32 ballotHash) internal {
         _nullifierUsed[electionId][nullifier] = true;
         _ballotHashOf[electionId][nullifier] = ballotHash;
+        _ballotHashList[electionId].push(ballotHash);
+        _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
         unchecked {
             _acceptedBallots[electionId] += 1;
         }

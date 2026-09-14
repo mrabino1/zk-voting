@@ -4,6 +4,8 @@
  * After accept, do not print the selected options.
  */
 
+import { openingIndexFromAnswers } from "./tally-crypto.js";
+
 export const SAMPLE_QUESTIONS = [
   {
     id: "q-ordinance",
@@ -145,12 +147,17 @@ export async function renderVote(main, ctx) {
         h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
         election.ballotSpecHash
           ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
+          : null,
+        election.tallyPubKey
+          ? h("li", {}, h("span", { class: "lbl", text: "Tally encryption" }), h("span", { text: "P-256 ECIES to the election tally pubkey (demo threshold-1 key, NON-PRODUCTION)" }))
           : null
       ),
       h(
         "p",
         {
-          text: "Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
+          text: election.tallyPubKey
+            ? "Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff. This page will not show how you voted."
+            : "Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
         }
       )
     );
@@ -318,9 +325,16 @@ export async function renderVote(main, ctx) {
       markedAt: new Date().toISOString(),
     };
     const ballotBytes = new TextEncoder().encode(JSON.stringify(ballotObject));
+    const choiceIndex = openingIndexFromAnswers(answers, questions);
+    const tallyPubKey = election.tallyPubKey || election.tallyCeremony?.publicKey || null;
 
     try {
-      const auth = await wallet.authorizeBallot({ electionId: election.id, ballotBytes });
+      const auth = await wallet.authorizeBallot({
+        electionId: election.id,
+        ballotBytes,
+        tallyPubKey,
+        choiceIndex: tallyPubKey ? choiceIndex : undefined,
+      });
       const dummyRoot = election.eligibleRoot || "0x" + "00".repeat(32);
       const body = {
         electionId: String(election.id),

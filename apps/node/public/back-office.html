@@ -134,6 +134,14 @@
 ]</textarea>
             <span class="field-hint">Array of questions (SINGLE_CHOICE, MULTI_CHOICE, YES_NO, MEASURE). The Node hashes the ballot spec.</span>
           </div>
+          <div class="field">
+            <label class="field-label" for="e-tally-scheme">Tally binding</label>
+            <select id="e-tally-scheme" name="tallyScheme">
+              <option value="sum_only" selected>sum_only — any counts that sum to accepted ballots (legacy demo)</option>
+              <option value="opens_ballots">opens_ballots — Node opens ECIES envelopes (threshold-1 demo key, NON-PRODUCTION)</option>
+            </select>
+            <span class="field-hint">Production guardians / mixnet are not this menu. The demo key is generated on create and labeled non-production.</span>
+          </div>
           <div class="actions">
             <button class="btn" type="submit">Create election</button>
           </div>
@@ -313,16 +321,16 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots after cutoff (the operator inbox, not the hourly public snapshot). You cannot invent votes. The election must be past cutoff.</p>
+        <p class="field-hint">After cutoff, post per-option counts. On <code>sum_only</code> elections, sum must equal accepted ballots (the operator inbox). On <code>opens_ballots</code> elections, leave counts blank to open the demo envelopes, or submit counts that must match the opened ballots — invented partitions are rejected. Threshold-1 operator key is NON-PRODUCTION.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
             <select id="t-election" name="electionId" required></select>
           </div>
           <div class="field">
-            <label class="field-label" for="t-counts">Counts JSON array <span class="req">*</span></label>
-            <textarea id="t-counts" name="counts" required spellcheck="false">[0, 0]</textarea>
-            <span class="field-hint">Example: two YES_NO options → <code>[noCount, yesCount]</code> as non-negative integers.</span>
+            <label class="field-label" for="t-counts">Counts JSON array</label>
+            <textarea id="t-counts" name="counts" spellcheck="false" placeholder="[2, 1]"></textarea>
+            <span class="field-hint">sum_only: required. opens_ballots: omit or leave as-is — the Node derives counts from opened ballots. Example YES_NO → <code>[yesCount, noCount]</code>.</span>
           </div>
           <details>
             <summary>Optional Groth16 proof (mock path may omit)</summary>

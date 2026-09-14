@@ -337,6 +337,7 @@
       treeDepth: Number($("e-depth").value),
       questions,
       jurisdictionId: $("e-jurisdiction").value,
+      tallyScheme: $("e-tally-scheme") ? $("e-tally-scheme").value : "sum_only",
     };
     try {
       const created = await request("/api/elections", { method: "POST", body });
@@ -494,17 +495,21 @@
   $("form-tally").addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = $("t-election").value;
-    let counts;
-    try {
-      counts = JSON.parse($("t-counts").value);
-      if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
-        throw new Error("Counts must be a JSON array of non-negative integers.");
+    const rawCounts = $("t-counts").value.trim();
+    const body = {};
+    if (rawCounts) {
+      let counts;
+      try {
+        counts = JSON.parse(rawCounts);
+        if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
+          throw new Error("Counts must be a JSON array of non-negative integers.");
+        }
+      } catch (err) {
+        flash($("flash-tally"), "err", err.message || "Counts JSON is invalid.");
+        return;
       }
-    } catch (err) {
-      flash($("flash-tally"), "err", err.message || "Counts JSON is invalid.");
-      return;
+      body.counts = counts;
     }
-    const body = { counts };
     const proofRaw = $("t-proof").value.trim();
     if (proofRaw) {
       try {
@@ -516,7 +521,7 @@
     }
     try {
       await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
-      flash($("flash-tally"), "ok", "Tally posted. Sum(counts) must equal accepted ballots.");
+      flash($("flash-tally"), "ok", "Tally posted. On opens_ballots, counts are derived from opened envelopes (demo key, NON-PRODUCTION).");
       wireExplorerLinks(id);
     } catch (err) {
       flash($("flash-tally"), "err", errText(err));

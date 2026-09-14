@@ -47,6 +47,20 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationOfficer: election.disqualificationOfficer,
     tallyOperator: election.tallyOperator,
     verifier: election.verifier,
+    tallyScheme: election.tallyScheme || 'sum_only',
+    tallyPubKey: election.tallyPubKey || null,
+    tallyPubKeyX: election.tallyPubKeyX || null,
+    tallyPubKeyY: election.tallyPubKeyY || null,
+    tallyCeremony: election.tallyCeremony
+      ? {
+          scheme: election.tallyCeremony.scheme,
+          threshold: election.tallyCeremony.threshold,
+          guardians: election.tallyCeremony.guardians,
+          production: false,
+          warning: election.tallyCeremony.warning,
+          publicKey: election.tallyCeremony.publicKey || election.tallyPubKey || null,
+        }
+      : null,
     lateUpdateAllowed: election.lateUpdateAllowed,
     rollFrozen: election.rollFrozen,
     frozenAt: election.frozenAt,
@@ -57,7 +71,12 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     state,
     stateName: STATE_NAMES[state],
     tally: election.tally
-      ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
+      ? {
+          counts: election.tally.counts,
+          postedAt: election.tally.postedAt,
+          source: election.tally.source || 'sum_only',
+          production: false,
+        }
       : null,
     createdAt: election.createdAt,
     disclosure: disclosurePublicView(now, interval),

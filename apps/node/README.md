@@ -95,7 +95,8 @@ GET  /api/elections/:id
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator)
+POST /api/elections/:id/tally       (tally operator; opens_ballots derives counts)
+GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods

@@ -20,6 +20,7 @@ contract ElectionFactory is IElectionFactory {
     error InvalidQuestionCount();
     error MissingRole();
     error ModulesNotSet();
+    error InvalidTallyScheme();
 
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;
@@ -109,6 +110,7 @@ contract ElectionFactory is IElectionFactory {
         if (params.startTime >= params.cutoffTime) revert InvalidWindow();
         if (params.treeDepth < MIN_DEPTH || params.treeDepth > MAX_DEPTH) revert InvalidTreeDepth();
         if (params.questionCount < 1) revert InvalidQuestionCount();
+        if (params.tallyScheme > 1) revert InvalidTallyScheme();
         if (
             params.clerk == address(0) || params.registrar == address(0)
                 || params.disqualificationOfficer == address(0) || params.tallyOperator == address(0)

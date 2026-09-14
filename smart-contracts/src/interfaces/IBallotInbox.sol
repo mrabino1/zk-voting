@@ -20,4 +20,9 @@ interface IBallotInbox {
     function acceptedBallots(uint256 electionId) external view returns (uint256);
 
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32);
+
+    /// @notice Hash-chain of accepted ballot hashes: `keccak256(prev || hash)`, starting at 0.
+    function ballotRoot(uint256 electionId) external view returns (bytes32);
+
+    function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
 }

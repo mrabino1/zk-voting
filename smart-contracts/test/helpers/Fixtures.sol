@@ -69,6 +69,10 @@ library Fixtures {
         p.verifier = verifier;
         p.questionCount = questionCount;
         p.jurisdictionId = jurisdictionId;
+        // Additive defaults: SUM_ONLY, no tally pubkey. OPENS_BALLOTS tests set these.
+        p.tallyPubKeyX = bytes32(0);
+        p.tallyPubKeyY = bytes32(0);
+        p.tallyScheme = 0;
     }
 
     function withCap(ElectionParams memory p, uint32 cap) internal pure returns (ElectionParams memory) {
@@ -97,6 +101,25 @@ library Fixtures {
         returns (ElectionParams memory)
     {
         p.jurisdictionId = jurisdictionId;
+        return p;
+    }
+
+    function withTallyScheme(ElectionParams memory p, uint8 scheme)
+        internal
+        pure
+        returns (ElectionParams memory)
+    {
+        p.tallyScheme = scheme;
+        return p;
+    }
+
+    function withTallyPubKey(ElectionParams memory p, bytes32 x, bytes32 y)
+        internal
+        pure
+        returns (ElectionParams memory)
+    {
+        p.tallyPubKeyX = x;
+        p.tallyPubKeyY = y;
         return p;
     }
 

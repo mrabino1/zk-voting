@@ -50,6 +50,9 @@ const FACTORY_ABI = [
           { name: "verifier", type: "address" },
           { name: "questionCount", type: "uint8" },
           { name: "jurisdictionId", type: "bytes32" },
+          { name: "tallyPubKeyX", type: "bytes32" },
+          { name: "tallyPubKeyY", type: "bytes32" },
+          { name: "tallyScheme", type: "uint8" },
         ],
       },
     ],
@@ -353,6 +356,9 @@ function toViemParams(params) {
     verifier: padAddress(params.verifier),
     questionCount: Number(params.questionCount),
     jurisdictionId: toHex32(params.jurisdictionId),
+    tallyPubKeyX: toHex32(params.tallyPubKeyX || 0),
+    tallyPubKeyY: toHex32(params.tallyPubKeyY || 0),
+    tallyScheme: Number(params.tallyScheme || 0),
   };
 }
 

@@ -427,11 +427,58 @@ function publicInputsToHex(publicInputs) {
   return arr.map(toHex32);
 }
 
+/** Solidity `TallyPublicInputs.VERSION` / TALLY_SOL_MOCK_V1. */
+const TALLY_INSTANCE_VERSION = 1n;
+
+/**
+ * Serialize Tally.sol mock Groth16 public inputs (TALLY_SOL_MOCK_V1).
+ *
+ * Order:
+ * `[version, electionId, acceptedCount, countsHash, ballotRoot, openingsHash]`.
+ *
+ * This is **not** `circuits/tally.circom` public signals (those are
+ * `[total, electionId, counts…, acceptedCount]` for the default Tally(8,4)).
+ *
+ * @param {object} input
+ * @returns {bigint[]} Length 6.
+ */
+function serializeTallyPublicInputs(input) {
+  if (input == null || typeof input !== "object") {
+    throw new TypeError("serializeTallyPublicInputs: expected an object");
+  }
+  const countsHash = input.countsHash != null ? input.countsHash : 0;
+  return [
+    TALLY_INSTANCE_VERSION,
+    toBigInt(input.electionId),
+    toBigInt(input.acceptedCount),
+    toBigInt(countsHash),
+    toBigInt(input.ballotRoot == null ? 0 : input.ballotRoot),
+    toBigInt(input.openingsHash == null ? 0 : input.openingsHash),
+  ];
+}
+
+function parseTallyPublicInputs(publicInputs) {
+  if (!Array.isArray(publicInputs) || publicInputs.length !== 6) {
+    throw new Error("parseTallyPublicInputs: expected 6 public inputs (TALLY_SOL_MOCK_V1)");
+  }
+  return {
+    version: toBigInt(publicInputs[0]),
+    electionId: toBigInt(publicInputs[1]),
+    acceptedCount: toBigInt(publicInputs[2]),
+    countsHash: toBigInt(publicInputs[3]),
+    ballotRoot: toBigInt(publicInputs[4]),
+    openingsHash: toBigInt(publicInputs[5]),
+  };
+}
+
 module.exports = {
   PUBLIC_INPUT_KEYS,
   serializePublicInputs,
   parsePublicInputs,
   publicInputsToHex,
+  serializeTallyPublicInputs,
+  parseTallyPublicInputs,
+  TALLY_INSTANCE_VERSION,
   toBigInt,
   toHex32,
   hexToBytes,

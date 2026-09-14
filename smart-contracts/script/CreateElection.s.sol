@@ -57,5 +57,11 @@ contract CreateElection is Script {
         // forge-lint: disable-next-line(unsafe-typecast)
         p.questionCount = uint8(questionCountRaw);
         p.jurisdictionId = vm.envOr("JURISDICTION_ID", keccak256("CIVIC"));
+        p.tallyPubKeyX = vm.envOr("TALLY_PUB_X", bytes32(0));
+        p.tallyPubKeyY = vm.envOr("TALLY_PUB_Y", bytes32(0));
+        uint256 schemeRaw = vm.envOr("TALLY_SCHEME", uint256(0));
+        require(schemeRaw <= 1, "TALLY_SCHEME");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        p.tallyScheme = uint8(schemeRaw);
     }
 }

@@ -124,6 +124,7 @@ Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` unt
 | Block explorer | Node `/explorer` + API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 | Passkeys | WebAuthn PRF; see [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
 | Person identity | Passkey / Web3 / smart card; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
+| Tally that opens ballots | **Demo slice in-tree.** `tallyScheme=1` encrypts choices to a P-256 tally pubkey (threshold-1 operator key, **NON-PRODUCTION**). Node decrypts accepted envelopes and rejects invented `counts[]` that only match the sum. On-chain `submitOpenedTally` requires a histogram of openings. Legacy `tallyScheme=0` still allows any partition of `acceptedBallots`. Not MACI / not production guardians. |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 
 ---
@@ -329,7 +330,7 @@ Circom 2, self-contained (no circomlib path in this repo). **Poseidon is preferr
 | Circuit | Role |
 | --- | --- |
 | `circuits/vote.circom` | `Vote(levels)`: membership in the eligible tree, `nullifier = Hash(nullifierSecret, electionId)`, public `[root, disqRoot, nullifier, ballotHash, electionId]` |
-| `circuits/tally.circom` | Per-option counts sum to accepted ballots (plaintext / mock-homomorphic path) |
+| `circuits/tally.circom` | Histogram of opened option indices (`CIRCOM_TALLY_V1` public signals). **Not** the same encoding as `Tally.sol` (`TALLY_SOL_MOCK_V1` in `TallyPublicInputs.sol`). MockVerifier until a translating wrapper exists. |
 | `circuits/identity.circom` | Commitment and nullifier primitives |
 
 Compile notes, snarkjs, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
@@ -343,7 +344,7 @@ npm workspaces (Node 22):
 | Package | Role |
 | --- | --- |
 | `@zk-voting/types` | JSDoc types: `ElectionParams`, `VoteEnvelope`, `Block`, `Jurisdiction`; reason codes and election states matching Solidity |
-| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; `encodePacked` mock; Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
+| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; `serializeTallyPublicInputs` → TALLY_SOL_MOCK_V1; `encodePacked` mock; Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
 | `@zk-voting/chain-client` | `getFactory`, `createElection`, `submitVote` through viem `writeContract` / `encodeFunctionData`, else `fetch` JSON-RPC `eth_call` wrappers for views |
 
 ---
@@ -519,11 +520,17 @@ A **jurisdiction** is the administrative owner: it defines the roll, the reason 
 | **Registrar** | Approve registrations | Insert/remove registry commitments |
 | **Disqualification officer** | Apply/revoke reason codes | Write `DisqualificationRegistry` |
 | **Election clerk** | Create election, freeze roll, open/close | Configure `Election`, freeze roots |
-| **Tally operator** | Run the prover / batch | Submit tally proofs (cannot invent votes) |
+| **Tally operator** | Run the prover / batch; on `opens_ballots` elections, open demo envelopes | Submit tally proofs. On SUM_ONLY they can still invent a partition of the sum. On OPENS_BALLOTS, invented partitions that only match the sum are rejected. |
 | **Observer** | Read-only | Read state and verify |
 | **Platform admin** | Host the Node, keys, uptime | Not an election officer unless also granted |
 
-A **corrupt tally operator** must not be able to change outcomes or add votes. They **can** stall (never submit a tally). The README’s threat model calls that out; later work can add a forced-reveal or guardian path. They **cannot** make a disqualified voter’s proof succeed.
+A **corrupt tally operator** on the legacy **SUM_ONLY** path can still post any `counts[]` that sum to `acceptedBallots` — the operator cannot add or drop ballots, but they can rearrange which option received them. That hole is why **OPENS_BALLOTS** exists: the Node decrypts ECIES envelopes under a **threshold-1 demo key** (the operator host holds it; **NON-PRODUCTION**, not a guardian ceremony) and the contract requires `histogram(openings) == counts`. They **can** stall (never submit a tally). They **cannot** make a disqualified voter’s proof succeed. Production remains homomorphic / mixnet decryption proofs plus a real Groth16 verifier. MACI-style coercion resistance is a separate gap.
+
+### Tally encryption (honest status)
+
+- **Demo (this slice):** each `opens_ballots` election generates a P-256 keypair at create time (`p256-ecies-aesgcm-v1`). The public key is on the election record (`tallyPubKey` / `tallyPubKeyX|Y`). The private JWK stays in the Node’s `tallyGuardians` collection and is never returned by `GET /api/elections/:id/tally-key`. Voters encrypt a packed option index to that pubkey (replacing seed-keyed AES for the posted envelope). After cutoff, `POST /tally` opens every accepted envelope and posts the derived plurality vector. Submitting a different vector whose sum still matches `acceptedBallots` fails with `INVENTED_COUNTS`.
+- **On-chain:** `ElectionParams.tallyScheme` is additive (`0` keeps old tests). `submitOpenedTally` binds openings ↔ counts ↔ inbox `ballotRoot`. `Tally.sol` Groth16 inputs are versioned as `TALLY_SOL_MOCK_V1` and are **not** `tally.circom`’s public signals.
+- **Not done:** Shamir / guardian threshold > 1, mixnet permutation before opening, homomorphic ciphertext product, real Groth16 tally keys, MACI last-vote-counts. Do not run a binding election on the demo key.
 
 ---
 
@@ -653,7 +660,7 @@ Install / build / restart use npm workspaces, then pm2, systemd, or Compose when
 
 Present: monorepo skeleton, Solidity interfaces and implementations under `smart-contracts/`, circuits, packages, Node app, L2, explorer and passkey docs.
 
-Still ahead of a binding election: Poseidon hasher swap, Groth16 ceremony, coercion-resistance upgrades, independent auditor packaging. Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
+Still ahead of a binding election: Poseidon hasher swap, Groth16 ceremony, production tally guardians (threshold > 1) / mixnet, coercion-resistance upgrades, independent auditor packaging. Do not treat `MockVerifier`, the circom `Hasher()` stand-in, or the threshold-1 tally operator key as production cryptography.
 
 ---
 

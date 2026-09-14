@@ -12,8 +12,8 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 - `src/VoterRegistry.sol` / `PersonRegistry.sol` / `DisqualificationRegistry.sol` / `BallotInbox.sol` / `Tally.sol`
 - `src/account/` — passkey AA + `RepublicPaymaster`
 - `src/l2/` — `RollupSettlement`, mailbox, L1 tally mirror
-- `src/zk/` — `MockVerifier` (tests) and structural `VoteVerifier`
-- `test/` — unit, fuzz (`test/fuzz`), invariant (`test/invariant`)
+- `src/zk/` — `MockVerifier` (tests), `TallyPublicInputs` (versioned tally instance), structural `VoteVerifier`
+- `test/` — unit (`Tally.t.sol` covers SUM_ONLY vs OPENS_BALLOTS), fuzz (`test/fuzz`), invariant (`test/invariant`)
 - `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`
 
 ## Test

@@ -10,6 +10,8 @@ import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
+import { DEMO_KEY_WARNING, publicCeremonyView } from '../tallyCrypto.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -137,6 +139,8 @@ export function electionsRouter(deps) {
         tallyOperator: body.tallyOperator || '',
         verifier: body.verifier || '',
         lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
+        tallyScheme: body.tallyScheme,
+        opensBallots: body.opensBallots,
         createdBy: req.user.id,
       });
       await explorer.append('election_created', {
@@ -366,6 +370,28 @@ export function electionsRouter(deps) {
     }),
   );
 
+  router.get(
+    '/:id/tally-key',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const guardian = store.getTallyGuardian(election.id);
+      res.json({
+        electionId: String(election.id),
+        tallyScheme: election.tallyScheme || 'sum_only',
+        ceremony: publicCeremonyView(guardian) || election.tallyCeremony || {
+          scheme: 'none',
+          threshold: 0,
+          guardians: 0,
+          production: false,
+          warning: 'No tally encryption key. Legacy sum-only demo: any counts that sum to acceptedBallots are accepted.',
+        },
+        production: false,
+        warning: DEMO_KEY_WARNING,
+        nfp: true,
+      });
+    }),
+  );
+
   router.post(
     '/:id/tally',
     requireAuth,
@@ -377,33 +403,67 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const counts = req.body?.counts;
-      if (!Array.isArray(counts) || counts.length === 0) {
-        throw new HttpError(400, 'counts[] required');
+
+      let nums;
+      let source = 'sum_only';
+      let openedBallots = null;
+
+      if (isOpensBallots(election)) {
+        const guardian = store.getTallyGuardian(election.id);
+        const envelopes = store.listEnvelopes(election.id);
+        const opened = await openBallots(election, envelopes, guardian, election.questions);
+        if (Array.isArray(req.body?.counts) && req.body.counts.length > 0) {
+          const submitted = req.body.counts.map((n) => Number(n));
+          if (submitted.some((n) => !Number.isInteger(n) || n < 0)) {
+            throw new HttpError(400, 'counts must be non-negative integers');
+          }
+          rejectInventedCounts(submitted, opened.counts);
+        }
+        nums = opened.counts;
+        source = 'opens_ballots';
+        openedBallots = opened.openings.length;
+      } else {
+        const counts = req.body?.counts;
+        if (!Array.isArray(counts) || counts.length === 0) {
+          throw new HttpError(400, 'counts[] required');
+        }
+        nums = counts.map((n) => Number(n));
+        if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
+          throw new HttpError(400, 'counts must be non-negative integers');
+        }
+        const sum = nums.reduce((a, b) => a + b, 0);
+        if (sum !== election.acceptedBallots) {
+          throw new HttpError(400, 'sum(counts) must equal acceptedBallots', {
+            code: 'TALLY_MISMATCH',
+            sum,
+            acceptedBallots: election.acceptedBallots,
+          });
+        }
+        const expected = expectedCountLength(election.questions);
+        if (expected && nums.length !== expected) {
+          throw new HttpError(400, `counts length must be ${expected}`, { expected });
+        }
       }
-      const nums = counts.map((n) => Number(n));
-      if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
-        throw new HttpError(400, 'counts must be non-negative integers');
-      }
-      const sum = nums.reduce((a, b) => a + b, 0);
-      if (sum !== election.acceptedBallots) {
-        throw new HttpError(400, 'sum(counts) must equal acceptedBallots', {
-          code: 'TALLY_MISMATCH',
-          sum,
-          acceptedBallots: election.acceptedBallots,
-        });
-      }
-      const expected = expectedCountLength(election.questions);
-      if (expected && nums.length !== expected) {
-        throw new HttpError(400, `counts length must be ${expected}`, { expected });
-      }
-      const tallied = await store.setTally(election.id, nums);
+
+      const tallied = await store.setTally(election.id, nums, { source, openedBallots });
       await explorer.append('tally', {
         electionId: String(tallied.id),
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
+        source,
+        production: false,
       });
-      res.json({ ok: true, election: presentElection(tallied, deps), nfp: true });
+      res.json({
+        ok: true,
+        election: presentElection(tallied, deps),
+        tally: {
+          counts: nums,
+          source,
+          production: false,
+          openedBallots,
+        },
+        nfp: true,
+      });
     }),
   );
 

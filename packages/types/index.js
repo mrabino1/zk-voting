@@ -90,6 +90,9 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ * @property {string} [tallyPubKeyX] P-256 pubkey X (bytes32 hex). Zero = no tally encryption key.
+ * @property {string} [tallyPubKeyY] P-256 pubkey Y (bytes32 hex).
+ * @property {number} [tallyScheme] 0 = SUM_ONLY (legacy). 1 = OPENS_BALLOTS.
  */
 
 /**
@@ -150,8 +153,10 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} [identityCommitment] Optional; MUST NOT be required to
  *   submit a vote. Present only in clerk-side debug tooling, never in the
  *   public explorer vote row.
- * @property {string} encryptedBallot Hex bytes of the ElGamal / hashed
- *   commitment ciphertext. Does not reveal the option in the clear.
+ * @property {string} encryptedBallot Hex bytes of the tally-pubkey ECIES envelope
+ *   (`RTv1` + P-256 eph pub + AES-GCM) when `tallyScheme == opens_ballots`, or
+ *   the legacy seed-keyed AES-GCM stand-in. Does not reveal the option in the clear
+ *   until the (demo) operator key opens it after cutoff.
  * @property {bigint[]|string[]} publicInputs Length-5 array documented above.
  * @property {Groth16Proof} proof Pairing-shaped Groth16 proof.
  * @property {string} [relayer] Address that submits the UserOp / tx (bundler).
