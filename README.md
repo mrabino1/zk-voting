@@ -1,28 +1,47 @@
-# zk-voting
+# zk-voting (Republic)
 
-A monorepo for a **zero-knowledge, Ethereum-settled voting system**.
+**NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
 
-This repository will hold two tightly coupled pieces of software:
+A monorepo for a **zero-knowledge, Ethereum-settled voting system**. Product name: **Republic**. Repo name: `zk-voting`.
 
-1. A **Node application** (same operational shape as [DealPunchList](https://dealpunchlist.com) / `dealpunchlist-node`): the product surface for voters, election officials, and public observers.
+This repository holds two tightly coupled pieces of software (and the circuits, L2, and packages that bind them):
+
+1. A **Node application** (same operational shape as [DealPunchList](https://dealpunchlist.com) / `dealpunchlist-node`): the product surface for voters, election officials, and public observers (`apps/node`).
 2. A **`smart-contracts/`** package: Solidity for Ethereum that registers voters, opens ballots, records (or commits to) votes with zero-knowledge proofs, and **enforces disqualification** so that a person who is on the roll can still be barred from a given election for jurisdiction-defined reasons.
 
-The same contracts are meant to run **on Ethereum mainnet (L1)** and on a **Layer 2 in the Lighter family** ([lighter.xyz](https://lighter.xyz)): a ZK rollup that settles proofs and state to Ethereum. Cheap, high-volume voter activity belongs on L2. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there.
+The same contracts are meant to run **on Ethereum mainnet (L1)** and on **Republic L2** (this repo’s sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): a ZK rollup that settles proofs and state to Ethereum. Cheap, high-volume voter activity belongs on L2. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there. Portable EVM bytecode still deploys to Lighter’s EVM surface and to other EVM L2s if needed.
 
-**Status:** this repository is documentation-first. The README is the current source of truth. Application and contract code have not been added yet. Work happens on `test/unstable`. `master` is production only.
+**Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only. The product spec in this README remains the source of truth for intent; [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) is the interface contract. If this file and the code disagree, treat that as a bug in the code or an overdue README update.
+
+---
+
+## Not for profit
+
+This software is **not a commercial product**. It exists to protect and preserve a republic driven by democracy: the people vote for representatives, and those representatives vote. A city, county, state, nation, union, cooperative, or (if a jurisdiction demanded it) a shareholder meeting should be able to run a binding election with **public verifiability** and **private ballots**.
+
+- There is **no token**. There is **no paid tier**. There is **no vendor lock-in**.
+- Nobody is to make money off this repository. Jurisdictions may run it **at cost** (hosts, paymaster gas, paper notice).
+- Voter data is not a product. Gas sponsorship is not a fee.
+- Every document in this repo carries a visible **NOT FOR PROFIT** label. Solidity files carry `// NOT FOR PROFIT — civic public good, not a commercial product.`
+
+If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md). License: AGPL-3.0-or-later.
 
 ---
 
 ## Table of contents
 
+- [Not for profit](#not-for-profit)
 - [Purpose](#purpose)
 - [Who it is for](#who-it-is-for)
 - [What “zero-knowledge voting” means here](#what-zero-knowledge-voting-means-here)
 - [Current status](#current-status)
 - [Monorepo layout](#monorepo-layout)
+- [How to run](#how-to-run)
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
-- [Chains: Ethereum L1 and Lighter L2](#chains-ethereum-l1-and-lighter-l2)
+- [Circuits](#circuits)
+- [Shared packages](#shared-packages)
+- [Chains: Ethereum L1, Republic L2, and Lighter](#chains-ethereum-l1-republic-l2-and-lighter)
 - [Registration](#registration)
 - [Eligibility, disqualification, and due process](#eligibility-disqualification-and-due-process)
 - [Ballots and “voting on aspects”](#ballots-and-voting-on-aspects)
@@ -85,45 +104,133 @@ The properties we are aiming for:
 
 Zero-knowledge does **not** mean “nobody is in charge.” Someone still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, **counting and eligibility checks are not a second trust sink**.
 
+Privacy construction (implementation): WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. See [Passkeys](./docs/PASSKEYS.md) and [ARCHITECTURE](./docs/ARCHITECTURE.md).
+
 ---
 
 ## Current status
 
+Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` until Poseidon + Groth16 keys exist. That is not a production ceremony.
+
 | Area | State |
 | --- | --- |
-| This README | Source of truth for intent and architecture |
-| Node application | Not started (will follow the `dealpunchlist-node` style: Node API + web frontend, hosted with `system_actions.sh`) |
-| `smart-contracts/` | Not started (Solidity, Ethereum L1 + Lighter L2) |
-| Circuits / proving keys | Not started |
-| Production deployment | None. `master` is reserved for it. |
-
-If this file and the code disagree later, treat that as a bug in the code or an overdue README update.
+| This README | Source of truth for intent; updated for the implemented tree |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Interface contract (Solidity, circuits, Node, L2) |
+| Node application (`apps/node`) | In-tree (DealPunchList-style API + SPA, `system_actions.sh`) |
+| `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry: factory, registries, inbox, tally, account, L2 settlement) |
+| Circuits (`circuits/`) | In-tree (`vote.circom`, `tally.circom`, `identity.circom`; Poseidon stand-in labeled) |
+| Shared packages | `@zk-voting/types`, `proof-helpers`, `chain-client` |
+| Republic L2 (`l2/`) | Own sequencer + prover, chainId **27427**, L1 `RollupSettlement` |
+| Block explorer | Node `/explorer` + API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
+| Passkeys | WebAuthn PRF; see [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
+| Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 
 ---
 
 ## Monorepo layout
 
-Planned layout. Only the files that already exist are real today.
+Current layout (names can still move slightly; the invariants will not).
 
 ```text
 zk-voting/
-  README.md                 ← you are here
-  system_actions.sh        ← host/operator menu (DealPunchList pattern)
+  README.md                    ← you are here (spec + how to run)
+  NOT_FOR_PROFIT.md
+  LICENSE                      AGPL-3.0-or-later
+  CONTRIBUTING.md
+  system_actions.sh            host/operator menu (DealPunchList pattern)
+  package.json                 npm workspaces
+  docs/
+    ARCHITECTURE.md            interface contract
+    OPERATOR.md
+    BLOCK_EXPLORER.md
+    PASSKEYS.md
+    L2.md
   apps/
-    node/                  ← DealPunchList-style Node app (API + frontend)
-  packages/                ← shared TS types, proof helpers, chain clients
-  smart-contracts/         ← Solidity, tests, deploy scripts (L1 and L2)
+    node/                      DealPunchList-style Node app (API + SPA)
+  packages/
+    types/                     JSDoc: ElectionParams, VoteEnvelope, Block, Jurisdiction
+    proof-helpers/             publicInputs [root, disqRoot, nullifier, ballotHash, electionId]
+    chain-client/              getFactory, createElection, submitVote (viem or eth_call)
+  smart-contracts/             Foundry, Solidity 0.8.24
     src/
-    test/
-    script/
-  circuits/                ← ZK circuits (added when proving work starts)
+    test/                      unit, fuzz, invariant
+    script/                    DeployLocal, DeployL1, DeployL2, CreateElection
+  circuits/                    vote.circom, tally.circom, identity.circom
+  l2/                          sequencer, prover, genesis (chainId 27427)
 ```
 
-Names can move slightly when the first packages land. The invariants will not:
+Invariants:
 
-- **One repo** for the voting product, the Node host, and the contracts.
+- **One repo** for the voting product, the Node host, the contracts, the circuits, and the L2.
 - **`smart-contracts/`** is the Solidity home. It is not buried inside the Node app.
 - The Node app talks to those contracts. It does not become a second, private source of election truth.
+
+---
+
+## How to run
+
+Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Branch policy: work on **`test/unstable`**; **`master`** is production.
+
+### Foundry tests (`smart-contracts/`)
+
+Requires [Foundry](https://book.getfoundry.sh/) (`foundryup`). solc **0.8.24**, optimizer on, fuzz 256 runs (`foundry.toml`).
+
+```bash
+cd smart-contracts
+forge test
+forge test --fuzz-runs 256
+forge test --match-path test/invariant/*
+
+# from repo root
+npm run test:contracts
+npm run test:fuzz
+npm run test:invariant
+```
+
+Tests must pass with `MockVerifier`. Invariants include: nullifier used at most once; no vote outside `[startTime, cutoffTime)`; no vote if `!rollFrozen`; `sum(counts) == acceptedBallots` after tally; factory clones do not share nullifier storage. See ARCHITECTURE.
+
+### Node (`apps/node`)
+
+```bash
+npm install
+npm run dev                 # API + SPA (workspace script)
+npm run start               # long-lived process for system_actions.sh
+npm test -w apps/node
+./system_actions.sh health  # GET http://127.0.0.1:3000/health
+```
+
+Details: [`apps/node/README.md`](./apps/node/README.md). SQLite: `apps/node/data/republic.sqlite` (gitignored).
+
+### Republic L2 (sequencer + prover)
+
+```bash
+npm run l2:sequencer        # node l2/sequencer/index.mjs
+npm run l2:prover           # node l2/prover/index.mjs
+```
+
+Genesis **chainId 27427**, 2s blocks, one sequencer. May proxy EVM to Anvil in dev. Settlement: L1 `RollupSettlement.submitBatch`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md).
+
+```bash
+export REPUBLIC_RPC_URL=http://127.0.0.1:8545
+export REPUBLIC_CHAIN_ID=27427
+```
+
+### Block explorer
+
+With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`. Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+
+### Passkeys
+
+Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF → wrap/derive secp256k1 smart-account key; **separate** PRF domain → `(trapdoor, nullifierSecret)`. UserOps are bundled; `RepublicPaymaster` sponsors register/vote. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
+
+### Host actions
+
+```bash
+./system_actions.sh              # interactive menu
+./system_actions.sh status
+./system_actions.sh deploy-dev   # pull test/unstable, install, build, restart
+./system_actions.sh deploy-prod  # pull master (confirms first)
+```
 
 ---
 
@@ -157,13 +264,15 @@ The Node side is the human product. It should feel operationally familiar to any
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
 | Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
 
+SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+
 ---
 
 ## Smart contracts
 
-Solidity on Ethereum. This is the enforcement layer.
+Solidity on Ethereum. This is the enforcement layer. Sources live under `smart-contracts/src/` (`pragma solidity ^0.8.24`, AGPL-3.0-or-later). Exact interfaces: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
-The first contract set is expected to cover:
+The contract set covers:
 
 | Contract (working name) | Role |
 | --- | --- |
@@ -171,11 +280,14 @@ The first contract set is expected to cover:
 | `VoterRegistry` | Commitments to registered persons (identity commitments / public keys), per jurisdiction. Registration is not a vote. |
 | `DisqualificationRegistry` | Registered persons who **must not** be able to vote in a given election (or on a given question), with reason codes, effective times, and issuer. |
 | `Election` / `Poll` | Parameters: questions (“aspects”), options, open/close, eligible-set root, disqualification-set root, voting rules. |
+| `ElectionFactory` | Unbounded elections via EIP-1167 clones. `maxParticipants = 0` means unlimited voters. |
 | `BallotInbox` | Accepts vote messages + ZK proofs. Rejects proofs that fail eligibility, disqualification, uniqueness, or time window. |
 | `TallyVerifier` | Verifies the coordinator/prover’s batch proofs that the published totals match the inbox. |
-| `BridgeOrMirror` (as needed) | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
+| `BridgeOrMirror` / `L1TallyMirror` | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
+| `RollupSettlement` | L1 contract: `submitBatch` for Republic L2 state roots. |
+| Passkey AA + paymaster | `PasskeyAccount`, factory, `RepublicPaymaster`, local `RepublicEntryPoint`. |
 
-Exact names will follow the first Solidity drop. The **behaviors** are the spec:
+Exact names follow the Solidity tree. The **behaviors** are the spec:
 
 ### Registration on chain
 
@@ -188,6 +300,7 @@ Exact names will follow the first Solidity drop. The **behaviors** are the spec:
 - A vote is a **proof + ciphertext / commitment**, not a public `vote(optionId)`.
 - The verifier checks: registered, **not disqualified**, in the voting window, unique nullifier, well-formed ballot for that election’s questions.
 - Multiple questions in one election (“aspects”) can be one ballot or one proof per question; the election parameters say which.
+- `submitVote` public inputs are `[root, disqRoot, nullifier, ballotHash, electionId]`. Relayer/bundler is `msg.sender`.
 
 ### Disqualification on chain
 
@@ -195,34 +308,64 @@ This is a first-class feature, not an admin footnote.
 
 - A registered voter can be marked **ineligible to cast** (or to have a ballot counted) for a specific election, a specific question, or (if the jurisdiction allows) all current elections in that jurisdiction.
 - The mark carries a **reason code** from a published catalog (see [Eligibility, disqualification, and due process](#eligibility-disqualification-and-due-process)).
-- Vote circuits take the **disqualification tree / set** as a public input. A valid vote proves **non-membership** (or an equivalent “still eligible” delta) for that person.
+- Vote circuits take the **disqualification tree / set** as a public input. A valid vote proves **non-membership** (or an equivalent “still eligible” delta) for that person. In v1 the eligible Merkle root is `registered ∩ ¬disqualified`; membership in that root is what a disqualified person cannot prove.
 - Removing a disqualification (appeal granted, error, restored rights) is the same kind of auditable event, with its own actor and timestamp.
 - Once a poll is frozen for tally, new disqualifications must not rewrite history. Late legal changes are a **new** election or a jurisdiction-level process off this protocol, unless the election was parameterized to allow a documented freeze/unfreeze.
 
-Contracts must be **boring Solidity**: explicit access control, no upgrade surprise unless a jurisdiction opted into a proxy, events for every state change the Node or an auditor will need.
+Contracts must be **boring Solidity**: explicit access control, no upgrade surprise unless a jurisdiction opted into a proxy, events for every state change the Node or an auditor will need. v1 factory deploys new elections; no upgradeable `Election` proxy unless params explicitly opt in.
 
 ---
 
-## Chains: Ethereum L1 and Lighter L2
+## Circuits
 
-### Why two layers
+Circom 2, self-contained (no circomlib path in this repo). **Poseidon is preferred** for identity commitments, Merkle `hashLeftRight`, and nullifiers. Until Poseidon is vendored, `Hasher()` is a labeled stand-in (`out = a + b + a*b`). **Not production Poseidon. Not for a binding election or a trusted setup.**
+
+| Circuit | Role |
+| --- | --- |
+| `circuits/vote.circom` | `Vote(levels)`: membership in the eligible tree, `nullifier = Hash(nullifierSecret, electionId)`, public `[root, disqRoot, nullifier, ballotHash, electionId]` |
+| `circuits/tally.circom` | Per-option counts sum to accepted ballots (plaintext / mock-homomorphic path) |
+| `circuits/identity.circom` | Commitment and nullifier primitives |
+
+Compile notes, snarkjs, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
+
+---
+
+## Shared packages
+
+npm workspaces (Node 22):
+
+| Package | Role |
+| --- | --- |
+| `@zk-voting/types` | JSDoc types: `ElectionParams`, `VoteEnvelope`, `Block`, `Jurisdiction`; reason codes and election states matching Solidity |
+| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; `encodePacked` mock; Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
+| `@zk-voting/chain-client` | `getFactory`, `createElection`, `submitVote` through viem `writeContract` / `encodeFunctionData`, else `fetch` JSON-RPC `eth_call` wrappers for views |
+
+---
+
+## Chains: Ethereum L1, Republic L2, and Lighter
+
+### Why two layers (plus a named L2 in this repo)
 
 | Layer | Job |
 | --- | --- |
-| **Lighter L2** ([lighter.xyz](https://lighter.xyz)) | High-volume voter actions: registration commitments, vote messages, frequent eligibility-set updates. Lighter is a **ZK rollup on Ethereum**: execution is proven, and Ethereum verifies those proofs. That matches this project’s bias — do not ask the public to trust an operator’s matching/counting engine. |
-| **Ethereum mainnet (L1)** | Canonical settlement. Deploy the same Solidity when the election must live where any Ethereum full node can verify it without an L2 client: national-scale certification, dispute windows, or “this result is an L1 transaction.” |
+| **Republic L2** (this repo, chainId **27427**) | High-volume voter actions: registration commitments, vote messages, frequent eligibility-set updates. **Own sequencer + prover.** Execution is proven; Ethereum verifies `RollupSettlement` batches. Gasless for voters (paymaster). |
+| **Lighter** ([lighter.xyz](https://lighter.xyz)) | Prior art and a possible alternate venue: a **ZK rollup on Ethereum**. Lighter’s original core is application-specific; it has also moved toward a general-purpose EVM surface. |
+| **Ethereum mainnet (L1)** | Canonical settlement. Deploy the same Solidity when the election must live where any Ethereum full node can verify it without an L2 client: national-scale certification, dispute windows, or “this result is an L1 transaction.” `L1TallyMirror` copies a tallied hash when the jurisdiction asks. |
 
-Lighter’s original core is an application-specific ZK rollup (verifiable exchange operations, proofs verified on Ethereum). Lighter has also moved toward a **general-purpose EVM** surface so ordinary Solidity can be deployed beside that core. This repo’s contracts will be written as **portable EVM bytecode**:
+Lighter’s original core is an application-specific ZK rollup (verifiable exchange operations, proofs verified on Ethereum). Lighter has also moved toward a **general-purpose EVM** surface so ordinary Solidity can be deployed beside that core. This repo’s contracts are written as **portable EVM bytecode**:
 
 - Deploy to **Ethereum mainnet** when L1 is the required venue.
-- Deploy to **Lighter** (Lighter EVM / the L2’s contract environment) when the election wants L2 fees and throughput, with L1 used to verify the rollup (and, if we add it, to mirror the certified tally).
-- If a given Lighter environment is not yet suitable for these contracts, the same artifacts should still deploy to Ethereum L1 and to any other EVM L2. The product requirement is “L2 like Lighter, plus L1,” not a hard dependency on a single sequencer remaining available.
+- Deploy to **Republic L2 (27427)** for the default high-throughput, gasless path.
+- Deploy to **Lighter** (Lighter EVM / the L2’s contract environment) when a jurisdiction wants that operator instead, with L1 used to verify the rollup (and, if we add it, to mirror the certified tally).
+- If a given Lighter environment is not yet suitable for these contracts, the same artifacts should still deploy to Ethereum L1 and to any other EVM L2. The product requirement is “L2 like Lighter, plus L1,” not a hard dependency on a single third-party sequencer remaining available.
+
+Republic L2 details (genesis, sequencer, prover, settlement): [`docs/L2.md`](./docs/L2.md).
 
 ### Deployment policy
 
-- **Development / staging elections** → L2 (and L1 test networks).
-- **Production elections** → explicit choice per jurisdiction: L2-only, L1-only, or L2 execution + L1 result mirror.
-- `system_actions.sh` and later deploy scripts must never “accidentally” point a production jurisdiction at `test/unstable` configuration. `master` is the production line.
+- **Development / staging elections** → Republic L2 and L1 test networks. Branch `test/unstable`.
+- **Production elections** → explicit choice per jurisdiction: L2-only, L1-only, or L2 execution + L1 result mirror. Branch `master`.
+- `system_actions.sh` and deploy scripts must never “accidentally” point a production jurisdiction at `test/unstable` configuration. `master` is the production line.
 
 ### What “on chain” means for an election
 
@@ -256,7 +399,7 @@ The Node stores what the jurisdiction is legally required to keep. That store is
 
 ### On-chain
 
-- An **identity commitment** (e.g. a hash of a voter key and jurisdiction salt) is added to the `VoterRegistry` for that jurisdiction.
+- An **identity commitment** (e.g. a hash of a voter key and jurisdiction salt) is added to the `VoterRegistry` for that jurisdiction. Implementation: `Poseidon(identityTrapdoor, nullifierSecret)` (stand-in hasher in circom until Poseidon is wired). The leaf is **never** the wallet address and **never** a name.
 - Optional: a **district leaf**, so a municipal election can require residency in that district without putting the street address on chain.
 - Duplicate prevention: the jurisdiction’s uniqueness rule (national ID hash, one-person attestation, etc.) is checked before the commitment is inserted. The contracts can enforce “this uniqueness nullifier is unused,” which is stronger than a SQL unique index.
 
@@ -298,7 +441,7 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
    | `SANCTION_OR_PROHIBITION` | Explicit legal prohibition |
    | `OTHER` | Requires a public or sealed memo reference |
 
-   Jurisdictions add, rename, or disable codes. The protocol does not hard-code one country’s election code.
+   Jurisdictions add, rename, or disable codes. The protocol does not hard-code one country’s election code. Solidity `ReasonCodes.sol` uses `uint16` (`NOT_OF_AGE=1` … `OTHER=14`).
 
 2. **On-chain record.** `{ voterCommitment, electionId or * , questionId or *, reasonCode, evidenceHash, issuer, issuedAt, expiresAt?, revokedAt? }`
 
@@ -351,7 +494,7 @@ The Node is the authoring tool for this ballot. The contracts store the hash of 
 
 | Kind | Example | Typical chain choice |
 | --- | --- | --- |
-| Local / municipal | City council, school board, local measure | L2 |
+| Local / municipal | City council, school board, local measure | L2 (Republic 27427) |
 | Regional / state / province | Statewide office or referendum | L2, L1 mirror of tally |
 | National | General election, national referendum | L1 certified result; L2 may still take the vote messages |
 | Non-governmental | Union, cooperative, professional college | L2, optional L1 |
@@ -380,9 +523,9 @@ A **corrupt tally operator** must not be able to change outcomes or add votes. T
 
 ### A. Register
 
-1. Voter completes the Node intake for jurisdiction J.
+1. Voter completes the Node intake for jurisdiction J (passkey create / PRF).
 2. Clerk verifies documents (or an automated attestation the jurisdiction accepts).
-3. Node (or voter wallet) submits a registration transaction: identity commitment to `VoterRegistry`.
+3. Node (or voter UserOp, paymaster-sponsored) submits a registration transaction: identity commitment to `VoterRegistry`.
 4. Voter sees **Registered**.
 
 ### B. Disqualify
@@ -396,7 +539,7 @@ A **corrupt tally operator** must not be able to change outcomes or add votes. T
 
 1. Polls open. Eligible-set root is frozen (or the election allows a documented refresh).
 2. Voter builds a ZK proof: I am in the eligible set, I am not in the disqualification set, this nullifier is unused, this ciphertext is a well-formed ballot for these questions.
-3. `BallotInbox` accepts the message. Choice is not plaintext.
+3. `BallotInbox` accepts the message (bundler is `msg.sender`). Choice is not plaintext.
 4. A second vote with the same nullifier fails.
 
 ### D. Tally and certify
@@ -421,6 +564,8 @@ These three fight each other. The design chooses explicitly:
 | **Disqualification transparency** | Reason **codes** are public so a jurisdiction cannot hide mass purges. Personal evidence stays off-chain. |
 
 If a jurisdiction needs a fully public roll (some do), that is a configuration: commitments can be replaced or accompanied by identified records. ZK voting still hides the **ballot**.
+
+Unlinkability: the passkey smart-account address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Details: [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
 ---
 
@@ -462,6 +607,7 @@ If a jurisdiction needs a fully public roll (some do), that is a configuration: 
 - Let a disqualified person vote “privately anyway.” Privacy is for the **choice**, not for bypassing the roll.
 - Hide mass disqualification behind ZK. The **fact** of disqualification is meant to be visible; the **ballot** is not.
 - Ship as a single-chain toy that cannot be certified on L1.
+- Charge voters, sell the software, or wrap it in a token.
 
 ---
 
@@ -471,6 +617,8 @@ If a jurisdiction needs a fully public roll (some do), that is a configuration: 
 
 - **`test/unstable`** — default development and staging. Almost all work happens here.
 - **`master`** — production only. Promote when a build is ready to ship.
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ### Host actions
 
@@ -483,31 +631,36 @@ If a jurisdiction needs a fully public roll (some do), that is a configuration: 
 ./system_actions.sh deploy-prod  # pull master (confirms first)
 ```
 
-Install / build / restart stay no-ops until a `package.json`, PM2 ecosystem, systemd unit, or Compose file exists.
+Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured.
 
-### What to build next (when we leave README-only)
+### Tooling
 
-Not in this change. When code starts, the expected order is:
+- Solidity: Foundry 1.8+, solc 0.8.24.
+- Node: Node 22, npm workspaces.
+- Circuits: Circom 2 (optional on the host until leaving MockVerifier).
+- Tests: `forge test` with MockVerifier; `npm test -w apps/node` for API tests.
 
-1. Monorepo skeleton (`apps/node`, `smart-contracts/`) with no election logic.
-2. Solidity interfaces and reason-code enums matching this document.
-3. Node screens that can display election and voter status against those contracts on a test chain.
-4. Circuits for eligibility + non-disqualification + vote.
+### What is in the tree vs what remains
+
+Present: monorepo skeleton, Solidity interfaces and implementations under `smart-contracts/`, circuits, packages, Node app, L2, explorer and passkey docs.
+
+Still ahead of a binding election: Poseidon hasher swap, Groth16 ceremony, coercion-resistance upgrades, independent auditor packaging. Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
 
 ---
 
 ## Roadmap
 
-Documentation-level only. Dates are not committed.
+Dates are not committed.
 
-1. **Spec freeze (this README)** — purpose, monorepo, L1 + Lighter L2, registration, disqualification.
-2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and Lighter.
-3. **Node skeleton** — DealPunchList-style app: jurisdictions, users, roles, election admin, voter home.
-4. **First proving path** — eligible vote on a single yes/no question on L2 test deployment.
-5. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof.
-6. **Multi-question ballots** — “aspects.”
-7. **L1 certification** — tally or tally hash on Ethereum mainnet.
-8. **Coercion-resistance upgrades** and independent auditor tooling.
+1. **Spec freeze (this README)** — purpose, monorepo, L1 + L2, registration, disqualification. **Done (kept current as code landed).**
+2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and Republic L2. **In-tree.**
+3. **Node skeleton** — DealPunchList-style app: jurisdictions, users, roles, election admin, voter home. **In-tree.**
+4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
+5. **First proving path** — eligible vote on a single yes/no question on L2 test deployment (MockVerifier locally).
+6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof.
+7. **Multi-question ballots** — “aspects.”
+8. **L1 certification** — tally or tally hash on Ethereum mainnet.
+9. **Coercion-resistance upgrades** and independent auditor tooling.
 
 ---
 
@@ -515,6 +668,7 @@ Documentation-level only. Dates are not committed.
 
 | Term | Meaning in this repo |
 | --- | --- |
+| **Republic** | Product name. Civic ZK voting / tally stack in this monorepo. |
 | **Jurisdiction** | The body that owns a roll and elections (government or other). |
 | **Roll / registry** | The set of registered identity commitments. |
 | **Eligible set** | Registered minus disqualified, for a given election/question. |
@@ -523,7 +677,8 @@ Documentation-level only. Dates are not committed.
 | **Nullifier** | A unique value revealed at vote time so the same person cannot vote twice, without publishing their name. |
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
-| **L2** | Lighter (and, if needed, other EVM L2s). Execution off L1, security anchored to Ethereum. |
+| **L2** | Republic L2 (chainId **27427**) by default; Lighter and other EVM L2s as portable venues. Execution off L1, security anchored to Ethereum. |
+| **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. |
 
 ---
 
@@ -533,8 +688,8 @@ This project is **not** a fork of any of the following. They are the prior art t
 
 - [MACI](https://maci.pse.dev/) — on-chain polls, signup policies, collusion-resistant messaging, proven tallies.
 - [Semaphore](https://semaphore.pse.dev/) — anonymous group membership proofs (a likely building block for “I am still in the eligible set”).
-- [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 this repo intends to treat as the high-throughput venue.
-- DealPunchList / `dealpunchlist-node` — the Node/product and hosting pattern this monorepo’s application side will follow.
+- [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 *family* this repo treats as the high-throughput venue. Republic L2 is operated from `l2/` (chainId 27427), not as a Lighter-hosted sequencer.
+- DealPunchList / `dealpunchlist-node` — the Node/product and hosting pattern this monorepo’s application side follows.
 
 ---
 
@@ -543,3 +698,5 @@ This project is **not** a fork of any of the following. They are the prior art t
 This repository describes software for running elections and for **denying a registered person a ballot** under coded rules. It is not legal advice. Disqualification reasons, notice, appeals, retention of identity files, and whether a blockchain record satisfies a given elections code are **jurisdiction-specific**. Operators must not run a binding public election on this stack without their own counsel and statutory authority.
 
 The authors’ intent is that **eligibility and disqualification are visible as process**, while **individual political choice is not**. If a deployment inverts that (public ballots, secret purges), it is misusing this design.
+
+**NOT FOR PROFIT.** See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).

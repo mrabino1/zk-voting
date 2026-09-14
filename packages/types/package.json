@@ -1,0 +1,15 @@
+{
+  "name": "@zk-voting/types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NOT FOR PROFIT — JSDoc types for Republic elections, votes, blocks, and jurisdictions.",
+  "license": "AGPL-3.0-or-later",
+  "type": "commonjs",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

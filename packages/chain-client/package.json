@@ -1,0 +1,27 @@
+{
+  "name": "@zk-voting/chain-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NOT FOR PROFIT — ElectionFactory / BallotInbox client (viem or JSON-RPC eth_call).",
+  "license": "AGPL-3.0-or-later",
+  "type": "commonjs",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@zk-voting/proof-helpers": "0.1.0",
+    "@zk-voting/types": "0.1.0"
+  },
+  "peerDependencies": {
+    "viem": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "viem": {
+      "optional": true
+    }
+  }
+}

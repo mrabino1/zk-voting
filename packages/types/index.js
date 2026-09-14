@@ -1,0 +1,223 @@
+/**
+ * @fileoverview Shared JSDoc types and constants for Republic / zk-voting.
+ *
+ * NOT FOR PROFIT — civic public good, not a commercial product.
+ *
+ * Mirrors `smart-contracts/src/interfaces/ElectionParams.sol`,
+ * `ReasonCodes.sol`, `Roles.sol`, and the Node / L2 explorer records.
+ * This package is documentation-in-code: no runtime validation library
+ * is implied. Callers still type-check at the edges (API, contract ABI).
+ */
+
+"use strict";
+
+/** Republic L2 chain id (see docs/L2.md). */
+const REPUBLIC_CHAIN_ID = 27427;
+
+/** Ethereum mainnet. Canonical court-grade settlement when chosen. */
+const ETHEREUM_MAINNET_CHAIN_ID = 1;
+
+/**
+ * Election lifecycle. Matches `ElectionState` in ElectionParams.sol.
+ * 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
+ *
+ * @enum {number}
+ */
+const ElectionState = Object.freeze({
+  CREATED: 0,
+  ROLL_FROZEN: 1,
+  OPEN: 2,
+  CLOSED: 3,
+  TALLIED: 4,
+});
+
+/**
+ * Public disqualification reason codes. Codes are visible on chain;
+ * evidence stays off-chain. Matches `ReasonCodes.sol`.
+ *
+ * @enum {number}
+ */
+const ReasonCode = Object.freeze({
+  NONE: 0,
+  NOT_OF_AGE: 1,
+  NOT_RESIDENT: 2,
+  NOT_CITIZEN_OR_MEMBER: 3,
+  DUPLICATE_IDENTITY: 4,
+  DECEASED: 5,
+  MOVED_OUT: 6,
+  DISTRICT_MISMATCH: 7,
+  ALREADY_VOTED: 8,
+  COURT_ORDER: 9,
+  INELIGIBLE_STATUS: 10,
+  FRAUD_HOLD: 11,
+  EXPIRED_OR_SUSPENDED: 12,
+  SANCTION_OR_PROHIBITION: 13,
+  OTHER: 14,
+});
+
+const REASON_CODE_LABELS = Object.freeze({
+  1: "NOT_OF_AGE",
+  2: "NOT_RESIDENT",
+  3: "NOT_CITIZEN_OR_MEMBER",
+  4: "DUPLICATE_IDENTITY",
+  5: "DECEASED",
+  6: "MOVED_OUT",
+  7: "DISTRICT_MISMATCH",
+  8: "ALREADY_VOTED",
+  9: "COURT_ORDER",
+  10: "INELIGIBLE_STATUS",
+  11: "FRAUD_HOLD",
+  12: "EXPIRED_OR_SUSPENDED",
+  13: "SANCTION_OR_PROHIBITION",
+  14: "OTHER",
+});
+
+/**
+ * @typedef {Object} ElectionParams
+ * @property {string} title Human-readable title. Not the ballot spec.
+ * @property {string} metadataURI URI of the canonical ballot JSON / extra metadata.
+ * @property {number|bigint} startTime Unix seconds, inclusive. Poll is not open before this.
+ * @property {number|bigint} cutoffTime Unix seconds, exclusive. Poll is closed at this instant.
+ * @property {number} maxParticipants `0` means unlimited. Otherwise registry insert reverts at cap.
+ * @property {number} treeDepth Merkle depth 16..32. Must match the compiled `Vote(levels)` circuit.
+ * @property {string} ballotSpecHash `0x`-prefixed keccak256 of the canonical ballot JSON (bytes32).
+ * @property {string} clerk Address with CLERK_ROLE for this election (freeze, open/close).
+ * @property {string} registrar Address allowed to insert identity commitments.
+ * @property {string} disqualificationOfficer Address allowed to write DisqualificationRegistry.
+ * @property {string} tallyOperator Address allowed to submit tally proofs.
+ * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
+ * @property {number} questionCount Number of aspects / questions on the ballot.
+ * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ */
+
+/**
+ * Encrypted / committed ballot plus the Groth16 proof that the voter is
+ * eligible, not double-voting, and bound to this election. Choice is
+ * not a public field.
+ *
+ * `publicInputs` MUST be `[root, disqRoot, nullifier, ballotHash, electionId]`
+ * (see `@zk-voting/proof-helpers` `serializePublicInputs`).
+ *
+ * @typedef {Object} VoteEnvelope
+ * @property {string|bigint} electionId Election id (uint256).
+ * @property {string} root Eligible-set Merkle root (bytes32 / uint256 hex).
+ * @property {string} disqRoot Disqualification-set Merkle root.
+ * @property {string} nullifier Unique per (voter, election). Spent on accept.
+ * @property {string} ballotHash Hash / commitment of `encryptedBallot`.
+ * @property {string} [identityCommitment] Optional; MUST NOT be required to
+ *   submit a vote. Present only in clerk-side debug tooling, never in the
+ *   public explorer vote row.
+ * @property {string} encryptedBallot Hex bytes of the ElGamal / hashed
+ *   commitment ciphertext. Does not reveal the option in the clear.
+ * @property {bigint[]|string[]} publicInputs Length-5 array documented above.
+ * @property {Groth16Proof} proof Pairing-shaped Groth16 proof.
+ * @property {string} [relayer] Address that submits the UserOp / tx (bundler).
+ */
+
+/**
+ * Groth16 proof points as the Solidity verifier expects them.
+ *
+ * @typedef {Object} Groth16Proof
+ * @property {[string, string]} a G1 point.
+ * @property {[[string, string], [string, string]]} b G2 point.
+ * @property {[string, string]} c G1 point.
+ */
+
+/**
+ * One Republic L2 block as the explorer shows it. Transaction origins
+ * are typically the bundler, not the voter.
+ *
+ * @typedef {Object} Block
+ * @property {number|bigint} number Block height.
+ * @property {string} hash Block hash (`0x` + 32 bytes).
+ * @property {string} parentHash Parent block hash.
+ * @property {number|bigint} timestamp Unix seconds.
+ * @property {string} stateRoot Post-state root.
+ * @property {string} [receiptsRoot] Optional receipts trie root.
+ * @property {number} chainId Always `27427` on Republic L2.
+ * @property {string} sequencer Sequencer address that proposed the block.
+ * @property {BlockTx[]} transactions Ordered txs / UserOps included.
+ * @property {BlockOutcome[]} outcomes Derived events the explorer indexes:
+ *   registration inserts (commitments only), votes accepted (nullifier +
+ *   ballotHash, never the choice), disqualifications (reason codes),
+ *   tally posts, rollup batches.
+ */
+
+/**
+ * @typedef {Object} BlockTx
+ * @property {string} hash Transaction hash.
+ * @property {string} from msg.sender. For votes this is the relayer/bundler.
+ * @property {string} to Contract called.
+ * @property {string} [input] Calldata (may be truncated in UI).
+ * @property {number} [status] 1 success, 0 revert.
+ */
+
+/**
+ * @typedef {Object} BlockOutcome
+ * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"batch"|"freeze"} type
+ * @property {string|bigint} [electionId]
+ * @property {string} [identityCommitment] Registration leaf only; never a name.
+ * @property {string} [nullifier]
+ * @property {string} [ballotHash]
+ * @property {number} [reasonCode]
+ * @property {string} [countsHash]
+ * @property {string} [dataHash] Rollup batch calldata hash.
+ */
+
+/**
+ * Administrative owner of a roll and of elections. DealPunchList
+ * "organization" analogue.
+ *
+ * @typedef {Object} Jurisdiction
+ * @property {string} id bytes32 (or hex) jurisdiction id used on chain.
+ * @property {string} name Display name (city, county, nation, union, …).
+ * @property {string} [metadataURI] Public policy / reason-catalog document.
+ * @property {string} [chainId] Decimal string of the execution chain
+ *   (`27427` for Republic L2, `1` for Ethereum mainnet).
+ * @property {string} [factory] ElectionFactory address on that chain.
+ * @property {string[]} [reasonCatalog] Enabled reason code labels. Protocol
+ *   default is the README catalog; jurisdictions may disable codes, not
+ *   hide mass purges.
+ * @property {JurisdictionOfficers} [officers] Role-bearing addresses.
+ * @property {boolean} [lateUpdateAllowed] If true, disqualifications after
+ *   roll freeze are allowed. Default false; discouraged.
+ */
+
+/**
+ * @typedef {Object} JurisdictionOfficers
+ * @property {string} [platformAdmin]
+ * @property {string} [clerk]
+ * @property {string} [registrar]
+ * @property {string} [disqualificationOfficer]
+ * @property {string} [tallyOperator]
+ * @property {string} [relayer]
+ */
+
+/**
+ * @param {number} code
+ * @returns {string}
+ */
+function reasonCodeLabel(code) {
+  const n = Number(code);
+  return REASON_CODE_LABELS[n] || `UNKNOWN(${n})`;
+}
+
+/**
+ * @param {number} state
+ * @returns {string}
+ */
+function electionStateLabel(state) {
+  const names = ["Created", "RollFrozen", "Open", "Closed", "Tallied"];
+  const n = Number(state);
+  return names[n] || `Unknown(${n})`;
+}
+
+module.exports = {
+  REPUBLIC_CHAIN_ID,
+  ETHEREUM_MAINNET_CHAIN_ID,
+  ElectionState,
+  ReasonCode,
+  REASON_CODE_LABELS,
+  reasonCodeLabel,
+  electionStateLabel,
+};
