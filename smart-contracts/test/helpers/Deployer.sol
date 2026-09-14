@@ -231,7 +231,9 @@ contract Deployer is Test {
         ];
         for (uint256 i; i < targets.length; ++i) {
             _grant(targets[i], bytes32(0), admin);
+            _grant(targets[i], bytes32(0), address(this));
             _grant(targets[i], Roles.PLATFORM_ADMIN_ROLE, admin);
+            _grant(targets[i], Roles.PLATFORM_ADMIN_ROLE, address(this));
             _grant(targets[i], Roles.CLERK_ROLE, admin);
             _grant(targets[i], Roles.CLERK_ROLE, clerk);
             _grant(targets[i], Roles.REGISTRAR_ROLE, registrar);
@@ -422,25 +424,5 @@ contract Deployer is Test {
         assembly {
             addr := create(0, add(payload, 0x20), mload(payload))
         }
-    }
-
-    function _mustDeploy(
-        string memory name,
-        bytes memory creation,
-        bytes memory a,
-        bytes memory b,
-        bytes memory c,
-        bytes memory d
-    ) internal returns (address addr) {
-        addr = _deploy(creation, a);
-        if (addr == address(0)) addr = _deploy(creation, b);
-        if (addr == address(0)) addr = _deploy(creation, c);
-        if (addr == address(0)) addr = _deploy(creation, d);
-        if (addr == address(0)) addr = _deploy(creation, "");
-        if (addr == address(0)) {
-            // Leave zero so the caller can try an additional encoding.
-            return address(0);
-        }
-        vm.label(addr, name);
     }
 }
