@@ -117,6 +117,11 @@ describe('Republic Node API', () => {
     assert.equal(votePage.status, 200);
     assert.match(votePage.text, /NOT FOR PROFIT/);
     assert.match(votePage.text, /loading/i);
+
+    const resultsPage = await api('GET', '/elections/1/results');
+    assert.equal(resultsPage.status, 200);
+    assert.match(resultsPage.res.headers.get('content-type') || '', /html/);
+    assert.match(resultsPage.text, /NOT FOR PROFIT/);
   });
 
   test('unknown API route is JSON 404', async () => {

@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
 import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
@@ -33,22 +34,33 @@ function stableStringify(value) {
 function normalizeQuestions(input) {
   if (!input) return [];
   if (!Array.isArray(input)) throw new HttpError(400, 'questions must be an array');
-  return input.map((q, i) => ({
-    id: String(q.id || `q${i + 1}`),
-    type: String(q.type || 'YES_NO'),
-    prompt: String(q.prompt || q.title || `Question ${i + 1}`),
-    options: Array.isArray(q.options)
-      ? q.options.map((o, j) => ({
-          id: String(o.id || `o${j + 1}`),
-          label: String(o.label || o.name || String(o)),
-        }))
-      : q.type === 'YES_NO' || !q.type
-        ? [
-            { id: 'yes', label: 'Yes' },
-            { id: 'no', label: 'No' },
-          ]
-        : [],
-  }));
+  return input.map((q, i) => {
+    const type = String(q.type || 'YES_NO');
+    const rawSeats = Number(q.maxSelections ?? q.max ?? q.seats);
+    const maxSelections =
+      Number.isInteger(rawSeats) && rawSeats > 0
+        ? rawSeats
+        : type.toUpperCase() === 'MULTI_CHOICE'
+          ? 2
+          : 1;
+    return {
+      id: String(q.id || `q${i + 1}`),
+      type,
+      prompt: String(q.prompt || q.title || `Question ${i + 1}`),
+      maxSelections,
+      options: Array.isArray(q.options)
+        ? q.options.map((o, j) => ({
+            id: String(o.id || `o${j + 1}`),
+            label: String(o.label || o.name || String(o)),
+          }))
+        : type === 'YES_NO' || !q.type
+          ? [
+              { id: 'yes', label: 'Yes' },
+              { id: 'no', label: 'No' },
+            ]
+          : [],
+    };
+  });
 }
 
 function expectedCountLength(questions) {
@@ -166,6 +178,15 @@ export function electionsRouter(deps) {
         dto.me = store.voterStatus(election.id, req.user.id);
       }
       res.json(dto);
+    }),
+  );
+
+  router.get(
+    '/:id/results',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentResults(election, deps));
     }),
   );
 

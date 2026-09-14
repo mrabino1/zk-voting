@@ -20,6 +20,20 @@ import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isRole } from './roles.mjs';
 import { isValidReasonCode } from './reasonCodes.mjs';
 
+/** Public aliases for an election id (numeric, UUID, or short code when stored). */
+export function electionAliases(election) {
+  if (!election) return [];
+  return [election.id, election.uuid, election.code, election.shortCode, election.publicId].filter(
+    (v) => v != null && String(v) !== '',
+  );
+}
+
+export function electionIdMatches(election, id) {
+  const want = String(id ?? '').trim();
+  if (!want) return false;
+  return electionAliases(election).some((v) => String(v) === want);
+}
+
 /** Public ballot row: no acceptedAt, no choice, no user id. */
 export function publicVoteRecord(vote) {
   if (!vote) return null;
@@ -143,7 +157,9 @@ export class Store {
   }
 
   getElection(id) {
-    return this.data.elections.find((e) => String(e.id) === String(id)) || null;
+    const want = String(id ?? '').trim();
+    if (!want) return null;
+    return this.data.elections.find((e) => electionIdMatches(e, want)) || null;
   }
 
   listElections() {

@@ -188,6 +188,16 @@ describe('hourly polling-place unlinkability', () => {
     assert.equal(detail.json.acceptedBallotsActual, undefined);
     assert.equal(leakKeys(detail.json).length, 0);
 
+    const resultsLive = await api('GET', `/api/elections/${id}/results`);
+    assert.equal(resultsLive.status, 200);
+    assert.equal(resultsLive.json.acceptedBallots, 0);
+    assert.equal(resultsLive.json.results.available, false);
+    assert.equal(resultsLive.json.results.status, 'open');
+    assert.equal(resultsLive.json.results.questions[0].options[0].count, null);
+    assert.equal(resultsLive.json.results.questions[0].outcome, null);
+    assert.equal(resultsLive.json.operatorInbox, undefined);
+    assert.equal(leakKeys(resultsLive.json).length, 0);
+
     const list = await api('GET', '/api/elections');
     const row = list.json.elections.find((e) => e.id === id);
     assert.equal(row.acceptedBallots, 0);
@@ -220,6 +230,11 @@ describe('hourly polling-place unlinkability', () => {
 
     const after = await api('GET', `/api/elections/${id}`);
     assert.equal(after.json.acceptedBallots, 2);
+
+    const resultsAfterHour = await api('GET', `/api/elections/${id}/results`);
+    assert.equal(resultsAfterHour.json.acceptedBallots, 2);
+    assert.equal(resultsAfterHour.json.results.available, false);
+    assert.equal(resultsAfterHour.json.results.questions[0].options[0].count, null);
 
     const found = await api('GET', `/api/explorer/nullifiers/${laterNullifier}`);
     assert.equal(found.status, 200);

@@ -92,6 +92,7 @@ GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
 GET  /api/elections/:id
+GET  /api/elections/:id/results  (public certified plurality; empty before tally)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)

@@ -152,6 +152,11 @@ export async function renderVote(main, ctx) {
         {
           text: "Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
         }
+      ),
+      h(
+        "p",
+        {},
+        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Election results" })
       )
     );
   }
@@ -206,7 +211,14 @@ export async function renderVote(main, ctx) {
 
     if (state.step === "receipt" && state.receipt) {
       children.push(renderReceipt(state.receipt, h));
-      children.push(h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" })));
+      children.push(
+        h(
+          "p",
+          { class: "cluster" },
+          h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }),
+          h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
+        )
+      );
       fill(root, ...children);
       return;
     }
@@ -227,7 +239,8 @@ export async function renderVote(main, ctx) {
         h(
           "div",
           { class: "notice notice-warn", role: "status" },
-          h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." })
+          h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." }),
+          h("p", {}, h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "View results" }))
         )
       );
     } else if (notOpen) {

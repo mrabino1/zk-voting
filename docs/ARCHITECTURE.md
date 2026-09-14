@@ -436,6 +436,7 @@ GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk)
 GET  /api/elections/:id
+GET  /api/elections/:id/results   (public; certified plurality after tally)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)

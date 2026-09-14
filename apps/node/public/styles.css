@@ -775,8 +775,44 @@ th {
   margin: 2rem 0;
 }
 
-.noscript {
-  margin: 1rem;
+.results-kicker {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+}
+
+.results-table .num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.results-option.is-winner {
+  background: var(--ok-bg);
+}
+
+.results-option.is-tie {
+  background: var(--warn-bg);
+}
+
+.tally-bar {
+  display: block;
+  width: 100%;
+  min-width: 6rem;
+  height: 0.7rem;
+  background: var(--cream-dark);
+  border: 1px solid var(--line);
+}
+
+.tally-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--navy);
+}
+
+.empty-results h2 {
+  margin-top: 0;
 }
 
 @media print {
