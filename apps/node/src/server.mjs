@@ -147,13 +147,15 @@ export async function startServer(overrides = {}) {
   const created = await createApp(overrides);
   const { app, config } = created;
   const server = await new Promise((resolve, reject) => {
-    const s = app.listen(config.port, () => resolve(s));
+    const s = app.listen(config.port, config.host, () => resolve(s));
     s.on('error', reject);
   });
   const addr = server.address();
   const port = typeof addr === 'object' && addr ? addr.port : config.port;
   if (!config.quiet) {
-    console.log(`Republic Node (NOT FOR PROFIT) listening on :${port}  chainId=${config.chainId}`);
+    console.log(
+      `Republic Node (NOT FOR PROFIT) listening on ${config.host}:${port}  chainId=${config.chainId}`,
+    );
   }
   return { ...created, server, port };
 }

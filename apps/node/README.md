@@ -55,6 +55,13 @@ npm test -w apps/node
 ./system_actions.sh restart   # pm2 / systemd / compose when configured
 ```
 
+Docker Compose from the **repository root** (not this directory):
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
 The process serves `public/` and `dist/` if present. Unknown GET routes that are
@@ -67,6 +74,7 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
+| `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |

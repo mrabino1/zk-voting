@@ -203,6 +203,15 @@ npm test -w apps/node
 
 Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored).
 
+Docker Compose (Node + L2 sequencer + prover), from the repo root:
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
+See [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+
 ### Republic L2 (sequencer + prover)
 
 ```bash
@@ -644,7 +653,12 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 ./system_actions.sh deploy-prod  # pull master (confirms first)
 ```
 
-Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured.
+Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured. Root `docker-compose.yml` is that Compose target:
+
+```bash
+docker compose up -d --build   # Node :3000, L2 RPC :8546
+npm run compose:up             # same
+```
 
 ### Tooling
 

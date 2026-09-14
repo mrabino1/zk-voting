@@ -59,6 +59,35 @@ Root [`.dockerignore`](../.dockerignore) applies to every image built from this 
 
 ---
 
+## Docker Compose
+
+Root [`docker-compose.yml`](../docker-compose.yml) is the host path `system_actions.sh` already looks for. One command builds the Node (API + SPA) and Republic L2 (sequencer + prover), the same shape as a typical frontend Compose file: images from this tree, published ports, health checks, named volumes, `restart: unless-stopped`.
+
+```bash
+cp .env.example .env          # optional; defaults are enough for a local demo
+docker compose up -d --build  # or: npm run compose:up
+curl -fsS http://127.0.0.1:3000/health
+curl -fsS http://127.0.0.1:8546/health
+./system_actions.sh health
+./system_actions.sh logs
+./system_actions.sh status
+docker compose down           # or: npm run compose:down
+```
+
+| Service | Image | Host port | Role |
+| --- | --- | --- | --- |
+| `node` | `Dockerfile` | `${ZK_VOTING_PORT:-3000}` | Republic Node — voter / admin SPA + JSON API |
+| `l2` | `l2/Dockerfile` | `${L2_RPC_PORT:-8546}` | Sequencer JSON-RPC (`GET /health`, `eth_chainId`) |
+| `prover` | same as `l2` | none | Batch prover; writes proofs on the `l2-data` volume |
+
+Voter JSON lives on the `node-data` volume (`DATA_DIR=/data`). L2 blocks and proofs live on `l2-data`. Secrets stay in `.env` (gitignored). Host-specific live-reload mounts belong in `docker-compose.override.yml` (also gitignored); start from [`docker-compose.override.example.yml`](../docker-compose.override.example.yml).
+
+The Node binds `HOST=0.0.0.0` so the published port is reachable. The sequencer binds `L2_RPC_HOST=0.0.0.0` for the same reason (plain-Node local use still defaults to `127.0.0.1`). Inside the Compose network the Node reaches L2 at `http://l2:8546`. The host user should be able to run `docker compose` (membership in the `docker` group); `system_actions.sh` will use `sudo docker compose` when passwordless sudo is the only way to talk to the daemon.
+
+Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, or paymaster keys into the image.
+
+---
+
 ## First-time machine
 
 ```bash

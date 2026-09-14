@@ -41,6 +41,7 @@ export function getConfig(overrides = {}) {
     product: 'Republic',
     pkgRoot: PKG_ROOT,
     port,
+    host: String(overrides.host ?? process.env.HOST ?? '0.0.0.0'),
     chainId: Number(process.env.CHAIN_ID || 27427),
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
