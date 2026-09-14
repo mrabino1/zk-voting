@@ -124,9 +124,13 @@ GET  /api/config
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools.
 
-Without `CHAIN_RPC`, votes that pass the election window and nullifier check are
-accepted in the local store so the explorer and SPA can run a demo. Those
+Without `CHAIN_RPC`, votes that pass the election window, nullifier check, **and**
+Node eligibility (`identityCommitment` is registered and not currently disqualified)
+are accepted in the local store so the explorer and SPA can run a demo. Those
 accepts still wait for hourly public disclosure unless the interval is `0`.
+Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified.
+Freeze snapshots the roots used for the open window. The circuit may still not
+prove non-disqualification; Node enforcement is the product control on this path.
 
 ---
 

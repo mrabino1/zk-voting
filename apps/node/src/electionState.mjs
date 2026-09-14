@@ -52,7 +52,13 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     lateUpdateAllowed: election.lateUpdateAllowed,
     rollFrozen: election.rollFrozen,
     frozenAt: election.frozenAt,
+    frozenEligibleRoot: election.frozenEligibleRoot || null,
+    frozenDisqualificationRoot: election.frozenDisqualificationRoot || null,
     participantCount: election.participantCount,
+    eligibleCount:
+      typeof election.eligibleCount === 'number'
+        ? election.eligibleCount
+        : election.participantCount,
     acceptedBallots,
     eligibleRoot: election.eligibleRoot,
     disqualificationRoot: election.disqualificationRoot,
