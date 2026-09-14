@@ -374,6 +374,10 @@ hr.hr-office {
   align-items: center;
 }
 
+.aspect-max[hidden] {
+  display: none !important;
+}
+
 details {
   border: 1px solid var(--line);
   padding: 0.5rem 0.75rem 0.75rem;

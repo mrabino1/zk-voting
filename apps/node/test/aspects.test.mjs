@@ -182,6 +182,7 @@ describe('multi-question ballots (aspects)', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '11', electionId: id },
+        identityCommitment: '0xa1',
         encryptedBallot: JSON.stringify({ electionId: id, answers: [answersA[0]] }),
       },
     });
@@ -192,6 +193,7 @@ describe('multi-question ballots (aspects)', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '21', electionId: id },
+        identityCommitment: '0xa1',
         encryptedBallot: JSON.stringify(envelopeA),
         answers: answersA,
       },
@@ -204,6 +206,7 @@ describe('multi-question ballots (aspects)', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '22', electionId: id },
+        identityCommitment: '0xa1',
         encryptedBallot: JSON.stringify(envelopeB),
       },
     });
@@ -302,6 +305,7 @@ describe('multi-question ballots (aspects)', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '31', electionId: id },
+        identityCommitment: '0xb2',
         encryptedBallot: JSON.stringify({
           answers: rankedAnswers,
         }),
