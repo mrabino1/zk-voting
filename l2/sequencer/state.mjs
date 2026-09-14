@@ -257,6 +257,7 @@ export function publicFieldsForTx(tx) {
 
 export function stableStringify(value) {
   if (value === undefined) return 'null';
+  if (typeof value === 'bigint') return JSON.stringify(value.toString());
   if (Array.isArray(value)) {
     return '[' + value.map(stableStringify).join(',') + ']';
   }
@@ -338,10 +339,14 @@ function u64be(n) {
   return buf;
 }
 
+function jsonReplacer(_key, value) {
+  return typeof value === 'bigint' ? value.toString() : value;
+}
+
 function writeJsonAtomic(file, obj) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(obj) + '\n');
+  fs.writeFileSync(tmp, JSON.stringify(obj, jsonReplacer) + '\n');
   fs.renameSync(tmp, file);
 }
 
@@ -517,7 +522,7 @@ export class ChainState {
       difficulty: '0x0',
       totalDifficulty: '0x0',
       extraData: extraData || '0x' + Buffer.from('NOT-FOR-PROFIT').toString('hex'),
-      size: toQuantity(JSON.stringify(transactions).length + 512),
+      size: toQuantity(JSON.stringify(transactions, jsonReplacer).length + 512),
       gasLimit: '0x1c9c380',
       gasUsed,
       timestamp,
@@ -631,7 +636,7 @@ export class ChainState {
         : '0x' + Buffer.from(JSON.stringify(civic), 'utf8').toString('hex');
     const tx = {
       hash,
-      nonce: this.txNonce,
+      nonce: Number(this.txNonce),
       from,
       to,
       input,
