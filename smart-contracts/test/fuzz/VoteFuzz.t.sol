@@ -4,12 +4,14 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {ElectionParams} from "../../src/interfaces/ElectionParams.sol";
+import {BallotInbox} from "../../src/BallotInbox.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
 
 /// @title VoteFuzz
-/// @notice Fuzz timestamps, nullifiers, and encrypted ballots. Nullifiers
-///         cannot be double-spent. Votes outside [start, cutoff) revert.
+/// @notice Fuzz timestamps, nullifiers, and encrypted ballots. Once-only /
+///         double-vote: nullifiers cannot be double-spent (not last-vote-counts).
+///         Votes outside [start, cutoff) revert.
 contract VoteFuzz is Deployer {
     uint256 internal electionId;
     address internal election;
@@ -31,7 +33,9 @@ contract VoteFuzz is Deployer {
         freezeRoll(election);
     }
 
-    function testFuzz_nullifierNoDoubleSpend(uint256 nullifier, bytes calldata encryptedBallot) public {
+    function testFuzz_onceOnly_doubleVoteSameNullifierReverts(uint256 nullifier, bytes calldata encryptedBallot)
+        public
+    {
         vm.assume(encryptedBallot.length > 0 && encryptedBallot.length <= 512);
         vm.assume(nullifier != 0);
         vm.warp(bound(block.timestamp, startTime, uint256(cutoffTime) - 1));
@@ -45,10 +49,42 @@ contract VoteFuzz is Deployer {
         assertEq(inbox.acceptedBallots(electionId), 1);
 
         vm.prank(relayer);
-        vm.expectRevert();
+        vm.expectRevert(BallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
-        assertEq(inbox.acceptedBallots(electionId), 1, "double spend accepted");
+        assertEq(inbox.acceptedBallots(electionId), 1, "double-vote accepted");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
+    }
+
+    /// @dev Historical name: same once-only property as the test above.
+    function testFuzz_nullifierNoDoubleSpend(uint256 nullifier, bytes calldata encryptedBallot) public {
+        testFuzz_onceOnly_doubleVoteSameNullifierReverts(nullifier, encryptedBallot);
+    }
+
+    /// @notice Same identity, different ciphertext: still once-only (not last-vote-counts).
+    function testFuzz_onceOnly_sameNullifierDifferentCiphertextReverts(
+        uint256 nullifier,
+        bytes calldata firstBallot,
+        bytes calldata secondBallot
+    ) public {
+        vm.assume(firstBallot.length > 0 && firstBallot.length <= 512);
+        vm.assume(secondBallot.length > 0 && secondBallot.length <= 512);
+        vm.assume(keccak256(firstBallot) != keccak256(secondBallot));
+        vm.assume(nullifier != 0);
+        vm.warp(bound(block.timestamp, startTime, uint256(cutoffTime) - 1));
+
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        uint256[] memory firstInputs = voteInputs(electionId, election, nullifier, firstBallot);
+        vm.prank(relayer);
+        inbox.submitVote(electionId, a, b, c, firstInputs, firstBallot);
+        bytes32 stored = inbox.ballotHashOf(electionId, nullifier);
+        assertEq(stored, keccak256(firstBallot));
+
+        uint256[] memory secondInputs = voteInputs(electionId, election, nullifier, secondBallot);
+        vm.prank(relayer);
+        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
+        assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot");
+        assertEq(inbox.ballotHashOf(electionId, nullifier), stored, "first ballot must not be superseded");
     }
 
     function testFuzz_voteOutsideWindowReverts(uint256 ts, uint256 nullifier, bytes calldata encryptedBallot) public {

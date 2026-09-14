@@ -13,6 +13,9 @@ import {Handler} from "./Handler.sol";
 /// @notice Foundry invariant suite for Republic / zk-voting.
 ///         fail_on_revert is false in foundry.toml; the handler also
 ///         swallows reverts so the run is not aborted.
+///         Once-only / double-vote: `invariant_nullifierOnceOnlyPerElection_doubleVoteRejected`
+///         (and `invariant_nullifierUnique`) require a nullifier is accepted at
+///         most once per election. Handler.doubleVote retries spent nullifiers.
 contract VotingInvariant is StdInvariant, Test {
     Handler public handler;
 
@@ -20,21 +23,33 @@ contract VotingInvariant is StdInvariant, Test {
         handler = new Handler();
         targetContract(address(handler));
 
-        bytes4[] memory selectors = new bytes4[](7);
+        bytes4[] memory selectors = new bytes4[](8);
         selectors[0] = Handler.createElection.selector;
         selectors[1] = Handler.register.selector;
         selectors[2] = Handler.freeze.selector;
         selectors[3] = Handler.warpIntoWindow.selector;
         selectors[4] = Handler.vote.selector;
-        selectors[5] = Handler.disqualify.selector;
-        selectors[6] = Handler.postTally.selector;
+        selectors[5] = Handler.doubleVote.selector;
+        selectors[6] = Handler.disqualify.selector;
+        selectors[7] = Handler.postTally.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         excludeSender(address(0));
     }
 
-    /// @notice A nullifier is used at most once per election.
+    /// @notice Once-only / double-vote: a nullifier is accepted at most once per
+    ///         election. Mind-change does not authorize a second accept.
+    function invariant_nullifierOnceOnlyPerElection_doubleVoteRejected() public view {
+        _assertNullifierOnceOnly();
+    }
+
+    /// @dev Same property under the historical invariant name so CI still lists it.
     function invariant_nullifierUnique() public view {
-        assertEq(handler.duplicateNullifiers(), 0, "nullifier spent twice");
+        _assertNullifierOnceOnly();
+    }
+
+    function _assertNullifierOnceOnly() internal view {
+        assertEq(handler.duplicateNullifiers(), 0, "once-only: nullifier spent twice");
+        assertEq(handler.doubleVotesAccepted(), 0, "once-only: double-vote accepted");
         uint256 n = handler.trackedElectionCount();
         uint256 ghostAccepted;
         for (uint256 i; i < n; ++i) {
@@ -46,7 +61,9 @@ contract VotingInvariant is StdInvariant, Test {
                 assertTrue(handler.nullifierUsed(electionId, nullifier), "ghost nullifier missing");
                 assertTrue(handler.getInbox().nullifierUsed(electionId, nullifier), "chain missing spent nullifier");
             }
-            assertEq(handler.getInbox().acceptedBallots(electionId), handler.acceptedByElection(electionId));
+            uint256 onChainAccepted = handler.getInbox().acceptedBallots(electionId);
+            assertEq(onChainAccepted, handler.acceptedByElection(electionId));
+            assertEq(onChainAccepted, used, "once-only: acceptedBallots == unique spent nullifiers");
         }
         assertEq(handler.votesAccepted(), ghostAccepted);
     }
