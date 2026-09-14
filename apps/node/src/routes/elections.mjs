@@ -5,10 +5,11 @@ import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
-import { publicElection, electionState } from '../electionState.mjs';
+import { presentElection, electionState, publishDue } from '../electionState.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
+import { publicVoteRecord } from '../store.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -74,15 +75,16 @@ async function revokeHandler(req, store, explorer) {
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain } = deps;
+  const { store, explorer, chain, config } = deps;
   const router = Router();
 
   router.get(
     '/',
     asyncHandler(async (_req, res) => {
+      await publishDue(deps);
       res.json({
         nfp: true,
-        elections: store.listElections().map((e) => publicElection(e)),
+        elections: store.listElections().map((e) => presentElection(e, deps)),
       });
     }),
   );
@@ -148,7 +150,7 @@ export function electionsRouter(deps) {
         ok: true,
         id: election.id,
         electionId: election.id,
-        election: publicElection(election),
+        election: presentElection(election, deps),
         nfp: true,
       });
     }),
@@ -157,8 +159,9 @@ export function electionsRouter(deps) {
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {
+      await publishDue(deps);
       const election = store.requireElection(req.params.id);
-      const dto = publicElection(election);
+      const dto = presentElection(election, deps, { user: req.user });
       if (req.user && req.user.role !== 'observer') {
         dto.me = store.voterStatus(election.id, req.user.id);
       }
@@ -169,11 +172,14 @@ export function electionsRouter(deps) {
   router.get(
     '/:id/ballots',
     asyncHandler(async (req, res) => {
+      const { now, interval, view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      const published = store.listPublishedVotes(election.id, now, interval);
       res.json({
         electionId: String(election.id),
-        acceptedBallots: election.acceptedBallots,
-        ballots: store.listVotes(election.id),
+        acceptedBallots: published.length,
+        ballots: published.map(publicVoteRecord),
+        disclosure: view,
         nfp: true,
       });
     }),
@@ -184,7 +190,11 @@ export function electionsRouter(deps) {
     requireAuth,
     requireRole('tally_operator'),
     asyncHandler(async (req, res) => {
-      store.requireElection(req.params.id);
+      const election = store.requireElection(req.params.id);
+      const now = config.nowFn();
+      if (now < election.cutoffTime) {
+        throw new HttpError(409, 'envelopes available after cutoff', { code: 'NOT_CLOSED' });
+      }
       const envelopes = store.listEnvelopes(req.params.id);
       for (const env of envelopes) {
         if ('userId' in env || 'choice' in env) {
@@ -262,7 +272,7 @@ export function electionsRouter(deps) {
         disqualificationRoot: election.disqualificationRoot,
         participantCount: election.participantCount,
       });
-      res.json({ ok: true, election: publicElection(election), nfp: true });
+      res.json({ ok: true, election: presentElection(election, deps), nfp: true });
     }),
   );
 
@@ -275,12 +285,18 @@ export function electionsRouter(deps) {
         chain,
         electionId: req.params.id,
         body: req.body,
+        now: config.nowFn(),
+        intervalSeconds: config.disclosureIntervalSeconds,
       });
       res.status(201).json({
         ok: true,
         accepted: true,
+        published: result.published,
+        nextPublishAt: result.nextPublishAt,
         vote: result.vote,
-        message: 'Ballot accepted for relay. Choice is not stored in the clear.',
+        message: result.published
+          ? 'Ballot accepted. Choice is not stored in the clear.'
+          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.',
         nfp: true,
       });
     }),
@@ -324,7 +340,7 @@ export function electionsRouter(deps) {
           evidenceHash: record.evidenceHash,
           issuedAt: record.issuedAt,
         },
-        election: publicElection(election),
+        election: presentElection(election, deps),
         nfp: true,
       });
     }),
@@ -336,7 +352,7 @@ export function electionsRouter(deps) {
     requireRole('disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = await revokeHandler(req, store, explorer);
-      res.json({ ok: true, election: publicElection(election), nfp: true });
+      res.json({ ok: true, election: presentElection(election, deps), nfp: true });
     }),
   );
 
@@ -346,7 +362,7 @@ export function electionsRouter(deps) {
     requireRole('disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = await revokeHandler(req, store, explorer);
-      res.json({ ok: true, election: publicElection(election), nfp: true });
+      res.json({ ok: true, election: presentElection(election, deps), nfp: true });
     }),
   );
 
@@ -387,7 +403,7 @@ export function electionsRouter(deps) {
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
       });
-      res.json({ ok: true, election: publicElection(tallied), nfp: true });
+      res.json({ ok: true, election: presentElection(tallied, deps), nfp: true });
     }),
   );
 

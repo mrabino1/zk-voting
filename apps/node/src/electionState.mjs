@@ -1,5 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
+// Public acceptedBallots is the last hourly snapshot, never a live tick.
+
+import { disclosurePublicView } from './disclosure.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -11,9 +14,22 @@ export function electionState(election, now = Math.floor(Date.now() / 1000)) {
   return 0;
 }
 
-export function publicElection(election, now = Math.floor(Date.now() / 1000)) {
+/**
+ * @param {object} election
+ * @param {number} [now]
+ * @param {{ intervalSeconds?: number, publishedAcceptedBallots?: number }} [disclosure]
+ */
+export function publicElection(election, now = Math.floor(Date.now() / 1000), disclosure = {}) {
   if (!election) return null;
   const state = electionState(election, now);
+  const interval = Number(disclosure.intervalSeconds ?? 0);
+  let acceptedBallots = election.acceptedBallots;
+  if (interval > 0) {
+    acceptedBallots =
+      typeof disclosure.publishedAcceptedBallots === 'number'
+        ? disclosure.publishedAcceptedBallots
+        : 0;
+  }
   return {
     id: election.id,
     title: election.title,
@@ -35,7 +51,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000)) {
     rollFrozen: election.rollFrozen,
     frozenAt: election.frozenAt,
     participantCount: election.participantCount,
-    acceptedBallots: election.acceptedBallots,
+    acceptedBallots,
     eligibleRoot: election.eligibleRoot,
     disqualificationRoot: election.disqualificationRoot,
     state,
@@ -44,6 +60,35 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000)) {
       ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
       : null,
     createdAt: election.createdAt,
+    disclosure: disclosurePublicView(now, interval),
     nfp: true,
   };
+}
+
+export async function publishDue(deps) {
+  const now = deps.config.nowFn();
+  const interval = deps.config.disclosureIntervalSeconds;
+  if (deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
+  return { now, interval, view: disclosurePublicView(now, interval) };
+}
+
+export function presentElection(election, deps, opts = {}) {
+  if (!election) return null;
+  const now = opts.now ?? deps.config.nowFn();
+  const interval = deps.config.disclosureIntervalSeconds;
+  const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
+    election.id,
+    now,
+    interval,
+  );
+  const dto = publicElection(election, now, { intervalSeconds: interval, publishedAcceptedBallots });
+  const role = opts.user?.role;
+  if (
+    opts.user &&
+    (role === 'tally_operator' || role === 'platform_admin') &&
+    electionState(election, now) >= 3
+  ) {
+    dto.operatorInbox = { acceptedBallots: election.acceptedBallots };
+  }
+  return dto;
 }

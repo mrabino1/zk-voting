@@ -277,7 +277,17 @@
   function votePrivacyNote() {
     return `<p class="privacy-callout"><strong>Ballot privacy</strong>
       This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
-      Choice plaintext is not a field on Republic L2 and is never rendered here.</p>`;
+      Choice plaintext is not a field on Republic L2 and is never rendered here.
+      Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
+  }
+
+  function paintDisclosure(data) {
+    const el = $("disclosure-banner");
+    if (!el || !data || !data.disclosure) return;
+    const d = data.disclosure;
+    const next = d.nextPublishAt != null ? fmtTime(d.nextPublishAt) : "";
+    el.textContent =
+      (d.note || el.textContent) + (next ? " Next publish: " + next + "." : "");
   }
 
   function txTable(txs) {
@@ -350,7 +360,8 @@
     const data = await request("/api/explorer/blocks");
     const blocks = asList(data, ["blocks", "items"]).map(normalizeBlock);
     blocks.sort((a, b) => Number(b.number) - Number(a.number));
-    return { chainId: data.chainId, head: data.head, blocks };
+    paintDisclosure(data);
+    return { chainId: data.chainId, head: data.head, blocks, disclosure: data.disclosure };
   }
 
   async function loadBlockList() {
@@ -376,7 +387,7 @@
     const newerHref = before != null ? "/explorer" : "";
     const olderHref = rows.length > LIMIT ? "/explorer?before=" + encodeURIComponent(String(oldest)) : "";
     $("view").innerHTML = `<section class="panel">
-      <header><h2>Blocks</h2><span class="field-hint">number · timestamp · tx count · state root</span></header>
+      <header><h2>Blocks</h2><span class="field-hint">Hourly vote disclosure · number · timestamp · tx count · state root</span></header>
       <div class="table-wrap"><table class="data-table">
         <thead>
           <tr>
@@ -570,7 +581,7 @@
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
         <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
       </dl>
-      <p class="field-hint">Linked from election results. Individual choices are not in this ledger.</p>
+      <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed.</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>

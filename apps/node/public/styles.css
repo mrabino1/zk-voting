@@ -159,6 +159,16 @@ body {
   border-bottom: 3px solid var(--gold);
 }
 
+.disclosure-banner {
+  background: var(--info-bg, #e8eef5);
+  color: var(--ink);
+  text-align: center;
+  font-size: 0.92rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid var(--navy);
+  line-height: 1.45;
+}
+
 .site-header {
   background: var(--navy);
   color: var(--cream);

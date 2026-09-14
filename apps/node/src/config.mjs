@@ -3,6 +3,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
+
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function csv(value) {
@@ -27,6 +29,12 @@ export function getConfig(overrides = {}) {
     ? csv(process.env.WEBAUTHN_ORIGINS)
     : defaultOrigins;
 
+  const isTest = process.env.NODE_ENV === 'test';
+  const disclosureIntervalSeconds = resolveDisclosureIntervalSeconds(
+    overrides.disclosureIntervalSeconds ?? process.env.DISCLOSURE_INTERVAL_SECONDS,
+    { isTest },
+  );
+
   return {
     nfp: true,
     app: 'zk-voting',
@@ -34,6 +42,8 @@ export function getConfig(overrides = {}) {
     pkgRoot: PKG_ROOT,
     port,
     chainId: Number(process.env.CHAIN_ID || 27427),
+    disclosureIntervalSeconds,
+    nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpName: 'Republic',
     rpID: process.env.RP_ID || 'localhost',
     origins,

@@ -24,9 +24,11 @@ Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
 `apps/node/data/` is the demo / operator cache (gitignored). Native addons such
 as `better-sqlite3` are **not** used.
 
-Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node" }`.
+Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
 The Node never writes a passkey user id onto the same record as an encrypted
-ballot or a choice. The UI must not print “I voted for X”.
+ballot or a choice. The UI must not print “I voted for X”. Public dashboards
+and the explorer show vote proofs only after the hour that contained the vote
+has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
 
 ---
 
@@ -74,7 +76,8 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
-| `NODE_ENV` | _unset_ | `test` enables dev login |
+| `NODE_ENV` | _unset_ | `test` enables dev login and sets disclosure interval to 0 |
+| `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 
 Passkey rpName is always **Republic**.
 
@@ -99,13 +102,16 @@ POST /api/auth/passkey/login/finish
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+POST /api/explorer/ingest
+GET  /api/config
 ```
 
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools.
 
 Without `CHAIN_RPC`, votes that pass the election window and nullifier check are
-accepted in the local store so the explorer and SPA can run a demo.
+accepted in the local store so the explorer and SPA can run a demo. Those
+accepts still wait for hourly public disclosure unless the interval is `0`.
 
 ---
 

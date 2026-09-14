@@ -93,6 +93,7 @@ export function createRpcServer(state, { host, port } = {}) {
           name: 'Republic L2',
           chainId: state.config.chainId,
           blockNumber: toQuantity(state.latestNumber),
+          disclosure: state.disclosureView(),
         }),
       );
       return;

@@ -82,7 +82,7 @@ The Node app is how humans do that work. The contracts are how Ethereum (L1 and 
 | **Voters** | Register, see whether they are eligible or disqualified, cast a ballot, keep a receipt that does not reveal their choice. |
 | **Election officials / clerks** | Stand up an election, define the roll and the questions, apply and reverse disqualifications, publish results. |
 | **Jurisdictions** | A government, a county, a nation, a union, a board — any body that needs a roll, a ballot, and a binding result. |
-| **Candidates and observers** | Watch the public state: how many registered, how many disqualified (and on what coded grounds), how many ballots, the proven tally. |
+| **Candidates and observers** | Watch the public state: how many registered, how many disqualified (and on what coded grounds), hourly published ballot counts, the proven tally. |
 | **Auditors and courts** | Reconstruct the election from chain data, proofs, and the Node’s published artifacts without trusting a vendor’s black box. |
 
 The product is **not** limited to national general elections. The same machinery should cover a municipal referendum, a legislative internal vote, or a professional body’s election, as long as someone is willing to run the jurisdiction and accept the legal consequences.
@@ -104,7 +104,7 @@ The properties we are aiming for:
 
 Zero-knowledge does **not** mean “nobody is in charge.” Someone still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, **counting and eligibility checks are not a second trust sink**.
 
-Privacy construction (implementation): WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. See [Passkeys](./docs/PASSKEYS.md) and [ARCHITECTURE](./docs/ARCHITECTURE.md).
+Privacy construction (implementation): WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Passkeys](./docs/PASSKEYS.md) and [ARCHITECTURE](./docs/ARCHITECTURE.md).
 
 ---
 
@@ -217,7 +217,7 @@ export REPUBLIC_CHAIN_ID=27427
 
 ### Block explorer
 
-With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`. Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`. Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour that contained the vote has closed. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
 ### Passkeys
 
@@ -242,7 +242,7 @@ The Node side is the human product. It should feel operationally familiar to any
 
 - **Voter UI:** registration intake, identity/document collection as required by the jurisdiction, status (“registered”, “eligible”, “disqualified”, “ballot accepted”), ballot UI, confirmation.
 - **Official UI:** create a jurisdiction and an election, define questions and options, manage the roll, record disqualifications with a reason code and evidence reference, freeze the roll, open/close voting, publish the tally.
-- **Public UI:** election calendar, certified parameters (chain, contract addresses, merkle roots, proving-key hashes), live counts that are safe to show, final results and verifier artifacts.
+- **Public UI:** election calendar, certified parameters (chain, contract addresses, merkle roots, proving-key hashes), **hourly** published ballot counts (never a live precinct tick), final results and verifier artifacts.
 - **API:** the same jobs as HTTP, so a jurisdiction’s own systems or a kiosk can be wired in without scraping the frontend.
 - **Proof client:** help the browser or a local helper build the witness for registration, vote, and (when needed) eligibility refresh. The Node may **orchestrate** proving; it must not be the only place a proof can be produced.
 - **Relaying (optional):** submit a voter’s already-signed/proofed transaction to L2 so the voter does not need gas, without learning their choice.
@@ -559,13 +559,14 @@ These three fight each other. The design chooses explicitly:
 | Goal | Approach |
 | --- | --- |
 | **Privacy of choice** | Vote is encrypted / committed; proof talks about eligibility, not the option. |
-| **Public verifiability** | Anyone can check proofs, set roots, inbox size, and the tally. |
+| **Public verifiability** | Anyone can check proofs, set roots, **hourly** published inbox size, and the tally. |
+| **Polling-place unlinkability** | Vote proofs and turnout ticks appear only after the hour that contained them closes. A person leaving a voting office cannot be matched to a live jurisdiction increase. |
 | **Coercion resistance** | Longer-term: last-vote-counts or MACI-style collusion-resistant messaging so a voter can overwrite a coerced ballot. First versions may be weaker (hidden choice, but a coerced voter might still prove they voted a certain way off-chain). The Node must not print a “I voted for X” receipt. |
 | **Disqualification transparency** | Reason **codes** are public so a jurisdiction cannot hide mass purges. Personal evidence stays off-chain. |
 
 If a jurisdiction needs a fully public roll (some do), that is a configuration: commitments can be replaced or accompanied by identified records. ZK voting still hides the **ballot**.
 
-Unlinkability: the passkey smart-account address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Details: [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
+Unlinkability: the passkey smart-account address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Dashboards delay vote proofs by one hour. Details: [`docs/PASSKEYS.md`](./docs/PASSKEYS.md), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
 ---
 

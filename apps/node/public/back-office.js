@@ -199,6 +199,20 @@
       markRole($("role-registrar"), role === "registrar" || role === "platform_admin");
       markRole($("role-dq"), role === "disqualification_officer" || role === "platform_admin");
       markRole($("role-tally"), role === "tally_operator" || role === "platform_admin");
+      try {
+        const cfg = await request("/api/config");
+        const banner = $("disclosure-banner");
+        if (banner && cfg.disclosure && cfg.disclosure.note) {
+          const next = cfg.disclosure.nextPublishAt;
+          const when =
+            next != null
+              ? new Date(Number(next) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC")
+              : "";
+          banner.textContent = cfg.disclosure.note + (when ? " Next publish: " + when + "." : "");
+        }
+      } catch {
+        /* banner keeps static copy */
+      }
       return me;
     } catch (err) {
       $("me-line").textContent = errText(err);

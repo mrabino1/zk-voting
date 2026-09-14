@@ -535,11 +535,17 @@ function renderHome(main, route, bundle) {
         { class: "lede" },
         "This is the voter desk for Republic: register with a device passkey, check whether you are on the roll, and mark a ballot while polls are open. Republic is not a commercial product."
       ),
-      h(
-        "div",
-        { class: "notice", role: "status" },
-        h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
-        h("p", { text: walletLine }),
+        h(
+          "div",
+          { class: "notice", role: "status" },
+          h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
+          h("p", { text: walletLine }),
+          h(
+            "p",
+            {
+              text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
+            }
+          ),
         source === "sample"
           ? h(
               "p",
@@ -600,6 +606,17 @@ function renderHome(main, route, bundle) {
             "p",
             {
               text: "You authorize a UserOp with the passkey. The Node relays it; the jurisdiction paymaster sponsors L2 gas. The bundler is the visible sender, not your local address.",
+            }
+          )
+        ),
+        h(
+          "article",
+          {},
+          h("h3", { text: "5. Proofs wait for the hour to close" }),
+          h(
+            "p",
+            {
+              text: "Your ballot is accepted immediately so the nullifier cannot be reused. Dashboards and the explorer only show that vote after the hour that contained it has closed, so walking out of a voting office cannot be matched to a live increase in any jurisdiction.",
             }
           )
         )

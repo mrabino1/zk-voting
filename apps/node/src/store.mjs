@@ -7,10 +7,22 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { isDisclosed } from './disclosure.mjs';
 import { HttpError } from './http.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isRole } from './roles.mjs';
 import { isValidReasonCode } from './reasonCodes.mjs';
+
+/** Public ballot row: no acceptedAt, no choice, no user id. */
+export function publicVoteRecord(vote) {
+  if (!vote) return null;
+  return {
+    nullifier: vote.nullifier,
+    ballotHash: vote.ballotHash,
+    electionId: String(vote.electionId),
+    relayer: vote.relayer || 'node',
+  };
+}
 
 function emptyData() {
   return {
@@ -453,18 +465,23 @@ export class Store {
   }
 
   /**
-   * Persist an accepted vote. The vote record is exactly
-   * { nullifier, ballotHash, electionId, relayer } — no passkey user id, no choice.
+   * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
+   * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
+   * they wait for hourly disclosure. No passkey user id, no choice.
    */
   async acceptVote(vote, envelope) {
     if (this.nullifierUsed(vote.electionId, vote.nullifier)) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
+    const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
+      ? Math.floor(Number(vote.acceptedAt))
+      : Math.floor(Date.now() / 1000);
     const record = {
       nullifier: toBytes32(vote.nullifier),
       ballotHash: toBytes32(vote.ballotHash),
       electionId: String(vote.electionId),
-      relayer: 'node',
+      relayer: vote.relayer || 'node',
+      acceptedAt,
     };
     this.data.votes.push(record);
     if (envelope) {
@@ -483,6 +500,14 @@ export class Store {
 
   listVotes(electionId) {
     return this.data.votes.filter((v) => String(v.electionId) === String(electionId));
+  }
+
+  listPublishedVotes(electionId, now, intervalSeconds) {
+    return this.listVotes(electionId).filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds));
+  }
+
+  publishedAcceptedBallots(electionId, now, intervalSeconds) {
+    return this.listPublishedVotes(electionId, now, intervalSeconds).length;
   }
 
   listEnvelopes(electionId) {

@@ -3,10 +3,12 @@
 import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
+import { disclosurePublicView } from '../disclosure.mjs';
 
 export function healthRouter(deps) {
   const router = Router();
   router.get(['/health', '/api/health'], (req, res) => {
+    const now = deps.config.nowFn();
     res.json({
       ok: true,
       app: 'zk-voting',
@@ -14,6 +16,7 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
+      disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
     });
   });
   return router;
@@ -24,6 +27,7 @@ export function configRouter(deps) {
   router.get(
     '/config',
     asyncHandler(async (_req, res) => {
+      const now = deps.config.nowFn();
       res.json({
         nfp: true,
         app: 'zk-voting',
@@ -33,6 +37,7 @@ export function configRouter(deps) {
         chainId: deps.config.chainId,
         origins: deps.config.origins,
         chainConfigured: deps.chain.isConfigured(),
+        disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
       });
     }),
   );

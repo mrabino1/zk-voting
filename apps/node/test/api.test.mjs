@@ -82,6 +82,7 @@ describe('Republic Node API', () => {
       adminHandle: 'admin',
       quiet: true,
       port: 0,
+      disclosureIntervalSeconds: 0,
     });
     app = created.app;
     store = created.store;
@@ -272,6 +273,7 @@ describe('Republic Node API', () => {
     const snap = store.snapshot();
     for (const vote of snap.votes) {
       assert.deepEqual(Object.keys(vote).sort(), [
+        'acceptedAt',
         'ballotHash',
         'electionId',
         'nullifier',

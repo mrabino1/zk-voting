@@ -407,7 +407,7 @@ function renderReceipt(receipt, h) {
     h(
       "p",
       {
-        text: "This is not a proof of how you voted. Keep the hashes. Anyone who demands to see your choice should be directed to the clerk’s coercion-resistance instructions.",
+        text: "This is not a proof of how you voted. Keep the hashes. Public explorer rows wait until the hour that contained this ballot closes, so leaving a voting office cannot be matched to a live jurisdiction tick. Anyone who demands to see your choice should be directed to the clerk’s coercion-resistance instructions.",
       }
     ),
     receipt.message ? h("p", { text: receipt.message }) : null,

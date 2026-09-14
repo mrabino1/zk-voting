@@ -162,6 +162,15 @@
         ? `<span class="hash">${esc(factory)}</span> <button type="button" class="copy" data-copy="${esc(factory)}">Copy</button>`
         : "—";
       $("stat-nfp").textContent = nfp ? "Yes" : "Host did not label itself NOT FOR PROFIT";
+      const banner = $("disclosure-banner");
+      if (banner && merged.disclosure && merged.disclosure.note) {
+        const next = merged.disclosure.nextPublishAt;
+        const when =
+          next != null
+            ? new Date(Number(next) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC")
+            : "";
+        banner.textContent = merged.disclosure.note + (when ? " Next publish: " + when + "." : "");
+      }
       renderFacts(merged);
     } catch (err) {
       healthEl.innerHTML = '<span class="status-dot off"></span>Unreachable';

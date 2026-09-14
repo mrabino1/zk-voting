@@ -7,6 +7,8 @@ import { keccak256, toHex } from 'viem';
 import { HttpError, stripBallotPii } from './http.mjs';
 import { toBytes32 } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
+import { isDisclosed, nextPublishAt } from './disclosure.mjs';
+import { publicVoteRecord } from './store.mjs';
 
 function toEncryptedHex(encryptedBallot) {
   if (typeof encryptedBallot === 'string' && encryptedBallot.startsWith('0x')) {
@@ -107,10 +109,12 @@ export function assertVoteWindow(election, now = Math.floor(Date.now() / 1000)) 
  * Relay a ballot. Intentionally ignores req.user / passkey identity so the
  * Node cannot write "this user voted for X" even if the client sends it.
  */
-export async function relayVote({ store, explorer, chain, electionId, body }) {
+export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
   const election = store.requireElection(electionId);
   const parsed = parseVoteBody(body, election.id);
-  assertVoteWindow(election);
+  const ts = now ?? Math.floor(Date.now() / 1000);
+  const interval = Number(intervalSeconds) || 0;
+  assertVoteWindow(election, ts);
   if (store.nullifierUsed(election.id, parsed.nullifier)) {
     throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
   }
@@ -130,16 +134,27 @@ export async function relayVote({ store, explorer, chain, electionId, body }) {
       ballotHash: parsed.ballotHash,
       electionId: election.id,
       relayer: 'node',
+      acceptedAt: ts,
     },
     { encryptedBallot: parsed.encryptedBallot },
   );
 
-  await explorer.append('vote', {
-    nullifier: vote.nullifier,
-    ballotHash: vote.ballotHash,
-    electionId: vote.electionId,
-    relayer: 'node',
-  });
+  await explorer.recordVote(
+    {
+      nullifier: vote.nullifier,
+      ballotHash: vote.ballotHash,
+      electionId: vote.electionId,
+      relayer: 'node',
+    },
+    ts,
+    interval,
+  );
 
-  return { ok: true, vote };
+  const published = isDisclosed(vote.acceptedAt, ts, interval);
+  return {
+    ok: true,
+    vote: publicVoteRecord(vote),
+    published,
+    nextPublishAt: nextPublishAt(ts, interval),
+  };
 }

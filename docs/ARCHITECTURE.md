@@ -62,6 +62,22 @@ When they vote:
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
 
+### Hourly public disclosure (polling-place unlinkability)
+
+Votes are **accepted immediately** (nullifier uniqueness). Public proof of
+those votes — explorer rows, jurisdiction `acceptedBallots`, any dashboard
+turnout tick — is published **only after the hour that contained the vote
+has closed** (UTC). At 14:23, only events with timestamp `< 14:00` are
+public; a 14:05 vote appears at 15:00.
+
+- Do not leak a pending-per-election count (that still identifies the
+  jurisdiction).
+- Do not publish original intra-hour timestamps. Votes of that hour are
+  lumped into **one disclosure block**, timestamped at the hour boundary,
+  ordered by nullifier (not arrival).
+- Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
+  and local instant demo may set `0`.
+
 Hasher note: production circuits use Poseidon. Solidity trees in v1 use a
 swappable `IHasher`. Tests may use keccak256 via `KeccakHasher` so Foundry
 tests do not need a trusted setup. The interface is identical.
@@ -407,6 +423,8 @@ POST /api/auth/passkey/login/finish
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
+GET  /api/config                    (includes hourly disclosure policy)
 ```
 
 ### Pages (SPA, Vite + React, served by Express)
@@ -443,6 +461,10 @@ No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
 Must answer: what happened in block N? Registration inserts (commitments
 only), votes accepted (nullifiers + ballot hashes, **not** choices),
 disqualifications (reason codes), tally posts, rollup batches.
+
+Vote rows and public turnout are **hourly**. A person leaving a voting
+office must not be matchable to a live jurisdiction increase. See
+[`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
 
 UI: `/explorer` in the Node app. Backend may read L2 JSON-RPC
 `eth_getBlockByNumber` plus contract event logs.

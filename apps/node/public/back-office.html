@@ -57,7 +57,12 @@
         <p class="lede">
           Clerks stand up elections. Registrars insert identity commitments (never names).
           Disqualification officers apply the public reason catalog. Tally operators post counts.
-          Choice plaintext never appears here.
+          Choice plaintext never appears here. Turnout and vote proofs on every dashboard wait
+          until the hour that contained the ballot has closed — a person leaving a voting office
+          cannot be matched to a live increase.
+        </p>
+        <p class="disclosure-banner" id="disclosure-banner" role="note">
+          Public ballot counts update once an hour. Officials do not get a live precinct tick.
         </p>
         <p class="session-line" id="me-line">Checking session…</p>
       </header>
@@ -225,7 +230,7 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots. You cannot invent votes. The election must be past cutoff.</p>
+        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots after cutoff (the operator inbox, not the hourly public snapshot). You cannot invent votes. The election must be past cutoff.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>

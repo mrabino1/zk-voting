@@ -16,7 +16,7 @@ We do **not** rent a commercial sequencer. We do **not** issue a gas token.
 
 | Piece | Job |
 | --- | --- |
-| **Our sequencer** (`sequencer/`) | Accepts civic transactions (register, vote, disqualify, tally, userop), produces blocks about every **2 seconds**, chain id **27427**. |
+| **Our sequencer** (`sequencer/`) | Accepts civic transactions (register, vote, disqualify, tally, userop), produces blocks about every **2 seconds**, chain id **27427**. Vote txs stay sealed until the hour closes. |
 | **Our prover** (`prover/`) | Watches new blocks, batches them (`batchSize`, default 4), hashes public batch data, produces a Groth16-shaped proof, and calls L1 `RollupSettlement.submitBatch`. |
 | **Ethereum L1** | Court-grade settlement. `RollupSettlement` stores `prevStateRoot`, `newStateRoot`, and `dataHash`. Anyone can re-derive `dataHash` from public batch data. |
 
@@ -53,9 +53,9 @@ Default bind: `L2_RPC_HOST=127.0.0.1`, `L2_RPC_PORT=8546`.
 | `eth_chainId` | `0x6b23` (27427) |
 | `net_version` | `"27427"` |
 | `eth_blockNumber` | latest sealed block |
-| `eth_getBlockByNumber` | tags `latest` / `earliest` / `pending` |
+| `eth_getBlockByNumber` | tags `latest` / `earliest` / `pending` (`pending` does not list sealed votes) |
 | `eth_getBlockByHash` | |
-| `eth_getTransactionByHash` | |
+| `eth_getTransactionByHash` | sealed votes return `null` until the hour closes |
 | `eth_getLogs` | civic events; votes expose nullifier + ballot hash, not choice |
 | `eth_sendRawTransaction` | hex-encoded JSON civic tx, or opaque bytes treated as `userop` |
 | `eth_call` | limited (`0x`, plus `balanceOf`-shaped selectors) |
@@ -120,6 +120,7 @@ npm run l2:prover
 | `L2_BATCH_SIZE` | `4` | blocks per proof batch |
 | `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped proof |
 | `REPUBLIC_NODE_URL` | unset | Node app base URL for explorer ingest |
+| `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). |
 | `L1_RPC` | unset | Ethereum RPC for settlement |
 | `SETTLEMENT_ADDRESS` | unset | `RollupSettlement` on L1 |
 | `PRIVATE_KEY` | unset | prover key authorized to call `submitBatch` |
@@ -135,7 +136,8 @@ l2/
   genesis.json
   config.json
   sequencer/index.mjs    process entry
-  sequencer/state.mjs    mempool, blocks, keccak, persistence
+  sequencer/state.mjs    mempool, sealed votes, blocks, keccak, persistence
+  disclosure.mjs         hourly polling-place unlinkability
   rpc/server.mjs         JSON-RPC subset
   prover/index.mjs       batch watcher + settlement
   prover/batch.mjs       public batch data + mock proof

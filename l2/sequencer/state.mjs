@@ -5,6 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  disclosurePublicView,
+  isDisclosed,
+  isHeldVoteType,
+  resolveDisclosureIntervalSeconds,
+} from '../disclosure.mjs';
+
 export const L2_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CHAIN_ID = 27427;
 export const ZERO_HASH =
@@ -330,6 +337,10 @@ export function loadConfig(root = L2_ROOT) {
       `http://${process.env.L2_RPC_HOST || file.rpcHost || '127.0.0.1'}:${
         process.env.L2_RPC_PORT || file.rpcPort || 8546
       }`,
+    disclosureIntervalSeconds: resolveDisclosureIntervalSeconds(
+      process.env.DISCLOSURE_INTERVAL_SECONDS ?? file.disclosureIntervalSeconds,
+      { isTest: process.env.NODE_ENV === 'test' },
+    ),
   };
 }
 
@@ -376,6 +387,8 @@ export class ChainState {
     this.logs = [];
     this.mempool = [];
     this.mempoolHashes = new Set();
+    this.sealed = [];
+    this.sealedHashes = new Set();
     this.txNonce = 0n;
     this.producing = false;
     this.running = false;
@@ -408,6 +421,15 @@ export class ChainState {
     return this.head ? this.head.number : 0;
   }
 
+  now() {
+    if (typeof this.config.nowFn === 'function') return this.config.nowFn();
+    return Math.floor(Date.now() / 1000);
+  }
+
+  disclosureView() {
+    return disclosurePublicView(this.now(), this.config.disclosureIntervalSeconds);
+  }
+
   blockPath(number) {
     return path.join(this.config.dataDir, 'blocks', `${number}.json`);
   }
@@ -438,6 +460,18 @@ export class ChainState {
         if (next > this.txNonce) this.txNonce = next;
       }
     }
+    const sealedPath = path.join(this.config.dataDir, 'sealed.json');
+    if (fs.existsSync(sealedPath)) {
+      const held = JSON.parse(fs.readFileSync(sealedPath, 'utf8'));
+      for (const tx of held) {
+        const hash = String(tx.hash || '').toLowerCase();
+        if (!hash || this.txsByHash.has(hash) || this.mempoolHashes.has(hash) || this.sealedHashes.has(hash)) {
+          continue;
+        }
+        this.sealed.push(tx);
+        this.sealedHashes.add(hash);
+      }
+    }
   }
 
   ingestLoadedBlock(block) {
@@ -461,6 +495,11 @@ export class ChainState {
       stateRoot: this.head.stateRoot,
     });
     writeJsonAtomic(path.join(this.config.dataDir, 'mempool.json'), this.mempool);
+    this.persistSealed();
+  }
+
+  persistSealed() {
+    writeJsonAtomic(path.join(this.config.dataDir, 'sealed.json'), this.sealed);
   }
 
   persistBlock(block) {
@@ -469,7 +508,7 @@ export class ChainState {
   }
 
   writeGenesis() {
-    const timestamp = Math.floor(Date.now() / 1000);
+    const timestamp = this.now();
     const extraData = '0x' + Buffer.from('NOT-FOR-PROFIT').toString('hex');
     const hash = keccak256Hex(
       Buffer.concat([
@@ -588,12 +627,27 @@ export class ChainState {
 
   rememberPending(tx, persist = true) {
     const hash = tx.hash.toLowerCase();
-    if (this.txsByHash.has(hash) || this.mempoolHashes.has(hash)) {
+    if (this.txsByHash.has(hash) || this.mempoolHashes.has(hash) || this.sealedHashes.has(hash)) {
       throw Object.assign(new Error('already known'), { code: -32000 });
     }
     this.mempool.push(tx);
     this.mempoolHashes.add(hash);
     if (persist) this.persistHead();
+  }
+
+  rememberSealed(tx) {
+    const hash = tx.hash.toLowerCase();
+    if (this.txsByHash.has(hash) || this.mempoolHashes.has(hash) || this.sealedHashes.has(hash)) {
+      throw Object.assign(new Error('already known'), { code: -32000 });
+    }
+    this.sealed.push(tx);
+    this.sealedHashes.add(hash);
+    this.persistSealed();
+  }
+
+  shouldHoldVote(tx) {
+    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
+    return interval > 0 && isHeldVoteType(tx.civicType);
   }
 
   decodeCivicRaw(rawHex) {
@@ -662,9 +716,34 @@ export class ChainState {
 
   enqueueRaw(rawHex) {
     const tx = this.decodeCivicRaw(rawHex);
+    if (this.shouldHoldVote(tx)) {
+      tx.receivedAt = this.now();
+      this.rememberSealed(tx);
+      return tx.hash;
+    }
     this.txNonce += 1n;
     this.rememberPending(tx);
     return tx.hash;
+  }
+
+  promoteReadyVotes() {
+    const now = this.now();
+    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
+    const ready = [];
+    const keep = [];
+    for (const tx of this.sealed) {
+      if (interval <= 0 || isDisclosed(tx.receivedAt, now, interval)) ready.push(tx);
+      else keep.push(tx);
+    }
+    this.sealed = keep;
+    this.sealedHashes = new Set(keep.map((t) => t.hash.toLowerCase()));
+    ready.sort((a, b) => String(a.hash).toLowerCase().localeCompare(String(b.hash).toLowerCase()));
+    for (const tx of ready) {
+      delete tx.receivedAt;
+      tx.nonce = Number(this.txNonce);
+      this.txNonce += 1n;
+    }
+    return ready;
   }
 
   logsForTx(tx, block, index, logIndexStart) {
@@ -747,8 +826,10 @@ export class ChainState {
     try {
       const parent = this.head;
       const number = parent.number + 1;
-      const timestamp = Math.floor(Date.now() / 1000);
-      const taken = this.mempool.splice(0, this.config.maxTxsPerBlock);
+      const timestamp = this.now();
+      const promoted = this.promoteReadyVotes();
+      const room = Math.max(0, this.config.maxTxsPerBlock - promoted.length);
+      const taken = [...promoted, ...this.mempool.splice(0, room)];
       for (const tx of taken) this.mempoolHashes.delete(tx.hash.toLowerCase());
       const stateRoot = this.computeStateRoot(taken);
       const extraData = '0x' + Buffer.from('NOT-FOR-PROFIT').toString('hex');
@@ -839,7 +920,7 @@ export class ChainState {
         parentHash: parent.hash,
         stateRoot,
         transactionsRoot: stateRoot,
-        timestamp: Math.floor(Date.now() / 1000),
+        timestamp: this.now(),
         extraData: '0x' + Buffer.from('NOT-FOR-PROFIT').toString('hex'),
         transactions: txs,
         logs: [],
