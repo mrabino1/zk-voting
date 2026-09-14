@@ -1,0 +1,555 @@
+// NOT FOR PROFIT — civic public good, not a commercial product.
+// JSON file store (no native addons). Jurisdictions ≈ DealPunchList organizations;
+// elections ≈ rooms. Identity links (passkey user ↔ commitment) live in a
+// separate collection from ballots and are never copied onto a vote record.
+
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+import { HttpError } from './http.mjs';
+import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
+import { isRole } from './roles.mjs';
+import { isValidReasonCode } from './reasonCodes.mjs';
+
+function emptyData() {
+  return {
+    meta: {
+      nfp: true,
+      app: 'zk-voting',
+      version: 1,
+      nextElectionId: 1,
+    },
+    users: [],
+    sessions: [],
+    jurisdictions: [],
+    elections: [],
+    registrations: [],
+    identityLinks: [],
+    disqualifications: [],
+    votes: [],
+    envelopes: [],
+    notifications: [],
+  };
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+export class Store {
+  constructor(filePath, data) {
+    this.filePath = filePath;
+    this.data = data;
+    this._write = Promise.resolve();
+  }
+
+  static async open(config) {
+    await fs.mkdir(config.dataDir, { recursive: true });
+    const filePath = path.join(config.dataDir, 'republic.json');
+    let data;
+    try {
+      const raw = await fs.readFile(filePath, 'utf8');
+      data = { ...emptyData(), ...JSON.parse(raw) };
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      data = emptyData();
+    }
+    const store = new Store(filePath, data);
+    await store.seed(config);
+    await store.persist();
+    return store;
+  }
+
+  async persist() {
+    this._write = this._write.then(async () => {
+      const tmp = `${this.filePath}.${process.pid}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(this.data, null, 2));
+      await fs.rename(tmp, this.filePath);
+    });
+    return this._write;
+  }
+
+  async seed(config) {
+    const handle = String(config.adminHandle || 'admin').trim() || 'admin';
+    const hasAdmin = this.data.users.some((u) => u.role === 'platform_admin');
+    if (!hasAdmin) {
+      const existing = this.getUserByHandle(handle);
+      if (existing) {
+        existing.role = 'platform_admin';
+      } else {
+        this.data.users.push({
+          id: randomUUID(),
+          handle,
+          role: 'platform_admin',
+          createdAt: new Date().toISOString(),
+          credentials: [],
+        });
+      }
+    }
+    if (this.data.jurisdictions.length === 0) {
+        this.data.jurisdictions.push({
+          id: 'demo',
+          name: 'Demo jurisdiction',
+          metadataURI: '',
+          officers: [],
+          createdAt: new Date().toISOString(),
+        });
+    }
+  }
+
+  snapshot() {
+    return clone(this.data);
+  }
+
+  requireElection(id) {
+    const election = this.getElection(id);
+    if (!election) throw new HttpError(404, 'election not found');
+    return election;
+  }
+
+  getElection(id) {
+    return this.data.elections.find((e) => String(e.id) === String(id)) || null;
+  }
+
+  listElections() {
+    return this.data.elections.slice();
+  }
+
+  getUser(id) {
+    return this.data.users.find((u) => u.id === id) || null;
+  }
+
+  getUserByHandle(handle) {
+    const h = String(handle || '').trim().toLowerCase();
+    if (!h) return null;
+    return this.data.users.find((u) => u.handle.toLowerCase() === h) || null;
+  }
+
+  createUser({ handle, role = 'voter' }) {
+    const trimmed = String(handle || '').trim();
+    if (!trimmed) throw new HttpError(400, 'handle required');
+    if (!isRole(role)) throw new HttpError(400, 'invalid role');
+    if (this.getUserByHandle(trimmed)) throw new HttpError(409, 'handle taken');
+    const user = {
+      id: randomUUID(),
+      handle: trimmed,
+      role,
+      createdAt: new Date().toISOString(),
+      credentials: [],
+    };
+    this.data.users.push(user);
+    return user;
+  }
+
+  async ensureUser({ handle, role = 'voter' }) {
+    const existing = this.getUserByHandle(handle);
+    if (existing) return existing;
+    const user = this.createUser({ handle, role });
+    await this.persist();
+    return user;
+  }
+
+  async updateUserRole(userId, role) {
+    if (!isRole(role)) throw new HttpError(400, 'invalid role');
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.role = role;
+    await this.persist();
+    return user;
+  }
+
+  listUsers() {
+    return this.data.users.slice();
+  }
+
+  getSession(id) {
+    if (!id) return null;
+    const session = this.data.sessions.find((s) => s.id === id);
+    if (!session) return null;
+    if (session.expiresAt <= Date.now()) return null;
+    return session;
+  }
+
+  async createSession(userId, ttlMs) {
+    this.data.sessions = this.data.sessions.filter((s) => s.expiresAt > Date.now());
+    const session = {
+      id: randomUUID(),
+      userId,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + ttlMs,
+    };
+    this.data.sessions.push(session);
+    await this.persist();
+    return session;
+  }
+
+  async deleteSession(id) {
+    this.data.sessions = this.data.sessions.filter((s) => s.id !== id);
+    await this.persist();
+  }
+
+  addCredential(userId, credential) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.credentials = user.credentials || [];
+    if (user.credentials.some((c) => c.id === credential.id)) {
+      throw new HttpError(409, 'credential already registered');
+    }
+    user.credentials.push(credential);
+    return credential;
+  }
+
+  findCredential(credentialId) {
+    for (const user of this.data.users) {
+      const cred = (user.credentials || []).find((c) => c.id === credentialId);
+      if (cred) return { user, credential: cred };
+    }
+    return null;
+  }
+
+  async updateCredentialCounter(credentialId, counter) {
+    const found = this.findCredential(credentialId);
+    if (found) found.credential.counter = counter;
+    await this.persist();
+  }
+
+  listJurisdictions() {
+    return this.data.jurisdictions.slice();
+  }
+
+  getJurisdiction(id) {
+    return this.data.jurisdictions.find((j) => String(j.id) === String(id)) || null;
+  }
+
+  async createJurisdiction({ id, name, metadataURI = '' }) {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new HttpError(400, 'name required');
+    const jurisdiction = {
+      id: id ? String(id) : randomUUID(),
+      name: trimmed,
+      metadataURI: String(metadataURI || ''),
+      officers: [],
+      createdAt: new Date().toISOString(),
+    };
+    if (this.getJurisdiction(jurisdiction.id)) {
+      throw new HttpError(409, 'jurisdiction id taken');
+    }
+    this.data.jurisdictions.push(jurisdiction);
+    await this.persist();
+    return jurisdiction;
+  }
+
+  async grantJurisdictionRole(jurisdictionId, { address, role, handle }) {
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
+    if (!isRole(role)) throw new HttpError(400, 'invalid role');
+    jurisdiction.officers = jurisdiction.officers || [];
+    const grant = {
+      address: address || '',
+      handle: handle || '',
+      role,
+      grantedAt: new Date().toISOString(),
+    };
+    jurisdiction.officers.push(grant);
+    const user =
+      (handle && this.getUserByHandle(handle)) ||
+      (address && this.getUserByHandle(address)) ||
+      null;
+    if (user && user.role !== 'platform_admin') {
+      user.role = role;
+    }
+    await this.persist();
+    return { jurisdiction, grant, user };
+  }
+
+  async createElection(params) {
+    const id = this.data.meta.nextElectionId;
+    this.data.meta.nextElectionId += 1;
+    const tree = emptyTree(params.treeDepth);
+    const dq = emptyTree(params.treeDepth);
+    const election = {
+      id,
+      title: params.title,
+      metadataURI: params.metadataURI || '',
+      startTime: params.startTime,
+      cutoffTime: params.cutoffTime,
+      maxParticipants: params.maxParticipants,
+      treeDepth: params.treeDepth,
+      ballotSpecHash: params.ballotSpecHash,
+      questions: params.questions,
+      questionCount: params.questions.length,
+      jurisdictionId: params.jurisdictionId,
+      clerk: params.clerk || '',
+      registrar: params.registrar || '',
+      disqualificationOfficer: params.disqualificationOfficer || '',
+      tallyOperator: params.tallyOperator || '',
+      verifier: params.verifier || '',
+      lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
+      rollFrozen: false,
+      frozenAt: null,
+      participantCount: 0,
+      acceptedBallots: 0,
+      eligibleRoot: tree.root,
+      disqualificationRoot: dq.root,
+      eligibleTree: tree,
+      disqualificationTree: dq,
+      tally: null,
+      createdBy: params.createdBy || null,
+      createdAt: new Date().toISOString(),
+    };
+    this.data.elections.push(election);
+    await this.persist();
+    return election;
+  }
+
+  async freezeElection(id) {
+    const election = this.requireElection(id);
+    if (election.rollFrozen) throw new HttpError(409, 'roll already frozen');
+    election.rollFrozen = true;
+    election.frozenAt = new Date().toISOString();
+    await this.persist();
+    return election;
+  }
+
+  isRegistered(electionId, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    return this.data.registrations.some(
+      (r) => String(r.electionId) === String(electionId) && r.identityCommitment === key,
+    );
+  }
+
+  async registerCommitment(electionId, identityCommitment, { userId } = {}) {
+    const election = this.requireElection(electionId);
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll is frozen', { code: 'ROLL_FROZEN' });
+    }
+    if (election.tally) throw new HttpError(409, 'election already tallied');
+    const key = toBytes32(identityCommitment);
+    if (this.isRegistered(electionId, key)) {
+      throw new HttpError(409, 'already registered', { code: 'DUPLICATE_COMMITMENT' });
+    }
+    if (election.maxParticipants !== 0 && election.participantCount >= election.maxParticipants) {
+      throw new HttpError(409, 'participant cap reached', { code: 'CAP' });
+    }
+    const { leafIndex, root } = insertLeaf(election.eligibleTree, key);
+    election.eligibleRoot = root;
+    election.participantCount += 1;
+    this.data.registrations.push({
+      electionId: String(election.id),
+      identityCommitment: key,
+      leafIndex,
+      registeredAt: new Date().toISOString(),
+    });
+    if (userId) {
+      const already = this.data.identityLinks.some(
+        (l) => l.userId === userId && String(l.electionId) === String(election.id),
+      );
+      if (!already) {
+        this.data.identityLinks.push({
+          userId,
+          electionId: String(election.id),
+          identityCommitment: key,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+    await this.persist();
+    return { election, leafIndex, identityCommitment: key, eligibleRoot: root };
+  }
+
+  findLink(electionId, userId) {
+    return (
+      this.data.identityLinks.find(
+        (l) => l.userId === userId && String(l.electionId) === String(electionId),
+      ) || null
+    );
+  }
+
+  findUserIdForCommitment(electionId, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    const link = this.data.identityLinks.find(
+      (l) => String(l.electionId) === String(electionId) && l.identityCommitment === key,
+    );
+    return link?.userId || null;
+  }
+
+  isDisqualified(electionId, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    const rec = this.data.disqualifications.find(
+      (d) =>
+        String(d.electionId) === String(electionId) &&
+        d.identityCommitment === key &&
+        !d.revokedAt,
+    );
+    return rec || null;
+  }
+
+  rebuildDisqualificationTree(election) {
+    const tree = emptyTree(election.treeDepth);
+    for (const d of this.data.disqualifications) {
+      if (String(d.electionId) !== String(election.id) || d.revokedAt) continue;
+      insertLeaf(tree, d.identityCommitment);
+    }
+    election.disqualificationTree = tree;
+    election.disqualificationRoot = tree.root;
+  }
+
+  async disqualify(electionId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
+    const election = this.requireElection(electionId);
+    if (election.rollFrozen && !election.lateUpdateAllowed) {
+      throw new HttpError(409, 'roll frozen; late disqualification not allowed', {
+        code: 'ROLL_FROZEN',
+      });
+    }
+    if (!isValidReasonCode(reasonCode)) {
+      throw new HttpError(400, 'invalid reasonCode');
+    }
+    const key = toBytes32(identityCommitment);
+    if (this.isDisqualified(election.id, key)) {
+      throw new HttpError(409, 'already disqualified');
+    }
+    const record = {
+      electionId: String(election.id),
+      identityCommitment: key,
+      reasonCode: Number(reasonCode),
+      evidenceHash: evidenceHash ? toBytes32(evidenceHash) : toBytes32(0),
+      issuer: issuer || 'node',
+      issuedAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    this.data.disqualifications.push(record);
+    this.rebuildDisqualificationTree(election);
+    await this.persist();
+    return { election, record };
+  }
+
+  async revokeDisqualification(electionId, { identityCommitment, evidenceHash, issuer }) {
+    const election = this.requireElection(electionId);
+    if (election.rollFrozen && !election.lateUpdateAllowed) {
+      throw new HttpError(409, 'roll frozen; late revoke not allowed', { code: 'ROLL_FROZEN' });
+    }
+    const key = toBytes32(identityCommitment);
+    const rec = this.data.disqualifications.find(
+      (d) =>
+        String(d.electionId) === String(election.id) &&
+        d.identityCommitment === key &&
+        !d.revokedAt,
+    );
+    if (!rec) throw new HttpError(404, 'disqualification not found');
+    rec.revokedAt = new Date().toISOString();
+    rec.revokeEvidenceHash = evidenceHash ? toBytes32(evidenceHash) : toBytes32(0);
+    rec.revokedBy = issuer || 'node';
+    this.rebuildDisqualificationTree(election);
+    await this.persist();
+    return { election, record: rec };
+  }
+
+  nullifierUsed(electionId, nullifier) {
+    const key = toBytes32(nullifier);
+    return this.data.votes.some(
+      (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+    );
+  }
+
+  /**
+   * Persist an accepted vote. The vote record is exactly
+   * { nullifier, ballotHash, electionId, relayer } — no passkey user id, no choice.
+   */
+  async acceptVote(vote, envelope) {
+    if (this.nullifierUsed(vote.electionId, vote.nullifier)) {
+      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+    }
+    const record = {
+      nullifier: toBytes32(vote.nullifier),
+      ballotHash: toBytes32(vote.ballotHash),
+      electionId: String(vote.electionId),
+      relayer: 'node',
+    };
+    this.data.votes.push(record);
+    if (envelope) {
+      this.data.envelopes.push({
+        electionId: record.electionId,
+        nullifier: record.nullifier,
+        ballotHash: record.ballotHash,
+        encryptedBallot: envelope.encryptedBallot,
+      });
+    }
+    const election = this.requireElection(vote.electionId);
+    election.acceptedBallots += 1;
+    await this.persist();
+    return record;
+  }
+
+  listVotes(electionId) {
+    return this.data.votes.filter((v) => String(v.electionId) === String(electionId));
+  }
+
+  listEnvelopes(electionId) {
+    return this.data.envelopes.filter((e) => String(e.electionId) === String(electionId));
+  }
+
+  listRegistrations(electionId) {
+    return this.data.registrations.filter((r) => String(r.electionId) === String(electionId));
+  }
+
+  listDisqualifications(electionId) {
+    return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
+  }
+
+  async setTally(id, counts) {
+    const election = this.requireElection(id);
+    if (election.tally) throw new HttpError(409, 'already tallied');
+    election.tally = {
+      counts: counts.map((n) => Number(n)),
+      postedAt: new Date().toISOString(),
+    };
+    await this.persist();
+    return election;
+  }
+
+  async addNotification({ userId, type, title, body, electionId }) {
+    if (!userId) return null;
+    const n = {
+      id: randomUUID(),
+      userId,
+      type,
+      title,
+      body,
+      electionId: electionId ? String(electionId) : null,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    this.data.notifications.push(n);
+    await this.persist();
+    return n;
+  }
+
+  listNotifications(userId) {
+    return this.data.notifications
+      .filter((n) => n.userId === userId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  async markNotificationRead(userId, id) {
+    const n = this.data.notifications.find((x) => x.id === id && x.userId === userId);
+    if (!n) throw new HttpError(404, 'notification not found');
+    n.read = true;
+    await this.persist();
+    return n;
+  }
+
+  voterStatus(electionId, userId) {
+    const link = this.findLink(electionId, userId);
+    if (!link) {
+      return { registered: false, disqualified: false, reasonCode: null, identityCommitment: null };
+    }
+    const dq = this.isDisqualified(electionId, link.identityCommitment);
+    return {
+      registered: true,
+      disqualified: Boolean(dq),
+      reasonCode: dq ? dq.reasonCode : null,
+      identityCommitment: link.identityCommitment,
+    };
+  }
+}
