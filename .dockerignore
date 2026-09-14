@@ -1,0 +1,106 @@
+# NOT FOR PROFIT — civic public good. Not a commercial product.
+# Keep this in sync with .gitignore. Docker build context for:
+#   apps/node  (voter / admin / back-office / explorer)
+#   l2/        (sequencer + prover)
+#   smart-contracts/ (Foundry deploy images)
+# Secrets, voter data, proving keys, and host junk must never enter an image layer.
+
+# --- VCS / tooling ---
+.git
+.git/**
+**/.git
+**/.git/**
+.gitignore
+.gitattributes
+.github
+.cursor
+.cursor/**
+**/.cursor
+**/.vscode
+**/.idea
+
+# --- Dependencies (install inside the image) ---
+**/node_modules
+node_modules
+apps/node/node_modules
+packages/*/node_modules
+.pnp
+.pnp.js
+.npm
+.yarn
+.pnpm-store
+
+# --- Env / secrets (never bake keys into an image) ---
+.env
+.env.*
+!**/.env.example
+!**/.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+**/secrets
+**/credentials
+**/keystore
+**/wallet.json
+broadcast
+**/broadcast/
+
+# --- Runtime / host data (mount as volumes instead) ---
+apps/node/data
+apps/node/data/**
+l2/data
+l2/data/**
+l2/.anvil*
+**/*.sqlite
+**/*.sqlite-journal
+*.sqlite
+*.sqlite-journal
+logs
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Foundry / Solidity build artifacts ---
+smart-contracts/out
+smart-contracts/cache
+smart-contracts/cache/**
+smart-contracts/out/**
+smart-contracts/broadcast
+**/cache/
+**/out/
+lcov.info
+coverage
+.coverage
+.nyc_output
+
+# --- Circom / snarkjs trusted setup (huge; mount or fetch at deploy) ---
+circuits/build
+circuits/build/**
+circuits/pot*.ptau
+**/*.ptau
+**/*.zkey
+**/*.wtns
+**/verification_key.json
+
+# --- Tests, fuzz caches, local anvil ---
+**/cache/invariant
+**/.anvil*
+smart-contracts/lib/forge-std/test
+smart-contracts/lib/forge-std/.github
+smart-contracts/lib/forge-std/scripts
+
+# --- OS / editor ---
+.DS_Store
+**/.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- Optional local compose overrides (host-specific) ---
+docker-compose.override.yml
+compose.override.yml

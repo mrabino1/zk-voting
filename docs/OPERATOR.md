@@ -55,6 +55,8 @@ Restart order: **pm2** → **systemd** unit → **docker compose**. If none are 
 
 Deploy refuses a **dirty worktree**. Commit or stash first.
 
+Root [`.dockerignore`](../.dockerignore) applies to every image built from this repo (Node, Republic L2, Foundry deploy). It keeps `.git`, `node_modules`, `.env` / keys, Foundry `out/` `cache/` `broadcast/`, `apps/node/data`, `l2/data`, and Circom trusted-setup files (`.ptau`, `.zkey`) out of the build context. Mount voter data and proving keys as volumes; do not `COPY` them into the image.
+
 ---
 
 ## First-time machine
