@@ -2,7 +2,8 @@
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
  *
  * History router with hash fallback for static hosting.
- * Routes: `/`, `/register`, `/vote/:id`
+ * Routes: `/`, `/register`, `/vote/:id`, `/elections/:id/info`,
+ * `/elections/:id/info/:questionId/:optionId`
  */
 
 const listeners = new Set();
@@ -35,6 +36,28 @@ export function parseRoute(loc = window.location) {
       name: "vote",
       path,
       params: { id: decodeURIComponent(vote[1]) },
+      query,
+    };
+  }
+  const infoOption = path.match(/^\/elections\/([^/]+)\/info\/([^/]+)\/([^/]+)$/);
+  if (infoOption) {
+    return {
+      name: "option-info",
+      path,
+      params: {
+        id: decodeURIComponent(infoOption[1]),
+        questionId: decodeURIComponent(infoOption[2]),
+        optionId: decodeURIComponent(infoOption[3]),
+      },
+      query,
+    };
+  }
+  const info = path.match(/^\/elections\/([^/]+)\/info$/);
+  if (info) {
+    return {
+      name: "election-info",
+      path,
+      params: { id: decodeURIComponent(info[1]) },
       query,
     };
   }

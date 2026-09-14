@@ -436,6 +436,9 @@ GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk)
 GET  /api/elections/:id
+GET  /api/elections/:id/info
+GET  /api/elections/:id/info/:questionId/:optionId
+PATCH /api/elections/:id            (clerk; questions + option metadata until freeze)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
@@ -511,6 +514,8 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 - `/admin` — platform admin (hosts, keys, jurisdictions)
 - `/back-office` — clerks / registrars / disqualification officers
 - `/explorer` — Republic L2 block explorer (every block's outcomes)
+- `/elections/:id/info` — voter punch-list of options (read-only supporting info)
+- `/elections/:id/info/:questionId/:optionId` — mini page for one option + external links
 - `/elections/:id/results`
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.

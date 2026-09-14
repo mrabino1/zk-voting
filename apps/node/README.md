@@ -59,6 +59,16 @@ npm test -w apps/node
 
 The process serves `public/` and `dist/` if present. Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
+Voter info pages: `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId`.
+
+### Ballot option information
+
+Each question option may be a plain string, `{ id, label }`, or a supporting-info
+object (`summary`, `body`, optional `imageUrl`, `links: [{ label, url }]`). Clerks
+edit that as a punch-list on `/back-office` (JSON remains under Advanced). The Node
+canonicalizes options and keccak-hashes `{ title, questions }` as `ballotSpecHash`.
+Empty optional fields are omitted so older elections without metadata keep working.
+`GET /api/elections/:id/info` returns the public copy (no `createdBy` / clerk notes).
 
 ---
 
@@ -91,7 +101,10 @@ Passkey rpName is always **Republic**.
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
+PATCH /api/elections/:id            (clerk; ballot metadata until roll freeze)
 GET  /api/elections/:id
+GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
+GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)

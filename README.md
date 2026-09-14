@@ -268,7 +268,7 @@ The Node side is the human product. It should feel operationally familiar to any
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
 | Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
 
-SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
 
 ---
 
@@ -498,7 +498,7 @@ Each **Election** contains one or more **questions**:
 
 Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar).
 
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on.
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON.
 
 ---
 
