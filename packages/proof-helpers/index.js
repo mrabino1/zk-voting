@@ -10,6 +10,10 @@
  * for `bytes32` values that Solidity `keccak256(...)` produces
  * (`ballotSpecHash`, packed encodings, function selectors).
  *
+ * HashLeftRight schemes (see `hash-scheme.js` / circuits/HASH_SCHEME.md):
+ * keccak-dev-v1 (default tests), standin-v0 (Circom proving path),
+ * poseidon-bn254-x5-t3-v1 (not wired).
+ *
  * When `viem` is installed, this package uses `viem.keccak256`.
  * `@noble/hashes/sha3` `keccak_256` is a second optional path.
  * There is a small built-in Keccak-f[1600] fallback so selectors and
@@ -408,9 +412,9 @@ function functionSelector(signature) {
 }
 
 /**
- * HashLeftRight stand-in for tests that do not run Poseidon.
+ * HashLeftRight for `republic.hash.keccak-dev-v1`.
  * Concatenate two 32-byte words and keccak256. Solidity `KeccakHasher`
- * should do the same. Production trees use Poseidon via `IHasher`.
+ * does the same. Production trees use Poseidon via `IHasher`.
  *
  * @param {string|bigint} left
  * @param {string|bigint} right
@@ -418,6 +422,34 @@ function functionSelector(signature) {
  */
 function keccakHashLeftRight(left, right) {
   return keccak256(encodePacked(["bytes32", "bytes32"], [toHex32(left), toHex32(right)]));
+}
+
+const hashScheme = require("./hash-scheme");
+const { createMerkleHelpers } = require("./merkle");
+
+const merkle = createMerkleHelpers({
+  toBigInt,
+  keccakHashLeftRight,
+  toHex32,
+});
+
+/**
+ * Scheme-dispatch HashLeftRight. Default is keccak-dev-v1 so existing tests
+ * keep their roots. Pass `republic.hash.standin-v0` to match Circom.
+ *
+ * @param {string|bigint} left
+ * @param {string|bigint} right
+ * @param {string} [scheme]
+ * @returns {`0x${string}`}
+ */
+function hashLeftRight(left, right, scheme) {
+  const id = hashScheme.normalizeHashScheme(scheme ?? hashScheme.HASH_SCHEMES.KECCAK_DEV_V1);
+  if (id === hashScheme.HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1) {
+    throw new Error(
+      "Poseidon hasher is not wired (republic.hash.poseidon-bn254-x5-t3-v1). See circuits/HASH_SCHEME.md",
+    );
+  }
+  return merkle.hashLeftRightHex(left, right, id);
 }
 
 function publicInputsToHex(publicInputs) {
@@ -441,4 +473,24 @@ module.exports = {
   keccak256FallbackBytes,
   functionSelector,
   keccakHashLeftRight,
+  hashLeftRight,
+  HASH_SCHEMES: hashScheme.HASH_SCHEMES,
+  HASH_SCHEME_STATUS: hashScheme.HASH_SCHEME_STATUS,
+  SNARK_SCALAR_FIELD: hashScheme.SNARK_SCALAR_FIELD,
+  provingPathEnabled: hashScheme.provingPathEnabled,
+  useMockVerifier: hashScheme.useMockVerifier,
+  normalizeHashScheme: hashScheme.normalizeHashScheme,
+  resolveHashScheme: hashScheme.resolveHashScheme,
+  standInHashLeftRight: hashScheme.standInHashLeftRight,
+  hashLeftRightField: merkle.hashLeftRightField,
+  computeZeros: merkle.computeZeros,
+  createTree: merkle.createTree,
+  insertLeaf: merkle.insertLeaf,
+  merkleProof: merkle.merkleProof,
+  verifyInclusion: merkle.verifyInclusion,
+  identityCommitment: merkle.identityCommitment,
+  computeNullifier: merkle.computeNullifier,
+  buildVoteWitness: merkle.buildVoteWitness,
+  voteWitnessToSnarkInput: merkle.voteWitnessToSnarkInput,
+  tallyDemoInput: merkle.tallyDemoInput,
 };

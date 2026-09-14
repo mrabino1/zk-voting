@@ -14,6 +14,15 @@ function csv(value) {
     .filter(Boolean);
 }
 
+function envFlag(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  const s = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+  if (['0', 'false', 'no', 'off'].includes(s)) return false;
+  return fallback;
+}
+
 /**
  * @param {Record<string, unknown>} [overrides]
  */
@@ -34,6 +43,15 @@ export function getConfig(overrides = {}) {
     overrides.disclosureIntervalSeconds ?? process.env.DISCLOSURE_INTERVAL_SECONDS,
     { isTest },
   );
+
+  const provingPath = envFlag(overrides.provingPath ?? process.env.REPUBLIC_PROVING_PATH, false);
+  const useMockVerifier = provingPath
+    ? false
+    : envFlag(overrides.useMockVerifier ?? process.env.REPUBLIC_USE_MOCK_VERIFIER, true);
+  const hashScheme =
+    overrides.hashScheme ||
+    process.env.REPUBLIC_HASH_SCHEME ||
+    (provingPath ? 'republic.hash.standin-v0' : 'republic.hash.keccak-dev-v1');
 
   return {
     nfp: true,
@@ -62,6 +80,9 @@ export function getConfig(overrides = {}) {
     quiet: process.env.NODE_ENV === 'test',
     publicDir: path.join(PKG_ROOT, 'public'),
     distDir: path.join(PKG_ROOT, 'dist'),
+    provingPath,
+    useMockVerifier,
+    hashScheme,
     ...overrides,
   };
 }

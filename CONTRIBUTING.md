@@ -36,7 +36,7 @@ Hosts use [`system_actions.sh`](./system_actions.sh) (DealPunchList / `dealpunch
 | Spec / product intent | `README.md`, `docs/ARCHITECTURE.md` | If code disagrees with ARCHITECTURE, the code is wrong. |
 | Solidity | `smart-contracts/src/` | `pragma solidity ^0.8.24`, AGPL, `// NOT FOR PROFIT` on every file. |
 | Foundry tests | `smart-contracts/test/` | Unit, fuzz (`--fuzz-runs 256`), invariants. |
-| Circuits | `circuits/` | Self-contained circom 2. Poseidon in production; stand-in hasher is labeled. |
+| Circuits | `circuits/` | Self-contained circom 2. Poseidon is the production target; stand-in hasher is gated (`HASH_SCHEME.md`). |
 | Shared JS | `packages/types`, `proof-helpers`, `chain-client` | JSDoc types; optional `viem`. |
 | Node app | `apps/node/` | DealPunchList-shaped API + SPA. Footer: NOT FOR PROFIT. |
 | L2 | `l2/` | Own sequencer + prover, chainId **27427**. |
@@ -61,6 +61,12 @@ cd smart-contracts && forge test --match-path 'test/invariant/*'
 
 # Node API (when apps/node tests exist)
 npm test -w apps/node
+
+# Hash-scheme / proving-path JS (no circom required)
+npm run test:proof-helpers
+
+# Optional Groth16 (skips if circom/snarkjs missing unless REPUBLIC_PROVING_PATH=1)
+npm run circuits:test
 ```
 
 Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer and solc **0.8.24** are set in `smart-contracts/foundry.toml`.

@@ -12,7 +12,8 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 - `src/VoterRegistry.sol` / `PersonRegistry.sol` / `DisqualificationRegistry.sol` / `BallotInbox.sol` / `Tally.sol`
 - `src/account/` — passkey AA + `RepublicPaymaster`
 - `src/l2/` — `RollupSettlement`, mailbox, L1 tally mirror
-- `src/zk/` — `MockVerifier` (tests) and structural `VoteVerifier`
+- `src/zk/` — `MockVerifier` (unit tests), structural `VoteVerifier`, `Groth16VerifierAdapter`
+- `src/hasher/` — `KeccakHasher` (tests), `StandInHasher` (proving path), `HashScheme` ids
 - `test/` — unit, fuzz (`test/fuzz`), invariant (`test/invariant`)
 - `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`
 
@@ -20,6 +21,12 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 
 ```bash
 forge test --via-ir
+```
+
+Unit tests use `MockVerifier`. Non-mock deploy:
+
+```bash
+REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
 Solidity 0.8.24. License AGPL-3.0-or-later. See `/NOT_FOR_PROFIT.md`.

@@ -2,21 +2,26 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-Circom 2 circuits for Republic / zk-voting. Self-contained: **no circomlib path**. The in-circuit hasher is a labeled stand-in until Poseidon is vendored.
+Circom 2 circuits for Republic / zk-voting. Self-contained: **no circomlib path**. The in-circuit hasher is a **gated** stand-in (`republic.hash.standin-v0`) until Poseidon is vendored. Hash versions: [`HASH_SCHEME.md`](./HASH_SCHEME.md).
+
+**Proving path status: in progress.** Local compile / untrusted setup / export scripts exist. There is **no** published ceremony. `MockVerifier` remains the Foundry unit-test default.
 
 | File | Job |
 | --- | --- |
-| [`identity.circom`](./identity.circom) | `Hasher`, identity commitment, nullifier |
+| [`identity.circom`](./identity.circom) | Identity commitment + nullifier (`include` of gated hasher) |
+| [`hasher/standin.circom`](./hasher/standin.circom) | Selected `Hasher()` — bilinear mix, **not** Poseidon |
+| [`hasher/poseidon.circom`](./hasher/poseidon.circom) | Production target (not included; compile fails if selected too early) |
 | [`vote.circom`](./vote.circom) | Eligible-set Merkle membership + unique nullifier + ballot / disqualification-root bind |
 | [`tally.circom`](./tally.circom) | Published per-option counts match accepted ballots (plaintext / mock-homomorphic path) |
+| [`scripts/proving-path.mjs`](./scripts/proving-path.mjs) | Compile, untrusted ptau + Groth16, export verifier, demo prove |
 
 ---
 
-## Hasher: Poseidon is preferred
+## Hasher: Poseidon is the production target
 
-Production identity commitments, Merkle `hashLeftRight`, and nullifiers **must** use **Poseidon** (the same permutation the Solidity `IHasher` will call once a Poseidon hasher is wired). Poseidon is cheap in R1CS and is what Semaphore / MACI-style voting circuits use.
+Production identity commitments, Merkle `hashLeftRight`, and nullifiers **must** use **Poseidon** (`republic.hash.poseidon-bn254-x5-t3-v1`) — the same permutation Solidity `IHasher` will call once a Poseidon hasher is wired.
 
-This directory does **not** `include` circomlib: that path is not in the repo. Until it is:
+Until circomlib is vendored, `identity.circom` includes only `hasher/standin.circom`:
 
 ```circom
 template Hasher() {
@@ -28,9 +33,7 @@ template Hasher() {
 }
 ```
 
-That bilinear mix is **not collision-resistant**. It exists so the circuit topology (membership, nullifier, tally summation) can compile and so Foundry tests that use `KeccakHasher` on chain can stay honest about the *interface* (`hashLeftRight(uint256,uint256)`). **Do not** run a binding election, a trusted setup, or a ceremony on this stand-in.
-
-Swap the body of `Hasher()` for `Poseidon(2)` (circomlib) and recompile `Vote(treeDepth)` at the election’s `ElectionParams.treeDepth` (16..32) before any proving keys are published.
+That bilinear mix is **not collision-resistant** (`hash(x,0)==x`). It exists so the circuit topology can compile and so the local proving path can share one formula with `StandInHasher` and `@zk-voting/proof-helpers`. Foundry unit tests keep `KeccakHasher` (`keccak-dev-v1`). **Do not** run a binding election or a trusted setup on the stand-in.
 
 ---
 
@@ -75,33 +78,49 @@ Default `main` is `Tally(8, 4)` for compile tests. Production compiles to the in
 
 ---
 
-## Compile (when `circom` is on PATH)
+## Exact commands (proving path in progress)
 
-Circom 2.0+ and snarkjs. Powers of tau live **outside git** (`circuits/pot*.ptau` is gitignored).
+Circom 2.0+ and snarkjs. Powers of tau, zkeys, and `verification_key.json` live **outside git** (`circuits/build/` is gitignored). Wrapper: `node circuits/scripts/proving-path.mjs` or `npm run circuits:*`.
+
+```bash
+# from repo root
+npm run circuits:status     # tools, HASH_SCHEME, ceremony=not-done
+npm run circuits:compile     # requires circom on PATH
+npm run circuits:setup      # UNTRUSTED local powers-of-tau + groth16 — NOT a ceremony
+npm run circuits:export      # circuits/build/vote_Groth16Verifier.sol (does not overwrite VoteVerifier.sol)
+npm run circuits:prove       # demo standin-v0 witness + groth16 verify
+npm run circuits:all
+```
+
+Manual equivalent (same steps the script runs):
 
 ```bash
 cd circuits
 mkdir -p build
 
-# R1CS + wasm witness (Vote depth 20, as in vote.circom main)
 circom vote.circom --r1cs --wasm --sym -o build
-
 circom tally.circom --r1cs --wasm --sym -o build
-
 # identity.circom has no main; it is included by the others.
+
+# UNTRUSTED ptau — anyone who ran this knows the toxic waste
+snarkjs powersoftau new bn128 12 build/pot12_0000.ptau -v
+snarkjs powersoftau contribute build/pot12_0000.ptau build/pot12_0001.ptau \
+  --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony -v
+snarkjs powersoftau prepare phase2 build/pot12_0001.ptau build/pot12_final.ptau -v
+
+snarkjs groth16 setup build/vote.r1cs build/pot12_final.ptau build/vote_0000.zkey
+snarkjs zkey contribute build/vote_0000.zkey build/vote_final.zkey \
+  --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony
+snarkjs zkey export verificationkey build/vote_final.zkey build/vote_verification_key.json
+snarkjs zkey export solidityverifier build/vote_final.zkey build/vote_Groth16Verifier.sol
 ```
 
-Groth16 (only after a real Poseidon hasher and a ceremony — **not** with the stand-in hasher):
+**Do not** `export solidityverifier` onto `smart-contracts/src/zk/VoteVerifier.sol`. That file is the structural verifier with a zero VK. Deploy the generated contract and wrap it with `Groth16VerifierAdapter`.
 
-```bash
-# example; replace ptau with a trusted file for the constraint count
-snarkjs groth16 setup build/vote.r1cs pot14_final.ptau build/vote_0000.zkey
-snarkjs zkey contribute build/vote_0000.zkey build/vote_final.zkey
-snarkjs zkey export verificationkey build/vote_final.zkey build/verification_key.json
-snarkjs zkey export solidityverifier build/vote_final.zkey ../smart-contracts/src/zk/VoteVerifier.sol
-```
+Until a Poseidon hasher and a real ceremony exist:
 
-Until those keys exist, **Foundry tests and local L2 use `MockVerifier`**. That is intentional. A mock that always accepts is not an election.
+- **Foundry unit tests** use `MockVerifier` (`acceptAll = true`).
+- **Local proving-path integration:** `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`) deploys `VoteVerifier` **without** a mock fallback. Dummy proofs fail.
 
 Witness inputs for `vote` (JSON for snarkjs) look like:
 
@@ -119,7 +138,7 @@ Witness inputs for `vote` (JSON for snarkjs) look like:
 }
 ```
 
-`pathElements` / `pathIndices` length must equal `levels`.
+`pathElements` / `pathIndices` length must equal `levels`. `npm run circuits:prove` writes `circuits/build/vote_demo.input.json` (two leaves so the first sibling is not zero).
 
 ---
 
@@ -127,4 +146,4 @@ Witness inputs for `vote` (JSON for snarkjs) look like:
 
 The Node (`apps/node`) may orchestrate proving in the browser or a helper; it must not be the only place a proof can be produced. `BallotInbox.submitVote` takes Groth16 `(a,b,c)` plus `publicInputs` and `encryptedBallot`. Relayer / bundler is `msg.sender`. The voter’s passkey smart-account address is **not** the Merkle leaf and is **not** sitting next to the ballot.
 
-See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), [`docs/PASSKEYS.md`](../docs/PASSKEYS.md), and [`packages/proof-helpers`](../packages/proof-helpers).
+See [`HASH_SCHEME.md`](./HASH_SCHEME.md), [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), [`docs/PASSKEYS.md`](../docs/PASSKEYS.md), and [`packages/proof-helpers`](../packages/proof-helpers).

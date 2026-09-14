@@ -425,7 +425,7 @@ async function publicFromSeed(seed) {
     addressScheme: ADDRESS_SCHEME,
     productionAddressNote: PRODUCTION_ADDRESS_NOTE,
     identityCommitment: identity.commitment,
-    hasher: "keccak256(trapdoor || nullifierSecret) demo; production circuits use Poseidon",
+    hasher: "keccak-dev-v1 (keccak256(trapdoor || nullifierSecret) demo); proving path uses standin-v0; production target poseidon-bn254-x5-t3-v1",
   };
 }
 

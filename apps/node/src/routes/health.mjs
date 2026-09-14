@@ -43,6 +43,14 @@ export function configRouter(deps) {
           oneActiveEthAddress: true,
           note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
         },
+        proving: {
+          path: 'in-progress',
+          ceremony: 'not-done',
+          mockVerifierDefault: deps.config.useMockVerifier !== false,
+          provingPath: Boolean(deps.config.provingPath),
+          hashScheme: deps.config.hashScheme || 'republic.hash.keccak-dev-v1',
+          poseidonWired: false,
+        },
       });
     }),
   );

@@ -78,9 +78,7 @@ public; a 14:05 vote appears at 15:00.
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
   and local instant demo may set `0`.
 
-Hasher note: production circuits use Poseidon. Solidity trees in v1 use a
-swappable `IHasher`. Tests may use keccak256 via `KeccakHasher` so Foundry
-tests do not need a trusted setup. The interface is identical.
+Hasher note: production circuits use Poseidon (`republic.hash.poseidon-bn254-x5-t3-v1`). Solidity trees in unit tests use `KeccakHasher` (`keccak-dev-v1`). The local proving path uses `StandInHasher` (`standin-v0`) so Circom, JS witnesses, and the on-chain tree share one formula. The `IHasher` interface is identical. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
 ### Person (unique) vs one active Ethereum address
 
@@ -123,7 +121,7 @@ zk-voting/
       l2/                           (rollup settlement)
     test/                           (unit, fuzz, invariant, handler)
     script/                         (deploy L1, L2, anvil)
-  circuits/                         (circom vote + tally)
+  circuits/                         (circom vote + tally; HASH_SCHEME.md; proving-path scripts)
   l2/                               (sequencer, prover, genesis, explorer backend)
   apps/node/                        (DealPunchList-shaped Node: API + SPA)
   packages/
@@ -280,9 +278,11 @@ function verifyProof(
 ) external view returns (bool);
 ```
 
-`MockVerifier` (tests / local L2): owner can `setAccept(bool)`.
-`VoteVerifier` is the generated/production verifier (can start as a
-well-formed stub that checks input length and pairing-shaped points).
+`MockVerifier` (tests / local L2 default): owner can `setAccept(bool)`.
+`VoteVerifier` is the generated/production verifier (zero VK until a ceremony;
+delegates to `mockVerifier` only while unconfigured). `REPUBLIC_PROVING_PATH=1`
+deploys `VoteVerifier` with no mock fallback. `Groth16VerifierAdapter` wraps a
+snarkjs-exported verifier (`circuits/build/`) onto `IGroth16Verifier`.
 
 ### `ITallyVerifier`
 
@@ -400,8 +400,11 @@ Broadcast JSON is gitignored. Scripts print addresses to stdout as
 `circuits/vote.circom` — membership + nullifier + ballot commitment.
 `circuits/tally.circom` — sum of encrypted ballots / plaintext homomorphic
 sum for the mock path.
-`circuits/README.md` — how to run `circom` + snarkjs when the trusted setup
-is available. Until then, MockVerifier is the local path.
+`circuits/HASH_SCHEME.md` — keccak-dev-v1 vs standin-v0 vs Poseidon target.
+`circuits/README.md` — exact `circom` + snarkjs commands. Proving path is
+**in progress**. Local `npm run circuits:setup` is UNTRUSTED. Until a real
+ceremony, MockVerifier is the Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`
+is the fail-closed integration flag.
 
 ---
 
@@ -517,7 +520,9 @@ UI: `/explorer` in the Node app. Backend may read L2 JSON-RPC
 - Solidity: Foundry 1.8+, solc 0.8.24, via-ir off unless needed.
 - Node: Node 22, npm workspaces.
 - Tests must pass with `forge test` using MockVerifier.
+- `npm run test:proof-helpers` for hash-scheme / stand-in Merkle vectors.
 - `npm test` in `apps/node` for API tests.
+- Optional: `npm run circuits:test` / `node circuits/scripts/proving-path.mjs test` (Groth16 only if circom+snarkjs are installed, or if `REPUBLIC_PROVING_PATH=1`).
 
 ---
 

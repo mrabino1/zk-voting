@@ -18,7 +18,7 @@ pragma circom 2.0.0;
 //   2. counts[j] == #{ ballots with value j }
 //   3. sum(counts) == acceptedCount
 //
-// Hasher() in identity.circom is a STAND-IN. NOT production Poseidon.
+// HASH_SCHEME: republic.hash.standin-v0 via identity.circom. NOT production Poseidon.
 
 include "./identity.circom";
 

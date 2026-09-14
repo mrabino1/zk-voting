@@ -107,6 +107,17 @@ describe('Republic Node API', () => {
     assert.equal(typeof json.chainId, 'number');
   });
 
+  test('GET /api/config advertises proving path in progress', async () => {
+    const { status, json } = await api('GET', '/api/config');
+    assert.equal(status, 200);
+    assert.equal(json.proving.path, 'in-progress');
+    assert.equal(json.proving.ceremony, 'not-done');
+    assert.equal(json.proving.mockVerifierDefault, true);
+    assert.equal(json.proving.provingPath, false);
+    assert.equal(json.proving.poseidonWired, false);
+    assert.match(json.proving.hashScheme, /keccak-dev-v1|standin-v0/);
+  });
+
   test('SPA fallback serves HTML for non-API GET', async () => {
     const explorerPage = await api('GET', '/explorer');
     assert.equal(explorerPage.status, 200);

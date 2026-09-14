@@ -192,7 +192,10 @@ async function main() {
       '  batchSize=' +
       config.batchSize +
       '  mock=' +
-      config.devMockProof,
+      config.devMockProof +
+      '  voteProvingPath=' +
+      Boolean(config.voteProvingPath) +
+      ' (vote circuit; distinct from DEV_MOCK_PROOF rollup batches)',
   );
   await waitForRpc();
   const cursor = readCursor();
