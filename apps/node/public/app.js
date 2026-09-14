@@ -664,7 +664,7 @@ async function renderRoute(route) {
       const [{ elections, source }, me, walletRecord] = await Promise.all([
         loadElections(),
         loadMe(),
-        wallet.getPublicRecord(),
+        wallet.getPublicRecord().catch(() => null),
       ]);
       renderHome(main, route, {
         elections,
