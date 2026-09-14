@@ -29,7 +29,9 @@ Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "nod
 The Node never writes a passkey user id onto the same record as an encrypted
 ballot or a choice. The UI must not print “I voted for X”. Public dashboards
 and the explorer show vote proofs only after the hour that contained the vote
-has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
+has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests). The
+explorer snapshot lists last closed hour, ballots disclosed so far, and a
+countdown to the next hour close — never a pending-per-election count.
 
 ---
 
@@ -92,6 +94,8 @@ GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
 GET  /api/elections/:id
+GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
+GET  /api/elections/:id/ballots
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
@@ -116,6 +120,7 @@ POST /api/auth/passkey/login/finish
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure         (last closed hour, disclosed ballots, countdown)
 POST /api/explorer/ingest
 GET  /api/config
 ```

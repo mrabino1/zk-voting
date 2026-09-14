@@ -436,6 +436,7 @@ GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk)
 GET  /api/elections/:id
+GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
@@ -448,6 +449,7 @@ POST /api/auth/passkey/login/finish
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure       (last closed hour, disclosed turnout, countdown)
 POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
 GET  /api/config                    (includes hourly disclosure + identity policy)
 GET  /api/identity/methods

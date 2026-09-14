@@ -57,13 +57,17 @@
         <p class="lede">
           Public record of every block: registrations (commitments only), accepted ballots
           (nullifier + ballot hash — never the choice), disqualifications, tallies, and
-          rollup batches. Vote proofs appear only after the hour that contained them closes,
+          rollup batches.         Vote proofs appear only after the hour that contained them closes,
           so a person leaving a voting office cannot be matched to a live jurisdiction tick.
+          The snapshot below is the last closed UTC hour: disclosed ballot count, when that
+          hour ended, and the countdown to the next update. Choice is never shown here.
           No ads. No tokens.
         </p>
-        <p class="disclosure-banner" id="disclosure-banner" role="note">
-          Vote proofs and turnout counts are published once an hour, after that hour closes.
-        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Vote proofs and turnout counts are published once an hour, after that hour closes.
+          </p>
+        </aside>
       </header>
 
       <section class="explorer-search" aria-label="Search the ledger">
@@ -99,6 +103,7 @@
         · AGPL-3.0-or-later
       </p>
     </footer>
+    <script src="/disclosure-ui.js"></script>
     <script src="/explorer.js" defer></script>
   </body>
 </html>

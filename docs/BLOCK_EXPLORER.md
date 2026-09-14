@@ -6,7 +6,7 @@ Republic needs a **public, election-grade explorer** because the Node is not the
 
 This is not a general-purpose ETH explorer white-label. It is indexed around election outcomes on Republic L2 (chainId **27427**) and, when used, L1 settlement / tally-mirror transactions.
 
-UI: Node SPA `/explorer`. HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`. Backend reads L2 JSON-RPC (`eth_getBlockByNumber`, `eth_getLogs`) plus the factory / registry / inbox / tally / rollup ABIs.
+UI: Node SPA `/explorer`. HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`, `GET /api/explorer/disclosure`. Public election snapshot: `GET /api/elections/:id/summary`. Backend reads L2 JSON-RPC (`eth_getBlockByNumber`, `eth_getLogs`) plus the factory / registry / inbox / tally / rollup ABIs.
 
 ---
 
@@ -45,13 +45,30 @@ Live **counts that are safe to show** before tally: number registered, number di
 
 Votes are accepted immediately so a nullifier cannot be reused. Proof of those votes is public only once the UTC hour that contained them has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
 
-- At 14:23, only events with timestamp `< 14:00` are public. A 14:05 vote appears at 15:00.
+- At 14:23, only events with timestamp `< 14:00` are public. A 14:05 vote appears at 15:00. A vote at **exactly** 14:00:00 is in the 14:00 hour and appears at 15:00.
 - All votes from that hour are lumped into **one** disclosure block. Public timestamp is the hour end. Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.
 - Do **not** show “N unpublished in election E”. That still identifies the jurisdiction.
 - Unpublished nullifiers and tx hashes 404 like unknown ones. Do not confirm that a sealed vote exists.
 - L2 `pending` and `eth_getTransactionByHash` omit sealed votes. The voter still gets an accept receipt from the Node.
 
 Tally operators after cutoff may use the real inbox size to certify `sum(counts) == acceptedBallots`. That privileged view is not a public dashboard.
+
+### Observer snapshot (explorer + public summary)
+
+Observers should see a **hour-bucketed update**, not a live tick. The explorer banner (`/explorer`) and `GET /api/explorer/disclosure` (also attached to `GET /api/explorer/blocks`) publish:
+
+| Field | Meaning |
+| --- | --- |
+| `lastClosedHourAt` / `lastPublishedAt` | Unix time when the last UTC hour closed (e.g. 14:00). Snapshot “through” this instant. |
+| `lastClosedHourStart` | Start of that closed hour (13:00 when `lastClosedHourAt` is 14:00). |
+| `acceptedBallotsDisclosed` | Accepted ballots whose hour has closed. Explorer total is chain-wide; election APIs are per election. Never a pending remainder. |
+| `nextPublishAt` | Unix time of the next hour close (15:00). |
+| `secondsUntilNext` | Countdown to that close. The explorer UI ticks this locally. |
+| `intervalSeconds` | Default `3600`. `0` publishes immediately (tests / local demo). |
+
+`GET /api/elections/:id/summary` is the public election snapshot: title, state, **disclosed** `acceptedBallots`, the same disclosure object, `explorerUrl`, and `resultsUrl` **only after a certified tally exists**. This surface does not compute or display a winner; when a tally is posted it links to `/elections/:id/results`.
+
+Choice plaintext is never a field on these responses.
 
 ---
 
@@ -77,7 +94,7 @@ A coercer who watches the explorer learns that **someone** registered a commitme
 3. Treat `msg.sender` as **relayer** for inbox calls. Label it that way.
 4. `identityCommitment` is shown as hex / decimal field element, not as a resolved person. Clerk tools that resolve commitments to files are **restricted** (back-office), not `/explorer`.
 5. After cutoff, the explorer still serves historical blocks. Tallies do not rewrite earlier vote rows.
-6. Vote events are withheld until `eventTs < floor(now / 3600) * 3600`. Dashboards show the last published snapshot and the next publish time, never a live tick.
+6. Vote events are withheld until `eventTs < floor(now / 3600) * 3600`. Dashboards show the last published snapshot (`lastClosedHourAt`, `acceptedBallotsDisclosed`) and the next publish time (`nextPublishAt` / `secondsUntilNext`), never a live tick.
 
 ---
 
