@@ -786,7 +786,11 @@ export class ChainState {
       this.ingestLoadedBlock(block);
       this.persistBlock(block);
       this.postExplorer(block).catch((err) => {
-        console.warn('explorer ingest failed (ignored):', err.message || err);
+        const now = Date.now();
+        if (now - (this._ingestWarnedAt || 0) > 15_000) {
+          this._ingestWarnedAt = now;
+          console.warn('explorer ingest failed (ignored):', err.message || err);
+        }
       });
       return block;
     } finally {
