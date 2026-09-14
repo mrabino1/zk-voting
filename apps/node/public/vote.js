@@ -78,6 +78,23 @@ function cssName(id) {
   return `q-${id}`;
 }
 
+const ZERO_ROOT = "0x" + "00".repeat(32);
+
+/**
+ * Mock Groth16 public instance. Same order as `@zk-voting/proof-helpers`
+ * `serializePublicInputs` and `IBallotInbox.submitVote`:
+ * `[eligibleRoot, disqRoot, nullifier, ballotHash, electionId]`.
+ */
+export function mockVotePublicInputs({ eligibleRoot, disqRoot, nullifier, ballotHash, electionId }) {
+  return [
+    eligibleRoot || ZERO_ROOT,
+    disqRoot || ZERO_ROOT,
+    nullifier,
+    ballotHash,
+    String(electionId),
+  ];
+}
+
 export async function renderVote(main, ctx) {
   const {
     h,
@@ -321,7 +338,13 @@ export async function renderVote(main, ctx) {
 
     try {
       const auth = await wallet.authorizeBallot({ electionId: election.id, ballotBytes });
-      const dummyRoot = election.eligibleRoot || "0x" + "00".repeat(32);
+      const publicInputs = mockVotePublicInputs({
+        eligibleRoot: election.eligibleRoot,
+        disqRoot: election.disqualificationRoot,
+        nullifier: auth.nullifier,
+        ballotHash: auth.ballotHash,
+        electionId: election.id,
+      });
       const body = {
         electionId: String(election.id),
         identityCommitment: auth.identityCommitment,
@@ -347,7 +370,7 @@ export async function renderVote(main, ctx) {
             ["0x0", "0x0"],
           ],
           c: ["0x0", "0x0"],
-          publicInputs: [dummyRoot, auth.nullifier, auth.ballotHash, String(election.id)],
+          publicInputs,
         },
       };
 

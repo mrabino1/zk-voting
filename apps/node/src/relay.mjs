@@ -4,11 +4,42 @@
 
 import { keccak256, toHex } from 'viem';
 
+import proofHelpers from '@zk-voting/proof-helpers';
+
 import { HttpError, stripBallotPii } from './http.mjs';
-import { toBytes32 } from './merkle.mjs';
+import { ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import { publicVoteRecord } from './store.mjs';
+
+const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
+
+/** Vote circuit / BallotInbox instance: [eligibleRoot, disqRoot, nullifier, ballotHash, electionId]. */
+export const VOTE_PUBLIC_INPUT_COUNT = PUBLIC_INPUT_KEYS.length;
+
+function firstDefined(...values) {
+  for (const value of values) {
+    if (value != null && value !== '') return value;
+  }
+  return undefined;
+}
+
+function asInputList(publicInputs, electionId, { root, disqRoot, nullifier, ballotHash }) {
+  if (Array.isArray(publicInputs) && publicInputs.length >= VOTE_PUBLIC_INPUT_COUNT) {
+    return publicInputs.slice(0, VOTE_PUBLIC_INPUT_COUNT);
+  }
+  try {
+    return publicInputsToHex({
+      root: root || ZERO,
+      disqRoot: disqRoot || ZERO,
+      nullifier,
+      ballotHash,
+      electionId,
+    });
+  } catch (err) {
+    throw new HttpError(400, err.message || 'invalid publicInputs');
+  }
+}
 
 function toEncryptedHex(encryptedBallot) {
   if (typeof encryptedBallot === 'string' && encryptedBallot.startsWith('0x')) {
@@ -24,14 +55,7 @@ export function hashBallot(encryptedBallot) {
   return keccak256(toEncryptedHex(encryptedBallot));
 }
 
-function asInputList(publicInputs, electionId, { root, nullifier, ballotHash }) {
-  if (Array.isArray(publicInputs) && publicInputs.length >= 4) {
-    return publicInputs.slice(0, 4);
-  }
-  return [root || toBytes32(0), nullifier, ballotHash, electionId];
-}
-
-export function parseVoteBody(body, electionId) {
+export function parseVoteBody(body, electionId, roots = {}) {
   if (!body || typeof body !== 'object') {
     throw new HttpError(400, 'JSON body required');
   }
@@ -45,7 +69,8 @@ export function parseVoteBody(body, electionId) {
   let publicInputs = body.publicInputs ?? proof.publicInputs;
   if (publicInputs == null && body.nullifier != null) {
     publicInputs = {
-      root: body.root,
+      root: firstDefined(body.root, body.eligibleRoot),
+      disqRoot: firstDefined(body.disqRoot, body.disqualificationRoot),
       nullifier: body.nullifier,
       ballotHash: body.ballotHash,
       electionId: body.electionId ?? electionId,
@@ -54,19 +79,36 @@ export function parseVoteBody(body, electionId) {
   if (publicInputs == null) throw new HttpError(400, 'publicInputs required');
 
   let root;
+  let disqRoot;
   let nullifier;
   let ballotHash;
   let eid;
   if (Array.isArray(publicInputs)) {
-    [root, nullifier, ballotHash, eid] = publicInputs;
+    if (publicInputs.length < VOTE_PUBLIC_INPUT_COUNT) {
+      throw new HttpError(
+        400,
+        'publicInputs must be [eligibleRoot, disqRoot, nullifier, ballotHash, electionId]',
+        { code: 'INVALID_PUBLIC_INPUTS' },
+      );
+    }
+    [root, disqRoot, nullifier, ballotHash, eid] = publicInputs;
   } else if (typeof publicInputs === 'object') {
-    root = publicInputs.root;
+    root = firstDefined(publicInputs.root, publicInputs.eligibleRoot);
+    disqRoot = firstDefined(publicInputs.disqRoot, publicInputs.disqualificationRoot);
     nullifier = publicInputs.nullifier;
     ballotHash = publicInputs.ballotHash;
     eid = publicInputs.electionId;
   } else {
     throw new HttpError(400, 'publicInputs required');
   }
+  root = firstDefined(root, body.root, body.eligibleRoot, roots.root, roots.eligibleRoot);
+  disqRoot = firstDefined(
+    disqRoot,
+    body.disqRoot,
+    body.disqualificationRoot,
+    roots.disqRoot,
+    roots.disqualificationRoot,
+  );
   if (nullifier == null || nullifier === '') nullifier = body.nullifier;
   if (ballotHash == null || ballotHash === '') ballotHash = body.ballotHash;
   if (nullifier == null || nullifier === '') {
@@ -78,10 +120,11 @@ export function parseVoteBody(body, electionId) {
   if (ballotHash == null || ballotHash === '') {
     ballotHash = hashBallot(encryptedBallot);
   }
-  const inputs = asInputList(publicInputs, electionId, { root, nullifier, ballotHash });
+  const inputs = asInputList(publicInputs, electionId, { root, disqRoot, nullifier, ballotHash });
   return {
     proof: stripBallotPii(proof),
     root,
+    disqRoot,
     nullifier,
     ballotHash,
     encryptedBallot: toEncryptedHex(encryptedBallot),
@@ -111,7 +154,10 @@ export function assertVoteWindow(election, now = Math.floor(Date.now() / 1000)) 
  */
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
   const election = store.requireElection(electionId);
-  const parsed = parseVoteBody(body, election.id);
+  const parsed = parseVoteBody(body, election.id, {
+    root: election.eligibleRoot,
+    disqRoot: election.disqualificationRoot,
+  });
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
