@@ -116,7 +116,7 @@ contract Handler is Deployer, Ghost {
         _tryDisqualify(electionSeed, commitment, reasonCode);
     }
 
-    function tally(uint256 electionSeed) public {
+    function postTally(uint256 electionSeed) public {
         _tryTally(electionSeed);
     }
 
@@ -139,11 +139,11 @@ contract Handler is Deployer, Ghost {
         uint8 questionCount,
         uint32 maxParticipants
     ) internal {
-        uint64 start = uint64(_bound(startTime, block.timestamp + 1, block.timestamp + 365 days));
-        uint64 cutoff = uint64(_bound(cutoffTime, uint256(start) + 1, uint256(start) + 30 days));
-        uint8 depth = uint8(_bound(treeDepth, 16, 20));
-        uint8 questions = uint8(_bound(questionCount, 1, 8));
-        uint32 cap = uint32(_bound(maxParticipants, 0, 8));
+        uint64 start = uint64(_clamp(startTime, block.timestamp + 1, block.timestamp + 365 days));
+        uint64 cutoff = uint64(_clamp(cutoffTime, uint256(start) + 1, uint256(start) + 30 days));
+        uint8 depth = uint8(_clamp(treeDepth, 16, 20));
+        uint8 questions = uint8(_clamp(questionCount, 1, 8));
+        uint32 cap = uint32(_clamp(maxParticipants, 0, 8));
 
         ElectionParams memory p = _params(start, cutoff, depth, questions, cap);
         vm.prank(admin);
@@ -198,15 +198,12 @@ contract Handler is Deployer, Ghost {
         uint64 start = startOf[electionId];
         uint64 cutoff = cutoffOf[electionId];
         if (cutoff <= start) return;
-        uint256 target = start;
-        if (block.timestamp >= cutoff) {
-            target = start;
-        } else if (block.timestamp < start) {
-            target = start;
-        } else {
-            target = block.timestamp;
+        // Never warp backwards past a posted tally / closed poll. If we are
+        // already at or after cutoff, leave time alone.
+        if (block.timestamp >= cutoff) return;
+        if (block.timestamp < start) {
+            vm.warp(start);
         }
-        vm.warp(target);
     }
 
     function _tryVote(uint256 electionSeed, uint256 nullifier, bytes calldata encryptedBallot) internal {
@@ -218,7 +215,12 @@ contract Handler is Deployer, Ghost {
         if (nullifier == 0) nullifier = uint256(keccak256(abi.encode(electionSeed, votesAccepted, ballot)));
 
         uint256 commitment = uint256(keccak256(abi.encode(nullifier, "commitment")));
-        _tryRegister(electionId, commitment);
+        bool enrolled = voterRegistry.isRegistered(electionId, commitment);
+        if (!enrolled) {
+            _tryRegister(electionId, commitment);
+            enrolled = voterRegistry.isRegistered(electionId, commitment);
+        }
+        if (!enrolled) return;
         _tryFreeze(electionId);
         _tryWarpIntoWindow(electionId);
 
@@ -228,6 +230,8 @@ contract Handler is Deployer, Ghost {
         try IElection(el).rollFrozen() returns (bool f) {
             frozen = f;
         } catch {}
+        if (!frozen) return;
+        if (block.timestamp < startOf[electionId] || block.timestamp >= cutoffOf[electionId]) return;
 
         uint256[] memory inputs = Fixtures.publicInputs(
             IElection(el).eligibleRoot(), IElection(el).disqualificationRoot(), nullifier, uint256(keccak256(ballot)), electionId
@@ -242,7 +246,7 @@ contract Handler is Deployer, Ghost {
         uint256 electionId = _pick(electionSeed);
         if (electionId == 0) return;
         if (commitment == 0) return;
-        uint16 code = uint16(_bound(reasonCode, 1, ReasonCodes.MAX_CODE));
+        uint16 code = uint16(_clamp(reasonCode, 1, ReasonCodes.MAX_CODE));
         bytes32 evidence = keccak256(abi.encode(electionId, commitment, code));
         address who = officerOf[electionId];
         if (who == address(0)) who = officer;
@@ -297,10 +301,10 @@ contract Handler is Deployer, Ghost {
     function _pick(uint256 seed) internal view returns (uint256) {
         uint256 n = trackedElectionIds.length;
         if (n == 0) return 0;
-        return trackedElectionIds[_bound(seed, 0, n - 1)];
+        return trackedElectionIds[_clamp(seed, 0, n - 1)];
     }
 
-    function _bound(uint256 x, uint256 min, uint256 max) internal pure returns (uint256) {
+    function _clamp(uint256 x, uint256 min, uint256 max) internal pure returns (uint256) {
         if (min > max) (min, max) = (max, min);
         if (min == max) return min;
         return min + (x % (max - min + 1));

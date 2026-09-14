@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {Vm} from "forge-std/Vm.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -99,7 +100,6 @@ contract PrivacyUnlinkabilityTest is Deployer {
         submitVote(electionId, election, nullifier);
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertTrue(nullifier != uint256(uint160(voterWallet)));
-        vm.expectRevert();
-        submitVote(electionId, election, nullifier);
+        expectSubmitVoteRevert(electionId, election, nullifier);
     }
 }

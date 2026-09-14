@@ -27,7 +27,7 @@ contract VotingInvariant is StdInvariant, Test {
         selectors[3] = Handler.warpIntoWindow.selector;
         selectors[4] = Handler.vote.selector;
         selectors[5] = Handler.disqualify.selector;
-        selectors[6] = Handler.tally.selector;
+        selectors[6] = Handler.postTally.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         excludeSender(address(0));
     }

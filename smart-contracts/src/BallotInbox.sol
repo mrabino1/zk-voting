@@ -8,6 +8,7 @@ import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
+import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 
 /// @title BallotInbox
 /// @notice Accepts gasless vote proofs. `msg.sender` is the relayer/bundler.
@@ -27,6 +28,7 @@ contract BallotInbox is IBallotInbox {
     error BallotHashMismatch();
     error NullifierUsed();
     error InvalidProof();
+    error AlreadyTallied();
 
     IElectionFactory public immutable factory;
 
@@ -56,6 +58,7 @@ contract BallotInbox is IBallotInbox {
 
         IElection election = _getElection(electionId);
         address verifier = _requireOpen(election);
+        _requireNotTallied(electionId);
         _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
 
         uint256 nullifier = publicInputs[2];
@@ -79,6 +82,16 @@ contract BallotInbox is IBallotInbox {
     /// @inheritdoc IBallotInbox
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32) {
         return _ballotHashOf[electionId][nullifier];
+    }
+
+    function _requireNotTallied(uint256 electionId) internal view {
+        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("tallyVerifier()"));
+        if (!ok || ret.length < 32) return;
+        address tally = abi.decode(ret, (address));
+        if (tally == address(0)) return;
+        try ITallyVerifier(tally).isTallied(electionId) returns (bool done) {
+            if (done) revert AlreadyTallied();
+        } catch {}
     }
 
     function _getElection(uint256 electionId) internal view returns (IElection election) {

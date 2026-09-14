@@ -347,6 +347,15 @@ contract Deployer is Test {
         inbox.submitVote(electionId, a, b, c, inputs, enc);
     }
 
+    function expectSubmitVoteRevert(uint256 electionId, address election, uint256 nullifier) internal {
+        bytes memory enc = Fixtures.encryptedBallot(nullifier);
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
+        vm.prank(relayer);
+        vm.expectRevert();
+        inbox.submitVote(electionId, a, b, c, inputs, enc);
+    }
+
     function prepareOpenElection(uint256 commitment) internal returns (uint256 electionId, address election) {
         (electionId, election) = createElection();
         registerVoter(electionId, commitment);

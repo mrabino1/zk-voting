@@ -47,7 +47,7 @@ contract MockVerifier is IGroth16Verifier {
         returns (bool)
     {
         if (!acceptAll) return false;
-        if (input.length < 4) revert InvalidInputLength();
+        if (input.length < 3) revert InvalidInputLength();
         if (input.length >= 3 && deniedNullifiers[bytes32(input[2])]) return false;
         return true;
     }

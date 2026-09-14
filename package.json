@@ -1,0 +1,27 @@
+{
+  "name": "zk-voting",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NOT FOR PROFIT — zero-knowledge civic voting for republican democracy.",
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "apps/node",
+    "packages/types",
+    "packages/proof-helpers",
+    "packages/chain-client"
+  ],
+  "scripts": {
+    "build": "npm run build -w apps/node",
+    "test": "npm run test -w apps/node && npm run test:contracts",
+    "test:contracts": "cd smart-contracts && forge test --via-ir",
+    "test:fuzz": "cd smart-contracts && forge test --via-ir --match-path 'test/fuzz/*' --fuzz-runs 256",
+    "test:invariant": "cd smart-contracts && forge test --via-ir --match-path 'test/invariant/*'",
+    "dev": "npm run dev -w apps/node",
+    "l2:sequencer": "node l2/sequencer/index.mjs",
+    "l2:prover": "node l2/prover/index.mjs",
+    "start": "npm run start -w apps/node"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

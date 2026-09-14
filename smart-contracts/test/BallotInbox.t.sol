@@ -46,24 +46,21 @@ contract BallotInboxTest is Deployer {
         submitVote(electionId, election, nullifier);
         assertEq(inbox.acceptedBallots(electionId), 1);
 
-        vm.expectRevert();
-        submitVote(electionId, election, nullifier);
+        expectSubmitVoteRevert(electionId, election, nullifier);
         assertEq(inbox.acceptedBallots(electionId), 1);
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
 
     function testVotingBeforeStartReverts() public {
         assertTrue(block.timestamp < IElection(election).params().startTime);
-        vm.expectRevert();
-        submitVote(electionId, election, nullifier);
+        expectSubmitVoteRevert(electionId, election, nullifier);
         assertEq(inbox.acceptedBallots(electionId), 0);
         assertFalse(inbox.nullifierUsed(electionId, nullifier));
     }
 
     function testVotingAfterCutoffReverts() public {
         warpClosed(election);
-        vm.expectRevert();
-        submitVote(electionId, election, uint256(keccak256("late-nullifier")));
+        expectSubmitVoteRevert(electionId, election, uint256(keccak256("late-nullifier")));
         assertEq(inbox.acceptedBallots(electionId), 0);
     }
 
@@ -72,8 +69,7 @@ contract BallotInboxTest is Deployer {
         registerVoter(id, Fixtures.identityCommitment(uint256(56)));
         warpOpen(el);
         assertFalse(IElection(el).rollFrozen());
-        vm.expectRevert();
-        submitVote(id, el, uint256(keccak256("unfrozen")));
+        expectSubmitVoteRevert(id, el, uint256(keccak256("unfrozen")));
     }
 
     function testNullifiersIsolatedPerElection() public {

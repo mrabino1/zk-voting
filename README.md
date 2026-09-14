@@ -177,9 +177,9 @@ Requires [Foundry](https://book.getfoundry.sh/) (`foundryup`). solc **0.8.24**, 
 
 ```bash
 cd smart-contracts
-forge test
-forge test --fuzz-runs 256
-forge test --match-path test/invariant/*
+forge test --via-ir
+forge test --via-ir --fuzz-runs 256
+forge test --via-ir --match-path test/invariant/*
 
 # from repo root
 npm run test:contracts
@@ -199,7 +199,7 @@ npm test -w apps/node
 ./system_actions.sh health  # GET http://127.0.0.1:3000/health
 ```
 
-Details: [`apps/node/README.md`](./apps/node/README.md). SQLite: `apps/node/data/republic.sqlite` (gitignored).
+Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored).
 
 ### Republic L2 (sequencer + prover)
 

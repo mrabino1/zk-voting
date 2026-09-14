@@ -57,8 +57,7 @@ contract ElectionLifecycleTest is Deployer {
         freezeRoll(election);
         // still before startTime
         assertTrue(block.timestamp < IElection(election).params().startTime);
-        vm.expectRevert();
-        submitVote(electionId, election, uint256(keccak256("n-before")));
+        expectSubmitVoteRevert(electionId, election, uint256(keccak256("n-before")));
     }
 
     function testVotingAfterCutoffReverts() public {
@@ -66,8 +65,7 @@ contract ElectionLifecycleTest is Deployer {
         registerVoter(electionId, commitment);
         freezeRoll(election);
         warpClosed(election);
-        vm.expectRevert();
-        submitVote(electionId, election, uint256(keccak256("n-after")));
+        expectSubmitVoteRevert(electionId, election, uint256(keccak256("n-after")));
     }
 
     function testVotingDuringWindowSucceeds() public {

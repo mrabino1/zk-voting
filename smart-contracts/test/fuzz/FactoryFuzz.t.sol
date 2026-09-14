@@ -53,11 +53,7 @@ contract FactoryFuzz is Deployer {
             assertEq(factory.electionCount(), before + 1);
             assertTrue(election != address(0));
             assertEq(factory.getElection(electionId), election);
-            ElectionParams memory got = IElection(election).params();
-            assertEq(got.startTime, startTime);
-            assertEq(got.cutoffTime, cutoffTime);
-            assertEq(got.treeDepth, treeDepth);
-            assertEq(got.questionCount, questionCount);
+            _assertParams(IElection(election).params(), p);
         }
     }
 
@@ -155,5 +151,12 @@ contract FactoryFuzz is Deployer {
     function _anyZero(ElectionParams memory p) internal pure returns (bool) {
         return p.clerk == address(0) || p.registrar == address(0) || p.disqualificationOfficer == address(0)
             || p.tallyOperator == address(0) || p.verifier == address(0);
+    }
+
+    function _assertParams(ElectionParams memory got, ElectionParams memory expected) internal pure {
+        assertEq(got.startTime, expected.startTime);
+        assertEq(got.cutoffTime, expected.cutoffTime);
+        assertEq(got.treeDepth, expected.treeDepth);
+        assertEq(got.questionCount, expected.questionCount);
     }
 }

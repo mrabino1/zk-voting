@@ -117,15 +117,15 @@ contract VoteFuzz is Deployer {
 
     function testFuzz_timestampsBound(uint64 start, uint64 cutoff, uint256 voteAt, uint256 nullifier) public {
         vm.assume(nullifier != 0);
-        start = uint64(bound(start, 1, type(uint64).max - 2));
-        cutoff = uint64(bound(cutoff, uint256(start) + 1, uint256(start) + 30 days));
+        uint64 origin = uint64(block.timestamp + 1);
+        start = uint64(bound(start, origin, origin + 30 days));
+        cutoff = uint64(bound(cutoff, uint256(start) + 1 hours, uint256(start) + 30 days));
         vm.assume(start < cutoff);
 
         ElectionParams memory p = Fixtures.withTimes(defaultParams(), start, cutoff);
         p.maxParticipants = 0;
         (uint256 id, address el) = createElection(p);
         registerVoter(id, uint256(keccak256(abi.encode(nullifier, "reg"))));
-        vm.warp(start);
         freezeRoll(el);
 
         uint256 t = bound(voteAt, 0, uint256(cutoff) + 7 days);
