@@ -427,19 +427,24 @@ Gas: voters never pay. Sequencer/paymaster is funded by the jurisdiction
 
 Long-lived Node process, web UI + HTTP API, `system_actions.sh` restarts it.
 SQLite for local (file `apps/node/data/republic.sqlite`). Jurisdictions are
-the DealPunchList "organizations". Elections are the "rooms".
+the DealPunchList "organizations". Elections are the "rooms". Officer roles
+(`clerk`, `registrar`, `disqualification_officer`, `tally_operator`) are
+granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
+`platform_admin` is a global override and may act in every jurisdiction.
 
 ### HTTP
 
 ```
 GET  /health
 GET  /api/elections
-POST /api/elections                 (clerk)
+POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id
-POST /api/elections/:id/register    (after passkey)
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays UserOp / proof)
-POST /api/elections/:id/disqualify   (officer)
+POST /api/elections/:id/disqualify   (officer of that jurisdiction)
 POST /api/elections/:id/tally
+POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
+DELETE /api/jurisdictions/:id/roles
 GET  /api/me
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish

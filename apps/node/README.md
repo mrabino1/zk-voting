@@ -18,7 +18,7 @@ See `/NOT_FOR_PROFIT.md` at the repo root.
 | --- | --- |
 | Organizations | Jurisdictions |
 | Rooms / processes | Elections (start + cutoff, roll, inbox) |
-| Users + roles | `voter`, `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, `platform_admin`, `observer` |
+| Users + roles | `voter` / `observer` / `platform_admin` are global. `clerk`, `registrar`, `disqualification_officer`, and `tally_operator` are granted **per jurisdiction**. `platform_admin` is a global override. |
 | Host menu | repo-root `system_actions.sh` |
 
 Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
@@ -90,12 +90,14 @@ Passkey rpName is always **Republic**.
 ```
 GET  /health
 GET  /api/elections
-POST /api/elections                 (clerk / platform_admin)
+POST /api/elections                 (clerk of that jurisdiction / platform_admin)
 GET  /api/elections/:id
-POST /api/elections/:id/register    (after passkey)
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
-POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator)
+POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction)
+POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/tally on that jurisdiction)
+DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods

@@ -56,7 +56,7 @@
         <h1>Host this Node</h1>
         <p class="lede">
           Jurisdictions are the organizations of this public-good stack. Grant clerks,
-          registrars, and disqualification officers. There is no token, no paid tier,
+          registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
           and no console that takes fees. Dashboards do not show live vote ticks; public
           proof of ballots is published once an hour.
         </p>
@@ -141,12 +141,19 @@
             <h2 id="grant-heading">Grant officers</h2>
           </header>
           <p class="field-hint">
-            Clerk, registrar, and disqualification officer. Roles are Node users (DealPunchList-shaped), not a fee market.
+            Clerk, registrar, disqualification officer, and tally operator are scoped to one
+            jurisdiction. <code>platform_admin</code> remains a global override and is not granted here.
           </p>
           <form id="form-grant" class="form-grid">
             <div class="field">
               <label class="field-label" for="g-user">User <span class="req">*</span></label>
               <select id="g-user" name="userId" required>
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-jurisdiction">Jurisdiction <span class="req">*</span></label>
+              <select id="g-jurisdiction" name="jurisdictionId" required>
                 <option value="">Loading…</option>
               </select>
             </div>
@@ -157,8 +164,6 @@
                 <option value="registrar">registrar — insert identity commitments</option>
                 <option value="disqualification_officer">disqualification_officer — reason codes</option>
                 <option value="tally_operator">tally_operator — post counts</option>
-                <option value="observer">observer — read only</option>
-                <option value="voter">voter</option>
               </select>
             </div>
             <div class="actions">
@@ -181,20 +186,50 @@
               <tr>
                 <th>Name</th>
                 <th>Id</th>
+                <th>Officers</th>
                 <th>Metadata</th>
                 <th>Created</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="4" class="empty">Loading…</td>
+                <td colspan="5" class="empty">Loading…</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <section class="panel" aria-labelledby="users-heading">
+      <section class="panel" aria-labelledby="officers-heading">
+        <header>
+          <h2 id="officers-heading">Jurisdiction officers</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-o">Refresh</button>
+        </header>
+        <p class="field-hint">
+          Grants live on the jurisdiction, not as a single global user role. Revoke removes that
+          office for that jurisdiction only.
+        </p>
+        <div class="table-wrap">
+          <table class="data-table" id="table-officers">
+            <caption class="visually-hidden">Officers granted per jurisdiction</caption>
+            <thead>
+              <tr>
+                <th>Jurisdiction</th>
+                <th>Handle</th>
+                <th>Role</th>
+                <th>Granted</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flash" id="flash-officers" role="status"></div>
+      </section>
         <header>
           <h2 id="users-heading">Users</h2>
           <button class="btn btn-secondary" type="button" id="btn-refresh-u">Refresh</button>
@@ -205,7 +240,8 @@
             <thead>
               <tr>
                 <th>Handle</th>
-                <th>Role</th>
+                <th>Global role</th>
+                <th>Jurisdiction offices</th>
                 <th>Methods</th>
                 <th>Active ETH</th>
                 <th>Person key</th>
@@ -214,7 +250,7 @@
             </thead>
             <tbody>
               <tr>
-                <td colspan="6" class="empty">Loading…</td>
+                <td colspan="7" class="empty">Loading…</td>
               </tr>
             </tbody>
           </table>

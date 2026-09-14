@@ -82,10 +82,9 @@ export function presentElection(election, deps, opts = {}) {
     interval,
   );
   const dto = publicElection(election, now, { intervalSeconds: interval, publishedAcceptedBallots });
-  const role = opts.user?.role;
   if (
     opts.user &&
-    (role === 'tally_operator' || role === 'platform_admin') &&
+    deps.store.userHasJurisdictionRole(opts.user, 'tally_operator', election.jurisdictionId) &&
     electionState(election, now) >= 3
   ) {
     dto.operatorInbox = { acceptedBallots: election.acceptedBallots };
