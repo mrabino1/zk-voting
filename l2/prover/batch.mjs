@@ -3,6 +3,7 @@
 // ballot hashes only — never ballot plaintext.
 import {
   keccak256Hex,
+  hexToBytes,
   publicFieldsForTx,
   stableStringify,
   ZERO_HASH,
@@ -92,7 +93,10 @@ export function buildBatch({ batchIndex, blocks, prevStateRoot }) {
   publicData.startBlock = first.number;
   publicData.endBlock = last.number;
   publicData.prevStateRoot = prevStateRoot || ZERO_HASH;
-  publicData.newStateRoot = last.stateRoot;
+  const hashBytes = publicData.txHashes.map((h) => Buffer.from(hexToBytes(h)));
+  publicData.newStateRoot = hashBytes.length
+    ? keccak256Hex(Buffer.concat(hashBytes))
+    : last.stateRoot;
   const dataHash = computeDataHash(publicData);
   return {
     notForProfit: true,
