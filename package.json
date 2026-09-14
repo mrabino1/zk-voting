@@ -12,7 +12,8 @@
   ],
   "scripts": {
     "build": "npm run build -w apps/node",
-    "test": "npm run test -w apps/node && npm run test:l2 && npm run test:contracts",
+    "test": "npm run test:node && npm run test:l2 && npm run test:contracts",
+    "test:node": "npm run test -w apps/node",
     "test:l2": "node --test l2/test/*.test.mjs",
     "test:contracts": "cd smart-contracts && forge test --via-ir",
     "test:fuzz": "cd smart-contracts && forge test --via-ir --match-path 'test/fuzz/*' --fuzz-runs 256",

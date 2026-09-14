@@ -70,6 +70,9 @@ async function revokeHandler(req, store, explorer) {
     electionId: String(election.id),
     identityCommitment: record.identityCommitment,
     evidenceHash: record.revokeEvidenceHash,
+    eligibleRoot: election.eligibleRoot,
+    disqualificationRoot: election.disqualificationRoot,
+    eligibleCount: election.eligibleCount,
   });
   return election;
 }
@@ -270,7 +273,10 @@ export function electionsRouter(deps) {
         electionId: String(election.id),
         eligibleRoot: election.eligibleRoot,
         disqualificationRoot: election.disqualificationRoot,
+        frozenEligibleRoot: election.frozenEligibleRoot,
+        frozenDisqualificationRoot: election.frozenDisqualificationRoot,
         participantCount: election.participantCount,
+        eligibleCount: election.eligibleCount,
       });
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
     }),
@@ -322,6 +328,9 @@ export function electionsRouter(deps) {
         identityCommitment: record.identityCommitment,
         reasonCode: record.reasonCode,
         evidenceHash: record.evidenceHash,
+        eligibleRoot: election.eligibleRoot,
+        disqualificationRoot: election.disqualificationRoot,
+        eligibleCount: election.eligibleCount,
       });
       const linked = store.findUserIdForCommitment(election.id, record.identityCommitment);
       await store.addNotification({
@@ -340,6 +349,7 @@ export function electionsRouter(deps) {
           evidenceHash: record.evidenceHash,
           issuedAt: record.issuedAt,
         },
+        eligibleRoot: election.eligibleRoot,
         election: presentElection(election, deps),
         nfp: true,
       });

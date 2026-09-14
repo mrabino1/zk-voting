@@ -92,12 +92,17 @@ describe('vote public inputs (5-signal)', () => {
       electionId: ELECTION_ID,
     });
     const parsed = parseVoteBody(spaBody(inputs), ELECTION_ID);
-    assert.equal(parsed.publicInputs.length, 5);
-    assert.deepEqual(parsed.publicInputs, inputs);
     assert.equal(parsed.root, ROOT);
     assert.equal(parsed.disqRoot, DISQ);
     assert.equal(parsed.nullifier, NULLIFIER);
-    const named = parsePublicInputs(parsed.publicInputs);
+    assert.equal(parsed.ballotHash, BALLOT);
+    const named = parsePublicInputs([
+      parsed.root,
+      parsed.disqRoot,
+      parsed.nullifier,
+      parsed.ballotHash,
+      ELECTION_ID,
+    ]);
     assert.equal(named.disqRoot, BigInt(DISQ));
     assert.equal(named.electionId, BigInt(ELECTION_ID));
   });
@@ -128,24 +133,24 @@ describe('vote public inputs (5-signal)', () => {
       ELECTION_ID,
       { root: ROOT, disqRoot: DISQ },
     );
-    assert.equal(parsed.publicInputs.length, 5);
-    assert.deepEqual(
-      parsed.publicInputs,
+    assert.equal(parsed.root, ROOT);
+    assert.equal(parsed.disqRoot, DISQ);
+    assert.equal(parsed.nullifier, '99');
+    assert.equal(parsed.ballotHash, hashBallot(ENCRYPTED));
+    const named = parsePublicInputs(
       publicInputsToHex({
-        root: ROOT,
-        disqRoot: DISQ,
-        nullifier: '99',
-        ballotHash: hashBallot(ENCRYPTED),
+        root: parsed.root,
+        disqRoot: parsed.disqRoot,
+        nullifier: parsed.nullifier,
+        ballotHash: parsed.ballotHash,
         electionId: ELECTION_ID,
       }),
     );
-    assert.equal(parsed.disqRoot, DISQ);
-    const named = parsePublicInputs(parsed.publicInputs);
     assert.equal(named.nullifier, 99n);
     assert.equal(named.disqRoot, BigInt(DISQ));
   });
 
-  test('object publicInputs default missing disqRoot to the zero root', () => {
+  test('object publicInputs leave omitted disqRoot unset so the relay can bind the election root', () => {
     const parsed = parseVoteBody(
       {
         proof: { accept: true },
@@ -154,8 +159,7 @@ describe('vote public inputs (5-signal)', () => {
       },
       ELECTION_ID,
     );
-    assert.equal(parsed.publicInputs.length, 5);
-    assert.equal(parsed.publicInputs[1], ZERO);
-    assert.equal(parsePublicInputs(parsed.publicInputs).disqRoot, 0n);
+    assert.equal(parsed.disqRoot, undefined);
+    assert.equal(parsed.root, undefined);
   });
 });
