@@ -48,6 +48,14 @@ describe('auditor verify', () => {
     assert.equal(result.ok, false);
   });
 
+  test('node pack without chain addresses still verifies uniqueness', () => {
+    const bundle = sampleBundle();
+    bundle.contracts = {};
+    const result = verifyAuditorBundle(bundle);
+    assert.equal(result.ok, true, result.errors.join('; '));
+    assert.equal(result.checks.addressesPresent, false);
+  });
+
   test('last-ballot-counts: two hashes one nullifier is one voter', () => {
     const bundle = sampleBundle();
     bundle.acceptedBallots = 2;

@@ -68,7 +68,7 @@ GET /api/config
 4. A nullifier’s current `ballotHash` is not in its `supersededHashes`.
 5. Disclosed rows have no `choice` / `optionId` / `userId`.
 6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present).
-7. `startTime < cutoffTime`; at least one contract address; NFP label; schema id.
+7. `startTime < cutoffTime`; NFP label; schema id. Contract addresses are included when known (chain export / configured Node); Node-only demo packs may omit them and still check uniqueness and tally.
 
 Same-ciphertext replay is a contract / Node reject (`NullifierUsed`). Auditors see only the surviving `ballotHash`.
 
