@@ -68,9 +68,11 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
-| `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
-| `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
-| `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
+| `CHAIN_RPC` | _empty_ | If set, clerk `POST /api/elections` calls `ElectionFactory.createElection` and `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem. Unset = JSON-only demo. |
+| `ELECTION_FACTORY_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for create-election (`FACTORY` alias matches Foundry scripts) |
+| `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
+| `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for vote relay |
+| `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for factory create and on-chain submit |
 | `RP_ID` | `localhost` | WebAuthn rpID |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
@@ -123,9 +125,16 @@ GET  /api/config
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools.
 
-Without `CHAIN_RPC`, votes that pass the election window and nullifier check are
-accepted in the local store so the explorer and SPA can run a demo. Those
-accepts still wait for hourly public disclosure unless the interval is `0`.
+Without `CHAIN_RPC`, creating an election and accepting a vote that passes the
+election window and nullifier check stay in the local JSON store so the explorer
+and SPA can run a demo. Those vote accepts still wait for hourly public
+disclosure unless the interval is `0`.
+
+When `CHAIN_RPC` is set, `POST /api/elections` must also succeed on
+`ElectionFactory` (same params as `smart-contracts/script/CreateElection.s.sol`).
+The Node keeps its own sequential id and stores `onChainElectionId` /
+`onChainElectionAddress` / `createTxHash` on the election record. A factory
+revert returns **502/503** to the clerk and does **not** write `republic.json`.
 
 ---
 

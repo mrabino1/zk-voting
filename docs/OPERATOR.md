@@ -76,7 +76,7 @@ git checkout test/unstable
 ./system_actions.sh deploy-dev
 ```
 
-Local Anvil + scripts (see `smart-contracts/script/`): `DeployLocal.s.sol` prints `name=0x…` for the Node to ingest. Broadcast JSON is gitignored.
+Local Anvil + scripts (see `smart-contracts/script/`): `DeployLocal.s.sol` prints `name=0x…` for the Node to ingest (`FACTORY=`, `VERIFIER=`, `INBOX=`). Broadcast JSON is gitignored.
 
 ---
 
@@ -104,6 +104,31 @@ npm test -w apps/node
 ```
 
 Expect `GET /health`. Public SPA routes include `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+
+### Creating elections (chain vs demo)
+
+Clerk **Create election** in `/back-office` is `POST /api/elections`.
+
+| Node env | What happens |
+| --- | --- |
+| `CHAIN_RPC` **unset** | JSON-only demo. Writes `apps/node/data/republic.json`. No factory call. |
+| `CHAIN_RPC` **set** | The API also calls `ElectionFactory.createElection` through viem (`simulateContract` + `writeContract`), matching `@zk-voting/chain-client` and `CreateElection.s.sol`. Failures return **502/503** with a message the clerk UI shows. Nothing is saved locally if the factory reverts. |
+
+Required when the chain is configured: `CHAIN_RPC`, `ELECTION_FACTORY_ADDRESS` (or `FACTORY`), `RELAYER_PRIVATE_KEY`, `VERIFIER_ADDRESS` (or `VERIFIER` from `DeployLocal`). Officer roles (clerk / registrar / disqualification / tally) default to the relayer address, matching `CreateElection.s.sol` using `msg.sender`, unless the POST body or `CLERK_ADDRESS` / `REGISTRAR_ADDRESS` / … is set.
+
+The Node election id and the on-chain `electionId` are stored together (`onChainElectionId`, `onChainElectionAddress`, `createTxHash`). They can differ: `DeployLocal` already creates on-chain election `#1`.
+
+Operators can still create with Foundry instead of the clerk UI:
+
+```bash
+cd smart-contracts
+FACTORY=0x… START=… CUTOFF=… TITLE='County general' \
+  forge script script/CreateElection.s.sol:CreateElection \
+  --rpc-url "$CHAIN_RPC" --broadcast
+# prints ELECTION=0x… and ELECTION_ID=…
+```
+
+Prefer the back office when you want the Node record and the factory clone created in one step.
 
 ### Republic L2
 

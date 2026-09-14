@@ -82,6 +82,12 @@
           <span class="pill" id="role-clerk">clerk</span>
         </header>
         <p class="field-hint">Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited.</p>
+        <p class="field-hint" id="chain-election-note">
+          If this Node has <code>CHAIN_RPC</code> set, Create election also calls
+          <code>ElectionFactory.createElection</code> and stores the on-chain id next to the Node id.
+          Factory failures are shown here and nothing is saved locally. Without
+          <code>CHAIN_RPC</code> this form writes <code>republic.json</code> only (demo).
+        </p>
         <form id="form-election" class="form-grid">
           <div class="field">
             <label class="field-label" for="e-jurisdiction">Jurisdiction <span class="req">*</span></label>

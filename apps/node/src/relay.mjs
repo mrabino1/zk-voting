@@ -121,7 +121,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
 
   if (chain.isConfigured()) {
     await chain.submitVote({
-      electionId: election.id,
+      electionId: election.onChainElectionId ?? election.id,
       proof: parsed.proof,
       publicInputs: parsed.publicInputs,
       encryptedBallot: parsed.encryptedBallot,

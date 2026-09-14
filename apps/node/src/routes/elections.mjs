@@ -121,6 +121,34 @@ export function electionsRouter(deps) {
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
       }
+      let chainResult = null;
+      if (chain.isConfigured()) {
+        const jurisdiction = store.getJurisdiction(jurisdictionId);
+        const officers = jurisdiction?.officers || [];
+        const roleAddr = (role) => officers.find((o) => o.role === role && o.address)?.address;
+        chainResult = await chain.createElection({
+          title,
+          metadataURI: String(body.metadataURI || ''),
+          startTime,
+          cutoffTime,
+          maxParticipants,
+          treeDepth,
+          ballotSpecHash,
+          questions,
+          questionCount: questions.length,
+          jurisdictionId,
+          clerk: body.clerk || roleAddr('clerk'),
+          registrar: body.registrar || roleAddr('registrar'),
+          disqualificationOfficer: body.disqualificationOfficer || roleAddr('disqualification_officer'),
+          tallyOperator: body.tallyOperator || roleAddr('tally_operator'),
+          verifier: body.verifier,
+        });
+        if (!chainResult?.onChainElectionId) {
+          throw new HttpError(502, 'ElectionFactory did not return an election id', {
+            code: 'CHAIN_CREATE_FAILED',
+          });
+        }
+      }
       const election = await store.createElection({
         title,
         metadataURI: String(body.metadataURI || ''),
@@ -131,16 +159,25 @@ export function electionsRouter(deps) {
         ballotSpecHash,
         questions,
         jurisdictionId,
-        clerk: body.clerk || '',
-        registrar: body.registrar || '',
-        disqualificationOfficer: body.disqualificationOfficer || '',
-        tallyOperator: body.tallyOperator || '',
-        verifier: body.verifier || '',
+        clerk: chainResult?.params?.clerk || body.clerk || '',
+        registrar: chainResult?.params?.registrar || body.registrar || '',
+        disqualificationOfficer:
+          chainResult?.params?.disqualificationOfficer || body.disqualificationOfficer || '',
+        tallyOperator: chainResult?.params?.tallyOperator || body.tallyOperator || '',
+        verifier: chainResult?.params?.verifier || body.verifier || '',
         lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
         createdBy: req.user.id,
+        onChainElectionId: chainResult?.onChainElectionId ?? null,
+        onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
+        factoryAddress: chainResult?.factoryAddress ?? null,
+        createTxHash: chainResult?.createTxHash ?? null,
+        chainId: chainResult?.chainId ?? null,
       });
       await explorer.append('election_created', {
         electionId: String(election.id),
+        onChainElectionId: election.onChainElectionId,
+        onChainElectionAddress: election.onChainElectionAddress,
+        createTxHash: election.createTxHash,
         title: election.title,
         jurisdictionId: election.jurisdictionId,
         startTime: election.startTime,
@@ -150,6 +187,10 @@ export function electionsRouter(deps) {
         ok: true,
         id: election.id,
         electionId: election.id,
+        onChainElectionId: election.onChainElectionId,
+        onChainElectionAddress: election.onChainElectionAddress,
+        createTxHash: election.createTxHash,
+        chainMode: election.onChainElectionId != null ? 'onchain' : 'demo',
         election: presentElection(election, deps),
         nfp: true,
       });

@@ -77,10 +77,11 @@ function spaFallback(config) {
 }
 
 export async function createApp(overrides = {}) {
-  const config = getConfig(overrides);
+  const { chain: chainOverride, ...configOverrides } = overrides;
+  const config = getConfig(configOverrides);
   const store = await Store.open(config);
   const explorer = await Explorer.open(config);
-  const chain = createChain(config);
+  const chain = chainOverride || createChain(config);
   const passkeys = createPasskeyService(config, store);
   const deps = { config, store, explorer, chain, passkeys };
 

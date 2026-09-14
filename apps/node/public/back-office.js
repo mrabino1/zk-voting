@@ -101,9 +101,11 @@
   }
 
   function errText(err) {
+    const code = err.data && err.data.code;
     return (
       (err.status ? err.status + " · " : "") +
       (err.message || "Request failed") +
+      (code ? " [" + code + "]" : "") +
       (err.path ? " (" + err.path + ")" : "")
     );
   }
@@ -160,7 +162,14 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
-    return title + " · #" + electionIdOf(row) + (state ? " · " + state : "");
+    const chain = pick(row, ["onChainElectionId"]);
+    return (
+      title +
+      " · #" +
+      electionIdOf(row) +
+      (chain ? " · chain #" + chain : "") +
+      (state ? " · " + state : "")
+    );
   }
 
   function markRole(el, ok) {
@@ -209,6 +218,10 @@
               ? new Date(Number(next) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC")
               : "";
           banner.textContent = cfg.disclosure.note + (when ? " Next publish: " + when + "." : "");
+        }
+        const chainNote = $("chain-election-note");
+        if (chainNote && cfg.chain && cfg.chain.note) {
+          chainNote.textContent = cfg.chain.note;
         }
       } catch {
         /* banner keeps static copy */
@@ -341,7 +354,31 @@
     try {
       const created = await request("/api/elections", { method: "POST", body });
       const id = pick(created, ["election.id", "id"]) || "";
-      flash($("flash-election"), "ok", "Created election" + (id ? " " + id : "") + ". Freeze the roll before opening.");
+      const chainMode = pick(created, ["chainMode", "election.chainMode"]);
+      const onChainId = pick(created, ["onChainElectionId", "election.onChainElectionId"]);
+      const addr = pick(created, ["onChainElectionAddress", "election.onChainElectionAddress"]);
+      const tx = pick(created, ["createTxHash", "election.createTxHash"]);
+      if (chainMode === "onchain" || onChainId) {
+        flash(
+          $("flash-election"),
+          "ok",
+          "Created Node election " +
+            id +
+            " on-chain as #" +
+            onChainId +
+            (addr ? " at " + addr : "") +
+            (tx ? " (tx " + tx + ")" : "") +
+            ". Freeze the roll before opening."
+        );
+      } else {
+        flash(
+          $("flash-election"),
+          "ok",
+          "Created election" +
+            (id ? " " + id : "") +
+            " in JSON demo mode (CHAIN_RPC unset). Freeze the roll before opening."
+        );
+      }
       await loadElections();
     } catch (err) {
       flash($("flash-election"), "err", errText(err));

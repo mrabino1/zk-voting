@@ -190,6 +190,10 @@ describe('Republic Node API', () => {
     assert.equal(json.election.stateName, 'Created');
     assert.equal(json.election.rollFrozen, false);
     assert.ok(json.election.ballotSpecHash);
+    assert.equal(json.chainMode, 'demo');
+    assert.equal(json.onChainElectionId, null);
+    assert.equal(json.election.chainMode, 'demo');
+    assert.equal(json.election.onChainElectionId, null);
   });
 
   test('voter cannot create an election', async () => {

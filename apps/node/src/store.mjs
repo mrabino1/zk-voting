@@ -146,6 +146,15 @@ export class Store {
     return this.data.elections.find((e) => String(e.id) === String(id)) || null;
   }
 
+  getElectionByOnChainId(onChainId) {
+    if (onChainId == null || onChainId === '') return null;
+    const key = String(onChainId);
+    return (
+      this.data.elections.find((e) => e.onChainElectionId != null && String(e.onChainElectionId) === key) ||
+      null
+    );
+  }
+
   listElections() {
     return this.data.elections.slice();
   }
@@ -472,6 +481,11 @@ export class Store {
       tallyOperator: params.tallyOperator || '',
       verifier: params.verifier || '',
       lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
+      onChainElectionId: params.onChainElectionId != null ? String(params.onChainElectionId) : null,
+      onChainElectionAddress: params.onChainElectionAddress || null,
+      factoryAddress: params.factoryAddress || null,
+      createTxHash: params.createTxHash || null,
+      chainId: params.chainId != null ? Number(params.chainId) : null,
       rollFrozen: false,
       frozenAt: null,
       participantCount: 0,
