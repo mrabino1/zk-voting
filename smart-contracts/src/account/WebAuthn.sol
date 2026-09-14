@@ -55,11 +55,7 @@ library WebAuthn {
     }
 
     /// @dev RIP-7212: 160-byte input (hash, r, s, x, y), 32-byte output `1` on success.
-    function _p256Verify(bytes32 messageHash, uint256 r, uint256 s, uint256 x, uint256 y)
-        private
-        view
-        returns (bool)
-    {
+    function _p256Verify(bytes32 messageHash, uint256 r, uint256 s, uint256 x, uint256 y) private view returns (bool) {
         address precompile = P256_VERIFY;
         bytes memory input = abi.encodePacked(messageHash, bytes32(r), bytes32(s), bytes32(x), bytes32(y));
         bytes memory output = new bytes(32);

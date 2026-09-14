@@ -38,11 +38,7 @@ contract PasskeyAccountFactory {
     }
 
     /// @notice Predict the CREATE2 address for these passkey parameters and salt.
-    function getAddress(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt)
-        public
-        view
-        returns (address)
-    {
+    function getAddress(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt) public view returns (address) {
         bytes32 bytecodeHash = keccak256(_creationCode(credIdHash, pubX, pubY));
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, bytecodeHash)))));
     }
