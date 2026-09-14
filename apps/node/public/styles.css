@@ -764,8 +764,20 @@ textarea {
 }
 
 @media (max-width: 720px) {
-  .rank-row {
+  .rank-row,
+  .rank-row.unranked {
     grid-template-columns: auto 1fr;
+  }
+  .rank-handle {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .rank-number {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .rank-label {
+    grid-column: 1 / -1;
   }
   .rank-move {
     grid-column: 1 / -1;
