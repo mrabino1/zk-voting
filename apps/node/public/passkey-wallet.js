@@ -258,12 +258,26 @@ function openDb() {
       return;
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const timer = setTimeout(() => {
+      try {
+        req.transaction?.abort();
+      } catch {
+        /* ignore */
+      }
+      reject(new Error("IndexedDB open timed out."));
+    }, 4000);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
+    req.onsuccess = () => {
+      clearTimeout(timer);
+      resolve(req.result);
+    };
+    req.onerror = () => {
+      clearTimeout(timer);
+      reject(req.error || new Error("IndexedDB open failed"));
+    };
   });
 }
 
@@ -656,26 +670,30 @@ async function unwrapSeedWithUv() {
 /* -------------------------------------------------------------------------- */
 
 export async function getPublicRecord() {
-  const rec = await idbGet();
-  if (!rec) return null;
-  return {
-    credentialId: rec.credentialId,
-    address: rec.address,
-    addressScheme: rec.addressScheme || ADDRESS_SCHEME,
-    productionAddressNote: rec.productionAddressNote || PRODUCTION_ADDRESS_NOTE,
-    identityCommitment: rec.identityCommitment,
-    hasher: rec.hasher,
-    prfSupported: Boolean(rec.prfSupported),
-    wrapScheme: rec.wrapScheme,
-    fallbackNote: rec.fallbackNote || null,
-    displayName: rec.displayName || null,
-    createdAt: rec.createdAt,
-  };
+  try {
+    const rec = await idbGet();
+    if (!rec) return null;
+    return {
+      credentialId: rec.credentialId,
+      address: rec.address,
+      addressScheme: rec.addressScheme || ADDRESS_SCHEME,
+      productionAddressNote: rec.productionAddressNote || PRODUCTION_ADDRESS_NOTE,
+      identityCommitment: rec.identityCommitment,
+      hasher: rec.hasher,
+      prfSupported: Boolean(rec.prfSupported),
+      wrapScheme: rec.wrapScheme,
+      fallbackNote: rec.fallbackNote || null,
+      displayName: rec.displayName || null,
+      createdAt: rec.createdAt,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function hasWallet() {
-  const rec = await idbGet();
-  return Boolean(rec?.wrappedSeed && rec?.identityCommitment);
+  const rec = await getPublicRecord();
+  return Boolean(rec?.identityCommitment);
 }
 
 /**

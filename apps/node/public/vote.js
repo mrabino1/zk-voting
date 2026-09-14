@@ -82,6 +82,7 @@ export async function renderVote(main, ctx) {
   const {
     h,
     api,
+    fill,
     announce,
     wallet,
     loadElection,
@@ -97,7 +98,7 @@ export async function renderVote(main, ctx) {
   const [{ election, source }, me, publicRecord] = await Promise.all([
     loadElection(electionId),
     loadMe(),
-    wallet.getPublicRecord(),
+    wallet.getPublicRecord().catch(() => null),
   ]);
 
   if (!election) {
@@ -206,7 +207,7 @@ export async function renderVote(main, ctx) {
     if (state.step === "receipt" && state.receipt) {
       children.push(renderReceipt(state.receipt, h));
       children.push(h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" })));
-      root.replaceChildren(...children);
+      fill(root, ...children);
       return;
     }
 
@@ -283,7 +284,7 @@ export async function renderVote(main, ctx) {
       )
     );
 
-    root.replaceChildren(...children);
+    fill(root, ...children);
   }
 
   async function onSubmit(event) {

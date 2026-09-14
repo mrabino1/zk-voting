@@ -7,6 +7,7 @@ export async function renderRegister(main, ctx) {
   const {
     h,
     api,
+    fill,
     announce,
     wallet,
     loadElections,
@@ -20,7 +21,7 @@ export async function renderRegister(main, ctx) {
   const [{ elections, source }, me, publicRecord] = await Promise.all([
     loadElections(),
     loadMe(),
-    wallet.getPublicRecord(),
+    wallet.getPublicRecord().catch(() => null),
   ]);
 
   const preselect = route.query.get("election") || "";
@@ -37,7 +38,7 @@ export async function renderRegister(main, ctx) {
 
   function paint() {
     const rec = state.record;
-    root.replaceChildren(
+    fill(root,
       h(
         "div",
         { class: "page-head" },
@@ -222,12 +223,12 @@ export async function renderRegister(main, ctx) {
           )
         )
       ),
-      me
+      me?.user
         ? h(
             "section",
             {},
             h("h2", { text: "Node account" }),
-            h("p", { text: me.status ? `Status from /api/me: ${me.status}` : "Signed in with this Node session." })
+            h("p", { text: me.status ? `Status from /api/me: ${me.status}` : `Signed in as ${me.user.handle || me.user.role || "voter"}.` })
           )
         : null,
       rec
