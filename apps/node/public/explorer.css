@@ -71,8 +71,7 @@
   background: var(--ok);
 }
 
-.tx-type.vote,
-.tx-type.vote_superseded {
+.tx-type.vote {
   background: var(--navy-mid);
 }
 

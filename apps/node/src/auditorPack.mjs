@@ -16,14 +16,7 @@ export function buildAuditorPack(election, deps) {
   const now = deps.config.nowFn();
   const interval = deps.config.disclosureIntervalSeconds;
   const tallied = electionState(election, now) >= 4;
-  const disclosed = deps.store.listPublishedVotes(election.id, now, interval).map((vote) => {
-    const row = publicVoteRecord(vote);
-    const superseded = Array.isArray(vote.supersededHashes) ? vote.supersededHashes : [];
-    return {
-      ...row,
-      supersededHashes: dto.state >= 3 || interval === 0 ? superseded : [],
-    };
-  });
+  const disclosed = deps.store.listPublishedVotes(election.id, now, interval).map((vote) => publicVoteRecord(vote));
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,
@@ -57,10 +50,10 @@ export function buildAuditorPack(election, deps) {
     tally: dto.tally,
     disclosure: dto.disclosure,
     coercion: {
-      policy: 'last-ballot-counts',
+      policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
       note:
-        'Each nullifier counts once. A later ballotHash supersedes earlier ones for that nullifier. A receipt lists hashes only; it cannot prove which option was marked. This is not MACI.',
+        'Each nullifier is accepted once. A second ballot, including a new ciphertext, is rejected. Double voting is impossible. A receipt lists hashes only; it cannot prove which option was marked. Voters may change their mind on the ballot form before submit. This is not MACI.',
     },
   };
 }

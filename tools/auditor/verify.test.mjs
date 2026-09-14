@@ -41,9 +41,9 @@ describe('auditor verify', () => {
     assert.equal(result.checks.noChoiceLeak, false);
   });
 
-  test('current hash in superseded list fails', () => {
+  test('supersededHashes is not a valid one-ballot pack', () => {
     const bundle = sampleBundle();
-    bundle.disclosedBallots[0].supersededHashes.push(bundle.disclosedBallots[0].ballotHash);
+    bundle.disclosedBallots[0].supersededHashes = [bundle.disclosedBallots[0].ballotHash];
     const result = verifyAuditorBundle(bundle);
     assert.equal(result.ok, false);
   });
@@ -56,14 +56,12 @@ describe('auditor verify', () => {
     assert.equal(result.checks.addressesPresent, false);
   });
 
-  test('last-ballot-counts: two hashes one nullifier is one voter', () => {
+  test('one ballot per nullifier: two hashes for one nullifier fail', () => {
     const bundle = sampleBundle();
-    bundle.acceptedBallots = 2;
-    bundle.tally.counts = [1, 1];
-    const row = bundle.disclosedBallots[0];
-    assert.equal(row.generation, 2);
-    assert.equal(row.supersededHashes.length, 1);
+    bundle.disclosedBallots[0].generation = 2;
+    bundle.disclosedBallots[0].supersededHashes = [`0x${'99'.repeat(32)}`];
     const result = verifyAuditorBundle(bundle);
-    assert.equal(result.ok, true, result.errors.join('; '));
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some((e) => /supersededHashes|generation/.test(e)));
   });
 });

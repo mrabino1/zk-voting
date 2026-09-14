@@ -97,40 +97,22 @@ contract BallotInboxTest is Deployer {
         assertEq(inbox.acceptedBallots(electionId), 2);
     }
 
-    function testLastBallotCountsDoesNotIncreaseAccepted() public {
+    function testSecondBallotDifferentCiphertextReverts() public {
         warpOpen(election);
         bytes memory first = Fixtures.encryptedBallot(nullifier);
-        bytes memory second = abi.encodePacked(first, "revote");
+        bytes memory second = abi.encodePacked(first, "changed-mind");
         submitVoteWithBallot(electionId, election, nullifier, first);
         assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.voteGeneration(electionId, nullifier), 1);
-
-        vm.expectEmit(true, true, false, true, address(inbox));
-        emit VoteSuperseded(electionId, nullifier, keccak256(first), keccak256(second), 2, relayer);
-        submitVoteWithBallot(electionId, election, nullifier, second);
-
-        assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1, "revote must not mint a second voter");
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(second));
-        assertEq(inbox.voteGeneration(electionId, nullifier), 2);
-        assertTrue(inbox.ballotHashSuperseded(electionId, nullifier, keccak256(first)));
-        assertFalse(inbox.ballotHashSuperseded(electionId, nullifier, keccak256(second)));
-    }
-
-    function testSupersededBallotHashCannotReplay() public {
-        warpOpen(election);
-        bytes memory first = Fixtures.encryptedBallot(nullifier);
-        bytes memory second = abi.encodePacked("later-ballot", nullifier);
-        submitVoteWithBallot(electionId, election, nullifier, first);
-        submitVoteWithBallot(electionId, election, nullifier, second);
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(first));
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
-        uint256[] memory inputs = voteInputs(electionId, election, nullifier, first);
+        uint256[] memory inputs = voteInputs(electionId, election, nullifier, second);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.BallotHashSuperseded.selector);
-        inbox.submitVote(electionId, a, b, c, inputs, first);
+        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        inbox.submitVote(electionId, a, b, c, inputs, second);
 
-        assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(second));
+        assertTrue(inbox.nullifierUsed(electionId, nullifier));
+        assertEq(inbox.acceptedBallots(electionId), 1, "second ballot must not mint a second voter");
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(first), "first accepted hash is final");
     }
 }

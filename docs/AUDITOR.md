@@ -15,12 +15,12 @@ This is roadmap item 9’s auditor slice. It does **not** replace a Groth16 cere
 | `contracts` | Factory, inbox, election, verifier, registries |
 | `roots` | Eligible root, disqualification root, `ballotSpecHash` |
 | `window` | `startTime`, `cutoffTime` |
-| `acceptedBallots` | Unique nullifiers that count (last ballot per nullifier) |
-| `disclosedBallots` | `nullifier`, `ballotHash`, `generation`, superseded hashes — **not** choices |
+| `acceptedBallots` | Unique nullifiers that were accepted (one ballot each) |
+| `disclosedBallots` | `nullifier`, `ballotHash` — **not** choices, not re-vote generations |
 | `tally` | Posted per-option counts when the election is tallied |
-| `coercion` | `last-ballot-counts`; `receiptsProveChoice: false` |
+| `coercion` | `one-ballot-per-nullifier`; `receiptsProveChoice: false` |
 
-Never in a bundle: civil names, evidence files, trapdoors, option ids, `userId`, relayer private keys.
+Never in a bundle: civil names, evidence files, trapdoors, option ids, `userId`, relayer private keys, `supersededHashes`.
 
 ---
 
@@ -36,7 +36,7 @@ node tools/auditor/cli.mjs verify --file bundle.json
 node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1 --out bundle.json
 node tools/auditor/cli.mjs verify-node --base http://127.0.0.1:3000 --election 1
 
-# Export from chain JSON-RPC (VoteAccepted / VoteSuperseded logs)
+# Export from chain JSON-RPC (VoteAccepted logs)
 node tools/auditor/cli.mjs export-chain \
   --rpc http://127.0.0.1:8545 \
   --factory 0x… \
@@ -62,23 +62,23 @@ GET /api/config
 
 ## Invariants the verifier checks
 
-1. Unique **current** nullifiers (last-ballot-counts: one row per nullifier).
+1. Unique nullifiers (one disclosed row per nullifier). Duplicate rows fail.
 2. `acceptedBallots >=` that unique count (hourly disclosure may hide not-yet-public votes).
 3. If `tally.counts` is present, `sum(counts) == acceptedBallots`.
-4. A nullifier’s current `ballotHash` is not in its `supersededHashes`.
-5. Disclosed rows have no `choice` / `optionId` / `userId`.
-6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present).
+4. Disclosed rows have no `choice` / `optionId` / `userId`.
+5. No last-vote-counts artifacts: non-empty `supersededHashes` or `generation != 1` fail.
+6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present). If `coercion.policy` is present it must be `one-ballot-per-nullifier`.
 7. `startTime < cutoffTime`; NFP label; schema id. Contract addresses are included when known (chain export / configured Node); Node-only demo packs may omit them and still check uniqueness and tally.
 
-Same-ciphertext replay is a contract / Node reject (`NullifierUsed`). Auditors see only the surviving `ballotHash`.
+A second ballot for a spent nullifier is a contract / Node reject (`NullifierUsed`). Double voting remains impossible. Auditors see only the single accepted `ballotHash` per nullifier.
 
 ---
 
-## How this lines up with last-ballot-counts
+## How this lines up with the coercion slice
 
-Inside `[startTime, cutoffTime)` a voter may submit a **new** proof and ciphertext for the same nullifier. The previous `ballotHash` is marked superseded and cannot be replayed. `acceptedBallots` still counts **people**, not submissions. A receipt lists hashes only; it is not “I voted for X.”
+Voters may change their mind **privately** on the ballot form before submit. After a nullifier is accepted they **cannot** recast. Last-vote-counts / re-vote supersession is **not** implemented. A receipt lists hashes only; it is not “I voted for X,” and it is not a second ballot.
 
-This is **not** MACI. A coercer who holds the voter’s secrets can still race last-write until cutoff. Full collusion-resistant messaging remains later work.
+This is **not** MACI. Full collusion-resistant messaging remains later work.
 
 ---
 

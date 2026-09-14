@@ -42,7 +42,7 @@ export function configRouter(deps) {
           ballotInbox: deps.config.ballotInboxAddress || null,
         },
         coercion: {
-          policy: 'last-ballot-counts',
+          policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,
         },
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),

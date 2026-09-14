@@ -318,13 +318,11 @@ export function recordRegistration(electionId, payload) {
 
 export function recordVoteReceipt(electionId, payload) {
   const store = readVoterStore();
-  const generation = Number(payload.generation || store.votes[String(electionId)]?.generation || 1);
   store.votes[String(electionId)] = {
     at: payload.at || new Date().toISOString(),
     ballotHash: payload.ballotHash,
     nullifier: payload.nullifier,
     userOpHash: payload.userOpHash,
-    generation,
     choiceOmitted: true,
   };
   writeVoterStore(store);
@@ -515,7 +513,7 @@ function renderHome(main, route, bundle) {
                 canVote
                   ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
                   : vs.key === "recorded"
-                    ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Receipt / re-vote" })
+                    ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
                     : election.state === 2
                       ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Open ballot" })
                       : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),

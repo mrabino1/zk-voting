@@ -303,16 +303,10 @@ export function electionsRouter(deps) {
         accepted: true,
         published: result.published,
         nextPublishAt: result.nextPublishAt,
-        superseded: Boolean(result.superseded),
-        generation: result.generation || 1,
         vote: result.vote,
         message: result.published
-          ? result.superseded
-            ? 'Replacement ballot accepted. The previous ballotHash for this nullifier no longer counts. Choice is not stored in the clear.'
-            : 'Ballot accepted. Choice is not stored in the clear.'
-          : result.superseded
-            ? 'Replacement ballot accepted for relay. The previous ballotHash for this nullifier no longer counts. Public proof waits until this hour closes. Choice is not stored in the clear.'
-            : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.',
+          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.'
+          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.',
         nfp: true,
       });
     }),

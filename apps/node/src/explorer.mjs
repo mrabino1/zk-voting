@@ -38,14 +38,11 @@ function stable(value) {
 
 function votePayload(payload) {
   const src = payload && typeof payload === 'object' ? payload : {};
-  const generation = Number(src.generation || 1);
   return {
     nullifier: payloadNullifier(src),
     ballotHash: src.ballotHash,
     electionId: src.electionId != null ? String(src.electionId) : undefined,
     relayer: src.relayer || 'node',
-    generation: Number.isFinite(generation) && generation > 0 ? generation : 1,
-    previousBallotHash: src.previousBallotHash || undefined,
   };
 }
 
@@ -62,17 +59,6 @@ function sameNullifier(a, b) {
     .replace(/^0x/, '');
   if (!x || !y) return false;
   return x === y || x.endsWith(y) || y.endsWith(x);
-}
-
-function sameHash(a, b) {
-  const x = String(a || '')
-    .toLowerCase()
-    .replace(/^0x/, '');
-  const y = String(b || '')
-    .toLowerCase()
-    .replace(/^0x/, '');
-  if (!x || !y) return false;
-  return x === y;
 }
 
 export class Explorer {
@@ -191,43 +177,15 @@ export class Explorer {
     await this.refresh();
     this.chain.sealed = this.chain.sealed || [];
 
-    const sealedIdx = this.chain.sealed.findIndex((item) =>
-      sameNullifier(payloadNullifier(item.payload || {}), body.nullifier),
-    );
-    if (sealedIdx >= 0) {
-      const prev = votePayload(this.chain.sealed[sealedIdx].payload);
-      if (sameHash(prev.ballotHash, body.ballotHash)) {
-        return { duplicate: true, published: false };
-      }
-      this.chain.sealed[sealedIdx] = {
-        receivedAt: now,
-        payload: {
-          ...body,
-          previousBallotHash: prev.ballotHash,
-          generation: Number(prev.generation || 1) + 1,
-        },
-      };
-      await this.persist();
-      return { supersededSealed: true, published: false };
+    if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) {
+      return { duplicate: true, published: Boolean(this.findByNullifier(body.nullifier)) };
     }
-
-    const existing = this.findByNullifier(body.nullifier);
-    if (existing && sameHash(existing.ballotHash, body.ballotHash)) {
-      return { duplicate: true, published: Boolean(existing) };
-    }
-
-    const generation = existing ? Number(existing.generation || 1) + 1 : Number(body.generation || 1);
-    const enriched = {
-      ...body,
-      previousBallotHash: existing ? existing.ballotHash : body.previousBallotHash,
-      generation,
-    };
 
     const interval = Number(intervalSeconds) || 0;
     if (!interval || interval <= 0) {
-      return this.append(generation > 1 ? 'vote_superseded' : 'vote', enriched, { timestamp: now });
+      return this.append('vote', body, { timestamp: now });
     }
-    this.chain.sealed.push({ receivedAt: now, payload: enriched });
+    this.chain.sealed.push({ receivedAt: now, payload: body });
     await this.persist();
     return { sealed: true, published: false };
   }
@@ -258,9 +216,7 @@ export class Explorer {
     for (const bucket of buckets) {
       const items = groups.get(bucket).filter((item) => {
         const p = votePayload(item.payload);
-        const existing = this.findByNullifier(p.nullifier);
-        if (!existing) return true;
-        return !sameHash(existing.ballotHash, p.ballotHash);
+        return !this.findByNullifier(p.nullifier);
       });
       if (!items.length) continue;
       items.sort((a, b) =>
@@ -309,15 +265,9 @@ export class Explorer {
       if (isDelayedPublicType(type) || type === 'vote_superseded') {
         const payload = votePayload(row.payload);
         if (!payload.nullifier) continue;
-        const existing = this.findByNullifier(payload.nullifier);
-        if (existing && sameHash(existing.ballotHash, payload.ballotHash)) continue;
+        if (this.findByNullifier(payload.nullifier) || this.sealedHasNullifier(payload.nullifier)) continue;
         if (l2Delayed) {
-          await this.refresh();
-          this.chain.sealed = (this.chain.sealed || []).filter(
-            (item) => !sameNullifier(payloadNullifier(item.payload || {}), payload.nullifier),
-          );
-          await this.persist();
-          await this.append(existing ? 'vote_superseded' : 'vote', payload, { timestamp: blockTs || now });
+          await this.append('vote', payload, { timestamp: blockTs || now });
           imported += 1;
         } else {
           await this.recordVote(payload, now, intervalSeconds);
@@ -381,7 +331,6 @@ export class Explorer {
   findByNullifier(value) {
     const needle = String(value || '').toLowerCase();
     if (!needle) return null;
-    let best = null;
     for (const tx of Object.values(this.chain.txs)) {
       const presented = this.presentTx(tx);
       const n = String(presented.nullifier || '').toLowerCase();
@@ -391,17 +340,10 @@ export class Explorer {
           n.endsWith(needle.replace(/^0x/, '')) ||
           needle.endsWith(n.replace(/^0x/, '')))
       ) {
-        if (
-          !best ||
-          Number(presented.generation || 1) > Number(best.generation || 1) ||
-          (Number(presented.generation || 1) === Number(best.generation || 1) &&
-            Number(presented.timestamp || 0) >= Number(best.timestamp || 0))
-        ) {
-          best = presented;
-        }
+        return presented;
       }
     }
-    return best;
+    return null;
   }
 
   search(q) {

@@ -51,10 +51,10 @@ When they vote:
 - Circuit proves: "I know a trapdoor whose commitment is in the eligible
   tree, I am **not** in the disqualification tree, this ballot is well-formed."
 - Reveals `nullifier = poseidon(nullifierSecret, electionId)` so they are counted
-  once. Inside the voting window they may **replace** the stored ballot with a
-  new proof + `ballotHash` (last-ballot-counts). A coercer who captured the
-  first ciphertext cannot replay it. The nullifier is **unlinkable** to the
-  smart-account address and to the civil identity.
+  once. That nullifier is accepted **once**. A second `submitVote`, including a
+  new ciphertext, reverts `NullifierUsed`. Voters may change their mind
+  privately on the ballot form **before** submit. The nullifier is **unlinkable**
+  to the smart-account address and to the civil identity.
 - Ballot is an **ElGamal / hashed commitment** ciphertext posted with the
   proof. Choice is not a public field.
 - The L2 transaction origin is the **bundler**, not the voter. The
@@ -63,20 +63,18 @@ When they vote:
 
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
-The receipt is hashes only (nullifier, `ballotHash`, generation). It cannot
-open the ciphertext. Last-ballot-counts lets the voter overwrite a coerced
-ballot until cutoff. This is **not** MACI: a coercer who holds the secrets
-can still race last-write.
+The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
+ciphertext. Double voting remains impossible. This is **not** MACI and **not**
+last-vote-counts: a coercer who can force the first (and only) submit still
+wins that ballot.
 
 ### Hourly public disclosure (polling-place unlinkability)
 
-Votes are **accepted immediately** (nullifier uniqueness **per current
-ballotHash**; a later hash for the same nullifier supersedes). Public proof of
-those votes — explorer rows, jurisdiction `acceptedBallots`, any dashboard
-turnout tick — is published **only after the hour that contained the vote
-has closed** (UTC). At 14:23, only events with timestamp `< 14:00` are
-public; a 14:05 vote appears at 15:00. A replacement submitted after that
-hour is disclosed with the later hour; unique-voter count does not grow.
+Votes are **accepted immediately** (each nullifier **once**; a second ballot is
+rejected). Public proof of those votes — explorer rows, jurisdiction
+`acceptedBallots`, any dashboard turnout tick — is published **only after the
+hour that contained the vote has closed** (UTC). At 14:23, only events with
+timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 
 - Do not leak a pending-per-election count (that still identifies the
   jurisdiction).
@@ -273,19 +271,14 @@ function submitVote(
 function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 function acceptedBallots(uint256 electionId) external view returns (uint256);
 function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32);
-function voteGeneration(uint256 electionId, uint256 nullifier) external view returns (uint32);
-function ballotHashSuperseded(uint256 electionId, uint256 nullifier, bytes32 ballotHash)
-    external view returns (bool);
 ```
 
-Rejects when: verifier returns false; **same** `ballotHash` already current for
-that nullifier (`NullifierUsed`); superseded `ballotHash` replayed
-(`BallotHashSuperseded`); outside window; roll not frozen; election mismatch;
+Rejects when: verifier returns false; nullifier already used (`NullifierUsed`),
+including a new `ballotHash`; outside window; roll not frozen; election mismatch;
 disqualification root in the proof does not match.
 
-A **new** `ballotHash` for an already-used nullifier **replaces** the stored
-ballot (last-ballot-counts). `acceptedBallots` counts unique nullifiers, not
-submissions. Events: `VoteAccepted`, `VoteSuperseded`. Relayer/bundler is
+A nullifier is accepted **once**. `acceptedBallots` counts unique nullifiers.
+Double voting is impossible. Event: `VoteAccepted`. Relayer/bundler is
 `msg.sender`. That is intentional.
 
 ### `IGroth16Verifier`
@@ -373,8 +366,8 @@ to L1 for court-grade records.
 - `VoterRegistry.t.sol` — insert, cap, duplicates.
 - `PersonRegistry.t.sol` — many verified addresses, one active, cannot steal.
 - `Disqualification.t.sol` — codes, revoke, frozen roll.
-- `BallotInbox.t.sol` — happy path with MockVerifier, same-hash double-vote, last-ballot-counts, window.
-- `CoercionResistance.t.sol` — revote then tally unique nullifiers; cutoff blocks replacement.
+- `BallotInbox.t.sol` — happy path with MockVerifier, double-vote (same and different ciphertext), window.
+- `CoercionResistance.t.sol` — second ballot reverts; on-chain state is nullifier + hash only.
 - `PrivacyUnlinkability.t.sol` — asserting wallet address ≠ leaf; nullifier
   uniqueness; msg.sender is relayer.
 - `Paymaster.t.sol` — gasless path.
@@ -386,9 +379,9 @@ to L1 for court-grade records.
 **Invariants (must hold):**
 
 1. `acceptedBallots <= participantCount` (or == registered eligible who voted).
-2. A nullifier is **counted** at most once per election. Same-ciphertext replay
-   reverts. A later different `ballotHash` supersedes; `acceptedBallots` does
-   not increase. The current hash is never in the superseded set.
+2. A nullifier is **accepted** at most once per election. A second ballot,
+   including a later different `ballotHash`, reverts. Double voting is
+   impossible. `acceptedBallots` equals unique spent nullifiers.
 3. No vote is accepted outside `[startTime, cutoffTime)`.
 4. No vote is accepted if `!rollFrozen`.
 5. If `maxParticipants > 0`, `participantCount <= maxParticipants`.

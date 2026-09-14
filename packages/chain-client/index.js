@@ -123,27 +123,6 @@ const INBOX_ABI = [
     ],
     outputs: [{ type: "bytes32" }],
   },
-  {
-    type: "function",
-    name: "voteGeneration",
-    stateMutability: "view",
-    inputs: [
-      { name: "electionId", type: "uint256" },
-      { name: "nullifier", type: "uint256" },
-    ],
-    outputs: [{ type: "uint32" }],
-  },
-  {
-    type: "function",
-    name: "ballotHashSuperseded",
-    stateMutability: "view",
-    inputs: [
-      { name: "electionId", type: "uint256" },
-      { name: "nullifier", type: "uint256" },
-      { name: "ballotHash", type: "bytes32" },
-    ],
-    outputs: [{ type: "bool" }],
-  },
 ];
 
 const ELECTION_ABI = [

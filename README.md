@@ -97,7 +97,7 @@ The properties we are aiming for:
 
 1. **Eligibility.** A vote proof is only valid if the prover is in the current eligible set for that election.
 2. **Disqualification.** Being registered is not enough. If the person is on the disqualification set for that election (or that question), the same circuits must reject the vote.
-3. **One counted ballot per eligible person** (or one per question, depending on the election rules), via nullifiers. A later valid ballot for the same nullifier **replaces** the previous one until cutoff (last-ballot-counts). Same-ciphertext replay is rejected.
+3. **One counted ballot per eligible person** (or one per question, depending on the election rules), via nullifiers. Each nullifier is accepted **once**. A second ballot — including a new ciphertext — is rejected (`NullifierUsed`). Double voting is impossible. Voters may change their mind privately on the ballot form **before** submit.
 4. **Hidden choice.** The option selected is not an on-chain plaintext field anyone can read from the transaction.
 5. **Public tally.** After the poll closes, anyone can check a proof that the published totals match the accepted ballots.
 6. **Public process.** Registration events, disqualification actions, poll parameters, and final tallies are attributable to known roles (jurisdiction, clerk, registrar).
@@ -194,7 +194,7 @@ npm run test:fuzz
 npm run test:invariant
 ```
 
-Tests must pass with `MockVerifier`. Invariants include: a nullifier **counts at most once** (last ballot for that nullifier wins; same-ciphertext replay still reverts); no vote outside `[startTime, cutoffTime)`; no vote if `!rollFrozen`; `sum(counts) == acceptedBallots` after tally; factory clones do not share nullifier storage. See ARCHITECTURE.
+Tests must pass with `MockVerifier`. Invariants include: a nullifier is **accepted at most once** (a second ballot, including a new ciphertext, reverts; double voting is impossible); no vote outside `[startTime, cutoffTime)`; no vote if `!rollFrozen`; `sum(counts) == acceptedBallots` after tally; factory clones do not share nullifier storage. See ARCHITECTURE.
 
 ### Node (`apps/node`)
 
@@ -321,7 +321,7 @@ Exact names follow the Solidity tree. The **behaviors** are the spec:
 ### Voting on chain
 
 - A vote is a **proof + ciphertext / commitment**, not a public `vote(optionId)`.
-- The verifier checks: registered, **not disqualified**, in the voting window, well-formed ballot. A nullifier identifies the voter: the **last** accepted `ballotHash` for that nullifier is what counts. Replay of a used or superseded hash fails.
+- The verifier checks: registered, **not disqualified**, in the voting window, well-formed ballot. A nullifier identifies the voter and is spent **once**. Replay of a used nullifier fails, even with a new `ballotHash`.
 - Multiple questions in one election (“aspects”) can be one ballot or one proof per question; the election parameters say which.
 - `submitVote` public inputs are `[root, disqRoot, nullifier, ballotHash, electionId]`. Relayer/bundler is `msg.sender`.
 
@@ -565,7 +565,7 @@ A **corrupt tally operator** must not be able to change outcomes or add votes. T
 1. Polls open. Eligible-set root is frozen (or the election allows a documented refresh).
 2. Voter builds a ZK proof: I am in the eligible set, I am not in the disqualification set, this ciphertext is a well-formed ballot for these questions. The nullifier identifies me without naming me.
 3. `BallotInbox` accepts the message (bundler is `msg.sender`). Choice is not plaintext.
-4. A second vote with the same ciphertext / `ballotHash` fails. A later valid proof with a **new** `ballotHash` for the same nullifier **supersedes** the previous ballot (last-ballot-counts). The old hash cannot be replayed. Unique-voter `acceptedBallots` does not increase.
+4. A second vote for the same nullifier fails (`NullifierUsed`), including a later proof with a **new** `ballotHash`. Double voting is impossible. `acceptedBallots` is unique accepted nullifiers.
 
 ### D. Tally and certify
 
@@ -586,7 +586,7 @@ These three fight each other. The design chooses explicitly:
 | **Privacy of choice** | Vote is encrypted / committed; proof talks about eligibility, not the option. |
 | **Public verifiability** | Anyone can check proofs, set roots, **hourly** published inbox size, and the tally. |
 | **Polling-place unlinkability** | Vote proofs and turnout ticks appear only after the hour that contained them closes. A person leaving a voting office cannot be matched to a live jurisdiction increase. |
-| **Coercion resistance** | **Shipped slice (not MACI):** last-ballot-counts inside the voting window. The same nullifier may overwrite its ballot with a new proof + `ballotHash`; superseded hashes cannot be replayed; `acceptedBallots` still counts unique voters. The Node prints a receipt of hashes only — it **cannot** prove choice (no option ids, no opening). **Still later:** MACI-style collusion-resistant messaging so a coercer who holds the voter’s secrets cannot race last-write. |
+| **Coercion resistance** | **Shipped slice (not MACI, not last-vote-counts):** one accepted nullifier. Voters may change their mind privately on the ballot form before submit; after accept they cannot recast. The Node prints a receipt of hashes only — it **cannot** prove choice (no option ids, no opening). Double voting remains impossible. **Still later:** MACI-style collusion-resistant messaging. |
 | **Disqualification transparency** | Reason **codes** are public so a jurisdiction cannot hide mass purges. Personal evidence stays off-chain. |
 
 If a jurisdiction needs a fully public roll (some do), that is a configuration: commitments can be replaced or accompanied by identified records. ZK voting still hides the **ballot**.
@@ -670,7 +670,7 @@ Install / build / restart use npm workspaces, then pm2, systemd, or Compose when
 
 Present: monorepo skeleton, Solidity interfaces and implementations under `smart-contracts/`, circuits, packages, Node app, L2, explorer and passkey docs.
 
-Still ahead of a binding election: Poseidon hasher swap, Groth16 ceremony, MACI-style collusion-resistant messaging. Last-ballot-counts and independent auditor packaging are in-tree (roadmap item 9 slice). Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
+Still ahead of a binding election: Poseidon hasher swap, Groth16 ceremony, MACI-style collusion-resistant messaging. Choice-free receipts and independent auditor packaging are in-tree (roadmap item 9 slice). Last-vote-counts / re-vote supersession is **not** shipped: a nullifier is accepted once. Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
 
 ---
 
@@ -686,11 +686,11 @@ Dates are not committed.
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof.
 7. **Multi-question ballots** — “aspects.”
 8. **L1 certification** — tally or tally hash on Ethereum mainnet.
-9. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice shipped on `test/unstable` (not full MACI):**
-   - **Last-ballot-counts:** inside `[startTime, cutoffTime)`, a new valid proof + ciphertext for the same nullifier supersedes the previous `ballotHash`. Replay of the current or a superseded hash still reverts (`NullifierUsed` / `BallotHashSuperseded`). `acceptedBallots` is unique nullifiers, so tally `sum(counts)` is unchanged as a unique-voter invariant.
-   - **Receipts cannot prove choice:** the Node receipt lists `ballotHash`, nullifier, generation, UserOp hash — never the marked options or the opening. Voters may replace a ballot while polls are open.
-   - **Auditor pack:** `tools/auditor` CLI + [`docs/AUDITOR.md`](./docs/AUDITOR.md) + `GET /api/elections/:id/artifacts` export public roots, disclosed ballot hashes, tally, and contract addresses and verify sum/invariants **without** the Node private DB.
-   - **Still later:** MACI-style encrypted message queues / key-changing so a coercer with the voter’s secrets cannot race last-write; guardian / forced-reveal if a tally operator stalls.
+9. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice shipped on `test/unstable` (not full MACI, not last-vote-counts):**
+   - **One accepted nullifier:** `submitVote` for a spent nullifier reverts `NullifierUsed`, including a new ciphertext. Double voting remains impossible. `acceptedBallots` is unique nullifiers, so tally `sum(counts)` is a unique-voter invariant. Voters may change their mind privately on the ballot form **before** submit; the inbox does not accept a second ballot.
+   - **Receipts cannot prove choice:** the Node receipt lists `ballotHash`, nullifier, UserOp hash — never the marked options or the opening. A receipt is not “I voted for X,” and it is not a second ballot.
+   - **Auditor pack:** `tools/auditor` CLI + [`docs/AUDITOR.md`](./docs/AUDITOR.md) + `GET /api/elections/:id/artifacts` export public roots, disclosed ballot hashes, tally, and contract addresses and verify sum/invariants **without** the Node private DB. Packs assert unique nullifiers and `receiptsProveChoice: false`.
+   - **Still later:** MACI-style encrypted message queues / key-changing; guardian / forced-reveal if a tally operator stalls. Last-vote-counts / re-vote supersession is **out of scope** for this slice.
 
 ---
 
@@ -704,7 +704,7 @@ Dates are not committed.
 | **Eligible set** | Registered minus disqualified, for a given election/question. |
 | **Disqualification** | An on-chain record that blocks voting despite registration. |
 | **Aspect / question** | One decision on a ballot (office, measure, article). |
-| **Nullifier** | A unique value revealed at vote time so the same person is counted once, without publishing their name. Last-ballot-counts: a later ballotHash for the same nullifier replaces the previous one. |
+| **Nullifier** | A unique value revealed at vote time so the same person is counted once, without publishing their name. Spent at most once: a second ballot for that nullifier is rejected. Double voting is impossible. |
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
 | **L2** | Republic L2 (chainId **27427**) by default; Lighter and other EVM L2s as portable venues. Execution off L1, security anchored to Ethereum. |

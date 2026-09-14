@@ -147,9 +147,11 @@ contract VoteFuzz is Deployer {
         }
     }
 
-    function testFuzz_lastBallotCounts(uint256 nullifier, bytes calldata firstBallot, bytes calldata secondBallot)
-        public
-    {
+    function testFuzz_secondBallotDifferentHashReverts(
+        uint256 nullifier,
+        bytes calldata firstBallot,
+        bytes calldata secondBallot
+    ) public {
         vm.assume(firstBallot.length > 0 && firstBallot.length <= 256);
         vm.assume(secondBallot.length > 0 && secondBallot.length <= 256);
         vm.assume(keccak256(firstBallot) != keccak256(secondBallot));
@@ -163,16 +165,11 @@ contract VoteFuzz is Deployer {
 
         uint256[] memory secondInputs = voteInputs(electionId, election, nullifier, secondBallot);
         vm.prank(relayer);
+        vm.expectRevert();
         inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
 
         assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(secondBallot));
-        assertTrue(inbox.ballotHashSuperseded(electionId, nullifier, keccak256(firstBallot)));
-        assertEq(inbox.voteGeneration(electionId, nullifier), 2);
-
-        vm.prank(relayer);
-        vm.expectRevert();
-        inbox.submitVote(electionId, a, b, c, firstInputs, firstBallot);
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(secondBallot));
+        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(firstBallot));
+        assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
 }

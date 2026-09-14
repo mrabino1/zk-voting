@@ -28,22 +28,14 @@ export function publicVoteRecord(vote) {
     ballotHash: vote.ballotHash,
     electionId: String(vote.electionId),
     relayer: vote.relayer || 'node',
-    generation: Number(vote.generation || 1),
   };
 }
 
-/** Hourly-safe view of a stored vote. Null if the first accept is still sealed. */
+/** Hourly-safe view of a stored vote. Null if the accept is still sealed. */
 export function publishedVoteSlice(vote, now, intervalSeconds) {
   if (!vote) return null;
   if (!isDisclosed(vote.acceptedAt, now, intervalSeconds)) return null;
-  const lastAt = Number(vote.lastAcceptedAt ?? vote.acceptedAt);
-  const lastPublic = isDisclosed(lastAt, now, intervalSeconds);
-  const generation = Number(vote.generation || 1);
-  return {
-    ...vote,
-    ballotHash: lastPublic ? vote.ballotHash : vote.previousBallotHash || vote.ballotHash,
-    generation: lastPublic ? generation : Math.max(1, generation - 1),
-  };
+  return vote;
 }
 
 function emptyData() {
@@ -659,74 +651,29 @@ export class Store {
     );
   }
 
-  ballotHashSuperseded(electionId, nullifier, ballotHash) {
-    const vote = this.findVote(electionId, nullifier);
-    if (!vote) return false;
-    const hash = toBytes32(ballotHash);
-    return (vote.supersededHashes || []).some((h) => toBytes32(h) === hash);
-  }
-
   /**
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
    * they wait for hourly disclosure. No passkey user id, no choice.
    *
-   * Last-ballot-counts: a later ciphertext for the same nullifier replaces the
-   * stored ballot. Unique-voter `acceptedBallots` does not increase. A replay of
-   * the current or a superseded ballotHash is rejected.
+   * One ballot per nullifier: any second submit (including a new ciphertext)
+   * is 409 NULLIFIER_USED. Double voting is impossible.
    */
   async acceptVote(vote, envelope) {
     const existing = this.findVote(vote.electionId, vote.nullifier);
+    if (existing) {
+      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+    }
     const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
       ? Math.floor(Number(vote.acceptedAt))
       : Math.floor(Date.now() / 1000);
     const ballotHash = toBytes32(vote.ballotHash);
-    if (existing) {
-      if (toBytes32(existing.ballotHash) === ballotHash) {
-        throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
-      }
-      if ((existing.supersededHashes || []).some((h) => toBytes32(h) === ballotHash)) {
-        throw new HttpError(409, 'ballot hash superseded', { code: 'BALLOT_HASH_SUPERSEDED' });
-      }
-      const previousBallotHash = existing.ballotHash;
-      existing.supersededHashes = [...(existing.supersededHashes || []), previousBallotHash];
-      existing.previousBallotHash = previousBallotHash;
-      existing.ballotHash = ballotHash;
-      existing.generation = Number(existing.generation || 1) + 1;
-      existing.lastAcceptedAt = acceptedAt;
-      existing.relayer = vote.relayer || existing.relayer || 'node';
-      if (envelope) {
-        const env = this.data.envelopes.find(
-          (e) =>
-            String(e.electionId) === String(existing.electionId) &&
-            toBytes32(e.nullifier) === existing.nullifier,
-        );
-        if (env) {
-          env.ballotHash = ballotHash;
-          env.encryptedBallot = envelope.encryptedBallot;
-        } else {
-          this.data.envelopes.push({
-            electionId: existing.electionId,
-            nullifier: existing.nullifier,
-            ballotHash,
-            encryptedBallot: envelope.encryptedBallot,
-          });
-        }
-      }
-      await this.persist();
-      return existing;
-    }
-
     const record = {
       nullifier: toBytes32(vote.nullifier),
       ballotHash,
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
-      lastAcceptedAt: acceptedAt,
-      generation: 1,
-      previousBallotHash: null,
-      supersededHashes: [],
     };
     this.data.votes.push(record);
     if (envelope) {
@@ -748,9 +695,8 @@ export class Store {
   }
 
   /**
-   * Votes whose first accept is past the disclosure horizon. If a later
-   * replacement is still inside the current hour, the publicly visible
-   * ballotHash is the last already-disclosed one (previousBallotHash).
+   * Votes whose accept is past the disclosure horizon. Each nullifier appears
+   * at most once.
    */
   listPublishedVotes(electionId, now, intervalSeconds) {
     return this.listVotes(electionId).flatMap((vote) => {

@@ -76,21 +76,17 @@ function sampleBundle() {
         ballotHash: `0x${'aa'.repeat(32)}`,
         electionId: '1',
         relayer: 'node',
-        generation: 2,
-        supersededHashes: [`0x${'99'.repeat(32)}`],
       },
       {
         nullifier: `0x${'02'.repeat(32)}`,
         ballotHash: `0x${'bb'.repeat(32)}`,
         electionId: '1',
         relayer: 'node',
-        generation: 1,
-        supersededHashes: [],
       },
     ],
     tally: { counts: [1, 1], postedAt: '2026-09-14T00:00:00.000Z' },
     coercion: {
-      policy: 'last-ballot-counts',
+      policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
     },
   };

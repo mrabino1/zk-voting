@@ -4,7 +4,7 @@
 
 Foundry package for Republic / zk-voting: an unbounded `ElectionFactory` (EIP-1167 clones), identity-commitment registries, a ZK ballot inbox, tally verifier, passkey account abstraction with a gasless paymaster, and L1 rollup settlement for Republic L2.
 
-There is no token. There are no voter fees. The leaf in the Merkle tree is an **identity commitment**, never a wallet address. `msg.sender` on `submitVote` is the relayer. Last-ballot-counts: a later valid ballotHash for the same nullifier supersedes; `acceptedBallots` still counts unique voters.
+There is no token. There are no voter fees. The leaf in the Merkle tree is an **identity commitment**, never a wallet address. `msg.sender` on `submitVote` is the relayer. A nullifier is accepted once; a second ballot reverts `NullifierUsed`. Double voting is impossible. `acceptedBallots` counts unique voters.
 
 ## Layout
 

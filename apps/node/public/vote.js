@@ -117,7 +117,7 @@ export async function renderVote(main, ctx) {
     busy: false,
     error: "",
     info: "",
-    step: prior && election.state !== 2 ? "receipt" : "ballot",
+    step: prior ? "receipt" : "ballot",
     receipt: prior || null,
     answersPreview: null,
   };
@@ -150,7 +150,7 @@ export async function renderVote(main, ctx) {
       h(
         "p",
         {
-          text: "Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
+          text: "You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       )
     );
@@ -205,30 +205,10 @@ export async function renderVote(main, ctx) {
     if (state.info) children.push(h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })));
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
-      children.push(renderReceipt(state.receipt, h, { canReplace: election.state === 2 && state.step !== "receipt" }));
+      children.push(renderReceipt(state.receipt, h));
     }
 
     if (state.step === "receipt" && state.receipt) {
-      if (election.state === 2) {
-        children.push(
-          h(
-            "p",
-            {},
-            h(
-              "button",
-              {
-                class: "btn",
-                type: "button",
-                onClick: () => {
-                  state.step = "ballot";
-                  paint();
-                },
-                text: "Cast a replacement ballot",
-              }
-            )
-          )
-        );
-      }
       children.push(h("p", {}, h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "Return to elections" })));
       fill(root, ...children);
       return;
@@ -299,11 +279,7 @@ export async function renderVote(main, ctx) {
               type: "submit",
               disabled: Boolean(state.busy || !publicRecord),
               "aria-busy": state.busy ? "true" : "false",
-              text: state.busy
-                ? "Waiting for passkey / relay…"
-                : state.receipt
-                  ? "Submit replacement ballot with passkey"
-                  : "Submit ballot with passkey",
+              text: state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
             }
           ),
           h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "Cancel" })
@@ -407,8 +383,6 @@ export async function renderVote(main, ctx) {
         nullifier: auth.nullifier,
         userOpHash: auth.userOpHash,
         accepted,
-        generation: Number(resGeneration(res, prior)),
-        superseded: Boolean(res?.superseded),
         message,
       };
       recordVoteReceipt(election.id, receipt);
@@ -429,13 +403,7 @@ export async function renderVote(main, ctx) {
   paint();
 }
 
-function resGeneration(res, prior) {
-  if (res && res.generation != null) return res.generation;
-  const prev = Number(prior?.generation || 0);
-  return prev > 0 ? prev + 1 : 1;
-}
-
-function renderReceipt(receipt, h, opts = {}) {
+function renderReceipt(receipt, h) {
   return h(
     "section",
     { class: "receipt", "aria-labelledby": "receipt-heading" },
@@ -443,26 +411,16 @@ function renderReceipt(receipt, h, opts = {}) {
     h(
       "p",
       {
-        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. A later ballot with the same nullifier supersedes this one until cutoff. Public explorer rows wait until the hour that contained this ballot closes.",
+        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
       }
     ),
     receipt.message ? h("p", { text: receipt.message }) : null,
-    opts.canReplace
-      ? h(
-          "p",
-          {
-            class: "field-hint",
-            text: "Polls are still open. If you were pressured to mark a ballot, you may submit a replacement. Only the last accepted ballotHash for your nullifier is counted.",
-          }
-        )
-      : null,
     h(
       "ul",
       { class: "meta-list" },
       h("li", {}, h("span", { class: "lbl", text: "Recorded" }), h("span", { text: receipt.at || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Ballot hash" }), h("span", { class: "hex", text: receipt.ballotHash || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Nullifier" }), h("span", { class: "hex", text: receipt.nullifier || "—" })),
-      h("li", {}, h("span", { class: "lbl", text: "Generation" }), h("span", { text: String(receipt.generation || 1) })),
       h("li", {}, h("span", { class: "lbl", text: "UserOp hash" }), h("span", { class: "hex", text: receipt.userOpHash || "—" }))
     )
   );

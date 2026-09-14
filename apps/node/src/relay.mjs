@@ -10,14 +10,6 @@ import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import { publicVoteRecord } from './store.mjs';
 
-function sameBytes32(a, b) {
-  try {
-    return toBytes32(a) === toBytes32(b);
-  } catch {
-    return String(a) === String(b);
-  }
-}
-
 function toEncryptedHex(encryptedBallot) {
   if (typeof encryptedBallot === 'string' && encryptedBallot.startsWith('0x')) {
     return encryptedBallot;
@@ -124,13 +116,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
   if (store.nullifierUsed(election.id, parsed.nullifier)) {
-    const existing = store.findVote(election.id, parsed.nullifier);
-    if (existing && sameBytes32(existing.ballotHash, parsed.ballotHash)) {
-      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
-    }
-    if (store.ballotHashSuperseded(election.id, parsed.nullifier, parsed.ballotHash)) {
-      throw new HttpError(409, 'ballot hash superseded', { code: 'BALLOT_HASH_SUPERSEDED' });
-    }
+    throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
   }
 
   if (chain.isConfigured()) {
@@ -159,19 +145,15 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       ballotHash: vote.ballotHash,
       electionId: vote.electionId,
       relayer: 'node',
-      generation: vote.generation,
-      previousBallotHash: vote.previousBallotHash,
     },
     ts,
     interval,
   );
 
-  const published = isDisclosed(vote.lastAcceptedAt ?? vote.acceptedAt, ts, interval);
+  const published = isDisclosed(vote.acceptedAt, ts, interval);
   return {
     ok: true,
     vote: publicVoteRecord(vote),
-    superseded: Number(vote.generation || 1) > 1,
-    generation: Number(vote.generation || 1),
     published,
     nextPublishAt: nextPublishAt(ts, interval),
   };

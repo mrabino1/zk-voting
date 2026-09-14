@@ -74,7 +74,8 @@ export async function exportFromNode(baseUrl, electionId) {
 
 /**
  * Reconstruct a bundle from an Ethereum JSON-RPC node using factory + electionId.
- * Uses VoteAccepted / VoteSuperseded logs. Last ballotHash per nullifier counts.
+ * Uses VoteAccepted logs. Each nullifier appears once; a second ballot is not
+ * accepted on chain.
  */
 export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock = '0x0', toBlock = 'latest' }) {
   const factoryAddr = padAddress(factory);
@@ -99,45 +100,21 @@ export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock =
   const accepted = Number(decodeUint(await ethCall(rpcUrl, inbox, calldataUint256('acceptedBallots(uint256)', eid))));
 
   const voteAcceptedTopic = topic('VoteAccepted(uint256,uint256,bytes32,address)');
-  const voteSupersededTopic = topic('VoteSuperseded(uint256,uint256,bytes32,bytes32,uint32,address)');
   const electionTopic = proof.toHex32(eid);
 
   const acceptedLogs = await rpc(rpcUrl, 'eth_getLogs', [
     { fromBlock, toBlock, address: inbox, topics: [voteAcceptedTopic, electionTopic] },
   ]);
-  let supersededLogs = [];
-  try {
-    supersededLogs = await rpc(rpcUrl, 'eth_getLogs', [
-      { fromBlock, toBlock, address: inbox, topics: [voteSupersededTopic, electionTopic] },
-    ]);
-  } catch {
-    supersededLogs = [];
-  }
 
   const current = new Map();
-  const supersededBy = new Map();
   for (const log of acceptedLogs || []) {
     const nullifier = decodeIndexedUint(log.topics[2]);
     const data = String(log.data || '').replace(/^0x/, '');
     const ballotHash = `0x${data.slice(0, 64)}`;
-    current.set(nullifier, { nullifier, ballotHash, generation: 1, supersededHashes: supersededBy.get(nullifier) || [] });
-  }
-  for (const log of supersededLogs || []) {
-    const nullifier = decodeIndexedUint(log.topics[2]);
-    const data = String(log.data || '').replace(/^0x/, '');
-    const previous = `0x${data.slice(0, 64)}`;
-    const ballotHash = `0x${data.slice(64, 128)}`;
-    const generation = Number(BigInt(`0x${data.slice(128, 192) || '1'}`));
-    const prevList = supersededBy.get(nullifier) || [];
-    prevList.push(previous);
-    supersededBy.set(nullifier, prevList);
-    current.set(nullifier, {
-      nullifier,
-      ballotHash,
-      generation: generation || 2,
-      supersededHashes: prevList.slice(),
-      previousBallotHash: previous,
-    });
+    if (current.has(nullifier)) {
+      throw new Error(`duplicate VoteAccepted for nullifier ${nullifier}: double voting is impossible on chain`);
+    }
+    current.set(nullifier, { nullifier, ballotHash });
   }
 
   const disclosedBallots = [...current.values()].map((row) => ({
@@ -145,8 +122,6 @@ export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock =
     ballotHash: row.ballotHash,
     electionId: String(electionId),
     relayer: 'chain',
-    generation: row.generation,
-    supersededHashes: row.supersededHashes,
   }));
 
   let tally = null;
@@ -188,7 +163,7 @@ export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock =
     disclosedBallots,
     tally,
     coercion: {
-      policy: 'last-ballot-counts',
+      policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
     },
   };

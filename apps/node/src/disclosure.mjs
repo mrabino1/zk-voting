@@ -7,7 +7,7 @@
 export const DEFAULT_DISCLOSURE_INTERVAL_SECONDS = 3600;
 
 /** Types whose public appearance is delayed (polling-place correlation). */
-export const DELAYED_PUBLIC_TYPES = Object.freeze(['vote', 'vote_superseded']);
+export const DELAYED_PUBLIC_TYPES = Object.freeze(['vote']);
 
 export function resolveDisclosureIntervalSeconds(raw, { isTest = false } = {}) {
   if (raw != null && raw !== '') {

@@ -18,8 +18,8 @@ function uniqueKey(value) {
 }
 
 /**
- * Verify public election artifacts: unique current nullifiers, tally sum,
- * superseded hashes are not current, and no choice fields leaked.
+ * Verify public election artifacts: unique nullifiers (one accepted ballot
+ * each), tally sum, and no choice fields leaked. Double voting is impossible.
  *
  * @param {object} bundle
  * @returns {{ ok: boolean, errors: string[], checks: Record<string, boolean>, summary: object }}
@@ -94,13 +94,15 @@ export function verifyAuditorBundle(bundle) {
       seen.set(n, row);
     }
     const current = uniqueKey(row.ballotHash);
-    const superseded = Array.isArray(row.supersededHashes) ? row.supersededHashes.map(uniqueKey) : [];
-    if (current && superseded.includes(current)) {
-      errors.push(`ballot[${i}] current ballotHash is marked superseded`);
+    if (!current && row.ballotHash == null) {
+      errors.push(`ballot[${i}] missing ballotHash`);
     }
-    const gen = Number(row.generation || 1);
-    if (!Number.isInteger(gen) || gen < 1) {
-      errors.push(`ballot[${i}] generation must be >= 1`);
+    const superseded = Array.isArray(row.supersededHashes) ? row.supersededHashes : [];
+    if (superseded.length > 0) {
+      errors.push(`ballot[${i}] supersededHashes is not allowed (one ballot per nullifier)`);
+    }
+    if (row.generation != null && Number(row.generation) !== 1) {
+      errors.push(`ballot[${i}] generation must be omitted or 1 (no re-vote)`);
     }
   }
   check('noChoiceLeak', leakedChoice === 0, 'disclosed ballots must not include choice, optionId, or userId');
@@ -143,6 +145,13 @@ export function verifyAuditorBundle(bundle) {
       bundle.coercion.receiptsProveChoice === false,
       'coercion.receiptsProveChoice must be false',
     );
+    if (bundle.coercion.policy != null) {
+      check(
+        'oneBallotPolicy',
+        bundle.coercion.policy === 'one-ballot-per-nullifier',
+        'coercion.policy must be one-ballot-per-nullifier (last-vote-counts is not accepted)',
+      );
+    }
   } else {
     checks.receiptsHideChoice = true;
   }
@@ -155,7 +164,6 @@ export function verifyAuditorBundle(bundle) {
       electionId: bundle.electionId,
       uniqueNullifiers: seen.size,
       acceptedBallots: accepted,
-      supersededBallots: ballots.reduce((n, row) => n + (Array.isArray(row.supersededHashes) ? row.supersededHashes.length : 0), 0),
       tallied: Boolean(bundle.tally && Array.isArray(bundle.tally.counts)),
     },
   };

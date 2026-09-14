@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Last-ballot-counts + public auditor pack (no Node private DB).
+// One accepted nullifier + choice-free receipts + public auditor pack.
 
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -65,7 +65,7 @@ function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
-describe('last-ballot-counts and auditor pack', () => {
+describe('one-ballot-per-nullifier and auditor pack', () => {
   before(async () => {
     tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-coercion-'));
     const created = await createApp({
@@ -99,7 +99,7 @@ describe('last-ballot-counts and auditor pack', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('revote with a new ciphertext supersedes; same ciphertext still 409', async () => {
+  test('second ballot is rejected even with a new ciphertext; receipts hide choice', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -137,9 +137,10 @@ describe('last-ballot-counts and auditor pack', () => {
       },
     });
     assert.equal(first.status, 201, first.json?.error);
-    assert.equal(first.json.generation, 1);
-    assert.equal(first.json.superseded, false);
+    assert.equal(first.json.generation, undefined);
+    assert.equal(first.json.superseded, undefined);
     assert.equal(first.json.vote.choice, undefined);
+    assert.equal(first.json.vote.generation, undefined);
 
     const replay = await api('POST', `/api/elections/${id}/vote`, {
       body: {
@@ -151,29 +152,29 @@ describe('last-ballot-counts and auditor pack', () => {
     assert.equal(replay.status, 409);
     assert.equal(replay.json.code, 'NULLIFIER_USED');
 
-    const revote = await api('POST', `/api/elections/${id}/vote`, {
+    const changedMind = await api('POST', `/api/elections/${id}/vote`, {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '0xabc', electionId: id },
         encryptedBallot: '0x02',
       },
     });
-    assert.equal(revote.status, 201, revote.json?.error);
-    assert.equal(revote.json.generation, 2);
-    assert.equal(revote.json.superseded, true);
-    assert.equal(revote.json.vote.choice, undefined);
+    assert.equal(changedMind.status, 409, 'a new ciphertext must not be a second ballot');
+    assert.equal(changedMind.json.code, 'NULLIFIER_USED');
 
     const election = store.requireElection(id);
-    assert.equal(election.acceptedBallots, 1, 'revote must not mint a second voter');
+    assert.equal(election.acceptedBallots, 1, 'double voting must remain impossible');
     const envelopes = store.listEnvelopes(id);
     assert.equal(envelopes.length, 1);
     assert.equal(envelopes[0].choice, undefined);
+    assert.equal(envelopes[0].encryptedBallot, '0x01');
 
     const ballots = await api('GET', `/api/elections/${id}/ballots`);
     assert.equal(ballots.json.acceptedBallots, 1);
     assert.equal(ballots.json.ballots.length, 1);
-    assert.equal(ballots.json.ballots[0].generation, 2);
+    assert.equal(ballots.json.ballots[0].generation, undefined);
     assert.equal(ballots.json.ballots[0].choice, undefined);
+    assert.equal(ballots.json.ballots[0].supersededHashes, undefined);
 
     election.cutoffTime = nowSec() - 1;
     await store.persist();
@@ -189,7 +190,9 @@ describe('last-ballot-counts and auditor pack', () => {
     assert.equal(artifacts.json.nfp, true);
     assert.equal(artifacts.json.acceptedBallots, 1);
     assert.equal(artifacts.json.coercion.receiptsProveChoice, false);
-    assert.equal(artifacts.json.disclosedBallots[0].generation, 2);
+    assert.equal(artifacts.json.coercion.policy, 'one-ballot-per-nullifier');
+    assert.equal(artifacts.json.disclosedBallots[0].generation, undefined);
+    assert.equal(artifacts.json.disclosedBallots[0].supersededHashes, undefined);
     const verified = verifyAuditorBundle(artifacts.json);
     assert.equal(verified.ok, true, verified.errors.join('; '));
   });
@@ -197,7 +200,7 @@ describe('last-ballot-counts and auditor pack', () => {
   test('GET /api/config publishes coercion policy and addresses, not keys', async () => {
     const { json } = await api('GET', '/api/config');
     assert.equal(json.coercion.receiptsProveChoice, false);
-    assert.equal(json.coercion.policy, 'last-ballot-counts');
+    assert.equal(json.coercion.policy, 'one-ballot-per-nullifier');
     assert.equal(json.addresses.factory, '0x1111111111111111111111111111111111111111');
     assert.equal(json.relayerPrivateKey, undefined);
   });

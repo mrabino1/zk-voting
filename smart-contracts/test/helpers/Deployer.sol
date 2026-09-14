@@ -41,14 +41,6 @@ contract Deployer is Test {
     );
     event DisqualificationRevoked(uint256 indexed electionId, uint256 indexed identityCommitment, bytes32 evidenceHash);
     event VoteAccepted(uint256 indexed electionId, uint256 indexed nullifier, bytes32 ballotHash, address relayer);
-    event VoteSuperseded(
-        uint256 indexed electionId,
-        uint256 indexed nullifier,
-        bytes32 previousBallotHash,
-        bytes32 ballotHash,
-        uint32 generation,
-        address relayer
-    );
 
     KeccakHasher internal hasher;
     MockVerifier internal verifier;

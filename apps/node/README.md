@@ -25,15 +25,16 @@ Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
 `apps/node/data/` is the demo / operator cache (gitignored). Native addons such
 as `better-sqlite3` are **not** used.
 
-Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt, generation }`.
-Last-ballot-counts: a later ciphertext for the same nullifier replaces the stored
-ballot; unique-voter `acceptedBallots` does not increase. The Node never writes a
+Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
+One ballot per nullifier: a later ciphertext for the same nullifier is rejected
+(`NULLIFIER_USED`). Double voting is impossible. The Node never writes a
 passkey user id onto the same record as an encrypted ballot or a choice. The UI
-must not print “I voted for X” (receipts are hashes only). Public dashboards
-and the explorer show vote proofs only after the hour that contained the vote
-has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
-Independent auditors use `GET /api/elections/:id/artifacts` or `tools/auditor`
-(see `/docs/AUDITOR.md`) — never `apps/node/data/`.
+must not print “I voted for X” (receipts are hashes only). Voters may change
+their mind on the ballot form before submit; after accept they cannot recast.
+Public dashboards and the explorer show vote proofs only after the hour that
+contained the vote has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0`
+in tests). Independent auditors use `GET /api/elections/:id/artifacts` or
+`tools/auditor` (see `/docs/AUDITOR.md`) — never `apps/node/data/`.
 
 ---
 

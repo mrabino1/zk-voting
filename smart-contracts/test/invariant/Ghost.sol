@@ -37,7 +37,6 @@ contract Ghost {
     mapping(uint256 => mapping(uint256 => bool)) public registeredCommitment;
 
     uint256 public duplicateNullifiers;
-    uint256 public supersessions;
     uint256 public votesOutsideWindow;
     uint256 public votesWhileUnfrozen;
 
@@ -87,9 +86,9 @@ contract Ghost {
 
     function _recordVote(uint256 electionId, uint256 nullifier, bool frozen) internal {
         if (nullifierUsed[electionId][nullifier]) {
-            // Last-ballot-counts: a later valid ballot for the same nullifier
-            // replaces the previous one. Unique-voter count does not grow.
-            supersessions += 1;
+            // Chain must reject a second submit. If a call still succeeds,
+            // the unique-spend invariant fails.
+            duplicateNullifiers += 1;
         } else {
             nullifierUsed[electionId][nullifier] = true;
             _nullifiersOf[electionId].push(nullifier);
