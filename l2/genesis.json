@@ -1,0 +1,13 @@
+{
+  "comment": "NOT FOR PROFIT — civic public good, not a commercial sequencer. Republic L2 genesis. Sequencer and paymaster addresses are placeholders until a jurisdiction issues operator keys.",
+  "nfp": "NOT FOR PROFIT",
+  "name": "Republic L2",
+  "chainId": 27427,
+  "blockTime": 2,
+  "period": 2,
+  "sequencers": 1,
+  "sequencer": "0x1111111111111111111111111111111111111111",
+  "paymaster": "0x2222222222222222222222222222222222222222",
+  "bundler": "0x1111111111111111111111111111111111111111",
+  "genesisStateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000"
+}
