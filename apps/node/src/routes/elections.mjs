@@ -3,9 +3,10 @@
 import { keccak256, stringToHex } from 'viem';
 import { Router } from 'express';
 
+import { questionsFromBody, parseTallyCounts } from '../ballot.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
-import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import { presentElection, presentResults, electionState, publishDue } from '../electionState.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { emptyTree } from '../merkle.mjs';
@@ -28,32 +29,6 @@ function stableStringify(value) {
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
   }
   return JSON.stringify(value);
-}
-
-function normalizeQuestions(input) {
-  if (!input) return [];
-  if (!Array.isArray(input)) throw new HttpError(400, 'questions must be an array');
-  return input.map((q, i) => ({
-    id: String(q.id || `q${i + 1}`),
-    type: String(q.type || 'YES_NO'),
-    prompt: String(q.prompt || q.title || `Question ${i + 1}`),
-    options: Array.isArray(q.options)
-      ? q.options.map((o, j) => ({
-          id: String(o.id || `o${j + 1}`),
-          label: String(o.label || o.name || String(o)),
-        }))
-      : q.type === 'YES_NO' || !q.type
-        ? [
-            { id: 'yes', label: 'Yes' },
-            { id: 'no', label: 'No' },
-          ]
-        : [],
-  }));
-}
-
-function expectedCountLength(questions) {
-  if (!questions.length) return 0;
-  return questions.reduce((n, q) => n + Math.max(q.options?.length || 0, 1), 0);
 }
 
 async function revokeHandler(req, store, explorer) {
@@ -114,7 +89,7 @@ export function electionsRouter(deps) {
       if (!Number.isInteger(maxParticipants) || maxParticipants < 0) {
         throw new HttpError(400, 'maxParticipants must be >= 0 (0 = unlimited)');
       }
-      const questions = normalizeQuestions(body.questions);
+      const questions = questionsFromBody(body);
       const ballotSpecHash =
         body.ballotSpecHash || keccak256(stringToHex(stableStringify({ title, questions })));
       const jurisdictionId = String(body.jurisdictionId || 'demo');
@@ -166,6 +141,15 @@ export function electionsRouter(deps) {
         dto.me = store.voterStatus(election.id, req.user.id);
       }
       res.json(dto);
+    }),
+  );
+
+  router.get(
+    '/:id/results',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentResults(election, deps, { user: req.user }));
     }),
   );
 
@@ -377,26 +361,7 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const counts = req.body?.counts;
-      if (!Array.isArray(counts) || counts.length === 0) {
-        throw new HttpError(400, 'counts[] required');
-      }
-      const nums = counts.map((n) => Number(n));
-      if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
-        throw new HttpError(400, 'counts must be non-negative integers');
-      }
-      const sum = nums.reduce((a, b) => a + b, 0);
-      if (sum !== election.acceptedBallots) {
-        throw new HttpError(400, 'sum(counts) must equal acceptedBallots', {
-          code: 'TALLY_MISMATCH',
-          sum,
-          acceptedBallots: election.acceptedBallots,
-        });
-      }
-      const expected = expectedCountLength(election.questions);
-      if (expected && nums.length !== expected) {
-        throw new HttpError(400, `counts length must be ${expected}`, { expected });
-      }
+      const nums = parseTallyCounts(req.body || {}, election.questions || [], election.acceptedBallots);
       const tallied = await store.setTally(election.id, nums);
       await explorer.append('tally', {
         electionId: String(tallied.id),

@@ -9,6 +9,7 @@ import { toBytes32 } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import { publicVoteRecord } from './store.mjs';
+import { answersFromVoteBody, assertBallotAnswers } from './ballot.mjs';
 
 function toEncryptedHex(encryptedBallot) {
   if (typeof encryptedBallot === 'string' && encryptedBallot.startsWith('0x')) {
@@ -112,6 +113,9 @@ export function assertVoteWindow(election, now = Math.floor(Date.now() / 1000)) 
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
   const election = store.requireElection(electionId);
   const parsed = parseVoteBody(body, election.id);
+  const questions = election.questions || [];
+  const answers = answersFromVoteBody(body, parsed.encryptedBallot);
+  if (answers) assertBallotAnswers(questions, answers);
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);

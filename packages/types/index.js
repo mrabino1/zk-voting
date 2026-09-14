@@ -93,6 +93,19 @@ const REASON_CODE_LABELS = Object.freeze({
  */
 
 /**
+ * One decision on a ballot (office, measure, article). Node authoring +
+ * plurality tally. `RANKED` is stored for a later IRV path.
+ *
+ * @typedef {Object} BallotQuestion
+ * @property {string} id
+ * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"MEASURE"|"ARTICLE"|"RANKED"} type
+ * @property {string} prompt
+ * @property {string} [description]
+ * @property {number} maxSelections
+ * @property {{id: string, label: string}[]} options
+ */
+
+/**
  * How this person proved who they are. A person may hold every type.
  *
  * @typedef {Object} AuthMethod

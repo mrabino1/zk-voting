@@ -135,6 +135,234 @@
     $("e-cutoff").value = iso(cutoff);
   }
 
+  const ASPECT_TYPES = [
+    ["YES_NO", "Yes / No"],
+    ["SINGLE_CHOICE", "Single choice"],
+    ["MULTI_CHOICE", "Multi choice"],
+    ["MEASURE", "Measure"],
+    ["ARTICLE", "Article"],
+    ["RANKED", "Ranked choice (stored; IRV not tallied)"],
+  ];
+
+  const DEFAULT_ASPECTS = [
+    {
+      id: "q-measure",
+      type: "YES_NO",
+      prompt: "Shall the measure be adopted?",
+      description: "",
+      maxSelections: 1,
+      options: [
+        { id: "yes", label: "Yes" },
+        { id: "no", label: "No" },
+      ],
+    },
+    {
+      id: "q-office",
+      type: "SINGLE_CHOICE",
+      prompt: "City Council, at-large — choose one.",
+      description: "",
+      maxSelections: 1,
+      options: [
+        { id: "cand-a", label: "Alex Rivera" },
+        { id: "cand-b", label: "Morgan Chen" },
+        { id: "cand-c", label: "Sam Okonkwo" },
+      ],
+    },
+  ];
+
+  let aspectsSyncing = false;
+
+  function slugOpt(value, fallback) {
+    const s = String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return s || fallback;
+  }
+
+  function readAspectsFromEditor() {
+    const cards = [...document.querySelectorAll("#questions-editor .aspect-card")];
+    return cards.map((card, i) => {
+      const type = card.querySelector(".aspect-type").value;
+      const prompt = card.querySelector(".aspect-prompt").value.trim();
+      const description = card.querySelector(".aspect-desc").value.trim();
+      const maxSelections = Number(card.querySelector(".aspect-maxsel").value || 1);
+      const options = [...card.querySelectorAll(".aspect-option")].map((row, j) => {
+        const label = row.querySelector(".opt-label").value.trim() || "Option " + (j + 1);
+        const id = slugOpt(row.querySelector(".opt-id").value, slugOpt(label, "o" + (j + 1)));
+        return { id, label };
+      });
+      return {
+        id: slugOpt(card.querySelector(".aspect-id").value, "q" + (i + 1)),
+        type,
+        prompt,
+        description,
+        maxSelections: type === "MULTI_CHOICE" ? maxSelections : type === "RANKED" ? options.length : 1,
+        options,
+      };
+    });
+  }
+
+  function writeAspectsJson(questions) {
+    aspectsSyncing = true;
+    $("e-questions").value = JSON.stringify(questions, null, 2);
+    aspectsSyncing = false;
+  }
+
+  function optionRowHtml(opt, index) {
+    const id = opt && opt.id != null ? opt.id : "o" + (index + 1);
+    const label = opt && opt.label != null ? opt.label : typeof opt === "string" ? opt : "";
+    return `<li class="aspect-option">
+      <input class="opt-id" spellcheck="false" placeholder="id" value="${esc(id)}" aria-label="Option id" />
+      <input class="opt-label" placeholder="Label" value="${esc(label)}" aria-label="Option label" />
+      <button type="button" class="btn btn-secondary btn-remove-opt">Remove</button>
+    </li>`;
+  }
+
+  function aspectCardHtml(q, index) {
+    const type = q.type || "YES_NO";
+    const options = Array.isArray(q.options) ? q.options : [];
+    const typeOpts = ASPECT_TYPES.map(
+      ([value, label]) => `<option value="${esc(value)}"${value === type ? " selected" : ""}>${esc(label)}</option>`
+    ).join("");
+    const showMax = type === "MULTI_CHOICE" ? "" : " hidden";
+    return `<article class="aspect-card" data-index="${index}">
+      <header>
+        <h3>Question ${index + 1}</h3>
+        <button type="button" class="btn btn-secondary btn-remove-aspect">Remove</button>
+      </header>
+      <div class="grid-2">
+        <div class="field">
+          <label class="field-label">Type</label>
+          <select class="aspect-type">${typeOpts}</select>
+        </div>
+        <div class="field">
+          <label class="field-label">Id</label>
+          <input class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
+        </div>
+      </div>
+      <div class="field aspect-max${showMax}">
+        <label class="field-label">Max selections</label>
+        <input class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
+      </div>
+      <div class="field">
+        <label class="field-label">Prompt <span class="req">*</span></label>
+        <input class="aspect-prompt" required maxlength="400" value="${esc(q.prompt || "")}" />
+      </div>
+      <div class="field">
+        <label class="field-label">Description</label>
+        <input class="aspect-desc" maxlength="500" value="${esc(q.description || "")}" />
+      </div>
+      <div class="field">
+        <span class="field-label">Options</span>
+        <ul class="aspect-options">${options.map((o, j) => optionRowHtml(o, j)).join("")}</ul>
+        <button type="button" class="btn btn-secondary btn-add-opt">Add option</button>
+      </div>
+      ${
+        type === "RANKED"
+          ? '<p class="field-hint">Ranked-choice rankings can be sealed in the envelope. This Node does not compute IRV.</p>'
+          : ""
+      }
+    </article>`;
+  }
+
+  function renderAspectEditor(questions) {
+    const list = Array.isArray(questions) && questions.length ? questions : DEFAULT_ASPECTS;
+    $("questions-editor").innerHTML = list.map((q, i) => aspectCardHtml(q, i)).join("");
+    writeAspectsJson(list);
+  }
+
+  function parseAspectsJson() {
+    const parsed = JSON.parse($("e-questions").value);
+    if (!Array.isArray(parsed)) throw new Error("Questions must be a JSON array.");
+    return parsed.map((q, i) => {
+      const options = Array.isArray(q.options)
+        ? q.options.map((o, j) =>
+            typeof o === "string" || typeof o === "number"
+              ? { id: slugOpt(o, "o" + (j + 1)), label: String(o) }
+              : { id: String(o.id || "o" + (j + 1)), label: String(o.label || o.name || o.id || "Option") }
+          )
+        : [
+            { id: "yes", label: "Yes" },
+            { id: "no", label: "No" },
+          ];
+      return {
+        id: q.id || "q" + (i + 1),
+        type: String(q.type || "YES_NO").toUpperCase(),
+        prompt: q.prompt || q.title || "",
+        description: q.description || "",
+        maxSelections: q.maxSelections || 1,
+        options,
+      };
+    });
+  }
+
+  function syncEditorFromFields() {
+    if (aspectsSyncing) return;
+    writeAspectsJson(readAspectsFromEditor());
+    document.querySelectorAll("#questions-editor .aspect-card").forEach((card, i) => {
+      const heading = card.querySelector("h3");
+      if (heading) heading.textContent = "Question " + (i + 1);
+      const type = card.querySelector(".aspect-type").value;
+      const maxWrap = card.querySelector(".aspect-max");
+      if (maxWrap) maxWrap.hidden = type !== "MULTI_CHOICE";
+    });
+  }
+
+  $("questions-editor").addEventListener("click", (event) => {
+    const addOpt = event.target.closest(".btn-add-opt");
+    if (addOpt) {
+      const ul = addOpt.parentElement.querySelector(".aspect-options");
+      ul.insertAdjacentHTML("beforeend", optionRowHtml({ id: "", label: "" }, ul.children.length));
+      syncEditorFromFields();
+      return;
+    }
+    const rmOpt = event.target.closest(".btn-remove-opt");
+    if (rmOpt) {
+      const ul = rmOpt.closest(".aspect-options");
+      if (ul.querySelectorAll(".aspect-option").length <= 2) return;
+      rmOpt.closest(".aspect-option").remove();
+      syncEditorFromFields();
+      return;
+    }
+    const rmQ = event.target.closest(".btn-remove-aspect");
+    if (rmQ) {
+      const cards = document.querySelectorAll("#questions-editor .aspect-card");
+      if (cards.length <= 1) return;
+      rmQ.closest(".aspect-card").remove();
+      syncEditorFromFields();
+    }
+  });
+
+  $("questions-editor").addEventListener("input", syncEditorFromFields);
+  $("questions-editor").addEventListener("change", syncEditorFromFields);
+
+  $("btn-add-question").addEventListener("click", () => {
+    const questions = readAspectsFromEditor();
+    questions.push({
+      id: "q" + (questions.length + 1),
+      type: "YES_NO",
+      prompt: "",
+      description: "",
+      maxSelections: 1,
+      options: [
+        { id: "yes", label: "Yes" },
+        { id: "no", label: "No" },
+      ],
+    });
+    renderAspectEditor(questions);
+  });
+
+  $("e-questions").addEventListener("change", () => {
+    if (aspectsSyncing) return;
+    try {
+      renderAspectEditor(parseAspectsJson());
+    } catch (err) {
+      flash($("flash-election"), "err", err.message || "Questions JSON is invalid.");
+    }
+  });
+
   function fillSelect(select, rows, getValue, getLabel) {
     const current = select.value;
     if (!rows.length) {
@@ -160,7 +388,9 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
-    return title + " · #" + electionIdOf(row) + (state ? " · " + state : "");
+    const nq = pick(row, ["questionCount"]) || (Array.isArray(row.questions) ? row.questions.length : "");
+    const qbit = nq ? " · " + nq + " q" : "";
+    return title + " · #" + electionIdOf(row) + (state ? " · " + state : "") + qbit;
   }
 
   function markRole(el, ok) {
@@ -309,10 +539,15 @@
     event.preventDefault();
     let questions;
     try {
-      questions = JSON.parse($("e-questions").value);
-      if (!Array.isArray(questions)) throw new Error("Questions must be a JSON array.");
+      questions = readAspectsFromEditor();
+      if (!questions.length) throw new Error("Add at least one question.");
+      if (questions.some((q) => !q.prompt)) throw new Error("Every question needs a prompt.");
+      if (questions.some((q) => !q.options || q.options.length < 2)) {
+        throw new Error("Every question needs at least two options.");
+      }
+      writeAspectsJson(questions);
     } catch (err) {
-      flash($("flash-election"), "err", err.message || "Questions JSON is invalid.");
+      flash($("flash-election"), "err", err.message || "Questions are invalid.");
       return;
     }
     let startTime;
@@ -494,9 +729,15 @@
   $("form-tally").addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = $("t-election").value;
+    const aspectInputs = document.querySelectorAll("#tally-aspects .tally-count");
     let counts;
     try {
-      counts = JSON.parse($("t-counts").value);
+      if (aspectInputs.length) {
+        counts = [...aspectInputs].map((el) => Number(el.value || 0));
+        $("t-counts").value = JSON.stringify(counts);
+      } else {
+        counts = JSON.parse($("t-counts").value);
+      }
       if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
         throw new Error("Counts must be a JSON array of non-negative integers.");
       }
@@ -516,14 +757,95 @@
     }
     try {
       await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
-      flash($("flash-tally"), "ok", "Tally posted. Sum(counts) must equal accepted ballots.");
+      flash($("flash-tally"), "ok", "Tally posted. Each plurality question is counted on its own options.");
       wireExplorerLinks(id);
     } catch (err) {
       flash($("flash-tally"), "err", errText(err));
     }
   });
 
-  $("t-election").addEventListener("change", () => wireExplorerLinks($("t-election").value));
+  function isRankedType(type) {
+    const t = String(type || "").toUpperCase();
+    return t === "RANKED" || t === "RANKED_CHOICE" || t === "IRV";
+  }
+
+  function renderTallyAspects(election) {
+    const host = $("tally-aspects");
+    const hint = $("t-counts-hint");
+    if (!host) return;
+    if (!election) {
+      host.innerHTML = "";
+      if (hint) {
+        hint.textContent =
+          "Concatenated plurality options in ballot order, or pick an election to fill per-question fields.";
+      }
+      return;
+    }
+    const questions = election.questions || election.aspects || [];
+    const plurality = questions.filter((q) => !isRankedType(q.type));
+    const expected = plurality.reduce((n, q) => n + (q.options || []).length, 0);
+    if (hint) {
+      hint.textContent =
+        questions.length +
+        " aspect" +
+        (questions.length === 1 ? "" : "s") +
+        "; plurality vector length " +
+        expected +
+        ". Each question is counted separately (undervotes allowed). Ranked-choice is skipped.";
+    }
+    if (!questions.length) {
+      host.innerHTML = '<p class="field-hint">This election has no published questions.</p>';
+      return;
+    }
+    host.innerHTML = questions
+      .map((q, i) => {
+        if (isRankedType(q.type)) {
+          return `<article class="aspect-card">
+            <h3>Question ${i + 1}: ${esc(q.prompt || q.id)}</h3>
+            <p class="field-hint">Ranked-choice / IRV is not tallied on this Node path.</p>
+          </article>`;
+        }
+        const opts = (q.options || [])
+          .map(
+            (o) => `<div class="tally-opt">
+              <label class="field-label" for="t-count-${esc(q.id)}-${esc(o.id)}">${esc(o.label || o.id)}</label>
+              <input id="t-count-${esc(q.id)}-${esc(o.id)}" class="tally-count" type="number" min="0" step="1" value="0" data-question="${esc(q.id)}" />
+            </div>`
+          )
+          .join("");
+        return `<article class="aspect-card">
+          <h3>Question ${i + 1}: ${esc(q.prompt || q.id)}</h3>
+          <p class="field-hint">${esc(q.type || "SINGLE_CHOICE")} · plurality</p>
+          <div class="tally-opts">${opts}</div>
+        </article>`;
+      })
+      .join("");
+    $("t-counts").value = JSON.stringify(Array(expected).fill(0));
+  }
+
+  async function loadTallyElection(id) {
+    if (!id) {
+      renderTallyAspects(null);
+      return;
+    }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(id));
+      renderTallyAspects(data.election || data);
+    } catch (err) {
+      $("tally-aspects").innerHTML = `<p class="field-hint">${esc(errText(err))}</p>`;
+    }
+  }
+
+  $("tally-aspects").addEventListener("input", () => {
+    const inputs = [...document.querySelectorAll("#tally-aspects .tally-count")];
+    if (inputs.length) $("t-counts").value = JSON.stringify(inputs.map((el) => Number(el.value || 0)));
+  });
+
+  $("t-election").addEventListener("change", () => {
+    const id = $("t-election").value;
+    wireExplorerLinks(id);
+    loadTallyElection(id);
+  });
 
   $("btn-refresh-notices").addEventListener("click", async () => {
     await loadMe();
@@ -538,8 +860,10 @@
   });
 
   defaultTimes();
+  renderAspectEditor(DEFAULT_ASPECTS);
   (async function init() {
     await loadMe();
     await Promise.all([loadJurisdictions(), loadElections(), loadNotifications(), loadReasonCodes()]);
+    if ($("t-election").value) await loadTallyElection($("t-election").value);
   })();
 })();

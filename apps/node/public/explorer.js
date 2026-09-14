@@ -569,7 +569,27 @@
     }
     const txs = [...byHash.values()];
     const title = pick(election, ["title", "name"]) || "Election " + id;
-    const tally = pick(election, ["tally.counts", "tally", "counts"]);
+    const tally = pick(election, ["tally"]);
+    const aspects = asList(election, ["aspects", "questions"]);
+    const tallyRows = Array.isArray(tally && tally.questions) && tally.questions.length
+      ? tally.questions
+          .map((q) => {
+            if (q.tallied === false) {
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — not tallied (${esc(q.note || "IRV")})</li>`;
+            }
+            const opts = (q.options || [])
+              .map((o) => `${esc(o.label || o.id)}: ${esc(o.count)}`)
+              .join("; ");
+            const under = q.undervotes != null ? ` · undervotes ${esc(q.undervotes)}` : "";
+            return `<li><strong>${esc(q.prompt || q.id)}</strong> — ${opts}${under}</li>`;
+          })
+          .join("")
+      : "";
+    const aspectList = aspects.length
+      ? `<ol class="aspect-preview">${aspects
+          .map((q) => `<li>${esc(q.type || "")} — ${esc(q.prompt || q.id)}</li>`)
+          .join("")}</ol>`
+      : "";
     $("view").innerHTML = `<section class="panel">
       <header>
         <h2>${esc(title)}</h2>
@@ -579,9 +599,15 @@
         <dt>Election id</dt><dd>${esc(id)}</dd>
         <dt>State</dt><dd>${esc(pick(election, ["stateName", "state", "status"]) ?? "—")}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
-        <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
+        <dt>Questions</dt><dd>${esc(pick(election, ["questionCount"]) ?? aspects.length ?? "—")}</dd>
+        <dt>Public tally</dt><dd>${
+          tallyRows
+            ? `<ul class="tally-bars">${tallyRows}</ul>`
+            : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted")
+        }</dd>
       </dl>
-      <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed.</p>
+      ${aspectList}
+      <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. Plurality totals are labeled per question.</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>

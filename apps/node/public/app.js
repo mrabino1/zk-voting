@@ -7,6 +7,7 @@ import { startRouter, navigate } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { labeledTally, questionsOf, typeLabel } from "./ballot.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -386,7 +387,6 @@ export async function loadElection(id) {
     const raw = data?.election || data;
     const normalized = normalizeElection(raw);
     if (normalized?.id) {
-      if (!normalized.questions?.length) normalized.questions = SAMPLE_QUESTIONS;
       return { election: normalized, source: "api" };
     }
   } catch {
@@ -506,6 +506,7 @@ function renderHome(main, route, bundle) {
                 )
               ),
               election.description ? h("p", { text: election.description }) : null,
+              aspectPreview(election, h),
               h(
                 "div",
                 { class: "cluster" },
@@ -518,6 +519,9 @@ function renderHome(main, route, bundle) {
                       : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
                 canRegister
                   ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+                  : null,
+                election.state >= 3
+                  ? h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
                   : null
               )
             );
@@ -631,6 +635,18 @@ function renderHome(main, route, bundle) {
   );
 }
 
+function aspectPreview(election, h) {
+  const questions = questionsOf(election);
+  if (!questions.length) return null;
+  return h(
+    "ol",
+    { class: "aspect-preview" },
+    ...questions.slice(0, 4).map((q) =>
+      h("li", {}, h("span", { class: "aspect-type", text: typeLabel(q.type) }), " ", h("span", { text: q.prompt }))
+    )
+  );
+}
+
 function renderDeviceStatus(walletRecord, me, store) {
   const nReg = Object.keys(store.registrations).length;
   const nVote = Object.keys(store.votes).length;
@@ -686,6 +702,114 @@ function renderNotFound(main, route) {
   );
 }
 
+async function renderResults(main, ctx) {
+  const { h, loadElection, formatTime, electionStateInfo, electionId } = ctx;
+  const { election, source } = await loadElection(electionId);
+  if (!election) {
+    renderNotFound(main, { path: `/elections/${electionId}/results` });
+    return;
+  }
+  const st = electionStateInfo(election.state);
+  const questions = questionsOf(election);
+  const tally = labeledTally(election);
+  const rows = [];
+
+  if (!questions.length) {
+    rows.push(h("div", { class: "notice notice-warn" }, h("p", { text: "No questions are published for this election." })));
+  } else if (!tally) {
+    rows.push(
+      h("div", { class: "notice notice-warn", role: "status" }, h("p", { text: "A certified tally has not been posted yet. Aspects on this ballot:" }))
+    );
+    for (const [i, q] of questions.entries()) {
+      rows.push(resultQuestionCard(h, q, i, questions.length, null, election));
+    }
+  } else {
+    const labeled = tally.questions?.length ? tally.questions : [];
+    if (labeled.length) {
+      for (const [i, q] of labeled.entries()) {
+        rows.push(resultQuestionCard(h, q, i, labeled.length, q, election));
+      }
+    } else {
+      rows.push(h("p", { text: `Flat counts: ${JSON.stringify(tally.counts || [])}` }));
+    }
+  }
+
+  main.replaceChildren(
+    h(
+      "div",
+      { class: "page-head" },
+      h("p", { class: "kicker", text: election.jurisdiction }),
+      h("h1", { text: "Certified results" }),
+      h("p", { class: "lede", text: election.title }),
+      h(
+        "p",
+        { class: "cluster" },
+        h("span", { class: `status-pill ${st.className}`, text: st.label }),
+        source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
+      ),
+      h(
+        "ul",
+        { class: "meta-list" },
+        h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        h("li", {}, h("span", { class: "lbl", text: "Public accepted ballots" }), h("span", { text: String(election.acceptedBallots ?? "—") })),
+        h("li", {}, h("span", { class: "lbl", text: "Questions" }), h("span", { text: String(questions.length || election.questionCount || "—") })),
+        tally?.postedAt ? h("li", {}, h("span", { class: "lbl", text: "Tally posted" }), h("span", { text: formatTime(tally.postedAt) })) : null
+      )
+    ),
+    ...rows,
+    h(
+      "p",
+      { class: "cluster" },
+      h("a", { class: "btn", href: "/", "data-nav": "", text: "Elections" }),
+      h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Ballot" }),
+      h("a", { class: "btn btn-secondary", href: `/explorer#/election/${encodeURIComponent(election.id)}`, text: "Explorer" })
+    )
+  );
+}
+
+function resultQuestionCard(h, question, index, total, tallied, election) {
+  const max = tallied?.options?.length
+    ? Math.max(Number(election?.acceptedBallots) || 0, ...tallied.options.map((o) => Number(o.count) || 0), 1)
+    : 1;
+  return h(
+    "section",
+    { class: "question result-aspect", "aria-labelledby": `result-${question.id}` },
+    h(
+      "h2",
+      { id: `result-${question.id}` },
+      h("span", { class: "aspect-kicker", text: `Question ${index + 1} of ${total} · ${typeLabel(question.type)}` }),
+      h("span", { class: "aspect-prompt", text: question.prompt })
+    ),
+    question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+    tallied && tallied.tallied === false
+      ? h("p", { class: "field-hint", text: tallied.note || "Ranked-choice / IRV is not computed on this Node path." })
+      : null,
+    tallied && tallied.tallied !== false
+      ? h(
+          "ul",
+          { class: "tally-bars" },
+          ...tallied.options.map((opt) => {
+            const count = Number(opt.count) || 0;
+            const pct = max ? Math.round((count / max) * 100) : 0;
+            return h(
+              "li",
+              {},
+              h("div", { class: "tally-label" }, h("span", { text: opt.label }), h("strong", { text: String(count) })),
+              h("div", { class: "tally-track", "aria-hidden": "true" }, h("div", { class: "tally-fill", style: { width: `${pct}%` } }))
+            );
+          }),
+          tallied.undervotes != null
+            ? h("li", { class: "tally-under" }, h("span", { text: "Undervotes" }), h("strong", { text: String(tallied.undervotes) }))
+            : null
+        )
+      : h(
+          "ul",
+          { class: "choice-list" },
+          ...(question.options || []).map((opt) => h("li", { class: "choice", text: opt.label || opt.id }))
+        )
+  );
+}
+
 async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
@@ -712,6 +836,9 @@ async function renderRoute(route) {
     } else if (route.name === "vote") {
       setTitle("Ballot");
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "results") {
+      setTitle("Results");
+      await renderResults(main, { ...ctx(), route, electionId: route.params.id });
     } else {
       setTitle("Not found");
       renderNotFound(main, route);

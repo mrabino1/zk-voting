@@ -489,12 +489,14 @@ Each **Election** contains one or more **questions**:
 - `SINGLE_CHOICE` — one option
 - `MULTI_CHOICE` — up to *k* options
 - `YES_NO`
-- `RANKED` — if the jurisdiction wants it (later)
+- `RANKED` — stored on the ballot spec; **IRV is not computed on the Node path** (separate work)
 - `MEASURE` / `ARTICLE` — labeled text plus options
 
-Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar).
+The Node authors this as a structured ballot (JSON remains an advanced escape hatch). Voters mark **every aspect on one envelope**. Plurality tallies are labeled per question; a two-contest ballot is not flattened into `sum(all option counts) == acceptedBallots`. Ranked-choice totals are skipped until an IRV path exists.
 
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on.
+Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) remain parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar). Per-question eligibility is not implemented on this Node slice.
+
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. The Solidity `Tally` contract still posts a single flat vector whose sum equals `acceptedBallots` (a single-contest mock invariant); multi-question certification on chain is not this slice.
 
 ---
 
@@ -667,7 +669,7 @@ Dates are not committed.
 4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
 5. **First proving path** — eligible vote on a single yes/no question on L2 test deployment (MockVerifier locally).
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof.
-7. **Multi-question ballots** — “aspects.”
+7. **Multi-question ballots** — “aspects.” **Node path in-tree:** clerks author several questions (structured back-office UI; JSON is advanced), `/vote/:id` renders every aspect on one envelope, plurality results are labeled per question (`GET /api/elections/:id/results`). Ranked-choice / IRV is stored on the spec but not tallied here. Solidity `Tally` still assumes a single flat vector summing to `acceptedBallots`.
 8. **L1 certification** — tally or tally hash on Ethereum mainnet.
 9. **Coercion-resistance upgrades** and independent auditor tooling.
 

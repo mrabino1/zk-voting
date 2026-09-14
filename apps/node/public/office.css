@@ -322,8 +322,78 @@ hr.hr-office {
   margin: 1.25rem 0;
 }
 
+.aspects-editor {
+  display: grid;
+  gap: 1rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.aspect-card {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 0.85rem 1rem 1rem;
+}
+
+.aspect-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.aspect-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.aspect-options {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.aspect-option {
+  display: grid;
+  grid-template-columns: 8rem 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.tally-opts {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.tally-opt {
+  display: grid;
+  grid-template-columns: 1fr 8rem;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+details {
+  border: 1px solid var(--line);
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--cream);
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+
 @media (max-width: 720px) {
   .data-table {
     min-width: 28rem;
+  }
+  .aspect-option,
+  .tally-opt {
+    grid-template-columns: 1fr;
   }
 }
