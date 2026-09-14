@@ -67,6 +67,10 @@ export function h(tag, attrs = {}, ...children) {
   return node;
 }
 
+export function fill(node, ...children) {
+  node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+}
+
 export async function api(path, options = {}) {
   const headers = {
     Accept: "application/json",
@@ -427,6 +431,7 @@ function ctx() {
   return {
     h,
     api,
+    fill,
     navigate,
     announce,
     wallet,
