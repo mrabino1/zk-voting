@@ -160,7 +160,7 @@
       $("stat-chain").textContent = chainId != null ? String(chainId) : "—";
       $("stat-factory").innerHTML = factory
         ? `<span class="hash">${esc(factory)}</span> <button type="button" class="copy" data-copy="${esc(factory)}">Copy</button>`
-        : "Not published";
+        : "—";
       $("stat-nfp").textContent = nfp ? "Yes" : "Host did not label itself NOT FOR PROFIT";
       renderFacts(merged);
     } catch (err) {
@@ -242,9 +242,13 @@
       const data = await getFirst(["/api/users", "/api/admin/users"]);
       renderUsers(asList(data, ["users", "items"]));
     } catch (err) {
+      const msg =
+        err.status === 401 || err.status === 403
+          ? "Sign in as platform_admin to list users and grant officers."
+          : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
-        `<tr><td colspan="3" class="empty">${esc(errText(err))}</td></tr>`;
-      $("g-user").innerHTML = '<option value="">Could not load users</option>';
+        `<tr><td colspan="3" class="empty">${esc(msg)}</td></tr>`;
+      $("g-user").innerHTML = `<option value="">${esc(msg)}</option>`;
     }
   }
 
