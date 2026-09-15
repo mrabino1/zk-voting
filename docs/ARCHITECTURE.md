@@ -427,7 +427,22 @@ Only the Republic prover/sequencer addresses. Batches are public; anyone
 can re-derive `dataHash` from posted calldata.
 
 `src/l2/L1TallyMirror.sol` — copies a tallied election result hash from L2
-to L1 for court-grade records.
+to L1 for court-grade records:
+
+```solidity
+function postResult(
+    uint256 electionId,
+    bytes32 resultHash,      // keccak256(abi.encodePacked(counts)) == Tally countsHash
+    uint256 totalBallots,
+    bytes32 l2StateRoot      // RollupSettlement.stateRoot() when known; else 0
+) external;
+function resultHashOf(uint256 electionId) external view returns (bytes32);
+```
+
+Only `admin` or `publishers[msg.sender]`. A second post for the same election
+reverts `AlreadyPosted`. The Node (`POST /api/elections/:id/tally` and
+`POST /api/elections/:id/certify-l1`) and `script/CertifyL1.s.sol` call this
+when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
 
 `src/l2/RepublicMailbox.sol` — L1/L2 message mailbox for the rollup.
 
@@ -448,6 +463,7 @@ to L1 for court-grade records.
   uniqueness; msg.sender is relayer.
 - `Paymaster.t.sol` — gasless path.
 - `RollupSettlement.t.sol` — batch progression.
+- `L1TallyMirror.t.sol` — `postResult`, publisher ACL, AlreadyPosted, packed counts hash.
 - `fuzz/FactoryFuzz.t.sol` — random params, start < cutoff, etc.
 - `fuzz/VoteFuzz.t.sol` — random nullifiers, windows, caps.
 - `fuzz/RegistryFuzz.t.sol`
@@ -482,6 +498,7 @@ passes `--via-ir`). Invariants: `forge test --via-ir --match-path test/invariant
 - `DeployL1.s.sol` — Ethereum (or sepolia) settlement + optional factory.
 - `DeployL2.s.sol` — same election stack targeting an EVM configured as Republic L2 (not the civic JSON sequencer).
 - `CreateElection.s.sol` — given factory address + JSON params, create one.
+- `CertifyL1.s.sol` — `L1TallyMirror.postResult` from `COUNTS` / `RESULT_HASH`. Wrapper: `script/certify_l1.sh` (no-op if L1 env unset).
 - `PrintAddresses.s.sol`, `anvil_deploy.sh` — local helpers (`RPC_URL` default `http://127.0.0.1:8545`).
 
 Broadcast JSON is gitignored. Scripts print addresses to stdout as
@@ -536,6 +553,9 @@ sequencer / paymaster report a fake sponsored balance for tooling.
 ## Node app (`apps/node`) — DealPunchList shape
 
 Long-lived Node 22 process, web UI + HTTP API, `system_actions.sh` restarts it.
+Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`)
+are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
+`platform_admin` is a global override and may act in every jurisdiction.
 
 **Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
 addons such as `better-sqlite3` are **not** used. Jurisdictions are the
@@ -551,26 +571,30 @@ build. `npm run build` in this package is a no-op log line.
 ```
 GET  /health
 GET  /api/health
-GET  /api/config                    (hourly disclosure + identity policy)
+GET  /api/config                    (hourly disclosure + identity policy + l1CertificationConfigured)
 GET  /api/elections
-POST /api/elections                 (clerk)
+POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id
 GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
 GET  /api/elections/:id/info/:questionId/:optionId
-PATCH /api/elections/:id            (clerk; questions + option metadata until freeze)
+PATCH /api/elections/:id            (clerk of that jurisdiction; questions + option metadata until freeze)
 PUT  /api/elections/:id             (same as PATCH)
 GET  /api/elections/:id/ballots     (published vote rows only)
-GET  /api/elections/:id/envelopes   (tally_operator; after cutoff; ciphertext only)
+GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext only)
 GET  /api/elections/:id/registrations
-POST /api/elections/:id/register    (after passkey)
-POST /api/elections/:id/freeze      (clerk)
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
+POST /api/elections/:id/freeze      (clerk of that jurisdiction)
 POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
-POST /api/elections/:id/disqualify   (officer)
+POST /api/elections/:id/disqualify   (officer of that jurisdiction)
 POST /api/elections/:id/disqualify/revoke
 POST /api/elections/:id/revoke
-POST /api/elections/:id/tally
-GET  /api/elections/:id/artifacts  (public auditor pack; no private DB fields)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; L1 postResult if env set)
+POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
+GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
+GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
+POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
+DELETE /api/jurisdictions/:id/roles
 GET  /api/me
 GET  /api/session
 GET  /api/me/identity
@@ -679,13 +703,16 @@ Question types the ballot UI renders: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`.
 ### Passkey wallet (Inertia-style)
 
 1. Create WebAuthn credential (`residentKey: required`, `extensions.prf`).
-2. `prf.eval` first output → HKDF → encrypt a generated 32-byte seed
+2. `prf.eval` **account** salt → HKDF → encrypt a generated 32-byte seed
    (AES-GCM) and store the blob in IndexedDB + server credential id.
-3. Signing: get PRF, unwrap seed, HMAC-sign, immediately drop plaintext
+3. `prf.eval` **identity** salt → HKDF → `(identityTrapdoor, nullifierSecret)`.
+   Separate domain from the account key ([`PASSKEYS.md`](./PASSKEYS.md)).
+4. Signing: get account PRF, unwrap seed, HMAC-sign, immediately drop plaintext
    from memory. **Today** this is not a secp256k1 UserOp signature.
-4. Fallback if PRF is unavailable: still create the passkey for login, and
+5. Fallback if PRF is unavailable: still create the passkey for login, and
    keep an encrypted key wrapped with a key derived from the assertion
-   signature (documented as weaker). Never display a mnemonic.
+   signature (documented as weaker). Never display a mnemonic. Never use
+   that account key as the trapdoor.
 
 ---
 

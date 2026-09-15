@@ -63,6 +63,9 @@ cd smart-contracts && forge test --match-path 'test/invariant/*'
 # Node API
 npm test -w apps/node
 
+# Shared JS packages (L1 tally-hash client, etc.)
+npm run test:packages
+
 # Civic L2
 npm run test:l2
 

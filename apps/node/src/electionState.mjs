@@ -2,6 +2,7 @@
 // 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
+import { presentAspects, presentTally } from './ballot.mjs';
 import { disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
@@ -39,8 +40,9 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     maxParticipants: election.maxParticipants,
     treeDepth: election.treeDepth,
     ballotSpecHash: election.ballotSpecHash,
-    questionCount: election.questionCount,
+    questionCount: election.questionCount ?? (election.questions || []).length,
     questions: election.questions,
+    aspects: presentAspects(election),
     jurisdictionId: election.jurisdictionId,
     clerk: election.clerk,
     registrar: election.registrar,
@@ -62,9 +64,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationRoot: election.disqualificationRoot,
     state,
     stateName: STATE_NAMES[state],
-    tally: election.tally
-      ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
-      : null,
+    tally: presentTally(election, election.acceptedBallots),
     createdAt: election.createdAt,
     disclosure: disclosurePublicView(now, interval, {
       acceptedBallotsDisclosed: acceptedBallots,
@@ -109,13 +109,31 @@ export function presentElection(election, deps, opts = {}) {
     publishedAcceptedBallots,
   });
   dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
-  const role = opts.user?.role;
   if (
     opts.user &&
-    (role === 'tally_operator' || role === 'platform_admin') &&
+    deps.store.userHasJurisdictionRole(opts.user, 'tally_operator', election.jurisdictionId) &&
     electionState(election, now) >= 3
   ) {
     dto.operatorInbox = { acceptedBallots: election.acceptedBallots };
   }
   return dto;
+}
+
+export function presentResults(election, deps, opts = {}) {
+  const dto = presentElection(election, deps, opts);
+  return {
+    nfp: true,
+    electionId: String(election.id),
+    title: election.title,
+    jurisdictionId: election.jurisdictionId,
+    state: dto.state,
+    stateName: dto.stateName,
+    acceptedBallots: dto.acceptedBallots,
+    questionCount: dto.questionCount,
+    aspects: dto.aspects,
+    questions: dto.questions,
+    tally: presentTally(election, election.acceptedBallots),
+    ballotSpecHash: election.ballotSpecHash,
+    cutoffTime: election.cutoffTime,
+  };
 }

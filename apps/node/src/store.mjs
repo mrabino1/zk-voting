@@ -17,7 +17,7 @@ import {
   sameEthAddress,
 } from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
-import { isRole } from './roles.mjs';
+import { isOfficerRole, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 
 /** Public ballot row: no acceptedAt, no choice, no user id. */
@@ -61,6 +61,26 @@ function emptyData() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+/** Keep a successful L1 post if a later retry fails or is AlreadyPosted. */
+export function mergeTallyL1(prev, next) {
+  if (!next || typeof next !== 'object') return prev || next;
+  if (!prev || typeof prev !== 'object') return next;
+  const prevOnChain = prev.posted || prev.alreadyPosted;
+  if (prevOnChain && next.status === 'failed') {
+    return { ...prev, lastError: next.error || null };
+  }
+  if (next.alreadyPosted || next.status === 'already_posted') {
+    return {
+      ...next,
+      txHash: next.txHash || prev.txHash || null,
+      chainId: next.chainId || prev.chainId || null,
+      mirror: next.mirror || prev.mirror || null,
+      settlement: next.settlement || prev.settlement || null,
+    };
+  }
+  return next;
 }
 
 export class Store {
@@ -434,27 +454,170 @@ export class Store {
     return jurisdiction;
   }
 
-  async grantJurisdictionRole(jurisdictionId, { address, role, handle }) {
+  resolveOfficerUser({ userId, handle, address } = {}) {
+    if (userId) {
+      const user = this.getUser(userId);
+      if (user) return user;
+    }
+    if (handle) {
+      const user = this.getUserByHandle(handle);
+      if (user) return user;
+    }
+    if (address) {
+      const byEth = this.findUserByEthAddress(address);
+      if (byEth) return byEth;
+      const byHandle = this.getUserByHandle(address);
+      if (byHandle) return byHandle;
+    }
+    return null;
+  }
+
+  officerMatchesUser(grant, user) {
+    if (!grant || !user) return false;
+    if (grant.userId && grant.userId === user.id) return true;
+    const grantHandle = String(grant.handle || '').trim().toLowerCase();
+    const userHandle = String(user.handle || '').trim().toLowerCase();
+    if (grantHandle && grantHandle === userHandle) return true;
+    const grantAddr = String(grant.address || '').trim();
+    if (!grantAddr) return false;
+    if (grantAddr.toLowerCase() === userHandle) return true;
+    if (sameEthAddress(user.activeEthAddress, grantAddr)) return true;
+    return (user.ethAccounts || []).some((a) => sameEthAddress(a.address, grantAddr));
+  }
+
+  userHasJurisdictionRole(user, roles, jurisdictionId) {
+    if (!user) return false;
+    if (user.role === 'platform_admin') return true;
+    const wanted = new Set((Array.isArray(roles) ? roles : [roles]).filter(Boolean));
+    if (!wanted.size || jurisdictionId == null || jurisdictionId === '') return false;
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) return false;
+    return (jurisdiction.officers || []).some(
+      (grant) => wanted.has(grant.role) && this.officerMatchesUser(grant, user),
+    );
+  }
+
+  userHasAnyJurisdictionRole(user, roles) {
+    if (!user) return false;
+    if (user.role === 'platform_admin') return true;
+    return this.data.jurisdictions.some((jurisdiction) =>
+      this.userHasJurisdictionRole(user, roles, jurisdiction.id),
+    );
+  }
+
+  listJurisdictionRolesForUser(user) {
+    if (!user) return [];
+    const out = [];
+    for (const jurisdiction of this.data.jurisdictions) {
+      for (const grant of jurisdiction.officers || []) {
+        if (this.officerMatchesUser(grant, user)) {
+          out.push({
+            jurisdictionId: jurisdiction.id,
+            jurisdictionName: jurisdiction.name,
+            role: grant.role,
+            grantedAt: grant.grantedAt || null,
+            address: grant.address || '',
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  _matchingOfficerGrant(jurisdiction, role, { user, handle, address, userId }) {
+    const handleKey = String(handle || '').trim().toLowerCase();
+    const addressKey = String(address || '').trim().toLowerCase();
+    const idKey = String(userId || '').trim();
+    return (jurisdiction.officers || []).find((grant) => {
+      if (grant.role !== role) return false;
+      if (user && this.officerMatchesUser(grant, user)) return true;
+      if (idKey && grant.userId === idKey) return true;
+      if (handleKey && String(grant.handle || '').trim().toLowerCase() === handleKey) return true;
+      if (addressKey && String(grant.address || '').trim().toLowerCase() === addressKey) return true;
+      return false;
+    });
+  }
+
+  async grantJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
     const jurisdiction = this.getJurisdiction(jurisdictionId);
     if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
-    if (!isRole(role)) throw new HttpError(400, 'invalid role');
+    if (!isOfficerRole(role)) throw new HttpError(400, 'invalid role');
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
     jurisdiction.officers = jurisdiction.officers || [];
+    const existing = this._matchingOfficerGrant(jurisdiction, role, {
+      user,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+      userId: trimmedUserId,
+    });
+    if (existing) {
+      if (user && !existing.userId) existing.userId = user.id;
+      if (user && !existing.handle) existing.handle = user.handle;
+      await this.persist();
+      return { jurisdiction, grant: existing, user };
+    }
     const grant = {
-      address: address || '',
-      handle: handle || '',
+      userId: user?.id || trimmedUserId || '',
+      address: trimmedAddress || user?.activeEthAddress || '',
+      handle: user?.handle || trimmedHandle,
       role,
       grantedAt: new Date().toISOString(),
     };
     jurisdiction.officers.push(grant);
-    const user =
-      (handle && this.getUserByHandle(handle)) ||
-      (address && this.getUserByHandle(address)) ||
-      null;
-    if (user && user.role !== 'platform_admin') {
-      user.role = role;
-    }
     await this.persist();
     return { jurisdiction, grant, user };
+  }
+
+  async revokeJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
+    if (!isOfficerRole(role)) throw new HttpError(400, 'invalid role');
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
+    const before = jurisdiction.officers || [];
+    const next = before.filter((grant) => {
+      if (grant.role !== role) return true;
+      if (user && this.officerMatchesUser(grant, user)) return false;
+      if (trimmedUserId && grant.userId === trimmedUserId) return false;
+      if (
+        trimmedHandle &&
+        String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        trimmedAddress &&
+        String(grant.address || '').trim().toLowerCase() === trimmedAddress.toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+    if (next.length === before.length) {
+      throw new HttpError(404, 'officer grant not found');
+    }
+    jurisdiction.officers = next;
+    await this.persist();
+    return { jurisdiction, role, user };
   }
 
   async createElection(params) {
@@ -849,13 +1012,26 @@ export class Store {
     return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
   }
 
-  async setTally(id, counts) {
+  async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
       counts: counts.map((n) => Number(n)),
       postedAt: new Date().toISOString(),
+      countsHash: extras.countsHash || null,
+      l1: extras.l1 || null,
     };
+    await this.persist();
+    return election;
+  }
+
+  async setTallyL1(id, l1) {
+    const election = this.requireElection(id);
+    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
+    election.tally.l1 = mergeTallyL1(election.tally.l1, l1);
+    if (l1?.resultHash && !election.tally.countsHash) {
+      election.tally.countsHash = l1.resultHash;
+    }
     await this.persist();
     return election;
   }

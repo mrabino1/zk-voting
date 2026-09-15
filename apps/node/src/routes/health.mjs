@@ -20,6 +20,7 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
+      l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
       disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
     });
   });
@@ -49,6 +50,8 @@ export function configRouter(deps) {
           policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,
         },
+        l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
+        l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds, {
           acceptedBallotsDisclosed: deps.store?.publishedAcceptedBallotsAll
             ? deps.store.publishedAcceptedBallotsAll(now, deps.config.disclosureIntervalSeconds)

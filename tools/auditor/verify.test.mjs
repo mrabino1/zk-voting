@@ -33,6 +33,23 @@ describe('auditor verify', () => {
     assert.equal(result.checks.tallySum, false);
   });
 
+  test('multi-question concatenated counts are checked per aspect, not as a unique-voter sum', () => {
+    const bundle = sampleBundle();
+    bundle.acceptedBallots = 1;
+    bundle.publicAcceptedBallots = 1;
+    bundle.disclosedBallots = [bundle.disclosedBallots[0]];
+    bundle.tally = {
+      counts: [1, 0, 0, 1],
+      questions: [
+        { id: 'q1', type: 'YES_NO', tallied: true, tallyMethod: 'plurality', counts: [1, 0] },
+        { id: 'q2', type: 'YES_NO', tallied: true, tallyMethod: 'plurality', counts: [0, 1] },
+      ],
+    };
+    const result = verifyAuditorBundle(bundle);
+    assert.equal(result.ok, true, result.errors.join('; '));
+    assert.equal(result.checks.tallySum, true);
+  });
+
   test('choice leak fails', () => {
     const bundle = sampleBundle();
     bundle.disclosedBallots[0].choice = 'yes';

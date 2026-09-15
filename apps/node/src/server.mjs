@@ -11,6 +11,7 @@ import express from 'express';
 import { attachAuth } from './auth.mjs';
 import { createChain } from './chain.mjs';
 import { getConfig } from './config.mjs';
+import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { createPasskeyService } from './passkey.mjs';
@@ -82,8 +83,9 @@ export async function createApp(overrides = {}) {
   const store = await Store.open(config);
   const explorer = await Explorer.open(config);
   const chain = createChain(config);
+  const l1 = overrides.l1 || createL1Certifier(config, overrides.l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
-  const deps = { config, store, explorer, chain, passkeys };
+  const deps = { config, store, explorer, chain, l1, passkeys };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -141,7 +143,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, config };
+  return { app, store, explorer, chain, l1, config };
 }
 
 export async function startServer(overrides = {}) {

@@ -64,7 +64,7 @@ GET /api/config
 
 1. Unique nullifiers (one disclosed row per nullifier). Duplicate rows fail.
 2. `acceptedBallots >=` that unique count (hourly disclosure may hide not-yet-public votes).
-3. If `tally.counts` is present, `sum(counts) == acceptedBallots`.
+3. Tally: if `tally.questions` lists plurality aspects, each aspect’s counts must respect `acceptedBallots` (undervotes allowed; a concatenated multi-question vector is **not** a unique-voter sum). If only a legacy flat `tally.counts` vector is present, `sum(counts) == acceptedBallots`. Solidity `Tally` still assumes that single-vector invariant.
 4. Disclosed rows have no `choice` / `optionId` / `userId`.
 5. No last-vote-counts artifacts: non-empty `supersededHashes` or `generation != 1` fail.
 6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present). If `coercion.policy` is present it must be `one-ballot-per-nullifier`.

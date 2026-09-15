@@ -348,16 +348,17 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots after cutoff (the operator inbox, not the hourly public snapshot). You cannot invent votes. The election must be past cutoff.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice / IRV is another path. You cannot invent votes. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
             <select id="t-election" name="electionId" required></select>
           </div>
+          <div id="tally-aspects" class="aspects-editor"></div>
           <div class="field">
-            <label class="field-label" for="t-counts">Counts JSON array <span class="req">*</span></label>
+            <label class="field-label" for="t-counts">Counts JSON <span class="req">*</span></label>
             <textarea id="t-counts" name="counts" required spellcheck="false">[0, 0]</textarea>
-            <span class="field-hint">Example: two YES_NO options → <code>[noCount, yesCount]</code> as non-negative integers.</span>
+            <span class="field-hint" id="t-counts-hint">Concatenated plurality options in ballot order, or use the per-question fields above.</span>
           </div>
           <details>
             <summary>Optional Groth16 proof (mock path may omit)</summary>
@@ -368,6 +369,7 @@
           </details>
           <div class="actions">
             <button class="btn" type="submit">Post counts</button>
+            <button class="btn btn-secondary" type="button" id="btn-certify-l1">Certify hash on L1</button>
             <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
             <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
           </div>

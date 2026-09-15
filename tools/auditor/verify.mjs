@@ -19,7 +19,9 @@ function uniqueKey(value) {
 
 /**
  * Verify public election artifacts: unique nullifiers (one accepted ballot
- * each), tally sum, and no choice fields leaked. Double voting is impossible.
+ * each), tally bounds, and no choice fields leaked. Double voting is impossible.
+ * A labeled multi-question tally is checked per aspect; a legacy flat vector
+ * must still sum to acceptedBallots.
  *
  * @param {object} bundle
  * @returns {{ ok: boolean, errors: string[], checks: Record<string, boolean>, summary: object }}
@@ -122,18 +124,49 @@ export function verifyAuditorBundle(bundle) {
     'publicAcceptedBallots must be <= acceptedBallots',
   );
 
-  if (bundle.tally && Array.isArray(bundle.tally.counts)) {
-    const sum = bundle.tally.counts.reduce((a, b) => a + Number(b), 0);
+  const labeledQuestions = Array.isArray(bundle.tally?.questions)
+    ? bundle.tally.questions.filter((q) => q && q.tallied !== false && q.tallyMethod !== 'irv')
+    : [];
+  const flatCounts = bundle.tally && Array.isArray(bundle.tally.counts) ? bundle.tally.counts : null;
+
+  function nonNegativeInts(arr) {
+    return Array.isArray(arr) && arr.every((n) => Number.isInteger(Number(n)) && Number(n) >= 0);
+  }
+
+  if (labeledQuestions.length) {
+    let boundsOk = true;
+    let nonNeg = true;
+    for (const q of labeledQuestions) {
+      const slice = Array.isArray(q.counts) ? q.counts : [];
+      if (!nonNegativeInts(slice)) {
+        nonNeg = false;
+        boundsOk = false;
+        continue;
+      }
+      const sum = slice.reduce((a, b) => a + Number(b), 0);
+      if (q.type === 'MULTI_CHOICE') {
+        const maxSel = Number(q.maxSelections) || slice.length;
+        if (slice.some((n) => Number(n) > accepted) || sum > maxSel * accepted) {
+          boundsOk = false;
+        }
+      } else if (sum > accepted) {
+        boundsOk = false;
+      }
+    }
+    check(
+      'tallySum',
+      boundsOk,
+      'each plurality question tally must respect acceptedBallots (concatenated multi-question vectors do not sum to unique voters)',
+    );
+    check('tallyNonNegative', nonNeg, 'tally counts must be non-negative integers');
+  } else if (flatCounts) {
+    const sum = flatCounts.reduce((a, b) => a + Number(b), 0);
     check(
       'tallySum',
       sum === accepted,
       `sum(tally.counts)=${sum} must equal acceptedBallots=${accepted}`,
     );
-    check(
-      'tallyNonNegative',
-      bundle.tally.counts.every((n) => Number.isInteger(Number(n)) && Number(n) >= 0),
-      'tally counts must be non-negative integers',
-    );
+    check('tallyNonNegative', nonNegativeInts(flatCounts), 'tally counts must be non-negative integers');
   } else {
     checks.tallySum = true;
     checks.tallyNonNegative = true;

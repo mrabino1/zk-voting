@@ -236,7 +236,7 @@ npm run l2:prover           # node l2/prover/index.mjs
 ./l2/bin/start-local.sh     # both
 ```
 
-Genesis **chainId 27427**, 2s blocks, one sequencer. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md).
+Genesis **chainId 27427**, 2s blocks, one sequencer. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ```bash
 export L2_RPC_PORT=8546
@@ -477,7 +477,7 @@ The Node stores what the jurisdiction is legally required to keep. That store is
 - **Registered** (on the roll commitment)
 - **Eligible for election E** (registered, and not disqualified for E)
 - **Disqualified for election E** (registered, but a live disqualification applies)
-- **Ballot recorded** (nullifier spent; last `ballotHash` for that nullifier is what the tally uses; choice not shown)
+- **Ballot recorded** (nullifier spent; the accepted `ballotHash` is what the tally uses; choice not shown)
 
 ---
 
@@ -552,15 +552,14 @@ Each **Election** contains one or more **questions**. **Implemented in the Node 
 - `SINGLE_CHOICE` — one option
 - `MULTI_CHOICE` — up to *k* options
 - `YES_NO`
+- `RANKED` — stored on the ballot spec; **IRV is not computed on the Node path** (separate work)
+- `MEASURE` / `ARTICLE` — labeled text plus options
 
-**Future (not tabulated in the UI):**
+The Node authors this as a structured ballot (JSON remains an advanced escape hatch). Voters mark **every aspect on one envelope**. Plurality tallies are labeled per question; a two-contest ballot is not flattened into `sum(all option counts) == acceptedBallots`. Ranked-choice totals are skipped until an IRV path exists.
 
-- `RANKED` — if the jurisdiction wants it
-- `MEASURE` / `ARTICLE` — labeled text plus options (clerk authoring may store a `MEASURE` type string; there is no distinct circuit)
+Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) remain parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar). **Per-question disqualification in circuits is Future**; v1 eligible root is `registered ∩ ¬disqualified` for the election.
 
-Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar). **Per-question disqualification in circuits is Future**; v1 eligible root is `registered ∩ ¬disqualified` for the election.
-
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON.
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON. The Solidity `Tally` contract still posts a single flat vector whose sum equals `acceptedBallots` (a single-contest mock invariant); multi-question certification on chain is not this slice.
 
 ---
 
@@ -738,8 +737,8 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
 5. **First proving path** — eligible vote on a single yes/no question with real Groth16 (MockVerifier locally today). **Future.**
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof against production keys. **Future** (eligible-root membership is in the circuit topology today).
-7. **Multi-question ballots** — “aspects” beyond yes/no + multi-choice; **`RANKED`**. **Future.**
-8. **L1 certification** — tally or tally hash on Ethereum mainnet. **Future** as a live deploy; contracts exist.
+7. **Multi-question ballots** — “aspects.” **Node path in-tree:** clerks author several questions (structured back-office UI; JSON is advanced), `/vote/:id` renders every aspect on one envelope, plurality results are labeled per question (`GET /api/elections/:id/results`). Ranked-choice / IRV is stored on the spec but not tallied here. Solidity `Tally` still assumes a single flat vector summing to `acceptedBallots`.
+8. **L1 certification** — tally or tally hash on Ethereum mainnet. **In-tree (testnet-friendly):** after Node tally, `L1TallyMirror.postResult` when L1 env is set; graceful no-op otherwise. See [`docs/OPERATOR.md`](./docs/OPERATOR.md). A live jurisdiction deploy on Ethereum mainnet (pinned addresses on `master`) is still **Future**.
 9. **EVM (or validity) execution on chainId 27427** so the same bytecode runs on the civic L2. **Future.**
 10. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice in-tree (not full MACI, not last-vote-counts):**
    - **One accepted nullifier:** `submitVote` for a spent nullifier reverts `NullifierUsed`, including a new ciphertext. Double voting remains impossible. `acceptedBallots` is unique nullifiers, so tally `sum(counts)` is a unique-voter invariant. Voters may change their mind privately on the ballot form **before** submit; the inbox does not accept a second ballot.
