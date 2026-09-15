@@ -123,7 +123,8 @@ npm run l2:prover
 | `L2_RPC_HOST` | `127.0.0.1` | RPC bind |
 | `L2_RPC_PORT` | `8546` | RPC port |
 | `L2_BATCH_SIZE` | `4` | blocks per proof batch |
-| `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped proof |
+| `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped **rollup batch** proof |
+| `REPUBLIC_PROVING_PATH` | `false` | Vote-circuit proving path (distinct from rollup `DEV_MOCK_PROOF`). See `/circuits/HASH_SCHEME.md`. |
 | `REPUBLIC_NODE_URL` | unset | Node app base URL for explorer ingest |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). |
 | `L1_RPC` | unset | Ethereum RPC for settlement |

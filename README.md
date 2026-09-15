@@ -118,7 +118,7 @@ Privacy construction (implementation): a person uniquely identifies with a **pas
 
 ## Current status
 
-Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` until Poseidon + Groth16 keys exist. That is not a production ceremony.
+Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVerifier` until Poseidon + a real Groth16 ceremony exist. The **first proving path is in progress**: compile / untrusted local setup / export scripts are in-tree. That is not a production ceremony.
 
 | Area | State |
 | --- | --- |
@@ -126,7 +126,8 @@ Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` unt
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Implemented map + Solidity/circuit interfaces; **Future** labeled |
 | Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/republic.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
 | `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry `via_ir = true`: factory, registries, inbox, `Tally.sol`, account, L2 settlement) |
-| Circuits (`circuits/`) | In-tree (`vote.circom`, `tally.circom`, `identity.circom`; Poseidon stand-in labeled) |
+| Circuits (`circuits/`) | In-tree (`vote.circom`, `tally.circom`, `identity.circom`; hasher **gated** as `standin-v0`; Poseidon not wired) |
+| Proving path | **In progress** — `npm run circuits:status` / `compile` / `setup` / `export` / `prove`. Untrusted local ptau only. `MockVerifier` still default for `forge test`. |
 | Shared packages | `@zk-voting/types`, `proof-helpers`, `chain-client` |
 | Republic L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
 | Block explorer | Node `/explorer` over `l2-chain.json` + ingest API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
@@ -172,7 +173,7 @@ zk-voting/
     src/
     test/                      unit, fuzz, invariant
     script/                    DeployLocal, DeployL1, DeployL2, CreateElection
-  circuits/                    vote.circom, tally.circom, identity.circom
+  circuits/                    vote.circom, tally.circom, identity.circom, HASH_SCHEME.md
   l2/                          civic JSON sequencer, prover, genesis (chainId 27427, :8546)
   tools/auditor/               CLI: export public artifacts, verify sum/invariants
 ```
@@ -206,6 +207,26 @@ npm run test:invariant
 ```
 
 Tests must pass with `MockVerifier`. Invariants include: a nullifier is **accepted at most once** (a second ballot, including a new ciphertext, reverts; double voting is impossible); no vote outside `[startTime, cutoffTime)`; no vote if `!rollFrozen`; `sum(counts) == acceptedBallots` after tally; factory clones do not share nullifier storage. See ARCHITECTURE.
+
+Non-mock local deploy (fail closed until a VK is installed):
+
+```bash
+REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+```
+
+### Circuits (proving path in progress)
+
+Circom 2 + snarkjs. Local powers-of-tau is **untrusted**. Exact commands:
+
+```bash
+npm run circuits:status
+npm run circuits:compile    # circom vote.circom + tally.circom
+npm run circuits:setup      # UNTRUSTED ptau + groth16; zkeys gitignored
+npm run circuits:export     # circuits/build/*_Groth16Verifier.sol — does not overwrite VoteVerifier.sol
+npm run circuits:prove      # demo witness + groth16 verify
+```
+
+Hash versions and Poseidon gate: [`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md).
 
 ### Node (`apps/node`)
 
@@ -383,7 +404,7 @@ Contracts must be **boring Solidity**: explicit access control, no upgrade surpr
 
 ## Circuits
 
-Circom 2, self-contained (no circomlib path in this repo). **Poseidon is preferred** for identity commitments, Merkle `hashLeftRight`, and nullifiers. Until Poseidon is vendored, `Hasher()` is a labeled stand-in (`out = a + b + a*b`). **Not production Poseidon. Not for a binding election or a trusted setup.**
+Circom 2, self-contained (no circomlib path in this repo). **Poseidon is the production target** (`republic.hash.poseidon-bn254-x5-t3-v1`). Until it is vendored, `Hasher()` is the gated stand-in `republic.hash.standin-v0` (`out = a + b + a*b` in `circuits/hasher/standin.circom`). **Not production Poseidon. Not for a binding election or a trusted setup.** Foundry tests keep `KeccakHasher` (`keccak-dev-v1`). The proving-path JS helpers and `StandInHasher` match the Circom stand-in so a local Groth16 proof can be produced.
 
 | Circuit | Role |
 | --- | --- |
@@ -391,7 +412,7 @@ Circom 2, self-contained (no circomlib path in this repo). **Poseidon is preferr
 | `circuits/tally.circom` | Per-option counts sum to accepted ballots (plaintext / mock-homomorphic path) |
 | `circuits/identity.circom` | Commitment and nullifier primitives |
 
-Compile notes, snarkjs, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
+Compile notes, snarkjs, **exact proving-path commands**, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md), [`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
 
 ---
 
@@ -402,7 +423,7 @@ npm workspaces (Node 22):
 | Package | Role |
 | --- | --- |
 | `@zk-voting/types` | JSDoc types: `ElectionParams`, `VoteEnvelope`, `Block`, `Jurisdiction`; reason codes and election states matching Solidity |
-| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; `encodePacked` mock; Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
+| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; versioned `hashLeftRight` (`keccak-dev-v1` default, `standin-v0` for Circom); Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
 | `@zk-voting/chain-client` | `getFactory`, `createElection`, `submitVote` through viem `writeContract` / `encodeFunctionData`, else `fetch` JSON-RPC `eth_call` wrappers for views |
 
 ---
@@ -469,7 +490,7 @@ The Node stores what the jurisdiction is legally required to keep. That store is
 
 ### On-chain
 
-- An **identity commitment** (e.g. a hash of a voter key and jurisdiction salt) is added to the `VoterRegistry` for that jurisdiction. Implementation: `Poseidon(identityTrapdoor, nullifierSecret)` (stand-in hasher in circom until Poseidon is wired). The leaf is **never** the wallet address and **never** a name.
+- An **identity commitment** (e.g. a hash of a voter key and jurisdiction salt) is added to the `VoterRegistry` for that jurisdiction. Implementation: `Poseidon(identityTrapdoor, nullifierSecret)` in production (`poseidon-bn254-x5-t3-v1`). Until then, circuits use gated `standin-v0`; Foundry/Node tests use `keccak-dev-v1`. The leaf is **never** the wallet address and **never** a name.
 - Optional: a **district leaf**, so a municipal election can require residency in that district without putting the street address on chain.
 - Duplicate prevention: the jurisdiction’s uniqueness rule (national ID hash, one-person attestation, etc.) is checked before the commitment is inserted. The contracts can enforce “this uniqueness nullifier is unused,” which is stronger than a SQL unique index.
 
@@ -723,14 +744,14 @@ npm run compose:up             # same
 
 - Solidity: Foundry 1.8+, solc 0.8.24, **via-ir on** (`foundry.toml`).
 - Node: Node 22, npm workspaces. Frontend: vanilla JS in `apps/node/public/` (no bundler).
-- Circuits: Circom 2 (optional on the host until leaving MockVerifier).
-- Tests: `forge test --via-ir` with MockVerifier; `npm test -w apps/node` for API tests; `npm run test:l2` for the civic sequencer.
+- Circuits: Circom 2 (optional on the host until leaving MockVerifier). `npm run circuits:status`.
+- Tests: `forge test --via-ir` with MockVerifier; `npm test -w apps/node` for API tests; `npm run test:l2` for the civic sequencer; `npm run test:proof-helpers` for hash-scheme vectors.
 
 ### What is in the tree vs what remains
 
 Present: monorepo skeleton, Solidity under `smart-contracts/`, circuits, packages, Node API + vanilla JS UI, civic JSON L2, explorer and passkey docs. Choice-free receipts and independent auditor packaging are in-tree (roadmap item 10 slice). Last-vote-counts / re-vote supersession is **not** shipped: a nullifier is accepted once.
 
-Still ahead of a binding election (**Future**): Poseidon hasher swap, Groth16 ceremony, secp256k1 in the browser passkey helper, dedicated `/elections/:id/results` view, `RANKED` ballots, EVM execution on 27427, MACI-style collusion-resistant messaging. Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
+Still ahead of a binding election (**Future**): Poseidon hasher swap, Groth16 **ceremony**, secp256k1 in the browser passkey helper, EVM execution on 27427, MACI-style collusion-resistant messaging. Do not treat `MockVerifier`, the circom `Hasher()` stand-in, or a local `circuits:setup` zkey as production cryptography. Dedicated results, ranked-choice IRV, UUID election ids, and L1 certification slices are already in `test/unstable`.
 
 ---
 
@@ -742,7 +763,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and an EVM configured as Republic L2. **In-tree.**
 3. **Node skeleton** — DealPunchList-style app: jurisdictions, users, roles, election admin, voter home. **In-tree** (vanilla JS + JSON store, not Vite/React/SQLite).
 4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
-5. **First proving path** — eligible vote on a single yes/no question with real Groth16 (MockVerifier locally today). **Future.**
+5. **First proving path** — **in progress.** Eligible-vote circuit compiles; untrusted local powers-of-tau + Groth16 setup/export/prove scripts exist (`npm run circuits:*`). `MockVerifier` still default for unit tests. Poseidon + ceremony still outstanding.
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof against production keys. **Future** (eligible-root membership is in the circuit topology today).
 7. **Multi-question ballots** — “aspects.” **Node path in-tree:** clerks author several questions (structured back-office UI; JSON is advanced), `/vote/:id` renders every aspect on one envelope, plurality results are labeled per question (`GET /api/elections/:id/results`). Ranked-choice / IRV is computed on the Node from accepted ranking envelopes (winner + round transcript). Solidity `Tally` still assumes a single flat vector; mixed ballots certify the plurality-only concatenation on L1.
 8. **L1 certification** — tally or tally hash on Ethereum mainnet. **In-tree (testnet-friendly):** after Node tally, `L1TallyMirror.postResult` when L1 env is set; graceful no-op otherwise. See [`docs/OPERATOR.md`](./docs/OPERATOR.md). A live jurisdiction deploy on Ethereum mainnet (pinned addresses on `master`) is still **Future**.

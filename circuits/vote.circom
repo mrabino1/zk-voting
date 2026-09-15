@@ -4,10 +4,10 @@ pragma circom 2.0.0;
 //
 // Vote circuit: eligible-set membership + unique nullifier + ballot bind.
 //
-// PRODUCTION HASHER: Poseidon is preferred. Merkle paths on chain and
-// in this circuit must use the same HashLeftRight. Until circomlib
-// Poseidon is vendored, Hasher() in identity.circom is a STAND-IN
-// (a + b + a*b). NOT production Poseidon. NOT for a binding election.
+// HASH_SCHEME: republic.hash.standin-v0 via identity.circom → hasher/standin.circom.
+// PRODUCTION HASHER: Poseidon (republic.hash.poseidon-bn254-x5-t3-v1). Merkle
+// paths on chain and in this circuit must use the same HashLeftRight. The
+// stand-in is gated and labeled. NOT production Poseidon. NOT for a binding election.
 //
 // Public statement (matches packages/proof-helpers serializePublicInputs):
 //   [root, disqRoot, nullifier, ballotHash, electionId]

@@ -12,6 +12,7 @@ import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 ///      This contract does **not** fake a pairing that always returns true.
 ///      When `verifyingKeyHash == bytes32(0)` the key is unconfigured: we
 ///      delegate to `mockVerifier` if set, otherwise revert `VerifierNotConfigured()`.
+///      `REPUBLIC_PROVING_PATH=1` deploys this with `mockVerifier = address(0)`.
 ///
 /// Public inputs convention:
 ///      input[0] = eligibleRoot

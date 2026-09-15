@@ -13,7 +13,7 @@ This software may be run **at cost** by a government, county clerk, union, coope
 1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/republic.json`). Same operational shape as DealPunchList (`dealpunchlist-node`). **No SQLite.**
 2. **`smart-contracts/`** — Solidity 0.8.24, Foundry (`via_ir = true`). Factory, registries, inbox, `Tally.sol`, passkey account, L1 `RollupSettlement`.
 3. **`l2/`** — Republic **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
-4. **`circuits/`** — circom vote / tally. Local and CI use `MockVerifier` until a Poseidon hasher and Groth16 keys exist.
+4. **`circuits/`** — circom vote / tally. Foundry unit tests use `MockVerifier`. Proving path is **in progress** (`npm run circuits:status`). Local setup is untrusted until Poseidon + a ceremony exist.
 
 The Node is allowed to be down. Chain records (L2, and L1 if you mirrored the tally) must still be enough for an independent verifier.
 
@@ -23,7 +23,7 @@ The Node is allowed to be down. Chain records (L2, and L1 if you mirrored the ta
 
 | Line | Branch | Meaning |
 | --- | --- | --- |
-| Development / staging | `test/unstable` | Default. Experimental elections, MockVerifier, civic JSON L2 (`:8546`), optional Foundry Anvil (`:8545`) for Solidity. |
+| Development / staging | `test/unstable` | Default. Experimental elections, MockVerifier (unit tests), optional `REPUBLIC_PROVING_PATH=1`, civic JSON L2 (`:8546`), optional Foundry Anvil (`:8545`) for Solidity. |
 | Production | `master` | Only builds a jurisdiction may treat as binding. |
 
 `system_actions.sh deploy-dev` pulls **`test/unstable`**. `deploy-prod` pulls **`master`** and **asks for confirmation** (unless you pass `--yes`, which you should not wire to an unattended cron for a live election).
@@ -100,7 +100,9 @@ node -v
 foundryup
 cd smart-contracts && forge test
 
-# Optional: circom 2 + snarkjs when you leave MockVerifier
+# Optional: circom 2 + snarkjs for the proving path (not a ceremony)
+npm run circuits:status
+# npm run circuits:compile && npm run circuits:setup   # UNTRUSTED local ptau
 # Optional: viem in the Node app for ABI encoding (packages/chain-client)
 
 git checkout test/unstable
@@ -122,7 +124,9 @@ forge test --fuzz-runs 256
 forge test --match-path test/invariant/*
 ```
 
-From repo root: `npm run test:contracts`, `npm run test:fuzz`, `npm run test:invariant`.
+From repo root: `npm run test:contracts`, `npm run test:fuzz`, `npm run test:invariant`, `npm run test:proof-helpers`.
+
+Proving path (optional tools): `npm run circuits:status`. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md). `REPUBLIC_PROVING_PATH=1` on `DeployLocal` deploys `VoteVerifier` without mock fallback.
 
 ### Independent auditor (no Node private DB)
 

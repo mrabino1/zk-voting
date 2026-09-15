@@ -332,6 +332,7 @@ export function loadConfig(root = L2_ROOT) {
     settlementAddress: process.env.SETTLEMENT_ADDRESS || file.settlementAddress || '',
     privateKey: process.env.PRIVATE_KEY || '',
     devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof !== false),
+    voteProvingPath: parseBool(process.env.REPUBLIC_PROVING_PATH, false),
     l2RpcUrl:
       process.env.L2_RPC_URL ||
       `http://${process.env.L2_RPC_HOST || file.rpcHost || '127.0.0.1'}:${
