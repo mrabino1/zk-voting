@@ -141,7 +141,7 @@
     ["MULTI_CHOICE", "Multi choice"],
     ["MEASURE", "Measure"],
     ["ARTICLE", "Article"],
-    ["RANKED", "Ranked choice (stored; IRV not tallied)"],
+    ["RANKED", "Ranked choice (IRV)"],
   ];
 
   const DEFAULT_ASPECTS = [
@@ -261,7 +261,7 @@
       </div>
       ${
         type === "RANKED"
-          ? '<p class="field-hint">Ranked-choice rankings can be sealed in the envelope. This Node does not compute IRV.</p>'
+          ? '<p class="field-hint">Voters rank these options. The Node computes IRV after cutoff from accepted ranking envelopes.</p>'
           : ""
       }
     </article>`;
@@ -389,7 +389,7 @@
     ["MULTI_CHOICE", "Multi choice"],
     ["MEASURE", "Measure"],
     ["ARTICLE", "Article"],
-    ["RANKED", "Ranked choice (stored; IRV not tallied)"],
+    ["RANKED", "Ranked choice (IRV)"],
   ];
 
   const DEFAULT_QUESTIONS = [
@@ -526,6 +526,7 @@
         out.maxSelections = Number.isInteger(maxSelections) && maxSelections > 0 ? maxSelections : 2;
       } else if (out.type === "RANKED") {
         out.maxSelections = out.options.length;
+        out.ballotMethod = "ranked_choice";
       }
       return out;
     });
@@ -670,7 +671,7 @@
       </div>
       ${
         type === "RANKED"
-          ? '<p class="field-hint">Ranked-choice rankings can be sealed in the envelope. This Node does not compute IRV.</p>'
+          ? '<p class="field-hint">Voters rank these options. The Node computes IRV after cutoff from accepted ranking envelopes.</p>'
           : ""
       }
       <div class="opt-list">${(q.options || []).map((opt, oi) => renderOptionCard(qi, oi, opt)).join("")}</div>
@@ -811,6 +812,9 @@
     const cutoff = pick(election, ["cutoffTime"]);
     if (start) $("e-start").value = unixToLocal(start);
     if (cutoff) $("e-cutoff").value = unixToLocal(cutoff);
+    if ($("e-method")) {
+      $("e-method").value = election.ballotMethod === "ranked_choice" ? "ranked_choice" : "plurality";
+    }
     ballotQuestions = hydrateQuestions(election.questions || []);
     setEditingElection(election.id, election.rollFrozen || Number(election.state) >= 1);
     if (election.rollFrozen) {
@@ -869,6 +873,7 @@
           title: $("e-title").value.trim(),
           metadataURI: $("e-uri").value.trim(),
           questions,
+          ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
         },
       });
       flash($("flash-election"), "ok", "Saved ballot " + editingElectionId + ". Option info is in ballotSpecHash.");
@@ -1108,6 +1113,7 @@
       treeDepth: Number($("e-depth").value),
       questions,
       jurisdictionId: $("e-jurisdiction").value,
+      ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
     };
     try {
       const created = await request("/api/elections", { method: "POST", body });
@@ -1272,22 +1278,25 @@
     event.preventDefault();
     const id = $("t-election").value;
     const aspectInputs = document.querySelectorAll("#tally-aspects .tally-count");
-    let counts;
+    let counts = null;
     try {
       if (aspectInputs.length) {
         counts = [...aspectInputs].map((el) => Number(el.value || 0));
         $("t-counts").value = JSON.stringify(counts);
       } else {
-        counts = JSON.parse($("t-counts").value);
-      }
-      if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
-        throw new Error("Counts must be a JSON array of non-negative integers.");
+        const raw = $("t-counts").value.trim();
+        if (raw) {
+          counts = JSON.parse(raw);
+          if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
+            throw new Error("Counts must be a JSON array of non-negative integers.");
+          }
+        }
       }
     } catch (err) {
       flash($("flash-tally"), "err", err.message || "Counts JSON is invalid.");
       return;
     }
-    const body = { counts };
+    const body = counts && counts.length ? { counts } : {};
     const proofRaw = $("t-proof").value.trim();
     if (proofRaw) {
       try {
@@ -1301,6 +1310,14 @@
       const data = await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
       const cert = data && data.l1Certification;
       let msg = "Tally posted. Each plurality question is counted on its own options.";
+      const winner = pick(data, ["election.tally.questions.0.winnerLabel"]) || pick(data, ["election.tally.questions.0.winner"]);
+      const method = pick(data, ["election.tally.ballotMethod"]);
+      if (method === "ranked_choice" || method === "mixed") {
+        msg =
+          "Tally posted. IRV winner: " +
+          (winner || "none") +
+          ". Round transcript is on the results page.";
+      }
       if (cert && cert.status === "skipped") {
         msg =
           "Tally posted. Each plurality question is counted on its own options. L1 certification skipped (" +
@@ -1347,7 +1364,7 @@
         (questions.length === 1 ? "" : "s") +
         "; plurality vector length " +
         expected +
-        ". Each question is counted separately (undervotes allowed). Ranked-choice is skipped.";
+        ". Each question is counted separately (undervotes allowed). Ranked-choice is computed as IRV from envelopes.";
     }
     if (!questions.length) {
       host.innerHTML = '<p class="field-hint">This election has no published questions.</p>';
@@ -1358,7 +1375,7 @@
         if (isRankedType(q.type)) {
           return `<article class="aspect-card">
             <h3>Question ${i + 1}: ${esc(q.prompt || q.id)}</h3>
-            <p class="field-hint">Ranked-choice / IRV is not tallied on this Node path.</p>
+            <p class="field-hint">Ranked-choice / IRV is computed from accepted ranking envelopes when you post the tally (leave counts blank on an all-ranked ballot).</p>
           </article>`;
         }
         const opts = (q.options || [])
@@ -1377,6 +1394,7 @@
       })
       .join("");
     $("t-counts").value = JSON.stringify(Array(expected).fill(0));
+    if (!plurality.length) $("t-counts").value = "";
   }
 
   async function loadTallyElection(id) {
@@ -1395,6 +1413,27 @@
   $("tally-aspects").addEventListener("input", () => {
     const inputs = [...document.querySelectorAll("#tally-aspects .tally-count")];
     if (inputs.length) $("t-counts").value = JSON.stringify(inputs.map((el) => Number(el.value || 0)));
+  });
+
+  $("btn-irv").addEventListener("click", async () => {
+    const id = $("t-election").value;
+    if (!id) {
+      flash($("flash-tally"), "err", "Choose an election first.");
+      return;
+    }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body: {} });
+      const winner =
+        pick(data, ["election.tally.questions.0.winnerLabel"]) || pick(data, ["election.tally.questions.0.winner"]);
+      flash(
+        $("flash-tally"),
+        "ok",
+        "IRV computed from accepted ballots. Winner: " + (winner || "none") + "."
+      );
+      wireExplorerLinks(id);
+    } catch (err) {
+      flash($("flash-tally"), "err", errText(err));
+    }
   });
 
   $("btn-certify-l1").addEventListener("click", async () => {

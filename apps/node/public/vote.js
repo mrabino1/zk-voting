@@ -8,6 +8,7 @@ import {
   collectAnswers,
   cssQuestionName,
   isMultiSelect,
+  isRankedQuestion,
   isRankedType,
   questionsOf,
   typeLabel,
@@ -78,6 +79,10 @@ export async function renderVote(main, ctx) {
 
   const questions =
     source === "sample" ? questionsOf({ questions: election.questions?.length ? election.questions : sampleQs || SAMPLE_QUESTIONS }) : questionsOf(election);
+  const rankingState = new Map();
+  for (const q of questions) {
+    if (isRankedQuestion(q)) rankingState.set(q.id, []);
+  }
   const store = readVoterStore();
   const prior = store.votes[String(election.id)];
   const st = electionStateInfo(election.state);
@@ -139,36 +144,174 @@ export async function renderVote(main, ctx) {
     );
   }
 
-  function rankedField(question) {
-    return h(
-      "div",
-      { class: "rank-list" },
-      h(
-        "p",
+  function optionById(question, id) {
+    return (question.options || []).find((o) => String(o.id) === String(id));
+  }
+
+  function setRanking(question, next, index) {
+    rankingState.set(question.id, next);
+    const mount = document.getElementById(`question-${question.id}`);
+    if (mount) mount.replaceWith(questionField(question, index));
+  }
+
+  function rankedField(question, index) {
+    const rankedIds = rankingState.get(question.id) || [];
+    const rankedSet = new Set(rankedIds);
+    const unranked = question.options.filter((o) => !rankedSet.has(o.id));
+    const n = question.options.length;
+
+    function applyRankNumber(optionId, rankValue) {
+      const current = (rankingState.get(question.id) || []).filter((id) => id !== optionId);
+      if (!rankValue) {
+        setRanking(question, current, index);
+        return;
+      }
+      const rank = Math.max(1, Math.min(n, Number(rankValue)));
+      current.splice(rank - 1, 0, optionId);
+      setRanking(question, current, index);
+    }
+
+    function rankRow(opt, rankIndex, total) {
+      return h(
+        "li",
         {
-          class: "field-hint",
-          text: "Ranked-choice / IRV is not tallied on this Node. Your ranking is still sealed in the ballot envelope.",
-        }
-      ),
-      ...question.options.map((_, i) =>
+          class: "rank-row",
+          draggable: "true",
+          "data-option-id": opt.id,
+          onDragstart: (ev) => {
+            ev.dataTransfer.setData("text/plain", opt.id);
+            ev.dataTransfer.effectAllowed = "move";
+          },
+          onDragover: (ev) => {
+            ev.preventDefault();
+          },
+          onDrop: (ev) => {
+            ev.preventDefault();
+            const from = ev.dataTransfer.getData("text/plain");
+            if (!from || from === opt.id) return;
+            const list = [...(rankingState.get(question.id) || [])];
+            const fromIdx = list.indexOf(from);
+            if (fromIdx >= 0) list.splice(fromIdx, 1);
+            const insertAt = list.indexOf(opt.id);
+            if (insertAt < 0) list.push(from);
+            else list.splice(insertAt, 0, from);
+            setRanking(question, list, index);
+          },
+        },
+        h("span", { class: "rank-handle", "aria-hidden": "true", text: "⋮⋮" }),
         h(
           "label",
-          { class: "field-label rank-slot", for: `${cssQuestionName(question.id)}-rank-${i}` },
-          h("span", { text: `Choice ${i + 1}` }),
+          { class: "rank-number" },
+          h("span", { class: "visually-hidden", text: `Rank for ${opt.label}` }),
           h(
             "select",
-            { id: `${cssQuestionName(question.id)}-rank-${i}`, name: `${cssQuestionName(question.id)}-rank-${i}` },
-            h("option", { value: "", text: "—" }),
-            ...question.options.map((opt) => h("option", { value: opt.id, text: opt.label }))
+            {
+              "aria-label": `Rank for ${opt.label}`,
+              value: String(rankIndex + 1),
+              onChange: (ev) => applyRankNumber(opt.id, ev.target.value),
+            },
+            ...Array.from({ length: total }, (_, i) =>
+              h("option", { value: String(i + 1), text: String(i + 1), selected: i === rankIndex })
+            )
           )
+        ),
+        h("span", { class: "rank-label", text: opt.label }),
+        h(
+          "span",
+          { class: "rank-move" },
+          h("button", {
+            type: "button",
+            class: "btn btn-secondary rank-btn",
+            text: "Up",
+            disabled: rankIndex === 0,
+            onClick: () => {
+              const list = [...(rankingState.get(question.id) || [])];
+              if (rankIndex <= 0) return;
+              [list[rankIndex - 1], list[rankIndex]] = [list[rankIndex], list[rankIndex - 1]];
+              setRanking(question, list, index);
+            },
+          }),
+          h("button", {
+            type: "button",
+            class: "btn btn-secondary rank-btn",
+            text: "Down",
+            disabled: rankIndex === total - 1,
+            onClick: () => {
+              const list = [...(rankingState.get(question.id) || [])];
+              if (rankIndex >= list.length - 1) return;
+              [list[rankIndex + 1], list[rankIndex]] = [list[rankIndex], list[rankIndex + 1]];
+              setRanking(question, list, index);
+            },
+          }),
+          h("button", {
+            type: "button",
+            class: "btn btn-secondary rank-btn",
+            text: "Remove",
+            onClick: () =>
+              setRanking(
+                question,
+                (rankingState.get(question.id) || []).filter((id) => id !== opt.id),
+                index
+              ),
+          })
         )
-      )
+      );
+    }
+
+    return h(
+      "div",
+      { class: "rank-list-wrap" },
+      h("p", {
+        class: "field-hint",
+        text: "Rank in order of preference (1 = first choice). Drag to reorder, use rank numbers, or move names from the unranked list. Leaving a name unranked is an undervote on that candidate. Instant-runoff (IRV) eliminates last place until a majority.",
+      }),
+      rankedIds.length
+        ? h(
+            "ol",
+            { class: "rank-list", "aria-label": "Your ranking" },
+            ...rankedIds.map((id, i) => rankRow(optionById(question, id) || { id, label: id }, i, rankedIds.length))
+          )
+        : h("p", { class: "field-hint", text: "No candidates ranked yet." }),
+      unranked.length
+        ? h(
+            "div",
+            { class: "unranked-list" },
+            h("p", { class: "field-hint", text: "Not ranked" }),
+            ...unranked.map((opt) =>
+              h(
+                "div",
+                { class: "rank-row unranked" },
+                h(
+                  "label",
+                  { class: "rank-number" },
+                  h("span", { class: "visually-hidden", text: `Assign rank for ${opt.label}` }),
+                  h(
+                    "select",
+                    {
+                      "aria-label": `Rank for ${opt.label}`,
+                      onChange: (ev) => applyRankNumber(opt.id, ev.target.value),
+                    },
+                    h("option", { value: "", text: "—" }),
+                    ...Array.from({ length: n }, (_, i) => h("option", { value: String(i + 1), text: String(i + 1) }))
+                  )
+                ),
+                h("span", { class: "rank-label", text: opt.label }),
+                h("button", {
+                  type: "button",
+                  class: "btn btn-secondary rank-btn",
+                  text: "Add next",
+                  onClick: () => setRanking(question, [...(rankingState.get(question.id) || []), opt.id], index),
+                })
+              )
+            )
+          )
+        : null
     );
   }
 
   function questionField(question, index) {
     const multi = isMultiSelect(question);
-    const ranked = isRankedType(question.type);
+    const ranked = isRankedQuestion(question) || isRankedType(question.type);
     const inputType = multi ? "checkbox" : "radio";
     return h(
       "fieldset",
@@ -181,7 +324,7 @@ export async function renderVote(main, ctx) {
       ),
       question.description ? h("p", { class: "field-hint", text: question.description }) : null,
       ranked
-        ? rankedField(question)
+        ? rankedField(question, index)
         : h("p", { class: "field-hint", text: multi ? `Select up to ${question.maxSelections}.` : "Select one. Leaving this blank is an undervote." }),
       ranked
         ? null
@@ -362,7 +505,7 @@ export async function renderVote(main, ctx) {
     }
     const form = event.target;
     const answers = collectAnswers(form, questions);
-    const blank = answers.every((a) => a.optionIds.length === 0);
+    const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : (a.optionIds || []).length === 0));
     if (blank && !window.confirm("Every question is blank. Submit an undervote?")) return;
     if (election.state !== 2) {
       if (!window.confirm("This election is not open. Try to relay anyway? The Node should reject the vote.")) return;
@@ -395,6 +538,7 @@ export async function renderVote(main, ctx) {
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
         encryptedBallot: auth.encryptedBallot,
+        answers,
         signature: auth.signature,
         userOpHash: auth.userOpHash,
         userOp: {

@@ -323,8 +323,9 @@ describe('multi-question ballots (aspects)', () => {
       body: { counts: [1, 0] },
     });
     assert.equal(tallied.status, 200, tallied.json?.error);
-    assert.equal(tallied.json.election.tally.questions[1].tallied, false);
+    assert.equal(tallied.json.election.tally.questions[1].tallied, true);
     assert.equal(tallied.json.election.tally.questions[1].tallyMethod, 'irv');
+    assert.ok(tallied.json.election.tally.questions[1].winner);
     assert.deepEqual(tallied.json.election.tally.counts, [1, 0]);
   });
 });

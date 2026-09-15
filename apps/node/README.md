@@ -87,6 +87,11 @@ canonicalizes options and keccak-hashes `{ title, questions }` as `ballotSpecHas
 Empty optional fields are omitted so older elections without metadata keep working.
 `GET /api/elections/:id/info` returns the public copy (no `createdBy` / clerk notes).
 
+Ranked-choice (`RANKED` / election `ballotMethod: ranked_choice`) is instant-runoff
+on this Node. `POST /api/elections/:id/tally` with an empty body computes IRV from
+accepted ranking envelopes and stores a winner plus round transcript. Mixed
+ballots still post a plurality-only `counts` vector for L1 certification.
+
 ---
 
 ## Environment
@@ -137,7 +142,7 @@ GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
-POST /api/elections/:id/tally       (tally operator of that jurisdiction; attempts L1 certify if env set)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality counts and/or IRV from envelopes; attempts L1 certify if env set)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 postResult; no-op if env unset)
 GET  /api/elections/:id/l1
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)

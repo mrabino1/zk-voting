@@ -57,7 +57,7 @@ on 27427 is **Future**.
 | Circuits | Circom 2: `vote.circom`, `tally.circom`, `identity.circom`. Hasher is a labeled Poseidon **stand-in**. |
 | Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
 | Explorer | Node `/explorer` over `l2-chain.json`, filled by Node writes and `POST /api/explorer/ingest`. |
-| Ballot types | Node UI/API: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`. Clerk hint also mentions `MEASURE` as a labeled question. **`RANKED` is Future.** |
+| Ballot types | Node UI/API: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED` (IRV on the Node path). |
 | Passkey helper | `public/passkey-wallet.js`: WebAuthn + PRF wrap. Demo address is `republic-local-address` (SHA-256 of seed). Production secp256k1 Ethereum addresses are **Future** in that helper (it does not ship a curve implementation). |
 
 Two local paths, both real:
@@ -581,7 +581,7 @@ GET  /api/elections/:id/info/:questionId/:optionId
 PATCH /api/elections/:id            (clerk of that jurisdiction; questions + option metadata until freeze)
 PUT  /api/elections/:id             (same as PATCH)
 GET  /api/elections/:id/ballots     (published vote rows only)
-GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext only)
+GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext; rankingPayload on ranked ballots)
 GET  /api/elections/:id/registrations
 POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/freeze      (clerk of that jurisdiction)
@@ -589,7 +589,7 @@ POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
 POST /api/elections/:id/disqualify   (officer of that jurisdiction)
 POST /api/elections/:id/disqualify/revoke
 POST /api/elections/:id/revoke
-POST /api/elections/:id/tally       (tally operator of that jurisdiction; L1 postResult if env set)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality counts and/or IRV from envelopes; L1 postResult if env set)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
@@ -697,8 +697,11 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
 
-Question types the ballot UI renders: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`.
-**`RANKED` is Future.** Do not document ranked choice as if the UI tabulated it.
+Question types the ballot UI renders: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED`.
+`RANKED` is instant-runoff (IRV) on the Node: voters rank options; the tally stores a winner and round transcript. Individual rankings stay in the operator envelope.
+
+`ballotSpecHash` is keccak256 of the canonical ballot JSON `{ title, questions }`.
+IRV is hashed via type `RANKED` and/or per-question `ballotMethod: "ranked_choice"` (election-level plurality is the default and is omitted so `{ id, label }` hashes stay stable). On-chain v1 does **not** add a method enum to `ElectionParams`.
 
 ### Passkey wallet (Inertia-style)
 

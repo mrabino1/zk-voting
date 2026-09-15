@@ -3,7 +3,15 @@
 import { Router } from 'express';
 
 import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody } from '../auth.mjs';
-import { parseTallyCounts } from '../ballot.mjs';
+import {
+  electionHasRanked,
+  normalizeBallotMethod,
+  parseTallyCounts,
+  payloadsFromEnvelopes,
+  pluralityQuestions,
+  tallyBallots,
+  withQuestionMethods,
+} from '../ballot.mjs';
 import {
   normalizeQuestions,
   presentPublicBallotInfo,
@@ -94,7 +102,8 @@ export function electionsRouter(deps) {
       if (!Number.isInteger(maxParticipants) || maxParticipants < 0) {
         throw new HttpError(400, 'maxParticipants must be >= 0 (0 = unlimited)');
       }
-      const questions = questionsFromCreateBody(body);
+      const ballotMethod = normalizeBallotMethod(body.ballotMethod);
+      const questions = withQuestionMethods(questionsFromCreateBody(body), ballotMethod);
       const ballotSpecHash = resolveBallotSpecHash({
         title,
         questions,
@@ -112,6 +121,7 @@ export function electionsRouter(deps) {
         maxParticipants,
         treeDepth,
         ballotSpecHash,
+        ballotMethod,
         questions,
         jurisdictionId,
         clerk: body.clerk || '',
@@ -169,12 +179,20 @@ export function electionsRouter(deps) {
     const body = req.body || {};
     const title = body.title != null ? String(body.title).trim() : election.title;
     if (!title) throw new HttpError(400, 'title required');
+    const ballotMethod = normalizeBallotMethod(
+      body.ballotMethod != null ? body.ballotMethod : election.ballotMethod,
+    );
     const questions =
       body.questions != null || body.aspects != null
-        ? normalizeQuestions(body.questions ?? body.aspects)
-        : election.questions;
+        ? withQuestionMethods(normalizeQuestions(body.questions ?? body.aspects), ballotMethod)
+        : withQuestionMethods(election.questions, ballotMethod);
     const metadataURI =
       body.metadataURI != null ? String(body.metadataURI) : election.metadataURI;
+    const startTime =
+      body.startTime != null ? unixSeconds(body.startTime, election.startTime) : election.startTime;
+    const cutoffTime =
+      body.cutoffTime != null ? unixSeconds(body.cutoffTime, election.cutoffTime) : election.cutoffTime;
+    if (!(startTime < cutoffTime)) throw new HttpError(400, 'startTime must be before cutoffTime');
     const ballotSpecHash = resolveBallotSpecHash({
       title,
       questions,
@@ -185,6 +203,9 @@ export function electionsRouter(deps) {
       metadataURI,
       questions,
       ballotSpecHash,
+      ballotMethod,
+      startTime,
+      cutoffTime,
     });
     res.json({
       ok: true,
@@ -470,14 +491,69 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const nums = parseTallyCounts(req.body || {}, election.questions || [], election.acceptedBallots);
+      const ranked = electionHasRanked(election);
+      const plurality = pluralityQuestions(election.questions || [], election.ballotMethod);
+      let irv = null;
+      if (ranked) {
+        const envelopes = store.listEnvelopes(election.id);
+        const ballots = payloadsFromEnvelopes(envelopes);
+        while (ballots.length < election.acceptedBallots) ballots.push([]);
+        irv = tallyBallots(election, ballots);
+      }
+      let nums;
+      if (plurality.length) {
+        nums = parseTallyCounts(
+          req.body || {},
+          election.questions || [],
+          election.acceptedBallots,
+          election.ballotMethod,
+        );
+      } else if (ranked && irv) {
+        const posted = req.body?.counts;
+        if (Array.isArray(posted) && posted.length) {
+          nums = posted.map((n) => Number(n));
+          if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
+            throw new HttpError(400, 'counts must be non-negative integers');
+          }
+          if (nums.length !== irv.counts.length) {
+            throw new HttpError(400, `counts length must be ${irv.counts.length}`, {
+              code: 'TALLY_LENGTH',
+              expected: irv.counts.length,
+              actual: nums.length,
+            });
+          }
+          if (nums.some((n, i) => n !== irv.counts[i])) {
+            throw new HttpError(400, 'counts must match first-round ranked preferences', {
+              code: 'TALLY_MISMATCH',
+              expected: irv.counts,
+            });
+          }
+        } else {
+          nums = irv.counts;
+        }
+        if (!nums.length) throw new HttpError(400, 'counts[] required');
+      } else {
+        nums = parseTallyCounts(
+          req.body || {},
+          election.questions || [],
+          election.acceptedBallots,
+          election.ballotMethod,
+        );
+      }
       const countsHash = computeTallyHash(nums);
-      const tallied = await store.setTally(election.id, nums, { countsHash });
+      const extras = {
+        countsHash,
+        ballotMethod: irv?.ballotMethod || 'plurality',
+      };
+      if (irv?.questions?.length) extras.questions = irv.questions;
+      const tallied = await store.setTally(election.id, nums, extras);
       await explorer.append('tally', {
         electionId: String(tallied.id),
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
         countsHash,
+        ballotMethod: tallied.tally?.ballotMethod,
+        winners: (tallied.tally?.questions || []).map((q) => q.winner).filter(Boolean),
       });
       let l1Certification = {
         status: 'skipped',

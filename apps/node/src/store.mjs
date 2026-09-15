@@ -634,6 +634,7 @@ export class Store {
       maxParticipants: params.maxParticipants,
       treeDepth: params.treeDepth,
       ballotSpecHash: params.ballotSpecHash,
+      ballotMethod: params.ballotMethod || 'plurality',
       questions: params.questions,
       questionCount: params.questions.length,
       jurisdictionId: params.jurisdictionId,
@@ -667,7 +668,7 @@ export class Store {
    * Update ballot title / questions / metadata URI before the roll is frozen.
    * `ballotSpecHash` must already be the keccak of the canonical ballot JSON.
    */
-  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash }) {
+  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash, ballotMethod, startTime, cutoffTime }) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
     if (election.rollFrozen) {
@@ -679,6 +680,9 @@ export class Store {
       election.title = trimmed;
     }
     if (metadataURI != null) election.metadataURI = String(metadataURI);
+    if (startTime != null) election.startTime = Number(startTime);
+    if (cutoffTime != null) election.cutoffTime = Number(cutoffTime);
+    if (ballotMethod) election.ballotMethod = ballotMethod;
     if (questions != null) {
       if (!Array.isArray(questions)) throw new HttpError(400, 'questions must be an array');
       election.questions = questions;
@@ -969,6 +973,7 @@ export class Store {
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
         encryptedBallot: envelope.encryptedBallot,
+        ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
     const election = this.requireElection(vote.electionId);
@@ -1020,7 +1025,11 @@ export class Store {
       postedAt: new Date().toISOString(),
       countsHash: extras.countsHash || null,
       l1: extras.l1 || null,
+      ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
+    if (Array.isArray(extras.questions) && extras.questions.length) {
+      election.tally.questions = extras.questions;
+    }
     await this.persist();
     return election;
   }

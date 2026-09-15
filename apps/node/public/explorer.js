@@ -637,6 +637,10 @@
             if (q.tallied === false) {
               return `<li><strong>${esc(q.prompt || q.id)}</strong> — not tallied (${esc(q.note || "IRV")})</li>`;
             }
+            if (q.tallyMethod === "irv" || q.ballotMethod === "ranked_choice") {
+              const win = q.winnerLabel || q.winner;
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — IRV${win ? ` winner ${esc(win)}` : ""}</li>`;
+            }
             const opts = (q.options || [])
               .map((o) => `${esc(o.label || o.id)}: ${esc(o.count)}`)
               .join("; ");
@@ -704,6 +708,9 @@
             ? `<a href="${esc(resultsUrl)}">Tally posted — view results</a>`
             : "not posted (winner page is linked after a certified tally)"
         }</dd>
+        ${pick(election, ["tally.questions.0.winnerLabel"])
+          ? `<dt>IRV winner</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
+          : ""}
       </dl>
       ${aspectList}
       <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. Plurality totals are labeled per question.</p>

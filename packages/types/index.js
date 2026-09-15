@@ -16,6 +16,20 @@ const AUTH_METHOD_TYPES = Object.freeze(["passkey", "web3", "smart_card"]);
 /** Republic L2 chain id (see docs/L2.md). */
 const REPUBLIC_CHAIN_ID = 27427;
 
+const BallotMethod = Object.freeze({
+  PLURALITY: "plurality",
+  RANKED_CHOICE: "ranked_choice",
+});
+
+const QuestionType = Object.freeze({
+  YES_NO: "YES_NO",
+  SINGLE_CHOICE: "SINGLE_CHOICE",
+  MULTI_CHOICE: "MULTI_CHOICE",
+  RANKED: "RANKED",
+  MEASURE: "MEASURE",
+  ARTICLE: "ARTICLE",
+});
+
 /** Ethereum mainnet. Canonical court-grade settlement when chosen. */
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
 
@@ -91,6 +105,9 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {number} questionCount Number of aspects / questions on the ballot.
  * @property {BallotQuestion[]} [questions] Canonical questions hashed into `ballotSpecHash`.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ * @property {"plurality"|"ranked_choice"} [ballotMethod] Counting flavor. Default
+ *   `plurality`. `ranked_choice` is instant-runoff. On-chain v1 may omit this
+ *   field and keep it only inside `ballotSpecHash`.
  */
 
 /**
@@ -117,16 +134,19 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * One decision on a ballot (office, measure, article). Node authoring +
- * plurality tally. `RANKED` is stored for a later IRV path.
+ * plurality or instant-runoff (IRV) tally. `RANKED` always uses IRV.
  *
  * @typedef {Object} BallotQuestion
  * @property {string} id
  * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"MEASURE"|"ARTICLE"|"RANKED"} type
+ * @property {"plurality"|"ranked_choice"} [ballotMethod]
  * @property {string} prompt
  * @property {string} [description]
  * @property {number} [maxSelections] Required for MULTI_CHOICE; omitted from the
  *   keccak preimage for single-choice / yes-no so older hashes stay stable.
- * @property {BallotOption[]} options
+ *   RANKED uses options.length.
+ * @property {BallotOption[]} options Ordered options. For RANKED this is the
+ *   printed candidate order, not the voter's ranking.
  */
 
 /**
@@ -168,6 +188,21 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {EthAccount[]} ethAccounts
  * @property {string|null} activeEthAddress
  * @property {number} verifiedEthAddressCount
+ */
+
+/**
+ * Instant-runoff round. Counts are aggregate; individual rankings stay in the
+ * operator envelope on the Node demo path.
+ *
+ * @typedef {Object} IrvRound
+ * @property {number} round
+ * @property {Record<string, number>} counts First-preference among remaining.
+ * @property {number} continuing
+ * @property {number} exhausted
+ * @property {string[]} remaining
+ * @property {string|null} eliminated
+ * @property {string|null} winner
+ * @property {boolean} [tieBroken]
  */
 
 /**
@@ -301,6 +336,8 @@ module.exports = {
   ReasonCode,
   REASON_CODE_LABELS,
   AUTH_METHOD_TYPES,
+  BallotMethod,
+  QuestionType,
   reasonCodeLabel,
   electionStateLabel,
 };

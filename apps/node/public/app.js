@@ -203,6 +203,7 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     questionCount: Number(raw.questionCount ?? params.questionCount ?? questions.length) || questions.length,
     rollFrozen: Boolean(raw.rollFrozen) || state >= 1,
     ballotSpecHash: raw.ballotSpecHash || params.ballotSpecHash || null,
+    ballotMethod: raw.ballotMethod || params.ballotMethod || "plurality",
     eligibleRoot: raw.eligibleRoot || null,
     disqualificationRoot: raw.disqualificationRoot || null,
     description: raw.description || raw.summary || "",
@@ -766,12 +767,15 @@ async function renderResults(main, ctx) {
       h("p", { class: "kicker", text: election.jurisdiction }),
       h("h1", { text: "Certified results" }),
       h("p", { class: "lede", text: election.title }),
-      h(
-        "p",
-        { class: "cluster" },
-        h("span", { class: `status-pill ${st.className}`, text: st.label }),
-        source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
-      ),
+        h(
+          "p",
+          { class: "cluster" },
+          h("span", { class: `status-pill ${st.className}`, text: st.label }),
+          source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null,
+          election.ballotMethod === "ranked_choice" || (tally && tally.ballotMethod === "ranked_choice")
+            ? h("span", { class: "status-pill", text: "Ranked choice (IRV)" })
+            : null
+        ),
       h(
         "ul",
         { class: "meta-list" },
@@ -807,7 +811,51 @@ function resultQuestionCard(h, question, index, total, tallied, election) {
     ),
     question.description ? h("p", { class: "field-hint", text: question.description }) : null,
     tallied && tallied.tallied === false
-      ? h("p", { class: "field-hint", text: tallied.note || "Ranked-choice / IRV is not computed on this Node path." })
+      ? h("p", { class: "field-hint", text: tallied.note || "Ranked-choice / IRV was not computed for this question." })
+      : null,
+    tallied && (tallied.winner || tallied.winnerLabel)
+      ? h("p", { text: `Winner: ${tallied.winnerLabel || tallied.winner}` })
+      : null,
+    tallied && tallied.tieBroken
+      ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." })
+      : null,
+    tallied && Array.isArray(tallied.rounds) && tallied.rounds.length
+      ? h(
+          "div",
+          { class: "table-wrap" },
+          h(
+            "table",
+            { class: "irv-rounds" },
+            h(
+              "thead",
+              {},
+              h(
+                "tr",
+                {},
+                h("th", { text: "Round" }),
+                h("th", { text: "Continuing" }),
+                h("th", { text: "Exhausted" }),
+                h("th", { text: "Eliminated" }),
+                h("th", { text: "Counts" })
+              )
+            ),
+            h(
+              "tbody",
+              {},
+              ...tallied.rounds.map((round) =>
+                h(
+                  "tr",
+                  {},
+                  h("td", { text: String(round.round) }),
+                  h("td", { text: String(round.continuing) }),
+                  h("td", { text: String(round.exhausted) }),
+                  h("td", { text: round.eliminated || "—" }),
+                  h("td", { text: round.counts ? JSON.stringify(round.counts) : "—" })
+                )
+              )
+            )
+          )
+        )
       : null,
     tallied && tallied.tallied !== false
       ? h(

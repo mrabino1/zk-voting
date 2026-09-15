@@ -82,6 +82,9 @@ const BANNED_PRIVACY_KEYS = new Set([
   'voteFor',
   'answers',
   'optionIds',
+  'ranking',
+  'ranks',
+  'rankingPayload',
 ]);
 
 /** Strip identity↔choice fields before persisting a ballot envelope. */

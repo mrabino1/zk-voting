@@ -42,6 +42,15 @@ export function isRankedType(type) {
   return canonicalQuestionType(type) === "RANKED";
 }
 
+export function isRankedQuestion(question) {
+  if (!question) return false;
+  if (isRankedType(question.type)) return true;
+  const method = String(question.ballotMethod || "")
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  return method === "ranked_choice" || method === "ranked" || method === "irv";
+}
+
 export function isMultiSelect(question) {
   return question.type === "MULTI_CHOICE" && Number(question.maxSelections) > 1;
 }
@@ -77,6 +86,7 @@ export function normalizeQuestion(q, index = 0) {
     prompt: q?.prompt || q?.title || q?.text || `Question ${index + 1}`,
     description: q?.description || q?.help || "",
     maxSelections,
+    ballotMethod: q?.ballotMethod || (type === "RANKED" ? "ranked_choice" : "plurality"),
     options,
   };
 }
@@ -94,17 +104,25 @@ export function cssQuestionName(id) {
 export function collectAnswers(form, questions) {
   const answers = [];
   for (const question of questions) {
-    if (question.type === "RANKED") {
-      const optionIds = [];
-      const seen = new Set();
-      for (let i = 0; i < question.options.length; i += 1) {
-        const sel = form.querySelector(`[name="${cssQuestionName(question.id)}-rank-${i}"]`);
-        const value = sel && sel.value ? String(sel.value) : "";
-        if (!value || seen.has(value)) continue;
-        seen.add(value);
-        optionIds.push(value);
+    if (isRankedQuestion(question)) {
+      const list = form.querySelector(`#question-${question.id} .rank-list`);
+      const ranking = list
+        ? [...list.querySelectorAll(".rank-row[data-option-id]")].map((el) => String(el.dataset.optionId || "")).filter(Boolean)
+        : [];
+      if (!ranking.length) {
+        const optionIds = [];
+        const seen = new Set();
+        for (let i = 0; i < question.options.length; i += 1) {
+          const sel = form.querySelector(`[name="${cssQuestionName(question.id)}-rank-${i}"]`);
+          const value = sel && sel.value ? String(sel.value) : "";
+          if (!value || seen.has(value)) continue;
+          seen.add(value);
+          optionIds.push(value);
+        }
+        answers.push({ questionId: question.id, type: question.type, ranking: optionIds, optionIds });
+        continue;
       }
-      answers.push({ questionId: question.id, type: question.type, optionIds });
+      answers.push({ questionId: question.id, type: question.type, ranking, optionIds: ranking });
       continue;
     }
     if (isMultiSelect(question)) {
@@ -145,7 +163,28 @@ export function labeledTally(election) {
   }
   let offset = 0;
   const labeled = questions.map((q, index) => {
-    if (q.type === "RANKED") {
+    if (q.type === "RANKED" || q.ballotMethod === "ranked_choice") {
+      const stored = Array.isArray(tally.questions)
+        ? tally.questions.find((row) => String(row.questionId || row.id) === String(q.id))
+        : null;
+      if (stored && (stored.tallied === true || stored.winner != null || Array.isArray(stored.rounds))) {
+        const first = stored.rounds?.[0]?.counts || null;
+        return {
+          index,
+          id: q.id,
+          type: q.type,
+          prompt: q.prompt,
+          tallied: true,
+          tallyMethod: "irv",
+          ballotMethod: "ranked_choice",
+          winner: stored.winner || null,
+          winnerLabel: stored.winnerLabel || stored.winner || null,
+          rounds: stored.rounds || [],
+          tieBroken: Boolean(stored.tieBroken),
+          options: q.options.map((o) => ({ ...o, count: first ? Number(first[o.id]) || 0 : null })),
+          undervotes: stored.exhausted ?? null,
+        };
+      }
       return {
         index,
         id: q.id,
@@ -153,7 +192,7 @@ export function labeledTally(election) {
         prompt: q.prompt,
         tallied: false,
         tallyMethod: "irv",
-        note: "Ranked-choice / IRV is not computed on this Node path.",
+        note: stored?.note || "Ranked-choice / IRV was not computed for this question.",
         options: q.options.map((o) => ({ ...o, count: null })),
         undervotes: null,
       };

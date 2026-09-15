@@ -2,7 +2,7 @@
 // 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
-import { presentAspects, presentTally } from './ballot.mjs';
+import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
 import { disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
@@ -40,8 +40,9 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     maxParticipants: election.maxParticipants,
     treeDepth: election.treeDepth,
     ballotSpecHash: election.ballotSpecHash,
+    ballotMethod: election.ballotMethod || 'plurality',
     questionCount: election.questionCount ?? (election.questions || []).length,
-    questions: election.questions,
+    questions: withQuestionMethods(election.questions, election.ballotMethod || 'plurality'),
     aspects: presentAspects(election),
     jurisdictionId: election.jurisdictionId,
     clerk: election.clerk,
@@ -135,5 +136,6 @@ export function presentResults(election, deps, opts = {}) {
     tally: presentTally(election, election.acceptedBallots),
     ballotSpecHash: election.ballotSpecHash,
     cutoffTime: election.cutoffTime,
+    ballotMethod: election.ballotMethod || 'plurality',
   };
 }

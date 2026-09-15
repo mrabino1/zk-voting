@@ -310,6 +310,9 @@ export function publicQuestion(raw, index = 0) {
   };
   if (obj.description) out.description = String(obj.description);
   if (obj.maxSelections != null) out.maxSelections = obj.maxSelections;
+  if (String(out.type || '').toUpperCase() === 'RANKED' || obj.ballotMethod === 'ranked_choice') {
+    out.ballotMethod = 'ranked_choice';
+  }
   return out;
 }
 
@@ -351,6 +354,7 @@ export function presentPublicBallotInfo(election, now = Math.floor(Date.now() / 
     startTime: election.startTime,
     cutoffTime: election.cutoffTime,
     ballotSpecHash: election.ballotSpecHash,
+    ballotMethod: election.ballotMethod || 'plurality',
     questionCount: election.questionCount ?? (election.questions ? election.questions.length : 0),
     questions: publicQuestions(election.questions),
     state,
