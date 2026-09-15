@@ -85,9 +85,10 @@ async function tallyFixture(overrides = {}) {
   });
   const electionId = createdEl.json.id;
   assert.equal(createdEl.status, 201, createdEl.json?.error);
+  const commitment = '0x' + '11'.repeat(32);
   await api(base, 'POST', `/api/elections/${electionId}/register`, {
     jar,
-    body: { identityCommitment: '0x' + '11'.repeat(32) },
+    body: { identityCommitment: commitment },
   });
   await api(base, 'POST', `/api/elections/${electionId}/freeze`, { jar, body: {} });
   const voted = await api(base, 'POST', `/api/elections/${electionId}/vote`, {
@@ -95,6 +96,7 @@ async function tallyFixture(overrides = {}) {
       proof: { accept: true },
       publicInputs: { nullifier: 7, electionId },
       encryptedBallot: '0xaa',
+      identityCommitment: commitment,
     },
   });
   assert.equal(voted.status, 201, voted.json?.error);

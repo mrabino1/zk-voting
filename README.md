@@ -268,7 +268,7 @@ The Node side is the human product. It should feel operationally familiar to any
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
 | Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
 
-SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
 
 ---
 
@@ -459,6 +459,10 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
    The vote proof shows membership in that set (or non-membership in the disqualification set plus membership in the registry), so a disqualified person **cannot** produce an accepting proof.
 
+   **Node path today:** `apps/node` rebuilds `eligibleRoot` from that intersection and the vote relay rejects currently-disqualified (and unregistered) commitments when `CHAIN_RPC` is unset. Freeze snapshots those roots for the open window.
+
+   **Remaining ZK gap:** the vote circuit still only *binds* `disqRoot`; it does not prove non-membership. `MockVerifier` still accepts any proof. Do not treat a local demo accept as circuit-enforced exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
 4. **Visibility.**
 
    - **Public:** that a disqualification exists, which election it applies to, reason **code**, issuer role, timestamps.
@@ -494,7 +498,7 @@ Each **Election** contains one or more **questions**:
 
 Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar).
 
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on.
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON.
 
 ---
 

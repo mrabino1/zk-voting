@@ -103,7 +103,7 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public SPA routes include `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public SPA routes include `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/info`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
 
 ### Republic L2
 

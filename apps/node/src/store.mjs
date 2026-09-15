@@ -18,7 +18,7 @@ import {
 } from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isRole } from './roles.mjs';
-import { isValidReasonCode } from './reasonCodes.mjs';
+import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 
 /** Public ballot row: no acceptedAt, no choice, no user id. */
 export function publicVoteRecord(vote) {
@@ -36,7 +36,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 2,
+      version: 3,
       nextElectionId: 1,
     },
     users: [],
@@ -107,6 +107,7 @@ export class Store {
       }
     }
     await store.seed(config);
+    store.rebuildAllEligibility();
     await store.persist();
     return store;
   }
@@ -494,7 +495,10 @@ export class Store {
       lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
       rollFrozen: false,
       frozenAt: null,
+      frozenEligibleRoot: null,
+      frozenDisqualificationRoot: null,
       participantCount: 0,
+      eligibleCount: 0,
       acceptedBallots: 0,
       eligibleRoot: tree.root,
       disqualificationRoot: dq.root,
@@ -509,11 +513,41 @@ export class Store {
     return election;
   }
 
+  /**
+   * Update ballot title / questions / metadata URI before the roll is frozen.
+   * `ballotSpecHash` must already be the keccak of the canonical ballot JSON.
+   */
+  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash }) {
+    const election = this.requireElection(id);
+    if (election.tally) throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll frozen; ballot spec is locked', { code: 'ROLL_FROZEN' });
+    }
+    if (title != null) {
+      const trimmed = String(title).trim();
+      if (!trimmed) throw new HttpError(400, 'title required');
+      election.title = trimmed;
+    }
+    if (metadataURI != null) election.metadataURI = String(metadataURI);
+    if (questions != null) {
+      if (!Array.isArray(questions)) throw new HttpError(400, 'questions must be an array');
+      election.questions = questions;
+      election.questionCount = questions.length;
+    }
+    if (ballotSpecHash) election.ballotSpecHash = ballotSpecHash;
+    await this.persist();
+    return election;
+  }
+
   async freezeElection(id) {
     const election = this.requireElection(id);
     if (election.rollFrozen) throw new HttpError(409, 'roll already frozen');
+    this.rebuildEligibleTree(election);
+    this.rebuildDisqualificationTree(election);
     election.rollFrozen = true;
     election.frozenAt = new Date().toISOString();
+    election.frozenEligibleRoot = election.eligibleRoot;
+    election.frozenDisqualificationRoot = election.disqualificationRoot;
     await this.persist();
     return election;
   }
@@ -538,8 +572,7 @@ export class Store {
     if (election.maxParticipants !== 0 && election.participantCount >= election.maxParticipants) {
       throw new HttpError(409, 'participant cap reached', { code: 'CAP' });
     }
-    const { leafIndex, root } = insertLeaf(election.eligibleTree, key);
-    election.eligibleRoot = root;
+    const leafIndex = election.participantCount;
     election.participantCount += 1;
     this.data.registrations.push({
       electionId: String(election.id),
@@ -560,8 +593,15 @@ export class Store {
         });
       }
     }
+    this.rebuildEligibleTree(election);
+    const eligibleLeafIndex = election.eligibleTree.leaves.indexOf(key);
     await this.persist();
-    return { election, leafIndex, identityCommitment: key, eligibleRoot: root };
+    return {
+      election,
+      leafIndex: eligibleLeafIndex >= 0 ? eligibleLeafIndex : leafIndex,
+      identityCommitment: key,
+      eligibleRoot: election.eligibleRoot,
+    };
   }
 
   findLink(electionId, userId) {
@@ -591,6 +631,32 @@ export class Store {
     return rec || null;
   }
 
+  isEligible(electionId, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    return this.isRegistered(electionId, key) && !this.isDisqualified(electionId, key);
+  }
+
+  listEligibleRegistrations(electionId) {
+    return this.listRegistrations(electionId).filter(
+      (r) => !this.isDisqualified(electionId, r.identityCommitment),
+    );
+  }
+
+  /**
+   * Node eligible set: registered ∩ ¬currently-disqualified, in registration order.
+   * Incremental Merkle trees cannot delete; disqualify/revoke rebuild this tree.
+   */
+  rebuildEligibleTree(election) {
+    const tree = emptyTree(election.treeDepth);
+    for (const r of this.listEligibleRegistrations(election.id)) {
+      insertLeaf(tree, r.identityCommitment);
+    }
+    election.eligibleTree = tree;
+    election.eligibleRoot = tree.root;
+    election.eligibleCount = tree.leaves.length;
+    return tree;
+  }
+
   rebuildDisqualificationTree(election) {
     const tree = emptyTree(election.treeDepth);
     for (const d of this.data.disqualifications) {
@@ -599,6 +665,62 @@ export class Store {
     }
     election.disqualificationTree = tree;
     election.disqualificationRoot = tree.root;
+  }
+
+  rebuildAllEligibility() {
+    for (const election of this.data.elections) {
+      if (!Number.isInteger(Number(election.treeDepth))) continue;
+      this.rebuildDisqualificationTree(election);
+      this.rebuildEligibleTree(election);
+      if (election.rollFrozen) {
+        if (!election.frozenEligibleRoot) election.frozenEligibleRoot = election.eligibleRoot;
+        if (!election.frozenDisqualificationRoot) {
+          election.frozenDisqualificationRoot = election.disqualificationRoot;
+        }
+      }
+    }
+  }
+
+  votingRoots(election) {
+    if (election.rollFrozen && !election.lateUpdateAllowed && election.frozenEligibleRoot) {
+      return {
+        eligibleRoot: election.frozenEligibleRoot,
+        disqualificationRoot: election.frozenDisqualificationRoot || election.disqualificationRoot,
+      };
+    }
+    return {
+      eligibleRoot: election.eligibleRoot,
+      disqualificationRoot: election.disqualificationRoot,
+    };
+  }
+
+  /**
+   * Node-path vote gate. The circuit still may not prove non-disqualification;
+   * this is the product control when CHAIN_RPC is unset.
+   */
+  assertCanVote(electionId, identityCommitment) {
+    if (identityCommitment == null || identityCommitment === '') {
+      throw new HttpError(400, 'identityCommitment required to vote on the Node path', {
+        code: 'IDENTITY_COMMITMENT_REQUIRED',
+      });
+    }
+    let key;
+    try {
+      key = toBytes32(identityCommitment);
+    } catch {
+      throw new HttpError(400, 'invalid identityCommitment', { code: 'INVALID_COMMITMENT' });
+    }
+    const dq = this.isDisqualified(electionId, key);
+    if (dq) {
+      throw new HttpError(403, 'identity is disqualified', {
+        code: 'DISQUALIFIED',
+        reasonCode: dq.reasonCode,
+        reasonName: reasonName(dq.reasonCode),
+      });
+    }
+    if (!this.isRegistered(electionId, key)) {
+      throw new HttpError(403, 'identity is not registered', { code: 'NOT_REGISTERED' });
+    }
   }
 
   async disqualify(electionId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
@@ -626,6 +748,7 @@ export class Store {
     };
     this.data.disqualifications.push(record);
     this.rebuildDisqualificationTree(election);
+    this.rebuildEligibleTree(election);
     await this.persist();
     return { election, record };
   }
@@ -647,6 +770,7 @@ export class Store {
     rec.revokeEvidenceHash = evidenceHash ? toBytes32(evidenceHash) : toBytes32(0);
     rec.revokedBy = issuer || 'node';
     this.rebuildDisqualificationTree(election);
+    this.rebuildEligibleTree(election);
     await this.persist();
     return { election, record: rec };
   }
@@ -774,12 +898,20 @@ export class Store {
   voterStatus(electionId, userId) {
     const link = this.findLink(electionId, userId);
     if (!link) {
-      return { registered: false, disqualified: false, reasonCode: null, identityCommitment: null };
+      return {
+        registered: false,
+        disqualified: false,
+        eligible: false,
+        reasonCode: null,
+        identityCommitment: null,
+      };
     }
     const dq = this.isDisqualified(electionId, link.identityCommitment);
+    const disqualified = Boolean(dq);
     return {
       registered: true,
-      disqualified: Boolean(dq),
+      disqualified,
+      eligible: !disqualified,
       reasonCode: dq ? dq.reasonCode : null,
       identityCommitment: link.identityCommitment,
     };
