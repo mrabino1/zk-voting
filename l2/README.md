@@ -96,9 +96,9 @@ submits `submitBatch` with [viem](https://viem.sh). Otherwise it writes
 This is **not** a proving-as-a-service company. The jurisdiction that runs an
 election runs the prover.
 
-## Run locally (pure Node, no Docker)
+## Run locally (pure Node)
 
-Docker is not required and is not used here.
+Docker is not required. From the repository root, `docker compose up -d --build` also starts this sequencer (`l2`) and the prover (`prover`); see [`docs/OPERATOR.md`](../docs/OPERATOR.md).
 
 ```bash
 ./l2/bin/start-local.sh

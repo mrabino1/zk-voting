@@ -133,6 +133,7 @@ Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` unt
 | Passkeys | WebAuthn PRF helper; demo address is `republic-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
 | Person identity | Passkey / Web3 / smart card; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
 | Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`. **`RANKED` is Future.** |
+| Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
 | Results page `/elections/:id/results` | Linked from explorer / back-office; **no voter-SPA view yet** (tally is on the API + explorer) |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 
@@ -150,6 +151,7 @@ zk-voting/
   CONTRIBUTING.md
   system_actions.sh            host/operator menu (DealPunchList pattern)
   package.json                 npm workspaces
+  docker-compose.yml           Node + L2 host path
   docs/
     ARCHITECTURE.md            implemented map + Solidity/circuit interfaces
     OPERATOR.md
@@ -212,6 +214,15 @@ npm test -w apps/node
 ```
 
 Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored). **Not SQLite.** The UI is vanilla JS in `apps/node/public/` (no Vite, no React).
+
+Docker Compose (Node + L2 sequencer + prover), from the repo root:
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
+See [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ### Republic L2 (sequencer + prover)
 
@@ -290,6 +301,8 @@ The Node side is the human product. It should feel operationally familiar to any
 | Path | What |
 | --- | --- |
 | `/`, `/register`, `/vote/:id` | Voter pages (`public/index.html` + `app.js`) |
+| `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
+| `/elections/:id/info/:questionId/:optionId` | One option + external links |
 | `/admin` | Platform admin (`admin.html`) |
 | `/back-office` | Clerks / registrars / officers (`back-office.html`) |
 | `/explorer` | Civic L2 explorer (`explorer.html`) |
@@ -489,6 +502,10 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
    The vote proof shows membership in that set (or non-membership in the disqualification set plus membership in the registry), so a disqualified person **cannot** produce an accepting proof.
 
+   **Node path today:** `apps/node` rebuilds `eligibleRoot` from that intersection and the vote relay rejects currently-disqualified (and unregistered) commitments when `CHAIN_RPC` is unset. Freeze snapshots those roots for the open window.
+
+   **Remaining ZK gap:** the vote circuit still only *binds* `disqRoot`; it does not prove non-membership. `MockVerifier` still accepts any proof. Do not treat a local demo accept as circuit-enforced exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
 4. **Visibility.**
 
    - **Public:** that a disqualification exists, which election it applies to, reason **code**, issuer role, timestamps.
@@ -527,7 +544,7 @@ Each **Election** contains one or more **questions**. **Implemented in the Node 
 
 Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar). **Per-question disqualification in circuits is Future**; v1 eligible root is `registered ∩ ¬disqualified` for the election.
 
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on.
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON.
 
 ---
 
@@ -673,7 +690,12 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 ./system_actions.sh deploy-prod  # pull master (confirms first)
 ```
 
-Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured.
+Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured. Root `docker-compose.yml` is that Compose target:
+
+```bash
+docker compose up -d --build   # Node :3000, L2 RPC :8546
+npm run compose:up             # same
+```
 
 ### Tooling
 

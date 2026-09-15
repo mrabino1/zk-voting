@@ -144,6 +144,7 @@ zk-voting/
   LICENSE                            (AGPL-3.0-or-later)
   system_actions.sh
   package.json                       (workspaces)
+  docker-compose.yml                 (Node + L2 host path)
   docs/ARCHITECTURE.md               (this file)
   docs/IDENTITY.md
   docs/L2.md
@@ -539,6 +540,10 @@ GET  /api/config                    (hourly disclosure + identity policy)
 GET  /api/elections
 POST /api/elections                 (clerk)
 GET  /api/elections/:id
+GET  /api/elections/:id/info
+GET  /api/elections/:id/info/:questionId/:optionId
+PATCH /api/elections/:id            (clerk; questions + option metadata until freeze)
+PUT  /api/elections/:id             (same as PATCH)
 GET  /api/elections/:id/ballots     (published vote rows only)
 GET  /api/elections/:id/envelopes   (tally_operator; after cutoff; ciphertext only)
 GET  /api/elections/:id/registrations
@@ -558,6 +563,8 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge       (returning-user wallet login)
+POST /api/auth/web3/login
 POST /api/auth/logout
 POST /api/auth/dev-login            (ALLOW_DEV_LOGIN or NODE_ENV=test)
 GET  /api/auth/session
@@ -590,13 +597,45 @@ GET  /api/users                     (platform_admin)
 PATCH /api/users/:id
 ```
 
-Without `CHAIN_RPC`, votes that pass the election window and nullifier check
+Without `CHAIN_RPC`, votes that pass the election window, nullifier check, and
+Node eligibility (`identityCommitment` registered and not currently disqualified)
 are accepted in the local JSON store so the explorer and UI can run a demo.
 Those accepts still wait for hourly public disclosure unless the interval is `0`.
 
 A person identifies with a **passkey, Web3 wallet, or smart-card digital ID**.
 Many ETH addresses may be verified internally; only one is active. The
 Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
+
+### Eligible set on the Node path
+
+Product rule: **`eligible = registered ∩ ¬currently-disqualified`** (registration
+order). The Node rebuilds `eligibleRoot` on register, disqualify, and revoke.
+`POST /api/elections/:id/freeze` snapshots `frozenEligibleRoot` and
+`frozenDisqualificationRoot` — those are the roots for the open window unless
+the election was created with `lateUpdateAllowed` (discouraged).
+
+When `CHAIN_RPC` is unset, `POST /api/elections/:id/vote` requires
+`identityCommitment` and rejects with:
+
+| `code` | Meaning |
+| --- | --- |
+| `DISQUALIFIED` | Commitment is currently disqualified (`reasonCode` / `reasonName` included) |
+| `NOT_REGISTERED` | Commitment is not on the registration roll |
+| `IDENTITY_COMMITMENT_REQUIRED` | Node path cannot enforce eligibility without the leaf |
+| `ELIGIBLE_ROOT_MISMATCH` / `DISQUALIFICATION_ROOT_MISMATCH` | Proof roots do not match the open-window set |
+
+`identityCommitment` is checked then discarded. It is never stored on the
+vote or envelope.
+
+### ZK non-membership gap (not fixed in this layer)
+
+`vote.circom` binds `disqRoot` as a public input; it does **not** prove
+non-membership in the disqualification tree. Cryptographic exclusion of a
+disqualified person depends on membership in a correctly rebuilt eligible
+root. `MockVerifier` still accepts any proof. **Node enforcement is the
+product control until a non-membership (or equivalent) constraint exists and
+a production hasher/verifier replaces the mock.** This layer does not
+replace MockVerifier or Poseidon.
 
 ### Pages (vanilla JS, served by Express)
 
@@ -607,6 +646,8 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 | Path | Files | Status |
 | --- | --- | --- |
 | `/`, `/register`, `/vote/:id` | `public/index.html` + `app.js` / `register.js` / `vote.js` / `router.js` | Implemented |
+| `/elections/:id/info` | `public/info.js` | Implemented (option supporting info) |
+| `/elections/:id/info/:questionId/:optionId` | `public/info.js` | Implemented |
 | `/admin` | `public/admin.html` + `admin.js` | Implemented |
 | `/back-office` | `public/back-office.html` + `back-office.js` | Implemented |
 | `/explorer` | `public/explorer.html` + `explorer.js` | Implemented |

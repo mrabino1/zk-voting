@@ -55,13 +55,30 @@ npm test -w apps/node
 ./system_actions.sh restart   # pm2 / systemd / compose when configured
 ```
 
+Docker Compose from the **repository root** (not this directory):
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
 The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
-Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`.
+Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+`/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
 Admin / back-office / explorer are separate HTML files. `/elections/:id/results` is
 **not** implemented on the voter router yet.
+
+### Ballot option information
+
+Each question option may be a plain string, `{ id, label }`, or a supporting-info
+object (`summary`, `body`, optional `imageUrl`, `links: [{ label, url }]`). Clerks
+edit that as a punch-list on `/back-office` (JSON remains under Advanced). The Node
+canonicalizes options and keccak-hashes `{ title, questions }` as `ballotSpecHash`.
+Empty optional fields are omitted so older elections without metadata keep working.
+`GET /api/elections/:id/info` returns the public copy (no `createdBy` / clerk notes).
 
 ---
 
@@ -70,6 +87,7 @@ Admin / back-office / explorer are separate HTML files. `/elections/:id/results`
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
+| `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
@@ -86,6 +104,8 @@ Admin / back-office / explorer are separate HTML files. `/elections/:id/results`
 
 Passkey rpName is always **Republic**.
 
+Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and **Sign in with Ethereum**. Register a person first (`/register`). Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
+
 ---
 
 ## HTTP
@@ -94,7 +114,10 @@ Passkey rpName is always **Republic**.
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
+PATCH /api/elections/:id            (clerk; ballot metadata until roll freeze)
 GET  /api/elections/:id
+GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
+GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
@@ -116,6 +139,10 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login            (ALLOW_DEV_LOGIN / tests only)
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
@@ -126,9 +153,13 @@ GET  /api/config
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools.
 
-Without `CHAIN_RPC`, votes that pass the election window and nullifier check are
-accepted in the local store so the explorer and SPA can run a demo. Those
+Without `CHAIN_RPC`, votes that pass the election window, nullifier check, **and**
+Node eligibility (`identityCommitment` is registered and not currently disqualified)
+are accepted in the local store so the explorer and SPA can run a demo. Those
 accepts still wait for hourly public disclosure unless the interval is `0`.
+Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified.
+Freeze snapshots the roots used for the open window. The circuit may still not
+prove non-disqualification; Node enforcement is the product control on this path.
 
 ---
 
