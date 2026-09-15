@@ -20,8 +20,8 @@ export const SAMPLE_QUESTIONS = [
     prompt: "Shall Ordinance 2026-14, extending public library hours on Sundays, be adopted?",
     description: "A Yes vote adopts the ordinance. A No vote rejects it. You may undervote only if you intend to leave this question blank.",
     options: [
-      { id: "yes", label: "Yes" },
-      { id: "no", label: "No" },
+      { id: "yes", label: "Yes", summary: "Adopt the ordinance." },
+      { id: "no", label: "No", summary: "Reject the ordinance." },
     ],
   },
   {
@@ -31,10 +31,16 @@ export const SAMPLE_QUESTIONS = [
     description: "Select one or two names. Selecting none is an undervote on this aspect.",
     maxSelections: 2,
     options: [
-      { id: "cand-rivera", label: "Alex Rivera" },
-      { id: "cand-chen", label: "Morgan Chen" },
-      { id: "cand-okonkwo", label: "Sam Okonkwo" },
-      { id: "cand-berg", label: "Jordan Berg" },
+      {
+        id: "cand-rivera",
+        label: "Alex Rivera",
+        summary: "Neighborhood organizer.",
+        body: "Alex Rivera organizes tenant unions in Northbridge.",
+        links: [{ label: "Campaign site", url: "https://example.org/rivera" }],
+      },
+      { id: "cand-chen", label: "Morgan Chen", summary: "Civil engineer." },
+      { id: "cand-okonkwo", label: "Sam Okonkwo", summary: "School teacher." },
+      { id: "cand-berg", label: "Jordan Berg", summary: "Small-business owner." },
     ],
   },
 ];
@@ -120,6 +126,15 @@ export async function renderVote(main, ctx) {
         {
           text: "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
         }
+      ),
+      h(
+        "p",
+        {},
+        h("a", {
+          href: `/elections/${encodeURIComponent(election.id)}/info`,
+          "data-nav": "",
+          text: "Read candidate and measure information (does not record a vote)",
+        })
       )
     );
   }
@@ -175,16 +190,33 @@ export async function renderVote(main, ctx) {
             { class: "choice-list", role: "group", "aria-label": question.prompt },
             ...question.options.map((opt) =>
               h(
-                "label",
-                { class: "choice", for: `${cssQuestionName(question.id)}-${opt.id}` },
-                h("input", {
-                  id: `${cssQuestionName(question.id)}-${opt.id}`,
-                  name: cssQuestionName(question.id),
-                  type: inputType,
-                  value: opt.id,
-                  onChange: (ev) => enforceMax(ev, question),
-                }),
-                h("span", { text: opt.label })
+                "div",
+                { class: "choice-row" },
+                h(
+                  "label",
+                  { class: "choice", for: `${cssQuestionName(question.id)}-${opt.id}` },
+                  h("input", {
+                    id: `${cssQuestionName(question.id)}-${opt.id}`,
+                    name: cssQuestionName(question.id),
+                    type: inputType,
+                    value: opt.id,
+                    onChange: (ev) => enforceMax(ev, question),
+                  }),
+                  h(
+                    "span",
+                    { class: "choice-copy" },
+                    h("span", { text: opt.label }),
+                    opt.summary ? h("span", { class: "field-hint", text: opt.summary }) : null
+                  )
+                ),
+                source === "sample"
+                  ? null
+                  : h("a", {
+                      class: "choice-info",
+                      href: `/elections/${encodeURIComponent(election.id)}/info/${encodeURIComponent(question.id)}/${encodeURIComponent(opt.id)}`,
+                      "data-nav": "",
+                      text: "About",
+                    })
               )
             )
           )
@@ -225,12 +257,16 @@ export async function renderVote(main, ctx) {
       return;
     }
 
-    if (!publicRecord) {
+    if (!publicRecord || publicRecord.staleWrap) {
       children.push(
         h(
           "div",
           { class: "notice notice-warn" },
-          h("p", { text: "This device does not have a Republic passkey yet. Register first, then return to the ballot." }),
+          h("p", {
+            text: publicRecord?.staleWrap
+              ? "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting."
+              : "This device does not have a Republic passkey yet. Register first, then return to the ballot.",
+          }),
           h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to registration" })
         )
       );
@@ -301,7 +337,7 @@ export async function renderVote(main, ctx) {
             {
               class: "btn",
               type: "submit",
-              disabled: Boolean(state.busy || !publicRecord),
+              disabled: Boolean(state.busy || !publicRecord || publicRecord.staleWrap),
               "aria-busy": state.busy ? "true" : "false",
               text: state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
             }
@@ -317,8 +353,10 @@ export async function renderVote(main, ctx) {
   async function onSubmit(event) {
     event.preventDefault();
     if (state.busy) return;
-    if (!publicRecord) {
-      state.error = "Register a passkey on this device before voting.";
+    if (!publicRecord || publicRecord.staleWrap) {
+      state.error = publicRecord?.staleWrap
+        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
+        : "Register a passkey on this device before voting.";
       paint();
       return;
     }

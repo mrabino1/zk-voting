@@ -297,9 +297,13 @@ describe('multi-question ballots (aspects)', () => {
       body: { identityCommitment: '0xb2' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
+    const rankedQ = created.json.election.questions[1];
     const rankedAnswers = [
       { questionId: created.json.election.questions[0].id, optionIds: ['yes'] },
-      { questionId: created.json.election.questions[1].id, optionIds: ['ada', 'bea'] },
+      {
+        questionId: rankedQ.id,
+        optionIds: [rankedQ.options[0].id, rankedQ.options[1].id],
+      },
     ];
     const vote = await api('POST', `/api/elections/${id}/vote`, {
       body: {

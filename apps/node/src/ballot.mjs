@@ -321,6 +321,8 @@ export function presentTally(election, acceptedBallots) {
     counts: flat,
     questions: labeled,
     postedAt: election.tally.postedAt,
+    countsHash: election.tally.countsHash || null,
+    l1: election.tally.l1 || null,
   };
 }
 

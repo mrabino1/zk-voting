@@ -51,7 +51,10 @@ contract PersonRegistryTest is Test {
         assertTrue(registry.isVerified(personA, addrA));
     }
 
-    function testCannotStealVerifiedAddress() public {
+    /// @notice One ETH address is bound to at most one person. Orthogonal to
+    ///         ballot uniqueness (votes are keyed by identity-commitment nullifiers
+    ///         **per election**; `msg.sender` on `submitVote` is typically the relayer).
+    function testOneAddressBoundToOnePerson_secondPersonCannotClaimIt() public {
         vm.prank(registrar);
         registry.verifyAddress(personA, addrA);
 
@@ -61,6 +64,10 @@ contract PersonRegistryTest is Test {
 
         assertEq(registry.personOf(addrA), personA);
         assertFalse(registry.verified(personB, addrA));
+    }
+
+    function testCannotStealVerifiedAddress() public {
+        testOneAddressBoundToOnePerson_secondPersonCannotClaimIt();
     }
 
     function testSetActiveRequiresVerified() public {

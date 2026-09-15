@@ -56,6 +56,26 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+/** Keep a successful L1 post if a later retry fails or is AlreadyPosted. */
+export function mergeTallyL1(prev, next) {
+  if (!next || typeof next !== 'object') return prev || next;
+  if (!prev || typeof prev !== 'object') return next;
+  const prevOnChain = prev.posted || prev.alreadyPosted;
+  if (prevOnChain && next.status === 'failed') {
+    return { ...prev, lastError: next.error || null };
+  }
+  if (next.alreadyPosted || next.status === 'already_posted') {
+    return {
+      ...next,
+      txHash: next.txHash || prev.txHash || null,
+      chainId: next.chainId || prev.chainId || null,
+      mirror: next.mirror || prev.mirror || null,
+      settlement: next.settlement || prev.settlement || null,
+    };
+  }
+  return next;
+}
+
 export class Store {
   constructor(filePath, data) {
     this.filePath = filePath;
@@ -493,6 +513,32 @@ export class Store {
     return election;
   }
 
+  /**
+   * Update ballot title / questions / metadata URI before the roll is frozen.
+   * `ballotSpecHash` must already be the keccak of the canonical ballot JSON.
+   */
+  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash }) {
+    const election = this.requireElection(id);
+    if (election.tally) throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll frozen; ballot spec is locked', { code: 'ROLL_FROZEN' });
+    }
+    if (title != null) {
+      const trimmed = String(title).trim();
+      if (!trimmed) throw new HttpError(400, 'title required');
+      election.title = trimmed;
+    }
+    if (metadataURI != null) election.metadataURI = String(metadataURI);
+    if (questions != null) {
+      if (!Array.isArray(questions)) throw new HttpError(400, 'questions must be an array');
+      election.questions = questions;
+      election.questionCount = questions.length;
+    }
+    if (ballotSpecHash) election.ballotSpecHash = ballotSpecHash;
+    await this.persist();
+    return election;
+  }
+
   async freezeElection(id) {
     const election = this.requireElection(id);
     if (election.rollFrozen) throw new HttpError(409, 'roll already frozen');
@@ -782,6 +828,10 @@ export class Store {
     return this.listPublishedVotes(electionId, now, intervalSeconds).length;
   }
 
+  publishedAcceptedBallotsAll(now, intervalSeconds) {
+    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds)).length;
+  }
+
   listEnvelopes(electionId) {
     return this.data.envelopes.filter((e) => String(e.electionId) === String(electionId));
   }
@@ -794,13 +844,26 @@ export class Store {
     return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
   }
 
-  async setTally(id, counts) {
+  async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
       counts: counts.map((n) => Number(n)),
       postedAt: new Date().toISOString(),
+      countsHash: extras.countsHash || null,
+      l1: extras.l1 || null,
     };
+    await this.persist();
+    return election;
+  }
+
+  async setTallyL1(id, l1) {
+    const election = this.requireElection(id);
+    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
+    election.tally.l1 = mergeTallyL1(election.tally.l1, l1);
+    if (l1?.resultHash && !election.tally.countsHash) {
+      election.tally.countsHash = l1.resultHash;
+    }
     await this.persist();
     return election;
   }

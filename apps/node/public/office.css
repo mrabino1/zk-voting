@@ -322,7 +322,8 @@ hr.hr-office {
   margin: 1.25rem 0;
 }
 
-.aspects-editor {
+.aspects-editor,
+.ballot-builder {
   display: grid;
   gap: 1rem;
   margin: 0.35rem 0 0.75rem;
@@ -338,6 +339,27 @@ hr.hr-office {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.q-card,
+.opt-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 0.9rem 1rem 1rem;
+}
+
+.q-card {
+  border-top: 4px solid var(--navy);
+}
+
+.q-card-head,
+.opt-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
   gap: 0.5rem;
   margin-bottom: 0.65rem;
 }
@@ -392,12 +414,68 @@ details summary {
   align-items: center;
 }
 
+.q-card-head h3,
+.opt-card-head h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.opt-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.opt-card {
+  background: var(--cream);
+  border-left: 4px solid var(--gold);
+}
+
+.link-rows {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.link-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.4fr) minmax(12rem, 1fr) auto;
+  gap: 0.45rem;
+  align-items: start;
+}
+
+.builder-mini {
+  min-height: 2.6rem !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.95rem !important;
+}
+
+textarea.builder-body {
+  min-height: 6rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+}
+
+.advanced-json {
+  margin: 0.5rem 0;
+  border: 1px dashed var(--line);
+  padding: 0.45rem 0.7rem 0.7rem;
+}
+
+.advanced-json summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+
 @media (max-width: 720px) {
   .data-table {
     min-width: 28rem;
   }
   .aspect-option,
-  .tally-opt {
+  .tally-opt,
+  .link-row {
     grid-template-columns: 1fr;
   }
 }

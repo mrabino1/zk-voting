@@ -163,7 +163,10 @@
         : "—";
       $("stat-nfp").textContent = nfp ? "Yes" : "Host did not label itself NOT FOR PROFIT";
       const banner = $("disclosure-banner");
-      if (banner && merged.disclosure && merged.disclosure.note) {
+      const helper = globalThis.RepublicDisclosure;
+      if (banner && merged.disclosure && helper) {
+        helper.paint(banner, merged.disclosure);
+      } else if (banner && merged.disclosure && merged.disclosure.note) {
         const next = merged.disclosure.nextPublishAt;
         const when =
           next != null
@@ -307,18 +310,8 @@
     }
   });
 
-  $("form-dev").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      const data = await request("/api/auth/dev-login", {
-        method: "POST",
-        body: { handle: $("dev-handle").value.trim(), role: "platform_admin" },
-      });
-      flash($("flash-dev"), "ok", "Signed in as " + (data.user && data.user.handle));
-      await Promise.all([loadMe(), loadUsers(), loadJurisdictions()]);
-    } catch (err) {
-      flash($("flash-dev"), "err", errText(err));
-    }
+  window.addEventListener("republic:session", () => {
+    Promise.all([loadMe(), loadUsers(), loadJurisdictions()]);
   });
 
   document.addEventListener("click", async (event) => {

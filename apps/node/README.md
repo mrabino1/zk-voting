@@ -5,7 +5,7 @@
 This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
 (product name Republic): JSON HTTP API, WebAuthn passkeys, Web3 and smart-card
 person identity, a gasless vote relayer, an L2 block-explorer backend, and a
-static host for the React SPA.
+static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
 
 There is no token. There is no paid tier. Do not commercialize this software.
 See `/NOT_FOR_PROFIT.md` at the repo root.
@@ -29,7 +29,9 @@ Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "nod
 The Node never writes a passkey user id onto the same record as an encrypted
 ballot or a choice. The UI must not print “I voted for X”. Public dashboards
 and the explorer show vote proofs only after the hour that contained the vote
-has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
+has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests). The
+explorer snapshot lists last closed hour, ballots disclosed so far, and a
+countdown to the next hour close — never a pending-per-election count.
 
 ---
 
@@ -55,10 +57,30 @@ npm test -w apps/node
 ./system_actions.sh restart   # pm2 / systemd / compose when configured
 ```
 
+Docker Compose from the **repository root** (not this directory):
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
-The process serves `public/` and `dist/` if present. Unknown GET routes that are
+The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
+Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+`/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
+Admin / back-office / explorer are separate HTML files. `/elections/:id/results` is
+**not** implemented on the voter router yet.
+
+### Ballot option information
+
+Each question option may be a plain string, `{ id, label }`, or a supporting-info
+object (`summary`, `body`, optional `imageUrl`, `links: [{ label, url }]`). Clerks
+edit that as a punch-list on `/back-office` (JSON remains under Advanced). The Node
+canonicalizes options and keccak-hashes `{ title, questions }` as `ballotSpecHash`.
+Empty optional fields are omitted so older elections without metadata keep working.
+`GET /api/elections/:id/info` returns the public copy (no `createdBy` / clerk notes).
 
 ---
 
@@ -67,12 +89,18 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
+| `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
+| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postResult`. Unset → tally still works (no-op certify) |
+| `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
+| `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
+| `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
+| `L1_CHAIN_ID` | RPC | Optional override |
 | `RP_ID` | `localhost` | WebAuthn rpID |
-| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
+| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
@@ -83,6 +111,8 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 
 Passkey rpName is always **Republic**.
 
+Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and **Sign in with Ethereum**. Register a person first (`/register`). Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
+
 ---
 
 ## HTTP
@@ -91,12 +121,19 @@ Passkey rpName is always **Republic**.
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
+PATCH /api/elections/:id            (clerk; ballot metadata until roll freeze)
 GET  /api/elections/:id
 GET  /api/elections/:id/results     (per-question plurality labels)
+GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
+GET  /api/elections/:id/ballots
+GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
+GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator)
+POST /api/elections/:id/tally       (tally operator; attempts L1 certify if env set)
+POST /api/elections/:id/certify-l1  (retry L1 postResult; no-op if env unset)
+GET  /api/elections/:id/l1
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods
@@ -114,9 +151,14 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login            (ALLOW_DEV_LOGIN / tests only)
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure         (last closed hour, disclosed ballots, countdown)
 POST /api/explorer/ingest
 GET  /api/config
 ```
@@ -131,6 +173,11 @@ accepts still wait for hourly public disclosure unless the interval is `0`.
 Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified.
 Freeze snapshots the roots used for the open window. The circuit may still not
 prove non-disqualification; Node enforcement is the product control on this path.
+
+Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
+`POST /tally` still records counts. `l1Certification.status` is `skipped`.
+Operator details: [`docs/OPERATOR.md`](../../docs/OPERATOR.md). `npm run certify:l1`
+from the repo root is the same no-op unless those vars are set.
 
 ---
 

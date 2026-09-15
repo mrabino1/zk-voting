@@ -89,7 +89,30 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} tallyOperator Address allowed to submit tally proofs.
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
+ * @property {BallotQuestion[]} [questions] Canonical questions hashed into `ballotSpecHash`.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ */
+
+/**
+ * One external page linked from a ballot option's supporting-info card.
+ *
+ * @typedef {Object} BallotOptionLink
+ * @property {string} label
+ * @property {string} url http(s) URL
+ */
+
+/**
+ * One candidate / measure choice. Legacy ballots may be a plain string or
+ * `{ id, label }` only. Empty optional fields are omitted from the keccak
+ * preimage so old elections keep a stable `ballotSpecHash`.
+ *
+ * @typedef {Object} BallotOption
+ * @property {string} id
+ * @property {string} label Display name (candidate, Yes/No, measure choice).
+ * @property {string} [summary] Short blurb on the option list.
+ * @property {string} [body] Plain or markdown supporting information.
+ * @property {string} [imageUrl] Optional portrait / logo http(s) URL.
+ * @property {BallotOptionLink[]} [links] External pages (campaign site, full text).
  */
 
 /**
@@ -101,8 +124,9 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"MEASURE"|"ARTICLE"|"RANKED"} type
  * @property {string} prompt
  * @property {string} [description]
- * @property {number} maxSelections
- * @property {{id: string, label: string}[]} options
+ * @property {number} [maxSelections] Required for MULTI_CHOICE; omitted from the
+ *   keccak preimage for single-choice / yes-no so older hashes stay stable.
+ * @property {BallotOption[]} options
  */
 
 /**
@@ -210,13 +234,14 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * @typedef {Object} BlockOutcome
- * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"batch"|"freeze"} type
+ * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"l1_certify"|"batch"|"freeze"} type
  * @property {string|bigint} [electionId]
  * @property {string} [identityCommitment] Registration leaf only; never a name.
  * @property {string} [nullifier]
  * @property {string} [ballotHash]
  * @property {number} [reasonCode]
  * @property {string} [countsHash]
+ * @property {string} [resultHash] L1TallyMirror result hash (same as countsHash).
  * @property {string} [dataHash] Rollup batch calldata hash.
  */
 

@@ -46,6 +46,7 @@
             <li><a href="/admin">Admin</a></li>
           </ul>
         </nav>
+        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
         <span class="office-badge">Not for profit</span>
       </div>
     </header>
@@ -61,11 +62,19 @@
           until the hour that contained the ballot has closed — a person leaving a voting office
           cannot be matched to a live increase.
         </p>
-        <p class="disclosure-banner" id="disclosure-banner" role="note">
-          Public ballot counts update once an hour. Officials do not get a live precinct tick.
-        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Public ballot counts update once an hour. Officials do not get a live precinct tick.
+          </p>
+        </aside>
         <p class="session-line" id="me-line">Checking session…</p>
       </header>
+
+      <div
+        id="sign-in-root"
+        data-heading="Sign in"
+        data-lede="Clerks, registrars, and officers sign in with a passkey or a bound Ethereum wallet. Roles are unchanged; the Node still enforces them on each action."
+      ></div>
 
       <nav class="local-nav" aria-label="Back-office sections">
         <a href="#clerk" class="active">Clerk</a>
@@ -123,22 +132,45 @@
               </select>
             </div>
           </div>
-          <div class="field">
-            <label class="field-label">Ballot questions (aspects) <span class="req">*</span></label>
-            <p class="field-hint">Each aspect is one decision (office, measure, article). The Node hashes this spec. Ranked-choice is stored but not IRV-tallied here.</p>
-            <div id="questions-editor" class="aspects-editor"></div>
-            <div class="actions">
-              <button class="btn btn-secondary" type="button" id="btn-add-question">Add question</button>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="e-load">Load existing ballot</label>
+              <select id="e-load" name="loadElectionId">
+                <option value="">New election…</option>
+              </select>
+              <span class="field-hint">Created elections can be edited until the roll is frozen. Frozen ballots stay hashed as-is.</span>
             </div>
-            <details id="questions-json-details">
-              <summary>Advanced: questions JSON</summary>
-              <label class="field-label visually-hidden" for="e-questions">Questions JSON</label>
-              <textarea id="e-questions" name="questions" spellcheck="false">[]</textarea>
-              <span class="field-hint">Editing JSON rebuilds the structured editor. Types: SINGLE_CHOICE, MULTI_CHOICE, YES_NO, MEASURE, ARTICLE, RANKED.</span>
-            </details>
+            <div class="field" style="justify-content:flex-end">
+              <span class="field-label">&nbsp;</span>
+              <div class="actions">
+                <button class="btn btn-secondary" type="button" id="btn-load-ballot">Load</button>
+                <a class="btn btn-secondary" id="link-info-preview" href="/elections" hidden>Voter info page</a>
+              </div>
+            </div>
           </div>
+          <p class="field-hint" id="ballot-lock-hint">
+            Punch-list each question’s options like a questionnaire: name, short blurb, supporting text, and optional external links.
+            That copy is hashed into <code>ballotSpecHash</code> so the voter info pages cannot diverge from the ballot.
+          </p>
+          <div id="ballot-builder" class="ballot-builder" aria-label="Ballot option metadata"></div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" id="btn-add-question">Add question</button>
+          </div>
+          <details class="advanced-json" id="questions-advanced">
+            <summary>Advanced: questions JSON</summary>
+            <div class="field" style="margin-top:0.6rem">
+              <label class="field-label" for="e-questions">Questions JSON <span class="req">*</span></label>
+              <textarea id="e-questions" name="questions" required spellcheck="false">[]</textarea>
+              <span class="field-hint">
+                Options may be a string, <code>{id,label}</code>, or full metadata
+                (<code>summary</code>, <code>body</code>, <code>imageUrl</code>, <code>links: [{label,url}]</code>).
+                The Node canonicalizes and keccak-hashes this with the title.
+              </span>
+            </div>
+          </details>
           <div class="actions">
             <button class="btn" type="submit">Create election</button>
+            <button class="btn btn-secondary" type="button" id="btn-save-ballot" hidden>Save ballot changes</button>
           </div>
           <div class="flash" id="flash-election" role="status"></div>
         </form>
@@ -316,7 +348,7 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice / IRV is another path. You cannot invent votes.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice / IRV is another path. You cannot invent votes. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
@@ -337,6 +369,7 @@
           </details>
           <div class="actions">
             <button class="btn" type="submit">Post counts</button>
+            <button class="btn btn-secondary" type="button" id="btn-certify-l1">Certify hash on L1</button>
             <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
             <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
           </div>
@@ -364,6 +397,8 @@
         · AGPL-3.0-or-later
       </p>
     </footer>
+    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/signin.js"></script>
     <script src="/back-office.js" defer></script>
   </body>
 </html>

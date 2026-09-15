@@ -2,12 +2,15 @@
   "name": "@zk-voting/chain-client",
   "version": "0.1.0",
   "private": true,
-  "description": "NOT FOR PROFIT — ElectionFactory / BallotInbox client (viem or JSON-RPC eth_call).",
+  "description": "NOT FOR PROFIT — ElectionFactory / BallotInbox / L1TallyMirror client (viem or JSON-RPC eth_call).",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=22"

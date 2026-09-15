@@ -59,6 +59,10 @@ export function normalizeQuestion(q, index = 0) {
       : {
           id: String(opt.id ?? opt.value ?? i),
           label: opt.label || opt.name || String(opt.id ?? i),
+          summary: opt.summary || opt.blurb || "",
+          body: opt.body || "",
+          imageUrl: opt.imageUrl || opt.image || "",
+          links: Array.isArray(opt.links) ? opt.links : [],
         }
   );
   if ((type === "YES_NO" || type === "MEASURE" || type === "ARTICLE") && options.length === 0) {
