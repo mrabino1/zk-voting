@@ -383,6 +383,18 @@ describe('per-jurisdiction officer roles', () => {
     });
     assert.equal(allowed.status, 200, allowed.json?.error);
     assert.equal(allowed.json.election.stateName, 'Tallied');
+
+    const deniedCert = await api('POST', `/api/elections/${id}/certify-l1`, {
+      jar: southTallyJar,
+      body: {},
+    });
+    assert.equal(deniedCert.status, 403);
+
+    const allowedCert = await api('POST', `/api/elections/${id}/certify-l1`, {
+      jar: northTallyJar,
+      body: {},
+    });
+    assert.equal(allowedCert.status, 200, allowedCert.json?.error);
   });
 
   test('platform_admin can tally in a jurisdiction with no local operator grant', async () => {

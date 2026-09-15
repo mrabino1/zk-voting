@@ -128,15 +128,47 @@ export function normalizeOption(raw, index = 0) {
   return option;
 }
 
+const TYPE_ALIASES = Object.freeze({
+  YES_NO: 'YES_NO',
+  YN: 'YES_NO',
+  REFERENDUM: 'YES_NO',
+  SINGLE_CHOICE: 'SINGLE_CHOICE',
+  SINGLE: 'SINGLE_CHOICE',
+  PLURALITY: 'SINGLE_CHOICE',
+  OFFICE: 'SINGLE_CHOICE',
+  MULTI_CHOICE: 'MULTI_CHOICE',
+  MULTI: 'MULTI_CHOICE',
+  MEASURE: 'MEASURE',
+  ARTICLE: 'ARTICLE',
+  RANKED: 'RANKED',
+  RANKED_CHOICE: 'RANKED',
+  IRV: 'RANKED',
+  RCV: 'RANKED',
+});
+
+export function canonicalQuestionType(raw) {
+  const key = String(raw || 'YES_NO')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  return TYPE_ALIASES[key] || null;
+}
+
 export function normalizeQuestion(raw, index = 0) {
   const obj = typeof raw === 'string' ? { prompt: raw } : raw;
   if (obj == null || typeof obj !== 'object') {
     throw new HttpError(400, `questions[${index}] is invalid`);
   }
-  const type = String(obj.type || 'YES_NO').trim().toUpperCase() || 'YES_NO';
+  const aliased = canonicalQuestionType(obj.type || obj.kind || obj.method || 'YES_NO');
+  const type = aliased || String(obj.type || 'YES_NO').trim().toUpperCase() || 'YES_NO';
+  const optionSource = Array.isArray(obj.options)
+    ? obj.options
+    : Array.isArray(obj.choices)
+      ? obj.choices
+      : null;
   let options;
-  if (Array.isArray(obj.options)) {
-    options = obj.options.map((o, j) => normalizeOption(o, j));
+  if (optionSource) {
+    options = optionSource.map((o, j) => normalizeOption(o, j));
   } else if (type === 'YES_NO' || !obj.type) {
     options = [
       { id: 'yes', label: 'Yes' },
@@ -145,20 +177,46 @@ export function normalizeQuestion(raw, index = 0) {
   } else {
     options = [];
   }
+  const seenOpts = new Set();
+  for (const opt of options) {
+    if (seenOpts.has(opt.id)) {
+      throw new HttpError(400, `duplicate option id "${opt.id}" on question ${index + 1}`);
+    }
+    seenOpts.add(opt.id);
+  }
   const question = {
-    id: String(obj.id || `q${index + 1}`).trim() || `q${index + 1}`,
+    id: String(obj.id || obj.questionId || obj.aspectId || `q${index + 1}`).trim() || `q${index + 1}`,
     type,
-    prompt: clipText(obj.prompt || obj.title || obj.text || '', MAX_PROMPT_LENGTH, 'prompt') ||
+    prompt:
+      clipText(obj.prompt || obj.title || obj.text || '', MAX_PROMPT_LENGTH, 'prompt') ||
       `Question ${index + 1}`,
     options,
   };
+  const description = clipText(obj.description || obj.help || '', MAX_PROMPT_LENGTH, 'description');
+  if (description) question.description = description;
+  if (type === 'MULTI_CHOICE') {
+    let maxSelections = Number(obj.maxSelections ?? obj.max ?? 2);
+    if (!Number.isInteger(maxSelections) || maxSelections < 1) {
+      throw new HttpError(400, `questions[${index}] maxSelections must be a positive integer`);
+    }
+    if (options.length && maxSelections > options.length) maxSelections = options.length;
+    question.maxSelections = maxSelections;
+  } else if (type === 'RANKED' && options.length) {
+    question.maxSelections = options.length;
+  }
   return question;
 }
 
 export function normalizeQuestions(input) {
   if (!input) return [];
   if (!Array.isArray(input)) throw new HttpError(400, 'questions must be an array');
-  return input.map((q, i) => normalizeQuestion(q, i));
+  const seen = new Set();
+  return input.map((q, i) => {
+    const question = normalizeQuestion(q, i);
+    if (seen.has(question.id)) throw new HttpError(400, `duplicate question id "${question.id}"`);
+    seen.add(question.id);
+    return question;
+  });
 }
 
 export function canonicalBallotSpec({ title, questions }) {
@@ -244,12 +302,15 @@ export function publicQuestion(raw, index = 0) {
           publicOption({ id: 'no', label: 'No' }, 1),
         ]
       : [];
-  return {
+  const out = {
     id: String(obj.id || `q${index + 1}`),
     type: String(obj.type || 'YES_NO'),
     prompt: String(obj.prompt || obj.title || obj.text || `Question ${index + 1}`),
     options,
   };
+  if (obj.description) out.description = String(obj.description);
+  if (obj.maxSelections != null) out.maxSelections = obj.maxSelections;
+  return out;
 }
 
 export function publicQuestions(questions) {

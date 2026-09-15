@@ -365,6 +365,8 @@ describe('Republic Node API', () => {
     assert.equal(ok.status, 200, ok.json?.error);
     assert.equal(ok.json.election.stateName, 'Tallied');
     assert.deepEqual(ok.json.election.tally.counts, [2, 0]);
+    assert.equal(ok.json.l1Certification.status, 'skipped');
+    assert.equal(ok.json.election.tally.l1.status, 'skipped');
   });
 
   test('disqualify after freeze is rejected', async () => {

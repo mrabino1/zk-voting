@@ -6,7 +6,7 @@ Republic needs a **public, election-grade explorer** because the Node is not the
 
 This is not a general-purpose ETH explorer white-label. It is indexed around election outcomes on Republic L2 (chainId **27427**) and, when used, L1 settlement / tally-mirror transactions.
 
-UI: Node SPA `/explorer`. HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`, `GET /api/explorer/disclosure`. Public election snapshot: `GET /api/elections/:id/summary`. Backend reads L2 JSON-RPC (`eth_getBlockByNumber`, `eth_getLogs`) plus the factory / registry / inbox / tally / rollup ABIs.
+UI: Node page `/explorer` (`public/explorer.html` + `explorer.js`, vanilla JS). HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`, `GET /api/explorer/disclosure`, `GET /api/explorer/search`, `GET /api/explorer/nullifiers/:value`, `GET /api/explorer/elections/:id`. Public election snapshot: `GET /api/elections/:id/summary`. Backend is the JSON log `apps/node/data/l2-chain.json` (Node appends + sequencer `POST /api/explorer/ingest`). The civic sequencer also exposes `eth_getBlockByNumber` on **:8546**. This explorer does **not** ABI-decode generic EVM logs.
 
 ---
 
@@ -15,7 +15,7 @@ UI: Node SPA `/explorer`. HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/b
 | Need | Why a normal wallet explorer is not enough |
 | --- | --- |
 | Audit a poll | Must group **electionId**, roots, nullifiers, reason codes — not just ERC-20 transfers. |
-| Public verifiability | Anyone can check inbox size, used nullifiers, freeze events, tally posts, rollup `dataHash`. |
+| Public verifiability | Anyone can check inbox size, used nullifiers, freeze events, tally posts, L1 tally-hash certification, rollup `dataHash`. |
 | Disqualification transparency | Mass purges cannot hide: reason **codes** are first-class rows. |
 | Privacy of choice | A naive “decode calldata” UI must **not** display option ids as “the vote”. |
 | Relayer reality | `tx.from` is usually the **bundler**, not the voter. Showing “from = voter EOA” would be a lie. |
@@ -66,7 +66,7 @@ Observers should see a **hour-bucketed update**, not a live tick. The explorer b
 | `secondsUntilNext` | Countdown to that close. The explorer UI ticks this locally. |
 | `intervalSeconds` | Default `3600`. `0` publishes immediately (tests / local demo). |
 
-`GET /api/elections/:id/summary` is the public election snapshot: title, state, **disclosed** `acceptedBallots`, the same disclosure object, `explorerUrl`, and `resultsUrl` **only after a certified tally exists**. This surface does not compute or display a winner; when a tally is posted it links to `/elections/:id/results`.
+`GET /api/elections/:id/summary` is the public election snapshot: title, state, **disclosed** `acceptedBallots`, the same disclosure object, `explorerUrl`, and `resultsUrl` **only after a certified tally exists**. This surface does not compute or display a winner; when a tally is posted it links to `/elections/:id/results` (that path is still **not** a voter-router page; tally JSON is on `GET /api/elections/:id`).
 
 Choice plaintext is never a field on these responses.
 
@@ -89,7 +89,7 @@ A coercer who watches the explorer learns that **someone** registered a commitme
 
 ## Indexing rules
 
-1. Prefer **contract events** (`VoterRegistered`, `VoteAccepted`, `Disqualified`, `TallyPosted`, `ElectionCreated`, rollup `submitBatch`) over calldata guesswork.
+1. Prefer **typed civic outcomes** already on the JSON log (`register`, `vote`, `disqualify`, `tally`, `roll_frozen`, …). On an EVM, prefer contract events (`VoterRegistered`, `VoteAccepted`, `Disqualified`, `TallyPosted`, `ElectionCreated`, rollup `submitBatch`) over calldata guesswork. The Node explorer today indexes the civic JSON log, not decoded EVM receipts.
 2. For `VoteAccepted`, store `nullifier` + `ballotHash` + `relayer`. Do not ABI-decode `encryptedBallot` into an option enum in the UI.
 3. Treat `msg.sender` as **relayer** for inbox calls. Label it that way.
 4. `identityCommitment` is shown as hex / decimal field element, not as a resolved person. Clerk tools that resolve commitments to files are **restricted** (back-office), not `/explorer`.

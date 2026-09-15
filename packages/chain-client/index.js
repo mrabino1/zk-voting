@@ -234,7 +234,8 @@ function calldataTwoUint256(signature, a, b) {
 
 /**
  * @typedef {Object} ChainClientOptions
- * @property {string} [rpcUrl] JSON-RPC endpoint (Republic L2 default http://127.0.0.1:8545).
+ * @property {string} [rpcUrl] JSON-RPC endpoint (Foundry Anvil default http://127.0.0.1:8545).
+ *   Civic Republic L2 sequencer listens on :8546 and is not this EVM.
  * @property {number} [chainId]
  * @property {string} factoryAddress ElectionFactory.
  * @property {string} [inboxAddress] BallotInbox; can also be read from Election.inbox().
@@ -531,6 +532,8 @@ async function nullifierUsed(inboxAddress, electionId, nullifier, opts = {}) {
   return decodeUintWord(raw) !== 0n;
 }
 
+const l1 = require("./l1");
+
 module.exports = {
   REPUBLIC_CHAIN_ID,
   FACTORY_ABI,
@@ -548,4 +551,5 @@ module.exports = {
   serializePublicInputs,
   encodePacked,
   padAddress,
+  ...l1,
 };

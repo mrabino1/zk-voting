@@ -5,7 +5,7 @@
 This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
 (product name Republic): JSON HTTP API, WebAuthn passkeys, Web3 and smart-card
 person identity, a gasless vote relayer, an L2 block-explorer backend, and a
-static host for the React SPA.
+static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
 
 There is no token. There is no paid tier. Do not commercialize this software.
 See `/NOT_FOR_PROFIT.md` at the repo root.
@@ -66,9 +66,12 @@ curl -fsS http://127.0.0.1:3000/health
 
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
-The process serves `public/` and `dist/` if present. Unknown GET routes that are
+The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
-Voter info pages: `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId`.
+Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+`/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
+Admin / back-office / explorer are separate HTML files. `/elections/:id/results` is
+**not** implemented on the voter router yet.
 
 ### Ballot option information
 
@@ -91,8 +94,13 @@ Empty optional fields are omitted so older elections without metadata keep worki
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
+| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postResult`. Unset → tally still works (no-op certify) |
+| `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
+| `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
+| `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
+| `L1_CHAIN_ID` | RPC | Optional override |
 | `RP_ID` | `localhost` | WebAuthn rpID |
-| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
+| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
@@ -115,6 +123,7 @@ GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction / platform_admin)
 PATCH /api/elections/:id            (clerk of that jurisdiction; ballot metadata until roll freeze)
 GET  /api/elections/:id
+GET  /api/elections/:id/results     (per-question plurality labels)
 GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
 GET  /api/elections/:id/ballots
 GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
@@ -122,7 +131,9 @@ GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
-POST /api/elections/:id/tally       (tally operator of that jurisdiction)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; attempts L1 certify if env set)
+POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 postResult; no-op if env unset)
+GET  /api/elections/:id/l1
 POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/tally on that jurisdiction)
 DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
 GET  /api/me
@@ -164,6 +175,11 @@ accepts still wait for hourly public disclosure unless the interval is `0`.
 Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified.
 Freeze snapshots the roots used for the open window. The circuit may still not
 prove non-disqualification; Node enforcement is the product control on this path.
+
+Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
+`POST /tally` still records counts. `l1Certification.status` is `skipped`.
+Operator details: [`docs/OPERATOR.md`](../../docs/OPERATOR.md). `npm run certify:l1`
+from the repo root is the same no-op unless those vars are set.
 
 ---
 

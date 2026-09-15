@@ -116,10 +116,16 @@ const REASON_CODE_LABELS = Object.freeze({
  */
 
 /**
+ * One decision on a ballot (office, measure, article). Node authoring +
+ * plurality tally. `RANKED` is stored for a later IRV path.
+ *
  * @typedef {Object} BallotQuestion
  * @property {string} id
- * @property {string} type SINGLE_CHOICE | MULTI_CHOICE | YES_NO | MEASURE | RANKED
+ * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"MEASURE"|"ARTICLE"|"RANKED"} type
  * @property {string} prompt
+ * @property {string} [description]
+ * @property {number} [maxSelections] Required for MULTI_CHOICE; omitted from the
+ *   keccak preimage for single-choice / yes-no so older hashes stay stable.
  * @property {BallotOption[]} options
  */
 
@@ -228,13 +234,14 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * @typedef {Object} BlockOutcome
- * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"batch"|"freeze"} type
+ * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"l1_certify"|"batch"|"freeze"} type
  * @property {string|bigint} [electionId]
  * @property {string} [identityCommitment] Registration leaf only; never a name.
  * @property {string} [nullifier]
  * @property {string} [ballotHash]
  * @property {number} [reasonCode]
  * @property {string} [countsHash]
+ * @property {string} [resultHash] L1TallyMirror result hash (same as countsHash).
  * @property {string} [dataHash] Rollup batch calldata hash.
  */
 
