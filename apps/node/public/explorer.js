@@ -120,6 +120,7 @@
     if (t.includes("register")) return "REGISTER";
     if (t === "vote" || t.includes("vote")) return "VOTE";
     if (t.includes("disqual") || t === "revoke") return "DISQUALIFY";
+    if (t.includes("certif") || t === "l1_certify") return "L1";
     if (t.includes("tally")) return "TALLY";
     return "BATCH";
   }
@@ -158,6 +159,11 @@
       out.evidenceHash = pick(tx, ["evidenceHash", "evidence_hash", "payload.evidenceHash"]);
     } else if (type === "TALLY") {
       out.counts = pick(tx, ["counts", "tally", "payload.counts"]);
+      out.countsHash = pick(tx, ["countsHash", "payload.countsHash"]);
+    } else if (type === "L1") {
+      out.resultHash = pick(tx, ["resultHash", "payload.resultHash", "countsHash"]);
+      out.txHash = pick(tx, ["txHash", "payload.txHash"]);
+      out.mirror = pick(tx, ["mirror", "payload.mirror"]);
     } else {
       out.batchIndex = pick(tx, ["batchIndex", "batch_index"]);
       out.dataHash = pick(tx, ["dataHash", "data_hash"]);
@@ -193,6 +199,14 @@
     const d = Number.isFinite(n) ? new Date(n > 1e12 ? n : n * 1000) : new Date(ts);
     if (Number.isNaN(d.getTime())) return String(ts);
     return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+  }
+
+  function fmtCountdown(seconds) {
+    const helper = globalThis.RepublicDisclosure;
+    if (helper && typeof helper.formatCountdown === "function") {
+      return helper.formatCountdown(seconds);
+    }
+    return String(seconds) + "s";
   }
 
   function shortHex(value, left, right) {
@@ -281,13 +295,50 @@
       Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 
-  function paintDisclosure(data) {
+  let disclosurePayload = null;
+  let disclosureFetchedAt = 0;
+  let countdownTimer = null;
+
+  function paintDisclosure(data, overlay) {
     const el = $("disclosure-banner");
-    if (!el || !data || !data.disclosure) return;
-    const d = data.disclosure;
-    const next = d.nextPublishAt != null ? fmtTime(d.nextPublishAt) : "";
-    el.textContent =
-      (d.note || el.textContent) + (next ? " Next publish: " + next + "." : "");
+    const helper = globalThis.RepublicDisclosure;
+    if (!el || !helper) return;
+    const d = {
+      ...((data && data.disclosure) || {}),
+      ...(overlay || {}),
+    };
+    if (!d.policy && !d.lastClosedHourAt && d.lastPublishedAt == null && !d.note) return;
+    disclosurePayload = d;
+    disclosureFetchedAt = helper.paint(el, d);
+    startCountdown();
+  }
+
+  function startCountdown() {
+    const helper = globalThis.RepublicDisclosure;
+    const el = $("disclosure-banner");
+    if (!helper || !el) return;
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+    if (!disclosurePayload || !(Number(disclosurePayload.intervalSeconds) > 0)) return;
+    countdownTimer = setInterval(() => {
+      const remaining = helper.tickCountdown(el, disclosurePayload, disclosureFetchedAt);
+      if (remaining <= 0) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        refreshDisclosure();
+      }
+    }, 1000);
+  }
+
+  async function refreshDisclosure(overlay) {
+    try {
+      const data = await request("/api/explorer/disclosure");
+      paintDisclosure(data, overlay);
+    } catch {
+      if (overlay) paintDisclosure({ disclosure: overlay }, overlay);
+    }
   }
 
   function txTable(txs) {
@@ -333,7 +384,7 @@
       [
         "Election",
         tx.electionId != null
-          ? `<a href="#/election/${esc(tx.electionId)}">${esc(tx.electionId)}</a> · <a href="/elections/${esc(tx.electionId)}/results">results</a>`
+          ? `<a href="#/election/${esc(tx.electionId)}">${esc(tx.electionId)}</a>`
           : "—",
       ],
     ];
@@ -436,6 +487,7 @@
       return;
     }
     const block = normalizeBlock(data.block || data);
+    paintDisclosure(data);
     const n = Number(block.number ?? id);
     $("view").innerHTML = `<section class="panel">
       <header><h2>Block #${esc(block.number ?? id)}</h2></header>
@@ -471,6 +523,7 @@
       return;
     }
     const tx = normalizeTx(data.tx || data.transaction || data);
+    await refreshDisclosure();
     $("view").innerHTML = `<section class="panel">
       <header><h2>Transaction</h2></header>
       <dl class="detail-grid">${txDetailRows(tx)}</dl>
@@ -543,10 +596,16 @@
     ]);
     let election = null;
     let ballots = [];
+    let summary = null;
     try {
       election = await request("/api/elections/" + encodeURIComponent(id));
     } catch {
       election = null;
+    }
+    try {
+      summary = await request("/api/elections/" + encodeURIComponent(id) + "/summary");
+    } catch {
+      summary = null;
     }
     try {
       const data = await request("/api/elections/" + encodeURIComponent(id) + "/ballots");
@@ -568,20 +627,93 @@
       if (!byHash.has(key)) byHash.set(key, tx);
     }
     const txs = [...byHash.values()];
-    const title = pick(election, ["title", "name"]) || "Election " + id;
-    const tally = pick(election, ["tally.counts", "tally", "counts"]);
+    const title = pick(election, ["title", "name"]) || (summary && summary.title) || "Election " + id;
+    const tally = pick(election, ["tally"]);
+    const aspects = asList(election, ["aspects", "questions"]);
+    const tallied = Boolean(tally);
+    const tallyRows = Array.isArray(tally && tally.questions) && tally.questions.length
+      ? tally.questions
+          .map((q) => {
+            if (q.tallied === false) {
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — not tallied (${esc(q.note || "IRV")})</li>`;
+            }
+            if (q.tallyMethod === "irv" || q.ballotMethod === "ranked_choice") {
+              const win = q.winnerLabel || q.winner;
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — IRV${win ? ` winner ${esc(win)}` : ""}</li>`;
+            }
+            const opts = (q.options || [])
+              .map((o) => `${esc(o.label || o.id)}: ${esc(o.count)}`)
+              .join("; ");
+            const under = q.undervotes != null ? ` · undervotes ${esc(q.undervotes)}` : "";
+            return `<li><strong>${esc(q.prompt || q.id)}</strong> — ${opts}${under}</li>`;
+          })
+          .join("")
+      : "";
+    const aspectList = aspects.length
+      ? `<ol class="aspect-preview">${aspects
+          .map((q) => `<li>${esc(q.type || "")} — ${esc(q.prompt || q.id)}</li>`)
+          .join("")}</ol>`
+      : "";
+    const l1 = pick(election, ["tally.l1"]);
+    let l1Label = "not posted";
+    if (l1) {
+      l1Label = l1.status || "unknown";
+      if (l1.txHash) l1Label += " · " + l1.txHash;
+      else if (l1.reason) l1Label += " · " + l1.reason;
+    }
+    const disclosure = (summary && summary.disclosure) || (election && election.disclosure) || null;
+    const accepted =
+      (summary && summary.acceptedBallots != null
+        ? summary.acceptedBallots
+        : pick(election, ["acceptedBallots"])) ??
+      (disclosure && disclosure.acceptedBallotsDisclosed);
+    const resultsUrl =
+      (summary && summary.resultsUrl) ||
+      (tallied ? "/elections/" + encodeURIComponent(id) + "/results" : null);
+    paintDisclosure({ disclosure: disclosure || {} }, disclosure);
+    const nextLine = !disclosure
+      ? "—"
+      : Number(disclosure.intervalSeconds) > 0
+        ? (disclosure.secondsUntilNext != null ? fmtCountdown(disclosure.secondsUntilNext) + " · " : "") +
+          fmtTime(disclosure.nextPublishAt)
+        : "Publishes immediately";
+    const stateLabel =
+      pick(election, ["stateName", "state", "status"]) || (summary && summary.stateName) || "—";
     $("view").innerHTML = `<section class="panel">
       <header>
         <h2>${esc(title)}</h2>
-        <a class="btn btn-secondary" href="/elections/${esc(id)}/results">Certified results</a>
+        ${
+          resultsUrl
+            ? `<a class="btn btn-secondary" href="${esc(resultsUrl)}">Certified results</a>`
+            : `<span class="field-hint">Tally not posted yet</span>`
+        }
       </header>
       <dl class="detail-grid">
         <dt>Election id</dt><dd>${esc(id)}</dd>
-        <dt>State</dt><dd>${esc(pick(election, ["stateName", "state", "status"]) ?? "—")}</dd>
+        <dt>State</dt><dd>${esc(stateLabel)}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
-        <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
+        <dt>Questions</dt><dd>${esc(pick(election, ["questionCount"]) ?? aspects.length ?? "—")}</dd>
+        <dt>Last closed hour</dt><dd>${esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt)))}</dd>
+        <dt>Ballots disclosed</dt><dd>${esc(accepted != null ? accepted : "—")}</dd>
+        <dt>Next disclosure</dt><dd>${esc(nextLine)}</dd>
+        <dt>Public tally</dt><dd>${
+          tallyRows
+            ? `<ul class="tally-bars">${tallyRows}</ul>`
+            : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted")
+        }</dd>
+        <dt>Tally hash</dt><dd class="hash">${esc(pick(election, ["tally.countsHash"]) || "—")}</dd>
+        <dt>L1 certification</dt><dd>${esc(l1Label)}</dd>
+        <dt>Certified results</dt><dd>${
+          resultsUrl
+            ? `<a href="${esc(resultsUrl)}">Tally posted — view results</a>`
+            : "not posted (winner page is linked after a certified tally)"
+        }</dd>
+        ${pick(election, ["tally.questions.0.winnerLabel"])
+          ? `<dt>IRV winner</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
+          : ""}
       </dl>
-      <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed.</p>
+      ${aspectList}
+      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. Plurality totals are labeled per question.</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>
@@ -634,6 +766,9 @@
   async function render() {
     clearFlash();
     const route = parseRoute();
+    if (route.kind !== "list" && route.kind !== "block" && route.kind !== "election") {
+      refreshDisclosure();
+    }
     if (route.kind === "list") return loadBlockList();
     if (route.kind === "block") return loadBlock(route.id);
     if (route.kind === "tx") return loadTx(route.id);

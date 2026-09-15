@@ -3,10 +3,13 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
-import { startRouter, navigate } from "./router.js";
+import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { labeledTally, questionsOf, typeLabel } from "./ballot.js";
+import { renderElectionInfo, renderOptionInfo } from "./info.js";
+import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -200,6 +203,7 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     questionCount: Number(raw.questionCount ?? params.questionCount ?? questions.length) || questions.length,
     rollFrozen: Boolean(raw.rollFrozen) || state >= 1,
     ballotSpecHash: raw.ballotSpecHash || params.ballotSpecHash || null,
+    ballotMethod: raw.ballotMethod || params.ballotMethod || "plurality",
     eligibleRoot: raw.eligibleRoot || null,
     disqualificationRoot: raw.disqualificationRoot || null,
     description: raw.description || raw.summary || "",
@@ -267,7 +271,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-      description: "Tally posted. Choice-level receipts are never shown to voters.",
+              description: "Tally posted. Receipts list hashes only and cannot prove which option you marked.",
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
@@ -319,10 +323,11 @@ export function recordRegistration(electionId, payload) {
 export function recordVoteReceipt(electionId, payload) {
   const store = readVoterStore();
   store.votes[String(electionId)] = {
-    at: new Date().toISOString(),
+    at: payload.at || new Date().toISOString(),
     ballotHash: payload.ballotHash,
     nullifier: payload.nullifier,
     userOpHash: payload.userOpHash,
+    choiceOmitted: true,
   };
   writeVoterStore(store);
 }
@@ -386,7 +391,6 @@ export async function loadElection(id) {
     const raw = data?.election || data;
     const normalized = normalizeElection(raw);
     if (normalized?.id) {
-      if (!normalized.questions?.length) normalized.questions = SAMPLE_QUESTIONS;
       return { election: normalized, source: "api" };
     }
   } catch {
@@ -421,7 +425,8 @@ function updateNav(routeName) {
     const current =
       (routeName === "home" && href === "/") ||
       (routeName === "register" && href === "/register") ||
-      (routeName === "vote" && href === "/");
+      (routeName === "vote" && href === "/") ||
+      ((routeName === "election-info" || routeName === "option-info") && href === "/");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
@@ -448,15 +453,18 @@ function ctx() {
     reasonLabel,
     setTitle,
     SAMPLE_QUESTIONS,
+    mountSignInPanel,
   };
 }
 
 function renderHome(main, route, bundle) {
   const { elections, source, me, walletRecord, store } = bundle;
   const openCount = elections.filter((e) => e.state === 2).length;
-  const walletLine = walletRecord
-    ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
-    : "No passkey on this device yet.";
+  const walletLine = walletRecord?.staleWrap
+    ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
+    : walletRecord
+      ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
+      : "No passkey on this device yet.";
 
   const list =
     elections.length === 0
@@ -506,6 +514,7 @@ function renderHome(main, route, bundle) {
                 )
               ),
               election.description ? h("p", { text: election.description }) : null,
+              aspectPreview(election, h),
               h(
                 "div",
                 { class: "cluster" },
@@ -518,7 +527,16 @@ function renderHome(main, route, bundle) {
                       : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
                 canRegister
                   ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-                  : null
+                  : null,
+                election.state >= 3
+                  ? h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
+                  : null,
+                h("a", {
+                  class: "btn btn-secondary",
+                  href: `/elections/${encodeURIComponent(election.id)}/info`,
+                  "data-nav": "",
+                  text: "Candidate / measure info",
+                })
               )
             );
           })
@@ -540,6 +558,9 @@ function renderHome(main, route, bundle) {
           { class: "notice", role: "status" },
           h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
           h("p", { text: walletLine }),
+          me?.user
+            ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
+            : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
           h(
             "p",
             {
@@ -556,6 +577,7 @@ function renderHome(main, route, bundle) {
           : null
       )
     ),
+    h("div", { id: "sign-in-root" }),
     list,
     h("hr", { class: "hr" }),
     h(
@@ -629,6 +651,26 @@ function renderHome(main, route, bundle) {
       renderDeviceStatus(walletRecord, me, store)
     )
   );
+  const signInRoot = main.querySelector("#sign-in-root");
+  if (signInRoot) {
+    signInRoot.setAttribute(
+      "data-lede",
+      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
+    );
+    mountSignInPanel(signInRoot);
+  }
+}
+
+function aspectPreview(election, h) {
+  const questions = questionsOf(election);
+  if (!questions.length) return null;
+  return h(
+    "ol",
+    { class: "aspect-preview" },
+    ...questions.slice(0, 4).map((q) =>
+      h("li", {}, h("span", { class: "aspect-type", text: typeLabel(q.type) }), " ", h("span", { text: q.prompt }))
+    )
+  );
 }
 
 function renderDeviceStatus(walletRecord, me, store) {
@@ -636,7 +678,7 @@ function renderDeviceStatus(walletRecord, me, store) {
   const nVote = Object.keys(store.votes).length;
   const rows = [
     h("dt", { text: "Passkey" }),
-    h("dd", { text: walletRecord ? "Present" : "Not created" }),
+    h("dd", { text: walletRecord?.staleWrap ? "v1 wrap — reset required" : walletRecord ? "Present" : "Not created" }),
     h("dt", { text: "Identity commitment" }),
     h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || "—" }),
     h("dt", { text: "Local address" }),
@@ -686,6 +728,161 @@ function renderNotFound(main, route) {
   );
 }
 
+async function renderResults(main, ctx) {
+  const { h, loadElection, formatTime, electionStateInfo, electionId } = ctx;
+  const { election, source } = await loadElection(electionId);
+  if (!election) {
+    renderNotFound(main, { path: `/elections/${electionId}/results` });
+    return;
+  }
+  const st = electionStateInfo(election.state);
+  const questions = questionsOf(election);
+  const tally = labeledTally(election);
+  const rows = [];
+
+  if (!questions.length) {
+    rows.push(h("div", { class: "notice notice-warn" }, h("p", { text: "No questions are published for this election." })));
+  } else if (!tally) {
+    rows.push(
+      h("div", { class: "notice notice-warn", role: "status" }, h("p", { text: "A certified tally has not been posted yet. Aspects on this ballot:" }))
+    );
+    for (const [i, q] of questions.entries()) {
+      rows.push(resultQuestionCard(h, q, i, questions.length, null, election));
+    }
+  } else {
+    const labeled = tally.questions?.length ? tally.questions : [];
+    if (labeled.length) {
+      for (const [i, q] of labeled.entries()) {
+        rows.push(resultQuestionCard(h, q, i, labeled.length, q, election));
+      }
+    } else {
+      rows.push(h("p", { text: `Flat counts: ${JSON.stringify(tally.counts || [])}` }));
+    }
+  }
+
+  main.replaceChildren(
+    h(
+      "div",
+      { class: "page-head" },
+      h("p", { class: "kicker", text: election.jurisdiction }),
+      h("h1", { text: "Certified results" }),
+      h("p", { class: "lede", text: election.title }),
+        h(
+          "p",
+          { class: "cluster" },
+          h("span", { class: `status-pill ${st.className}`, text: st.label }),
+          source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null,
+          election.ballotMethod === "ranked_choice" || (tally && tally.ballotMethod === "ranked_choice")
+            ? h("span", { class: "status-pill", text: "Ranked choice (IRV)" })
+            : null
+        ),
+      h(
+        "ul",
+        { class: "meta-list" },
+        h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        h("li", {}, h("span", { class: "lbl", text: "Public accepted ballots" }), h("span", { text: String(election.acceptedBallots ?? "—") })),
+        h("li", {}, h("span", { class: "lbl", text: "Questions" }), h("span", { text: String(questions.length || election.questionCount || "—") })),
+        tally?.postedAt ? h("li", {}, h("span", { class: "lbl", text: "Tally posted" }), h("span", { text: formatTime(tally.postedAt) })) : null
+      )
+    ),
+    ...rows,
+    h(
+      "p",
+      { class: "cluster" },
+      h("a", { class: "btn", href: "/", "data-nav": "", text: "Elections" }),
+      h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Ballot" }),
+      h("a", { class: "btn btn-secondary", href: `/explorer#/election/${encodeURIComponent(election.id)}`, text: "Explorer" })
+    )
+  );
+}
+
+function resultQuestionCard(h, question, index, total, tallied, election) {
+  const max = tallied?.options?.length
+    ? Math.max(Number(election?.acceptedBallots) || 0, ...tallied.options.map((o) => Number(o.count) || 0), 1)
+    : 1;
+  return h(
+    "section",
+    { class: "question result-aspect", "aria-labelledby": `result-${question.id}` },
+    h(
+      "h2",
+      { id: `result-${question.id}` },
+      h("span", { class: "aspect-kicker", text: `Question ${index + 1} of ${total} · ${typeLabel(question.type)}` }),
+      h("span", { class: "aspect-prompt", text: question.prompt })
+    ),
+    question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+    tallied && tallied.tallied === false
+      ? h("p", { class: "field-hint", text: tallied.note || "Ranked-choice / IRV was not computed for this question." })
+      : null,
+    tallied && (tallied.winner || tallied.winnerLabel)
+      ? h("p", { text: `Winner: ${tallied.winnerLabel || tallied.winner}` })
+      : null,
+    tallied && tallied.tieBroken
+      ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." })
+      : null,
+    tallied && Array.isArray(tallied.rounds) && tallied.rounds.length
+      ? h(
+          "div",
+          { class: "table-wrap" },
+          h(
+            "table",
+            { class: "irv-rounds" },
+            h(
+              "thead",
+              {},
+              h(
+                "tr",
+                {},
+                h("th", { text: "Round" }),
+                h("th", { text: "Continuing" }),
+                h("th", { text: "Exhausted" }),
+                h("th", { text: "Eliminated" }),
+                h("th", { text: "Counts" })
+              )
+            ),
+            h(
+              "tbody",
+              {},
+              ...tallied.rounds.map((round) =>
+                h(
+                  "tr",
+                  {},
+                  h("td", { text: String(round.round) }),
+                  h("td", { text: String(round.continuing) }),
+                  h("td", { text: String(round.exhausted) }),
+                  h("td", { text: round.eliminated || "—" }),
+                  h("td", { text: round.counts ? JSON.stringify(round.counts) : "—" })
+                )
+              )
+            )
+          )
+        )
+      : null,
+    tallied && tallied.tallied !== false
+      ? h(
+          "ul",
+          { class: "tally-bars" },
+          ...tallied.options.map((opt) => {
+            const count = Number(opt.count) || 0;
+            const pct = max ? Math.round((count / max) * 100) : 0;
+            return h(
+              "li",
+              {},
+              h("div", { class: "tally-label" }, h("span", { text: opt.label }), h("strong", { text: String(count) })),
+              h("div", { class: "tally-track", "aria-hidden": "true" }, h("div", { class: "tally-fill", style: { width: `${pct}%` } }))
+            );
+          }),
+          tallied.undervotes != null
+            ? h("li", { class: "tally-under" }, h("span", { text: "Undervotes" }), h("strong", { text: String(tallied.undervotes) }))
+            : null
+        )
+      : h(
+          "ul",
+          { class: "choice-list" },
+          ...(question.options || []).map((opt) => h("li", { class: "choice", text: opt.label || opt.id }))
+        )
+  );
+}
+
 async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
@@ -712,6 +909,21 @@ async function renderRoute(route) {
     } else if (route.name === "vote") {
       setTitle("Ballot");
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "results") {
+      setTitle("Results");
+      await renderResults(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "election-info") {
+      setTitle("Ballot information");
+      await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "option-info") {
+      setTitle("Option information");
+      await renderOptionInfo(main, {
+        ...ctx(),
+        route,
+        electionId: route.params.id,
+        questionId: route.params.questionId,
+        optionId: route.params.optionId,
+      });
     } else {
       setTitle("Not found");
       renderNotFound(main, route);
@@ -731,4 +943,7 @@ async function renderRoute(route) {
 
 if (typeof document !== "undefined") {
   startRouter(renderRoute);
+  window.addEventListener(SESSION_EVENT, () => {
+    renderRoute(currentRoute());
+  });
 }

@@ -12,10 +12,12 @@
     "start": "node src/server.mjs",
     "dev": "node --watch src/server.mjs",
     "test": "NODE_ENV=test node --test test/*.test.mjs",
+    "certify:l1": "node scripts/certify-l1.mjs",
     "build": "node -e \"console.log('NOT FOR PROFIT — Republic Node serves public/ and dist/; the SPA is built separately.')\""
   },
   "dependencies": {
     "@simplewebauthn/server": "13.1.2",
+    "@zk-voting/chain-client": "0.1.0",
     "@zk-voting/proof-helpers": "file:../../packages/proof-helpers",
     "cors": "2.8.5",
     "express": "4.21.2",

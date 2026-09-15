@@ -4,6 +4,7 @@
  */
 
 import { bindSmartCard, bindWeb3Wallet, registerEthAccount, setActiveEthAddress } from "./identity-methods.js";
+import { mountSignInPanel } from "./signin.js";
 
 export async function renderRegister(main, ctx) {
   const {
@@ -37,8 +38,16 @@ export async function renderRegister(main, ctx) {
     selected: preselect && elections.some((e) => e.id === preselect) ? preselect : elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
   };
 
+  const signInHost = h("div", {
+    id: "sign-in-root",
+    dataset: {
+      heading: "Already registered? Sign in",
+      lede: "Use the passkey on this device or a bound Ethereum wallet. Creating a passkey below is for first-time registration.",
+    },
+  });
   const root = h("div", { class: "register-page" });
-  main.replaceChildren(root);
+  main.replaceChildren(signInHost, root);
+  mountSignInPanel(signInHost);
 
   function paint() {
     const rec = state.record;
@@ -167,8 +176,10 @@ export async function renderRegister(main, ctx) {
               "p",
               {
                 text: rec
-                  ? "A passkey wallet is already stored on this browser profile. Creating another one replaces the wrapped seed on this device."
-                  : "Use the platform authenticator (Touch ID, Windows Hello, a hardware key). You will be asked to verify it is you.",
+                  ? rec.staleWrap
+                    ? "This browser still has a v1 passkey wrap. v1 derived the vote identity from the account seed (weaker than the spec). Reset it, then create a new passkey so account and identity use separate PRF domains."
+                    : "A passkey wallet is already stored on this browser profile. Creating another one replaces the wrapped seed on this device."
+                  : "Use the platform authenticator (Touch ID, Windows Hello, a hardware key). You will be asked to verify it is you. The account key and the vote identity are derived under separate PRF domains.",
               }
             ),
             h(
@@ -241,13 +252,21 @@ export async function renderRegister(main, ctx) {
               h("p", { class: "field-label", text: "Republic local address" }),
               h("div", { class: "hex", text: `${rec.address}  ·  ${rec.addressScheme}` }),
               h("p", { class: "field-hint", text: rec.productionAddressNote }),
-              rec.prfSupported
-                ? h("p", { text: "PRF wrap: this authenticator returned a PRF output. The seed is AES-GCM wrapped from HKDF-SHA256(PRF)." })
+              rec.staleWrap
+                ? h(
+                    "p",
+                    {
+                      class: "notice notice-warn",
+                      text: rec.migrationNote || "This wrap is from an older demo. Reset the device wallet and create a new passkey.",
+                    }
+                  )
+                : rec.prfSupported
+                ? h("p", { text: "PRF wrap: account material uses salt republic:account:v1; the ZK trapdoor uses salt republic:identity:v1. They are not the same bytes." })
                 : h(
                     "p",
                     {
                       class: "notice notice-warn",
-                      text: rec.fallbackNote || "PRF was not available. Fallback wrap is weaker than production PRF.",
+                      text: rec.fallbackNote || "PRF was not available. Fallback wrap is weaker than production PRF. The trapdoor still uses a separate HKDF domain from the account seed.",
                     }
                   ),
             ]
@@ -396,7 +415,7 @@ export async function renderRegister(main, ctx) {
             h(
               "p",
               {
-                text: "Resetting removes the wrapped seed from IndexedDB. It cannot print the seed because the seed is never kept in plaintext. A new passkey is required afterwards.",
+                text: "Resetting removes the wrapped seed from IndexedDB (wallet record v2). It cannot print the seed because the seed is never kept in plaintext. A new passkey is required afterwards. v1 wraps cannot be migrated; reset is the demo upgrade path.",
               }
             ),
             h(
@@ -527,7 +546,12 @@ export async function renderRegister(main, ctx) {
     paint();
     announce("Waiting for the authenticator.");
     try {
-      const record = await wallet.registerPasskey({ api, displayName });
+      const election = elections.find((e) => e.id === state.selected);
+      const record = await wallet.registerPasskey({
+        api,
+        displayName,
+        jurisdictionId: election?.jurisdictionId || undefined,
+      });
       state.record = record;
       await refreshIdentity();
       if (record.finishError) {

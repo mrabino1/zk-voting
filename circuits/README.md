@@ -57,6 +57,8 @@ Constraints:
 4. `disqRoot` is bound into the constraint system so a proof is specific to the live disqualification tree the contract publishes. A disqualified person cannot produce an accepting membership proof against the eligible root.
 5. `ballotHash` is a public commitment to the encrypted ballot. Choice bits are not plaintext public inputs.
 
+The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier; not last-vote-counts). The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.
+
 Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to match a given election. The Solidity incremental tree and this template argument **must agree**.
 
 ---

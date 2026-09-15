@@ -2,7 +2,8 @@
 // 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
-import { disclosurePublicView } from './disclosure.mjs';
+import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
+import { disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -39,8 +40,10 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     maxParticipants: election.maxParticipants,
     treeDepth: election.treeDepth,
     ballotSpecHash: election.ballotSpecHash,
-    questionCount: election.questionCount,
-    questions: election.questions,
+    ballotMethod: election.ballotMethod || 'plurality',
+    questionCount: election.questionCount ?? (election.questions || []).length,
+    questions: withQuestionMethods(election.questions, election.ballotMethod || 'plurality'),
+    aspects: presentAspects(election),
     jurisdictionId: election.jurisdictionId,
     clerk: election.clerk,
     registrar: election.registrar,
@@ -62,11 +65,11 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationRoot: election.disqualificationRoot,
     state,
     stateName: STATE_NAMES[state],
-    tally: election.tally
-      ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
-      : null,
+    tally: presentTally(election, election.acceptedBallots),
     createdAt: election.createdAt,
-    disclosure: disclosurePublicView(now, interval),
+    disclosure: disclosurePublicView(now, interval, {
+      acceptedBallotsDisclosed: acceptedBallots,
+    }),
     nfp: true,
   };
 }
@@ -75,7 +78,22 @@ export async function publishDue(deps) {
   const now = deps.config.nowFn();
   const interval = deps.config.disclosureIntervalSeconds;
   if (deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
-  return { now, interval, view: disclosurePublicView(now, interval) };
+  const view = deps.explorer?.publicDisclosure
+    ? deps.explorer.publicDisclosure(now, interval)
+    : disclosurePublicView(now, interval);
+  return { now, interval, view };
+}
+
+export function electionDisclosure(election, deps, view) {
+  const now = deps.config.nowFn();
+  const interval = deps.config.disclosureIntervalSeconds;
+  const acceptedBallotsDisclosed = deps.store.publishedAcceptedBallots(
+    election.id,
+    now,
+    interval,
+  );
+  const base = view || disclosurePublicView(now, interval);
+  return withDisclosedCount(base, acceptedBallotsDisclosed);
 }
 
 export function presentElection(election, deps, opts = {}) {
@@ -87,14 +105,37 @@ export function presentElection(election, deps, opts = {}) {
     now,
     interval,
   );
-  const dto = publicElection(election, now, { intervalSeconds: interval, publishedAcceptedBallots });
-  const role = opts.user?.role;
+  const dto = publicElection(election, now, {
+    intervalSeconds: interval,
+    publishedAcceptedBallots,
+  });
+  dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
   if (
     opts.user &&
-    (role === 'tally_operator' || role === 'platform_admin') &&
+    deps.store.userHasJurisdictionRole(opts.user, 'tally_operator', election.jurisdictionId) &&
     electionState(election, now) >= 3
   ) {
     dto.operatorInbox = { acceptedBallots: election.acceptedBallots };
   }
   return dto;
+}
+
+export function presentResults(election, deps, opts = {}) {
+  const dto = presentElection(election, deps, opts);
+  return {
+    nfp: true,
+    electionId: String(election.id),
+    title: election.title,
+    jurisdictionId: election.jurisdictionId,
+    state: dto.state,
+    stateName: dto.stateName,
+    acceptedBallots: dto.acceptedBallots,
+    questionCount: dto.questionCount,
+    aspects: dto.aspects,
+    questions: dto.questions,
+    tally: presentTally(election, election.acceptedBallots),
+    ballotSpecHash: election.ballotSpecHash,
+    cutoffTime: election.cutoffTime,
+    ballotMethod: election.ballotMethod || 'plurality',
+  };
 }

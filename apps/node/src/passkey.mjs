@@ -36,7 +36,11 @@ function challengeFromClientData(body) {
   return body?.challenge || null;
 }
 
-export function createPasskeyService(config, store) {
+export function createPasskeyService(config, store, hooks = {}) {
+  const generateReg = hooks.generateRegistrationOptions || generateRegistrationOptions;
+  const generateAuth = hooks.generateAuthenticationOptions || generateAuthenticationOptions;
+  const verifyReg = hooks.verifyRegistrationResponse || verifyRegistrationResponse;
+  const verifyAuth = hooks.verifyAuthenticationResponse || verifyAuthenticationResponse;
   const challenges = new Map();
 
   function sweep() {
@@ -76,7 +80,7 @@ export function createPasskeyService(config, store) {
     if (!user && !handle) throw new HttpError(400, 'handle required');
     const userName = user?.handle || String(handle).trim();
     if (!userName) throw new HttpError(400, 'handle required');
-    const options = await generateRegistrationOptions({
+    const options = await generateReg({
       rpName: config.rpName,
       rpID: config.rpID,
       userName,
@@ -111,7 +115,7 @@ export function createPasskeyService(config, store) {
     }
     let verification;
     try {
-      verification = await verifyRegistrationResponse({
+      verification = await verifyReg({
         response: body,
         expectedChallenge: pending.challenge,
         expectedOrigin: config.origins,
@@ -149,11 +153,17 @@ export function createPasskeyService(config, store) {
   }
 
   async function beginLogin({ user, handle } = {}) {
-    const account = user || (handle ? store.getUserByHandle(handle) : null);
-    const options = await generateAuthenticationOptions({
+    const trimmedHandle = handle != null && String(handle).trim() ? String(handle).trim() : '';
+    const account = user || (trimmedHandle ? store.getUserByHandle(trimmedHandle) : null);
+    if (trimmedHandle && !account) throw new HttpError(404, 'unknown handle');
+    const creds = account ? existingCredentials(account) : [];
+    // Discoverable / resident-key login (DFC-style): omit allowCredentials so
+    // the authenticator can present the passkey. Handle-scoped login only
+    // lists that person's credentials when they already exist.
+    const options = await generateAuth({
       rpID: config.rpID,
       userVerification: 'preferred',
-      allowCredentials: account ? existingCredentials(account) : undefined,
+      ...(creds.length ? { allowCredentials: creds } : {}),
       extensions: { prf: {} },
     });
     options.extensions = { ...(options.extensions || {}), prf: {} };
@@ -174,11 +184,14 @@ export function createPasskeyService(config, store) {
     }
     const credId = body?.id || body?.rawId;
     const found = credId ? store.findCredential(credId) : null;
-    if (!found) throw new HttpError(404, 'unknown credential');
+    if (!found) throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
     const { user: account, credential } = found;
+    if (pending.userId && pending.userId !== account.id) {
+      throw new HttpError(403, 'credential does not belong to this person', { code: 'CREDENTIAL_MISMATCH' });
+    }
     let verification;
     try {
-      verification = await verifyAuthenticationResponse({
+      verification = await verifyAuth({
         response: body,
         expectedChallenge: pending.challenge,
         expectedOrigin: config.origins,
