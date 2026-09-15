@@ -3,13 +3,14 @@
 import { Router } from 'express';
 
 import { requireAuth, requireRole } from '../auth.mjs';
+import { parseTallyCounts } from '../ballot.mjs';
 import {
   normalizeQuestions,
   presentPublicBallotInfo,
   presentPublicOptionInfo,
   resolveBallotSpecHash,
 } from '../ballotSpec.mjs';
-import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
+import { presentElection, presentResults, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { reasonName } from '../reasonCodes.mjs';
@@ -27,9 +28,8 @@ function unixSeconds(value, fallback) {
   return Math.floor(ms / 1000);
 }
 
-function expectedCountLength(questions) {
-  if (!questions.length) return 0;
-  return questions.reduce((n, q) => n + Math.max(q.options?.length || 0, 1), 0);
+function questionsFromCreateBody(body) {
+  return normalizeQuestions(body?.questions ?? body?.aspects ?? body?.ballot?.questions);
 }
 
 async function revokeHandler(req, store, explorer) {
@@ -93,7 +93,7 @@ export function electionsRouter(deps) {
       if (!Number.isInteger(maxParticipants) || maxParticipants < 0) {
         throw new HttpError(400, 'maxParticipants must be >= 0 (0 = unlimited)');
       }
-      const questions = normalizeQuestions(body.questions);
+      const questions = questionsFromCreateBody(body);
       const ballotSpecHash = resolveBallotSpecHash({
         title,
         questions,
@@ -169,7 +169,9 @@ export function electionsRouter(deps) {
     const title = body.title != null ? String(body.title).trim() : election.title;
     if (!title) throw new HttpError(400, 'title required');
     const questions =
-      body.questions != null ? normalizeQuestions(body.questions) : election.questions;
+      body.questions != null || body.aspects != null
+        ? normalizeQuestions(body.questions ?? body.aspects)
+        : election.questions;
     const metadataURI =
       body.metadataURI != null ? String(body.metadataURI) : election.metadataURI;
     const ballotSpecHash = resolveBallotSpecHash({
@@ -205,6 +207,15 @@ export function electionsRouter(deps) {
         dto.me = store.voterStatus(election.id, req.user.id);
       }
       res.json(dto);
+    }),
+  );
+
+  router.get(
+    '/:id/results',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentResults(election, deps, { user: req.user }));
     }),
   );
 
@@ -448,26 +459,7 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const counts = req.body?.counts;
-      if (!Array.isArray(counts) || counts.length === 0) {
-        throw new HttpError(400, 'counts[] required');
-      }
-      const nums = counts.map((n) => Number(n));
-      if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
-        throw new HttpError(400, 'counts must be non-negative integers');
-      }
-      const sum = nums.reduce((a, b) => a + b, 0);
-      if (sum !== election.acceptedBallots) {
-        throw new HttpError(400, 'sum(counts) must equal acceptedBallots', {
-          code: 'TALLY_MISMATCH',
-          sum,
-          acceptedBallots: election.acceptedBallots,
-        });
-      }
-      const expected = expectedCountLength(election.questions);
-      if (expected && nums.length !== expected) {
-        throw new HttpError(400, `counts length must be ${expected}`, { expected });
-      }
+      const nums = parseTallyCounts(req.body || {}, election.questions || [], election.acceptedBallots);
       const countsHash = computeTallyHash(nums);
       const tallied = await store.setTally(election.id, nums, { countsHash });
       await explorer.append('tally', {

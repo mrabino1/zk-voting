@@ -116,10 +116,16 @@ const REASON_CODE_LABELS = Object.freeze({
  */
 
 /**
+ * One decision on a ballot (office, measure, article). Node authoring +
+ * plurality tally. `RANKED` is stored for a later IRV path.
+ *
  * @typedef {Object} BallotQuestion
  * @property {string} id
- * @property {string} type SINGLE_CHOICE | MULTI_CHOICE | YES_NO | MEASURE | RANKED
+ * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"MEASURE"|"ARTICLE"|"RANKED"} type
  * @property {string} prompt
+ * @property {string} [description]
+ * @property {number} [maxSelections] Required for MULTI_CHOICE; omitted from the
+ *   keccak preimage for single-choice / yes-no so older hashes stay stable.
  * @property {BallotOption[]} options
  */
 

@@ -628,8 +628,28 @@
     }
     const txs = [...byHash.values()];
     const title = pick(election, ["title", "name"]) || (summary && summary.title) || "Election " + id;
-    const tally = pick(election, ["tally.counts", "tally", "counts"]);
+    const tally = pick(election, ["tally"]);
+    const aspects = asList(election, ["aspects", "questions"]);
     const tallied = Boolean(tally);
+    const tallyRows = Array.isArray(tally && tally.questions) && tally.questions.length
+      ? tally.questions
+          .map((q) => {
+            if (q.tallied === false) {
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — not tallied (${esc(q.note || "IRV")})</li>`;
+            }
+            const opts = (q.options || [])
+              .map((o) => `${esc(o.label || o.id)}: ${esc(o.count)}`)
+              .join("; ");
+            const under = q.undervotes != null ? ` · undervotes ${esc(q.undervotes)}` : "";
+            return `<li><strong>${esc(q.prompt || q.id)}</strong> — ${opts}${under}</li>`;
+          })
+          .join("")
+      : "";
+    const aspectList = aspects.length
+      ? `<ol class="aspect-preview">${aspects
+          .map((q) => `<li>${esc(q.type || "")} — ${esc(q.prompt || q.id)}</li>`)
+          .join("")}</ol>`
+      : "";
     const l1 = pick(election, ["tally.l1"]);
     let l1Label = "not posted";
     if (l1) {
@@ -668,10 +688,15 @@
         <dt>Election id</dt><dd>${esc(id)}</dd>
         <dt>State</dt><dd>${esc(stateLabel)}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
+        <dt>Questions</dt><dd>${esc(pick(election, ["questionCount"]) ?? aspects.length ?? "—")}</dd>
         <dt>Last closed hour</dt><dd>${esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt)))}</dd>
         <dt>Ballots disclosed</dt><dd>${esc(accepted != null ? accepted : "—")}</dd>
         <dt>Next disclosure</dt><dd>${esc(nextLine)}</dd>
-        <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
+        <dt>Public tally</dt><dd>${
+          tallyRows
+            ? `<ul class="tally-bars">${tallyRows}</ul>`
+            : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted")
+        }</dd>
         <dt>Tally hash</dt><dd class="hash">${esc(pick(election, ["tally.countsHash"]) || "—")}</dd>
         <dt>L1 certification</dt><dd>${esc(l1Label)}</dd>
         <dt>Certified results</dt><dd>${
@@ -680,7 +705,8 @@
             : "not posted (winner page is linked after a certified tally)"
         }</dd>
       </dl>
-      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. This page does not compute a winner.</p>
+      ${aspectList}
+      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. Plurality totals are labeled per question.</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>

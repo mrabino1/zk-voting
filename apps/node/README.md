@@ -123,6 +123,7 @@ GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
 PATCH /api/elections/:id            (clerk; ballot metadata until roll freeze)
 GET  /api/elections/:id
+GET  /api/elections/:id/results     (per-question plurality labels)
 GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
 GET  /api/elections/:id/ballots
 GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
