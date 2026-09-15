@@ -8,6 +8,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { isDisclosed } from './disclosure.mjs';
+import {
+  electionMatchesRef,
+  mintShortCode,
+  mintUuid,
+  parseOnChainElectionId,
+} from './electionIds.mjs';
 import { HttpError } from './http.mjs';
 import {
   ensurePersonFields,
@@ -17,7 +23,7 @@ import {
   sameEthAddress,
 } from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
-import { isRole } from './roles.mjs';
+import { isOfficerRole, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 import {
   DEMO_KEY_WARNING,
@@ -28,6 +34,20 @@ import {
   publicCeremonyView,
 } from './tallyCrypto.mjs';
 
+/** Public aliases for an election id (numeric, UUID, or short code when stored). */
+export function electionAliases(election) {
+  if (!election) return [];
+  return [election.id, election.uuid, election.code, election.shortCode, election.publicId].filter(
+    (v) => v != null && String(v) !== '',
+  );
+}
+
+export function electionIdMatches(election, id) {
+  const want = String(id ?? '').trim();
+  if (!want) return false;
+  return electionAliases(election).some((v) => String(v) === want);
+}
+
 /** Public ballot row: no acceptedAt, no choice, no user id. */
 export function publicVoteRecord(vote) {
   if (!vote) return null;
@@ -37,6 +57,13 @@ export function publicVoteRecord(vote) {
     electionId: String(vote.electionId),
     relayer: vote.relayer || 'node',
   };
+}
+
+/** Hourly-safe view of a stored vote. Null if the accept is still sealed. */
+export function publishedVoteSlice(vote, now, intervalSeconds) {
+  if (!vote) return null;
+  if (!isDisclosed(vote.acceptedAt, now, intervalSeconds)) return null;
+  return vote;
 }
 
 function emptyData() {
@@ -63,6 +90,26 @@ function emptyData() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+/** Keep a successful L1 post if a later retry fails or is AlreadyPosted. */
+export function mergeTallyL1(prev, next) {
+  if (!next || typeof next !== 'object') return prev || next;
+  if (!prev || typeof prev !== 'object') return next;
+  const prevOnChain = prev.posted || prev.alreadyPosted;
+  if (prevOnChain && next.status === 'failed') {
+    return { ...prev, lastError: next.error || null };
+  }
+  if (next.alreadyPosted || next.status === 'already_posted') {
+    return {
+      ...next,
+      txHash: next.txHash || prev.txHash || null,
+      chainId: next.chainId || prev.chainId || null,
+      mirror: next.mirror || prev.mirror || null,
+      settlement: next.settlement || prev.settlement || null,
+    };
+  }
+  return next;
 }
 
 export class Store {
@@ -96,6 +143,7 @@ export class Store {
       }
     }
     await store.seed(config);
+    store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
     await store.persist();
     return store;
@@ -153,7 +201,92 @@ export class Store {
   }
 
   getElection(id) {
-    return this.data.elections.find((e) => String(e.id) === String(id)) || null;
+    const want = String(id ?? '').trim();
+    if (!want) return null;
+    return (
+      this.data.elections.find((e) => electionMatchesRef(e, want) || electionIdMatches(e, want)) ||
+      null
+    );
+  }
+
+  _shortCodeTaken(code, exceptId = null) {
+    return this.data.elections.some(
+      (e) => e.shortCode && e.shortCode === code && (exceptId == null || String(e.id) !== String(exceptId)),
+    );
+  }
+
+  _uniqueShortCode() {
+    for (let i = 0; i < 48; i += 1) {
+      const code = mintShortCode();
+      if (!this._shortCodeTaken(code) && !this.getElection(code)) return code;
+    }
+    throw new HttpError(500, 'could not mint election short code');
+  }
+
+  _allocateOnChainElectionId(requested) {
+    let value;
+    try {
+      value = parseOnChainElectionId(requested);
+    } catch (err) {
+      throw new HttpError(err.status || 400, err.message);
+    }
+    if (value == null) {
+      value = String(this.data.meta.nextElectionId || 1);
+      this.data.meta.nextElectionId = Number(this.data.meta.nextElectionId || 1) + 1;
+    } else {
+      const taken = this.data.elections.some((e) => String(e.onChainElectionId) === value);
+      if (taken) throw new HttpError(409, 'onChainElectionId taken');
+      try {
+        const n = BigInt(value);
+        const next = BigInt(this.data.meta.nextElectionId || 1);
+        if (n >= next && n < BigInt(Number.MAX_SAFE_INTEGER)) {
+          this.data.meta.nextElectionId = Number(n) + 1;
+        }
+      } catch {
+        /* keep allocator as-is for oversized ids */
+      }
+    }
+    return value;
+  }
+
+  /**
+   * Backfill shortCode / onChainElectionId on elections created before UUID
+   * public ids. Existing non-UUID ids are kept so old bookmarks still resolve.
+   */
+  ensureElectionPublicIds() {
+    this.data.meta = this.data.meta || {};
+    if (this.data.meta.nextElectionId == null) this.data.meta.nextElectionId = 1;
+    this.data.meta.version = Math.max(Number(this.data.meta.version || 0), 3);
+    for (const election of this.data.elections) {
+      if (!election.shortCode) {
+        election.shortCode = this._uniqueShortCode();
+      }
+      if (election.onChainElectionId == null || election.onChainElectionId === '') {
+        if (/^\d+$/.test(String(election.id))) {
+          election.onChainElectionId = String(election.id);
+          try {
+            const n = BigInt(election.id);
+            const next = BigInt(this.data.meta.nextElectionId || 1);
+            if (n >= next && n < BigInt(Number.MAX_SAFE_INTEGER)) {
+              this.data.meta.nextElectionId = Number(n) + 1;
+            }
+          } catch {
+            /* ignore */
+          }
+        } else {
+          election.onChainElectionId = this._allocateOnChainElectionId(null);
+        }
+      }
+    }
+  }
+
+  getElectionByOnChainId(onChainId) {
+    if (onChainId == null || onChainId === '') return null;
+    const key = String(onChainId);
+    return (
+      this.data.elections.find((e) => e.onChainElectionId != null && String(e.onChainElectionId) === key) ||
+      null
+    );
   }
 
   listElections() {
@@ -436,32 +569,177 @@ export class Store {
     return jurisdiction;
   }
 
-  async grantJurisdictionRole(jurisdictionId, { address, role, handle }) {
+  resolveOfficerUser({ userId, handle, address } = {}) {
+    if (userId) {
+      const user = this.getUser(userId);
+      if (user) return user;
+    }
+    if (handle) {
+      const user = this.getUserByHandle(handle);
+      if (user) return user;
+    }
+    if (address) {
+      const byEth = this.findUserByEthAddress(address);
+      if (byEth) return byEth;
+      const byHandle = this.getUserByHandle(address);
+      if (byHandle) return byHandle;
+    }
+    return null;
+  }
+
+  officerMatchesUser(grant, user) {
+    if (!grant || !user) return false;
+    if (grant.userId && grant.userId === user.id) return true;
+    const grantHandle = String(grant.handle || '').trim().toLowerCase();
+    const userHandle = String(user.handle || '').trim().toLowerCase();
+    if (grantHandle && grantHandle === userHandle) return true;
+    const grantAddr = String(grant.address || '').trim();
+    if (!grantAddr) return false;
+    if (grantAddr.toLowerCase() === userHandle) return true;
+    if (sameEthAddress(user.activeEthAddress, grantAddr)) return true;
+    return (user.ethAccounts || []).some((a) => sameEthAddress(a.address, grantAddr));
+  }
+
+  userHasJurisdictionRole(user, roles, jurisdictionId) {
+    if (!user) return false;
+    if (user.role === 'platform_admin') return true;
+    const wanted = new Set((Array.isArray(roles) ? roles : [roles]).filter(Boolean));
+    if (!wanted.size || jurisdictionId == null || jurisdictionId === '') return false;
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) return false;
+    return (jurisdiction.officers || []).some(
+      (grant) => wanted.has(grant.role) && this.officerMatchesUser(grant, user),
+    );
+  }
+
+  userHasAnyJurisdictionRole(user, roles) {
+    if (!user) return false;
+    if (user.role === 'platform_admin') return true;
+    return this.data.jurisdictions.some((jurisdiction) =>
+      this.userHasJurisdictionRole(user, roles, jurisdiction.id),
+    );
+  }
+
+  listJurisdictionRolesForUser(user) {
+    if (!user) return [];
+    const out = [];
+    for (const jurisdiction of this.data.jurisdictions) {
+      for (const grant of jurisdiction.officers || []) {
+        if (this.officerMatchesUser(grant, user)) {
+          out.push({
+            jurisdictionId: jurisdiction.id,
+            jurisdictionName: jurisdiction.name,
+            role: grant.role,
+            grantedAt: grant.grantedAt || null,
+            address: grant.address || '',
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  _matchingOfficerGrant(jurisdiction, role, { user, handle, address, userId }) {
+    const handleKey = String(handle || '').trim().toLowerCase();
+    const addressKey = String(address || '').trim().toLowerCase();
+    const idKey = String(userId || '').trim();
+    return (jurisdiction.officers || []).find((grant) => {
+      if (grant.role !== role) return false;
+      if (user && this.officerMatchesUser(grant, user)) return true;
+      if (idKey && grant.userId === idKey) return true;
+      if (handleKey && String(grant.handle || '').trim().toLowerCase() === handleKey) return true;
+      if (addressKey && String(grant.address || '').trim().toLowerCase() === addressKey) return true;
+      return false;
+    });
+  }
+
+  async grantJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
     const jurisdiction = this.getJurisdiction(jurisdictionId);
     if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
-    if (!isRole(role)) throw new HttpError(400, 'invalid role');
+    if (!isOfficerRole(role)) throw new HttpError(400, 'invalid role');
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
     jurisdiction.officers = jurisdiction.officers || [];
+    const existing = this._matchingOfficerGrant(jurisdiction, role, {
+      user,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+      userId: trimmedUserId,
+    });
+    if (existing) {
+      if (user && !existing.userId) existing.userId = user.id;
+      if (user && !existing.handle) existing.handle = user.handle;
+      await this.persist();
+      return { jurisdiction, grant: existing, user };
+    }
     const grant = {
-      address: address || '',
-      handle: handle || '',
+      userId: user?.id || trimmedUserId || '',
+      address: trimmedAddress || user?.activeEthAddress || '',
+      handle: user?.handle || trimmedHandle,
       role,
       grantedAt: new Date().toISOString(),
     };
     jurisdiction.officers.push(grant);
-    const user =
-      (handle && this.getUserByHandle(handle)) ||
-      (address && this.getUserByHandle(address)) ||
-      null;
-    if (user && user.role !== 'platform_admin') {
-      user.role = role;
-    }
     await this.persist();
     return { jurisdiction, grant, user };
   }
 
+  async revokeJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
+    if (!isOfficerRole(role)) throw new HttpError(400, 'invalid role');
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
+    const before = jurisdiction.officers || [];
+    const next = before.filter((grant) => {
+      if (grant.role !== role) return true;
+      if (user && this.officerMatchesUser(grant, user)) return false;
+      if (trimmedUserId && grant.userId === trimmedUserId) return false;
+      if (
+        trimmedHandle &&
+        String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        trimmedAddress &&
+        String(grant.address || '').trim().toLowerCase() === trimmedAddress.toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+    if (next.length === before.length) {
+      throw new HttpError(404, 'officer grant not found');
+    }
+    jurisdiction.officers = next;
+    await this.persist();
+    return { jurisdiction, role, user };
+  }
+
   async createElection(params) {
-    const id = this.data.meta.nextElectionId;
-    this.data.meta.nextElectionId += 1;
+    const id = mintUuid();
+    if (this.getElection(id)) throw new HttpError(409, 'election id collision');
+    const shortCode = this._uniqueShortCode();
+    const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
     const tree = emptyTree(params.treeDepth);
     const dq = emptyTree(params.treeDepth);
     let tallyScheme;
@@ -497,6 +775,9 @@ export class Store {
     }
     const election = {
       id,
+      shortCode,
+      onChainElectionId,
+      aliases: [],
       title: params.title,
       metadataURI: params.metadataURI || '',
       startTime: params.startTime,
@@ -504,6 +785,7 @@ export class Store {
       maxParticipants: params.maxParticipants,
       treeDepth: params.treeDepth,
       ballotSpecHash: params.ballotSpecHash,
+      ballotMethod: params.ballotMethod || 'plurality',
       questions: params.questions,
       questionCount: params.questions.length,
       jurisdictionId: params.jurisdictionId,
@@ -518,6 +800,10 @@ export class Store {
       tallyPubKeyX,
       tallyPubKeyY,
       tallyCeremony,
+      onChainElectionAddress: params.onChainElectionAddress || null,
+      factoryAddress: params.factoryAddress || null,
+      createTxHash: params.createTxHash || null,
+      chainId: params.chainId != null ? Number(params.chainId) : null,
       rollFrozen: false,
       frozenAt: null,
       frozenEligibleRoot: null,
@@ -542,7 +828,7 @@ export class Store {
    * Update ballot title / questions / metadata URI before the roll is frozen.
    * `ballotSpecHash` must already be the keccak of the canonical ballot JSON.
    */
-  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash }) {
+  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash, ballotMethod, startTime, cutoffTime }) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
     if (election.rollFrozen) {
@@ -554,6 +840,9 @@ export class Store {
       election.title = trimmed;
     }
     if (metadataURI != null) election.metadataURI = String(metadataURI);
+    if (startTime != null) election.startTime = Number(startTime);
+    if (cutoffTime != null) election.cutoffTime = Number(cutoffTime);
+    if (ballotMethod) election.ballotMethod = ballotMethod;
     if (questions != null) {
       if (!Array.isArray(questions)) throw new HttpError(400, 'questions must be an array');
       election.questions = questions;
@@ -801,9 +1090,15 @@ export class Store {
   }
 
   nullifierUsed(electionId, nullifier) {
+    return Boolean(this.findVote(electionId, nullifier));
+  }
+
+  findVote(electionId, nullifier) {
     const key = toBytes32(nullifier);
-    return this.data.votes.some(
-      (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+    return (
+      this.data.votes.find(
+        (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+      ) || null
     );
   }
 
@@ -811,17 +1106,22 @@ export class Store {
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
    * they wait for hourly disclosure. No passkey user id, no choice.
+   *
+   * One ballot per nullifier: any second submit (including a new ciphertext)
+   * is 409 NULLIFIER_USED. Double voting is impossible.
    */
   async acceptVote(vote, envelope) {
-    if (this.nullifierUsed(vote.electionId, vote.nullifier)) {
+    const existing = this.findVote(vote.electionId, vote.nullifier);
+    if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
     const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
       ? Math.floor(Number(vote.acceptedAt))
       : Math.floor(Date.now() / 1000);
+    const ballotHash = toBytes32(vote.ballotHash);
     const record = {
       nullifier: toBytes32(vote.nullifier),
-      ballotHash: toBytes32(vote.ballotHash),
+      ballotHash,
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
@@ -833,6 +1133,7 @@ export class Store {
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
         encryptedBallot: envelope.encryptedBallot,
+        ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
     const election = this.requireElection(vote.electionId);
@@ -845,12 +1146,23 @@ export class Store {
     return this.data.votes.filter((v) => String(v.electionId) === String(electionId));
   }
 
+  /**
+   * Votes whose accept is past the disclosure horizon. Each nullifier appears
+   * at most once.
+   */
   listPublishedVotes(electionId, now, intervalSeconds) {
-    return this.listVotes(electionId).filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds));
+    return this.listVotes(electionId).flatMap((vote) => {
+      const slice = publishedVoteSlice(vote, now, intervalSeconds);
+      return slice ? [slice] : [];
+    });
   }
 
   publishedAcceptedBallots(electionId, now, intervalSeconds) {
     return this.listPublishedVotes(electionId, now, intervalSeconds).length;
+  }
+
+  publishedAcceptedBallotsAll(now, intervalSeconds) {
+    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds)).length;
   }
 
   listEnvelopes(electionId) {
@@ -870,16 +1182,33 @@ export class Store {
     return list.find((g) => String(g.electionId) === String(electionId)) || null;
   }
 
-  async setTally(id, counts, extra = {}) {
+  async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
       counts: counts.map((n) => Number(n)),
       postedAt: new Date().toISOString(),
-      source: extra.source || TALLY_SCHEME_SUM_ONLY,
+      source: extras.source || TALLY_SCHEME_SUM_ONLY,
       production: false,
-      openedBallots: extra.openedBallots ?? null,
+      openedBallots: extras.openedBallots ?? null,
+      countsHash: extras.countsHash || null,
+      l1: extras.l1 || null,
+      ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
+    if (Array.isArray(extras.questions) && extras.questions.length) {
+      election.tally.questions = extras.questions;
+    }
+    await this.persist();
+    return election;
+  }
+
+  async setTallyL1(id, l1) {
+    const election = this.requireElection(id);
+    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
+    election.tally.l1 = mergeTallyL1(election.tally.l1, l1);
+    if (l1?.resultHash && !election.tally.countsHash) {
+      election.tally.countsHash = l1.resultHash;
+    }
     await this.persist();
     return election;
   }

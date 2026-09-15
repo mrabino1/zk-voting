@@ -59,11 +59,12 @@ export function clearSessionCookie(res, config) {
 
 export function errorHandler(err, req, res, _next) {
   const status = Number(err.status || err.statusCode || 500);
+  const hideInternals = status >= 500 && !(err instanceof HttpError);
   if (status >= 500 && !req.app?.locals?.quiet) {
     console.error(err);
   }
   res.status(status).json({
-    error: status >= 500 ? 'internal error' : err.message || 'request failed',
+    error: hideInternals ? 'internal error' : err.message || 'request failed',
     nfp: true,
     ...(err.extra || {}),
   });
@@ -80,6 +81,11 @@ const BANNED_PRIVACY_KEYS = new Set([
   'selected',
   'plaintext',
   'voteFor',
+  'answers',
+  'optionIds',
+  'ranking',
+  'ranks',
+  'rankingPayload',
 ]);
 
 /** Strip identity↔choice fields before persisting a ballot envelope. */

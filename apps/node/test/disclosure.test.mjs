@@ -19,6 +19,7 @@ let app;
 let server;
 let base;
 let clock;
+let store;
 const adminJar = {};
 const voterJar = {};
 
@@ -116,7 +117,11 @@ describe('hourly polling-place unlinkability', () => {
     assert.equal(json.disclosure.intervalSeconds, HOUR);
     assert.equal(json.disclosure.policy, 'hourly-polling-place-unlinkability');
     assert.equal(json.disclosure.lastPublishedAt, HOUR_START);
+    assert.equal(json.disclosure.lastClosedHourAt, HOUR_START);
+    assert.equal(json.disclosure.lastClosedHourStart, HOUR_START - HOUR);
     assert.equal(json.disclosure.nextPublishAt, HOUR_START + HOUR);
+    assert.equal(json.disclosure.secondsUntilNext, 2220);
+    assert.equal(json.disclosure.acceptedBallotsDisclosed, 0);
     assert.equal(leakKeys(json).length, 0);
   });
 
@@ -191,6 +196,16 @@ describe('hourly polling-place unlinkability', () => {
     assert.equal(detail.json.acceptedBallotsActual, undefined);
     assert.equal(leakKeys(detail.json).length, 0);
 
+    const resultsLive = await api('GET', `/api/elections/${id}/results`);
+    assert.equal(resultsLive.status, 200);
+    assert.equal(resultsLive.json.acceptedBallots, 0);
+    assert.equal(resultsLive.json.results.available, false);
+    assert.equal(resultsLive.json.results.status, 'open');
+    assert.equal(resultsLive.json.results.questions[0].options[0].count, null);
+    assert.equal(resultsLive.json.results.questions[0].outcome, null);
+    assert.equal(resultsLive.json.operatorInbox, undefined);
+    assert.equal(leakKeys(resultsLive.json).length, 0);
+
     const list = await api('GET', '/api/elections');
     const row = list.json.elections.find((e) => e.id === id);
     assert.equal(row.acceptedBallots, 0);
@@ -213,6 +228,23 @@ describe('hourly polling-place unlinkability', () => {
     }
     assert.equal(voteBlocks.length, 0);
     assert.equal(leakKeys(blocks.json).length, 0);
+    assert.equal(blocks.json.disclosure.lastClosedHourAt, HOUR_START);
+    assert.equal(blocks.json.disclosure.secondsUntilNext, 2220);
+    assert.equal(blocks.json.disclosure.acceptedBallotsDisclosed, 0);
+
+    const snap = await api('GET', '/api/explorer/disclosure');
+    assert.equal(snap.status, 200);
+    assert.equal(snap.json.disclosure.acceptedBallotsDisclosed, 0);
+    assert.equal(snap.json.disclosure.lastClosedHourAt, HOUR_START);
+
+    const summaryBefore = await api('GET', `/api/elections/${id}/summary`);
+    assert.equal(summaryBefore.status, 200);
+    assert.equal(summaryBefore.json.acceptedBallots, 0);
+    assert.equal(summaryBefore.json.disclosure.acceptedBallotsDisclosed, 0);
+    assert.equal(summaryBefore.json.disclosure.secondsUntilNext, 2220);
+    assert.equal(summaryBefore.json.resultsUrl, null);
+    assert.equal(summaryBefore.json.winner, undefined);
+    assert.equal(leakKeys(summaryBefore.json).length, 0);
 
     clock = HOUR_START + HOUR;
 
@@ -223,6 +255,23 @@ describe('hourly polling-place unlinkability', () => {
 
     const after = await api('GET', `/api/elections/${id}`);
     assert.equal(after.json.acceptedBallots, 2);
+    assert.equal(after.json.disclosure.acceptedBallotsDisclosed, 2);
+    assert.equal(after.json.disclosure.lastClosedHourAt, HOUR_START + HOUR);
+    assert.equal(after.json.disclosure.secondsUntilNext, HOUR);
+
+    const summaryAfter = await api('GET', `/api/elections/${id}/summary`);
+    assert.equal(summaryAfter.json.acceptedBallots, 2);
+    assert.equal(summaryAfter.json.disclosure.acceptedBallotsDisclosed, 2);
+    assert.equal(summaryAfter.json.resultsUrl, null);
+
+    const explorerAfter = await api('GET', '/api/explorer/disclosure');
+    assert.equal(explorerAfter.json.disclosure.acceptedBallotsDisclosed, 2);
+    assert.equal(explorerAfter.json.disclosure.lastClosedHourAt, HOUR_START + HOUR);
+
+    const resultsAfterHour = await api('GET', `/api/elections/${id}/results`);
+    assert.equal(resultsAfterHour.json.acceptedBallots, 2);
+    assert.equal(resultsAfterHour.json.results.available, false);
+    assert.equal(resultsAfterHour.json.results.questions[0].options[0].count, null);
 
     const found = await api('GET', `/api/explorer/nullifiers/${laterNullifier}`);
     assert.equal(found.status, 200);
@@ -249,5 +298,121 @@ describe('hourly polling-place unlinkability', () => {
       lumped.votes.map((tx) => String(tx.nullifier)),
       [...nullifiers].sort((a, b) => a.localeCompare(b)),
     );
+  });
+});
+
+describe('disclosure hour-boundary vote', () => {
+  const boundaryAdminJar = {};
+  const boundaryVoterJar = {};
+
+  before(async () => {
+    clock = HOUR_START;
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-boundary-'));
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: HOUR,
+      nowFn: () => clock,
+    });
+    app = created.app;
+    store = created.store;
+    server = await listen(app);
+    base = `http://127.0.0.1:${server.address().port}`;
+    await api('POST', '/api/auth/dev-login', { body: { handle: 'admin' }, jar: boundaryAdminJar });
+    await api('POST', '/api/auth/dev-login', {
+      body: { handle: 'voter1', role: 'voter' },
+      jar: boundaryVoterJar,
+    });
+  });
+
+  after(async () => {
+    await new Promise((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  test('a vote at the exact hour start stays sealed until the next hour closes', async () => {
+    const created = await api('POST', '/api/elections', {
+      jar: boundaryAdminJar,
+      body: {
+        title: 'Boundary precinct',
+        startTime: clock - 60,
+        cutoffTime: clock + 7 * HOUR,
+        treeDepth: 16,
+        jurisdictionId: 'demo',
+        questions: [{ type: 'YES_NO', prompt: 'Adopt?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    const id = created.json.election.id;
+    const reg = await api('POST', `/api/elections/${id}/register`, {
+      jar: boundaryVoterJar,
+      body: { identityCommitment: '0xabc1' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: boundaryAdminJar });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+
+    const vote = await api('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '7', electionId: id },
+        encryptedBallot: '0xee',
+        identityCommitment: '0xabc1',
+      },
+    });
+    assert.equal(vote.status, 201, vote.json?.error);
+    assert.equal(vote.json.published, false);
+    assert.equal(vote.json.nextPublishAt, HOUR_START + HOUR);
+
+    const stillSealed = await api('GET', `/api/elections/${id}/summary`);
+    assert.equal(stillSealed.json.acceptedBallots, 0);
+    assert.equal(stillSealed.json.disclosure.acceptedBallotsDisclosed, 0);
+    assert.equal(stillSealed.json.disclosure.lastClosedHourAt, HOUR_START);
+    assert.equal(stillSealed.json.disclosure.secondsUntilNext, HOUR);
+    assert.equal(stillSealed.json.resultsUrl, null);
+
+    const explorerSealed = await api('GET', '/api/explorer/disclosure');
+    assert.equal(explorerSealed.json.disclosure.acceptedBallotsDisclosed, 0);
+
+    clock = HOUR_START + HOUR;
+
+    const opened = await api('GET', `/api/elections/${id}/summary`);
+    assert.equal(opened.json.acceptedBallots, 1);
+    assert.equal(opened.json.disclosure.acceptedBallotsDisclosed, 1);
+    assert.equal(opened.json.disclosure.lastClosedHourAt, HOUR_START + HOUR);
+    assert.equal(opened.json.resultsUrl, null);
+
+    const explorerOpen = await api('GET', '/api/explorer/disclosure');
+    assert.equal(explorerOpen.json.disclosure.acceptedBallotsDisclosed, 1);
+
+    const election = store.requireElection(id);
+    election.cutoffTime = clock - 1;
+    await store.persist();
+
+    const tallied = await api('POST', `/api/elections/${id}/tally`, {
+      jar: boundaryAdminJar,
+      body: { counts: [1, 0] },
+    });
+    assert.equal(tallied.status, 200, tallied.json?.error);
+
+    const afterTally = await api('GET', `/api/elections/${id}/summary`);
+    assert.equal(afterTally.json.resultsUrl, `/elections/${id}/results`);
+    assert.equal(afterTally.json.winner, undefined);
+    assert.equal(afterTally.json.tally, undefined);
+    assert.equal(afterTally.json.disclosure.acceptedBallotsDisclosed, 1);
+    assert.equal(leakKeys(afterTally.json).length, 0);
+  });
+
+  test('explorer HTML hosts the hour-bucket snapshot region', async () => {
+    const page = await api('GET', '/explorer');
+    assert.equal(page.status, 200);
+    assert.match(page.text, /disclosure-banner/);
+    assert.match(page.text, /disclosure-snapshot/);
+    assert.match(page.text, /Last closed hour|hour that contained them closes/i);
   });
 });

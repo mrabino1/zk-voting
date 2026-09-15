@@ -4,8 +4,13 @@
  * Inertia-style passkey-held wallet for Republic.
  *
  * - WebAuthn resident key + userVerification required.
- * - When the authenticator supports the PRF extension, `prf.eval.first` is a
- *   32-byte salt; HKDF-SHA256 of that PRF output wraps a 32-byte seed with AES-GCM.
+ * - Two PRF / HKDF domains (docs/PASSKEYS.md): account key ≠ trapdoor/nullifierSecret.
+ *   prf.eval(saltAccount)  → HKDF("republic:account:v1")  → AES-GCM wrap of secp256k1 seed
+ *   prf.eval(saltIdentity) → HKDF("republic:identity:v1") → (identityTrapdoor, nullifierSecret)
+ * - saltAccount  = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:account:v1", binding=chain id)
+ * - saltIdentity = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:identity:v1", binding=jurisdictionId)
+ * - Authenticators that return only one PRF eval are prompted a second time with saltIdentity.
+ *   Republic will not derive the trapdoor from the account seed or account PRF output.
  * - The seed stands in for a secp256k1 private key. This file does not ship a
  *   curve implementation, so it cannot emit an uncompressed public key.
  * - getAddress() therefore returns `0x` + first 20 bytes of SHA-256(seed) and
@@ -14,17 +19,35 @@
  *   A compact keccak256 is included here for commitments, ballot hashes, and docs.
  * - NEVER render a seed phrase. The seed never leaves RAM except as AES-GCM ciphertext
  *   in IndexedDB. signUserOp() unwraps, HMAC-signs, then zeroes the seed.
+ *
+ * IndexedDB `republic-wallet` version 2. v1 wraps derived the ZK identity from the
+ * account seed (weaker than the spec) and used a random PRF salt, so they cannot be
+ * unwrapped under the new domain salts. Reset the demo wallet and create a new passkey.
  */
 
 import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
-const DB_VERSION = 1;
+const DB_NAME = "republic-wallet";
+const DB_VERSION = 2;
 const STORE = "wallet";
 const RECORD_KEY = "primary";
-const HKDF_SALT = "republic.zk-voting.prf.v1";
-const WRAP_INFO = "republic-secp256k1-wrap";
-const IDENTITY_SALT = "republic.identity.v1";
-const IDENTITY_INFO = "trapdoor+nullifier";
+
+/** @see docs/PASSKEYS.md domain-separated salts */
+export const ACCOUNT_PRF_DOMAIN = "republic:account:v1";
+export const IDENTITY_PRF_DOMAIN = "republic:identity:v1";
+export const ACCOUNT_HKDF_INFO = "republic-secp256k1-wrap";
+export const IDENTITY_HKDF_INFO = "trapdoor+nullifier";
+export const WALLET_RECORD_VERSION = 2;
+export const IDENTITY_SCHEME = "prf-hkdf-identity-v2";
+export const DEFAULT_CHAIN_ID = 27427;
+export const DEFAULT_JURISDICTION_ID = "demo";
+
+const WRAP_INFO = ACCOUNT_HKDF_INFO;
 const FALLBACK_INFO = "republic-prf-fallback-v1";
+const FALLBACK_IDENTITY_INFO = "republic-prf-fallback-identity-v1";
+const PRF_ENABLE_INFO = "republic:prf-enable:v1";
+
+export const STALE_WALLET_MESSAGE =
+  "This browser has a v1 passkey wrap (IndexedDB republic-wallet). v1 derived the ZK trapdoor from the same seed as the account key, which is weaker than docs/PASSKEYS.md. The demo cannot migrate that wrap in place: v1 used a random PRF salt and a single HKDF domain, so the new account/identity salts cannot unwrap it. Reset the device wallet and create a new passkey. The local address and identity commitment will change; any prior demo roll entry will not match.";
 
 export const ADDRESS_SCHEME = "republic-local-address";
 export const PRODUCTION_ADDRESS_NOTE =
@@ -102,6 +125,10 @@ function concatBytes(...parts) {
     o += c.length;
   }
   return out;
+}
+
+function utf8(value) {
+  return textEncoder.encode(String(value ?? ""));
 }
 
 function zeroFill(arr) {
@@ -269,6 +296,9 @@ function openDb() {
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      // v1 → v2 keeps the same store. v1 records (identity HKDF of the account
+      // seed) are detected via record.version / identityScheme and refused until
+      // the voter resets — a breaking demo upgrade, documented in PASSKEYS.md.
     };
     req.onsuccess = () => {
       clearTimeout(timer);
@@ -324,46 +354,162 @@ async function idbClear() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* HKDF / AES-GCM wrap                                                        */
+/* HKDF / AES-GCM wrap — domain-separated account vs identity                 */
 /* -------------------------------------------------------------------------- */
 
 async function importHkdfIkm(raw) {
   return crypto.subtle.importKey("raw", coerceBytes(raw), "HKDF", false, ["deriveKey", "deriveBits"]);
 }
 
-async function aesKeyFromPrf(prfOutput) {
-  const ikm = await importHkdfIkm(prfOutput);
+/**
+ * HKDF-SHA-256. `salt` and `info` may be strings (UTF-8) or bytes.
+ * Exported so tests can pin domain-separation vectors without WebAuthn.
+ *
+ * @param {BufferSource | string} ikm
+ * @param {{ salt?: BufferSource | string, info?: BufferSource | string, length?: number }} [opts]
+ * @returns {Promise<Uint8Array>}
+ */
+export async function hkdfSha256Bits(ikm, { salt = new Uint8Array(), info = new Uint8Array(), length = 32 } = {}) {
+  const key = await importHkdfIkm(ikm);
+  const saltBytes = typeof salt === "string" ? utf8(salt) : coerceBytes(salt);
+  const infoBytes = typeof info === "string" ? utf8(info) : coerceBytes(info);
+  return new Uint8Array(
+    await crypto.subtle.deriveBits(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: saltBytes,
+        info: infoBytes,
+      },
+      key,
+      length * 8
+    )
+  );
+}
+
+/**
+ * 32-byte WebAuthn PRF eval salt (docs/PASSKEYS.md).
+ *
+ *   saltAccount  = HKDF-SHA-256(ikm=credentialId, salt="republic:account:v1",  info=chainId)
+ *   saltIdentity = HKDF-SHA-256(ikm=credentialId, salt="republic:identity:v1", info=jurisdictionId)
+ *
+ * HKDF-Extract uses the domain string as salt; HKDF-Expand uses the binding as info
+ * so the two domains cannot be swapped and chain id cannot be confused with jurisdiction id.
+ *
+ * @param {{ domain: string, credentialId: BufferSource, binding: string | number }} params
+ * @returns {Promise<Uint8Array>} 32 bytes
+ */
+export async function derivePrfEvalSalt({ domain, credentialId, binding }) {
+  if (!domain) throw new Error("PRF domain is required");
+  const id = coerceBytes(credentialId);
+  if (!id.length) throw new Error("credentialId is required to derive a PRF salt");
+  return hkdfSha256Bits(id, {
+    salt: domain,
+    info: String(binding ?? ""),
+    length: 32,
+  });
+}
+
+/**
+ * Account + identity PRF eval salts for a credential. Login can merge
+ * `buildPrfEvalExtension(salts)` onto `navigator.credentials.get` extensions.
+ *
+ * @param {{ credentialId: BufferSource, chainId?: number, jurisdictionId?: string }} params
+ */
+export async function prfEvalSaltsForCredential({
+  credentialId,
+  chainId = DEFAULT_CHAIN_ID,
+  jurisdictionId = DEFAULT_JURISDICTION_ID,
+}) {
+  const saltAccount = await derivePrfEvalSalt({
+    domain: ACCOUNT_PRF_DOMAIN,
+    credentialId,
+    binding: String(chainId),
+  });
+  const saltIdentity = await derivePrfEvalSalt({
+    domain: IDENTITY_PRF_DOMAIN,
+    credentialId,
+    binding: String(jurisdictionId || DEFAULT_JURISDICTION_ID),
+  });
+  return { saltAccount, saltIdentity, chainId: Number(chainId), jurisdictionId: String(jurisdictionId || DEFAULT_JURISDICTION_ID) };
+}
+
+/**
+ * @param {{ saltAccount: BufferSource, saltIdentity?: BufferSource | null }} params
+ */
+export function buildPrfEvalExtension({ saltAccount, saltIdentity }) {
+  const evalInput = { first: coerceBytes(saltAccount) };
+  if (saltIdentity) evalInput.second = coerceBytes(saltIdentity);
+  return { prf: { eval: evalInput } };
+}
+
+export function isCurrentWalletRecord(rec) {
+  if (!rec || typeof rec !== "object") return false;
+  return (
+    Number(rec.version) >= WALLET_RECORD_VERSION &&
+    rec.identityScheme === IDENTITY_SCHEME &&
+    rec.prfDomains?.account === ACCOUNT_PRF_DOMAIN &&
+    rec.prfDomains?.identity === IDENTITY_PRF_DOMAIN
+  );
+}
+
+/**
+ * HKDF the identity-domain PRF output into (trapdoor, nullifierSecret).
+ * Never pass the account seed or account PRF output here in production paths.
+ *
+ * @param {BufferSource} prfIdentityOutput
+ */
+export async function deriveIdentitySecrets(prfIdentityOutput) {
+  const bits = await hkdfSha256Bits(prfIdentityOutput, {
+    salt: IDENTITY_PRF_DOMAIN,
+    info: IDENTITY_HKDF_INFO,
+    length: 64,
+  });
+  const trapdoor = bits.subarray(0, 32);
+  const nullifierSecret = bits.subarray(32, 64);
+  const commitment = "0x" + bytesToHex(keccak256(concatBytes(trapdoor, nullifierSecret)));
+  return {
+    trapdoor,
+    nullifierSecret,
+    commitment,
+    hasher: "keccak256(trapdoor || nullifierSecret) demo; production circuits use Poseidon",
+  };
+}
+
+async function aesKeyFromHkdf(ikm, { salt, info }) {
+  const key = await importHkdfIkm(ikm);
   return crypto.subtle.deriveKey(
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: textEncoder.encode(HKDF_SALT),
-      info: textEncoder.encode(WRAP_INFO),
+      salt: typeof salt === "string" ? utf8(salt) : coerceBytes(salt),
+      info: typeof info === "string" ? utf8(info) : coerceBytes(info),
     },
-    ikm,
+    key,
     { name: "AES-GCM", length: 256 },
     false,
     ["encrypt", "decrypt"]
   );
 }
 
+async function aesKeyFromPrf(prfOutput) {
+  return aesKeyFromHkdf(prfOutput, { salt: ACCOUNT_PRF_DOMAIN, info: WRAP_INFO });
+}
+
 async function aesKeyFromFallback(credentialIdBytes) {
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    concatBytes(textEncoder.encode(FALLBACK_INFO), coerceBytes(credentialIdBytes))
+    concatBytes(utf8(FALLBACK_INFO), coerceBytes(credentialIdBytes))
   );
-  const ikm = await importHkdfIkm(digest);
-  return crypto.subtle.deriveKey(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: textEncoder.encode(HKDF_SALT),
-      info: textEncoder.encode(FALLBACK_INFO),
-    },
-    ikm,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
+  return aesKeyFromHkdf(digest, { salt: ACCOUNT_PRF_DOMAIN, info: FALLBACK_INFO });
+}
+
+async function fallbackIdentityIkm(credentialIdBytes) {
+  return new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-256",
+      concatBytes(utf8(FALLBACK_IDENTITY_INFO), coerceBytes(credentialIdBytes))
+    )
   );
 }
 
@@ -386,8 +532,31 @@ async function decryptSeed(aesKey, wrapped) {
 }
 
 /**
- * HKDF-SHA256 the authenticator PRF output into an AES-GCM wrapping key,
+ * Wrap a 32-byte account seed with HKDF(account-domain, PRF output). Deterministic
+ * given (prfOutput, seed, iv) — callers that need a random wrap should generate iv
+ * via encryptSeed; this helper is for tests and provision.
+ *
+ * @param {BufferSource} prfAccountOutput
+ * @param {BufferSource} seed
+ */
+export async function wrapSeedWithAccountPrf(prfAccountOutput, seed) {
+  const aesKey = await aesKeyFromPrf(prfAccountOutput);
+  return encryptSeed(aesKey, coerceBytes(seed));
+}
+
+/**
+ * @param {BufferSource} prfAccountOutput
+ * @param {{ iv: string, ciphertext: string }} wrapped
+ */
+export async function unwrapSeedWithAccountPrf(prfAccountOutput, wrapped) {
+  const aesKey = await aesKeyFromPrf(prfAccountOutput);
+  return decryptSeed(aesKey, wrapped);
+}
+
+/**
+ * HKDF-SHA256 the authenticator **account** PRF output into an AES-GCM wrapping key,
  * then unwrap (or create and wrap) a 32-byte seed used as a secp256k1 stand-in.
+ * Does not derive identity material — that is a separate PRF domain.
  *
  * @param {BufferSource} prfOutput
  * @param {{ credentialId?: BufferSource, existing?: object | null }} [opts]
@@ -397,6 +566,9 @@ export async function deriveOrUnwrapSecp256k1(prfOutput, opts = {}) {
   const aesKey = await aesKeyFromPrf(prfOutput);
   const existing = opts.existing !== undefined ? opts.existing : await idbGet();
   if (existing?.wrappedSeed && existing.wrapScheme === "prf-hkdf-aes-gcm") {
+    if (existing.version && existing.version < WALLET_RECORD_VERSION) {
+      throw new Error(STALE_WALLET_MESSAGE);
+    }
     return decryptSeed(aesKey, existing.wrappedSeed);
   }
   const seed = crypto.getRandomValues(new Uint8Array(32));
@@ -404,10 +576,11 @@ export async function deriveOrUnwrapSecp256k1(prfOutput, opts = {}) {
   const publicParts = await publicFromSeed(seed);
   const record = {
     ...(existing || {}),
-    version: 1,
+    version: WALLET_RECORD_VERSION,
     wrapScheme: "prf-hkdf-aes-gcm",
     wrappedSeed,
     prfSupported: true,
+    prfDomains: { account: ACCOUNT_PRF_DOMAIN, identity: IDENTITY_PRF_DOMAIN },
     ...publicParts,
     updatedAt: new Date().toISOString(),
   };
@@ -419,34 +592,19 @@ export async function deriveOrUnwrapSecp256k1(prfOutput, opts = {}) {
 async function publicFromSeed(seed) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", seed));
   const address = "0x" + bytesToHex(digest.subarray(0, 20));
-  const identity = await identityFromSeed(seed);
   return {
     address,
     addressScheme: ADDRESS_SCHEME,
     productionAddressNote: PRODUCTION_ADDRESS_NOTE,
-    identityCommitment: identity.commitment,
-    hasher: "keccak256(trapdoor || nullifierSecret) demo; production circuits use Poseidon",
   };
 }
 
-async function identityFromSeed(seed) {
-  const ikm = await importHkdfIkm(seed);
-  const bits = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: textEncoder.encode(IDENTITY_SALT),
-        info: textEncoder.encode(IDENTITY_INFO),
-      },
-      ikm,
-      512
-    )
-  );
-  const trapdoor = bits.subarray(0, 32);
-  const nullifierSecret = bits.subarray(32, 64);
-  const commitment = "0x" + bytesToHex(keccak256(concatBytes(trapdoor, nullifierSecret)));
-  return { trapdoor, nullifierSecret, commitment };
+function publicFromIdentity(identity) {
+  return {
+    identityCommitment: identity.commitment,
+    hasher: identity.hasher,
+    identityScheme: IDENTITY_SCHEME,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -484,6 +642,14 @@ function randomChallenge() {
   return crypto.getRandomValues(new Uint8Array(32));
 }
 
+function prfEnableSalt() {
+  return hkdfSha256Bits(utf8(PRF_ENABLE_INFO), {
+    salt: PRF_ENABLE_INFO,
+    info: PRF_ENABLE_INFO,
+    length: 32,
+  });
+}
+
 /**
  * @param {PublicKeyCredentialCreationOptions | object} [serverOptions]
  * @returns {Promise<PublicKeyCredential>}
@@ -496,7 +662,9 @@ export async function createCredential(serverOptions = {}) {
   const evalFirst =
     serverOptions.prfEvalFirst != null
       ? coerceBytes(serverOptions.prfEvalFirst)
-      : random32();
+      : await prfEnableSalt();
+  const evalSecond =
+    serverOptions.prfEvalSecond != null ? coerceBytes(serverOptions.prfEvalSecond) : null;
 
   const pk = serverOptions.publicKey || serverOptions;
   const challenge = pk.challenge ? coerceBytes(pk.challenge) : randomChallenge();
@@ -509,6 +677,7 @@ export async function createCredential(serverOptions = {}) {
   const extensions = { ...(pk.extensions || {}) };
   if (prfOk) {
     extensions.prf = { eval: { first: evalFirst } };
+    if (evalSecond) extensions.prf.eval.second = evalSecond;
   }
 
   const publicKey = {
@@ -545,20 +714,24 @@ export async function createCredential(serverOptions = {}) {
   const credential = await enqueueWebAuthn(() => navigator.credentials.create({ publicKey }));
   if (!credential) throw new Error("Passkey creation was cancelled.");
   credential._republicPrfEvalFirst = evalFirst;
+  if (evalSecond) credential._republicPrfEvalSecond = evalSecond;
   return credential;
 }
 
-function prfOutputFromCredential(credential) {
+export function prfOutputsFromCredential(credential) {
   const ext =
     typeof credential.getClientExtensionResults === "function"
       ? credential.getClientExtensionResults()
       : {};
-  const first = ext?.prf?.results?.first;
-  if (first) return coerceBytes(first);
-  return null;
+  const first = ext?.prf?.results?.first ? coerceBytes(ext.prf.results.first) : null;
+  const second = ext?.prf?.results?.second ? coerceBytes(ext.prf.results.second) : null;
+  return { first, second, enabled: Boolean(ext?.prf) };
 }
 
 async function assertionWithPrf(credentialId, evalFirst, extra = {}) {
+  const evalExt = {};
+  if (evalFirst) evalExt.first = coerceBytes(evalFirst);
+  if (extra.evalSecond) evalExt.second = coerceBytes(extra.evalSecond);
   const publicKey = {
     challenge: extra.challenge ? coerceBytes(extra.challenge) : randomChallenge(),
     timeout: 120000,
@@ -567,101 +740,236 @@ async function assertionWithPrf(credentialId, evalFirst, extra = {}) {
     allowCredentials: credentialId
       ? [{ type: "public-key", id: coerceBytes(credentialId) }]
       : undefined,
-    extensions: evalFirst
-      ? { prf: { eval: { first: coerceBytes(evalFirst) } } }
-      : {},
+    extensions: Object.keys(evalExt).length ? { prf: { eval: evalExt } } : {},
   };
   const assertion = await enqueueWebAuthn(() => navigator.credentials.get({ publicKey }));
   if (!assertion) throw new Error("Passkey assertion was cancelled.");
   return assertion;
 }
 
-async function provisionFromCredential(credential, { displayName } = {}) {
-  const credentialId = new Uint8Array(credential.rawId);
-  const evalFirst = credential._republicPrfEvalFirst || random32();
-  let prfOut = prfOutputFromCredential(credential);
-  let assertion = null;
-  if (!prfOut) {
-    try {
-      assertion = await assertionWithPrf(credentialId, evalFirst);
-      prfOut = prfOutputFromCredential(assertion);
-    } catch {
-      assertion = null;
-    }
+/**
+ * Eval account (and optionally identity) PRF salts. If the authenticator returns
+ * `first` but not `second`, a second assertion uses saltIdentity as `eval.first`.
+ */
+async function evalSeparatedPrf(credentialId, { chainId, jurisdictionId, needIdentity = true } = {}) {
+  const salts = await prfEvalSaltsForCredential({ credentialId, chainId, jurisdictionId });
+  const assertion = await assertionWithPrf(credentialId, salts.saltAccount, {
+    evalSecond: needIdentity ? salts.saltIdentity : null,
+  });
+  const outputs = prfOutputsFromCredential(assertion);
+  let prfAccount = outputs.first;
+  let prfIdentity = needIdentity ? outputs.second : null;
+  let prfSecondSupported = Boolean(outputs.second);
+
+  if (needIdentity && prfAccount && !prfIdentity) {
+    const secondAssertion = await assertionWithPrf(credentialId, salts.saltIdentity);
+    const secondOut = prfOutputsFromCredential(secondAssertion);
+    prfIdentity = secondOut.first;
+    prfSecondSupported = false;
   }
 
+  return {
+    ...salts,
+    prfAccount,
+    prfIdentity,
+    prfSecondSupported,
+    assertion,
+  };
+}
+
+function walletRecordFields({
+  credentialId,
+  displayName,
+  wrapScheme,
+  wrappedSeed,
+  prfSupported,
+  prfSecondSupported,
+  salts,
+  publicParts,
+  identityParts,
+  fallbackNote,
+}) {
+  return {
+    version: WALLET_RECORD_VERSION,
+    credentialId: bytesToBase64url(credentialId),
+    prfEvalAccount: salts?.saltAccount ? bytesToBase64url(salts.saltAccount) : null,
+    prfEvalIdentity: salts?.saltIdentity ? bytesToBase64url(salts.saltIdentity) : null,
+    prfDomains: { account: ACCOUNT_PRF_DOMAIN, identity: IDENTITY_PRF_DOMAIN },
+    chainId: salts?.chainId ?? DEFAULT_CHAIN_ID,
+    jurisdictionId: salts?.jurisdictionId || DEFAULT_JURISDICTION_ID,
+    wrapScheme,
+    wrappedSeed,
+    prfSupported: Boolean(prfSupported),
+    prfSecondSupported: prfSecondSupported == null ? null : Boolean(prfSecondSupported),
+    identityScheme: IDENTITY_SCHEME,
+    displayName: displayName || null,
+    fallbackNote: fallbackNote || null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...publicParts,
+    ...identityParts,
+  };
+}
+
+async function provisionFromCredential(credential, { displayName, chainId, jurisdictionId } = {}) {
+  const credentialId = new Uint8Array(credential.rawId);
+  const ctx = {
+    chainId: Number(chainId ?? DEFAULT_CHAIN_ID),
+    jurisdictionId: String(jurisdictionId || DEFAULT_JURISDICTION_ID),
+  };
   let seed;
-  let wrapScheme;
-  let prfSupported = Boolean(prfOut);
+  let prfAccount;
+  let prfIdentity;
   try {
-    if (prfOut) {
-      wrapScheme = "prf-hkdf-aes-gcm";
-      const aesKey = await aesKeyFromPrf(prfOut);
-      seed = crypto.getRandomValues(new Uint8Array(32));
-      const wrappedSeed = await encryptSeed(aesKey, seed);
-      const publicParts = await publicFromSeed(seed);
-      await idbPut({
-        version: 1,
-        credentialId: bytesToBase64url(credentialId),
-        prfEvalFirst: bytesToBase64url(evalFirst),
-        wrapScheme,
-        wrappedSeed,
-        prfSupported: true,
-        displayName: displayName || null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        ...publicParts,
+    let evaluated = null;
+    try {
+      evaluated = await evalSeparatedPrf(credentialId, {
+        chainId: ctx.chainId,
+        jurisdictionId: ctx.jurisdictionId,
+        needIdentity: true,
       });
+    } catch (err) {
+      const msg = String(err?.message || err);
+      if (/cancelled|not allowed|abort/i.test(msg)) throw err;
+      evaluated = null;
+    }
+
+    prfAccount = evaluated?.prfAccount || null;
+    prfIdentity = evaluated?.prfIdentity || null;
+
+    if (prfAccount && !prfIdentity) {
+      throw new Error(
+        "This authenticator returned an account PRF output but not an identity-domain PRF output. Republic will not derive the trapdoor from the account key."
+      );
+    }
+
+    if (prfAccount && prfIdentity) {
+      seed = crypto.getRandomValues(new Uint8Array(32));
+      const wrappedSeed = await wrapSeedWithAccountPrf(prfAccount, seed);
+      const publicParts = await publicFromSeed(seed);
+      const identity = await deriveIdentitySecrets(prfIdentity);
+      await idbPut(
+        walletRecordFields({
+          credentialId,
+          displayName,
+          wrapScheme: "prf-hkdf-aes-gcm",
+          wrappedSeed,
+          prfSupported: true,
+          prfSecondSupported: evaluated.prfSecondSupported,
+          salts: evaluated,
+          publicParts,
+          identityParts: publicFromIdentity(identity),
+        })
+      );
+      zeroFill(identity.trapdoor);
+      zeroFill(identity.nullifierSecret);
     } else {
-      wrapScheme = "uv-fallback-hkdf-aes-gcm";
-      if (!assertion) {
-        assertion = await assertionWithPrf(credentialId, null);
+      if (!evaluated) {
+        await assertionWithPrf(credentialId, null);
       }
-      const aesKey = await aesKeyFromFallback(credentialId);
       seed = crypto.getRandomValues(new Uint8Array(32));
+      const aesKey = await aesKeyFromFallback(credentialId);
       const wrappedSeed = await encryptSeed(aesKey, seed);
       const publicParts = await publicFromSeed(seed);
-      await idbPut({
-        version: 1,
-        credentialId: bytesToBase64url(credentialId),
-        prfEvalFirst: bytesToBase64url(evalFirst),
-        wrapScheme,
-        wrappedSeed,
-        prfSupported: false,
-        fallbackNote:
-          "PRF was unavailable. The seed is wrapped with a key derived from the credential id after userVerification. This is weaker than WebAuthn PRF and is a demo-only path.",
-        displayName: displayName || null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        ...publicParts,
-      });
+      const identityIkm = await fallbackIdentityIkm(credentialId);
+      const identity = await deriveIdentitySecrets(identityIkm);
+      zeroFill(identityIkm);
+      await idbPut(
+        walletRecordFields({
+          credentialId,
+          displayName,
+          wrapScheme: "uv-fallback-hkdf-aes-gcm",
+          wrappedSeed,
+          prfSupported: false,
+          prfSecondSupported: false,
+          salts: await prfEvalSaltsForCredential({
+            credentialId,
+            chainId: ctx.chainId,
+            jurisdictionId: ctx.jurisdictionId,
+          }),
+          publicParts,
+          identityParts: publicFromIdentity(identity),
+          fallbackNote:
+            "PRF was unavailable. The account seed is wrapped with a key derived from the credential id after userVerification, and the ZK identity uses a *separate* HKDF domain of that credential id. This is weaker than WebAuthn PRF and is a demo-only path. The trapdoor is still not the account seed.",
+        })
+      );
+      zeroFill(identity.trapdoor);
+      zeroFill(identity.nullifierSecret);
     }
   } finally {
     zeroFill(seed);
-    zeroFill(prfOut);
+    zeroFill(prfAccount);
+    zeroFill(prfIdentity);
   }
   return getPublicRecord();
 }
 
-async function unwrapSeedWithUv() {
+async function unwrapWalletMaterial({ needIdentity = false } = {}) {
   const rec = await idbGet();
   if (!rec?.wrappedSeed) throw new Error("No passkey wallet on this device. Register first.");
+  if (!isCurrentWalletRecord(rec)) {
+    throw new Error(STALE_WALLET_MESSAGE);
+  }
   const credentialId = rec.credentialId ? base64urlToBytes(rec.credentialId) : null;
-  const evalFirst = rec.prfEvalFirst ? base64urlToBytes(rec.prfEvalFirst) : random32();
-  const assertion = await assertionWithPrf(credentialId, evalFirst);
-  const prfOut = prfOutputFromCredential(assertion);
+  const chainId = rec.chainId ?? DEFAULT_CHAIN_ID;
+  const jurisdictionId = rec.jurisdictionId || DEFAULT_JURISDICTION_ID;
+
+  let seed;
+  let identity = null;
+  let prfAccount;
+  let prfIdentity;
   try {
     if (rec.wrapScheme === "prf-hkdf-aes-gcm") {
-      if (!prfOut) {
+      const evaluated = await evalSeparatedPrf(credentialId, {
+        chainId,
+        jurisdictionId,
+        needIdentity,
+      });
+      prfAccount = evaluated.prfAccount;
+      prfIdentity = evaluated.prfIdentity;
+      if (!prfAccount) {
         throw new Error("This authenticator did not return a PRF output; cannot unwrap the seed.");
       }
-      const aesKey = await aesKeyFromPrf(prfOut);
-      return decryptSeed(aesKey, rec.wrappedSeed);
+      seed = await unwrapSeedWithAccountPrf(prfAccount, rec.wrappedSeed);
+      if (needIdentity) {
+        if (!prfIdentity) {
+          throw new Error(
+            "This authenticator did not return a PRF output for the identity domain. Republic will not derive the trapdoor from the account key."
+          );
+        }
+        identity = await deriveIdentitySecrets(prfIdentity);
+        if (rec.identityCommitment && identity.commitment !== rec.identityCommitment) {
+          throw new Error(
+            "Identity commitment from the identity PRF domain does not match the stored wallet. Reset the demo wallet and register again."
+          );
+        }
+      }
+    } else {
+      await assertionWithPrf(credentialId, null);
+      const aesKey = await aesKeyFromFallback(credentialId);
+      seed = await decryptSeed(aesKey, rec.wrappedSeed);
+      if (needIdentity) {
+        const identityIkm = await fallbackIdentityIkm(credentialId);
+        identity = await deriveIdentitySecrets(identityIkm);
+        zeroFill(identityIkm);
+        if (rec.identityCommitment && identity.commitment !== rec.identityCommitment) {
+          throw new Error(
+            "Identity commitment from the fallback identity domain does not match the stored wallet. Reset the demo wallet and register again."
+          );
+        }
+      }
     }
-    const aesKey = await aesKeyFromFallback(credentialId);
-    return decryptSeed(aesKey, rec.wrappedSeed);
+    return { rec, seed, identity };
+  } catch (err) {
+    zeroFill(seed);
+    if (identity) {
+      zeroFill(identity.trapdoor);
+      zeroFill(identity.nullifierSecret);
+    }
+    throw err;
   } finally {
-    zeroFill(prfOut);
+    zeroFill(prfAccount);
+    zeroFill(prfIdentity);
   }
 }
 
@@ -673,6 +981,7 @@ export async function getPublicRecord() {
   try {
     const rec = await idbGet();
     if (!rec) return null;
+    const staleWrap = !isCurrentWalletRecord(rec);
     return {
       credentialId: rec.credentialId,
       address: rec.address,
@@ -680,11 +989,19 @@ export async function getPublicRecord() {
       productionAddressNote: rec.productionAddressNote || PRODUCTION_ADDRESS_NOTE,
       identityCommitment: rec.identityCommitment,
       hasher: rec.hasher,
+      identityScheme: rec.identityScheme || "account-seed-hkdf-v1",
       prfSupported: Boolean(rec.prfSupported),
+      prfSecondSupported: rec.prfSecondSupported ?? null,
       wrapScheme: rec.wrapScheme,
       fallbackNote: rec.fallbackNote || null,
       displayName: rec.displayName || null,
       createdAt: rec.createdAt,
+      walletRecordVersion: rec.version || 1,
+      prfDomains: rec.prfDomains || null,
+      chainId: rec.chainId ?? null,
+      jurisdictionId: rec.jurisdictionId || null,
+      staleWrap,
+      migrationNote: staleWrap ? STALE_WALLET_MESSAGE : null,
     };
   } catch {
     return null;
@@ -693,7 +1010,7 @@ export async function getPublicRecord() {
 
 export async function hasWallet() {
   const rec = await getPublicRecord();
-  return Boolean(rec?.identityCommitment);
+  return Boolean(rec?.identityCommitment) && !rec.staleWrap;
 }
 
 /**
@@ -704,6 +1021,7 @@ export async function hasWallet() {
 export async function getAddress() {
   const rec = await getPublicRecord();
   if (!rec?.address) throw new Error("No passkey wallet on this device. Register first.");
+  if (rec.staleWrap) throw new Error(STALE_WALLET_MESSAGE);
   return {
     address: rec.address,
     scheme: rec.addressScheme,
@@ -714,14 +1032,33 @@ export async function getAddress() {
 export async function getIdentityCommitment() {
   const rec = await getPublicRecord();
   if (!rec?.identityCommitment) throw new Error("No passkey wallet on this device. Register first.");
+  if (rec.staleWrap) throw new Error(STALE_WALLET_MESSAGE);
   return rec.identityCommitment;
 }
 
+async function resolveDerivationContext({ api, chainId, jurisdictionId } = {}) {
+  let chain = chainId;
+  let jur = jurisdictionId;
+  if ((chain == null || jur == null) && typeof api === "function") {
+    try {
+      const cfg = await api("/api/config");
+      if (chain == null && cfg?.chainId != null) chain = cfg.chainId;
+    } catch {
+      /* local defaults */
+    }
+  }
+  return {
+    chainId: Number(chain ?? DEFAULT_CHAIN_ID),
+    jurisdictionId: String(jur || DEFAULT_JURISDICTION_ID),
+  };
+}
+
 /**
- * Register a resident-key passkey, wrap a 32-byte seed, and optionally finish
- * with the Node (`POST /api/auth/passkey/register/{begin,finish}`).
+ * Register a resident-key passkey, wrap a 32-byte account seed under the account
+ * PRF domain, derive (trapdoor, nullifierSecret) under the identity PRF domain,
+ * and optionally finish with the Node (`POST /api/auth/passkey/register/{begin,finish}`).
  */
-export async function registerPasskey({ api, displayName } = {}) {
+export async function registerPasskey({ api, displayName, chainId, jurisdictionId } = {}) {
   let server = null;
   let finishError = null;
   if (typeof api === "function") {
@@ -740,8 +1077,13 @@ export async function registerPasskey({ api, displayName } = {}) {
       ? server.options
       : server || {};
   if (displayName) options.displayName = displayName;
+  const ctx = await resolveDerivationContext({ api, chainId, jurisdictionId });
   const credential = await createCredential(options);
-  const publicRecord = await provisionFromCredential(credential, { displayName });
+  const publicRecord = await provisionFromCredential(credential, {
+    displayName,
+    chainId: ctx.chainId,
+    jurisdictionId: ctx.jurisdictionId,
+  });
 
   if (typeof api === "function") {
     try {
@@ -839,7 +1181,7 @@ export async function loginPasskey({ api, handle } = {}) {
 export async function signUserOp(hash) {
   const rec = await idbGet();
   if (!rec) throw new Error("No passkey wallet on this device. Register first.");
-  const seed = await unwrapSeedWithUv();
+  const { seed } = await unwrapWalletMaterial({ needIdentity: false });
   try {
     const msg =
       typeof hash === "string"
@@ -869,23 +1211,18 @@ export async function signUserOp(hash) {
 }
 
 /**
- * Unlock identity secrets under passkey UV, compute a per-election nullifier,
- * and optionally encrypt a ballot. When `tallyPubKey` is set, the posted
- * envelope is P-256 ECIES to that key (tally-opens path). Otherwise the
- * legacy seed-keyed AES-GCM stand-in is used (only the voter can open it).
- * Zeroes trapdoor and seed before return. The trapdoor is never included
- * in the returned object.
+ * Unlock identity secrets under the **identity** PRF/HKDF domain, compute a
+ * per-election nullifier, and optionally encrypt a ballot. When `tallyPubKey`
+ * is set, the posted envelope is P-256 ECIES to that key (tally-opens path).
+ * Otherwise the legacy seed-keyed AES-GCM stand-in is used (only the voter can
+ * open it). Zeroes trapdoor and account seed before return. The trapdoor is never
+ * included in the returned object.
  */
 export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, choiceIndex } = {}) {
-  const rec = await idbGet();
-  if (!rec) throw new Error("No passkey wallet on this device. Register first.");
-  const seed = await unwrapSeedWithUv();
-  let trapdoor;
-  let nullifierSecret;
+  const { rec, seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
+  let trapdoor = identity.trapdoor;
+  let nullifierSecret = identity.nullifierSecret;
   try {
-    const ident = await identityFromSeed(seed);
-    trapdoor = ident.trapdoor;
-    nullifierSecret = ident.nullifierSecret;
     const electionKey = keccak256(String(electionId));
     const nullifier = keccak256Hex(concatBytes(nullifierSecret, electionKey));
     let encryptedBallot = null;
@@ -938,7 +1275,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
     );
     const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, userOpMaterial));
     return {
-      identityCommitment: ident.commitment,
+      identityCommitment: identity.commitment,
       address: rec.address,
       addressScheme: rec.addressScheme || ADDRESS_SCHEME,
       nullifier,

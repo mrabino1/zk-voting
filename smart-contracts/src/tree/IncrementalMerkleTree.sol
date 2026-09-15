@@ -7,8 +7,9 @@ import {IHasher} from "../interfaces/IHasher.sol";
 
 /// @title IncrementalMerkleTree
 /// @notice Semaphore-style incremental binary tree. Depth 16–32.
-///         Production circuits hash with Poseidon; Solidity tests use IHasher
-///         (keccak in v1). Max leaves = 2**depth.
+///         Production circuits hash with Poseidon (`poseidon-bn254-x5-t3-v1`).
+///         Unit tests inject `KeccakHasher` (`keccak-dev-v1`). The local proving
+///         path may inject `StandInHasher` so the tree matches Circom. Max leaves = 2**depth.
 library IncrementalMerkleTree {
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;

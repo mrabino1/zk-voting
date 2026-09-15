@@ -164,9 +164,48 @@ body {
   color: var(--ink);
   text-align: center;
   font-size: 0.92rem;
-  padding: 0.65rem 1.25rem;
+  padding: 0.75rem 1.25rem 0.95rem;
   border-bottom: 1px solid var(--navy);
   line-height: 1.45;
+}
+
+.disclosure-banner .disclosure-note {
+  margin: 0;
+}
+
+.disclosure-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0.65rem 1rem;
+  margin: 0.75rem auto 0;
+  max-width: 52rem;
+  text-align: left;
+}
+
+.disclosure-stats > div {
+  background: var(--paper, #fff);
+  border: 1px solid var(--line, #c5cdd8);
+  padding: 0.55rem 0.75rem;
+}
+
+.disclosure-stats dt {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.disclosure-stats dd {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 1.02rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclosure-stats .countdown {
+  font-variant-numeric: tabular-nums;
 }
 
 .site-header {
@@ -691,6 +730,163 @@ textarea {
   accent-color: var(--navy);
 }
 
+.aspect-kicker {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.aspect-prompt {
+  display: block;
+}
+
+.aspect-preview {
+  margin: 0 0 0.85rem;
+  padding-left: 1.2rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.aspect-preview .aspect-type {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.rank-list,
+.unranked-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rank-list {
+  counter-reset: rank;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0.55rem 0.75rem;
+  border: 2px solid var(--line);
+  background: var(--paper);
+}
+
+.rank-row.unranked {
+  grid-template-columns: auto 1fr auto;
+}
+
+.rank-handle {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 0.9rem;
+  user-select: none;
+}
+
+.rank-number select {
+  min-height: 2.4rem;
+  min-width: 3.4rem;
+  font: inherit;
+  font-weight: 700;
+  border: 2px solid var(--navy);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.2rem 0.35rem;
+}
+
+.rank-label {
+  font-weight: 650;
+}
+
+.rank-move {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rank-btn {
+  min-height: 2.2rem;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.82rem;
+}
+
+.irv-rounds {
+  width: 100%;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.irv-rounds th,
+.irv-rounds td {
+  font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .rank-row,
+  .rank-row.unranked {
+    grid-template-columns: auto 1fr;
+  }
+  .rank-handle {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .rank-number {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .rank-label {
+    grid-column: 1 / -1;
+  }
+  .rank-move {
+    grid-column: 1 / -1;
+  }
+}
+
+.tally-bars {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.tally-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 650;
+}
+
+.tally-track {
+  height: 0.55rem;
+  background: var(--cream-dark);
+  border: 1px solid var(--line);
+}
+
+.tally-fill {
+  height: 100%;
+  background: var(--navy);
+  min-width: 0;
+}
+
+.tally-under {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .how-grid {
   display: grid;
   gap: 0.85rem;
@@ -971,8 +1167,44 @@ a.session-chrome-btn:hover {
   margin: 2rem 0;
 }
 
-.noscript {
-  margin: 1rem;
+.results-kicker {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+}
+
+.results-table .num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.results-option.is-winner {
+  background: var(--ok-bg);
+}
+
+.results-option.is-tie {
+  background: var(--warn-bg);
+}
+
+.tally-bar {
+  display: block;
+  width: 100%;
+  min-width: 6rem;
+  height: 0.7rem;
+  background: var(--cream-dark);
+  border: 1px solid var(--line);
+}
+
+.tally-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--navy);
+}
+
+.empty-results h2 {
+  margin-top: 0;
 }
 
 @media print {

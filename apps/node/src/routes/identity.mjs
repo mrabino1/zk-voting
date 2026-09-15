@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { keccak256, stringToHex } from 'viem';
 
 import { asyncHandler, HttpError } from '../http.mjs';
-import { requireAuth, requireRole, publicUser, establishSession } from '../auth.mjs';
+import { requireAuth, requireAnyJurisdictionRole, publicUser, establishSession } from '../auth.mjs';
 import {
   AUTH_METHOD_CATALOG,
   createIdentityChallenges,
@@ -222,7 +222,7 @@ export function identityRouter(deps) {
   router.post(
     '/persons/:id/person-key',
     requireAuth,
-    requireRole('registrar'),
+    requireAnyJurisdictionRole(store, 'registrar'),
     asyncHandler(async (req, res) => {
       let hash = req.body?.personKeyHash;
       if (!hash && req.body?.personKey) {
@@ -236,7 +236,7 @@ export function identityRouter(deps) {
   router.post(
     '/persons/:id/methods',
     requireAuth,
-    requireRole('registrar'),
+    requireAnyJurisdictionRole(store, 'registrar'),
     asyncHandler(async (req, res) => {
       const type = req.body?.type;
       if (!isAuthMethodType(type)) throw new HttpError(400, 'invalid auth method type');
@@ -269,7 +269,7 @@ export function identityRouter(deps) {
   router.post(
     '/persons/:id/eth-accounts',
     requireAuth,
-    requireRole('registrar'),
+    requireAnyJurisdictionRole(store, 'registrar'),
     asyncHandler(async (req, res) => {
       const { user } = await store.addEthAccount(req.params.id, {
         address: req.body?.address,
@@ -282,7 +282,7 @@ export function identityRouter(deps) {
   router.post(
     '/persons/:id/eth-accounts/active',
     requireAuth,
-    requireRole('registrar'),
+    requireAnyJurisdictionRole(store, 'registrar'),
     asyncHandler(async (req, res) => {
       const user = await store.setActiveEthAddress(req.params.id, req.body?.address);
       res.json({ nfp: true, identity: publicIdentity(user), activeEthAddress: user.activeEthAddress });

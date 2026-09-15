@@ -2,10 +2,22 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See `/NOT_FOR_PROFIT.md`.
 
-This file is the **interface contract** for every package in this monorepo.
-If code disagrees with this file, the code is wrong.
-
 Product name: **Republic**. Repo name: `zk-voting`.
+
+This file is two things:
+
+1. **Implemented today** — what is actually in the tree on `test/unstable`.
+2. **Interface contract** — Solidity ABIs, circuit public inputs, and event shapes that packages must keep aligned.
+
+**Future** work is labeled as such. Do not describe Future as if it were running.
+
+| If this disagrees with… | Then |
+| --- | --- |
+| The tree in an **Implemented** section | This file is wrong. Update the docs. |
+| Solidity / circuit **interface** text | The **code** is wrong (or the interface section is overdue). |
+| A **Future** paragraph | The code is not expected to match yet. |
+
+Product intent (why Republic exists, privacy construction, disqualification) lives in the root [`README.md`](../README.md). This file is the map of packages and interfaces.
 
 ---
 
@@ -24,6 +36,34 @@ stack that:
    linked to an outcome.
 5. Settles on **our own L2** with **our own prover**, gasless for voters
    (paymaster / relayer). Ethereum L1 is the court-grade settlement layer.
+
+**Implemented today:** the civic JSON sequencer + prover in `l2/` (chainId
+**27427**) posts batch hashes to L1 `RollupSettlement`. It is **not** a
+general-purpose EVM. Portable Solidity still deploys to Foundry Anvil,
+Ethereum L1, and other EVM L2s. Running that same bytecode *as execution*
+on 27427 is **Future**.
+
+---
+
+## Implemented stack (today)
+
+| Layer | What is in the tree |
+| --- | --- |
+| Node UI | Vanilla JS + HTML/CSS in `apps/node/public/`. Express serves `public/` (and `dist/` if present). **No Vite. No React.** |
+| Node API | Express 4, Node 22, `apps/node/src/*.mjs`. |
+| Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
+| Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
+| Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |
+| Circuits | Circom 2: `vote.circom`, `tally.circom`, `identity.circom`. Hasher is a labeled Poseidon **stand-in**. |
+| Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
+| Explorer | Node `/explorer` over `l2-chain.json`, filled by Node writes and `POST /api/explorer/ingest`. |
+| Ballot types | Node UI/API: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED` (IRV on the Node path). |
+| Passkey helper | `public/passkey-wallet.js`: WebAuthn + PRF wrap. Demo address is `republic-local-address` (SHA-256 of seed). Production secp256k1 Ethereum addresses are **Future** in that helper (it does not ship a curve implementation). |
+
+Two local paths, both real:
+
+1. **Demo civic path (default):** Node JSON store + Republic L2 JSON sequencer (`:8546`) + explorer ingest. No EVM required.
+2. **Contract path (optional):** set `CHAIN_RPC` + `BALLOT_INBOX_ADDRESS` + `RELAYER_PRIVATE_KEY` so the Node relays `BallotInbox.submitVote` through viem to an EVM (typically Anvil on `:8545`). `@zk-voting/chain-client` still defaults `REPUBLIC_RPC_URL` to `http://127.0.0.1:8545` (Anvil), not the civic sequencer.
 
 ---
 
@@ -46,29 +86,39 @@ passkey (WebAuthn, device-bound)
                          inserted into the election Merkle tree at registration
 ```
 
+**Today’s browser helper** follows that shape but labels the derived account
+`republic-local-address` until a secp256k1 library is wired. Production
+Ethereum address derivation remains keccak256 of the uncompressed pubkey.
+
 When they vote:
 
 - Circuit proves: "I know a trapdoor whose commitment is in the eligible
   tree, I am **not** in the disqualification tree, this ballot is well-formed."
-- Reveals `nullifier = poseidon(nullifierSecret, electionId)` so they cannot
-  vote twice. The nullifier is **unlinkable** to the smart-account address
-  and to the civil identity.
+- Reveals `nullifier = poseidon(nullifierSecret, electionId)` so they are counted
+  once. That nullifier is accepted **once**. A second `submitVote`, including a
+  new ciphertext, reverts `NullifierUsed`. Voters may change their mind
+  privately on the ballot form **before** submit. The nullifier is **unlinkable**
+  to the smart-account address and to the civil identity. (Circom `Hasher()` is
+  a stand-in until Poseidon.)
 - Ballot is an **ElGamal / hashed commitment** ciphertext posted with the
   proof. Choice is not a public field.
-- The L2 transaction origin is the **bundler**, not the voter. The
-  passkey-bound address is therefore not sitting next to the ballot in
-  the same transaction.
+- On the civic sequencer, the transaction origin is the sequencer / bundler
+  field, not the voter. On an EVM inbox call, `msg.sender` is the relayer.
 
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
+The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
+ciphertext. Double voting remains impossible. This is **not** MACI and **not**
+last-vote-counts: a coercer who can force the first (and only) submit still
+wins that ballot.
 
 ### Hourly public disclosure (polling-place unlinkability)
 
-Votes are **accepted immediately** (nullifier uniqueness). Public proof of
-those votes — explorer rows, jurisdiction `acceptedBallots`, any dashboard
-turnout tick — is published **only after the hour that contained the vote
-has closed** (UTC). At 14:23, only events with timestamp `< 14:00` are
-public; a 14:05 vote appears at 15:00.
+Votes are **accepted immediately** (each nullifier **once**; a second ballot is
+rejected). Public proof of those votes — explorer rows, jurisdiction
+`acceptedBallots`, any dashboard turnout tick — is published **only after the
+hour that contained the vote has closed** (UTC). At 14:23, only events with
+timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 
 - Do not leak a pending-per-election count (that still identifies the
   jurisdiction).
@@ -78,9 +128,7 @@ public; a 14:05 vote appears at 15:00.
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
   and local instant demo may set `0`.
 
-Hasher note: production circuits use Poseidon. Solidity trees in v1 use a
-swappable `IHasher`. Tests may use keccak256 via `KeccakHasher` so Foundry
-tests do not need a trusted setup. The interface is identical.
+Hasher note: production circuits use Poseidon (`republic.hash.poseidon-bn254-x5-t3-v1`). Solidity trees in unit tests use `KeccakHasher` (`keccak-dev-v1`). The local proving path uses `StandInHasher` (`standin-v0`) so Circom, JS witnesses, and the on-chain tree share one formula. The `IHasher` interface is identical. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
 ### Person (unique) vs one active Ethereum address
 
@@ -96,15 +144,21 @@ belong to two people. The vote leaf stays `identityCommitment`. Details:
 
 ```
 zk-voting/
-  README.md                          (docs agent)
+  README.md                          (product intent + how to run)
   NOT_FOR_PROFIT.md
   LICENSE                            (AGPL-3.0-or-later)
   system_actions.sh
   package.json                       (workspaces)
+  docker-compose.yml                 (Node + L2 host path)
   docs/ARCHITECTURE.md               (this file)
   docs/IDENTITY.md
+  docs/L2.md
+  docs/OPERATOR.md
+  docs/BLOCK_EXPLORER.md
+  docs/PASSKEYS.md
+  docs/AUDITOR.md
   smart-contracts/                   (Foundry)
-    foundry.toml
+    foundry.toml                     (solc 0.8.24, via_ir = true, fuzz 256)
     src/
       interfaces/                   (shared, do not drift)
       ElectionFactory.sol
@@ -114,18 +168,19 @@ zk-voting/
       PersonRegistry.sol
       DisqualificationRegistry.sol
       BallotInbox.sol
-      TallyVerifier.sol
+      Tally.sol                     (implements ITallyVerifier)
       ReasonCodes.sol
       hasher/
       tree/
-      zk/
+      zk/                           (MockVerifier, VoteVerifier stub)
       account/                      (passkey AA + paymaster)
-      l2/                           (rollup settlement)
+      l2/                           (RollupSettlement, L1TallyMirror, mailbox)
     test/                           (unit, fuzz, invariant, handler)
-    script/                         (deploy L1, L2, anvil)
-  circuits/                         (circom vote + tally)
-  l2/                               (sequencer, prover, genesis, explorer backend)
-  apps/node/                        (DealPunchList-shaped Node: API + SPA)
+    script/                         (DeployLocal, DeployL1, DeployL2, CreateElection)
+  circuits/                         (circom vote + tally + identity; HASH_SCHEME.md; proving-path scripts)
+  l2/                               (civic JSON sequencer, prover, genesis)
+  apps/node/                        (Express API + vanilla JS pages)
+  tools/auditor/                    export + verify public artifacts
   packages/
     types/
     proof-helpers/
@@ -142,13 +197,17 @@ First comment after SPDX: `// NOT FOR PROFIT — civic public good, not a commer
 
 ### Roles (bytes32)
 
+From `src/Roles.sol`:
+
 ```
+PLATFORM_ADMIN_ROLE
 REGISTRAR_ROLE
 CLERK_ROLE
 DISQUALIFICATION_OFFICER_ROLE
 TALLY_OPERATOR_ROLE
 RELAYER_ROLE
-PLATFORM_ADMIN_ROLE
+SEQUENCER_ROLE
+PROVER_ROLE
 ```
 
 ### `ElectionParams`
@@ -189,7 +248,28 @@ Factory uses EIP-1167 clones of `Election`. Anyone with `CLERK_ROLE` on
 `JurisdictionRegistry` for that `jurisdictionId` may create. Platform admin
 may also create (bootstrap).
 
-Events: `ElectionCreated(uint256 indexed id, address election, bytes32 jurisdictionId, uint64 start, uint64 cutoff)`.
+Events: `ElectionCreated(uint256 indexed electionId, address indexed election, bytes32 indexed jurisdictionId, uint64 startTime, uint64 cutoffTime)`.
+
+### Election identifiers (off-chain vs on-chain)
+
+These are **two different ids**. Do not put a UUID into a `uint256` circuit
+input or `BallotInbox.submitVote`.
+
+| Field | Where | Shape |
+| --- | --- | --- |
+| `id` | Node API, SPA `/vote/:id`, clerk links | UUID v4 (canonical public id) |
+| `shortCode` | `/v/:shortCode`, `/e/:shortCode`, optional API `:id` | 10 url-safe chars, unique per Node |
+| `onChainElectionId` | `ElectionFactory`, registries, BallotInbox, Groth16 `electionId` | `uint256`, factory `++electionCount` |
+
+`GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
+on-chain id (and any leftover non-UUID fixture ids). Short HTTP routes
+302 to `/vote/<uuid>`. New elections mint both UUID and short code; the
+Node stores `onChainElectionId` as the mapping. Local demos allocate a
+sequential integer so proofs still have a uint256 when the factory is not
+invoked. When a clerk already created on chain, `POST /api/elections` may
+send `onChainElectionId` to record that mapping.
+
+The factory is **not** changed: it still returns `(uint256 electionId, address)`.
 
 ### `IElection`
 
@@ -204,6 +284,11 @@ function rollFrozen() external view returns (bool);
 function participantCount() external view returns (uint256);
 function state() external view returns (uint8);
 // 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
+function inbox() external view returns (address);
+function voterRegistry() external view returns (address);
+function disqualificationRegistry() external view returns (address);
+function setRoots(bytes32 eligibleRoot_, bytes32 disqualificationRoot_) external;
+function bumpParticipantCount() external;
 ```
 
 Time: `block.timestamp < startTime` → not open. `>= cutoffTime` → closed.
@@ -213,15 +298,18 @@ Time: `block.timestamp < startTime` → not open. `>= cutoffTime` → closed.
 
 ```solidity
 function register(uint256 electionId, uint256 identityCommitment) external;
-function registerWithProof(...) external; // optional path
 function isRegistered(uint256 electionId, uint256 identityCommitment) external view returns (bool);
 function merkleRoot(uint256 electionId) external view returns (bytes32);
-function merklePath(uint256 electionId, uint256 leafIndex) /* test helper, not production leak of PII */;
+function leafIndexOf(uint256 electionId, uint256 identityCommitment) external view returns (uint256);
+function participantCount(uint256 electionId) external view returns (uint256);
 ```
 
 `register` is called by `REGISTRAR_ROLE` or by a voter UserOp after the Node
 has approved documents off-chain. The **leaf is the identity commitment**,
 never the wallet address, never a name.
+
+**Future (not in `IVoterRegistry`):** `registerWithProof`, a production
+`merklePath` helper (do not leak PII).
 
 ### `PersonRegistry`
 
@@ -244,6 +332,7 @@ function disqualify(uint256 electionId, uint256 identityCommitment, uint16 reaso
 function revoke(uint256 electionId, uint256 identityCommitment, bytes32 evidenceHash) external;
 function isDisqualified(uint256 electionId, uint256 identityCommitment) external view returns (bool);
 function merkleRoot(uint256 electionId) external view returns (bytes32);
+function reasonCodeOf(uint256 electionId, uint256 identityCommitment) external view returns (uint16);
 ```
 
 Reason codes live in `ReasonCodes.sol` as `uint16` constants matching the README catalog
@@ -259,7 +348,7 @@ function submitVote(
     uint256[2] calldata a,
     uint256[2][2] calldata b,
     uint256[2] calldata c,
-    uint256[] calldata publicInputs, // [root, nullifier, ballotHash, electionId]
+    uint256[] calldata publicInputs, // [root, disqRoot, nullifier, ballotHash, electionId]
     bytes calldata encryptedBallot
 ) external;
 
@@ -270,10 +359,19 @@ function ballotRoot(uint256 electionId) external view returns (bytes32);
 function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
 ```
 
-Rejects when: verifier returns false; nullifier used; outside window; roll not frozen;
-election mismatch; disqualification root in the proof does not match.
+Public inputs **must** be length ≥ 5, same order as `@zk-voting/proof-helpers`
+`serializePublicInputs` and `circuits/vote.circom`:
 
-Relayer/bundler is the `msg.sender`. That is intentional.
+`[root, disqRoot, nullifier, ballotHash, electionId]`
+
+Rejects when: verifier returns false; nullifier already used (`NullifierUsed`),
+including a new `ballotHash`; outside window; roll not frozen; election mismatch;
+eligible / disqualification root in the proof does not match;
+`ballotHash` does not match `keccak256(encryptedBallot)`.
+
+A nullifier is accepted **once**. `acceptedBallots` counts unique nullifiers.
+Double voting is impossible. Event: `VoteAccepted`. Relayer/bundler is
+`msg.sender`. That is intentional.
 
 ### `IGroth16Verifier`
 
@@ -286,11 +384,16 @@ function verifyProof(
 ) external view returns (bool);
 ```
 
-`MockVerifier` (tests / local L2): owner can `setAccept(bool)`.
-`VoteVerifier` is the generated/production verifier (can start as a
-well-formed stub that checks input length and pairing-shaped points).
+`MockVerifier` (tests / local L2 default): owner can `setAccept(bool)`.
+`VoteVerifier` is the generated/production verifier (zero VK until a ceremony;
+delegates to `mockVerifier` only while unconfigured). `REPUBLIC_PROVING_PATH=1`
+deploys `VoteVerifier` with no mock fallback. `Groth16VerifierAdapter` wraps a
+snarkjs-exported verifier (`circuits/build/`) onto `IGroth16Verifier`.
+Unconfigured key still checks input length and pairing-shaped points.
 
-### `ITallyVerifier`
+### `ITallyVerifier` (implemented by `Tally.sol`)
+
+There is **no** `TallyVerifier.sol`. The contract is `src/Tally.sol`.
 
 ```solidity
 function submitTally(
@@ -307,6 +410,7 @@ function submitOpenedTally(
     uint256[2] a, uint256[2][2] b, uint256[2] c
 ) external;
 function tally(uint256 electionId) external view returns (uint256[] memory);
+function isTallied(uint256 electionId) external view returns (bool);
 ```
 
 Tally operator only. After cutoff.
@@ -349,8 +453,11 @@ P-256 / WebAuthn public key. Signature is a WebAuthn assertion.
 Voters do not hold the L2 gas token.
 
 `src/account/RepublicEntryPoint.sol` — minimal EntryPoint sufficient for
-local L2 (validate, paymaster, execute). Not a full eth-infinitism copy;
+local EVM (validate, paymaster, execute). Not a full eth-infinitism copy;
 keep it small and auditable.
+
+These contracts run on an **EVM** (Anvil, L1, other L2s). The civic JSON
+sequencer does not execute them.
 
 ### L2 settlement
 
@@ -372,7 +479,24 @@ Only the Republic prover/sequencer addresses. Batches are public; anyone
 can re-derive `dataHash` from posted calldata.
 
 `src/l2/L1TallyMirror.sol` — copies a tallied election result hash from L2
-to L1 for court-grade records.
+to L1 for court-grade records:
+
+```solidity
+function postResult(
+    uint256 electionId,
+    bytes32 resultHash,      // keccak256(abi.encodePacked(counts)) == Tally countsHash
+    uint256 totalBallots,
+    bytes32 l2StateRoot      // RollupSettlement.stateRoot() when known; else 0
+) external;
+function resultHashOf(uint256 electionId) external view returns (bytes32);
+```
+
+Only `admin` or `publishers[msg.sender]`. A second post for the same election
+reverts `AlreadyPosted`. The Node (`POST /api/elections/:id/tally` and
+`POST /api/elections/:id/certify-l1`) and `script/CertifyL1.s.sol` call this
+when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
+
+`src/l2/RepublicMailbox.sol` — L1/L2 message mailbox for the rollup.
 
 ---
 
@@ -386,19 +510,24 @@ to L1 for court-grade records.
 - `VoterRegistry.t.sol` — insert, cap, duplicates.
 - `PersonRegistry.t.sol` — many verified addresses, one active, cannot steal.
 - `Disqualification.t.sol` — codes, revoke, frozen roll.
-- `BallotInbox.t.sol` — happy path with MockVerifier, double-vote, window.
+- `BallotInbox.t.sol` — happy path with MockVerifier, double-vote (same and different ciphertext), window.
+- `CoercionResistance.t.sol` — second ballot reverts; on-chain state is nullifier + hash only.
 - `PrivacyUnlinkability.t.sol` — asserting wallet address ≠ leaf; nullifier
   uniqueness; msg.sender is relayer.
 - `Paymaster.t.sol` — gasless path.
 - `RollupSettlement.t.sol` — batch progression.
+- `L1TallyMirror.t.sol` — `postResult`, publisher ACL, AlreadyPosted, packed counts hash.
 - `fuzz/FactoryFuzz.t.sol` — random params, start < cutoff, etc.
 - `fuzz/VoteFuzz.t.sol` — random nullifiers, windows, caps.
+- `fuzz/RegistryFuzz.t.sol`
 - `invariant/VotingInvariant.t.sol` + `invariant/Handler.sol`
 
 **Invariants (must hold):**
 
 1. `acceptedBallots <= participantCount` (or == registered eligible who voted).
-2. A nullifier is used at most once per election.
+2. A nullifier is **accepted** at most once per election. A second ballot,
+   including a later different `ballotHash`, reverts. Double voting is
+   impossible. `acceptedBallots` equals unique spent nullifiers.
 3. No vote is accepted outside `[startTime, cutoffTime)`.
 4. No vote is accepted if `!rollFrozen`.
 5. If `maxParticipants > 0`, `participantCount <= maxParticipants`.
@@ -408,8 +537,9 @@ to L1 for court-grade records.
    verifier is in "check disqualification set" mode (handler simulates this).
 9. Factory clones never share nullifier storage.
 
-Use `forge test` (unit) and `forge test --fuzz-runs 256` locally.
-Invariants: `forge test --match-path test/invariant/*`.
+`foundry.toml` sets `via_ir = true`, solc **0.8.24**, fuzz **256** runs.
+Use `forge test --via-ir` (or the root `npm run test:contracts`, which already
+passes `--via-ir`). Invariants: `forge test --via-ir --match-path test/invariant/*`.
 
 ---
 
@@ -417,10 +547,12 @@ Invariants: `forge test --match-path test/invariant/*`.
 
 `smart-contracts/script/`:
 
-- `DeployLocal.s.sol` — anvil: factory, registries, mock verifier, paymaster, rollup.
+- `DeployLocal.s.sol` — Anvil EVM: factory, registries, mock verifier, paymaster, rollup.
 - `DeployL1.s.sol` — Ethereum (or sepolia) settlement + optional factory.
-- `DeployL2.s.sol` — Republic L2: factory + election stack + paymaster.
+- `DeployL2.s.sol` — same election stack targeting an EVM configured as Republic L2 (not the civic JSON sequencer).
 - `CreateElection.s.sol` — given factory address + JSON params, create one.
+- `CertifyL1.s.sol` — `L1TallyMirror.postResult` from `COUNTS` / `RESULT_HASH`. Wrapper: `script/certify_l1.sh` (no-op if L1 env unset).
+- `PrintAddresses.s.sol`, `anvil_deploy.sh` — local helpers (`RPC_URL` default `http://127.0.0.1:8545`).
 
 Broadcast JSON is gitignored. Scripts print addresses to stdout as
 `name=0x...` for the Node app to ingest.
@@ -430,82 +562,149 @@ Broadcast JSON is gitignored. Scripts print addresses to stdout as
 ## Circuits
 
 `circuits/vote.circom` — membership + nullifier + ballot commitment.
+Public instance: `[root, disqRoot, nullifier, ballotHash, electionId]`.
 `circuits/tally.circom` — plaintext histogram of opened option indices
 (`Tally(nBallots, nOptions)`). Public signals are **CIRCOM_TALLY_V1** (outputs
 first): `[total, electionId, counts…, acceptedCount]`. Solidity `Tally.sol`
 uses a separately versioned mock instance (`TallyPublicInputs`). Do not wire a
 generated circuit verifier to `Tally.sol` without a translator. MockVerifier
-is the local path.
-`circuits/README.md` — how to run `circom` + snarkjs when the trusted setup
-is available. Until then, MockVerifier is the local path.
+is the local Foundry path.
+`circuits/HASH_SCHEME.md` — keccak-dev-v1 vs standin-v0 vs Poseidon target.
+`circuits/identity.circom` — `Hasher()` stand-in, commitment, nullifier.
+`circuits/README.md` — exact `circom` + snarkjs commands. Proving path is
+**in progress**. Local `npm run circuits:setup` is UNTRUSTED. Until a real
+ceremony, MockVerifier is the Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`
+is the fail-closed integration flag.
 
 ---
 
-## Republic L2 (`/l2`)
+## Republic L2 (`/l2`) — civic JSON sequencer
 
-App-specific ZK rollup (Lighter-shaped: prove the operations, settle on L1).
+**Implemented:** an application-specific civic rollup (Lighter-shaped:
+prove the operations, settle on L1). Plain Node. No Docker. **Not** an
+Anvil proxy and **not** a general-purpose EVM.
 
 - `l2/genesis.json` — chainId `27427` (Republic), period 2s, 1 sequencer.
-- `l2/sequencer/index.mjs` — JSON-RPC subset + block production. Can proxy
-  to Anvil for EVM execution in dev.
+- `l2/sequencer/index.mjs` — mempool, ~2s blocks, hourly sealed votes.
+- `l2/rpc/server.mjs` — JSON-RPC subset (`eth_chainId`, `eth_getBlockByNumber`,
+  `eth_sendRawTransaction` as hex-encoded civic JSON, …). Bind **:8546**.
 - `l2/prover/index.mjs` — for each batch, compute new state root, produce a
-  proof (real groth16 when keys exist; mock proof `{accept:true}` in dev),
-  call `RollupSettlement.submitBatch`.
-- `l2/config.json` — endpoints, addresses.
+  proof (real groth16 when keys exist; mock `{a,b,c}` placeholder in dev),
+  call `RollupSettlement.submitBatch` when `L1_RPC` + settlement address +
+  key are set; otherwise write `l2/data/proofs/batch-N.json`.
+- `l2/config.json` — endpoints, placeholder contract addresses.
 - `l2/README.md` — operator instructions, **NOT FOR PROFIT**.
 
+Civic `eth_sendRawTransaction` payload is UTF-8 JSON hex, for example:
+
+```json
+{"type":"vote","electionId":"1","nullifier":"0x…","ballotHash":"0x…","eligibleRoot":"0x…","disqualificationRoot":"0x…"}
+```
+
+**Future:** proxying EVM execution to Anvil so Foundry-deployed contracts
+run unchanged on 27427. That is not in this tree.
+
 Gas: voters never pay. Sequencer/paymaster is funded by the jurisdiction
-(at cost). No token.
+(at cost). No token. `eth_getBalance` is `0` for ordinary voter addresses;
+sequencer / paymaster report a fake sponsored balance for tooling.
 
 ---
 
 ## Node app (`apps/node`) — DealPunchList shape
 
-Long-lived Node process, web UI + HTTP API, `system_actions.sh` restarts it.
-SQLite for local (file `apps/node/data/republic.sqlite`). Jurisdictions are
-the DealPunchList "organizations". Elections are the "rooms".
+Long-lived Node 22 process, web UI + HTTP API, `system_actions.sh` restarts it.
+Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`)
+are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
+`platform_admin` is a global override and may act in every jurisdiction.
 
-### HTTP
+**Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
+addons such as `better-sqlite3` are **not** used. Jurisdictions are the
+DealPunchList "organizations". Elections are the "rooms".
+
+**UI:** vanilla JS modules and HTML in `apps/node/public/`. Express
+`express.static` + a GET fallback that serves `admin.html` / `back-office.html`
+/ `explorer.html` / `index.html`. There is no Vite dev server and no React
+build. `npm run build` in this package is a no-op log line.
+
+### HTTP (implemented)
 
 ```
 GET  /health
+GET  /api/health
+GET  /api/config                    (hourly disclosure + identity policy + l1CertificationConfigured)
 GET  /api/elections
-POST /api/elections                 (clerk)
-GET  /api/elections/:id
+POST /api/elections                 (clerk of that jurisdiction)
+GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
+GET  /api/elections/:id/results     (public; certified plurality/IRV after tally; empty before)
+GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
 GET  /api/elections/:id/info/:questionId/:optionId
-PATCH /api/elections/:id            (clerk; questions + option metadata until freeze)
-POST /api/elections/:id/register    (after passkey)
-POST /api/elections/:id/vote        (relays UserOp / proof)
-POST /api/elections/:id/disqualify   (officer)
-POST /api/elections/:id/tally
+PATCH /api/elections/:id            (clerk of that jurisdiction; questions + option metadata until freeze)
+PUT  /api/elections/:id             (same as PATCH)
+GET  /api/elections/:id/ballots     (published vote rows only)
+GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext; rankingPayload on ranked ballots)
+GET  /api/elections/:id/registrations
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
+POST /api/elections/:id/freeze      (clerk of that jurisdiction)
+POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
+POST /api/elections/:id/disqualify   (officer of that jurisdiction)
+POST /api/elections/:id/disqualify/revoke
+POST /api/elections/:id/revoke
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; L1 postResult if env set)
 GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
+POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
+GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
+GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
+POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
+DELETE /api/jurisdictions/:id/roles
 GET  /api/me
+GET  /api/session
+GET  /api/me/identity
+GET  /api/notifications
+POST /api/notifications/:id/read
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
-POST /api/auth/web3/challenge
+POST /api/auth/web3/challenge       (returning-user wallet login)
 POST /api/auth/web3/login
 POST /api/auth/logout
-GET  /api/explorer/blocks
-GET  /api/explorer/blocks/:n
-GET  /api/explorer/txs/:hash
-POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
-GET  /api/config                    (includes hourly disclosure + identity policy)
+POST /api/auth/dev-login            (ALLOW_DEV_LOGIN or NODE_ENV=test)
+GET  /api/auth/session
 GET  /api/identity/methods
 POST /api/identity/web3/challenge
 POST /api/identity/web3/verify
 POST /api/identity/smart-card/challenge
 POST /api/identity/smart-card/verify
-GET  /api/me/identity
 POST /api/me/eth-accounts            (many internally verified; first becomes active)
 POST /api/me/eth-accounts/active
 POST /api/persons/:id/person-key     (registrar; keccak256 civil-file token)
 POST /api/persons/:id/methods
 POST /api/persons/:id/eth-accounts
 POST /api/persons/:id/eth-accounts/active
+GET  /api/explorer/blocks
+GET  /api/explorer/blocks/:n
+GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure       (last closed hour, disclosed turnout, countdown)
+GET  /api/explorer/nullifiers/:value
+GET  /api/explorer/search
+GET  /api/explorer/elections/:id
+POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
+GET  /api/reason-codes
+GET  /api/roles
+GET  /api/jurisdictions
+POST /api/jurisdictions
+POST /api/jurisdictions/:id/roles
+POST /api/admin/roles
+POST /api/admin/grant
+GET  /api/users                     (platform_admin)
+PATCH /api/users/:id
 ```
+
+Without `CHAIN_RPC`, votes that pass the election window, nullifier check, and
+Node eligibility (`identityCommitment` registered and not currently disqualified)
+are accepted in the local JSON store so the explorer and UI can run a demo.
+Those accepts still wait for hourly public disclosure unless the interval is `0`.
 
 A person identifies with a **passkey, Web3 wallet, or smart-card digital ID**.
 Many ETH addresses may be verified internally; only one is active. The
@@ -542,34 +741,44 @@ product control until a non-membership (or equivalent) constraint exists and
 a production hasher/verifier replaces the mock.** This layer does not
 replace MockVerifier or Poseidon.
 
-### Pages (SPA, Vite + React, served by Express)
+### Pages (vanilla JS, served by Express)
 
 Inspired by DealPunchList operational UX (organizations → jurisdictions,
 admin tools, notifications) and Inertia-style passkey-held wallets
 (WebAuthn PRF wraps the Ethereum key; no seed phrase shown).
 
-- `/` — voter home (consumer)
-- `/vote/:id` — ballot (passkey)
-- `/register` — intake (passkey / Web3 / smart-card; one active ETH address)
-- `/admin` — platform admin (hosts, keys, jurisdictions)
-- `/back-office` — clerks / registrars / disqualification officers
-- `/explorer` — Republic L2 block explorer (every block's outcomes)
-- `/elections/:id/info` — voter punch-list of options (read-only supporting info)
-- `/elections/:id/info/:questionId/:optionId` — mini page for one option + external links
-- `/elections/:id/results`
+| Path | Files | Status |
+| --- | --- | --- |
+| `/`, `/register`, `/vote/:id` | `public/index.html` + `app.js` / `register.js` / `vote.js` / `router.js` | Implemented. `:id` is UUID, short code, or on-chain id. |
+| `/v/:shortCode`, `/e/:shortCode` | Node 302 + SPA vote route | Implemented |
+| `/elections/:id/info` | `public/info.js` | Implemented (option supporting info) |
+| `/elections/:id/info/:questionId/:optionId` | `public/info.js` | Implemented |
+| `/admin` | `public/admin.html` + `admin.js` | Implemented |
+| `/back-office` | `public/back-office.html` + `back-office.js` | Implemented |
+| `/explorer` | `public/explorer.html` + `explorer.js` | Implemented |
+| `/elections/:id/results` | `public/results.js` | Implemented certified plurality / IRV |
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
+
+Question types the ballot UI renders: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED`.
+`RANKED` is instant-runoff (IRV) on the Node: voters rank options; the tally stores a winner and round transcript. Individual rankings stay in the operator envelope.
+
+`ballotSpecHash` is keccak256 of the canonical ballot JSON `{ title, questions }`.
+IRV is hashed via type `RANKED` and/or per-question `ballotMethod: "ranked_choice"` (election-level plurality is the default and is omitted so `{ id, label }` hashes stay stable). On-chain v1 does **not** add a method enum to `ElectionParams`.
 
 ### Passkey wallet (Inertia-style)
 
 1. Create WebAuthn credential (`residentKey: required`, `extensions.prf`).
-2. `prf.eval` first output → HKDF → encrypt a generated secp256k1 key
-   (or derive it). Store wrapped key in IndexedDB + server credential id.
-3. Signing a UserOp: get PRF, unwrap key, sign, immediately drop plaintext
-   key from memory.
-4. Fallback if PRF is unavailable: still create the passkey for login, and
+2. `prf.eval` **account** salt → HKDF → encrypt a generated 32-byte seed
+   (AES-GCM) and store the blob in IndexedDB + server credential id.
+3. `prf.eval` **identity** salt → HKDF → `(identityTrapdoor, nullifierSecret)`.
+   Separate domain from the account key ([`PASSKEYS.md`](./PASSKEYS.md)).
+4. Signing: get account PRF, unwrap seed, HMAC-sign, immediately drop plaintext
+   from memory. **Today** this is not a secp256k1 UserOp signature.
+5. Fallback if PRF is unavailable: still create the passkey for login, and
    keep an encrypted key wrapped with a key derived from the assertion
-   signature (documented as weaker). Never display a mnemonic.
+   signature (documented as weaker). Never display a mnemonic. Never use
+   that account key as the trapdoor.
 
 ---
 
@@ -583,17 +792,24 @@ Vote rows and public turnout are **hourly**. A person leaving a voting
 office must not be matchable to a live jurisdiction increase. See
 [`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
 
-UI: `/explorer` in the Node app. Backend may read L2 JSON-RPC
-`eth_getBlockByNumber` plus contract event logs.
+UI: `/explorer` in the Node app. **Implemented backend:** JSON log
+`apps/node/data/l2-chain.json`, Node `explorer.append` / `recordVote`, and
+sequencer `POST /api/explorer/ingest`. The civic sequencer also exposes
+`eth_getBlockByNumber` on `:8546`. The Node explorer does **not** ABI-decode
+generic EVM logs.
 
 ---
 
 ## Tooling
 
-- Solidity: Foundry 1.8+, solc 0.8.24, via-ir off unless needed.
+- Solidity: Foundry 1.8+, solc 0.8.24, **`via_ir = true`** in `foundry.toml`.
 - Node: Node 22, npm workspaces.
-- Tests must pass with `forge test` using MockVerifier.
-- `npm test` in `apps/node` for API tests.
+- Tests must pass with `forge test --via-ir` using MockVerifier.
+- `npm run test:proof-helpers` for hash-scheme / stand-in Merkle vectors.
+- `npm test -w apps/node` for API tests (`NODE_ENV=test node --test`).
+- `npm run test:l2` for civic sequencer tests.
+- `npm run test:auditor` for the independent verifier (no Node DB).
+- Optional: `npm run circuits:test` (Groth16 only if circom+snarkjs are installed, or if `REPUBLIC_PROVING_PATH=1`).
 
 ---
 
@@ -604,3 +820,5 @@ UI: `/explorer` in the Node app. Backend may read L2 JSON-RPC
 - Do not add fees, tokens, or admin-skimmable ETH except gas sponsorship.
 - Do not use upgradeable proxies for Election unless the params explicitly
   opt in (v1: no upgrades; factory deploys new elections).
+- Do not claim Vite, React, SQLite, or an Anvil-backed EVM L2 in docs
+  unless those land in the tree.

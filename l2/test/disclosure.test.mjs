@@ -60,6 +60,11 @@ describe('L2 sealed vote disclosure', () => {
     const pending = state.getBlockByNumber('pending', true);
     assert.equal(voteTxs(pending).length, 0);
 
+    const view = state.disclosureView();
+    assert.equal(view.lastClosedHourAt, HOUR_START);
+    assert.equal(view.secondsUntilNext, HOUR - 10 * 60);
+    assert.equal(view.pending, undefined);
+
     const mined = await state.produceBlock();
     assert.equal(voteTxs(mined).length, 0);
     assert.equal(state.getTransactionByHash(hash), null);

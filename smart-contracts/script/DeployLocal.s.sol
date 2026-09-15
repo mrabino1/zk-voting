@@ -5,8 +5,12 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {ElectionParams} from "../src/interfaces/ElectionParams.sol";
+import {IHasher} from "../src/interfaces/IHasher.sol";
+import {IGroth16Verifier} from "../src/interfaces/IGroth16Verifier.sol";
 import {KeccakHasher} from "../src/hasher/KeccakHasher.sol";
+import {StandInHasher} from "../src/hasher/StandInHasher.sol";
 import {MockVerifier} from "../src/zk/MockVerifier.sol";
+import {VoteVerifier} from "../src/zk/VoteVerifier.sol";
 import {ElectionFactory} from "../src/ElectionFactory.sol";
 import {VoterRegistry} from "../src/VoterRegistry.sol";
 import {DisqualificationRegistry} from "../src/DisqualificationRegistry.sol";
@@ -21,8 +25,10 @@ import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
 
 /// @notice Shared deploy result for the Republic election + AA stack.
 struct RepublicStack {
-    KeccakHasher hasher;
-    MockVerifier verifier;
+    IHasher hasher;
+    IGroth16Verifier verifier;
+    bool mockVerifier;
+    string hashScheme;
     ElectionFactory factory;
     VoterRegistry voterRegistry;
     DisqualificationRegistry disqualificationRegistry;
@@ -34,14 +40,53 @@ struct RepublicStack {
 }
 
 /// @notice Anvil / L2 helpers. `DeployLocal` and `DeployL2` inherit this.
+/// @dev Unit tests never call this script. Default is MockVerifier + keccak-dev-v1.
+///      Integration: `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`)
+///      deploys `VoteVerifier` with no mock fallback (fail closed until a real VK).
 abstract contract RepublicStackScript is Script {
     function _log(string memory name, address addr) internal view {
         console2.log(string.concat(name, "=", vm.toString(addr)));
     }
 
+    function _logStr(string memory name, string memory value) internal pure {
+        console2.log(string.concat(name, "=", value));
+    }
+
+    function _isTruthy(string memory v) internal pure returns (bool) {
+        bytes32 h = keccak256(bytes(v));
+        return h == keccak256("1") || h == keccak256("true") || h == keccak256("TRUE") || h == keccak256("yes")
+            || h == keccak256("YES") || h == keccak256("on") || h == keccak256("ON");
+    }
+
+    function _isFalsy(string memory v) internal pure returns (bool) {
+        bytes32 h = keccak256(bytes(v));
+        return h == keccak256("0") || h == keccak256("false") || h == keccak256("FALSE") || h == keccak256("no")
+            || h == keccak256("NO") || h == keccak256("off") || h == keccak256("OFF");
+    }
+
+    function _envTruthy(string memory name) internal view returns (bool) {
+        return _isTruthy(vm.envOr(name, string("")));
+    }
+
+    /// @dev Default true. `REPUBLIC_PROVING_PATH=1` or `REPUBLIC_USE_MOCK_VERIFIER=0` → VoteVerifier.
+    function _useMockVerifier() internal view returns (bool) {
+        if (_envTruthy("REPUBLIC_PROVING_PATH")) return false;
+        string memory mock = vm.envOr("REPUBLIC_USE_MOCK_VERIFIER", string("1"));
+        if (_isFalsy(mock)) return false;
+        return true;
+    }
+
+    function _schemeIsStandIn(string memory scheme) internal pure returns (bool) {
+        bytes32 h = keccak256(bytes(scheme));
+        return h == keccak256("republic.hash.standin-v0") || h == keccak256("standin-v0") || h == keccak256("standin");
+    }
+
     function _logStack(RepublicStack memory s) internal view {
         _log("HASHER", address(s.hasher));
         _log("VERIFIER", address(s.verifier));
+        _logStr("HASH_SCHEME", s.hashScheme);
+        _logStr("PROVING_PATH", s.mockVerifier ? "0" : "1");
+        _logStr("VERIFIER_KIND", s.mockVerifier ? "MockVerifier" : "VoteVerifier");
         _log("FACTORY", address(s.factory));
         _log("IMPLEMENTATION", s.factory.implementation());
         _log("VOTER_REGISTRY", address(s.voterRegistry));
@@ -55,9 +100,30 @@ abstract contract RepublicStackScript is Script {
 
     /// @dev Factory first, then modules that take `factory`, then `setModules`.
     function _deployElectionStack(address admin) internal returns (RepublicStack memory s) {
-        s.hasher = new KeccakHasher();
-        s.verifier = new MockVerifier();
-        s.verifier.setAccept(true);
+        bool useMock = _useMockVerifier();
+        s.mockVerifier = useMock;
+
+        string memory schemeEnv = vm.envOr("REPUBLIC_HASH_SCHEME", string(""));
+        if (bytes(schemeEnv).length == 0) {
+            s.hashScheme = useMock ? "republic.hash.keccak-dev-v1" : "republic.hash.standin-v0";
+        } else {
+            s.hashScheme = schemeEnv;
+        }
+
+        if (_schemeIsStandIn(s.hashScheme)) {
+            s.hasher = IHasher(address(new StandInHasher()));
+        } else {
+            s.hasher = IHasher(address(new KeccakHasher()));
+        }
+
+        if (useMock) {
+            MockVerifier mock = new MockVerifier();
+            mock.setAccept(true);
+            s.verifier = IGroth16Verifier(address(mock));
+        } else {
+            // Fail closed: zero VK, no MockVerifier fallback. Dummy proofs cannot pass.
+            s.verifier = IGroth16Verifier(address(new VoteVerifier(address(0))));
+        }
 
         // address(0) implementation: factory deploys Election internally.
         s.factory = new ElectionFactory(admin, address(0));
@@ -65,16 +131,15 @@ abstract contract RepublicStackScript is Script {
         s.disqualificationRegistry = new DisqualificationRegistry(address(s.hasher), address(s.factory));
         s.inbox = new BallotInbox(address(s.factory));
         s.tally = new Tally(address(s.factory));
-        s.factory.setModules(
-            address(s.voterRegistry), address(s.disqualificationRegistry), address(s.inbox), address(s.tally)
-        );
+        s.factory
+            .setModules(
+                address(s.voterRegistry), address(s.disqualificationRegistry), address(s.inbox), address(s.tally)
+            );
 
         s.entryPoint = new RepublicEntryPoint();
         s.accountFactory = new PasskeyAccountFactory(address(s.entryPoint));
         s.paymaster = new RepublicPaymaster(address(s.entryPoint), admin);
-        s.paymaster.setSponsoredTargets(
-            address(s.inbox), address(s.voterRegistry), address(s.accountFactory)
-        );
+        s.paymaster.setSponsoredTargets(address(s.inbox), address(s.voterRegistry), address(s.accountFactory));
     }
 
     function _civicSampleParams(address admin, address verifier) internal view returns (ElectionParams memory p) {

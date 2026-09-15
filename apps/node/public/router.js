@@ -2,8 +2,8 @@
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
  *
  * History router with hash fallback for static hosting.
- * Routes: `/`, `/register`, `/vote/:id`, `/elections/:id/info`,
- * `/elections/:id/info/:questionId/:optionId`
+ * Routes: `/`, `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
+ * `/elections`, `/elections/:id/results`, `/elections/:id/info`
  */
 
 const listeners = new Set();
@@ -30,12 +30,13 @@ export function parseRoute(loc = window.location) {
   const query = queryFromLocation(loc);
   if (path === "/") return { name: "home", path, params: {}, query };
   if (path === "/register") return { name: "register", path, params: {}, query };
-  const vote = path.match(/^\/vote\/([^/]+)$/);
-  if (vote) {
+  if (path === "/elections") return { name: "resultsIndex", path, params: {}, query };
+  const results = path.match(/^\/elections\/([^/]+)\/results$/);
+  if (results) {
     return {
-      name: "vote",
+      name: "results",
       path,
-      params: { id: decodeURIComponent(vote[1]) },
+      params: { id: decodeURIComponent(results[1]) },
       query,
     };
   }
@@ -58,6 +59,33 @@ export function parseRoute(loc = window.location) {
       name: "election-info",
       path,
       params: { id: decodeURIComponent(info[1]) },
+      query,
+    };
+  }
+  const vote = path.match(/^\/vote\/([^/]+)$/);
+  if (vote) {
+    return {
+      name: "vote",
+      path,
+      params: { id: decodeURIComponent(vote[1]) },
+      query,
+    };
+  }
+  const short = path.match(/^\/(?:v|e)\/([^/]+)$/);
+  if (short) {
+    return {
+      name: "vote",
+      path,
+      params: { id: decodeURIComponent(short[1]) },
+      query,
+    };
+  }
+  const electionAlias = path.match(/^\/elections\/([^/]+)$/);
+  if (electionAlias) {
+    return {
+      name: "results",
+      path,
+      params: { id: decodeURIComponent(electionAlias[1]) },
       query,
     };
   }

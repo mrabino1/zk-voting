@@ -163,7 +163,10 @@
         : "—";
       $("stat-nfp").textContent = nfp ? "Yes" : "Host did not label itself NOT FOR PROFIT";
       const banner = $("disclosure-banner");
-      if (banner && merged.disclosure && merged.disclosure.note) {
+      const helper = globalThis.RepublicDisclosure;
+      if (banner && merged.disclosure && helper) {
+        helper.paint(banner, merged.disclosure);
+      } else if (banner && merged.disclosure && merged.disclosure.note) {
         const next = merged.disclosure.nextPublishAt;
         const when =
           next != null
@@ -188,8 +191,17 @@
         $("session-line").textContent = "Not signed in. Create a jurisdiction and grant roles as platform_admin.";
         return me;
       }
+      const grants = me.jurisdictionRoles || [];
+      const offices = grants
+        .map((g) => (g.role || "") + "@" + (g.jurisdictionId || ""))
+        .filter(Boolean)
+        .join(", ");
       $("session-line").textContent =
-        user.handle + " · " + user.role + (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
+        user.handle +
+        " · " +
+        user.role +
+        (offices ? " · " + offices : "") +
+        (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
       return me;
     } catch (err) {
       $("session-line").textContent = errText(err);
@@ -197,10 +209,27 @@
     }
   }
 
+  function formatOfficers(row) {
+    const officers = Array.isArray(row.officers) ? row.officers : [];
+    if (!officers.length) return "—";
+    return officers
+      .map((o) => (o.handle || o.address || o.userId || "?") + ": " + (o.role || "?"))
+      .join("; ");
+  }
+
+  function formatUserOffices(row) {
+    const grants = Array.isArray(row.jurisdictionRoles) ? row.jurisdictionRoles : [];
+    if (!grants.length) return "—";
+    return grants.map((g) => (g.jurisdictionId || "?") + ": " + (g.role || "?")).join("; ");
+  }
+
   function renderJurisdictions(rows) {
     const tbody = $("table-jurisdictions").querySelector("tbody");
+    const select = $("g-jurisdiction");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty">No jurisdictions yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No jurisdictions yet.</td></tr>';
+      if (select) select.innerHTML = '<option value="">None loaded</option>';
+      renderOfficers([]);
       return;
     }
     tbody.innerHTML = rows
@@ -208,10 +237,67 @@
         return `<tr>
           <td>${esc(row.name || "Untitled")}</td>
           <td class="hash">${esc(row.id)}</td>
+          <td>${esc(formatOfficers(row))}</td>
           <td class="hash">${esc(row.metadataURI || "—")}</td>
           <td>${esc(row.createdAt || "—")}</td>
         </tr>`;
       })
+      .join("");
+    if (select) {
+      const current = select.value;
+      select.innerHTML =
+        '<option value="">Select…</option>' +
+        rows
+          .map((row) => `<option value="${esc(row.id)}">${esc(row.name || row.id)} · ${esc(row.id)}</option>`)
+          .join("");
+      if (current && [...select.options].some((o) => o.value === current)) select.value = current;
+    }
+    renderOfficers(rows);
+  }
+
+  function renderOfficers(rows) {
+    const table = $("table-officers");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const grants = [];
+    for (const row of rows) {
+      for (const grant of row.officers || []) {
+        grants.push({
+          jurisdictionId: row.id,
+          jurisdictionName: row.name || row.id,
+          handle: grant.handle || "",
+          userId: grant.userId || "",
+          address: grant.address || "",
+          role: grant.role || "",
+          grantedAt: grant.grantedAt || "",
+        });
+      }
+    }
+    if (!grants.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No jurisdiction officers yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = grants
+      .map(
+        (g) => `<tr>
+          <td>${esc(g.jurisdictionName)} <span class="hash">${esc(g.jurisdictionId)}</span></td>
+          <td>${esc(g.handle || g.address || g.userId || "—")}</td>
+          <td>${esc(g.role)}</td>
+          <td>${esc(g.grantedAt || "—")}</td>
+          <td>
+            <button
+              type="button"
+              class="btn btn-secondary btn-inline"
+              data-revoke="1"
+              data-jurisdiction="${esc(g.jurisdictionId)}"
+              data-role="${esc(g.role)}"
+              data-handle="${esc(g.handle)}"
+              data-userid="${esc(g.userId)}"
+              data-address="${esc(g.address)}"
+            >Revoke</button>
+          </td>
+        </tr>`
+      )
       .join("");
   }
 
@@ -221,7 +307,11 @@
       renderJurisdictions(asList(data, ["jurisdictions", "items"]));
     } catch (err) {
       $("table-jurisdictions").querySelector("tbody").innerHTML =
-        `<tr><td colspan="4" class="empty">${esc(errText(err))}</td></tr>`;
+        `<tr><td colspan="5" class="empty">${esc(errText(err))}</td></tr>`;
+      const officersBody = $("table-officers") && $("table-officers").querySelector("tbody");
+      if (officersBody) {
+        officersBody.innerHTML = `<tr><td colspan="5" class="empty">${esc(errText(err))}</td></tr>`;
+      }
     }
   }
 
@@ -229,20 +319,20 @@
     const tbody = $("table-users").querySelector("tbody");
     const select = $("g-user");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">No users (or not authorized).</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No users (or not authorized).</td></tr>';
       select.innerHTML = '<option value="">None loaded</option>';
       return;
     }
     tbody.innerHTML = rows
       .map(
         (row) =>
-          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || "—")}</td><td>${row.personKeyBound ? "bound" : "—"}</td><td class="hash">${esc(row.id)}</td></tr>`
+          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || "—")}</td><td>${row.personKeyBound ? "bound" : "—"}</td><td class="hash">${esc(row.id)}</td></tr>`
       )
       .join("");
     select.innerHTML =
       '<option value="">Select…</option>' +
       rows
-        .map((row) => `<option value="${esc(row.id)}">${esc(row.handle)} · ${esc(row.role)}</option>`)
+        .map((row) => `<option value="${esc(row.id)}" data-handle="${esc(row.handle)}">${esc(row.handle)} · ${esc(row.role)}</option>`)
         .join("");
   }
 
@@ -256,7 +346,7 @@
           ? "Sign in as platform_admin to list users and grant officers."
           : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
-        `<tr><td colspan="6" class="empty">${esc(msg)}</td></tr>`;
+        `<tr><td colspan="7" class="empty">${esc(msg)}</td></tr>`;
       $("g-user").innerHTML = `<option value="">${esc(msg)}</option>`;
     }
   }
@@ -274,6 +364,7 @@
       flash($("flash-jurisdiction"), "ok", "Created " + name);
       event.target.reset();
       await loadJurisdictions();
+      await loadUsers();
     } catch (err) {
       flash($("flash-jurisdiction"), "err", errText(err));
     }
@@ -283,25 +374,37 @@
     event.preventDefault();
     const userId = $("g-user").value.trim();
     const role = $("g-role").value;
+    const jurisdictionId = $("g-jurisdiction").value.trim();
     if (!userId) {
       flash($("flash-grant"), "err", "Choose a user.");
       return;
     }
+    if (!jurisdictionId) {
+      flash($("flash-grant"), "err", "Choose a jurisdiction.");
+      return;
+    }
+    const selected = $("g-user").selectedOptions[0];
+    const handle = (selected && selected.getAttribute("data-handle")) || "";
+    const body = { userId, handle, role, jurisdictionId };
     try {
+      let granted = null;
       try {
-        await request("/api/users/" + encodeURIComponent(userId), {
-          method: "PATCH",
-          body: { role },
+        granted = await request("/api/jurisdictions/" + encodeURIComponent(jurisdictionId) + "/roles", {
+          method: "POST",
+          body,
         });
       } catch (err) {
         if (!retryable(err)) throw err;
-        await request("/api/admin/users/" + encodeURIComponent(userId), {
-          method: "PATCH",
-          body: { role },
-        });
+        try {
+          granted = await request("/api/admin/roles", { method: "POST", body });
+        } catch (err2) {
+          if (!retryable(err2)) throw err2;
+          granted = await request("/api/admin/grant", { method: "POST", body });
+        }
       }
-      flash($("flash-grant"), "ok", "Granted " + role);
-      await loadUsers();
+      const who = pick(granted, ["grant.handle", "user.handle"]) || handle || userId;
+      flash($("flash-grant"), "ok", "Granted " + role + " on " + jurisdictionId + " to " + who);
+      await Promise.all([loadUsers(), loadJurisdictions()]);
     } catch (err) {
       flash($("flash-grant"), "err", errText(err));
     }
@@ -312,6 +415,26 @@
   });
 
   document.addEventListener("click", async (event) => {
+    const revokeBtn = event.target.closest("[data-revoke]");
+    if (revokeBtn) {
+      const jurisdictionId = revokeBtn.getAttribute("data-jurisdiction") || "";
+      const role = revokeBtn.getAttribute("data-role") || "";
+      const handle = revokeBtn.getAttribute("data-handle") || "";
+      const userId = revokeBtn.getAttribute("data-userid") || "";
+      const address = revokeBtn.getAttribute("data-address") || "";
+      const flashEl = $("flash-officers") || $("flash-grant");
+      try {
+        await request("/api/jurisdictions/" + encodeURIComponent(jurisdictionId) + "/roles", {
+          method: "DELETE",
+          body: { jurisdictionId, role, handle, userId, address },
+        });
+        flash(flashEl, "ok", "Revoked " + role + " on " + jurisdictionId);
+        await Promise.all([loadUsers(), loadJurisdictions()]);
+      } catch (err) {
+        flash(flashEl, "err", errText(err));
+      }
+      return;
+    }
     const btn = event.target.closest("[data-copy]");
     if (!btn) return;
     try {
@@ -327,6 +450,8 @@
 
   $("btn-refresh-j").addEventListener("click", () => loadJurisdictions());
   $("btn-refresh-u").addEventListener("click", () => loadUsers());
+  const refreshOfficers = $("btn-refresh-o");
+  if (refreshOfficers) refreshOfficers.addEventListener("click", () => loadJurisdictions());
 
   loadHealth();
   loadMe();

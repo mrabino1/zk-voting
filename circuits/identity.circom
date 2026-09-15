@@ -9,26 +9,11 @@ pragma circom 2.0.0;
 // intended IHasher.hashLeftRight on chain once a Poseidon hasher is
 // wired, and is what Semaphore / MACI-style voting circuits use.
 //
-// This file does NOT include circomlib (the path is not vendored here).
-// Hasher() below is a STAND-IN HashLeftRight. It is NOT Poseidon, NOT
-// MiMC, NOT collision-resistant, and MUST NOT be used in a binding
-// election. Swap it for Poseidon(2) before any trusted setup.
-
-// =============================================================================
-// Hasher — STAND-IN. NOT production Poseidon.
-// =============================================================================
-// Dummy HashLeftRight: out = a + b + a*b over the scalar field.
-// Same shape as IHasher.hashLeftRight(uint256, uint256) so Merkle code
-// and Solidity trees can swap implementations without changing topology.
-template Hasher() {
-    signal input a;
-    signal input b;
-    signal output out;
-
-    // Single quadratic constraint. Replace this body with Poseidon(2)
-    // (circomlib poseidon.circom) for production.
-    out <== a + b + a * b;
-}
+// HASH_SCHEME (gated include):
+//   republic.hash.standin-v0  — hasher/standin.circom (selected)
+//   republic.hash.poseidon-bn254-x5-t3-v1 — hasher/poseidon.circom (NOT selected)
+// See circuits/HASH_SCHEME.md. Do not include both.
+include "./hasher/standin.circom";
 
 // identityCommitment = Hash(identityTrapdoor, nullifierSecret)
 //

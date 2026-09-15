@@ -10,10 +10,10 @@ This software may be run **at cost** by a government, county clerk, union, coope
 
 ## What you are operating
 
-1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI, HTTP API, optional vote relayer, SQLite (`apps/node/data/republic.sqlite`). Same operational shape as DealPunchList (`dealpunchlist-node`).
-2. **`smart-contracts/`** — Solidity 0.8.24, Foundry. Factory, registries, inbox, tally verifier, passkey account, L1 `RollupSettlement`.
-3. **`l2/`** — Republic sequencer + prover. Settles batches to L1. Not a hosted Lighter sequencer; Lighter is prior art (see root README).
-4. **`circuits/`** — circom vote / tally. Local and CI use `MockVerifier` until a Poseidon hasher and Groth16 keys exist.
+1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/republic.json`). Same operational shape as DealPunchList (`dealpunchlist-node`). **No SQLite.**
+2. **`smart-contracts/`** — Solidity 0.8.24, Foundry (`via_ir = true`). Factory, registries, inbox, `Tally.sol`, passkey account, L1 `RollupSettlement`.
+3. **`l2/`** — Republic **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
+4. **`circuits/`** — circom vote / tally. Foundry unit tests use `MockVerifier`. Proving path is **in progress** (`npm run circuits:status`). Local setup is untrusted until Poseidon + a ceremony exist.
 
 The Node is allowed to be down. Chain records (L2, and L1 if you mirrored the tally) must still be enough for an independent verifier.
 
@@ -23,7 +23,7 @@ The Node is allowed to be down. Chain records (L2, and L1 if you mirrored the ta
 
 | Line | Branch | Meaning |
 | --- | --- | --- |
-| Development / staging | `test/unstable` | Default. Experimental elections, MockVerifier, Anvil, local L2. |
+| Development / staging | `test/unstable` | Default. Experimental elections, MockVerifier (unit tests), optional `REPUBLIC_PROVING_PATH=1`, civic JSON L2 (`:8546`), optional Foundry Anvil (`:8545`) for Solidity. |
 | Production | `master` | Only builds a jurisdiction may treat as binding. |
 
 `system_actions.sh deploy-dev` pulls **`test/unstable`**. `deploy-prod` pulls **`master`** and **asks for confirmation** (unless you pass `--yes`, which you should not wire to an unattended cron for a live election).
@@ -84,7 +84,9 @@ Voter JSON lives on the `node-data` volume (`DATA_DIR=/data`). L2 blocks and pro
 
 The Node binds `HOST=0.0.0.0` so the published port is reachable. The sequencer binds `L2_RPC_HOST=0.0.0.0` for the same reason (plain-Node local use still defaults to `127.0.0.1`). Inside the Compose network the Node reaches L2 at `http://l2:8546`. The host user should be able to run `docker compose` (membership in the `docker` group); `system_actions.sh` will use `sudo docker compose` when passwordless sudo is the only way to talk to the daemon.
 
-Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, or paymaster keys into the image.
+The Node image installs the npm **workspaces** from the repository root (`@zk-voting/chain-client` is private and is not fetched from the public registry). L1 tally-hash env vars on the `node` service are optional; leaving them empty is a documented no-op.
+
+Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY`, or paymaster keys into the image.
 
 ---
 
@@ -94,18 +96,20 @@ Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, or paymaster keys into 
 # Node 22+
 node -v
 
-# Foundry 1.8+ (solc 0.8.24 comes via foundry.toml)
+# Foundry 1.8+ (solc 0.8.24, via_ir on — foundry.toml)
 foundryup
 cd smart-contracts && forge test
 
-# Optional: circom 2 + snarkjs when you leave MockVerifier
+# Optional: circom 2 + snarkjs for the proving path (not a ceremony)
+npm run circuits:status
+# npm run circuits:compile && npm run circuits:setup   # UNTRUSTED local ptau
 # Optional: viem in the Node app for ABI encoding (packages/chain-client)
 
 git checkout test/unstable
 ./system_actions.sh deploy-dev
 ```
 
-Local Anvil + scripts (see `smart-contracts/script/`): `DeployLocal.s.sol` prints `name=0x…` for the Node to ingest. Broadcast JSON is gitignored.
+Optional local EVM (Foundry Anvil **:8545**) + scripts (see `smart-contracts/script/`): `DeployLocal.s.sol` prints `name=0x…` for the Node to ingest (`FACTORY=`, `VERIFIER=`, `INBOX=`). Broadcast JSON is gitignored. The civic sequencer is a different process on **:8546**.
 
 ---
 
@@ -120,28 +124,66 @@ forge test --fuzz-runs 256
 forge test --match-path test/invariant/*
 ```
 
-From repo root: `npm run test:contracts`, `npm run test:fuzz`, `npm run test:invariant`.
+From repo root: `npm run test:contracts`, `npm run test:fuzz`, `npm run test:invariant`, `npm run test:proof-helpers`.
+
+Proving path (optional tools): `npm run circuits:status`. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md). `REPUBLIC_PROVING_PATH=1` on `DeployLocal` deploys `VoteVerifier` without mock fallback.
+
+### Independent auditor (no Node private DB)
+
+```bash
+npm run test:auditor
+npm run auditor -- verify --file bundle.json
+node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
+```
+
+Public HTTP: `GET /api/elections/:id/artifacts`. Docs: [`docs/AUDITOR.md`](./AUDITOR.md).
 
 ### Node
 
 ```bash
 # workspaces
 npm install
-npm run dev          # apps/node Vite + API when scripts exist
+npm run dev          # node --watch apps/node (Express + public/)
 npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public SPA routes include `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/info`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+
+### Creating elections (chain vs demo)
+
+Clerk **Create election** in `/back-office` is `POST /api/elections`.
+
+| Node env | What happens |
+| --- | --- |
+| `CHAIN_RPC` **unset** | JSON-only demo. Writes `apps/node/data/republic.json`. No factory call. |
+| `CHAIN_RPC` **set** | The API also calls `ElectionFactory.createElection` through viem (`simulateContract` + `writeContract`), matching `@zk-voting/chain-client` and `CreateElection.s.sol`. Failures return **502/503** with a message the clerk UI shows. Nothing is saved locally if the factory reverts. |
+
+Required when the chain is configured: `CHAIN_RPC`, `ELECTION_FACTORY_ADDRESS` (or `FACTORY`), `RELAYER_PRIVATE_KEY`, `VERIFIER_ADDRESS` (or `VERIFIER` from `DeployLocal`). Officer roles (clerk / registrar / disqualification / tally) default to the relayer address, matching `CreateElection.s.sol` using `msg.sender`, unless the POST body or `CLERK_ADDRESS` / `REGISTRAR_ADDRESS` / … is set.
+
+The Node public election id is a UUID v4; the on-chain `electionId` is a uint256 stored as `onChainElectionId` (plus `onChainElectionAddress` / `createTxHash` when the factory ran). They can differ: `DeployLocal` already creates on-chain election `#1`. Demo mode still mints a local uint256 so Groth16 public inputs stay numeric.
+
+Operators can still create with Foundry instead of the clerk UI:
+
+```bash
+cd smart-contracts
+FACTORY=0x… START=… CUTOFF=… TITLE='County general' \
+  forge script script/CreateElection.s.sol:CreateElection \
+  --rpc-url "$CHAIN_RPC" --broadcast
+# prints ELECTION=0x… and ELECTION_ID=…
+```
+
+Prefer the back office when you want the Node record and the factory clone created in one step.
 
 ### Republic L2
 
 ```bash
-npm run l2:sequencer   # node l2/sequencer/index.mjs
-npm run l2:prover      # node l2/prover/index.mjs
+npm run l2:sequencer   # civic JSON-RPC on :8546
+npm run l2:prover
+./l2/bin/start-local.sh
 ```
 
-`l2/genesis.json` uses **chainId 27427**, 2s period, one sequencer. Voters do not hold the gas token; `RepublicPaymaster` sponsors UserOps that hit `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`. Fund the paymaster from the **jurisdiction budget at cost**, not from voters.
+`l2/genesis.json` uses **chainId 27427**, 2s period, one sequencer. This process does **not** proxy EVM to Anvil. Voters do not hold a gas token. On an EVM, `RepublicPaymaster` sponsors UserOps that hit `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`. Fund the paymaster from the **jurisdiction budget at cost**, not from voters.
 
 Details: [`docs/L2.md`](./L2.md).
 
@@ -186,8 +228,69 @@ RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`doc
 - Deploy keys, paymaster keys, sequencer keys, and proving keys are **not** in git.
 - `.env` is gitignored. Do not paste production RPC URLs with credentials into issues.
 - Contract addresses for a live election are pinned in the Node’s published election record.
-- After roll freeze, do not “fix” a tally in SQLite. If the chain rejects a proof, the UI reports failure.
+- After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
 - `opens_ballots` elections store a **threshold-1** P-256 private JWK in the Node data file (`tallyGuardians`). That key decrypts every ballot. It is a demo, labeled NON-PRODUCTION. Do not use it for a binding election. Production guardians / mixnet are not this host’s JSON file.
+
+## L1 certification (tally hash on Ethereum)
+
+After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postResult`. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`.
+
+`RollupSettlement` is the batch-root contract. When `L1_SETTLEMENT_ADDRESS` is set, the Node/script reads `stateRoot()` and attaches it as `l2StateRoot`. That is optional court context, not a substitute for the tally hash.
+
+### When L1 env is unset
+
+This is the default. The Node **still tallies**. Certification is a documented no-op (`status: "skipped"`, reason `L1 env unset`). CI must **not** set mainnet keys. `GET /api/config` reports `l1CertificationConfigured: false`.
+
+### Env (Node process)
+
+| Variable | Required to post | Purpose |
+| --- | --- | --- |
+| `L1_RPC` (alias `L1_RPC_URL`) | yes | Ethereum JSON-RPC (Sepolia / Anvil). Not Republic L2. |
+| `L1_TALLY_MIRROR_ADDRESS` (alias `TALLY_MIRROR`) | yes | `L1TallyMirror` from `DeployL1.s.sol` / `DeployLocal.s.sol` |
+| `L1_PUBLISHER_PRIVATE_KEY` (alias `L1_PRIVATE_KEY`) | yes | Key that is `admin` or `setPublisher`'d on the mirror. **Not** the L2 prover `PRIVATE_KEY`. |
+| `L1_SETTLEMENT_ADDRESS` (alias `SETTLEMENT`) | no | `RollupSettlement` — attach current L2 state root |
+| `L1_CHAIN_ID` | no | Defaults to whatever the RPC reports |
+
+Deploy the mirror (Anvil or Sepolia):
+
+```bash
+cd smart-contracts
+forge script script/DeployL1.s.sol --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
+# stdout includes TALLY_MIRROR=0x… and SETTLEMENT=0x…
+```
+
+Grant a dedicated publisher if the broadcaster is not the mirror admin:
+
+```solidity
+L1TallyMirror.setPublisher(publisher, true);
+```
+
+### After Node tally
+
+1. Close the poll (cutoff passed). Tally operator posts counts. Sum must equal accepted ballots.
+2. If the three required L1 vars are set, `POST /api/elections/:id/tally` also calls `postResult`. The JSON includes `l1Certification` (`posted` / `skipped` / `failed` / `already_posted`). A failed L1 tx **does not** roll back the Node tally.
+3. Retry without re-tallying. `AlreadyPosted` is success (`already_posted`); the Node keeps the original L1 tx hash.
+
+```bash
+# HTTP (tally_operator session)
+curl -X POST http://127.0.0.1:3000/api/elections/1/certify-l1
+
+# Public record
+curl http://127.0.0.1:3000/api/elections/1/l1
+
+# CLI against L1 (no Node auth). Unset env → exit 0 no-op.
+npm run certify:l1 -- --election-id 1 --counts 2,0
+npm run certify:l1 -- --election-id 1 --from-store
+
+# Foundry (same no-op wrapper if env unset)
+./smart-contracts/script/certify_l1.sh
+# or, when env is set:
+# COUNTS=2,0 ELECTION_ID=1 ./smart-contracts/script/certify_l1.sh
+```
+
+Back office: **Post counts**, then **Certify hash on L1** if you skipped or failed.
+
+Do not put mainnet publisher keys in CI, Compose files committed to git, or `test/unstable` sample env.
 
 ## Disqualification operations
 

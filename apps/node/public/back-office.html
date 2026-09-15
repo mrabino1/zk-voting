@@ -62,9 +62,11 @@
           until the hour that contained the ballot has closed — a person leaving a voting office
           cannot be matched to a live increase.
         </p>
-        <p class="disclosure-banner" id="disclosure-banner" role="note">
-          Public ballot counts update once an hour. Officials do not get a live precinct tick.
-        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Public ballot counts update once an hour. Officials do not get a live precinct tick.
+          </p>
+        </aside>
         <p class="session-line" id="me-line">Checking session…</p>
       </header>
 
@@ -88,7 +90,14 @@
           <h2 id="clerk-heading">Election clerk</h2>
           <span class="pill" id="role-clerk">clerk</span>
         </header>
-        <p class="field-hint">Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited.</p>
+        <p class="field-hint">Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited. Choose plurality (default) or ranked choice (IRV).</p>
+        <p class="field-hint" id="chain-election-note">
+          If this Node has <code>CHAIN_RPC</code> set, Create election also calls
+          <code>ElectionFactory.createElection</code> and stores the on-chain uint256 id next to the UUID.
+          Factory failures are shown here and nothing is saved locally. Without
+          <code>CHAIN_RPC</code> this form writes <code>republic.json</code> only (demo) and still mints a
+          demo <code>onChainElectionId</code> for the circuit.
+        </p>
         <form id="form-election" class="form-grid">
           <div class="field">
             <label class="field-label" for="e-jurisdiction">Jurisdiction <span class="req">*</span></label>
@@ -129,6 +138,14 @@
                 <option value="32">32 (~4e9 leaves)</option>
               </select>
             </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="e-method">Ballot method</label>
+            <select id="e-method" name="ballotMethod">
+              <option value="plurality" selected>plurality — first past the post</option>
+              <option value="ranked_choice">ranked_choice — instant-runoff (IRV)</option>
+            </select>
+            <span class="field-hint">Election default. YES_NO stays plurality. RANKED questions always use IRV. Created elections get a UUID public id and a short <code>/v/…</code> link; the factory <code>uint256</code> stays <code>onChainElectionId</code>.</span>
           </div>
           <div class="grid-2">
             <div class="field">
@@ -354,16 +371,17 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">After cutoff, post per-option counts. On <code>sum_only</code> elections, sum must equal accepted ballots (the operator inbox). On <code>opens_ballots</code> elections, leave counts blank to open the demo envelopes, or submit counts that must match the opened ballots — invented partitions are rejected. Threshold-1 operator key is NON-PRODUCTION.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, leave counts blank to open the demo ECIES envelopes, or submit counts that must match the opened ballots — invented partitions are rejected. Threshold-1 operator key is NON-PRODUCTION. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
             <select id="t-election" name="electionId" required></select>
           </div>
+          <div id="tally-aspects" class="aspects-editor"></div>
           <div class="field">
-            <label class="field-label" for="t-counts">Counts JSON array</label>
+            <label class="field-label" for="t-counts">Counts JSON</label>
             <textarea id="t-counts" name="counts" spellcheck="false" placeholder="[2, 1]"></textarea>
-            <span class="field-hint">sum_only: required. opens_ballots: omit or leave as-is — the Node derives counts from opened ballots. Example YES_NO → <code>[yesCount, noCount]</code>.</span>
+            <span class="field-hint" id="t-counts-hint">Concatenated plurality options in ballot order, or use the per-question fields above. For an all-ranked ballot, leave blank to compute IRV from envelopes. On <code>opens_ballots</code>, omit to derive counts from opened envelopes; invented partitions are rejected. Example YES_NO → <code>[yesCount, noCount]</code>.</span>
           </div>
           <details>
             <summary>Optional Groth16 proof (mock path may omit)</summary>
@@ -374,6 +392,8 @@
           </details>
           <div class="actions">
             <button class="btn" type="submit">Post counts</button>
+            <button class="btn btn-secondary" type="button" id="btn-irv">Compute IRV from ballots</button>
+            <button class="btn btn-secondary" type="button" id="btn-certify-l1">Certify hash on L1</button>
             <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
             <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
           </div>
@@ -401,6 +421,7 @@
         · AGPL-3.0-or-later
       </p>
     </footer>
+    <script src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
     <script src="/back-office.js" defer></script>
   </body>

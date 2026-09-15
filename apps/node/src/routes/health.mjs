@@ -9,6 +9,10 @@ export function healthRouter(deps) {
   const router = Router();
   router.get(['/health', '/api/health'], (req, res) => {
     const now = deps.config.nowFn();
+    const interval = deps.config.disclosureIntervalSeconds;
+    const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
+      ? deps.store.publishedAcceptedBallotsAll(now, interval)
+      : undefined;
     res.json({
       ok: true,
       app: 'zk-voting',
@@ -16,7 +20,10 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
-      disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
+      electionFactoryAddress: deps.config.electionFactoryAddress || '',
+      chainConfigured: deps.chain.isConfigured(),
+      l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
+      disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
     });
   });
   return router;
@@ -28,6 +35,9 @@ export function configRouter(deps) {
     '/config',
     asyncHandler(async (_req, res) => {
       const now = deps.config.nowFn();
+      const chainConfigured = deps.chain.isConfigured();
+      const factoryReady =
+        typeof deps.chain.isFactoryReady === 'function' ? deps.chain.isFactoryReady() : false;
       res.json({
         nfp: true,
         app: 'zk-voting',
@@ -36,8 +46,33 @@ export function configRouter(deps) {
         rpID: deps.config.rpID,
         chainId: deps.config.chainId,
         origins: deps.config.origins,
-        chainConfigured: deps.chain.isConfigured(),
-        disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
+        chainConfigured,
+        electionFactoryAddress: deps.config.electionFactoryAddress || '',
+        factoryReady,
+        chain: {
+          configured: chainConfigured,
+          factoryAddress: deps.config.electionFactoryAddress || '',
+          factoryReady,
+          voteReady: deps.chain.isReady(),
+          note: chainConfigured
+            ? 'POST /api/elections calls ElectionFactory.createElection. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
+            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo).',
+        },
+        addresses: {
+          factory: deps.config.electionFactoryAddress || null,
+          ballotInbox: deps.config.ballotInboxAddress || null,
+        },
+        coercion: {
+          policy: 'one-ballot-per-nullifier',
+          receiptsProveChoice: false,
+        },
+        l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
+        l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
+        disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds, {
+          acceptedBallotsDisclosed: deps.store?.publishedAcceptedBallotsAll
+            ? deps.store.publishedAcceptedBallotsAll(now, deps.config.disclosureIntervalSeconds)
+            : undefined,
+        }),
         identity: {
           methods: ['passkey', 'web3', 'smart_card'],
           oneActiveEthAddress: true,
@@ -49,6 +84,20 @@ export function configRouter(deps) {
           demoEncryption: 'p256-ecies-aesgcm-v1',
           production: false,
           note: 'opens_ballots uses a threshold-1 operator key (NON-PRODUCTION). sum_only still accepts any counts that sum to acceptedBallots. Circuit public signals (tally.circom) are versioned separately from Tally.sol mock inputs.',
+        },
+        proving: {
+          path: 'in-progress',
+          ceremony: 'not-done',
+          mockVerifierDefault: deps.config.useMockVerifier !== false,
+          provingPath: Boolean(deps.config.provingPath),
+          hashScheme: deps.config.hashScheme || 'republic.hash.keccak-dev-v1',
+          poseidonWired: false,
+        },
+        ballot: {
+          methods: ['plurality', 'ranked_choice'],
+          defaultMethod: 'plurality',
+          questionTypes: ['YES_NO', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'RANKED', 'MEASURE', 'ARTICLE'],
+          note: 'ranked_choice is instant-runoff (IRV). On-chain v1 may keep the method inside ballotSpecHash; ElectionParams has no method enum.',
         },
         auth: {
           allowDevLogin: Boolean(deps.config.allowDevLogin),

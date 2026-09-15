@@ -21,7 +21,9 @@ We do **not** rent a commercial sequencer. We do **not** issue a gas token.
 | **Ethereum L1** | Court-grade settlement. `RollupSettlement` stores `prevStateRoot`, `newStateRoot`, and `dataHash`. Anyone can re-derive `dataHash` from public batch data. |
 
 Voters never hold an L2 gas token. The sequencer / paymaster / bundler is the
-transaction origin. The paymaster sponsors UserOps that touch the civic
+transaction origin. On an **EVM**, the paymaster sponsors UserOps that touch the
+civic contracts. This civic sequencer is **not** Anvil and does **not** execute
+Solidity; Foundry Anvil (default `:8545`) is only for compiling and testing
 contracts. `eth_getBalance` for ordinary voter addresses is always `0`. The
 sequencer and paymaster report a **fake** sponsored balance so tooling that
 checks “can this paymaster pay?” is satisfied without introducing a token.
@@ -91,6 +93,9 @@ If `L1_RPC`, `SETTLEMENT_ADDRESS`, and `PRIVATE_KEY` are all set, the prover
 submits `submitBatch` with [viem](https://viem.sh). Otherwise it writes
 `l2/data/proofs/batch-N.json`.
 
+Tally **hash** certification is a separate operator step (`L1TallyMirror.postResult`),
+not `submitBatch`. See [`docs/OPERATOR.md`](../docs/OPERATOR.md).
+
 This is **not** a proving-as-a-service company. The jurisdiction that runs an
 election runs the prover.
 
@@ -118,7 +123,8 @@ npm run l2:prover
 | `L2_RPC_HOST` | `127.0.0.1` | RPC bind |
 | `L2_RPC_PORT` | `8546` | RPC port |
 | `L2_BATCH_SIZE` | `4` | blocks per proof batch |
-| `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped proof |
+| `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped **rollup batch** proof |
+| `REPUBLIC_PROVING_PATH` | `false` | Vote-circuit proving path (distinct from rollup `DEV_MOCK_PROOF`). See `/circuits/HASH_SCHEME.md`. |
 | `REPUBLIC_NODE_URL` | unset | Node app base URL for explorer ingest |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). |
 | `L1_RPC` | unset | Ethereum RPC for settlement |

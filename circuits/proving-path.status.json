@@ -1,0 +1,9 @@
+{
+  "nfp": true,
+  "status": "in-progress",
+  "ceremony": "not-done",
+  "hashSchemeSelected": "republic.hash.standin-v0",
+  "hashSchemeProductionTarget": "republic.hash.poseidon-bn254-x5-t3-v1",
+  "mockVerifierDefault": true,
+  "note": "Local untrusted powers-of-tau / Groth16 only. See circuits/HASH_SCHEME.md and circuits/README.md. Do not treat MockVerifier or standin-v0 as production cryptography."
+}
