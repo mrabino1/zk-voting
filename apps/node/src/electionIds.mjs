@@ -71,6 +71,9 @@ export function refsOf(election) {
   const refs = new Set();
   if (!election) return refs;
   if (election.id != null && election.id !== '') refs.add(String(election.id));
+  if (election.uuid) refs.add(String(election.uuid));
+  if (election.code) refs.add(String(election.code));
+  if (election.publicId) refs.add(String(election.publicId));
   if (election.shortCode) refs.add(String(election.shortCode));
   if (election.onChainElectionId != null && election.onChainElectionId !== '') {
     refs.add(String(election.onChainElectionId));

@@ -20,6 +20,18 @@ export function explorerRouter(deps) {
   );
 
   router.get(
+    '/disclosure',
+    asyncHandler(async (_req, res) => {
+      const { now, interval, view } = await publishDue(deps);
+      res.json({
+        nfp: true,
+        chainId: explorer.chain.chainId || config.chainId,
+        disclosure: view || explorer.publicDisclosure(now, interval),
+      });
+    }),
+  );
+
+  router.get(
     '/blocks',
     asyncHandler(async (req, res) => {
       const { now, interval, view } = await publishDue(deps);
@@ -43,12 +55,17 @@ export function explorerRouter(deps) {
   router.get(
     '/blocks/:n',
     asyncHandler(async (req, res) => {
-      await publishDue(deps);
+      const { now, interval, view } = await publishDue(deps);
       const n = req.params.n === 'latest' ? explorer.headNumber() : Number(req.params.n);
       if (!Number.isInteger(n) || n < 1) throw new HttpError(400, 'invalid block number');
       const block = explorer.getBlock(n);
       if (!block) throw new HttpError(404, 'block not found');
-      res.json({ nfp: true, chainId: explorer.chain.chainId || config.chainId, block });
+      res.json({
+        nfp: true,
+        chainId: explorer.chain.chainId || config.chainId,
+        block,
+        disclosure: view || explorer.publicDisclosure(now, interval),
+      });
     }),
   );
 
@@ -96,10 +113,12 @@ export function explorerRouter(deps) {
       for (const tx of extra) {
         if (tx.hash && !seen.has(tx.hash)) result.txs.push(tx);
       }
+      const presented = presentElection(election, deps);
       res.json({
         nfp: true,
-        election: presentElection(election, deps),
+        election: presented,
         txs: result.txs,
+        disclosure: presented.disclosure,
       });
     }),
   );

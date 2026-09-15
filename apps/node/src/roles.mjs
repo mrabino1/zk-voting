@@ -10,8 +10,20 @@ export const ROLES = [
   'observer',
 ];
 
+/** Officer roles that are granted per jurisdiction. platform_admin is global. */
+export const OFFICER_ROLES = [
+  'clerk',
+  'registrar',
+  'disqualification_officer',
+  'tally_operator',
+];
+
 export function isRole(role) {
   return ROLES.includes(role);
+}
+
+export function isOfficerRole(role) {
+  return OFFICER_ROLES.includes(role);
 }
 
 export function publicUser(user) {

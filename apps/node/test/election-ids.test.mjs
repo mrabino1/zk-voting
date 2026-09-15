@@ -230,6 +230,7 @@ describe('election UUID + short code', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '7', electionId: uuid },
+        identityCommitment: '0xabc1',
         encryptedBallot: '0xab',
       },
     });
@@ -243,6 +244,7 @@ describe('election UUID + short code', () => {
           nullifier: '8',
           electionId: created.json.onChainElectionId,
         },
+        identityCommitment: '0xabc1',
         encryptedBallot: '0xcd',
       },
     });

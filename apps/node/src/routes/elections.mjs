@@ -1,16 +1,33 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import { keccak256, stringToHex } from 'viem';
 import { Router } from 'express';
 
-import { asyncHandler, HttpError } from '../http.mjs';
-import { requireAuth, requireRole } from '../auth.mjs';
-import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody } from '../auth.mjs';
+import {
+  electionHasRanked,
+  normalizeBallotMethod,
+  parseTallyCounts,
+  payloadsFromEnvelopes,
+  pluralityQuestions,
+  tallyBallots,
+  withQuestionMethods,
+} from '../ballot.mjs';
+import {
+  normalizeQuestions,
+  presentPublicBallotInfo,
+  presentPublicOptionInfo,
+  resolveBallotSpecHash,
+} from '../ballotSpec.mjs';
 import { parseOnChainElectionId } from '../electionIds.mjs';
+import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
+import { asyncHandler, HttpError } from '../http.mjs';
+import { emptyTree } from '../merkle.mjs';
+import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
-import { emptyTree } from '../merkle.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { buildAuditorPack } from '../auditorPack.mjs';
+import { computeTallyHash } from '../l1Certify.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -22,39 +39,8 @@ function unixSeconds(value, fallback) {
   return Math.floor(ms / 1000);
 }
 
-function stableStringify(value) {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function normalizeQuestions(input) {
-  if (!input) return [];
-  if (!Array.isArray(input)) throw new HttpError(400, 'questions must be an array');
-  return input.map((q, i) => ({
-    id: String(q.id || `q${i + 1}`),
-    type: String(q.type || 'YES_NO'),
-    prompt: String(q.prompt || q.title || `Question ${i + 1}`),
-    options: Array.isArray(q.options)
-      ? q.options.map((o, j) => ({
-          id: String(o.id || `o${j + 1}`),
-          label: String(o.label || o.name || String(o)),
-        }))
-      : q.type === 'YES_NO' || !q.type
-        ? [
-            { id: 'yes', label: 'Yes' },
-            { id: 'no', label: 'No' },
-          ]
-        : [],
-  }));
-}
-
-function expectedCountLength(questions) {
-  if (!questions.length) return 0;
-  return questions.reduce((n, q) => n + Math.max(q.options?.length || 0, 1), 0);
+function questionsFromCreateBody(body) {
+  return normalizeQuestions(body?.questions ?? body?.aspects ?? body?.ballot?.questions);
 }
 
 async function revokeHandler(req, store, explorer) {
@@ -71,12 +57,15 @@ async function revokeHandler(req, store, explorer) {
     electionId: String(election.id),
     identityCommitment: record.identityCommitment,
     evidenceHash: record.revokeEvidenceHash,
+    eligibleRoot: election.eligibleRoot,
+    disqualificationRoot: election.disqualificationRoot,
+    eligibleCount: election.eligibleCount,
   });
   return election;
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain, config } = deps;
+  const { store, explorer, chain, config, l1 } = deps;
   const router = Router();
 
   router.get(
@@ -93,7 +82,7 @@ export function electionsRouter(deps) {
   router.post(
     '/',
     requireAuth,
-    requireRole('clerk'),
+    requireJurisdictionRoleFromBody(store, 'clerk'),
     asyncHandler(async (req, res) => {
       const body = req.body || {};
       const title = String(body.title || '').trim();
@@ -115,9 +104,13 @@ export function electionsRouter(deps) {
       if (!Number.isInteger(maxParticipants) || maxParticipants < 0) {
         throw new HttpError(400, 'maxParticipants must be >= 0 (0 = unlimited)');
       }
-      const questions = normalizeQuestions(body.questions);
-      const ballotSpecHash =
-        body.ballotSpecHash || keccak256(stringToHex(stableStringify({ title, questions })));
+      const ballotMethod = normalizeBallotMethod(body.ballotMethod);
+      const questions = withQuestionMethods(questionsFromCreateBody(body), ballotMethod);
+      const ballotSpecHash = resolveBallotSpecHash({
+        title,
+        questions,
+        ballotSpecHash: body.ballotSpecHash,
+      });
       const jurisdictionId = String(body.jurisdictionId || 'demo');
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
@@ -136,6 +129,7 @@ export function electionsRouter(deps) {
         maxParticipants,
         treeDepth,
         ballotSpecHash,
+        ballotMethod,
         questions,
         jurisdictionId,
         clerk: body.clerk || '',
@@ -164,10 +158,81 @@ export function electionsRouter(deps) {
         shortCode: election.shortCode,
         onChainElectionId: election.onChainElectionId,
         election: dto,
+        links: dto.links,
         nfp: true,
       });
     }),
   );
+
+  router.get(
+    '/:id/info',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentPublicBallotInfo(election, deps.config.nowFn()));
+    }),
+  );
+
+  router.get(
+    '/:id/info/:questionId/:optionId',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentPublicOptionInfo(
+        election,
+        req.params.questionId,
+        req.params.optionId,
+        deps.config.nowFn(),
+      );
+      if (!dto) throw new HttpError(404, 'option not found');
+      res.json(dto);
+    }),
+  );
+
+  const patchBallot = asyncHandler(async (req, res) => {
+    const election = store.requireElection(req.params.id);
+    const body = req.body || {};
+    const title = body.title != null ? String(body.title).trim() : election.title;
+    if (!title) throw new HttpError(400, 'title required');
+    const ballotMethod = normalizeBallotMethod(
+      body.ballotMethod != null ? body.ballotMethod : election.ballotMethod,
+    );
+    const questions =
+      body.questions != null || body.aspects != null
+        ? withQuestionMethods(normalizeQuestions(body.questions ?? body.aspects), ballotMethod)
+        : withQuestionMethods(election.questions, ballotMethod);
+    const metadataURI =
+      body.metadataURI != null ? String(body.metadataURI) : election.metadataURI;
+    const startTime =
+      body.startTime != null ? unixSeconds(body.startTime, election.startTime) : election.startTime;
+    const cutoffTime =
+      body.cutoffTime != null ? unixSeconds(body.cutoffTime, election.cutoffTime) : election.cutoffTime;
+    if (!(startTime < cutoffTime)) throw new HttpError(400, 'startTime must be before cutoffTime');
+    const ballotSpecHash = resolveBallotSpecHash({
+      title,
+      questions,
+      ballotSpecHash: body.ballotSpecHash,
+    });
+    const updated = await store.updateElectionBallot(req.params.id, {
+      title,
+      metadataURI,
+      questions,
+      ballotSpecHash,
+      ballotMethod,
+      startTime,
+      cutoffTime,
+    });
+    res.json({
+      ok: true,
+      id: updated.id,
+      electionId: updated.id,
+      election: presentElection(updated, deps),
+      nfp: true,
+    });
+  });
+
+  router.patch('/:id', requireAuth, requireElectionRole(store, 'clerk'), patchBallot);
+  router.put('/:id', requireAuth, requireElectionRole(store, 'clerk'), patchBallot);
 
   router.get(
     '/:id',
@@ -183,6 +248,40 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/results',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentResults(election, deps));
+    }),
+  );
+
+  router.get(
+    '/:id/summary',
+    asyncHandler(async (req, res) => {
+      const { view } = await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentElection(election, deps);
+      const tallied = Boolean(election.tally);
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        title: election.title,
+        jurisdictionId: election.jurisdictionId,
+        state: dto.state,
+        stateName: dto.stateName,
+        startTime: election.startTime,
+        cutoffTime: election.cutoffTime,
+        participantCount: election.participantCount,
+        acceptedBallots: dto.acceptedBallots,
+        disclosure: electionDisclosure(election, deps, view),
+        explorerUrl: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
+        resultsUrl: tallied ? `/elections/${election.id}/results` : null,
+      });
+    }),
+  );
+
+  router.get(
     '/:id/ballots',
     asyncHandler(async (req, res) => {
       const { now, interval, view } = await publishDue(deps);
@@ -192,16 +291,25 @@ export function electionsRouter(deps) {
         electionId: String(election.id),
         acceptedBallots: published.length,
         ballots: published.map(publicVoteRecord),
-        disclosure: view,
+        disclosure: electionDisclosure(election, deps, view),
         nfp: true,
       });
     }),
   );
 
   router.get(
+    '/:id/artifacts',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(buildAuditorPack(election, deps));
+    }),
+  );
+
+  router.get(
     '/:id/envelopes',
     requireAuth,
-    requireRole('tally_operator'),
+    requireElectionRole(store, 'tally_operator'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
       const now = config.nowFn();
@@ -221,7 +329,7 @@ export function electionsRouter(deps) {
   router.get(
     '/:id/registrations',
     requireAuth,
-    requireRole('clerk', 'registrar', 'disqualification_officer'),
+    requireElectionRole(store, 'clerk', 'registrar', 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
       res.json({
@@ -237,6 +345,7 @@ export function electionsRouter(deps) {
     requireAuth,
     asyncHandler(async (req, res) => {
       if (req.user.role === 'observer') throw new HttpError(403, 'observers are read-only');
+      const election = store.requireElection(req.params.id);
       const identityCommitment = req.body?.identityCommitment;
       if (identityCommitment == null || identityCommitment === '') {
         throw new HttpError(400, 'identityCommitment required');
@@ -244,7 +353,7 @@ export function electionsRouter(deps) {
       const forUser = req.body?.userId;
       let userId = req.user.id;
       if (forUser && forUser !== req.user.id) {
-        if (!['platform_admin', 'registrar'].includes(req.user.role)) {
+        if (!store.userHasJurisdictionRole(req.user, 'registrar', election.jurisdictionId)) {
           throw new HttpError(403, 'only registrar may register another user');
         }
         userId = forUser;
@@ -276,14 +385,17 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/freeze',
     requireAuth,
-    requireRole('clerk'),
+    requireElectionRole(store, 'clerk'),
     asyncHandler(async (req, res) => {
       const election = await store.freezeElection(req.params.id);
       await explorer.append('roll_frozen', {
         electionId: String(election.id),
         eligibleRoot: election.eligibleRoot,
         disqualificationRoot: election.disqualificationRoot,
+        frozenEligibleRoot: election.frozenEligibleRoot,
+        frozenDisqualificationRoot: election.frozenDisqualificationRoot,
         participantCount: election.participantCount,
+        eligibleCount: election.eligibleCount,
       });
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
     }),
@@ -308,8 +420,8 @@ export function electionsRouter(deps) {
         nextPublishAt: result.nextPublishAt,
         vote: result.vote,
         message: result.published
-          ? 'Ballot accepted. Choice is not stored in the clear.'
-          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.',
+          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.'
+          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.',
         nfp: true,
       });
     }),
@@ -318,7 +430,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/disqualify',
     requireAuth,
-    requireRole('disqualification_officer'),
+    requireElectionRole(store, 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const { identityCommitment, reasonCode, evidenceHash } = req.body || {};
       if (identityCommitment == null || identityCommitment === '') {
@@ -335,6 +447,9 @@ export function electionsRouter(deps) {
         identityCommitment: record.identityCommitment,
         reasonCode: record.reasonCode,
         evidenceHash: record.evidenceHash,
+        eligibleRoot: election.eligibleRoot,
+        disqualificationRoot: election.disqualificationRoot,
+        eligibleCount: election.eligibleCount,
       });
       const linked = store.findUserIdForCommitment(election.id, record.identityCommitment);
       await store.addNotification({
@@ -353,6 +468,7 @@ export function electionsRouter(deps) {
           evidenceHash: record.evidenceHash,
           issuedAt: record.issuedAt,
         },
+        eligibleRoot: election.eligibleRoot,
         election: presentElection(election, deps),
         nfp: true,
       });
@@ -362,7 +478,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/disqualify/revoke',
     requireAuth,
-    requireRole('disqualification_officer'),
+    requireElectionRole(store, 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = await revokeHandler(req, store, explorer);
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
@@ -372,7 +488,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/revoke',
     requireAuth,
-    requireRole('disqualification_officer'),
+    requireElectionRole(store, 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = await revokeHandler(req, store, explorer);
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
@@ -382,7 +498,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/tally',
     requireAuth,
-    requireRole('tally_operator'),
+    requireElectionRole(store, 'tally_operator'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
       const now = Math.floor(Date.now() / 1000);
@@ -390,33 +506,168 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const counts = req.body?.counts;
-      if (!Array.isArray(counts) || counts.length === 0) {
-        throw new HttpError(400, 'counts[] required');
+      const ranked = electionHasRanked(election);
+      const plurality = pluralityQuestions(election.questions || [], election.ballotMethod);
+      let irv = null;
+      if (ranked) {
+        const envelopes = store.listEnvelopes(election.id);
+        const ballots = payloadsFromEnvelopes(envelopes);
+        while (ballots.length < election.acceptedBallots) ballots.push([]);
+        irv = tallyBallots(election, ballots);
       }
-      const nums = counts.map((n) => Number(n));
-      if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
-        throw new HttpError(400, 'counts must be non-negative integers');
+      let nums;
+      if (plurality.length) {
+        nums = parseTallyCounts(
+          req.body || {},
+          election.questions || [],
+          election.acceptedBallots,
+          election.ballotMethod,
+        );
+      } else if (ranked && irv) {
+        const posted = req.body?.counts;
+        if (Array.isArray(posted) && posted.length) {
+          nums = posted.map((n) => Number(n));
+          if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
+            throw new HttpError(400, 'counts must be non-negative integers');
+          }
+          if (nums.length !== irv.counts.length) {
+            throw new HttpError(400, `counts length must be ${irv.counts.length}`, {
+              code: 'TALLY_LENGTH',
+              expected: irv.counts.length,
+              actual: nums.length,
+            });
+          }
+          if (nums.some((n, i) => n !== irv.counts[i])) {
+            throw new HttpError(400, 'counts must match first-round ranked preferences', {
+              code: 'TALLY_MISMATCH',
+              expected: irv.counts,
+            });
+          }
+        } else {
+          nums = irv.counts;
+        }
+        if (!nums.length) throw new HttpError(400, 'counts[] required');
+      } else {
+        nums = parseTallyCounts(
+          req.body || {},
+          election.questions || [],
+          election.acceptedBallots,
+          election.ballotMethod,
+        );
       }
-      const sum = nums.reduce((a, b) => a + b, 0);
-      if (sum !== election.acceptedBallots) {
-        throw new HttpError(400, 'sum(counts) must equal acceptedBallots', {
-          code: 'TALLY_MISMATCH',
-          sum,
-          acceptedBallots: election.acceptedBallots,
-        });
-      }
-      const expected = expectedCountLength(election.questions);
-      if (expected && nums.length !== expected) {
-        throw new HttpError(400, `counts length must be ${expected}`, { expected });
-      }
-      const tallied = await store.setTally(election.id, nums);
+      const countsHash = computeTallyHash(nums);
+      const extras = {
+        countsHash,
+        ballotMethod: irv?.ballotMethod || 'plurality',
+      };
+      if (irv?.questions?.length) extras.questions = irv.questions;
+      const tallied = await store.setTally(election.id, nums, extras);
       await explorer.append('tally', {
         electionId: String(tallied.id),
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
+        countsHash,
+        ballotMethod: tallied.tally?.ballotMethod,
+        winners: (tallied.tally?.questions || []).map((q) => q.winner).filter(Boolean),
       });
-      res.json({ ok: true, election: presentElection(tallied, deps), nfp: true });
+      let l1Certification = {
+        status: 'skipped',
+        posted: false,
+        skipped: true,
+        reason: 'L1 certifier not wired',
+        resultHash: countsHash,
+      };
+      if (l1 && typeof l1.certifyTally === 'function') {
+        l1Certification = await l1.certifyTally({
+          electionId: tallied.id,
+          counts: nums,
+          totalBallots: tallied.acceptedBallots,
+          resultHash: countsHash,
+        });
+        await store.setTallyL1(tallied.id, l1Certification);
+        const recorded = store.requireElection(tallied.id).tally?.l1 || l1Certification;
+        l1Certification = recorded;
+        if (l1Certification.posted || l1Certification.alreadyPosted) {
+          await explorer.append('l1_certify', {
+            electionId: String(tallied.id),
+            resultHash: l1Certification.resultHash,
+            txHash: l1Certification.txHash,
+            chainId: l1Certification.chainId,
+            mirror: l1Certification.mirror,
+          });
+        }
+      }
+      const fresh = store.requireElection(tallied.id);
+      res.json({
+        ok: true,
+        election: presentElection(fresh, deps),
+        l1Certification,
+        nfp: true,
+      });
+    }),
+  );
+
+  router.get(
+    '/:id/l1',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const configured = Boolean(l1 && typeof l1.isConfigured === 'function' && l1.isConfigured());
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        tallied: Boolean(election.tally),
+        countsHash: election.tally?.countsHash || null,
+        l1Certification: election.tally?.l1 || null,
+        l1Configured: configured,
+        skipReason: configured ? null : l1?.skipReason?.() || 'L1 env unset',
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/certify-l1',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      if (!election.tally) {
+        throw new HttpError(409, 'tally first (POST /api/elections/:id/tally)', { code: 'NOT_TALLIED' });
+      }
+      if (!l1 || typeof l1.certifyTally !== 'function') {
+        res.json({
+          ok: true,
+          skipped: true,
+          l1Certification: { status: 'skipped', reason: 'L1 certifier not wired' },
+          nfp: true,
+        });
+        return;
+      }
+      const counts = election.tally.counts;
+      let l1Certification = await l1.certifyTally({
+        electionId: election.id,
+        counts,
+        totalBallots: election.acceptedBallots,
+        resultHash: election.tally.countsHash || computeTallyHash(counts),
+        l2StateRoot: req.body?.l2StateRoot,
+      });
+      await store.setTallyL1(election.id, l1Certification);
+      l1Certification = store.requireElection(election.id).tally?.l1 || l1Certification;
+      if (l1Certification.posted || l1Certification.alreadyPosted) {
+        await explorer.append('l1_certify', {
+          electionId: String(election.id),
+          resultHash: l1Certification.resultHash,
+          txHash: l1Certification.txHash,
+          chainId: l1Certification.chainId,
+          mirror: l1Certification.mirror,
+        });
+      }
+      const status = l1Certification.status === 'failed' ? 502 : 200;
+      res.status(status).json({
+        ok: l1Certification.status !== 'failed',
+        election: presentElection(store.requireElection(election.id), deps),
+        l1Certification,
+        nfp: true,
+      });
     }),
   );
 

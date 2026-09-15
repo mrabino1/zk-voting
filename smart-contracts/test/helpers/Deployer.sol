@@ -340,7 +340,12 @@ contract Deployer is Test {
     }
 
     function submitVote(uint256 electionId, address election, uint256 nullifier) internal {
-        bytes memory enc = Fixtures.encryptedBallot(nullifier);
+        submitVoteWithBallot(electionId, election, nullifier, Fixtures.encryptedBallot(nullifier));
+    }
+
+    function submitVoteWithBallot(uint256 electionId, address election, uint256 nullifier, bytes memory enc)
+        internal
+    {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
         vm.prank(relayer);
