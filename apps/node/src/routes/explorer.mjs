@@ -4,6 +4,7 @@ import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
 import { presentElection, publishDue } from '../electionState.mjs';
+import { refsOf } from '../electionIds.mjs';
 
 export function explorerRouter(deps) {
   const { explorer, config, store } = deps;
@@ -103,7 +104,15 @@ export function explorerRouter(deps) {
     asyncHandler(async (req, res) => {
       await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      const allowed = refsOf(election);
       const result = explorer.search(`election:${election.id}`);
+      const extra = Object.values(explorer.chain.txs)
+        .map((t) => explorer.presentTx(t))
+        .filter((t) => t && allowed.has(String(t.electionId)));
+      const seen = new Set((result.txs || []).map((t) => t.hash));
+      for (const tx of extra) {
+        if (tx.hash && !seen.has(tx.hash)) result.txs.push(tx);
+      }
       const presented = presentElection(election, deps);
       res.json({
         nfp: true,

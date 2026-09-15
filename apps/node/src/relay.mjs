@@ -10,6 +10,7 @@ import { keccak256, toHex } from 'viem';
 import proofHelpers from '@zk-voting/proof-helpers';
 
 import { HttpError, stripBallotPii } from './http.mjs';
+import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
@@ -70,7 +71,9 @@ export function hashBallot(encryptedBallot) {
   return keccak256(toEncryptedHex(encryptedBallot));
 }
 
-export function parseVoteBody(body, electionId, roots = {}) {
+export function parseVoteBody(body, electionOrId, roots = {}) {
+  const election = typeof electionOrId === 'object' && electionOrId ? electionOrId : null;
+  const electionId = election ? String(election.id) : String(electionOrId);
   if (!body || typeof body !== 'object') {
     throw new HttpError(400, 'JSON body required');
   }
@@ -129,8 +132,13 @@ export function parseVoteBody(body, electionId, roots = {}) {
   if (nullifier == null || nullifier === '') {
     throw new HttpError(400, 'nullifier required');
   }
-  if (eid != null && String(eid) !== String(electionId)) {
-    throw new HttpError(400, 'electionId mismatch');
+  if (eid != null && eid !== '') {
+    const matches = election
+      ? electionMatchesRef(election, eid)
+      : String(eid) === String(electionId);
+    if (!matches) {
+      throw new HttpError(400, 'electionId mismatch');
+    }
   }
   if (ballotHash == null || ballotHash === '') {
     ballotHash = hashBallot(encryptedBallot);
@@ -187,7 +195,7 @@ function assertBoundRoots(election, parsed, store) {
  */
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
   const election = store.requireElection(electionId);
-  const parsed = parseVoteBody(body, election.id);
+  const parsed = parseVoteBody(body, election);
   const questions = election.questions || [];
   const answers = answersFromVoteBody(body, parsed.encryptedBallot);
   if (answers) assertBallotAnswers(questions, answers);
@@ -211,12 +219,12 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     disqRoot: bound.disqRoot,
     nullifier: parsed.nullifier,
     ballotHash: parsed.ballotHash,
-    electionId: election.id,
+    electionId: chainElectionId(election),
   });
 
   if (chainConfigured) {
     await chain.submitVote({
-      electionId: election.id,
+      electionId: chainElectionId(election),
       proof: parsed.proof,
       publicInputs,
       encryptedBallot: parsed.encryptedBallot,

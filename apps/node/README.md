@@ -73,10 +73,18 @@ curl -fsS http://127.0.0.1:3000/health
 
 The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
+`GET /v/:shortCode` and `GET /e/:shortCode` 302 to `/vote/<uuid>` when the code
+resolves.
+
+New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
+`GET /api/elections/:id` accepts UUID, short code, or `onChainElectionId`.
+On-chain / circuit `electionId` stays the factory `uint256`, stored as
+`onChainElectionId` on the Node record.
+
 Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+`/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
-Admin / back-office / explorer are separate HTML files. `/elections/:id/results` is
-**not** implemented on the voter router yet.
+Admin / back-office / explorer are separate HTML files.
 
 ### Ballot option information
 
@@ -130,10 +138,12 @@ Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and
 
 ```
 GET  /health
+GET  /v/:shortCode                  (302 → /vote/<uuid>)
+GET  /e/:shortCode                  (302 → /vote/<uuid>)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction / platform_admin)
 PATCH /api/elections/:id            (clerk of that jurisdiction; ballot metadata until roll freeze)
-GET  /api/elections/:id
+GET  /api/elections/:id             (UUID, shortCode, or onChainElectionId)
 GET  /api/elections/:id/results     (public certified plurality/IRV; empty before tally)
 GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
 GET  /api/elections/:id/ballots

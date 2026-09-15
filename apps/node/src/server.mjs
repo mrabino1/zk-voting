@@ -59,6 +59,23 @@ function htmlCandidate(config, pathname) {
   ];
 }
 
+function electionShortLinks(store) {
+  return function shortLinkMiddleware(req, res, next) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const match = /^\/(v|e)\/([^/]+)\/?$/.exec(req.path);
+    if (!match) return next();
+    let code = match[2];
+    try {
+      code = decodeURIComponent(code);
+    } catch {
+      /* keep raw */
+    }
+    const election = store.getElection(code);
+    if (!election) return next();
+    res.redirect(302, `/vote/${encodeURIComponent(election.id)}`);
+  };
+}
+
 function spaFallback(config) {
   return function spaMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
@@ -130,6 +147,7 @@ export async function createApp(overrides = {}) {
     res.status(404).json({ error: 'not found', nfp: true });
   });
 
+  app.use(electionShortLinks(store));
   app.use(express.static(config.distDir));
   app.use(express.static(config.publicDir));
   app.use(spaFallback(config));

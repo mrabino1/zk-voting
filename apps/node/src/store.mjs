@@ -8,6 +8,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { isDisclosed } from './disclosure.mjs';
+import {
+  electionMatchesRef,
+  mintShortCode,
+  mintUuid,
+  parseOnChainElectionId,
+} from './electionIds.mjs';
 import { HttpError } from './http.mjs';
 import {
   ensurePersonFields,
@@ -128,6 +134,7 @@ export class Store {
       }
     }
     await store.seed(config);
+    store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
     await store.persist();
     return store;
@@ -187,7 +194,81 @@ export class Store {
   getElection(id) {
     const want = String(id ?? '').trim();
     if (!want) return null;
-    return this.data.elections.find((e) => electionIdMatches(e, want)) || null;
+    return (
+      this.data.elections.find((e) => electionMatchesRef(e, want) || electionIdMatches(e, want)) ||
+      null
+    );
+  }
+
+  _shortCodeTaken(code, exceptId = null) {
+    return this.data.elections.some(
+      (e) => e.shortCode && e.shortCode === code && (exceptId == null || String(e.id) !== String(exceptId)),
+    );
+  }
+
+  _uniqueShortCode() {
+    for (let i = 0; i < 48; i += 1) {
+      const code = mintShortCode();
+      if (!this._shortCodeTaken(code) && !this.getElection(code)) return code;
+    }
+    throw new HttpError(500, 'could not mint election short code');
+  }
+
+  _allocateOnChainElectionId(requested) {
+    let value;
+    try {
+      value = parseOnChainElectionId(requested);
+    } catch (err) {
+      throw new HttpError(err.status || 400, err.message);
+    }
+    if (value == null) {
+      value = String(this.data.meta.nextElectionId || 1);
+      this.data.meta.nextElectionId = Number(this.data.meta.nextElectionId || 1) + 1;
+    } else {
+      const taken = this.data.elections.some((e) => String(e.onChainElectionId) === value);
+      if (taken) throw new HttpError(409, 'onChainElectionId taken');
+      try {
+        const n = BigInt(value);
+        const next = BigInt(this.data.meta.nextElectionId || 1);
+        if (n >= next && n < BigInt(Number.MAX_SAFE_INTEGER)) {
+          this.data.meta.nextElectionId = Number(n) + 1;
+        }
+      } catch {
+        /* keep allocator as-is for oversized ids */
+      }
+    }
+    return value;
+  }
+
+  /**
+   * Backfill shortCode / onChainElectionId on elections created before UUID
+   * public ids. Existing non-UUID ids are kept so old bookmarks still resolve.
+   */
+  ensureElectionPublicIds() {
+    this.data.meta = this.data.meta || {};
+    if (this.data.meta.nextElectionId == null) this.data.meta.nextElectionId = 1;
+    this.data.meta.version = Math.max(Number(this.data.meta.version || 0), 3);
+    for (const election of this.data.elections) {
+      if (!election.shortCode) {
+        election.shortCode = this._uniqueShortCode();
+      }
+      if (election.onChainElectionId == null || election.onChainElectionId === '') {
+        if (/^\d+$/.test(String(election.id))) {
+          election.onChainElectionId = String(election.id);
+          try {
+            const n = BigInt(election.id);
+            const next = BigInt(this.data.meta.nextElectionId || 1);
+            if (n >= next && n < BigInt(Number.MAX_SAFE_INTEGER)) {
+              this.data.meta.nextElectionId = Number(n) + 1;
+            }
+          } catch {
+            /* ignore */
+          }
+        } else {
+          election.onChainElectionId = this._allocateOnChainElectionId(null);
+        }
+      }
+    }
   }
 
   listElections() {
@@ -637,12 +718,17 @@ export class Store {
   }
 
   async createElection(params) {
-    const id = this.data.meta.nextElectionId;
-    this.data.meta.nextElectionId += 1;
+    const id = mintUuid();
+    if (this.getElection(id)) throw new HttpError(409, 'election id collision');
+    const shortCode = this._uniqueShortCode();
+    const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
     const tree = emptyTree(params.treeDepth);
     const dq = emptyTree(params.treeDepth);
     const election = {
       id,
+      shortCode,
+      onChainElectionId,
+      aliases: [],
       title: params.title,
       metadataURI: params.metadataURI || '',
       startTime: params.startTime,

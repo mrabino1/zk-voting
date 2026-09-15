@@ -118,6 +118,10 @@ describe('Republic Node API', () => {
     assert.match(votePage.text, /NOT FOR PROFIT/);
     assert.match(votePage.text, /loading/i);
 
+    const uuidPage = await api('GET', '/vote/3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01');
+    assert.equal(uuidPage.status, 200);
+    assert.match(uuidPage.text, /NOT FOR PROFIT/);
+
     const resultsPage = await api('GET', '/elections/1/results');
     assert.equal(resultsPage.status, 200);
     assert.match(resultsPage.res.headers.get('content-type') || '', /html/);
@@ -192,6 +196,11 @@ describe('Republic Node API', () => {
     });
     assert.equal(status, 201, json?.error);
     electionId = json.election.id;
+    assert.match(String(electionId), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.equal(json.id, electionId);
+    assert.equal(json.shortCode, json.election.shortCode);
+    assert.equal(typeof json.shortCode, 'string');
+    assert.ok(json.shortCode.length >= 8);
     assert.equal(json.election.stateName, 'Created');
     assert.equal(json.election.rollFrozen, false);
     assert.ok(json.election.ballotSpecHash);

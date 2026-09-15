@@ -249,6 +249,27 @@ may also create (bootstrap).
 
 Events: `ElectionCreated(uint256 indexed electionId, address indexed election, bytes32 indexed jurisdictionId, uint64 startTime, uint64 cutoffTime)`.
 
+### Election identifiers (off-chain vs on-chain)
+
+These are **two different ids**. Do not put a UUID into a `uint256` circuit
+input or `BallotInbox.submitVote`.
+
+| Field | Where | Shape |
+| --- | --- | --- |
+| `id` | Node API, SPA `/vote/:id`, clerk links | UUID v4 (canonical public id) |
+| `shortCode` | `/v/:shortCode`, `/e/:shortCode`, optional API `:id` | 10 url-safe chars, unique per Node |
+| `onChainElectionId` | `ElectionFactory`, registries, BallotInbox, Groth16 `electionId` | `uint256`, factory `++electionCount` |
+
+`GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
+on-chain id (and any leftover non-UUID fixture ids). Short HTTP routes
+302 to `/vote/<uuid>`. New elections mint both UUID and short code; the
+Node stores `onChainElectionId` as the mapping. Local demos allocate a
+sequential integer so proofs still have a uint256 when the factory is not
+invoked. When a clerk already created on chain, `POST /api/elections` may
+send `onChainElectionId` to record that mapping.
+
+The factory is **not** changed: it still returns `(uint256 electionId, address)`.
+
 ### `IElection`
 
 Minimal proxy that owns per-election roots and points at inbox/registry.
@@ -574,7 +595,7 @@ GET  /api/health
 GET  /api/config                    (hourly disclosure + identity policy + l1CertificationConfigured)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
-GET  /api/elections/:id
+GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
 GET  /api/elections/:id/results     (public; certified plurality/IRV after tally; empty before)
 GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
@@ -688,13 +709,14 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 
 | Path | Files | Status |
 | --- | --- | --- |
-| `/`, `/register`, `/vote/:id` | `public/index.html` + `app.js` / `register.js` / `vote.js` / `router.js` | Implemented |
+| `/`, `/register`, `/vote/:id` | `public/index.html` + `app.js` / `register.js` / `vote.js` / `router.js` | Implemented. `:id` is UUID, short code, or on-chain id. |
+| `/v/:shortCode`, `/e/:shortCode` | Node 302 + SPA vote route | Implemented |
 | `/elections/:id/info` | `public/info.js` | Implemented (option supporting info) |
 | `/elections/:id/info/:questionId/:optionId` | `public/info.js` | Implemented |
 | `/admin` | `public/admin.html` + `admin.js` | Implemented |
 | `/back-office` | `public/back-office.html` + `back-office.js` | Implemented |
 | `/explorer` | `public/explorer.html` + `explorer.js` | Implemented |
-| `/elections/:id/results` | Linked from explorer and back-office | **Not a voter-SPA route yet.** `index.html` shows “page not found”. Tally data is on `GET /api/elections/:id` and the explorer. **Future:** a dedicated results view. |
+| `/elections/:id/results` | `public/results.js` | Implemented certified plurality / IRV |
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
 

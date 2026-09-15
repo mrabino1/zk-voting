@@ -144,7 +144,7 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public pages: `/`, `/vote/:id`, `/register`, `/elections/:id/info`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. `/elections/:id/results` is linked but **not** a voter-SPA route yet. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
 
 ### Republic L2
 

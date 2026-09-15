@@ -4,6 +4,7 @@
 
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
 import { disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
+import { publicIdFields } from './electionIds.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -32,7 +33,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
         : 0;
   }
   return {
-    id: election.id,
+    ...publicIdFields(election),
     title: election.title,
     metadataURI: election.metadataURI,
     startTime: election.startTime,

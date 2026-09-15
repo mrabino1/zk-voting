@@ -316,13 +316,16 @@ The Node side is the human product. It should feel operationally familiar to any
 
 | Path | What |
 | --- | --- |
-| `/`, `/register`, `/vote/:id` | Voter pages (`public/index.html` + `app.js`) |
+| `/`, `/register`, `/vote/:id` | Voter pages (`public/index.html` + `app.js`). `:id` is UUID, short code, or on-chain id. |
+| `/v/:shortCode`, `/e/:shortCode` | 302 to `/vote/<uuid>` |
 | `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
 | `/elections/:id/info/:questionId/:optionId` | One option + external links |
 | `/admin` | Platform admin (`admin.html`) |
 | `/back-office` | Clerks / registrars / officers (`back-office.html`) |
 | `/explorer` | Civic L2 explorer (`explorer.html`) |
-| `/elections/:id/results` | **Future** as a voter page. Explorer and back-office already link here; the voter router does not handle it. Tally JSON is on `GET /api/elections/:id`. |
+| `/elections/:id/results` | Certified plurality / IRV results |
+
+Public election ids are UUID v4. On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`.
 
 Every page footer: **NOT FOR PROFIT**. There is **no Vite** and **no React** in this tree.
 
