@@ -1,0 +1,25 @@
+# NOT FOR PROFIT — civic public good, not a commercial product.
+#
+# Copy to docker-compose.override.yml (gitignored) for a live-reload host.
+# Compose merges this automatically with docker-compose.yml.
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#   docker compose up --build
+
+services:
+  node:
+    environment:
+      ALLOW_DEV_LOGIN: "1"
+      DISCLOSURE_INTERVAL_SECONDS: "0"
+    volumes:
+      - ./apps/node/src:/app/src
+      - ./apps/node/public:/app/public
+    command: ["node", "--watch", "src/server.mjs"]
+
+  l2:
+    environment:
+      DISCLOSURE_INTERVAL_SECONDS: "0"
+
+  prover:
+    environment:
+      DISCLOSURE_INTERVAL_SECONDS: "0"

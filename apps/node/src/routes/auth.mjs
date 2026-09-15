@@ -4,11 +4,35 @@ import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
 import { establishSession, destroySession, requireAuth, publicUser } from '../auth.mjs';
+import {
+  createIdentityChallenges,
+  normalizeEthAddress,
+  publicIdentity,
+  resolveWeb3LoginPerson,
+  verifyWeb3Bind,
+} from '../identity.mjs';
 import { isRole } from '../roles.mjs';
 
 export function authRouter(deps) {
   const { store, config, passkeys } = deps;
   const router = Router();
+  const web3Challenges = createIdentityChallenges();
+
+  function originOf(req) {
+    const origin = req.headers.origin;
+    if (origin) return String(origin);
+    return config.origins?.[0] || `http://localhost:${config.port}`;
+  }
+
+  function sessionPayload(user) {
+    return {
+      ok: true,
+      verified: true,
+      user: publicUser(user),
+      identity: publicIdentity(user),
+      nfp: true,
+    };
+  }
 
   router.post(
     '/passkey/register/begin',
@@ -31,7 +55,7 @@ export function authRouter(deps) {
         handle: req.body?.handle,
       });
       await establishSession(res, store, config, result.user);
-      res.json({ ok: true, verified: true, user: publicUser(result.user), nfp: true });
+      res.json({ ...sessionPayload(result.user) });
     }),
   );
 
@@ -52,7 +76,45 @@ export function authRouter(deps) {
     asyncHandler(async (req, res) => {
       const result = await passkeys.finishLogin({ body: req.body });
       await establishSession(res, store, config, result.user);
-      res.json({ ok: true, verified: true, user: publicUser(result.user), nfp: true });
+      res.json({ ...sessionPayload(result.user) });
+    }),
+  );
+
+  router.post(
+    '/web3/challenge',
+    asyncHandler(async (req, res) => {
+      const address = normalizeEthAddress(req.body?.address);
+      const issued = web3Challenges.issueWeb3Login({
+        address,
+        chainId: config.chainId,
+        origin: originOf(req),
+      });
+      res.json({ nfp: true, ...issued });
+    }),
+  );
+
+  router.post(
+    '/web3/login',
+    asyncHandler(async (req, res) => {
+      const address = normalizeEthAddress(req.body?.address);
+      const signature = req.body?.signature;
+      if (!signature) throw new HttpError(400, 'signature required');
+      const pending =
+        web3Challenges.take(`web3-login:${address.toLowerCase()}`) ||
+        web3Challenges.take(req.body?.nonce);
+      if (!pending || pending.type !== 'web3_login') {
+        throw new HttpError(400, 'no web3 login challenge');
+      }
+      if (normalizeEthAddress(pending.address) !== address) {
+        throw new HttpError(400, 'address mismatch');
+      }
+      await verifyWeb3Bind({ address, message: pending.message, signature });
+      const user = resolveWeb3LoginPerson(store, address);
+      if (!user) {
+        throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
+      }
+      await establishSession(res, store, config, user);
+      res.json({ ...sessionPayload(store.getUser(user.id)) });
     }),
   );
 
@@ -79,12 +141,12 @@ export function authRouter(deps) {
         await store.persist();
       }
       await establishSession(res, store, config, user);
-      res.json({ ok: true, user: publicUser(user), nfp: true, dev: true });
+      res.json({ ok: true, user: publicUser(user), identity: publicIdentity(user), nfp: true, dev: true });
     }),
   );
 
   router.get('/session', requireAuth, (req, res) => {
-    res.json({ ok: true, user: req.publicUser, nfp: true });
+    res.json({ ok: true, user: req.publicUser, identity: publicIdentity(req.user), nfp: true });
   });
 
   return router;

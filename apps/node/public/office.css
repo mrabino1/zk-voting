@@ -311,9 +311,10 @@ textarea {
   background: var(--danger);
 }
 
-.session-line {
-  margin: 0 0 1rem;
-  color: var(--muted);
+.btn-inline {
+  font-size: 0.75rem;
+  min-height: 2rem;
+  padding: 0.2rem 0.55rem;
 }
 
 hr.hr-office {
@@ -322,8 +323,160 @@ hr.hr-office {
   margin: 1.25rem 0;
 }
 
+.aspects-editor,
+.ballot-builder {
+  display: grid;
+  gap: 1rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.aspect-card {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 0.85rem 1rem 1rem;
+}
+
+.aspect-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.q-card,
+.opt-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 0.9rem 1rem 1rem;
+}
+
+.q-card {
+  border-top: 4px solid var(--navy);
+}
+
+.q-card-head,
+.opt-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.aspect-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.aspect-options {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.aspect-option {
+  display: grid;
+  grid-template-columns: 8rem 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.tally-opts {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.tally-opt {
+  display: grid;
+  grid-template-columns: 1fr 8rem;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.aspect-max[hidden] {
+  display: none !important;
+}
+
+details {
+  border: 1px solid var(--line);
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--cream);
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+
+.q-card-head h3,
+.opt-card-head h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.opt-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.opt-card {
+  background: var(--cream);
+  border-left: 4px solid var(--gold);
+}
+
+.link-rows {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.link-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.4fr) minmax(12rem, 1fr) auto;
+  gap: 0.45rem;
+  align-items: start;
+}
+
+.builder-mini {
+  min-height: 2.6rem !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.95rem !important;
+}
+
+textarea.builder-body {
+  min-height: 6rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+}
+
+.advanced-json {
+  margin: 0.5rem 0;
+  border: 1px dashed var(--line);
+  padding: 0.45rem 0.7rem 0.7rem;
+}
+
+.advanced-json summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+
 @media (max-width: 720px) {
   .data-table {
     min-width: 28rem;
+  }
+  .aspect-option,
+  .tally-opt,
+  .link-row {
+    grid-template-columns: 1fr;
   }
 }

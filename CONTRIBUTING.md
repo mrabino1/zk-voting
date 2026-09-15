@@ -33,13 +33,14 @@ Hosts use [`system_actions.sh`](./system_actions.sh) (DealPunchList / `dealpunch
 
 | Area | Path | Notes |
 | --- | --- | --- |
-| Spec / product intent | `README.md`, `docs/ARCHITECTURE.md` | If code disagrees with ARCHITECTURE, the code is wrong. |
+| Spec / product intent | `README.md`, `docs/ARCHITECTURE.md` | Implemented sections must match the tree. Solidity/circuit **interfaces** in ARCHITECTURE are the ABI contract — if those disagree with `smart-contracts/` / `circuits/`, the code is wrong. **Future** is labeled and is not expected to match yet. |
 | Solidity | `smart-contracts/src/` | `pragma solidity ^0.8.24`, AGPL, `// NOT FOR PROFIT` on every file. |
 | Foundry tests | `smart-contracts/test/` | Unit, fuzz (`--fuzz-runs 256`), invariants. |
 | Circuits | `circuits/` | Self-contained circom 2. Poseidon is the production target; stand-in hasher is gated (`HASH_SCHEME.md`). |
 | Shared JS | `packages/types`, `proof-helpers`, `chain-client` | JSDoc types; optional `viem`. |
-| Node app | `apps/node/` | DealPunchList-shaped API + SPA. Footer: NOT FOR PROFIT. |
-| L2 | `l2/` | Own sequencer + prover, chainId **27427**. |
+| Node app | `apps/node/` | DealPunchList-shaped API + **vanilla JS** pages in `public/`. JSON store. Footer: NOT FOR PROFIT. |
+| L2 | `l2/` | Civic JSON sequencer + prover, chainId **27427**, RPC **:8546**. Not Anvil. |
+| Docker Compose | `docker-compose.yml`, `Dockerfile`, `l2/Dockerfile` | Host Node + L2. Secrets in `.env`, data on volumes. |
 
 Do not put legal names, dates of birth, or street addresses on chain. Do not emit the selected option in an event. Do not print “I voted for X” receipts.
 
@@ -59,7 +60,7 @@ cd smart-contracts && forge test --fuzz-runs 256
 cd smart-contracts && forge test --match-path 'test/invariant/*'
 # or: npm run test:invariant
 
-# Node API (when apps/node tests exist)
+# Node API
 npm test -w apps/node
 
 # Hash-scheme / proving-path JS (no circom required)
@@ -67,9 +68,18 @@ npm run test:proof-helpers
 
 # Optional Groth16 (skips if circom/snarkjs missing unless REPUBLIC_PROVING_PATH=1)
 npm run circuits:test
+
+# Shared JS packages (L1 tally-hash client, etc.)
+npm run test:packages
+
+# Civic L2
+npm run test:l2
+
+# Independent auditor (no Node private DB)
+npm run test:auditor
 ```
 
-Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer and solc **0.8.24** are set in `smart-contracts/foundry.toml`.
+Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer, solc **0.8.24**, and **`via_ir = true`** are set in `smart-contracts/foundry.toml`.
 
 ## Documentation label
 

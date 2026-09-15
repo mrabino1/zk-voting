@@ -112,6 +112,12 @@ contract Handler is Deployer, Ghost {
         _tryVote(electionSeed, nullifier, encryptedBallot);
     }
 
+    /// @notice Same-election double-vote: retry a spent nullifier with a (possibly
+    ///         different) ciphertext. Must revert; does not ban other elections.
+    function doubleVote(uint256 electionSeed, uint256 spentIndex, bytes calldata encryptedBallot) public {
+        _tryDoubleVote(electionSeed, spentIndex, encryptedBallot);
+    }
+
     function disqualify(uint256 electionSeed, uint256 commitment, uint16 reasonCode) public {
         _tryDisqualify(electionSeed, commitment, reasonCode);
     }
@@ -149,13 +155,29 @@ contract Handler is Deployer, Ghost {
         vm.prank(admin);
         try factory.createElection(p) returns (uint256 electionId, address election) {
             _recordElection(
-                electionId, election, start, cutoff, cap, p.clerk, p.registrar, p.disqualificationOfficer, p.tallyOperator
+                electionId,
+                election,
+                start,
+                cutoff,
+                cap,
+                p.clerk,
+                p.registrar,
+                p.disqualificationOfficer,
+                p.tallyOperator
             );
         } catch {
             vm.prank(clerk);
             try factory.createElection(p) returns (uint256 electionId, address election) {
                 _recordElection(
-                    electionId, election, start, cutoff, cap, p.clerk, p.registrar, p.disqualificationOfficer, p.tallyOperator
+                    electionId,
+                    election,
+                    start,
+                    cutoff,
+                    cap,
+                    p.clerk,
+                    p.registrar,
+                    p.disqualificationOfficer,
+                    p.tallyOperator
                 );
             } catch {}
         }
@@ -186,7 +208,8 @@ contract Handler is Deployer, Ghost {
         address who = clerkOf[electionId];
         if (who == address(0)) who = clerk;
         vm.prank(who);
-        try IElection(el).freezeRoll() {} catch {
+        try IElection(el).freezeRoll() {}
+        catch {
             vm.prank(admin);
             try IElection(el).freezeRoll() {} catch {}
         }
@@ -234,12 +257,52 @@ contract Handler is Deployer, Ghost {
         if (block.timestamp < startOf[electionId] || block.timestamp >= cutoffOf[electionId]) return;
 
         uint256[] memory inputs = Fixtures.publicInputs(
-            IElection(el).eligibleRoot(), IElection(el).disqualificationRoot(), nullifier, uint256(keccak256(ballot)), electionId
+            IElection(el).eligibleRoot(),
+            IElection(el).disqualificationRoot(),
+            nullifier,
+            uint256(keccak256(ballot)),
+            electionId
         );
         vm.prank(relayer);
         try inbox.submitVote(electionId, _a, _b, _c, inputs, ballot) {
             _recordVote(electionId, nullifier, frozen);
         } catch {}
+    }
+
+    function _tryDoubleVote(uint256 electionSeed, uint256 spentIndex, bytes calldata encryptedBallot) internal {
+        uint256 electionId = _pick(electionSeed);
+        if (electionId == 0) return;
+        uint256 used = _nullifiersOf[electionId].length;
+        if (used == 0) return;
+        uint256 nullifier = _nullifiersOf[electionId][_clamp(spentIndex, 0, used - 1)];
+
+        bytes memory ballot = encryptedBallot;
+        if (ballot.length > 1024) return;
+        if (ballot.length == 0) ballot = hex"02";
+
+        address el = factory.getElection(electionId);
+        if (el == address(0)) return;
+        bool frozen;
+        try IElection(el).rollFrozen() returns (bool f) {
+            frozen = f;
+        } catch {}
+        if (!frozen) return;
+        if (block.timestamp < startOf[electionId] || block.timestamp >= cutoffOf[electionId]) return;
+
+        uint256[] memory inputs = Fixtures.publicInputs(
+            IElection(el).eligibleRoot(),
+            IElection(el).disqualificationRoot(),
+            nullifier,
+            uint256(keccak256(ballot)),
+            electionId
+        );
+        vm.prank(relayer);
+        try inbox.submitVote(electionId, _a, _b, _c, inputs, ballot) {
+            _recordDoubleVoteAttempt(true);
+            _recordVote(electionId, nullifier, frozen);
+        } catch {
+            _recordDoubleVoteAttempt(false);
+        }
     }
 
     function _tryDisqualify(uint256 electionSeed, uint256 commitment, uint16 reasonCode) internal {
@@ -251,7 +314,8 @@ contract Handler is Deployer, Ghost {
         address who = officerOf[electionId];
         if (who == address(0)) who = officer;
         vm.prank(who);
-        try disqualification.disqualify(electionId, commitment, code, evidence) {} catch {
+        try disqualification.disqualify(electionId, commitment, code, evidence) {}
+        catch {
             vm.prank(admin);
             try disqualification.disqualify(electionId, commitment, code, evidence) {} catch {}
         }
