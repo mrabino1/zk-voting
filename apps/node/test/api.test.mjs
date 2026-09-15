@@ -371,9 +371,14 @@ describe('Republic Node API', () => {
 
   test('disqualify after freeze is rejected', async () => {
     await api('POST', '/api/auth/dev-login', {
-      body: { handle: 'officer', role: 'disqualification_officer' },
+      body: { handle: 'officer', role: 'voter' },
       jar: officerJar,
     });
+    const grant = await api('POST', '/api/jurisdictions/demo/roles', {
+      jar: adminJar,
+      body: { handle: 'officer', role: 'disqualification_officer' },
+    });
+    assert.equal(grant.status, 200, grant.json?.error);
     const { status, json } = await api('POST', `/api/elections/${electionId}/disqualify`, {
       jar: officerJar,
       body: { identityCommitment: '0x1234', reasonCode: 2 },

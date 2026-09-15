@@ -895,6 +895,24 @@
     el.title = ok ? "Granted on this session" : "Not listed on /api/me — the Node still enforces roles";
   }
 
+  function hasOfficerRole(me, name) {
+    const user = me && me.user;
+    if (!user) return false;
+    if (user.role === "platform_admin") return true;
+    const grants = me.jurisdictionRoles || (me.me && me.me.jurisdictionRoles) || [];
+    if (grants.some((g) => g.role === name)) return true;
+    const roles = me.roles || [];
+    return roles.some((r) => String(r).toLowerCase() === name);
+  }
+
+  function clerkJurisdictionIds(me) {
+    if (!me || !me.user) return null;
+    if (me.user.role === "platform_admin") return null;
+    return new Set(
+      (me.jurisdictionRoles || []).filter((g) => g.role === "clerk").map((g) => String(g.jurisdictionId))
+    );
+  }
+
   function hexUint(value, label) {
     const v = value.trim();
     if (/^0x[0-9a-fA-F]+$/.test(v)) return v;
@@ -919,13 +937,22 @@
       if (!user) {
         $("me-line").textContent = "Not signed in — the Node will still enforce roles on each action.";
       } else {
+        const grants = me.jurisdictionRoles || [];
+        const offices = grants
+          .map((g) => (g.role || "") + "@" + (g.jurisdictionId || ""))
+          .filter(Boolean)
+          .join(", ");
         $("me-line").textContent =
-          user.handle + " · " + role + (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
+          user.handle +
+          " · " +
+          role +
+          (offices ? " · " + offices : "") +
+          (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
       }
-      markRole($("role-clerk"), role === "clerk" || role === "platform_admin");
-      markRole($("role-registrar"), role === "registrar" || role === "platform_admin");
-      markRole($("role-dq"), role === "disqualification_officer" || role === "platform_admin");
-      markRole($("role-tally"), role === "tally_operator" || role === "platform_admin");
+      markRole($("role-clerk"), hasOfficerRole(me, "clerk"));
+      markRole($("role-registrar"), hasOfficerRole(me, "registrar"));
+      markRole($("role-dq"), hasOfficerRole(me, "disqualification_officer"));
+      markRole($("role-tally"), hasOfficerRole(me, "tally_operator"));
       try {
         const cfg = await request("/api/config");
         const banner = $("disclosure-banner");
@@ -950,10 +977,12 @@
     }
   }
 
-  async function loadJurisdictions() {
+  async function loadJurisdictions(me) {
     try {
       const data = await getFirst(["/api/jurisdictions", "/api/admin/jurisdictions"]);
-      const rows = asList(data, ["jurisdictions", "items"]);
+      let rows = asList(data, ["jurisdictions", "items"]);
+      const clerkIds = clerkJurisdictionIds(me);
+      if (clerkIds) rows = rows.filter((row) => clerkIds.has(String(row.id)));
       fillSelect(
         $("e-jurisdiction"),
         rows,
@@ -1414,12 +1443,12 @@
   wireBuilder();
   renderBuilder();
   window.addEventListener("republic:session", async () => {
-    await loadMe();
-    await Promise.all([loadJurisdictions(), loadElections(), loadNotifications()]);
+    const me = await loadMe();
+    await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications()]);
   });
   (async function init() {
-    await loadMe();
-    await Promise.all([loadJurisdictions(), loadElections(), loadNotifications(), loadReasonCodes()]);
+    const me = await loadMe();
+    await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
     if ($("t-election").value) await loadTallyElection($("t-election").value);
   })();
 })();

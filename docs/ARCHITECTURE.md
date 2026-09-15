@@ -538,6 +538,9 @@ sequencer / paymaster report a fake sponsored balance for tooling.
 ## Node app (`apps/node`) — DealPunchList shape
 
 Long-lived Node 22 process, web UI + HTTP API, `system_actions.sh` restarts it.
+Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`)
+are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
+`platform_admin` is a global override and may act in every jurisdiction.
 
 **Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
 addons such as `better-sqlite3` are **not** used. Jurisdictions are the
@@ -555,25 +558,27 @@ GET  /health
 GET  /api/health
 GET  /api/config                    (hourly disclosure + identity policy + l1CertificationConfigured)
 GET  /api/elections
-POST /api/elections                 (clerk)
+POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id
 GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
 GET  /api/elections/:id/info/:questionId/:optionId
-PATCH /api/elections/:id            (clerk; questions + option metadata until freeze)
+PATCH /api/elections/:id            (clerk of that jurisdiction; questions + option metadata until freeze)
 PUT  /api/elections/:id             (same as PATCH)
 GET  /api/elections/:id/ballots     (published vote rows only)
-GET  /api/elections/:id/envelopes   (tally_operator; after cutoff; ciphertext only)
+GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext only)
 GET  /api/elections/:id/registrations
-POST /api/elections/:id/register    (after passkey)
-POST /api/elections/:id/freeze      (clerk)
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
+POST /api/elections/:id/freeze      (clerk of that jurisdiction)
 POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
-POST /api/elections/:id/disqualify   (officer)
+POST /api/elections/:id/disqualify   (officer of that jurisdiction)
 POST /api/elections/:id/disqualify/revoke
 POST /api/elections/:id/revoke
-POST /api/elections/:id/tally       (tally operator; L1 postResult if env set)
-POST /api/elections/:id/certify-l1  (retry L1; no-op if L1 env unset)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; L1 postResult if env set)
+POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
+POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
+DELETE /api/jurisdictions/:id/roles
 GET  /api/me
 GET  /api/session
 GET  /api/me/identity

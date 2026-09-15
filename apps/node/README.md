@@ -18,7 +18,7 @@ See `/NOT_FOR_PROFIT.md` at the repo root.
 | --- | --- |
 | Organizations | Jurisdictions |
 | Rooms / processes | Elections (start + cutoff, roll, inbox) |
-| Users + roles | `voter`, `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, `platform_admin`, `observer` |
+| Users + roles | `voter` / `observer` / `platform_admin` are global. `clerk`, `registrar`, `disqualification_officer`, and `tally_operator` are granted **per jurisdiction**. `platform_admin` is a global override. |
 | Host menu | repo-root `system_actions.sh` |
 
 Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
@@ -120,20 +120,22 @@ Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and
 ```
 GET  /health
 GET  /api/elections
-POST /api/elections                 (clerk / platform_admin)
-PATCH /api/elections/:id            (clerk; ballot metadata until roll freeze)
+POST /api/elections                 (clerk of that jurisdiction / platform_admin)
+PATCH /api/elections/:id            (clerk of that jurisdiction; ballot metadata until roll freeze)
 GET  /api/elections/:id
 GET  /api/elections/:id/results     (per-question plurality labels)
 GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
 GET  /api/elections/:id/ballots
 GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
 GET  /api/elections/:id/info/:questionId/:optionId
-POST /api/elections/:id/register    (after passkey)
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
-POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator; attempts L1 certify if env set)
-POST /api/elections/:id/certify-l1  (retry L1 postResult; no-op if env unset)
+POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; attempts L1 certify if env set)
+POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 postResult; no-op if env unset)
 GET  /api/elections/:id/l1
+POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/tally on that jurisdiction)
+DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods

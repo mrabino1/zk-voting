@@ -237,6 +237,7 @@ describe('passkey and Ethereum wallet login (returning users)', () => {
       counter: 0,
       transports: ['internal'],
     });
+    await store.grantJurisdictionRole('demo', { handle: 'clerk-passkey', role: 'clerk' });
     await store.persist();
     const begin = await api('POST', '/api/auth/passkey/login/begin', { body: {} });
     const finish = await api('POST', '/api/auth/passkey/login/finish', {

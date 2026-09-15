@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 
-import { requireAuth, requireRole } from '../auth.mjs';
+import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody } from '../auth.mjs';
 import { parseTallyCounts } from '../ballot.mjs';
 import {
   normalizeQuestions,
@@ -71,7 +71,7 @@ export function electionsRouter(deps) {
   router.post(
     '/',
     requireAuth,
-    requireRole('clerk'),
+    requireJurisdictionRoleFromBody(store, 'clerk'),
     asyncHandler(async (req, res) => {
       const body = req.body || {};
       const title = String(body.title || '').trim();
@@ -194,8 +194,8 @@ export function electionsRouter(deps) {
     });
   });
 
-  router.patch('/:id', requireAuth, requireRole('clerk'), patchBallot);
-  router.put('/:id', requireAuth, requireRole('clerk'), patchBallot);
+  router.patch('/:id', requireAuth, requireElectionRole(store, 'clerk'), patchBallot);
+  router.put('/:id', requireAuth, requireElectionRole(store, 'clerk'), patchBallot);
 
   router.get(
     '/:id',
@@ -263,7 +263,7 @@ export function electionsRouter(deps) {
   router.get(
     '/:id/envelopes',
     requireAuth,
-    requireRole('tally_operator'),
+    requireElectionRole(store, 'tally_operator'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
       const now = config.nowFn();
@@ -283,7 +283,7 @@ export function electionsRouter(deps) {
   router.get(
     '/:id/registrations',
     requireAuth,
-    requireRole('clerk', 'registrar', 'disqualification_officer'),
+    requireElectionRole(store, 'clerk', 'registrar', 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       store.requireElection(req.params.id);
       res.json({
@@ -299,6 +299,7 @@ export function electionsRouter(deps) {
     requireAuth,
     asyncHandler(async (req, res) => {
       if (req.user.role === 'observer') throw new HttpError(403, 'observers are read-only');
+      const election = store.requireElection(req.params.id);
       const identityCommitment = req.body?.identityCommitment;
       if (identityCommitment == null || identityCommitment === '') {
         throw new HttpError(400, 'identityCommitment required');
@@ -306,7 +307,7 @@ export function electionsRouter(deps) {
       const forUser = req.body?.userId;
       let userId = req.user.id;
       if (forUser && forUser !== req.user.id) {
-        if (!['platform_admin', 'registrar'].includes(req.user.role)) {
+        if (!store.userHasJurisdictionRole(req.user, 'registrar', election.jurisdictionId)) {
           throw new HttpError(403, 'only registrar may register another user');
         }
         userId = forUser;
@@ -338,7 +339,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/freeze',
     requireAuth,
-    requireRole('clerk'),
+    requireElectionRole(store, 'clerk'),
     asyncHandler(async (req, res) => {
       const election = await store.freezeElection(req.params.id);
       await explorer.append('roll_frozen', {
@@ -383,7 +384,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/disqualify',
     requireAuth,
-    requireRole('disqualification_officer'),
+    requireElectionRole(store, 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const { identityCommitment, reasonCode, evidenceHash } = req.body || {};
       if (identityCommitment == null || identityCommitment === '') {
@@ -431,7 +432,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/disqualify/revoke',
     requireAuth,
-    requireRole('disqualification_officer'),
+    requireElectionRole(store, 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = await revokeHandler(req, store, explorer);
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
@@ -441,7 +442,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/revoke',
     requireAuth,
-    requireRole('disqualification_officer'),
+    requireElectionRole(store, 'disqualification_officer'),
     asyncHandler(async (req, res) => {
       const election = await revokeHandler(req, store, explorer);
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
@@ -451,7 +452,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/tally',
     requireAuth,
-    requireRole('tally_operator'),
+    requireElectionRole(store, 'tally_operator'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
       const now = Math.floor(Date.now() / 1000);
@@ -525,7 +526,7 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/certify-l1',
     requireAuth,
-    requireRole('tally_operator'),
+    requireElectionRole(store, 'tally_operator'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
       if (!election.tally) {
