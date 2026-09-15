@@ -20,6 +20,7 @@ import {
 } from '../src/chain.mjs';
 import { HttpError } from '../src/http.mjs';
 import { createApp } from '../src/server.mjs';
+import { isUuid } from '../src/electionIds.mjs';
 
 const ANVIL_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const FACTORY = '0x1111111111111111111111111111111111111111';
@@ -260,7 +261,9 @@ describe('POST /api/elections with mocked factory', () => {
     });
     assert.equal(status, 201, json?.error);
     assert.equal(json.chainMode, 'demo');
-    assert.equal(json.onChainElectionId, null);
+    assert.match(String(json.onChainElectionId), /^\d+$/);
+    assert.equal(json.onChainElectionAddress, null);
+    assert.equal(isUuid(json.election.id), true);
     assert.equal(chain.calls.create.length, 0);
   });
 
@@ -276,7 +279,7 @@ describe('POST /api/elections with mocked factory', () => {
     assert.equal(json.chainMode, 'onchain');
     assert.equal(json.onChainElectionId, '42');
     assert.equal(json.onChainElectionAddress.toLowerCase(), CLONE.toLowerCase());
-    assert.equal(json.election.id, 1);
+    assert.equal(isUuid(json.election.id), true);
     assert.equal(json.election.onChainElectionId, '42');
     assert.equal(json.election.chainMode, 'onchain');
     assert.equal(json.election.factoryAddress.toLowerCase(), FACTORY.toLowerCase());
@@ -389,6 +392,7 @@ describe('POST /api/elections with mocked factory', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '7', electionId: id },
+        identityCommitment: '0x1234',
         encryptedBallot: '0xab',
       },
     });

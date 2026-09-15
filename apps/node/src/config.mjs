@@ -14,6 +14,15 @@ function csv(value) {
     .filter(Boolean);
 }
 
+function envFlag(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  const s = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+  if (['0', 'false', 'no', 'off'].includes(s)) return false;
+  return fallback;
+}
+
 /**
  * @param {Record<string, unknown>} [overrides]
  */
@@ -35,12 +44,22 @@ export function getConfig(overrides = {}) {
     { isTest },
   );
 
+  const provingPath = envFlag(overrides.provingPath ?? process.env.REPUBLIC_PROVING_PATH, false);
+  const useMockVerifier = provingPath
+    ? false
+    : envFlag(overrides.useMockVerifier ?? process.env.REPUBLIC_USE_MOCK_VERIFIER, true);
+  const hashScheme =
+    overrides.hashScheme ||
+    process.env.REPUBLIC_HASH_SCHEME ||
+    (provingPath ? 'republic.hash.standin-v0' : 'republic.hash.keccak-dev-v1');
+
   return {
     nfp: true,
     app: 'zk-voting',
     product: 'Republic',
     pkgRoot: PKG_ROOT,
     port,
+    host: String(overrides.host ?? process.env.HOST ?? '0.0.0.0'),
     chainId: Number(process.env.CHAIN_ID || 27427),
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
@@ -58,6 +77,21 @@ export function getConfig(overrides = {}) {
       process.env.DISQUALIFICATION_OFFICER_ADDRESS || process.env.DISQUALIFICATION_OFFICER || '',
     tallyOperatorAddress: process.env.TALLY_OPERATOR_ADDRESS || process.env.TALLY_OPERATOR || '',
     relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY || '',
+    // NODE_ENV=test never inherits operator L1 keys (CI / local Anvil leakage).
+    l1Rpc: isTest ? '' : process.env.L1_RPC || process.env.L1_RPC_URL || '',
+    l1TallyMirrorAddress: isTest
+      ? ''
+      : process.env.L1_TALLY_MIRROR_ADDRESS ||
+        process.env.TALLY_MIRROR_ADDRESS ||
+        process.env.TALLY_MIRROR ||
+        '',
+    l1PublisherPrivateKey: isTest
+      ? ''
+      : process.env.L1_PUBLISHER_PRIVATE_KEY || process.env.L1_PRIVATE_KEY || '',
+    l1SettlementAddress: isTest
+      ? ''
+      : process.env.L1_SETTLEMENT_ADDRESS || process.env.SETTLEMENT_ADDRESS || process.env.SETTLEMENT || '',
+    l1ChainId: isTest ? 0 : Number(process.env.L1_CHAIN_ID || 0),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
     allowDevLogin: process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_LOGIN === '1',
@@ -68,6 +102,9 @@ export function getConfig(overrides = {}) {
     quiet: process.env.NODE_ENV === 'test',
     publicDir: path.join(PKG_ROOT, 'public'),
     distDir: path.join(PKG_ROOT, 'dist'),
+    provingPath,
+    useMockVerifier,
+    hashScheme,
     ...overrides,
   };
 }

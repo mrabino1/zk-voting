@@ -3,10 +3,14 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
-import { startRouter, navigate } from "./router.js";
+import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { questionsOf, typeLabel } from "./ballot.js";
+import { renderElectionInfo, renderOptionInfo } from "./info.js";
+import { renderResults, renderResultsIndex } from "./results.js";
+import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -143,6 +147,23 @@ export function formatTime(value) {
   }
 }
 
+export function electionRefEquals(election, ref) {
+  if (!election || ref == null || ref === "") return false;
+  const r = String(ref);
+  if (String(election.id) === r) return true;
+  if (election.shortCode && String(election.shortCode) === r) return true;
+  if (election.onChainElectionId != null && String(election.onChainElectionId) === r) return true;
+  if (Array.isArray(election.aliases) && election.aliases.some((a) => String(a) === r)) return true;
+  return false;
+}
+
+export function chainElectionId(election) {
+  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== "") {
+    return String(election.onChainElectionId);
+  }
+  return String(election?.id ?? "");
+}
+
 export function unixSeconds(value) {
   if (value == null || value === "") return null;
   let n = Number(value);
@@ -185,6 +206,15 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
   return {
     ...raw,
     id,
+    shortCode: raw.shortCode || raw.short_code || null,
+    onChainElectionId:
+      raw.onChainElectionId != null
+        ? String(raw.onChainElectionId)
+        : raw.on_chain_election_id != null
+          ? String(raw.on_chain_election_id)
+          : null,
+    aliases: Array.isArray(raw.aliases) ? raw.aliases.map((a) => String(a)) : [],
+    links: raw.links || null,
     title: raw.title || params.title || `Election ${id}`,
     jurisdiction:
       raw.jurisdiction ||
@@ -200,6 +230,7 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     questionCount: Number(raw.questionCount ?? params.questionCount ?? questions.length) || questions.length,
     rollFrozen: Boolean(raw.rollFrozen) || state >= 1,
     ballotSpecHash: raw.ballotSpecHash || params.ballotSpecHash || null,
+    ballotMethod: raw.ballotMethod || params.ballotMethod || "plurality",
     eligibleRoot: raw.eligibleRoot || null,
     disqualificationRoot: raw.disqualificationRoot || null,
     description: raw.description || raw.summary || "",
@@ -210,7 +241,10 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
 export function sampleElections(now = Math.floor(Date.now() / 1000)) {
   return [
     {
-      id: "1",
+      id: "3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01",
+      shortCode: "nbrdge2k3m",
+      onChainElectionId: "1",
+      aliases: ["1"],
       title: "City of Northbridge General Municipal Election",
       jurisdiction: "City of Northbridge",
       jurisdictionId: "northbridge",
@@ -226,7 +260,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: SAMPLE_QUESTIONS,
     },
     {
-      id: "2",
+      id: "7a8b9c0d-1e2f-4a3b-9c4d-5e6f70819202",
+      shortCode: "ctymeas4n8",
+      onChainElectionId: "2",
+      aliases: ["2"],
       title: "County Measure A — Public Library Bond",
       jurisdiction: "Northbridge County",
       jurisdictionId: "northbridge-county",
@@ -241,7 +278,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
-      id: "3",
+      id: "4b5c6d7e-8f90-41a2-a3b4-c5d6e7f80903",
+      shortCode: "schbrd5p2q",
+      onChainElectionId: "3",
+      aliases: ["3"],
       title: "School Board, District 4",
       jurisdiction: "Northbridge Unified School District",
       jurisdictionId: "nusd",
@@ -256,7 +296,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questions: [SAMPLE_QUESTIONS[1]],
     },
     {
-      id: "4",
+      id: "90ab12cd-34ef-4a56-8b78-90abcdef0404",
+      shortCode: "stref6q3r4",
+      onChainElectionId: "4",
+      aliases: ["4"],
       title: "Statewide special referendum — transit authority",
       jurisdiction: "State of example",
       jurisdictionId: "state-ex",
@@ -267,11 +310,14 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-      description: "Tally posted. Choice-level receipts are never shown to voters.",
+              description: "Tally posted. Receipts list hashes only and cannot prove which option you marked.",
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
-      id: "5",
+      id: "11223344-5566-4777-8899-aabbccdde505",
+      shortCode: "wrkcbd7s4t",
+      onChainElectionId: "5",
+      aliases: ["5"],
       title: "Workers’ cooperative board (annual)",
       jurisdiction: "Northbridge Food Cooperative",
       jurisdictionId: "nfc",
@@ -319,10 +365,11 @@ export function recordRegistration(electionId, payload) {
 export function recordVoteReceipt(electionId, payload) {
   const store = readVoterStore();
   store.votes[String(electionId)] = {
-    at: new Date().toISOString(),
+    at: payload.at || new Date().toISOString(),
     ballotHash: payload.ballotHash,
     nullifier: payload.nullifier,
     userOpHash: payload.userOpHash,
+    choiceOmitted: true,
   };
   writeVoterStore(store);
 }
@@ -342,10 +389,18 @@ export function reasonLabel(code) {
   return REASON_CODES[n] || String(code);
 }
 
+function voterKeys(election) {
+  const keys = [String(election.id)];
+  if (election.shortCode) keys.push(String(election.shortCode));
+  if (election.onChainElectionId != null) keys.push(String(election.onChainElectionId));
+  for (const a of election.aliases || []) keys.push(String(a));
+  return keys;
+}
+
 function voterStatusForElection(election, me, store) {
-  const id = String(election.id);
-  if (store.votes[id]) return { key: "recorded", label: "Ballot recorded", className: "status-recorded" };
-  const remote = me?.elections?.[id] || me?.statuses?.[id];
+  const keys = voterKeys(election);
+  if (keys.some((k) => store.votes[k])) return { key: "recorded", label: "Ballot recorded", className: "status-recorded" };
+  const remote = keys.map((k) => me?.elections?.[k] || me?.statuses?.[k]).find(Boolean);
   if (remote) {
     const status = String(remote.status || remote).toLowerCase();
     if (status.includes("disqual")) {
@@ -362,7 +417,7 @@ function voterStatusForElection(election, me, store) {
   if (me?.disqualified || me?.isDisqualified) {
     return { key: "disqualified", label: "Disqualified", className: "status-disqualified" };
   }
-  if (store.registrations[id]) {
+  if (keys.some((k) => store.registrations[k])) {
     if (election.state === 2) return { key: "eligible", label: "Eligible on this device", className: "status-eligible" };
     return { key: "registered", label: "Registered on this device", className: "status-eligible" };
   }
@@ -386,13 +441,12 @@ export async function loadElection(id) {
     const raw = data?.election || data;
     const normalized = normalizeElection(raw);
     if (normalized?.id) {
-      if (!normalized.questions?.length) normalized.questions = SAMPLE_QUESTIONS;
       return { election: normalized, source: "api" };
     }
   } catch {
     /* fall through */
   }
-  const sample = sampleElections().find((e) => e.id === String(id));
+  const sample = sampleElections().find((e) => electionRefEquals(e, id));
   if (sample) return { election: sample, source: "sample" };
   return { election: null, source: "missing" };
 }
@@ -421,7 +475,9 @@ function updateNav(routeName) {
     const current =
       (routeName === "home" && href === "/") ||
       (routeName === "register" && href === "/register") ||
-      (routeName === "vote" && href === "/");
+      (routeName === "vote" && href === "/") ||
+      ((routeName === "results" || routeName === "resultsIndex") && href === "/elections") ||
+      ((routeName === "election-info" || routeName === "option-info") && href === "/");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
@@ -437,6 +493,8 @@ function ctx() {
     wallet,
     formatTime,
     electionStateInfo,
+    electionRefEquals,
+    chainElectionId,
     normalizeElection,
     loadElections,
     loadElection,
@@ -448,15 +506,18 @@ function ctx() {
     reasonLabel,
     setTitle,
     SAMPLE_QUESTIONS,
+    mountSignInPanel,
   };
 }
 
 function renderHome(main, route, bundle) {
   const { elections, source, me, walletRecord, store } = bundle;
   const openCount = elections.filter((e) => e.state === 2).length;
-  const walletLine = walletRecord
-    ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
-    : "No passkey on this device yet.";
+  const walletLine = walletRecord?.staleWrap
+    ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
+    : walletRecord
+      ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
+      : "No passkey on this device yet.";
 
   const list =
     elections.length === 0
@@ -485,6 +546,14 @@ function renderHome(main, route, bundle) {
                 { class: "meta-list" },
                 h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
                 h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+                election.shortCode
+                  ? h(
+                      "li",
+                      {},
+                      h("span", { class: "lbl", text: "Short link" }),
+                      h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
+                    )
+                  : null,
                 h(
                   "li",
                   {},
@@ -506,6 +575,7 @@ function renderHome(main, route, bundle) {
                 )
               ),
               election.description ? h("p", { text: election.description }) : null,
+              aspectPreview(election, h),
               h(
                 "div",
                 { class: "cluster" },
@@ -518,7 +588,22 @@ function renderHome(main, route, bundle) {
                       : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
                 canRegister
                   ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-                  : null
+                  : null,
+                h(
+                  "a",
+                  {
+                    class: election.state >= 4 ? "btn" : "btn btn-secondary",
+                    href: `/elections/${encodeURIComponent(election.id)}/results`,
+                    "data-nav": "",
+                    text: election.state >= 4 ? "Results" : "Results status",
+                  }
+                ),
+                h("a", {
+                  class: "btn btn-secondary",
+                  href: `/elections/${encodeURIComponent(election.id)}/info`,
+                  "data-nav": "",
+                  text: "Candidate / measure info",
+                })
               )
             );
           })
@@ -540,6 +625,9 @@ function renderHome(main, route, bundle) {
           { class: "notice", role: "status" },
           h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
           h("p", { text: walletLine }),
+          me?.user
+            ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
+            : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
           h(
             "p",
             {
@@ -556,6 +644,7 @@ function renderHome(main, route, bundle) {
           : null
       )
     ),
+    h("div", { id: "sign-in-root" }),
     list,
     h("hr", { class: "hr" }),
     h(
@@ -629,6 +718,26 @@ function renderHome(main, route, bundle) {
       renderDeviceStatus(walletRecord, me, store)
     )
   );
+  const signInRoot = main.querySelector("#sign-in-root");
+  if (signInRoot) {
+    signInRoot.setAttribute(
+      "data-lede",
+      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
+    );
+    mountSignInPanel(signInRoot);
+  }
+}
+
+function aspectPreview(election, h) {
+  const questions = questionsOf(election);
+  if (!questions.length) return null;
+  return h(
+    "ol",
+    { class: "aspect-preview" },
+    ...questions.slice(0, 4).map((q) =>
+      h("li", {}, h("span", { class: "aspect-type", text: typeLabel(q.type) }), " ", h("span", { text: q.prompt }))
+    )
+  );
 }
 
 function renderDeviceStatus(walletRecord, me, store) {
@@ -636,7 +745,7 @@ function renderDeviceStatus(walletRecord, me, store) {
   const nVote = Object.keys(store.votes).length;
   const rows = [
     h("dt", { text: "Passkey" }),
-    h("dd", { text: walletRecord ? "Present" : "Not created" }),
+    h("dd", { text: walletRecord?.staleWrap ? "v1 wrap — reset required" : walletRecord ? "Present" : "Not created" }),
     h("dt", { text: "Identity commitment" }),
     h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || "—" }),
     h("dt", { text: "Local address" }),
@@ -712,6 +821,24 @@ async function renderRoute(route) {
     } else if (route.name === "vote") {
       setTitle("Ballot");
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "results") {
+      setTitle("Results");
+      await renderResults(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "resultsIndex") {
+      setTitle("Results");
+      await renderResultsIndex(main, { ...ctx(), route });
+    } else if (route.name === "election-info") {
+      setTitle("Ballot information");
+      await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "option-info") {
+      setTitle("Option information");
+      await renderOptionInfo(main, {
+        ...ctx(),
+        route,
+        electionId: route.params.id,
+        questionId: route.params.questionId,
+        optionId: route.params.optionId,
+      });
     } else {
       setTitle("Not found");
       renderNotFound(main, route);
@@ -731,4 +858,7 @@ async function renderRoute(route) {
 
 if (typeof document !== "undefined") {
   startRouter(renderRoute);
+  window.addEventListener(SESSION_EVENT, () => {
+    renderRoute(currentRoute());
+  });
 }
