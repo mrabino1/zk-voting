@@ -156,6 +156,7 @@ describe('hourly polling-place unlinkability', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '2', electionId: id },
         encryptedBallot: '0xaa',
+        identityCommitment: '0xabc1',
       },
     });
     assert.equal(v2.status, 201, v2.json?.error);
@@ -174,6 +175,7 @@ describe('hourly polling-place unlinkability', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '1', electionId: id },
         encryptedBallot: '0xbb',
+        identityCommitment: '0xabc1',
       },
     });
     assert.equal(v1.status, 201, v1.json?.error);
@@ -183,6 +185,7 @@ describe('hourly polling-place unlinkability', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '2', electionId: id },
         encryptedBallot: '0xaa',
+        identityCommitment: '0xabc1',
       },
     });
     assert.equal(dup.status, 409);
@@ -344,6 +347,7 @@ describe('disclosure hour-boundary vote', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '7', electionId: id },
         encryptedBallot: '0xee',
+        identityCommitment: '0xabc1',
       },
     });
     assert.equal(vote.status, 201, vote.json?.error);

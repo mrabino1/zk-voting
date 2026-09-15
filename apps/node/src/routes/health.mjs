@@ -51,6 +51,12 @@ export function configRouter(deps) {
           oneActiveEthAddress: true,
           note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
         },
+        auth: {
+          allowDevLogin: Boolean(deps.config.allowDevLogin),
+          passkeyLogin: true,
+          web3Login: true,
+          note: 'Sign in with a registered passkey or a bound Ethereum wallet. Dev login is a local/test fallback only.',
+        },
       });
     }),
   );

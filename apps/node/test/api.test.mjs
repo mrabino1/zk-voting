@@ -234,12 +234,18 @@ describe('Republic Node API', () => {
     const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.json?.error);
     assert.equal(freeze.json.election.rollFrozen, true);
+    assert.equal(freeze.json.election.frozenEligibleRoot, freeze.json.election.eligibleRoot);
+    assert.equal(
+      freeze.json.election.frozenDisqualificationRoot,
+      freeze.json.election.disqualificationRoot,
+    );
 
     const { status, json } = await api('POST', `/api/elections/${electionId}/vote`, {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '99', electionId, root: freeze.json.election.eligibleRoot },
         encryptedBallot: '0xc0ffee',
+        identityCommitment: '0x1234',
         userId: 'should-never-be-stored',
         choice: 1,
         optionId: 'yes',
@@ -263,6 +269,7 @@ describe('Republic Node API', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '99', electionId },
         encryptedBallot: '0xc0ffee',
+        identityCommitment: '0x1234',
       },
     });
     assert.equal(status, 409);
@@ -325,6 +332,7 @@ describe('Republic Node API', () => {
         proof: { accept: true },
         publicInputs: { nullifier: 100, electionId },
         encryptedBallot: '0xdd',
+        identityCommitment: '0x1234',
       },
     });
     assert.equal(v2.status, 201, v2.json?.error);
@@ -406,6 +414,7 @@ describe('Republic Node API', () => {
     assert.equal(dq.json.disqualification.reasonCode, 1);
     const detail = await api('GET', `/api/elections/${id}`, { jar: voterJar });
     assert.equal(detail.json.me.disqualified, true);
+    assert.equal(detail.json.me.eligible, false);
     assert.equal(detail.json.me.reasonCode, 1);
   });
 
@@ -453,7 +462,8 @@ describe('Republic Node API', () => {
     assert.equal(freeze.status, 200, freeze.json?.error);
     const { status, json } = await api('POST', `/api/elections/${id}/vote`, {
       body: {
-        identityCommitment: 'should-not-land-on-vote',
+        identityCommitment: '0xabc1',
+        address: '0xdead',
         address: '0xdead',
         credentialId: 'cred',
         nullifier: '0xfeed',
