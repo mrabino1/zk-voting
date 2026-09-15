@@ -776,6 +776,60 @@ function serializeAttestation(credential, publicRecord) {
   };
 }
 
+export function serializeAssertion(credential) {
+  const res = credential.response;
+  return {
+    id: credential.id,
+    rawId: bytesToBase64url(credential.rawId),
+    type: credential.type,
+    authenticatorAttachment: credential.authenticatorAttachment || null,
+    clientExtensionResults: credential.getClientExtensionResults?.() || {},
+    response: {
+      clientDataJSON: bytesToBase64url(res.clientDataJSON),
+      authenticatorData: bytesToBase64url(res.authenticatorData),
+      signature: bytesToBase64url(res.signature),
+      userHandle: res.userHandle ? bytesToBase64url(res.userHandle) : null,
+    },
+  };
+}
+
+/**
+ * Discoverable (username-less) passkey login. Optional handle scopes
+ * allowCredentials when the authenticator is not resident-key capable.
+ */
+export async function loginPasskey({ api, handle } = {}) {
+  if (!hasWebAuthn()) throw new Error(webAuthnUnavailableMessage());
+  if (typeof api !== "function") throw new Error("Passkey login needs the Node API helper.");
+  const trimmed = String(handle || "").trim();
+  const server = await api("/api/auth/passkey/login/begin", {
+    method: "POST",
+    body: trimmed ? { handle: trimmed } : {},
+  });
+  const pk = server?.publicKey || server || {};
+  const allow = (pk.allowCredentials || []).map((c) => ({
+    type: c.type || "public-key",
+    id: coerceBytes(c.id),
+    transports: c.transports,
+  }));
+  const assertion = await enqueueWebAuthn(() =>
+    navigator.credentials.get({
+      publicKey: {
+        challenge: coerceBytes(pk.challenge),
+        timeout: pk.timeout || 120000,
+        rpId: pk.rpId || (typeof location !== "undefined" ? location.hostname : undefined),
+        userVerification: pk.userVerification || "preferred",
+        allowCredentials: allow.length ? allow : undefined,
+        extensions: pk.extensions || { prf: {} },
+      },
+    })
+  );
+  if (!assertion) throw new Error("Passkey sign-in was cancelled.");
+  return api("/api/auth/passkey/login/finish", {
+    method: "POST",
+    body: serializeAssertion(assertion),
+  });
+}
+
 /**
  * PRF-unwrap the seed, HMAC-SHA256 the UserOp hash, drop the key from memory.
  * Production signs with secp256k1 over the ERC-4337 UserOp hash (or WebAuthn P-256).

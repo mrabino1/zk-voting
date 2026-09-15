@@ -89,10 +89,41 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} tallyOperator Address allowed to submit tally proofs.
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
+ * @property {BallotQuestion[]} [questions] Canonical questions hashed into `ballotSpecHash`.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
  * @property {string} [tallyPubKeyX] P-256 pubkey X (bytes32 hex). Zero = no tally encryption key.
  * @property {string} [tallyPubKeyY] P-256 pubkey Y (bytes32 hex).
  * @property {number} [tallyScheme] 0 = SUM_ONLY (legacy). 1 = OPENS_BALLOTS.
+ */
+
+/**
+ * One external page linked from a ballot option's supporting-info card.
+ *
+ * @typedef {Object} BallotOptionLink
+ * @property {string} label
+ * @property {string} url http(s) URL
+ */
+
+/**
+ * One candidate / measure choice. Legacy ballots may be a plain string or
+ * `{ id, label }` only. Empty optional fields are omitted from the keccak
+ * preimage so old elections keep a stable `ballotSpecHash`.
+ *
+ * @typedef {Object} BallotOption
+ * @property {string} id
+ * @property {string} label Display name (candidate, Yes/No, measure choice).
+ * @property {string} [summary] Short blurb on the option list.
+ * @property {string} [body] Plain or markdown supporting information.
+ * @property {string} [imageUrl] Optional portrait / logo http(s) URL.
+ * @property {BallotOptionLink[]} [links] External pages (campaign site, full text).
+ */
+
+/**
+ * @typedef {Object} BallotQuestion
+ * @property {string} id
+ * @property {string} type SINGLE_CHOICE | MULTI_CHOICE | YES_NO | MEASURE | RANKED
+ * @property {string} prompt
+ * @property {BallotOption[]} options
  */
 
 /**

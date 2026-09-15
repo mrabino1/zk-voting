@@ -50,6 +50,12 @@ export function configRouter(deps) {
           production: false,
           note: 'opens_ballots uses a threshold-1 operator key (NON-PRODUCTION). sum_only still accepts any counts that sum to acceptedBallots. Circuit public signals (tally.circom) are versioned separately from Tally.sol mock inputs.',
         },
+        auth: {
+          allowDevLogin: Boolean(deps.config.allowDevLogin),
+          passkeyLogin: true,
+          web3Login: true,
+          note: 'Sign in with a registered passkey or a bound Ethereum wallet. Dev login is a local/test fallback only.',
+        },
       });
     }),
   );
