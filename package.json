@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "npm run build -w apps/node",
-    "test": "npm run test:node && npm run test:packages && npm run test:l2 && npm run test:contracts",
+    "test": "npm run test:node && npm run test:packages && npm run test:l2 && npm run test:contracts && npm run test:auditor",
     "test:node": "npm run test -w apps/node",
     "test:packages": "npm test -w @zk-voting/chain-client",
     "certify:l1": "node apps/node/scripts/certify-l1.mjs",
@@ -20,6 +20,8 @@
     "test:contracts": "cd smart-contracts && forge test --via-ir",
     "test:fuzz": "cd smart-contracts && forge test --via-ir --match-path 'test/fuzz/*' --fuzz-runs 256",
     "test:invariant": "cd smart-contracts && forge test --via-ir --match-path 'test/invariant/*'",
+    "test:auditor": "node --test tools/auditor/*.test.mjs",
+    "auditor": "node tools/auditor/cli.mjs",
     "dev": "npm run dev -w apps/node",
     "l2:sequencer": "node l2/sequencer/index.mjs",
     "l2:prover": "node l2/prover/index.mjs",

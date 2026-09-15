@@ -68,6 +68,9 @@ npm run test:packages
 
 # Civic L2
 npm run test:l2
+
+# Independent auditor (no Node private DB)
+npm run test:auditor
 ```
 
 Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer, solc **0.8.24**, and **`via_ir = true`** are set in `smart-contracts/foundry.toml`.

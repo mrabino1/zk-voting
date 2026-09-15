@@ -42,6 +42,14 @@ export function configRouter(deps) {
         chainId: deps.config.chainId,
         origins: deps.config.origins,
         chainConfigured: deps.chain.isConfigured(),
+        addresses: {
+          factory: deps.config.electionFactoryAddress || null,
+          ballotInbox: deps.config.ballotInboxAddress || null,
+        },
+        coercion: {
+          policy: 'one-ballot-per-nullifier',
+          receiptsProveChoice: false,
+        },
         l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
         l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds, {

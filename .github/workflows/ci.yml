@@ -11,7 +11,8 @@
 #   npm run test:packages      # @zk-voting/chain-client (L1 tally-hash; no keys)
 #   npm run test:l2            # skipped in CI if l2/test has no *.test.mjs
 #   npm run test:contracts     # forge test --via-ir
-#   npm test                   # node + packages + L2 + contracts
+#   npm run test:auditor       # tools/auditor
+#   npm test                   # node + packages + L2 + contracts + auditor
 #
 name: CI
 
@@ -99,6 +100,9 @@ jobs:
       - name: Forge tests
         run: npm run test:contracts
 
+      - name: Auditor tests
+        run: npm run test:auditor
+
       - name: How to run locally
         if: always()
         run: |
@@ -113,6 +117,7 @@ jobs:
             echo "npm run test:packages      # chain-client L1 helpers (no keys)"
             echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
             echo "npm run test:contracts     # forge test --via-ir"
+            echo "npm run test:auditor       # tools/auditor"
             echo "npm test                   # all of the above"
             echo "docker compose up -d --build"
             echo '```'

@@ -270,7 +270,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-      description: "Tally posted. Choice-level receipts are never shown to voters.",
+              description: "Tally posted. Receipts list hashes only and cannot prove which option you marked.",
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
@@ -322,10 +322,11 @@ export function recordRegistration(electionId, payload) {
 export function recordVoteReceipt(electionId, payload) {
   const store = readVoterStore();
   store.votes[String(electionId)] = {
-    at: new Date().toISOString(),
+    at: payload.at || new Date().toISOString(),
     ballotHash: payload.ballotHash,
     nullifier: payload.nullifier,
     userOpHash: payload.userOpHash,
+    choiceOmitted: true,
   };
   writeVoterStore(store);
 }

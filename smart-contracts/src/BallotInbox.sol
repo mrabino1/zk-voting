@@ -14,6 +14,12 @@ import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 /// @notice Accepts gasless vote proofs. `msg.sender` is the relayer/bundler.
 /// @dev There is NO function that takes a voter address. The passkey smart
 ///      account is not an argument; unlinkability depends on that.
+///
+///      Coercion slice (not MACI, not last-ballot-counts): a nullifier is
+///      accepted **once**. Any second `submitVote` for that nullifier reverts
+///      `NullifierUsed`, including a new ciphertext. Voters may change their
+///      mind privately on the ballot form before submit. Double voting remains
+///      impossible. Receipts list hashes only and cannot prove choice.
 contract BallotInbox is IBallotInbox {
     error ZeroAddress();
     error UnknownElection();
@@ -61,12 +67,12 @@ contract BallotInbox is IBallotInbox {
         _requireNotTallied(electionId);
         _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
 
-        uint256 nullifier = publicInputs[2];
-        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
-
         if (!IGroth16Verifier(verifier).verifyProof(a, b, c, publicInputs)) revert InvalidProof();
 
-        _recordAcceptance(electionId, nullifier, bytes32(publicInputs[3]));
+        uint256 nullifier = publicInputs[2];
+        bytes32 ballotHash = bytes32(publicInputs[3]);
+        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        _recordAcceptance(electionId, nullifier, ballotHash);
     }
 
     /// @inheritdoc IBallotInbox

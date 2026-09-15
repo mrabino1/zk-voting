@@ -124,7 +124,7 @@ export async function renderVote(main, ctx) {
       h(
         "p",
         {
-          text: "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
+          text: "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       ),
       h(
@@ -241,7 +241,7 @@ export async function renderVote(main, ctx) {
     if (state.error) children.push(h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })));
     if (state.info) children.push(h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })));
 
-    if (state.step === "receipt" && state.receipt) {
+    if (state.receipt && (state.step === "receipt" || election.state === 2)) {
       children.push(renderReceipt(state.receipt, h));
       children.push(
         h(
@@ -417,8 +417,9 @@ export async function renderVote(main, ctx) {
 
       let accepted = false;
       let message = "";
+      let res = null;
       try {
-        const res = await api(`/api/elections/${encodeURIComponent(election.id)}/vote`, {
+        res = await api(`/api/elections/${encodeURIComponent(election.id)}/vote`, {
           method: "POST",
           body,
         });
@@ -471,7 +472,7 @@ function renderReceipt(receipt, h) {
     h(
       "p",
       {
-        text: "This is not a proof of how you voted. Keep the hashes. Public explorer rows wait until the hour that contained this ballot closes, so leaving a voting office cannot be matched to a live jurisdiction tick. Anyone who demands to see your choice should be directed to the clerk’s coercion-resistance instructions.",
+        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
       }
     ),
     receipt.message ? h("p", { text: receipt.message }) : null,

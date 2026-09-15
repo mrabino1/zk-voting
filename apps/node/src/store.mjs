@@ -31,6 +31,13 @@ export function publicVoteRecord(vote) {
   };
 }
 
+/** Hourly-safe view of a stored vote. Null if the accept is still sealed. */
+export function publishedVoteSlice(vote, now, intervalSeconds) {
+  if (!vote) return null;
+  if (!isDisclosed(vote.acceptedAt, now, intervalSeconds)) return null;
+  return vote;
+}
+
 function emptyData() {
   return {
     meta: {
@@ -919,9 +926,15 @@ export class Store {
   }
 
   nullifierUsed(electionId, nullifier) {
+    return Boolean(this.findVote(electionId, nullifier));
+  }
+
+  findVote(electionId, nullifier) {
     const key = toBytes32(nullifier);
-    return this.data.votes.some(
-      (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+    return (
+      this.data.votes.find(
+        (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+      ) || null
     );
   }
 
@@ -929,17 +942,22 @@ export class Store {
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
    * they wait for hourly disclosure. No passkey user id, no choice.
+   *
+   * One ballot per nullifier: any second submit (including a new ciphertext)
+   * is 409 NULLIFIER_USED. Double voting is impossible.
    */
   async acceptVote(vote, envelope) {
-    if (this.nullifierUsed(vote.electionId, vote.nullifier)) {
+    const existing = this.findVote(vote.electionId, vote.nullifier);
+    if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
     const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
       ? Math.floor(Number(vote.acceptedAt))
       : Math.floor(Date.now() / 1000);
+    const ballotHash = toBytes32(vote.ballotHash);
     const record = {
       nullifier: toBytes32(vote.nullifier),
-      ballotHash: toBytes32(vote.ballotHash),
+      ballotHash,
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
@@ -963,8 +981,15 @@ export class Store {
     return this.data.votes.filter((v) => String(v.electionId) === String(electionId));
   }
 
+  /**
+   * Votes whose accept is past the disclosure horizon. Each nullifier appears
+   * at most once.
+   */
   listPublishedVotes(electionId, now, intervalSeconds) {
-    return this.listVotes(electionId).filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds));
+    return this.listVotes(electionId).flatMap((vote) => {
+      const slice = publishedVoteSlice(vote, now, intervalSeconds);
+      return slice ? [slice] : [];
+    });
   }
 
   publishedAcceptedBallots(electionId, now, intervalSeconds) {

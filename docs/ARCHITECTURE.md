@@ -94,9 +94,12 @@ When they vote:
 
 - Circuit proves: "I know a trapdoor whose commitment is in the eligible
   tree, I am **not** in the disqualification tree, this ballot is well-formed."
-- Reveals `nullifier = poseidon(nullifierSecret, electionId)` so they cannot
-  vote twice. The nullifier is **unlinkable** to the smart-account address
-  and to the civil identity. (Circom `Hasher()` is a stand-in until Poseidon.)
+- Reveals `nullifier = poseidon(nullifierSecret, electionId)` so they are counted
+  once. That nullifier is accepted **once**. A second `submitVote`, including a
+  new ciphertext, reverts `NullifierUsed`. Voters may change their mind
+  privately on the ballot form **before** submit. The nullifier is **unlinkable**
+  to the smart-account address and to the civil identity. (Circom `Hasher()` is
+  a stand-in until Poseidon.)
 - Ballot is an **ElGamal / hashed commitment** ciphertext posted with the
   proof. Choice is not a public field.
 - On the civic sequencer, the transaction origin is the sequencer / bundler
@@ -104,14 +107,18 @@ When they vote:
 
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
+The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
+ciphertext. Double voting remains impossible. This is **not** MACI and **not**
+last-vote-counts: a coercer who can force the first (and only) submit still
+wins that ballot.
 
 ### Hourly public disclosure (polling-place unlinkability)
 
-Votes are **accepted immediately** (nullifier uniqueness). Public proof of
-those votes — explorer rows, jurisdiction `acceptedBallots`, any dashboard
-turnout tick — is published **only after the hour that contained the vote
-has closed** (UTC). At 14:23, only events with timestamp `< 14:00` are
-public; a 14:05 vote appears at 15:00.
+Votes are **accepted immediately** (each nullifier **once**; a second ballot is
+rejected). Public proof of those votes — explorer rows, jurisdiction
+`acceptedBallots`, any dashboard turnout tick — is published **only after the
+hour that contained the vote has closed** (UTC). At 14:23, only events with
+timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 
 - Do not leak a pending-per-election count (that still identifies the
   jurisdiction).
@@ -151,6 +158,7 @@ zk-voting/
   docs/OPERATOR.md
   docs/BLOCK_EXPLORER.md
   docs/PASSKEYS.md
+  docs/AUDITOR.md
   smart-contracts/                   (Foundry)
     foundry.toml                     (solc 0.8.24, via_ir = true, fuzz 256)
     src/
@@ -174,6 +182,7 @@ zk-voting/
   circuits/                         (circom vote + tally + identity)
   l2/                               (civic JSON sequencer, prover, genesis)
   apps/node/                        (Express API + vanilla JS pages)
+  tools/auditor/                    export + verify public artifacts
   packages/
     types/
     proof-helpers/
@@ -331,11 +340,14 @@ Public inputs **must** be length ≥ 5, same order as `@zk-voting/proof-helpers`
 
 `[root, disqRoot, nullifier, ballotHash, electionId]`
 
-Rejects when: verifier returns false; nullifier used; outside window; roll not frozen;
-election mismatch; eligible / disqualification root in the proof does not match;
+Rejects when: verifier returns false; nullifier already used (`NullifierUsed`),
+including a new `ballotHash`; outside window; roll not frozen; election mismatch;
+eligible / disqualification root in the proof does not match;
 `ballotHash` does not match `keccak256(encryptedBallot)`.
 
-Relayer/bundler is the `msg.sender`. That is intentional.
+A nullifier is accepted **once**. `acceptedBallots` counts unique nullifiers.
+Double voting is impossible. Event: `VoteAccepted`. Relayer/bundler is
+`msg.sender`. That is intentional.
 
 ### `IGroth16Verifier`
 
@@ -445,7 +457,8 @@ when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
 - `VoterRegistry.t.sol` — insert, cap, duplicates.
 - `PersonRegistry.t.sol` — many verified addresses, one active, cannot steal.
 - `Disqualification.t.sol` — codes, revoke, frozen roll.
-- `BallotInbox.t.sol` — happy path with MockVerifier, double-vote, window.
+- `BallotInbox.t.sol` — happy path with MockVerifier, double-vote (same and different ciphertext), window.
+- `CoercionResistance.t.sol` — second ballot reverts; on-chain state is nullifier + hash only.
 - `PrivacyUnlinkability.t.sol` — asserting wallet address ≠ leaf; nullifier
   uniqueness; msg.sender is relayer.
 - `Paymaster.t.sol` — gasless path.
@@ -459,7 +472,9 @@ when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
 **Invariants (must hold):**
 
 1. `acceptedBallots <= participantCount` (or == registered eligible who voted).
-2. A nullifier is used at most once per election.
+2. A nullifier is **accepted** at most once per election. A second ballot,
+   including a later different `ballotHash`, reverts. Double voting is
+   impossible. `acceptedBallots` equals unique spent nullifiers.
 3. No vote is accepted outside `[startTime, cutoffTime)`.
 4. No vote is accepted if `!rollFrozen`.
 5. If `maxParticipants > 0`, `participantCount <= maxParticipants`.
@@ -577,6 +592,7 @@ POST /api/elections/:id/revoke
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; L1 postResult if env set)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
+GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
 POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
 DELETE /api/jurisdictions/:id/roles
 GET  /api/me
@@ -725,6 +741,7 @@ generic EVM logs.
 - Tests must pass with `forge test --via-ir` using MockVerifier.
 - `npm test -w apps/node` for API tests (`NODE_ENV=test node --test`).
 - `npm run test:l2` for civic sequencer tests.
+- `npm run test:auditor` for the independent verifier (no Node DB).
 
 ---
 

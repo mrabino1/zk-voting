@@ -95,13 +95,15 @@ contract Ghost {
 
     function _recordVote(uint256 electionId, uint256 nullifier, bool frozen) internal {
         if (nullifierUsed[electionId][nullifier]) {
+            // Chain must reject a second submit. If a call still succeeds,
+            // the unique-spend invariant fails.
             duplicateNullifiers += 1;
         } else {
             nullifierUsed[electionId][nullifier] = true;
             _nullifiersOf[electionId].push(nullifier);
+            votesAccepted += 1;
+            acceptedByElection[electionId] += 1;
         }
-        votesAccepted += 1;
-        acceptedByElection[electionId] += 1;
         uint64 start = startOf[electionId];
         uint64 cutoff = cutoffOf[electionId];
         if (block.timestamp < start || block.timestamp >= cutoff) {

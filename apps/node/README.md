@@ -26,12 +26,17 @@ Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
 as `better-sqlite3` are **not** used.
 
 Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
-The Node never writes a passkey user id onto the same record as an encrypted
-ballot or a choice. The UI must not print “I voted for X”. Public dashboards
-and the explorer show vote proofs only after the hour that contained the vote
-has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests). The
-explorer snapshot lists last closed hour, ballots disclosed so far, and a
-countdown to the next hour close — never a pending-per-election count.
+One ballot per nullifier: a later ciphertext for the same nullifier is rejected
+(`NULLIFIER_USED`). Double voting is impossible. The Node never writes a
+passkey user id onto the same record as an encrypted ballot or a choice. The UI
+must not print “I voted for X” (receipts are hashes only). Voters may change
+their mind on the ballot form before submit; after accept they cannot recast.
+Public dashboards and the explorer show vote proofs only after the hour that
+contained the vote has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0`
+in tests). The explorer snapshot lists last closed hour, ballots disclosed so far,
+and a countdown to the next hour close — never a pending-per-election count.
+Independent auditors use `GET /api/elections/:id/artifacts` or `tools/auditor`
+(see `/docs/AUDITOR.md`) — never `apps/node/data/`.
 
 ---
 
@@ -93,6 +98,7 @@ Empty optional fields are omitted so older elections without metadata keep worki
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
+| `ELECTION_FACTORY_ADDRESS` | _empty_ | Published on `GET /api/config` and auditor artifacts |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
 | `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postResult`. Unset → tally still works (no-op certify) |
 | `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
@@ -134,6 +140,7 @@ POST /api/elections/:id/disqualify  (disqualification officer of that jurisdicti
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; attempts L1 certify if env set)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 postResult; no-op if env unset)
 GET  /api/elections/:id/l1
+GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)
 POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/tally on that jurisdiction)
 DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
 GET  /api/me

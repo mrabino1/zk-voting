@@ -32,7 +32,7 @@ These are **meant** to be public. The explorer should render them in plain langu
 | --- | --- |
 | Blocks | Number, hash, parent, timestamp, state root, sequencer address, tx count. |
 | Registration | `identityCommitment` (field element / bytes32) inserted into the election tree. Leaf **index** if the contract emits it. Never a legal name. |
-| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour that contained the vote has closed**. Timestamp is the hour boundary, not the minute they voted. |
+| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour that contained the vote has closed**. Timestamp is the hour boundary, not the minute they voted. Each nullifier appears once; a second ballot is not accepted. |
 | Disqualification | `identityCommitment`, `electionId`, **reason code** (and label, e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revoke events. |
 | Roll freeze | Eligible root, disqualification root, clerk, time. |
 | Tally | Per-option **counts** (after a valid tally proof), `countsHash`, operator. |
@@ -43,7 +43,7 @@ Live **counts that are safe to show** before tally: number registered, number di
 
 ### Hourly disclosure (polling-place unlinkability)
 
-Votes are accepted immediately so a nullifier cannot be reused. Proof of those votes is public only once the UTC hour that contained them has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
+Votes are accepted immediately so a nullifier is unique. A second ciphertext for the same nullifier is rejected (`NullifierUsed`). Double voting is impossible. Proof of those votes is public only once the UTC hour that contained them has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
 
 - At 14:23, only events with timestamp `< 14:00` are public. A 14:05 vote appears at 15:00. A vote at **exactly** 14:00:00 is in the 14:00 hour and appears at 15:00.
 - All votes from that hour are lumped into **one** disclosure block. Public timestamp is the hour end. Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.

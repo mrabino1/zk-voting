@@ -16,6 +16,7 @@ import { emptyTree } from '../merkle.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash } from '../l1Certify.mjs';
 
 function unixSeconds(value, fallback) {
@@ -261,6 +262,15 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/artifacts',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(buildAuditorPack(election, deps));
+    }),
+  );
+
+  router.get(
     '/:id/envelopes',
     requireAuth,
     requireElectionRole(store, 'tally_operator'),
@@ -374,8 +384,8 @@ export function electionsRouter(deps) {
         nextPublishAt: result.nextPublishAt,
         vote: result.vote,
         message: result.published
-          ? 'Ballot accepted. Choice is not stored in the clear.'
-          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.',
+          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.'
+          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.',
         nfp: true,
       });
     }),

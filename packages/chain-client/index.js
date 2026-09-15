@@ -113,6 +113,16 @@ const INBOX_ABI = [
     inputs: [{ name: "electionId", type: "uint256" }],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "ballotHashOf",
+    stateMutability: "view",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "nullifier", type: "uint256" },
+    ],
+    outputs: [{ type: "bytes32" }],
+  },
 ];
 
 const ELECTION_ABI = [
