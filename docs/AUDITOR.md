@@ -4,7 +4,7 @@
 
 This pack lets an observer, losing candidate, or court **export public election artifacts** and **verify tally / uniqueness invariants offline** without the Node’s private database (`apps/node/data/republic.json`). The Node is allowed to be down. Canonical truth is the chain; the Node may publish a convenience JSON pack of already-public fields.
 
-This is roadmap item 9’s auditor slice. It does **not** replace a Groth16 ceremony or Poseidon hasher.
+This is the roadmap auditor slice (item 10). It does **not** replace a Groth16 ceremony or Poseidon hasher.
 
 ---
 
