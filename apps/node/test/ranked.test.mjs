@@ -314,6 +314,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     });
     assert.equal(ok.status, 200, ok.json?.error);
     assert.equal(ok.json.election.tally.ballotMethod, 'plurality');
-    assert.equal(ok.json.election.tally.questions, undefined);
+    assert.equal(ok.json.election.tally.questions[0].tallyMethod, 'plurality');
+    assert.equal(ok.json.election.tally.questions[0].winner, undefined);
   });
 });

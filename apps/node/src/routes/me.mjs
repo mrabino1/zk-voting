@@ -6,8 +6,9 @@ import { asyncHandler } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
 
-function expandedRoles(role) {
-  if (role === 'platform_admin') {
+function expandedRoles(store, user) {
+  if (!user) return [];
+  if (user.role === 'platform_admin') {
     return [
       'platform_admin',
       'CLERK',
@@ -16,7 +17,12 @@ function expandedRoles(role) {
       'TALLY_OPERATOR',
     ];
   }
-  return [String(role || '').toUpperCase()];
+  const set = new Set();
+  if (user.role) set.add(String(user.role).toUpperCase());
+  for (const grant of store.listJurisdictionRolesForUser(user)) {
+    set.add(String(grant.role).toUpperCase());
+  }
+  return [...set];
 }
 
 function electionsMap(store, user) {
@@ -40,13 +46,15 @@ export function meRouter(deps) {
   function mePayload(req) {
     const notifications = req.user ? store.listNotifications(req.user.id) : [];
     const user = req.publicUser;
-    const roles = user ? expandedRoles(user.role) : [];
+    const jurisdictionRoles = req.user ? store.listJurisdictionRolesForUser(req.user) : [];
+    const roles = user ? expandedRoles(store, req.user) : [];
     const elections = electionsMap(store, req.user);
     const me = user
       ? {
           ...user,
           name: user.handle,
           roles,
+          jurisdictionRoles,
           elections,
           identity: publicIdentity(req.user),
         }
@@ -56,6 +64,7 @@ export function meRouter(deps) {
       user,
       me,
       roles,
+      jurisdictionRoles,
       elections,
       identity: req.user ? publicIdentity(req.user) : null,
       unreadCount: notifications.filter((n) => !n.read).length,

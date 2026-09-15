@@ -12,7 +12,7 @@ import { toBytes32 } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import { publicVoteRecord } from './store.mjs';
-import { extractRankingPayload } from './ballot.mjs';
+import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from './ballot.mjs';
 
 function toEncryptedHex(encryptedBallot) {
   if (typeof encryptedBallot === 'string' && encryptedBallot.startsWith('0x')) {
@@ -156,6 +156,10 @@ function assertBoundRoots(election, parsed, store) {
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
   const election = store.requireElection(electionId);
   const parsed = parseVoteBody(body, election.id);
+  const questions = election.questions || [];
+  const answers = answersFromVoteBody(body, parsed.encryptedBallot);
+  if (answers) assertBallotAnswers(questions, answers);
+  const rankingPayload = extractRankingPayload(election, body, parsed.encryptedBallot);
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
@@ -186,8 +190,6 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       encryptedBallot: parsed.encryptedBallot,
     });
   }
-
-  const rankingPayload = extractRankingPayload(election, body, parsed.encryptedBallot);
 
   const vote = await store.acceptVote(
     {

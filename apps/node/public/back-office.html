@@ -57,10 +57,10 @@
         <h1>Back office</h1>
         <p class="lede">
           Clerks stand up elections. Registrars insert identity commitments (never names).
-          Disqualification officers apply the public reason catalog. Tally operators post counts
-          or compute instant-runoff from ranked ballots. Choice plaintext never appears on a voter
-          receipt. Turnout and vote proofs on every dashboard wait until the hour that contained the
-          ballot has closed — a person leaving a voting office cannot be matched to a live increase.
+          Disqualification officers apply the public reason catalog. Tally operators post counts.
+          Choice plaintext never appears here. Turnout and vote proofs on every dashboard wait
+          until the hour that contained the ballot has closed — a person leaving a voting office
+          cannot be matched to a live increase.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
@@ -90,9 +90,8 @@
           <h2 id="clerk-heading">Election clerk</h2>
           <span class="pill" id="role-clerk">clerk</span>
         </header>
-        <p class="field-hint">Create or edit an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited. Choose plurality (default) or ranked choice (IRV).</p>
+        <p class="field-hint">Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited. Choose plurality (default) or ranked choice (IRV).</p>
         <form id="form-election" class="form-grid">
-          <input type="hidden" id="e-id" value="" />
           <div class="field">
             <label class="field-label" for="e-jurisdiction">Jurisdiction <span class="req">*</span></label>
             <select id="e-jurisdiction" name="jurisdictionId" required></select>
@@ -100,14 +99,6 @@
           <div class="field">
             <label class="field-label" for="e-title">Title <span class="req">*</span></label>
             <input id="e-title" name="title" required maxlength="200" placeholder="General election 2026" />
-          </div>
-          <div class="field">
-            <label class="field-label" for="e-method">Ballot method <span class="req">*</span></label>
-            <select id="e-method" name="ballotMethod" required>
-              <option value="plurality" selected>plurality — first past the post (default)</option>
-              <option value="ranked_choice">ranked_choice — instant-runoff (IRV)</option>
-            </select>
-            <span class="field-hint">Election default. YES_NO stays plurality. RANKED questions always use IRV. On-chain v1 may keep this only inside ballotSpecHash.</span>
           </div>
           <div class="field">
             <label class="field-label" for="e-uri">Metadata URI</label>
@@ -141,13 +132,21 @@
               </select>
             </div>
           </div>
+          <div class="field">
+            <label class="field-label" for="e-method">Ballot method</label>
+            <select id="e-method" name="ballotMethod">
+              <option value="plurality" selected>plurality — first past the post</option>
+              <option value="ranked_choice">ranked_choice — instant-runoff (IRV)</option>
+            </select>
+            <span class="field-hint">Election default. YES_NO stays plurality. RANKED questions always use IRV. On-chain v1 may keep this only inside ballotSpecHash.</span>
+          </div>
           <div class="grid-2">
             <div class="field">
               <label class="field-label" for="e-load">Load existing ballot</label>
               <select id="e-load" name="loadElectionId">
                 <option value="">New election…</option>
               </select>
-              <span class="field-hint">Created elections can be edited until the roll is frozen. Frozen ballots stay hashed as-is. RANKED questions always use IRV.</span>
+              <span class="field-hint">Created elections can be edited until the roll is frozen. Frozen ballots stay hashed as-is.</span>
             </div>
             <div class="field" style="justify-content:flex-end">
               <span class="field-label">&nbsp;</span>
@@ -173,16 +172,13 @@
               <span class="field-hint">
                 Options may be a string, <code>{id,label}</code>, or full metadata
                 (<code>summary</code>, <code>body</code>, <code>imageUrl</code>, <code>links: [{label,url}]</code>).
-                RANKED questions use instant-runoff; option order is the printed ballot order.
-                The Node canonicalizes and keccak-hashes title + questions (IRV via type
-                <code>RANKED</code> / per-question <code>ballotMethod</code>).
+                The Node canonicalizes and keccak-hashes this with the title.
               </span>
             </div>
           </details>
           <div class="actions">
-            <button class="btn" type="submit" id="btn-save-election">Create election</button>
+            <button class="btn" type="submit">Create election</button>
             <button class="btn btn-secondary" type="button" id="btn-save-ballot" hidden>Save ballot changes</button>
-            <button class="btn btn-secondary" type="button" id="btn-reset-election">New election</button>
           </div>
           <div class="flash" id="flash-election" role="status"></div>
         </form>
@@ -360,16 +356,17 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Plurality: post per-option counts (concatenated per question). Sum must equal accepted ballots after cutoff (the operator inbox, not the hourly public snapshot). Ranked choice: compute IRV from accepted ranking envelopes; the Node stores the winner and a round transcript. You cannot invent votes.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). You cannot invent votes. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
             <select id="t-election" name="electionId" required></select>
           </div>
+          <div id="tally-aspects" class="aspects-editor"></div>
           <div class="field">
-            <label class="field-label" for="t-counts">Counts JSON array</label>
+            <label class="field-label" for="t-counts">Counts JSON</label>
             <textarea id="t-counts" name="counts" spellcheck="false">[0, 0]</textarea>
-            <span class="field-hint">Plurality example: two YES_NO options → <code>[noCount, yesCount]</code>. For ranked_choice, leave blank to compute IRV; if you post counts they must match first-round first preferences.</span>
+            <span class="field-hint" id="t-counts-hint">Concatenated plurality options in ballot order, or use the per-question fields above. For an all-ranked ballot, leave blank to compute IRV from envelopes.</span>
           </div>
           <details>
             <summary>Optional Groth16 proof (mock path may omit)</summary>
@@ -381,6 +378,7 @@
           <div class="actions">
             <button class="btn" type="submit">Post counts</button>
             <button class="btn btn-secondary" type="button" id="btn-irv">Compute IRV from ballots</button>
+            <button class="btn btn-secondary" type="button" id="btn-certify-l1">Certify hash on L1</button>
             <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
             <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
           </div>

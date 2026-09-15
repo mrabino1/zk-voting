@@ -175,15 +175,16 @@ export class Explorer {
   async recordVote(payload, now, intervalSeconds) {
     const body = votePayload(payload);
     await this.refresh();
+    this.chain.sealed = this.chain.sealed || [];
+
     if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) {
       return { duplicate: true, published: Boolean(this.findByNullifier(body.nullifier)) };
     }
+
     const interval = Number(intervalSeconds) || 0;
     if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }
-    await this.refresh();
-    this.chain.sealed = this.chain.sealed || [];
     this.chain.sealed.push({ receivedAt: now, payload: body });
     await this.persist();
     return { sealed: true, published: false };
@@ -213,9 +214,10 @@ export class Explorer {
     const published = [];
     const buckets = [...groups.keys()].sort((a, b) => a - b);
     for (const bucket of buckets) {
-      const items = groups.get(bucket).filter(
-        (item) => !this.findByNullifier(payloadNullifier(item.payload)),
-      );
+      const items = groups.get(bucket).filter((item) => {
+        const p = votePayload(item.payload);
+        return !this.findByNullifier(p.nullifier);
+      });
       if (!items.length) continue;
       items.sort((a, b) =>
         payloadNullifier(a.payload).localeCompare(payloadNullifier(b.payload), 'en'),
@@ -260,16 +262,11 @@ export class Explorer {
     for (const row of rows) {
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
-      if (isDelayedPublicType(type)) {
+      if (isDelayedPublicType(type) || type === 'vote_superseded') {
         const payload = votePayload(row.payload);
         if (!payload.nullifier) continue;
-        if (this.findByNullifier(payload.nullifier)) continue;
+        if (this.findByNullifier(payload.nullifier) || this.sealedHasNullifier(payload.nullifier)) continue;
         if (l2Delayed) {
-          await this.refresh();
-          this.chain.sealed = (this.chain.sealed || []).filter(
-            (item) => !sameNullifier(payloadNullifier(item.payload || {}), payload.nullifier),
-          );
-          await this.persist();
           await this.append('vote', payload, { timestamp: blockTs || now });
           imported += 1;
         } else {

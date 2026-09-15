@@ -7,6 +7,7 @@ import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { labeledTally, questionsOf, typeLabel } from "./ballot.js";
 import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
 
@@ -202,12 +203,11 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     questionCount: Number(raw.questionCount ?? params.questionCount ?? questions.length) || questions.length,
     rollFrozen: Boolean(raw.rollFrozen) || state >= 1,
     ballotSpecHash: raw.ballotSpecHash || params.ballotSpecHash || null,
+    ballotMethod: raw.ballotMethod || params.ballotMethod || "plurality",
     eligibleRoot: raw.eligibleRoot || null,
     disqualificationRoot: raw.disqualificationRoot || null,
     description: raw.description || raw.summary || "",
     questions,
-    ballotMethod: raw.ballotMethod || params.ballotMethod || "plurality",
-    tally: raw.tally || null,
   };
 }
 
@@ -223,10 +223,10 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       cutoffTime: now + 86400 * 12,
       participantCount: 1840,
       maxParticipants: 0,
-      questionCount: 3,
+      questionCount: 2,
       rollFrozen: true,
       ballotSpecHash: "0x" + "ab".repeat(32),
-      description: "Mayor is ranked-choice (IRV). Council at-large and one ordinance.",
+      description: "Mayor is not on this ballot. Council at-large and one ordinance.",
       questions: SAMPLE_QUESTIONS,
     },
     {
@@ -271,7 +271,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-      description: "Tally posted. Choice-level receipts are never shown to voters.",
+              description: "Tally posted. Receipts list hashes only and cannot prove which option you marked.",
       questions: [SAMPLE_QUESTIONS[0]],
     },
     {
@@ -284,7 +284,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       cutoffTime: now + 86400 * 21,
       participantCount: 40,
       maxParticipants: 0,
-      questionCount: 3,
+      questionCount: 2,
       rollFrozen: false,
       description: "Registration is open. The clerk has not frozen the roll.",
       questions: SAMPLE_QUESTIONS,
@@ -323,10 +323,11 @@ export function recordRegistration(electionId, payload) {
 export function recordVoteReceipt(electionId, payload) {
   const store = readVoterStore();
   store.votes[String(electionId)] = {
-    at: new Date().toISOString(),
+    at: payload.at || new Date().toISOString(),
     ballotHash: payload.ballotHash,
     nullifier: payload.nullifier,
     userOpHash: payload.userOpHash,
+    choiceOmitted: true,
   };
   writeVoterStore(store);
 }
@@ -390,7 +391,6 @@ export async function loadElection(id) {
     const raw = data?.election || data;
     const normalized = normalizeElection(raw);
     if (normalized?.id) {
-      if (!normalized.questions?.length) normalized.questions = SAMPLE_QUESTIONS;
       return { election: normalized, source: "api" };
     }
   } catch {
@@ -460,9 +460,11 @@ function ctx() {
 function renderHome(main, route, bundle) {
   const { elections, source, me, walletRecord, store } = bundle;
   const openCount = elections.filter((e) => e.state === 2).length;
-  const walletLine = walletRecord
-    ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
-    : "No passkey on this device yet.";
+  const walletLine = walletRecord?.staleWrap
+    ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
+    : walletRecord
+      ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
+      : "No passkey on this device yet.";
 
   const list =
     elections.length === 0
@@ -509,23 +511,10 @@ function renderHome(main, route, bundle) {
                   {},
                   h("span", { class: "lbl", text: "Questions" }),
                   h("span", { text: String(election.questionCount || election.questions?.length || "—") })
-                ),
-                h(
-                  "li",
-                  {},
-                  h("span", { class: "lbl", text: "Method" }),
-                  h(
-                    "span",
-                    {
-                      text:
-                        String(election.ballotMethod || "").toLowerCase() === "ranked_choice"
-                          ? "Ranked choice (IRV)"
-                          : "Plurality",
-                    }
-                  )
                 )
               ),
               election.description ? h("p", { text: election.description }) : null,
+              aspectPreview(election, h),
               h(
                 "div",
                 { class: "cluster" },
@@ -672,12 +661,24 @@ function renderHome(main, route, bundle) {
   }
 }
 
+function aspectPreview(election, h) {
+  const questions = questionsOf(election);
+  if (!questions.length) return null;
+  return h(
+    "ol",
+    { class: "aspect-preview" },
+    ...questions.slice(0, 4).map((q) =>
+      h("li", {}, h("span", { class: "aspect-type", text: typeLabel(q.type) }), " ", h("span", { text: q.prompt }))
+    )
+  );
+}
+
 function renderDeviceStatus(walletRecord, me, store) {
   const nReg = Object.keys(store.registrations).length;
   const nVote = Object.keys(store.votes).length;
   const rows = [
     h("dt", { text: "Passkey" }),
-    h("dd", { text: walletRecord ? "Present" : "Not created" }),
+    h("dd", { text: walletRecord?.staleWrap ? "v1 wrap — reset required" : walletRecord ? "Present" : "Not created" }),
     h("dt", { text: "Identity commitment" }),
     h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || "—" }),
     h("dt", { text: "Local address" }),
@@ -727,88 +728,159 @@ function renderNotFound(main, route) {
   );
 }
 
-function renderResults(main, election, source) {
+async function renderResults(main, ctx) {
+  const { h, loadElection, formatTime, electionStateInfo, electionId } = ctx;
+  const { election, source } = await loadElection(electionId);
+  if (!election) {
+    renderNotFound(main, { path: `/elections/${electionId}/results` });
+    return;
+  }
   const st = electionStateInfo(election.state);
-  const tally = election.tally;
-  const irvQuestions = Array.isArray(tally?.questions) ? tally.questions.filter((q) => q.ballotMethod === "ranked_choice") : [];
-  const children = [
+  const questions = questionsOf(election);
+  const tally = labeledTally(election);
+  const rows = [];
+
+  if (!questions.length) {
+    rows.push(h("div", { class: "notice notice-warn" }, h("p", { text: "No questions are published for this election." })));
+  } else if (!tally) {
+    rows.push(
+      h("div", { class: "notice notice-warn", role: "status" }, h("p", { text: "A certified tally has not been posted yet. Aspects on this ballot:" }))
+    );
+    for (const [i, q] of questions.entries()) {
+      rows.push(resultQuestionCard(h, q, i, questions.length, null, election));
+    }
+  } else {
+    const labeled = tally.questions?.length ? tally.questions : [];
+    if (labeled.length) {
+      for (const [i, q] of labeled.entries()) {
+        rows.push(resultQuestionCard(h, q, i, labeled.length, q, election));
+      }
+    } else {
+      rows.push(h("p", { text: `Flat counts: ${JSON.stringify(tally.counts || [])}` }));
+    }
+  }
+
+  main.replaceChildren(
     h(
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: election.jurisdiction }),
-      h("h1", { text: "Results" }),
+      h("h1", { text: "Certified results" }),
       h("p", { class: "lede", text: election.title }),
-      h(
-        "p",
-        { class: "cluster" },
-        h("span", { class: `status-pill ${st.className}`, text: st.label }),
         h(
-          "span",
-          {
-            class: "status-pill",
-            text: election.ballotMethod === "ranked_choice" ? "Ranked choice (IRV)" : "Plurality",
-          }
-        )
+          "p",
+          { class: "cluster" },
+          h("span", { class: `status-pill ${st.className}`, text: st.label }),
+          source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null,
+          election.ballotMethod === "ranked_choice" || (tally && tally.ballotMethod === "ranked_choice")
+            ? h("span", { class: "status-pill", text: "Ranked choice (IRV)" })
+            : null
+        ),
+      h(
+        "ul",
+        { class: "meta-list" },
+        h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        h("li", {}, h("span", { class: "lbl", text: "Public accepted ballots" }), h("span", { text: String(election.acceptedBallots ?? "—") })),
+        h("li", {}, h("span", { class: "lbl", text: "Questions" }), h("span", { text: String(questions.length || election.questionCount || "—") })),
+        tally?.postedAt ? h("li", {}, h("span", { class: "lbl", text: "Tally posted" }), h("span", { text: formatTime(tally.postedAt) })) : null
       )
     ),
-  ];
-  if (!tally) {
-    children.push(
-      h(
-        "div",
-        { class: "notice notice-warn" },
-        h("p", { text: "A certified tally has not been posted yet. Individual rankings are never shown here." })
-      )
-    );
-  } else {
-    children.push(
-      h(
-        "section",
-        { class: "panel" },
-        h("h2", { text: "Posted counts" }),
-        h("p", { class: "field-hint", text: "For ranked questions these are first-round first preferences. The IRV transcript is below." }),
-        h("p", { class: "hex", text: JSON.stringify(tally.counts) }),
-        h("p", { class: "field-hint", text: tally.postedAt ? `Posted ${tally.postedAt}` : "" })
-      )
-    );
-    for (const q of irvQuestions) {
-      children.push(
-        h(
-          "section",
-          { class: "panel" },
-          h("h2", { text: q.prompt || q.questionId }),
-          h("p", { text: q.winnerLabel || q.winner ? `Winner: ${q.winnerLabel || q.winner}` : "No winner (exhausted or empty)." }),
-          q.tieBroken ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." }) : null,
+    ...rows,
+    h(
+      "p",
+      { class: "cluster" },
+      h("a", { class: "btn", href: "/", "data-nav": "", text: "Elections" }),
+      h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Ballot" }),
+      h("a", { class: "btn btn-secondary", href: `/explorer#/election/${encodeURIComponent(election.id)}`, text: "Explorer" })
+    )
+  );
+}
+
+function resultQuestionCard(h, question, index, total, tallied, election) {
+  const max = tallied?.options?.length
+    ? Math.max(Number(election?.acceptedBallots) || 0, ...tallied.options.map((o) => Number(o.count) || 0), 1)
+    : 1;
+  return h(
+    "section",
+    { class: "question result-aspect", "aria-labelledby": `result-${question.id}` },
+    h(
+      "h2",
+      { id: `result-${question.id}` },
+      h("span", { class: "aspect-kicker", text: `Question ${index + 1} of ${total} · ${typeLabel(question.type)}` }),
+      h("span", { class: "aspect-prompt", text: question.prompt })
+    ),
+    question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+    tallied && tallied.tallied === false
+      ? h("p", { class: "field-hint", text: tallied.note || "Ranked-choice / IRV was not computed for this question." })
+      : null,
+    tallied && (tallied.winner || tallied.winnerLabel)
+      ? h("p", { text: `Winner: ${tallied.winnerLabel || tallied.winner}` })
+      : null,
+    tallied && tallied.tieBroken
+      ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." })
+      : null,
+    tallied && Array.isArray(tallied.rounds) && tallied.rounds.length
+      ? h(
+          "div",
+          { class: "table-wrap" },
           h(
-            "div",
-            { class: "table-wrap" },
+            "table",
+            { class: "irv-rounds" },
             h(
-              "table",
-              { class: "irv-rounds" },
-              h("thead", {}, h("tr", {}, h("th", { text: "Round" }), h("th", { text: "Continuing" }), h("th", { text: "Exhausted" }), h("th", { text: "Eliminated" }), h("th", { text: "Counts" }))),
+              "thead",
+              {},
               h(
-                "tbody",
+                "tr",
                 {},
-                ...(q.rounds || []).map((round) =>
-                  h(
-                    "tr",
-                    {},
-                    h("td", { text: String(round.round) }),
-                    h("td", { text: String(round.continuing) }),
-                    h("td", { text: String(round.exhausted) }),
-                    h("td", { text: round.eliminated || (round.winner ? "—" : "—") }),
-                    h("td", { text: JSON.stringify(round.counts) })
-                  )
+                h("th", { text: "Round" }),
+                h("th", { text: "Continuing" }),
+                h("th", { text: "Exhausted" }),
+                h("th", { text: "Eliminated" }),
+                h("th", { text: "Counts" })
+              )
+            ),
+            h(
+              "tbody",
+              {},
+              ...tallied.rounds.map((round) =>
+                h(
+                  "tr",
+                  {},
+                  h("td", { text: String(round.round) }),
+                  h("td", { text: String(round.continuing) }),
+                  h("td", { text: String(round.exhausted) }),
+                  h("td", { text: round.eliminated || "—" }),
+                  h("td", { text: round.counts ? JSON.stringify(round.counts) : "—" })
                 )
               )
             )
           )
         )
-      );
-    }
-  }
-  children.push(h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Back to elections" })));
-  main.replaceChildren(...children);
+      : null,
+    tallied && tallied.tallied !== false
+      ? h(
+          "ul",
+          { class: "tally-bars" },
+          ...tallied.options.map((opt) => {
+            const count = Number(opt.count) || 0;
+            const pct = max ? Math.round((count / max) * 100) : 0;
+            return h(
+              "li",
+              {},
+              h("div", { class: "tally-label" }, h("span", { text: opt.label }), h("strong", { text: String(count) })),
+              h("div", { class: "tally-track", "aria-hidden": "true" }, h("div", { class: "tally-fill", style: { width: `${pct}%` } }))
+            );
+          }),
+          tallied.undervotes != null
+            ? h("li", { class: "tally-under" }, h("span", { text: "Undervotes" }), h("strong", { text: String(tallied.undervotes) }))
+            : null
+        )
+      : h(
+          "ul",
+          { class: "choice-list" },
+          ...(question.options || []).map((opt) => h("li", { class: "choice", text: opt.label || opt.id }))
+        )
+  );
 }
 
 async function renderRoute(route) {
@@ -839,9 +911,7 @@ async function renderRoute(route) {
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
     } else if (route.name === "results") {
       setTitle("Results");
-      const { election, source } = await loadElection(route.params.id);
-      if (!election) renderNotFound(main, route);
-      else renderResults(main, election, source);
+      await renderResults(main, { ...ctx(), route, electionId: route.params.id });
     } else if (route.name === "election-info") {
       setTitle("Ballot information");
       await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });

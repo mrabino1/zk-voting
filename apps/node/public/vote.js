@@ -1,8 +1,18 @@
 /**
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Ballot UI: yes/no + multi-choice, passkey authorize, relay to /api/elections/:id/vote.
- * After accept, do not print the selected options.
+ * Ballot UI: every aspect on one envelope. After accept, do not print selections.
  */
+
+import {
+  buildBallotObject,
+  collectAnswers,
+  cssQuestionName,
+  isMultiSelect,
+  isRankedQuestion,
+  isRankedType,
+  questionsOf,
+  typeLabel,
+} from "./ballot.js";
 
 export const SAMPLE_QUESTIONS = [
   {
@@ -34,100 +44,7 @@ export const SAMPLE_QUESTIONS = [
       { id: "cand-berg", label: "Jordan Berg", summary: "Small-business owner." },
     ],
   },
-  {
-    id: "q-mayor",
-    type: "RANKED",
-    ballotMethod: "ranked_choice",
-    prompt: "Mayor — rank candidates in order of preference.",
-    description: "1 is your first choice. You may leave names unranked. Instant-runoff (IRV) eliminates last place until a majority.",
-    options: [
-      { id: "cand-nguyen", label: "Priya Nguyen" },
-      { id: "cand-hassan", label: "Omar Hassan" },
-      { id: "cand-vale", label: "Riley Vale" },
-    ],
-  },
 ];
-
-function normalizeQuestion(q, index = 0, electionMethod = "plurality") {
-  const type = String(q.type || q.kind || "SINGLE_CHOICE").toUpperCase().replace(/[\s-]+/g, "_");
-  const mapped = type === "RANKED_CHOICE" || type === "IRV" || type === "RCV" ? "RANKED" : type;
-  const options = (q.options || q.choices || []).map((opt, i) => {
-    if (typeof opt === "string") return { id: String(i), label: opt, summary: "", body: "", imageUrl: "", links: [] };
-    return {
-      id: String(opt.id ?? opt.value ?? i),
-      label: opt.label || opt.name || String(opt.id ?? i),
-      summary: opt.summary || opt.blurb || "",
-      body: opt.body || "",
-      imageUrl: opt.imageUrl || "",
-      links: Array.isArray(opt.links) ? opt.links : [],
-    };
-  });
-  if (mapped === "YES_NO" && options.length === 0) {
-    options.push(
-      { id: "yes", label: "Yes", summary: "", body: "", imageUrl: "", links: [] },
-      { id: "no", label: "No", summary: "", body: "", imageUrl: "", links: [] }
-    );
-  }
-  const explicit = q.ballotMethod ? String(q.ballotMethod).toLowerCase().replace(/[\s-]+/g, "_") : "";
-  let ballotMethod = "plurality";
-  if (explicit === "ranked_choice" || explicit === "ranked" || explicit === "irv") ballotMethod = "ranked_choice";
-  else if (explicit === "plurality" || explicit === "fptp") ballotMethod = "plurality";
-  else if (mapped === "RANKED") ballotMethod = "ranked_choice";
-  else if (mapped === "SINGLE_CHOICE" || mapped === "MEASURE" || mapped === "ARTICLE") ballotMethod = electionMethod;
-  return {
-    id: String(q.id ?? q.questionId ?? `q${index}`),
-    type: mapped,
-    ballotMethod,
-    prompt: q.prompt || q.title || q.text || `Question ${index + 1}`,
-    description: q.description || q.help || "",
-    maxSelections: Number(q.maxSelections ?? q.max ?? (mapped === "MULTI_CHOICE" ? 2 : 1)) || 1,
-    options,
-  };
-}
-
-function questionsOf(election, fallback) {
-  const method = String(election?.ballotMethod || "plurality").toLowerCase().replace(/[\s-]+/g, "_");
-  const electionMethod = method === "ranked_choice" || method === "ranked" || method === "irv" ? "ranked_choice" : "plurality";
-  const q = election?.questions;
-  if (Array.isArray(q) && q.length) return q.map((item, i) => normalizeQuestion(item, i, electionMethod));
-  return fallback.map((item, i) => normalizeQuestion(item, i, electionMethod));
-}
-
-function isRankedQuestion(question) {
-  return question.ballotMethod === "ranked_choice" || question.type === "RANKED";
-}
-
-function collectAnswers(form, questions, rankingState) {
-  const answers = [];
-  for (const question of questions) {
-    if (isRankedQuestion(question)) {
-      const ranking = [...(rankingState.get(question.id) || [])];
-      answers.push({
-        questionId: question.id,
-        type: question.type,
-        ballotMethod: "ranked_choice",
-        ranking,
-      });
-      continue;
-    }
-    if (question.type === "MULTI_CHOICE" && question.maxSelections > 1) {
-      const checked = [...form.querySelectorAll(`input[name="${cssName(question.id)}"]:checked`)].map((el) => el.value);
-      answers.push({ questionId: question.id, type: question.type, optionIds: checked });
-    } else {
-      const picked = form.querySelector(`input[name="${cssName(question.id)}"]:checked`);
-      answers.push({
-        questionId: question.id,
-        type: question.type,
-        optionIds: picked ? [picked.value] : [],
-      });
-    }
-  }
-  return answers;
-}
-
-function cssName(id) {
-  return `q-${id}`;
-}
 
 export async function renderVote(main, ctx) {
   const {
@@ -160,10 +77,11 @@ export async function renderVote(main, ctx) {
     return;
   }
 
-  const questions = questionsOf(election, sampleQs || SAMPLE_QUESTIONS);
+  const questions =
+    source === "sample" ? questionsOf({ questions: election.questions?.length ? election.questions : sampleQs || SAMPLE_QUESTIONS }) : questionsOf(election);
   const rankingState = new Map();
-  for (const question of questions) {
-    if (isRankedQuestion(question)) rankingState.set(question.id, []);
+  for (const q of questions) {
+    if (isRankedQuestion(q)) rankingState.set(q.id, []);
   }
   const store = readVoterStore();
   const prior = store.votes[String(election.id)];
@@ -198,27 +116,20 @@ export async function renderVote(main, ctx) {
         h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { text: String(election.id) })),
         h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
         h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-        election.ballotSpecHash
-          ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
-          : null,
         h(
           "li",
           {},
-          h("span", { class: "lbl", text: "Ballot method" }),
-          h(
-            "span",
-            {
-              text: questions.some(isRankedQuestion)
-                ? "Ranked choice (IRV) on ranked questions; plurality elsewhere"
-                : "Plurality (first past the post)",
-            }
-          )
-        )
+          h("span", { class: "lbl", text: "Aspects" }),
+          h("span", { text: questions.length ? `${questions.length} question${questions.length === 1 ? "" : "s"} on this ballot` : "None published" })
+        ),
+        election.ballotSpecHash
+          ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
+          : null
       ),
       h(
         "p",
         {
-          text: "Your selections stay on this form until you submit. After the relay accepts the ballot, this page will not show how you voted.",
+          text: "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       ),
       h(
@@ -234,16 +145,16 @@ export async function renderVote(main, ctx) {
   }
 
   function optionById(question, id) {
-    return question.options.find((o) => String(o.id) === String(id));
+    return (question.options || []).find((o) => String(o.id) === String(id));
   }
 
-  function setRanking(question, next) {
+  function setRanking(question, next, index) {
     rankingState.set(question.id, next);
     const mount = document.getElementById(`question-${question.id}`);
-    if (mount) mount.replaceWith(questionField(question));
+    if (mount) mount.replaceWith(questionField(question, index));
   }
 
-  function rankedField(question) {
+  function rankedField(question, index) {
     const rankedIds = rankingState.get(question.id) || [];
     const rankedSet = new Set(rankedIds);
     const unranked = question.options.filter((o) => !rankedSet.has(o.id));
@@ -252,15 +163,15 @@ export async function renderVote(main, ctx) {
     function applyRankNumber(optionId, rankValue) {
       const current = (rankingState.get(question.id) || []).filter((id) => id !== optionId);
       if (!rankValue) {
-        setRanking(question, current);
+        setRanking(question, current, index);
         return;
       }
       const rank = Math.max(1, Math.min(n, Number(rankValue)));
       current.splice(rank - 1, 0, optionId);
-      setRanking(question, current);
+      setRanking(question, current, index);
     }
 
-    function rankRow(opt, index, total) {
+    function rankRow(opt, rankIndex, total) {
       return h(
         "li",
         {
@@ -284,7 +195,7 @@ export async function renderVote(main, ctx) {
             const insertAt = list.indexOf(opt.id);
             if (insertAt < 0) list.push(from);
             else list.splice(insertAt, 0, from);
-            setRanking(question, list);
+            setRanking(question, list, index);
           },
         },
         h("span", { class: "rank-handle", "aria-hidden": "true", text: "⋮⋮" }),
@@ -296,11 +207,11 @@ export async function renderVote(main, ctx) {
             "select",
             {
               "aria-label": `Rank for ${opt.label}`,
-              value: String(index + 1),
+              value: String(rankIndex + 1),
               onChange: (ev) => applyRankNumber(opt.id, ev.target.value),
             },
             ...Array.from({ length: total }, (_, i) =>
-              h("option", { value: String(i + 1), text: String(i + 1), selected: i === index })
+              h("option", { value: String(i + 1), text: String(i + 1), selected: i === rankIndex })
             )
           )
         ),
@@ -312,44 +223,47 @@ export async function renderVote(main, ctx) {
             type: "button",
             class: "btn btn-secondary rank-btn",
             text: "Up",
-            disabled: index === 0,
+            disabled: rankIndex === 0,
             onClick: () => {
               const list = [...(rankingState.get(question.id) || [])];
-              if (index <= 0) return;
-              [list[index - 1], list[index]] = [list[index], list[index - 1]];
-              setRanking(question, list);
+              if (rankIndex <= 0) return;
+              [list[rankIndex - 1], list[rankIndex]] = [list[rankIndex], list[rankIndex - 1]];
+              setRanking(question, list, index);
             },
           }),
           h("button", {
             type: "button",
             class: "btn btn-secondary rank-btn",
             text: "Down",
-            disabled: index === total - 1,
+            disabled: rankIndex === total - 1,
             onClick: () => {
               const list = [...(rankingState.get(question.id) || [])];
-              if (index >= list.length - 1) return;
-              [list[index + 1], list[index]] = [list[index], list[index + 1]];
-              setRanking(question, list);
+              if (rankIndex >= list.length - 1) return;
+              [list[rankIndex + 1], list[rankIndex]] = [list[rankIndex], list[rankIndex + 1]];
+              setRanking(question, list, index);
             },
           }),
           h("button", {
             type: "button",
             class: "btn btn-secondary rank-btn",
             text: "Remove",
-            onClick: () => setRanking(question, (rankingState.get(question.id) || []).filter((id) => id !== opt.id)),
+            onClick: () =>
+              setRanking(
+                question,
+                (rankingState.get(question.id) || []).filter((id) => id !== opt.id),
+                index
+              ),
           })
         )
       );
     }
 
     return h(
-      "fieldset",
-      { class: "question ranked-question", id: `question-${question.id}` },
-      h("legend", { text: question.prompt }),
-      question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+      "div",
+      { class: "rank-list-wrap" },
       h("p", {
         class: "field-hint",
-        text: "Rank in order of preference (1 = first choice). Drag to reorder, use rank numbers, or move names from the unranked list. Leaving a name unranked is an undervote on that candidate.",
+        text: "Rank in order of preference (1 = first choice). Drag to reorder, use rank numbers, or move names from the unranked list. Leaving a name unranked is an undervote on that candidate. Instant-runoff (IRV) eliminates last place until a majority.",
       }),
       rankedIds.length
         ? h(
@@ -386,7 +300,7 @@ export async function renderVote(main, ctx) {
                   type: "button",
                   class: "btn btn-secondary rank-btn",
                   text: "Add next",
-                  onClick: () => setRanking(question, [...(rankingState.get(question.id) || []), opt.id]),
+                  onClick: () => setRanking(question, [...(rankingState.get(question.id) || []), opt.id], index),
                 })
               )
             )
@@ -395,56 +309,67 @@ export async function renderVote(main, ctx) {
     );
   }
 
-  function questionField(question) {
-    if (isRankedQuestion(question)) return rankedField(question);
-    const multi = question.type === "MULTI_CHOICE" && question.maxSelections > 1;
+  function questionField(question, index) {
+    const multi = isMultiSelect(question);
+    const ranked = isRankedQuestion(question) || isRankedType(question.type);
     const inputType = multi ? "checkbox" : "radio";
     return h(
       "fieldset",
       { class: "question", id: `question-${question.id}` },
-      h("legend", { text: question.prompt }),
-      question.description ? h("p", { class: "field-hint", text: question.description }) : null,
-      h("p", { class: "field-hint", text: multi ? `Select up to ${question.maxSelections}.` : "Select one." }),
       h(
-        "div",
-        { class: "choice-list", role: "group", "aria-label": question.prompt },
-        ...question.options.map((opt) =>
-          h(
+        "legend",
+        {},
+        h("span", { class: "aspect-kicker", text: `Question ${index + 1} of ${questions.length} · ${typeLabel(question.type)}` }),
+        h("span", { class: "aspect-prompt", text: question.prompt })
+      ),
+      question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+      ranked
+        ? rankedField(question, index)
+        : h("p", { class: "field-hint", text: multi ? `Select up to ${question.maxSelections}.` : "Select one. Leaving this blank is an undervote." }),
+      ranked
+        ? null
+        : h(
             "div",
-            { class: "choice-row" },
-            h(
-              "label",
-              { class: "choice", for: `${cssName(question.id)}-${opt.id}` },
-              h("input", {
-                id: `${cssName(question.id)}-${opt.id}`,
-                name: cssName(question.id),
-                type: inputType,
-                value: opt.id,
-                onChange: (ev) => enforceMax(ev, question),
-              }),
+            { class: "choice-list", role: "group", "aria-label": question.prompt },
+            ...question.options.map((opt) =>
               h(
-                "span",
-                { class: "choice-copy" },
-                h("span", { text: opt.label }),
-                opt.summary ? h("span", { class: "field-hint", text: opt.summary }) : null
+                "div",
+                { class: "choice-row" },
+                h(
+                  "label",
+                  { class: "choice", for: `${cssQuestionName(question.id)}-${opt.id}` },
+                  h("input", {
+                    id: `${cssQuestionName(question.id)}-${opt.id}`,
+                    name: cssQuestionName(question.id),
+                    type: inputType,
+                    value: opt.id,
+                    onChange: (ev) => enforceMax(ev, question),
+                  }),
+                  h(
+                    "span",
+                    { class: "choice-copy" },
+                    h("span", { text: opt.label }),
+                    opt.summary ? h("span", { class: "field-hint", text: opt.summary }) : null
+                  )
+                ),
+                source === "sample"
+                  ? null
+                  : h("a", {
+                      class: "choice-info",
+                      href: `/elections/${encodeURIComponent(election.id)}/info/${encodeURIComponent(question.id)}/${encodeURIComponent(opt.id)}`,
+                      "data-nav": "",
+                      text: "About",
+                    })
               )
-            ),
-            h("a", {
-              class: "choice-info",
-              href: `/elections/${encodeURIComponent(election.id)}/info/${encodeURIComponent(question.id)}/${encodeURIComponent(opt.id)}`,
-              "data-nav": "",
-              text: "About",
-            })
+            )
           )
-        )
-      )
     );
   }
 
   function enforceMax(event, question) {
-    if (!(question.type === "MULTI_CHOICE" && question.maxSelections > 1)) return;
+    if (!isMultiSelect(question)) return;
     const form = event.target.form;
-    const boxes = [...form.querySelectorAll(`input[name="${cssName(question.id)}"]`)];
+    const boxes = [...form.querySelectorAll(`input[name="${cssQuestionName(question.id)}"]`)];
     const checked = boxes.filter((b) => b.checked);
     if (checked.length > question.maxSelections) {
       event.target.checked = false;
@@ -459,19 +384,32 @@ export async function renderVote(main, ctx) {
     if (state.error) children.push(h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })));
     if (state.info) children.push(h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })));
 
-    if (state.step === "receipt" && state.receipt) {
+    if (state.receipt && (state.step === "receipt" || election.state === 2)) {
       children.push(renderReceipt(state.receipt, h));
-      children.push(h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" })));
+      children.push(
+        h(
+          "p",
+          { class: "cluster" },
+          h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }),
+          election.state >= 3
+            ? h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "View results" })
+            : null
+        )
+      );
       fill(root, ...children);
       return;
     }
 
-    if (!publicRecord) {
+    if (!publicRecord || publicRecord.staleWrap) {
       children.push(
         h(
           "div",
           { class: "notice notice-warn" },
-          h("p", { text: "This device does not have a Republic passkey yet. Register first, then return to the ballot." }),
+          h("p", {
+            text: publicRecord?.staleWrap
+              ? "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting."
+              : "This device does not have a Republic passkey yet. Register first, then return to the ballot.",
+          }),
           h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to registration" })
         )
       );
@@ -482,7 +420,8 @@ export async function renderVote(main, ctx) {
         h(
           "div",
           { class: "notice notice-warn", role: "status" },
-          h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." })
+          h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." }),
+          h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Certified results" })
         )
       );
     } else if (notOpen) {
@@ -493,7 +432,7 @@ export async function renderVote(main, ctx) {
           h("p", {
             text:
               election.state === 1
-                ? "The roll is frozen. Voting has not opened. You may review the sample questions."
+                ? "The roll is frozen. Voting has not opened. You may review the questions."
                 : "This election is not open. Registration may still be available.",
           })
         )
@@ -504,12 +443,24 @@ export async function renderVote(main, ctx) {
       children.push(h("p", { text: `Node status for you: ${me.elections[election.id].status}.` }));
     }
 
+    if (!questions.length) {
+      children.push(
+        h(
+          "div",
+          { class: "notice notice-error", role: "alert" },
+          h("p", { text: "This election has no published questions. The clerk must author at least one aspect." })
+        )
+      );
+      fill(root, ...children);
+      return;
+    }
+
     children.push(
       h(
         "form",
         { class: "ballot", id: "ballot-form", autocomplete: "off", onSubmit: onSubmit },
-        h("h2", { text: "Official ballot" }),
-        ...questions.map(questionField),
+        h("h2", { text: `Official ballot · ${questions.length} question${questions.length === 1 ? "" : "s"}` }),
+        ...questions.map((q, i) => questionField(q, i)),
         h(
           "label",
           { class: "choice", for: "swear" },
@@ -529,7 +480,7 @@ export async function renderVote(main, ctx) {
             {
               class: "btn",
               type: "submit",
-              disabled: Boolean(state.busy || !publicRecord),
+              disabled: Boolean(state.busy || !publicRecord || publicRecord.staleWrap),
               "aria-busy": state.busy ? "true" : "false",
               text: state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
             }
@@ -545,14 +496,16 @@ export async function renderVote(main, ctx) {
   async function onSubmit(event) {
     event.preventDefault();
     if (state.busy) return;
-    if (!publicRecord) {
-      state.error = "Register a passkey on this device before voting.";
+    if (!publicRecord || publicRecord.staleWrap) {
+      state.error = publicRecord?.staleWrap
+        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
+        : "Register a passkey on this device before voting.";
       paint();
       return;
     }
     const form = event.target;
-    const answers = collectAnswers(form, questions, rankingState);
-    const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : a.optionIds.length === 0));
+    const answers = collectAnswers(form, questions);
+    const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : (a.optionIds || []).length === 0));
     if (blank && !window.confirm("Every question is blank. Submit an undervote?")) return;
     if (election.state !== 2) {
       if (!window.confirm("This election is not open. Try to relay anyway? The Node should reject the vote.")) return;
@@ -565,14 +518,12 @@ export async function renderVote(main, ctx) {
     paint();
     announce("Confirm your passkey. Your choices will not appear on the receipt.");
 
-    const ballotObject = {
-      electionId: String(election.id),
+    const ballotObject = buildBallotObject({
+      electionId: election.id,
       ballotSpecHash: election.ballotSpecHash || null,
-      ballotMethod: election.ballotMethod || (questions.some(isRankedQuestion) ? "ranked_choice" : "plurality"),
-      questions: questions.map((q) => ({ id: q.id, type: q.type, ballotMethod: q.ballotMethod })),
+      questions,
       answers,
-      markedAt: new Date().toISOString(),
-    };
+    });
     const ballotBytes = new TextEncoder().encode(JSON.stringify(ballotObject));
 
     try {
@@ -587,9 +538,9 @@ export async function renderVote(main, ctx) {
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
         encryptedBallot: auth.encryptedBallot,
+        answers,
         signature: auth.signature,
         userOpHash: auth.userOpHash,
-        answers,
         userOp: {
           sender: auth.address,
           nonce: "0x0",
@@ -610,8 +561,9 @@ export async function renderVote(main, ctx) {
 
       let accepted = false;
       let message = "";
+      let res = null;
       try {
-        const res = await api(`/api/elections/${encodeURIComponent(election.id)}/vote`, {
+        res = await api(`/api/elections/${encodeURIComponent(election.id)}/vote`, {
           method: "POST",
           body,
         });
@@ -664,7 +616,7 @@ function renderReceipt(receipt, h) {
     h(
       "p",
       {
-        text: "This is not a proof of how you voted. Keep the hashes. Public explorer rows wait until the hour that contained this ballot closes, so leaving a voting office cannot be matched to a live jurisdiction tick. Anyone who demands to see your choice should be directed to the clerk’s coercion-resistance instructions.",
+        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
       }
     ),
     receipt.message ? h("p", { text: receipt.message }) : null,
