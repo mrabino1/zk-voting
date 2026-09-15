@@ -63,14 +63,24 @@ function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
-async function voteEncrypted(electionId, nullifier, envelopeHex) {
+async function voteEncrypted(electionId, nullifier, envelopeHex, identityCommitment) {
   return api('POST', `/api/elections/${electionId}/vote`, {
     body: {
       proof: { accept: true },
       publicInputs: { nullifier, electionId },
       encryptedBallot: envelopeHex,
+      identityCommitment,
     },
   });
+}
+
+async function registerVoter(electionId, identityCommitment) {
+  const res = await api('POST', `/api/elections/${electionId}/register`, {
+    jar: adminJar,
+    body: { identityCommitment },
+  });
+  assert.equal(res.status, 201, res.text);
+  return res;
 }
 
 describe('tally opens ballots (demo ECIES)', () => {
@@ -137,14 +147,19 @@ describe('tally opens ballots (demo ECIES)', () => {
     assert.equal(key.json.ceremony.privateJwk, undefined);
     const pub = created.json.election.tallyPubKey;
 
+    // 5 ballots: 0,0,1,0,2 → [3,1,1]
+    const choices = [0, 0, 1, 0, 2];
+    const commitments = choices.map((_, i) => `0x${(0xa01 + i).toString(16)}`);
+    for (const commitment of commitments) {
+      await registerVoter(electionId, commitment);
+    }
+
     const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.text);
 
-    // 5 ballots: 0,0,1,0,2 → [3,1,1]
-    const choices = [0, 0, 1, 0, 2];
     for (let i = 0; i < choices.length; i++) {
       const env = await encryptToTallyPub(pub, packChoices([choices[i]]));
-      const cast = await voteEncrypted(electionId, 1000 + i, env);
+      const cast = await voteEncrypted(electionId, 1000 + i, env, commitments[i]);
       assert.equal(cast.status, 201, cast.text);
     }
 
@@ -204,9 +219,10 @@ describe('tally opens ballots (demo ECIES)', () => {
     assert.equal(created.json.election.tallyScheme, 'sum_only');
     assert.equal(created.json.election.tallyPubKey, null);
 
+    await registerVoter(electionId, '0xb01');
     const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.text);
-    const v = await voteEncrypted(electionId, 42, '0xab');
+    const v = await voteEncrypted(electionId, 42, '0xab', '0xb01');
     assert.equal(v.status, 201, v.text);
 
     const election = store.requireElection(electionId);
