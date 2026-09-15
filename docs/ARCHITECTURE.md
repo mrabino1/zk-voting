@@ -575,6 +575,7 @@ GET  /api/config                    (hourly disclosure + identity policy + l1Cer
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id
+GET  /api/elections/:id/results     (public; certified plurality/IRV after tally; empty before)
 GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
 GET  /api/elections/:id/info/:questionId/:optionId

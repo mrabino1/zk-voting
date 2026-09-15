@@ -156,7 +156,9 @@ export async function renderVote(main, ctx) {
           href: `/elections/${encodeURIComponent(election.id)}/info`,
           "data-nav": "",
           text: "Read candidate and measure information (does not record a vote)",
-        })
+        }),
+        " · ",
+        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Election results" })
       )
     );
   }
@@ -408,9 +410,7 @@ export async function renderVote(main, ctx) {
           "p",
           { class: "cluster" },
           h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }),
-          election.state >= 3
-            ? h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "View results" })
-            : null
+          h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
         )
       );
       fill(root, ...children);
@@ -438,7 +438,7 @@ export async function renderVote(main, ctx) {
           "div",
           { class: "notice notice-warn", role: "status" },
           h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." }),
-          h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Certified results" })
+          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Certified results" })
         )
       );
     } else if (notOpen) {

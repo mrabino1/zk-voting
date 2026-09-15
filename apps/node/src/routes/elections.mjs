@@ -18,9 +18,10 @@ import {
   presentPublicOptionInfo,
   resolveBallotSpecHash,
 } from '../ballotSpec.mjs';
-import { presentElection, presentResults, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
+import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
+import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { publicVoteRecord } from '../store.mjs';
@@ -237,7 +238,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       await publishDue(deps);
       const election = store.requireElection(req.params.id);
-      res.json(presentResults(election, deps, { user: req.user }));
+      res.json(presentResults(election, deps));
     }),
   );
 
