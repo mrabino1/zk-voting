@@ -658,7 +658,10 @@
       try {
         const cfg = await request("/api/config");
         const banner = $("disclosure-banner");
-        if (banner && cfg.disclosure && cfg.disclosure.note) {
+        const helper = globalThis.RepublicDisclosure;
+        if (banner && cfg.disclosure && helper) {
+          helper.paint(banner, cfg.disclosure);
+        } else if (banner && cfg.disclosure && cfg.disclosure.note) {
           const next = cfg.disclosure.nextPublishAt;
           const when =
             next != null

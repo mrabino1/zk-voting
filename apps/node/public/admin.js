@@ -163,7 +163,10 @@
         : "—";
       $("stat-nfp").textContent = nfp ? "Yes" : "Host did not label itself NOT FOR PROFIT";
       const banner = $("disclosure-banner");
-      if (banner && merged.disclosure && merged.disclosure.note) {
+      const helper = globalThis.RepublicDisclosure;
+      if (banner && merged.disclosure && helper) {
+        helper.paint(banner, merged.disclosure);
+      } else if (banner && merged.disclosure && merged.disclosure.note) {
         const next = merged.disclosure.nextPublishAt;
         const when =
           next != null
