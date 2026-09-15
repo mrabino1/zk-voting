@@ -69,7 +69,13 @@ export function getConfig(overrides = {}) {
     adminHandle: process.env.ADMIN_HANDLE || 'admin',
     chainRpc: process.env.CHAIN_RPC || '',
     ballotInboxAddress: process.env.BALLOT_INBOX_ADDRESS || '',
-    electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || '',
+    electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || process.env.FACTORY || '',
+    verifierAddress: process.env.VERIFIER_ADDRESS || process.env.VERIFIER || '',
+    clerkAddress: process.env.CLERK_ADDRESS || process.env.CLERK || '',
+    registrarAddress: process.env.REGISTRAR_ADDRESS || process.env.REGISTRAR || '',
+    disqualificationOfficerAddress:
+      process.env.DISQUALIFICATION_OFFICER_ADDRESS || process.env.DISQUALIFICATION_OFFICER || '',
+    tallyOperatorAddress: process.env.TALLY_OPERATOR_ADDRESS || process.env.TALLY_OPERATOR || '',
     relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY || '',
     // NODE_ENV=test never inherits operator L1 keys (CI / local Anvil leakage).
     l1Rpc: isTest ? '' : process.env.L1_RPC || process.env.L1_RPC_URL || '',

@@ -271,6 +271,15 @@ export class Store {
     }
   }
 
+  getElectionByOnChainId(onChainId) {
+    if (onChainId == null || onChainId === '') return null;
+    const key = String(onChainId);
+    return (
+      this.data.elections.find((e) => e.onChainElectionId != null && String(e.onChainElectionId) === key) ||
+      null
+    );
+  }
+
   listElections() {
     return this.data.elections.slice();
   }
@@ -746,6 +755,10 @@ export class Store {
       tallyOperator: params.tallyOperator || '',
       verifier: params.verifier || '',
       lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
+      onChainElectionAddress: params.onChainElectionAddress || null,
+      factoryAddress: params.factoryAddress || null,
+      createTxHash: params.createTxHash || null,
+      chainId: params.chainId != null ? Number(params.chainId) : null,
       rollFrozen: false,
       frozenAt: null,
       frozenEligibleRoot: null,

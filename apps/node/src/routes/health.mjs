@@ -20,6 +20,8 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
+      electionFactoryAddress: deps.config.electionFactoryAddress || '',
+      chainConfigured: deps.chain.isConfigured(),
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
       disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
     });
@@ -33,6 +35,9 @@ export function configRouter(deps) {
     '/config',
     asyncHandler(async (_req, res) => {
       const now = deps.config.nowFn();
+      const chainConfigured = deps.chain.isConfigured();
+      const factoryReady =
+        typeof deps.chain.isFactoryReady === 'function' ? deps.chain.isFactoryReady() : false;
       res.json({
         nfp: true,
         app: 'zk-voting',
@@ -41,7 +46,18 @@ export function configRouter(deps) {
         rpID: deps.config.rpID,
         chainId: deps.config.chainId,
         origins: deps.config.origins,
-        chainConfigured: deps.chain.isConfigured(),
+        chainConfigured,
+        electionFactoryAddress: deps.config.electionFactoryAddress || '',
+        factoryReady,
+        chain: {
+          configured: chainConfigured,
+          factoryAddress: deps.config.electionFactoryAddress || '',
+          factoryReady,
+          voteReady: deps.chain.isReady(),
+          note: chainConfigured
+            ? 'POST /api/elections calls ElectionFactory.createElection. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
+            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo).',
+        },
         addresses: {
           factory: deps.config.electionFactoryAddress || null,
           ballotInbox: deps.config.ballotInboxAddress || null,

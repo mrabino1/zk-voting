@@ -101,9 +101,11 @@
   }
 
   function errText(err) {
+    const code = err.data && err.data.code;
     return (
       (err.status ? err.status + " · " : "") +
       (err.message || "Request failed") +
+      (code ? " [" + code + "]" : "") +
       (err.path ? " (" + err.path + ")" : "")
     );
   }
@@ -890,12 +892,14 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
+    const chain = pick(row, ["onChainElectionId"]);
     const short = pick(row, ["shortCode"]);
     const id = electionIdOf(row);
     const ref = short ? short : String(id).slice(0, 8);
     const nq = pick(row, ["questionCount"]) || (Array.isArray(row.questions) ? row.questions.length : "");
     const qbit = nq ? " · " + nq + " q" : "";
-    return title + " · " + ref + (state ? " · " + state : "") + qbit;
+    const chainBit = chain ? " · chain #" + chain : "";
+    return title + " · " + ref + chainBit + (state ? " · " + state : "") + qbit;
   }
 
   function markRole(el, ok) {
@@ -974,6 +978,10 @@
               ? new Date(Number(next) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC")
               : "";
           banner.textContent = cfg.disclosure.note + (when ? " Next publish: " + when + "." : "");
+        }
+        const chainNote = $("chain-election-note");
+        if (chainNote && cfg.chain && cfg.chain.note) {
+          chainNote.textContent = cfg.chain.note;
         }
       } catch {
         /* banner keeps static copy */
@@ -1121,11 +1129,20 @@
     try {
       const created = await request("/api/elections", { method: "POST", body });
       const id = pick(created, ["election.id", "id"]) || "";
+      const chainMode = pick(created, ["chainMode", "election.chainMode"]);
+      const onChainId = pick(created, ["onChainElectionId", "election.onChainElectionId"]);
+      const addr = pick(created, ["onChainElectionAddress", "election.onChainElectionAddress"]);
+      const tx = pick(created, ["createTxHash", "election.createTxHash"]);
       const short = pick(created, ["election.shortCode", "shortCode"]) || "";
-      const onChain = pick(created, ["election.onChainElectionId", "onChainElectionId"]) || "";
       const bits = ["Created election " + id];
       if (short) bits.push("short /v/" + short);
-      if (onChain) bits.push("on-chain id " + onChain);
+      if (chainMode === "onchain") {
+        bits.push("factory #" + onChainId);
+        if (addr) bits.push(addr);
+        if (tx) bits.push("tx " + tx);
+      } else if (onChainId) {
+        bits.push("circuit id " + onChainId + " (JSON demo)");
+      }
       flash($("flash-election"), "ok", bits.join(" · ") + ". Freeze the roll before opening.");
       if (id) {
         $("e-load").value = String(id);

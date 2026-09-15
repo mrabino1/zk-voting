@@ -59,6 +59,17 @@ const FACTORY_ABI = [
     ],
   },
   {
+    type: "event",
+    name: "ElectionCreated",
+    inputs: [
+      { name: "electionId", type: "uint256", indexed: true },
+      { name: "election", type: "address", indexed: true },
+      { name: "jurisdictionId", type: "bytes32", indexed: true },
+      { name: "startTime", type: "uint64", indexed: false },
+      { name: "cutoffTime", type: "uint64", indexed: false },
+    ],
+  },
+  {
     type: "function",
     name: "getElection",
     stateMutability: "view",
@@ -367,13 +378,79 @@ function toViemParams(params) {
   };
 }
 
+function unpackCreateResult(result) {
+  if (result == null) return {};
+  if (Array.isArray(result)) {
+    return { electionId: result[0], election: result[1] };
+  }
+  if (typeof result === "object") {
+    return {
+      electionId: result.electionId ?? result[0],
+      election: result.election ?? result[1],
+    };
+  }
+  return {};
+}
+
+/**
+ * Read `ElectionCreated` from a transaction receipt.
+ * @param {{logs?: Array<{data?: string, topics?: string[]}>}|null|undefined} receipt
+ * @param {object} [viemLib]
+ * @returns {{electionId?: bigint, election?: string, jurisdictionId?: string, startTime?: bigint, cutoffTime?: bigint}}
+ */
+function decodeElectionCreated(receipt, viemLib) {
+  const viem = viemLib || tryViem();
+  if (!viem || typeof viem.decodeEventLog !== "function") return {};
+  if (!receipt || !Array.isArray(receipt.logs)) return {};
+  for (const log of receipt.logs) {
+    try {
+      const decoded = viem.decodeEventLog({
+        abi: FACTORY_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      if (decoded.eventName === "ElectionCreated") {
+        return {
+          electionId: decoded.args.electionId,
+          election: decoded.args.election,
+          jurisdictionId: decoded.args.jurisdictionId,
+          startTime: decoded.args.startTime,
+          cutoffTime: decoded.args.cutoffTime,
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return {};
+}
+
+async function resolveCreatedElection(factory, viem, receipt, simulated) {
+  const fromSim = unpackCreateResult(simulated);
+  const decoded = decodeElectionCreated(receipt, viem);
+  let electionId = fromSim.electionId ?? decoded.electionId;
+  let election = fromSim.election ?? decoded.election;
+  if ((electionId == null || election == null) && typeof factory.electionCount === "function") {
+    try {
+      const count = await factory.electionCount();
+      if (electionId == null) electionId = count;
+      if (election == null && count != null) {
+        election = await factory.getElection(count);
+      }
+    } catch {
+      // leave unset; caller surfaces a clear error
+    }
+  }
+  return { electionId, election };
+}
+
 /**
  * Create an election via ElectionFactory.createElection.
  *
  * @param {string|ChainClientOptions} factoryAddressOrOpts
  * @param {ElectionParams} params
  * @param {ChainClientOptions} [opts]
- * @returns {Promise<{hash?: string, electionId?: bigint, election?: string, result?: unknown}>}
+ * @returns {Promise<{hash?: string, electionId?: bigint, election?: string, receipt?: unknown, result?: unknown}>}
  */
 async function createElection(factoryAddressOrOpts, params, opts) {
   const options = normalizeOptions(factoryAddressOrOpts, opts);
@@ -384,19 +461,34 @@ async function createElection(factoryAddressOrOpts, params, opts) {
 
   if (viem && options.walletClient) {
     const account = options.walletClient.account || options.account;
-    const hash = await options.walletClient.writeContract({
-      address: factory.address,
-      abi: FACTORY_ABI,
-      functionName: "createElection",
-      args: [viemParams],
-      account,
-      chain: options.walletClient.chain,
-    });
+    let hash;
+    let simulated = null;
+    if (options.publicClient && typeof options.publicClient.simulateContract === "function") {
+      const sim = await options.publicClient.simulateContract({
+        address: factory.address,
+        abi: FACTORY_ABI,
+        functionName: "createElection",
+        args: [viemParams],
+        account,
+      });
+      simulated = sim.result;
+      hash = await options.walletClient.writeContract(sim.request);
+    } else {
+      hash = await options.walletClient.writeContract({
+        address: factory.address,
+        abi: FACTORY_ABI,
+        functionName: "createElection",
+        args: [viemParams],
+        account,
+        chain: options.walletClient.chain,
+      });
+    }
     let receipt = null;
     if (options.publicClient && typeof options.publicClient.waitForTransactionReceipt === "function") {
       receipt = await options.publicClient.waitForTransactionReceipt({ hash });
     }
-    return { hash, receipt, factory: factory.address };
+    const created = await resolveCreatedElection(factory, viem, receipt, simulated);
+    return { hash, receipt, factory: factory.address, ...created };
   }
 
   if (viem && typeof viem.encodeFunctionData === "function") {
@@ -413,7 +505,14 @@ async function createElection(factoryAddressOrOpts, params, opts) {
       data,
       from: options.account,
     });
-    return { hash, factory: factory.address };
+    let receipt = null;
+    try {
+      receipt = await rpc(factory.rpcUrl, "eth_getTransactionReceipt", [hash]);
+    } catch {
+      receipt = null;
+    }
+    const created = await resolveCreatedElection(factory, viem, receipt, null);
+    return { hash, receipt, factory: factory.address, ...created };
   }
 
   throw new Error(
@@ -554,6 +653,7 @@ module.exports = {
   ethSendTransaction,
   getFactory,
   createElection,
+  decodeElectionCreated,
   submitVote,
   getElectionAddress,
   acceptedBallots,

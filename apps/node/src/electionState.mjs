@@ -16,6 +16,12 @@ export function electionState(election, now = Math.floor(Date.now() / 1000)) {
   return 0;
 }
 
+/** Demo still allocates a uint256 circuit id; onchain means factory mapping exists. */
+export function electionChainMode(election) {
+  if (election?.createTxHash || election?.onChainElectionAddress) return 'onchain';
+  return 'demo';
+}
+
 /**
  * @param {object} election
  * @param {number} [now]
@@ -52,6 +58,12 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     tallyOperator: election.tallyOperator,
     verifier: election.verifier,
     lateUpdateAllowed: election.lateUpdateAllowed,
+    onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
+    onChainElectionAddress: election.onChainElectionAddress || null,
+    factoryAddress: election.factoryAddress || null,
+    createTxHash: election.createTxHash || null,
+    chainId: election.chainId ?? null,
+    chainMode: electionChainMode(election),
     rollFrozen: election.rollFrozen,
     frozenAt: election.frozenAt,
     frozenEligibleRoot: election.frozenEligibleRoot || null,

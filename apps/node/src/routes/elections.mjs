@@ -19,7 +19,7 @@ import {
   resolveBallotSpecHash,
 } from '../ballotSpec.mjs';
 import { parseOnChainElectionId } from '../electionIds.mjs';
-import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
+import { presentElection, electionState, electionChainMode, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
@@ -115,11 +115,41 @@ export function electionsRouter(deps) {
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
       }
-      let onChainElectionId = null;
-      try {
-        onChainElectionId = parseOnChainElectionId(body.onChainElectionId);
-      } catch (err) {
-        throw new HttpError(err.status || 400, err.message);
+      let chainResult = null;
+      if (chain.isConfigured()) {
+        const jurisdiction = store.getJurisdiction(jurisdictionId);
+        const officers = jurisdiction?.officers || [];
+        const roleAddr = (role) => officers.find((o) => o.role === role && o.address)?.address;
+        chainResult = await chain.createElection({
+          title,
+          metadataURI: String(body.metadataURI || ''),
+          startTime,
+          cutoffTime,
+          maxParticipants,
+          treeDepth,
+          ballotSpecHash,
+          questions,
+          questionCount: questions.length,
+          jurisdictionId,
+          clerk: body.clerk || roleAddr('clerk'),
+          registrar: body.registrar || roleAddr('registrar'),
+          disqualificationOfficer: body.disqualificationOfficer || roleAddr('disqualification_officer'),
+          tallyOperator: body.tallyOperator || roleAddr('tally_operator'),
+          verifier: body.verifier,
+        });
+        if (!chainResult?.onChainElectionId) {
+          throw new HttpError(502, 'ElectionFactory did not return an election id', {
+            code: 'CHAIN_CREATE_FAILED',
+          });
+        }
+      }
+      let requestedOnChainId = chainResult?.onChainElectionId ?? null;
+      if (requestedOnChainId == null) {
+        try {
+          requestedOnChainId = parseOnChainElectionId(body.onChainElectionId);
+        } catch (err) {
+          throw new HttpError(err.status || 400, err.message);
+        }
       }
       const election = await store.createElection({
         title,
@@ -132,19 +162,26 @@ export function electionsRouter(deps) {
         ballotMethod,
         questions,
         jurisdictionId,
-        clerk: body.clerk || '',
-        registrar: body.registrar || '',
-        disqualificationOfficer: body.disqualificationOfficer || '',
-        tallyOperator: body.tallyOperator || '',
-        verifier: body.verifier || '',
+        clerk: chainResult?.params?.clerk || body.clerk || '',
+        registrar: chainResult?.params?.registrar || body.registrar || '',
+        disqualificationOfficer:
+          chainResult?.params?.disqualificationOfficer || body.disqualificationOfficer || '',
+        tallyOperator: chainResult?.params?.tallyOperator || body.tallyOperator || '',
+        verifier: chainResult?.params?.verifier || body.verifier || '',
         lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
-        onChainElectionId,
         createdBy: req.user.id,
+        onChainElectionId: requestedOnChainId,
+        onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
+        factoryAddress: chainResult?.factoryAddress ?? null,
+        createTxHash: chainResult?.createTxHash ?? null,
+        chainId: chainResult?.chainId ?? null,
       });
       await explorer.append('election_created', {
         electionId: String(election.id),
         shortCode: election.shortCode,
         onChainElectionId: String(election.onChainElectionId),
+        onChainElectionAddress: election.onChainElectionAddress,
+        createTxHash: election.createTxHash,
         title: election.title,
         jurisdictionId: election.jurisdictionId,
         startTime: election.startTime,
@@ -157,6 +194,9 @@ export function electionsRouter(deps) {
         electionId: election.id,
         shortCode: election.shortCode,
         onChainElectionId: election.onChainElectionId,
+        onChainElectionAddress: election.onChainElectionAddress,
+        createTxHash: election.createTxHash,
+        chainMode: electionChainMode(election),
         election: dto,
         links: dto.links,
         nfp: true,
