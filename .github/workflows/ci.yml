@@ -52,8 +52,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          # Root has workspaces but no root lockfile; apps/node holds the deps.
-          cache-dependency-path: apps/node/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1

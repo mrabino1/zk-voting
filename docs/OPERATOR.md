@@ -84,7 +84,9 @@ Voter JSON lives on the `node-data` volume (`DATA_DIR=/data`). L2 blocks and pro
 
 The Node binds `HOST=0.0.0.0` so the published port is reachable. The sequencer binds `L2_RPC_HOST=0.0.0.0` for the same reason (plain-Node local use still defaults to `127.0.0.1`). Inside the Compose network the Node reaches L2 at `http://l2:8546`. The host user should be able to run `docker compose` (membership in the `docker` group); `system_actions.sh` will use `sudo docker compose` when passwordless sudo is the only way to talk to the daemon.
 
-Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, or paymaster keys into the image.
+The Node image installs the npm **workspaces** from the repository root (`@zk-voting/chain-client` is private and is not fetched from the public registry). L1 tally-hash env vars on the `node` service are optional; leaving them empty is a documented no-op.
+
+Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY`, or paymaster keys into the image.
 
 ---
 
