@@ -7,7 +7,12 @@ Republic voters do not handle seed phrases. A **WebAuthn** credential on the dev
 1. An **Ethereum smart-account** key (secp256k1), used only to authorize a UserOperation.
 2. A **ZK identity** `(identityTrapdoor, nullifierSecret)`, used only inside the vote circuit.
 
-The ballot is unlinkable from the smart-account address. L2 gas is **sponsored** (paymaster). This document is the implementation note for that construction; the interface contract is [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+The ballot is unlinkable from the smart-account address. L2 gas is **sponsored** (paymaster). This document is the implementation note for that construction; the package map
+is [`ARCHITECTURE.md`](./ARCHITECTURE.md). **Implemented today** in
+`apps/node/public/passkey-wallet.js`: WebAuthn + PRF wrap of a 32-byte seed in
+IndexedDB. `getAddress()` returns `republic-local-address` (SHA-256 of the seed).
+Production Ethereum addresses (keccak256 of the uncompressed secp256k1 pubkey)
+are **Future** in that helper — it does not ship a curve implementation.
 
 ---
 
@@ -132,6 +137,10 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login              (ALLOW_DEV_LOGIN / NODE_ENV=test only)
 POST /api/elections/:id/register    (after passkey; commitment, not name)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 GET  /api/identity/methods

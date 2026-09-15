@@ -828,6 +828,10 @@ export class Store {
     return this.listPublishedVotes(electionId, now, intervalSeconds).length;
   }
 
+  publishedAcceptedBallotsAll(now, intervalSeconds) {
+    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds)).length;
+  }
+
   listEnvelopes(electionId) {
     return this.data.envelopes.filter((e) => String(e.electionId) === String(electionId));
   }

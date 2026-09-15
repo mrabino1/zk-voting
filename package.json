@@ -23,7 +23,11 @@
     "dev": "npm run dev -w apps/node",
     "l2:sequencer": "node l2/sequencer/index.mjs",
     "l2:prover": "node l2/prover/index.mjs",
-    "start": "npm run start -w apps/node"
+    "start": "npm run start -w apps/node",
+    "compose:up": "docker compose up -d --build",
+    "compose:down": "docker compose down",
+    "compose:logs": "docker compose logs -f --tail=80",
+    "compose:ps": "docker compose ps"
   },
   "engines": {
     "node": ">=22"

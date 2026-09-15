@@ -9,6 +9,10 @@ export function healthRouter(deps) {
   const router = Router();
   router.get(['/health', '/api/health'], (req, res) => {
     const now = deps.config.nowFn();
+    const interval = deps.config.disclosureIntervalSeconds;
+    const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
+      ? deps.store.publishedAcceptedBallotsAll(now, interval)
+      : undefined;
     res.json({
       ok: true,
       app: 'zk-voting',
@@ -17,7 +21,7 @@ export function healthRouter(deps) {
       chainId: deps.config.chainId,
       product: 'Republic',
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
-      disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
+      disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
     });
   });
   return router;
@@ -40,11 +44,21 @@ export function configRouter(deps) {
         chainConfigured: deps.chain.isConfigured(),
         l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
         l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
-        disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds),
+        disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds, {
+          acceptedBallotsDisclosed: deps.store?.publishedAcceptedBallotsAll
+            ? deps.store.publishedAcceptedBallotsAll(now, deps.config.disclosureIntervalSeconds)
+            : undefined,
+        }),
         identity: {
           methods: ['passkey', 'web3', 'smart_card'],
           oneActiveEthAddress: true,
           note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
+        },
+        auth: {
+          allowDevLogin: Boolean(deps.config.allowDevLogin),
+          passkeyLogin: true,
+          web3Login: true,
+          note: 'Sign in with a registered passkey or a bound Ethereum wallet. Dev login is a local/test fallback only.',
         },
       });
     }),

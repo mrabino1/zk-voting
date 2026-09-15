@@ -5,7 +5,7 @@
 This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
 (product name Republic): JSON HTTP API, WebAuthn passkeys, Web3 and smart-card
 person identity, a gasless vote relayer, an L2 block-explorer backend, and a
-static host for the React SPA.
+static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
 
 There is no token. There is no paid tier. Do not commercialize this software.
 See `/NOT_FOR_PROFIT.md` at the repo root.
@@ -29,7 +29,9 @@ Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "nod
 The Node never writes a passkey user id onto the same record as an encrypted
 ballot or a choice. The UI must not print “I voted for X”. Public dashboards
 and the explorer show vote proofs only after the hour that contained the vote
-has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
+has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests). The
+explorer snapshot lists last closed hour, ballots disclosed so far, and a
+countdown to the next hour close — never a pending-per-election count.
 
 ---
 
@@ -55,11 +57,21 @@ npm test -w apps/node
 ./system_actions.sh restart   # pm2 / systemd / compose when configured
 ```
 
+Docker Compose from the **repository root** (not this directory):
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
-The process serves `public/` and `dist/` if present. Unknown GET routes that are
+The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
-Voter info pages: `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId`.
+Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+`/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
+Admin / back-office / explorer are separate HTML files. `/elections/:id/results` is
+**not** implemented on the voter router yet.
 
 ### Ballot option information
 
@@ -77,6 +89,7 @@ Empty optional fields are omitted so older elections without metadata keep worki
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
+| `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
@@ -87,7 +100,7 @@ Empty optional fields are omitted so older elections without metadata keep worki
 | `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
 | `L1_CHAIN_ID` | RPC | Optional override |
 | `RP_ID` | `localhost` | WebAuthn rpID |
-| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins |
+| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
@@ -97,6 +110,8 @@ Empty optional fields are omitted so older elections without metadata keep worki
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 
 Passkey rpName is always **Republic**.
+
+Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and **Sign in with Ethereum**. Register a person first (`/register`). Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
 
 ---
 
@@ -108,6 +123,8 @@ GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
 PATCH /api/elections/:id            (clerk; ballot metadata until roll freeze)
 GET  /api/elections/:id
+GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
+GET  /api/elections/:id/ballots
 GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
 GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey)
@@ -133,9 +150,14 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login            (ALLOW_DEV_LOGIN / tests only)
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure         (last closed hour, disclosed ballots, countdown)
 POST /api/explorer/ingest
 GET  /api/config
 ```

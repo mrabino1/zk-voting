@@ -139,12 +139,22 @@ has_compose() {
 
 compose_cmd() {
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    if docker info >/dev/null 2>&1; then
+      echo "docker compose"
+      return 0
+    fi
+    if sudo -n docker info >/dev/null 2>&1; then
+      echo "sudo docker compose"
+      return 0
+    fi
     echo "docker compose"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    echo docker-compose
-  else
-    echo ""
+    return 0
   fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    echo docker-compose
+    return 0
+  fi
+  echo ""
 }
 
 restart_services() {
