@@ -1014,6 +1014,10 @@
   defaultTimes();
   wireBuilder();
   renderBuilder();
+  window.addEventListener("republic:session", async () => {
+    await loadMe();
+    await Promise.all([loadJurisdictions(), loadElections(), loadNotifications()]);
+  });
   (async function init() {
     await loadMe();
     await Promise.all([loadJurisdictions(), loadElections(), loadNotifications(), loadReasonCodes()]);
