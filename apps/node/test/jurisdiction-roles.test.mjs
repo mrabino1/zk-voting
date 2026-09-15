@@ -240,6 +240,28 @@ describe('per-jurisdiction officer roles', () => {
   let northElectionId;
   let southElectionId;
 
+  test('PATCH ballot metadata is allowed only for the election jurisdiction clerk', async () => {
+    const north = await api('POST', '/api/elections', {
+      jar: northClerkJar,
+      body: electionBody('north', { title: 'North metadata' }),
+    });
+    assert.equal(north.status, 201, north.json?.error);
+    const id = north.json.election.id;
+
+    const denied = await api('PATCH', `/api/elections/${id}`, {
+      jar: southClerkJar,
+      body: { title: 'Hijack' },
+    });
+    assert.equal(denied.status, 403);
+
+    const allowed = await api('PATCH', `/api/elections/${id}`, {
+      jar: northClerkJar,
+      body: { title: 'North metadata revised' },
+    });
+    assert.equal(allowed.status, 200, allowed.json?.error);
+    assert.equal(allowed.json.election.title, 'North metadata revised');
+  });
+
   test('freeze is allowed only for the election jurisdiction clerk', async () => {
     const north = await api('POST', '/api/elections', {
       jar: northClerkJar,

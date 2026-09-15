@@ -123,19 +123,45 @@
               </select>
             </div>
           </div>
-          <div class="field">
-            <label class="field-label" for="e-questions">Questions JSON <span class="req">*</span></label>
-            <textarea id="e-questions" name="questions" required spellcheck="false">[
-  {
-    "type": "YES_NO",
-    "prompt": "Shall the measure be adopted?",
-    "options": ["No", "Yes"]
-  }
-]</textarea>
-            <span class="field-hint">Array of questions (SINGLE_CHOICE, MULTI_CHOICE, YES_NO, MEASURE). The Node hashes the ballot spec.</span>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="e-load">Load existing ballot</label>
+              <select id="e-load" name="loadElectionId">
+                <option value="">New election…</option>
+              </select>
+              <span class="field-hint">Created elections can be edited until the roll is frozen. Frozen ballots stay hashed as-is.</span>
+            </div>
+            <div class="field" style="justify-content:flex-end">
+              <span class="field-label">&nbsp;</span>
+              <div class="actions">
+                <button class="btn btn-secondary" type="button" id="btn-load-ballot">Load</button>
+                <a class="btn btn-secondary" id="link-info-preview" href="/elections" hidden>Voter info page</a>
+              </div>
+            </div>
           </div>
+          <p class="field-hint" id="ballot-lock-hint">
+            Punch-list each question’s options like a questionnaire: name, short blurb, supporting text, and optional external links.
+            That copy is hashed into <code>ballotSpecHash</code> so the voter info pages cannot diverge from the ballot.
+          </p>
+          <div id="ballot-builder" class="ballot-builder" aria-label="Ballot option metadata"></div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" id="btn-add-question">Add question</button>
+          </div>
+          <details class="advanced-json" id="questions-advanced">
+            <summary>Advanced: questions JSON</summary>
+            <div class="field" style="margin-top:0.6rem">
+              <label class="field-label" for="e-questions">Questions JSON <span class="req">*</span></label>
+              <textarea id="e-questions" name="questions" required spellcheck="false">[]</textarea>
+              <span class="field-hint">
+                Options may be a string, <code>{id,label}</code>, or full metadata
+                (<code>summary</code>, <code>body</code>, <code>imageUrl</code>, <code>links: [{label,url}]</code>).
+                The Node canonicalizes and keccak-hashes this with the title.
+              </span>
+            </div>
+          </details>
           <div class="actions">
             <button class="btn" type="submit">Create election</button>
+            <button class="btn btn-secondary" type="button" id="btn-save-ballot" hidden>Save ballot changes</button>
           </div>
           <div class="flash" id="flash-election" role="status"></div>
         </form>

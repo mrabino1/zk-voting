@@ -439,6 +439,9 @@ GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id
+GET  /api/elections/:id/info
+GET  /api/elections/:id/info/:questionId/:optionId
+PATCH /api/elections/:id            (clerk of that jurisdiction; questions + option metadata until freeze)
 POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer of that jurisdiction)
@@ -473,6 +476,37 @@ A person identifies with a **passkey, Web3 wallet, or smart-card digital ID**.
 Many ETH addresses may be verified internally; only one is active. The
 Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 
+### Eligible set on the Node path
+
+Product rule: **`eligible = registered ∩ ¬currently-disqualified`** (registration
+order). The Node rebuilds `eligibleRoot` on register, disqualify, and revoke.
+`POST /api/elections/:id/freeze` snapshots `frozenEligibleRoot` and
+`frozenDisqualificationRoot` — those are the roots for the open window unless
+the election was created with `lateUpdateAllowed` (discouraged).
+
+When `CHAIN_RPC` is unset, `POST /api/elections/:id/vote` requires
+`identityCommitment` and rejects with:
+
+| `code` | Meaning |
+| --- | --- |
+| `DISQUALIFIED` | Commitment is currently disqualified (`reasonCode` / `reasonName` included) |
+| `NOT_REGISTERED` | Commitment is not on the registration roll |
+| `IDENTITY_COMMITMENT_REQUIRED` | Node path cannot enforce eligibility without the leaf |
+| `ELIGIBLE_ROOT_MISMATCH` / `DISQUALIFICATION_ROOT_MISMATCH` | Proof roots do not match the open-window set |
+
+`identityCommitment` is checked then discarded. It is never stored on the
+vote or envelope.
+
+### ZK non-membership gap (not fixed in this layer)
+
+`vote.circom` binds `disqRoot` as a public input; it does **not** prove
+non-membership in the disqualification tree. Cryptographic exclusion of a
+disqualified person depends on membership in a correctly rebuilt eligible
+root. `MockVerifier` still accepts any proof. **Node enforcement is the
+product control until a non-membership (or equivalent) constraint exists and
+a production hasher/verifier replaces the mock.** This layer does not
+replace MockVerifier or Poseidon.
+
 ### Pages (SPA, Vite + React, served by Express)
 
 Inspired by DealPunchList operational UX (organizations → jurisdictions,
@@ -485,6 +519,8 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 - `/admin` — platform admin (hosts, keys, jurisdictions)
 - `/back-office` — clerks / registrars / disqualification officers
 - `/explorer` — Republic L2 block explorer (every block's outcomes)
+- `/elections/:id/info` — voter punch-list of options (read-only supporting info)
+- `/elections/:id/info/:questionId/:optionId` — mini page for one option + external links
 - `/elections/:id/results`
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
