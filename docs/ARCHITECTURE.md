@@ -682,13 +682,16 @@ Question types the ballot UI renders: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`.
 ### Passkey wallet (Inertia-style)
 
 1. Create WebAuthn credential (`residentKey: required`, `extensions.prf`).
-2. `prf.eval` first output → HKDF → encrypt a generated 32-byte seed
+2. `prf.eval` **account** salt → HKDF → encrypt a generated 32-byte seed
    (AES-GCM) and store the blob in IndexedDB + server credential id.
-3. Signing: get PRF, unwrap seed, HMAC-sign, immediately drop plaintext
+3. `prf.eval` **identity** salt → HKDF → `(identityTrapdoor, nullifierSecret)`.
+   Separate domain from the account key ([`PASSKEYS.md`](./PASSKEYS.md)).
+4. Signing: get account PRF, unwrap seed, HMAC-sign, immediately drop plaintext
    from memory. **Today** this is not a secp256k1 UserOp signature.
-4. Fallback if PRF is unavailable: still create the passkey for login, and
+5. Fallback if PRF is unavailable: still create the passkey for login, and
    keep an encrypted key wrapped with a key derived from the assertion
-   signature (documented as weaker). Never display a mnemonic.
+   signature (documented as weaker). Never display a mnemonic. Never use
+   that account key as the trapdoor.
 
 ---
 

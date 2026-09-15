@@ -247,12 +247,16 @@ export async function renderVote(main, ctx) {
       return;
     }
 
-    if (!publicRecord) {
+    if (!publicRecord || publicRecord.staleWrap) {
       children.push(
         h(
           "div",
           { class: "notice notice-warn" },
-          h("p", { text: "This device does not have a Republic passkey yet. Register first, then return to the ballot." }),
+          h("p", {
+            text: publicRecord?.staleWrap
+              ? "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting."
+              : "This device does not have a Republic passkey yet. Register first, then return to the ballot.",
+          }),
           h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to registration" })
         )
       );
@@ -310,7 +314,7 @@ export async function renderVote(main, ctx) {
             {
               class: "btn",
               type: "submit",
-              disabled: Boolean(state.busy || !publicRecord),
+              disabled: Boolean(state.busy || !publicRecord || publicRecord.staleWrap),
               "aria-busy": state.busy ? "true" : "false",
               text: state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
             }
@@ -326,8 +330,10 @@ export async function renderVote(main, ctx) {
   async function onSubmit(event) {
     event.preventDefault();
     if (state.busy) return;
-    if (!publicRecord) {
-      state.error = "Register a passkey on this device before voting.";
+    if (!publicRecord || publicRecord.staleWrap) {
+      state.error = publicRecord?.staleWrap
+        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
+        : "Register a passkey on this device before voting.";
       paint();
       return;
     }
