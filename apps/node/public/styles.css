@@ -164,9 +164,48 @@ body {
   color: var(--ink);
   text-align: center;
   font-size: 0.92rem;
-  padding: 0.65rem 1.25rem;
+  padding: 0.75rem 1.25rem 0.95rem;
   border-bottom: 1px solid var(--navy);
   line-height: 1.45;
+}
+
+.disclosure-banner .disclosure-note {
+  margin: 0;
+}
+
+.disclosure-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0.65rem 1rem;
+  margin: 0.75rem auto 0;
+  max-width: 52rem;
+  text-align: left;
+}
+
+.disclosure-stats > div {
+  background: var(--paper, #fff);
+  border: 1px solid var(--line, #c5cdd8);
+  padding: 0.55rem 0.75rem;
+}
+
+.disclosure-stats dt {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.disclosure-stats dd {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 1.02rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclosure-stats .countdown {
+  font-variant-numeric: tabular-nums;
 }
 
 .site-header {
@@ -767,6 +806,202 @@ th {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+.punch-list,
+.punch-options,
+.ext-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.punch-list {
+  display: grid;
+  gap: 1.25rem;
+  counter-reset: punch;
+  margin-bottom: 1.5rem;
+}
+
+.punch-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 1rem 1.1rem 1.15rem;
+  border-top: 4px solid var(--navy);
+}
+
+.punch-section h2 {
+  margin-top: 0;
+}
+
+.punch-options {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.punch-item {
+  border: 2px solid var(--line);
+  background: var(--cream);
+  padding: 0.85rem 1rem;
+}
+
+.punch-item h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.12rem;
+}
+
+.option-mini h2 {
+  margin-top: 0.2rem;
+}
+
+.option-portrait {
+  display: block;
+  max-width: 12rem;
+  max-height: 12rem;
+  object-fit: cover;
+  border: 2px solid var(--navy);
+  margin: 0 0 1rem;
+}
+
+.option-body {
+  max-width: var(--measure);
+}
+
+.option-body-p {
+  white-space: pre-wrap;
+}
+
+.ext-links li {
+  margin: 0 0 0.4rem;
+}
+
+.crumbs {
+  font-size: 0.92rem;
+  margin: 0 0 1rem;
+}
+
+.choice-copy {
+  display: grid;
+  gap: 0.2rem;
+  flex: 1;
+}
+
+.choice-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.choice-row .choice {
+  margin: 0;
+}
+
+.choice-info {
+  font-size: 0.88rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 0.75rem;
+  border: 2px solid var(--line);
+  background: var(--paper);
+  text-decoration: none;
+  color: var(--navy);
+}
+
+.choice-info:hover {
+  border-color: var(--navy);
+}
+
+.session-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--cream);
+  font-size: 0.9rem;
+}
+
+.session-chip {
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.session-chrome .session-chrome-btn,
+a.session-chrome-btn {
+  min-height: 2.4rem;
+  padding: 0.35rem 0.85rem;
+  background: transparent;
+  color: var(--cream);
+  border-color: var(--gold);
+}
+
+.session-chrome .session-chrome-btn:hover,
+a.session-chrome-btn:hover {
+  background: var(--navy-deep);
+  color: var(--cream);
+}
+
+.sign-in-panel {
+  margin: 0 0 1.5rem;
+}
+
+.sign-in-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+
+.sign-in-handle,
+.sign-in-dev {
+  margin: 0.75rem 0 0;
+}
+
+.sign-in-handle summary,
+.sign-in-dev summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+
+.sign-in-handle input,
+.sign-in-dev input {
+  margin-top: 0.35rem;
+}
+
+.sign-in-dev .form-grid {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.flash {
+  border-radius: var(--radius);
+  padding: 0.65rem 0.8rem;
+  margin: 0.5rem 0 0;
+  display: none;
+}
+
+.flash.show {
+  display: block;
+}
+
+.flash.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 2px solid var(--ok);
+}
+
+.flash.err {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 2px solid var(--danger);
 }
 
 .hr {

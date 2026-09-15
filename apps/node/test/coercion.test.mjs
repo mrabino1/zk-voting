@@ -134,6 +134,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '0xabc', electionId: id },
         encryptedBallot: '0x01',
+        identityCommitment: '0xca11',
       },
     });
     assert.equal(first.status, 201, first.json?.error);
@@ -147,6 +148,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '0xabc', electionId: id },
         encryptedBallot: '0x01',
+        identityCommitment: '0xca11',
       },
     });
     assert.equal(replay.status, 409);
@@ -157,6 +159,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '0xabc', electionId: id },
         encryptedBallot: '0x02',
+        identityCommitment: '0xca11',
       },
     });
     assert.equal(changedMind.status, 409, 'a new ciphertext must not be a second ballot');

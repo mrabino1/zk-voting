@@ -37,6 +37,10 @@ contract Ghost {
     mapping(uint256 => mapping(uint256 => bool)) public registeredCommitment;
 
     uint256 public duplicateNullifiers;
+    /// @dev Handler retries of an already-spent nullifier in the **same** election.
+    uint256 public doubleVoteAttempts;
+    /// @dev Must stay 0: a second accepted ballot for a spent nullifier in that election.
+    uint256 public doubleVotesAccepted;
     uint256 public votesOutsideWindow;
     uint256 public votesWhileUnfrozen;
 
@@ -82,6 +86,11 @@ contract Ghost {
         registeredCommitment[electionId][commitment] = true;
         registered += 1;
         registeredByElection[electionId] += 1;
+    }
+
+    function _recordDoubleVoteAttempt(bool accepted) internal {
+        doubleVoteAttempts += 1;
+        if (accepted) doubleVotesAccepted += 1;
     }
 
     function _recordVote(uint256 electionId, uint256 nullifier, bool frozen) internal {

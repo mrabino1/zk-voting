@@ -373,7 +373,17 @@ export class Explorer {
     return { blocks, txs };
   }
 
+  countPublishedVoteTxs() {
+    let n = 0;
+    for (const tx of Object.values(this.chain.txs || {})) {
+      if (String(tx.type || '').toLowerCase() === 'vote') n += 1;
+    }
+    return n;
+  }
+
   publicDisclosure(now, intervalSeconds) {
-    return disclosurePublicView(now, intervalSeconds);
+    return disclosurePublicView(now, intervalSeconds, {
+      acceptedBallotsDisclosed: this.countPublishedVoteTxs(),
+    });
   }
 }

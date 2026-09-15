@@ -40,6 +40,7 @@ Hosts use [`system_actions.sh`](./system_actions.sh) (DealPunchList / `dealpunch
 | Shared JS | `packages/types`, `proof-helpers`, `chain-client` | JSDoc types; optional `viem`. |
 | Node app | `apps/node/` | DealPunchList-shaped API + SPA. Footer: NOT FOR PROFIT. |
 | L2 | `l2/` | Own sequencer + prover, chainId **27427**. |
+| Docker Compose | `docker-compose.yml`, `Dockerfile`, `l2/Dockerfile` | Host Node + L2. Secrets in `.env`, data on volumes. |
 
 Do not put legal names, dates of birth, or street addresses on chain. Do not emit the selected option in an event. Do not print “I voted for X” receipts.
 

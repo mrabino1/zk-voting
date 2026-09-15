@@ -13,6 +13,11 @@ import {Handler} from "./Handler.sol";
 /// @notice Foundry invariant suite for Republic / zk-voting.
 ///         fail_on_revert is false in foundry.toml; the handler also
 ///         swallows reverts so the run is not aborted.
+///         Per individual election (not a lifetime ban): a nullifier is accepted
+///         at most once in that election. Same identity may vote in other elections.
+///         `invariant_nullifierOnceOnlyPerElection_doubleVoteRejected` (and
+///         `invariant_nullifierUnique`). Handler.doubleVote retries spent
+///         nullifiers in the same election.
 contract VotingInvariant is StdInvariant, Test {
     Handler public handler;
 
@@ -20,22 +25,34 @@ contract VotingInvariant is StdInvariant, Test {
         handler = new Handler();
         targetContract(address(handler));
 
-        bytes4[] memory selectors = new bytes4[](7);
+        bytes4[] memory selectors = new bytes4[](8);
         selectors[0] = Handler.createElection.selector;
         selectors[1] = Handler.register.selector;
         selectors[2] = Handler.freeze.selector;
         selectors[3] = Handler.warpIntoWindow.selector;
         selectors[4] = Handler.vote.selector;
-        selectors[5] = Handler.disqualify.selector;
-        selectors[6] = Handler.postTally.selector;
+        selectors[5] = Handler.doubleVote.selector;
+        selectors[6] = Handler.disqualify.selector;
+        selectors[7] = Handler.postTally.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         excludeSender(address(0));
     }
 
-    /// @notice A nullifier is accepted at most once per election.
-    ///         A second ballot, including a new ciphertext, is a revert.
+    /// @notice Per individual election: a nullifier is accepted at most once in
+    ///         that election. Not a lifetime ban across elections. Mind-change
+    ///         does not authorize a second accept in the same election.
+    function invariant_nullifierOnceOnlyPerElection_doubleVoteRejected() public view {
+        _assertNullifierOncePerElection();
+    }
+
+    /// @dev Same per-election uniqueness under the historical invariant name.
     function invariant_nullifierUnique() public view {
-        assertEq(handler.duplicateNullifiers(), 0, "nullifier counted twice");
+        _assertNullifierOncePerElection();
+    }
+
+    function _assertNullifierOncePerElection() internal view {
+        assertEq(handler.duplicateNullifiers(), 0, "per-election: nullifier spent twice in the same election");
+        assertEq(handler.doubleVotesAccepted(), 0, "per-election: double-vote accepted in the same election");
         uint256 n = handler.trackedElectionCount();
         uint256 ghostAccepted;
         for (uint256 i; i < n; ++i) {
@@ -48,8 +65,9 @@ contract VotingInvariant is StdInvariant, Test {
                 assertTrue(handler.getInbox().nullifierUsed(electionId, nullifier), "chain missing spent nullifier");
                 handler.getInbox().ballotHashOf(electionId, nullifier);
             }
-            assertEq(handler.getInbox().acceptedBallots(electionId), handler.acceptedByElection(electionId));
-            assertEq(handler.getInbox().acceptedBallots(electionId), used, "acceptedBallots != unique nullifiers");
+            uint256 onChainAccepted = handler.getInbox().acceptedBallots(electionId);
+            assertEq(onChainAccepted, handler.acceptedByElection(electionId));
+            assertEq(onChainAccepted, used, "per-election: acceptedBallots == unique spent nullifiers");
         }
         assertEq(handler.votesAccepted(), ghostAccepted);
     }
