@@ -163,6 +163,14 @@
               </div>
             </div>
           </div>
+          <div class="field">
+            <label class="field-label" for="e-tally-scheme">Tally binding</label>
+            <select id="e-tally-scheme" name="tallyScheme">
+              <option value="sum_only" selected>sum_only — any counts that sum to accepted ballots (legacy demo)</option>
+              <option value="opens_ballots">opens_ballots — Node opens ECIES envelopes (threshold-1 demo key, NON-PRODUCTION)</option>
+            </select>
+            <span class="field-hint">Production guardians / mixnet are not this menu. The demo key is generated on create and labeled non-production.</span>
+          </div>
           <p class="field-hint" id="ballot-lock-hint">
             Punch-list each question’s options like a questionnaire: name, short blurb, supporting text, and optional external links.
             That copy is hashed into <code>ballotSpecHash</code> so the voter info pages cannot diverge from the ballot.
@@ -363,7 +371,7 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). You cannot invent votes. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, leave counts blank to open the demo ECIES envelopes, or submit counts that must match the opened ballots — invented partitions are rejected. Threshold-1 operator key is NON-PRODUCTION. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
@@ -372,8 +380,8 @@
           <div id="tally-aspects" class="aspects-editor"></div>
           <div class="field">
             <label class="field-label" for="t-counts">Counts JSON</label>
-            <textarea id="t-counts" name="counts" spellcheck="false">[0, 0]</textarea>
-            <span class="field-hint" id="t-counts-hint">Concatenated plurality options in ballot order, or use the per-question fields above. For an all-ranked ballot, leave blank to compute IRV from envelopes.</span>
+            <textarea id="t-counts" name="counts" spellcheck="false" placeholder="[2, 1]"></textarea>
+            <span class="field-hint" id="t-counts-hint">Concatenated plurality options in ballot order, or use the per-question fields above. For an all-ranked ballot, leave blank to compute IRV from envelopes. On <code>opens_ballots</code>, omit to derive counts from opened envelopes; invented partitions are rejected. Example YES_NO → <code>[yesCount, noCount]</code>.</span>
           </div>
           <details>
             <summary>Optional Groth16 proof (mock path may omit)</summary>

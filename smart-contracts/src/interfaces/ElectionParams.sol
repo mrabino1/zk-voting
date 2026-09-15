@@ -19,6 +19,18 @@ struct ElectionParams {
     address verifier;
     uint8 questionCount;
     bytes32 jurisdictionId;
+    /// @notice P-256 tally encryption pubkey X. Zero with `tallyScheme == 0` keeps legacy sum-only demo mode.
+    bytes32 tallyPubKeyX;
+    /// @notice P-256 tally encryption pubkey Y.
+    bytes32 tallyPubKeyY;
+    /// @notice 0 = SUM_ONLY (any `counts` that sum to acceptedBallots). 1 = OPENS_BALLOTS (openings required).
+    uint8 tallyScheme;
+}
+
+/// @notice Tally binding mode. Additive: existing elections default to SUM_ONLY (0).
+library TallyScheme {
+    uint8 internal constant SUM_ONLY = 0;
+    uint8 internal constant OPENS_BALLOTS = 1;
 }
 
 library ElectionState {

@@ -229,6 +229,7 @@ RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`doc
 - `.env` is gitignored. Do not paste production RPC URLs with credentials into issues.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
+- `opens_ballots` elections store a **threshold-1** P-256 private JWK in the Node data file (`tallyGuardians`). That key decrypts every ballot. It is a demo, labeled NON-PRODUCTION. Do not use it for a binding election. Production guardians / mixnet are not this host’s JSON file.
 
 ## L1 certification (tally hash on Ethereum)
 

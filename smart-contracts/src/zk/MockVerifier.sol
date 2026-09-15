@@ -50,7 +50,9 @@ contract MockVerifier is IGroth16Verifier {
     {
         if (!acceptAll) return false;
         if (input.length < 3) revert InvalidInputLength();
-        if (input.length >= 3 && deniedNullifiers[bytes32(input[2])]) return false;
+        // Vote circuit uses 5 public inputs; nullifier is input[2]. Tally uses a
+        // 6-word TALLY_SOL_MOCK_V1 instance and must not share that denylist slot.
+        if (input.length == 5 && deniedNullifiers[bytes32(input[2])]) return false;
         return true;
     }
 }

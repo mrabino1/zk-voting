@@ -155,7 +155,8 @@ GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
-POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality counts and/or IRV from envelopes; attempts L1 certify if env set)
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
+GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 postResult; no-op if env unset)
 GET  /api/elections/:id/l1
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)

@@ -26,6 +26,8 @@ import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
+import { DEMO_KEY_WARNING, publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash } from '../l1Certify.mjs';
 
@@ -136,6 +138,9 @@ export function electionsRouter(deps) {
           disqualificationOfficer: body.disqualificationOfficer || roleAddr('disqualification_officer'),
           tallyOperator: body.tallyOperator || roleAddr('tally_operator'),
           verifier: body.verifier,
+          tallyScheme: body.tallyScheme,
+          tallyPubKeyX: body.tallyPubKeyX,
+          tallyPubKeyY: body.tallyPubKeyY,
         });
         if (!chainResult?.onChainElectionId) {
           throw new HttpError(502, 'ElectionFactory did not return an election id', {
@@ -169,6 +174,8 @@ export function electionsRouter(deps) {
         tallyOperator: chainResult?.params?.tallyOperator || body.tallyOperator || '',
         verifier: chainResult?.params?.verifier || body.verifier || '',
         lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
+        tallyScheme: body.tallyScheme,
+        opensBallots: body.opensBallots,
         createdBy: req.user.id,
         onChainElectionId: requestedOnChainId,
         onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
@@ -535,6 +542,28 @@ export function electionsRouter(deps) {
     }),
   );
 
+  router.get(
+    '/:id/tally-key',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const guardian = store.getTallyGuardian(election.id);
+      res.json({
+        electionId: String(election.id),
+        tallyScheme: election.tallyScheme || 'sum_only',
+        ceremony: publicCeremonyView(guardian) || election.tallyCeremony || {
+          scheme: 'none',
+          threshold: 0,
+          guardians: 0,
+          production: false,
+          warning: 'No tally encryption key. Legacy sum-only demo: any counts that sum to acceptedBallots are accepted.',
+        },
+        production: false,
+        warning: DEMO_KEY_WARNING,
+        nfp: true,
+      });
+    }),
+  );
+
   router.post(
     '/:id/tally',
     requireAuth,
@@ -546,59 +575,82 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const ranked = electionHasRanked(election);
-      const plurality = pluralityQuestions(election.questions || [], election.ballotMethod);
-      let irv = null;
-      if (ranked) {
-        const envelopes = store.listEnvelopes(election.id);
-        const ballots = payloadsFromEnvelopes(envelopes);
-        while (ballots.length < election.acceptedBallots) ballots.push([]);
-        irv = tallyBallots(election, ballots);
-      }
+
       let nums;
-      if (plurality.length) {
-        nums = parseTallyCounts(
-          req.body || {},
-          election.questions || [],
-          election.acceptedBallots,
-          election.ballotMethod,
-        );
-      } else if (ranked && irv) {
-        const posted = req.body?.counts;
-        if (Array.isArray(posted) && posted.length) {
-          nums = posted.map((n) => Number(n));
-          if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
+      let source = 'sum_only';
+      let openedBallots = null;
+      let irv = null;
+
+      if (isOpensBallots(election)) {
+        const guardian = store.getTallyGuardian(election.id);
+        const envelopes = store.listEnvelopes(election.id);
+        const opened = await openBallots(election, envelopes, guardian, election.questions);
+        if (Array.isArray(req.body?.counts) && req.body.counts.length > 0) {
+          const submitted = req.body.counts.map((n) => Number(n));
+          if (submitted.some((n) => !Number.isInteger(n) || n < 0)) {
             throw new HttpError(400, 'counts must be non-negative integers');
           }
-          if (nums.length !== irv.counts.length) {
-            throw new HttpError(400, `counts length must be ${irv.counts.length}`, {
-              code: 'TALLY_LENGTH',
-              expected: irv.counts.length,
-              actual: nums.length,
-            });
-          }
-          if (nums.some((n, i) => n !== irv.counts[i])) {
-            throw new HttpError(400, 'counts must match first-round ranked preferences', {
-              code: 'TALLY_MISMATCH',
-              expected: irv.counts,
-            });
-          }
-        } else {
-          nums = irv.counts;
+          rejectInventedCounts(submitted, opened.counts);
         }
-        if (!nums.length) throw new HttpError(400, 'counts[] required');
+        nums = opened.counts;
+        source = 'opens_ballots';
+        openedBallots = opened.openings.length;
       } else {
-        nums = parseTallyCounts(
-          req.body || {},
-          election.questions || [],
-          election.acceptedBallots,
-          election.ballotMethod,
-        );
+        const ranked = electionHasRanked(election);
+        const plurality = pluralityQuestions(election.questions || [], election.ballotMethod);
+        if (ranked) {
+          const envelopes = store.listEnvelopes(election.id);
+          const ballots = payloadsFromEnvelopes(envelopes);
+          while (ballots.length < election.acceptedBallots) ballots.push([]);
+          irv = tallyBallots(election, ballots);
+        }
+        if (plurality.length) {
+          nums = parseTallyCounts(
+            req.body || {},
+            election.questions || [],
+            election.acceptedBallots,
+            election.ballotMethod,
+          );
+        } else if (ranked && irv) {
+          const posted = req.body?.counts;
+          if (Array.isArray(posted) && posted.length) {
+            nums = posted.map((n) => Number(n));
+            if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
+              throw new HttpError(400, 'counts must be non-negative integers');
+            }
+            if (nums.length !== irv.counts.length) {
+              throw new HttpError(400, `counts length must be ${irv.counts.length}`, {
+                code: 'TALLY_LENGTH',
+                expected: irv.counts.length,
+                actual: nums.length,
+              });
+            }
+            if (nums.some((n, i) => n !== irv.counts[i])) {
+              throw new HttpError(400, 'counts must match first-round ranked preferences', {
+                code: 'TALLY_MISMATCH',
+                expected: irv.counts,
+              });
+            }
+          } else {
+            nums = irv.counts;
+          }
+          if (!nums.length) throw new HttpError(400, 'counts[] required');
+        } else {
+          nums = parseTallyCounts(
+            req.body || {},
+            election.questions || [],
+            election.acceptedBallots,
+            election.ballotMethod,
+          );
+        }
       }
+
       const countsHash = computeTallyHash(nums);
       const extras = {
         countsHash,
-        ballotMethod: irv?.ballotMethod || 'plurality',
+        ballotMethod: irv?.ballotMethod || (source === 'opens_ballots' ? 'plurality' : election.ballotMethod || 'plurality'),
+        source,
+        openedBallots,
       };
       if (irv?.questions?.length) extras.questions = irv.questions;
       const tallied = await store.setTally(election.id, nums, extras);
@@ -606,6 +658,8 @@ export function electionsRouter(deps) {
         electionId: String(tallied.id),
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
+        source,
+        production: false,
         countsHash,
         ballotMethod: tallied.tally?.ballotMethod,
         winners: (tallied.tally?.questions || []).map((q) => q.winner).filter(Boolean),
@@ -641,6 +695,12 @@ export function electionsRouter(deps) {
       res.json({
         ok: true,
         election: presentElection(fresh, deps),
+        tally: {
+          counts: nums,
+          source,
+          production: false,
+          openedBallots,
+        },
         l1Certification,
         nfp: true,
       });

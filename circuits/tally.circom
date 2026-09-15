@@ -5,6 +5,41 @@ pragma circom 2.0.0;
 // Tally circuit: prove that published per-option counts equal the
 // accepted ballots (plaintext / mock-homomorphic path).
 //
+// =============================================================================
+// Public-input versioning (READ THIS BEFORE WIRING A VERIFIER)
+// =============================================================================
+//
+// Circom public signals for this file's default `Tally(8, 4)`
+// (`component main {public [electionId, counts, acceptedCount]}`).
+// Circom puts **outputs first**:
+//
+//   CIRCOM_TALLY_V1 (nBallots=8, nOptions=4):
+//     [0] total                 // output; constrained == acceptedCount
+//     [1] electionId
+//     [2] counts[0]
+//     [3] counts[1]
+//     [4] counts[2]
+//     [5] counts[3]
+//     [6] acceptedCount
+//
+// Solidity `Tally.sol` does **not** pass this array. It uses
+// `TallyPublicInputs` / TALLY_SOL_MOCK_V1:
+//
+//     [0] version (1)
+//     [1] electionId
+//     [2] acceptedCount
+//     [3] countsHash     // keccak256(abi.encodePacked(counts))
+//     [4] ballotRoot     // inbox hash-chain; 0 on SUM_ONLY
+//     [5] openingsHash   // keccak of opened option indices; 0 on SUM_ONLY
+//
+// These layouts are versioned separately on purpose:
+// - Circom fixes nOptions at compile time and exposes counts in the clear.
+// - Solidity supports variable-length counts via a hash, plus the
+//   opened-ballot bind (ballotRoot / openingsHash).
+// Do not generate VoteVerifier-style Solidity from this R1CS and point
+// `ElectionParams.verifier` at it without a translating wrapper.
+// Foundry tests and local L2 keep MockVerifier.
+//
 // PRODUCTION: ballots on chain are ElGamal (or similar) ciphertexts.
 // A production tally proves a decryption of the product of those
 // ciphertexts, or a mixnet + decrypt, with the same Poseidon/elliptic
@@ -17,6 +52,7 @@ pragma circom 2.0.0;
 //   1. each non-padding ballot is an option index in [0, nOptions)
 //   2. counts[j] == #{ ballots with value j }
 //   3. sum(counts) == acceptedCount
+//   4. electionId is bound as a public input (same id Tally.sol posts)
 //
 // HASH_SCHEME: republic.hash.standin-v0 via identity.circom. NOT production Poseidon.
 
@@ -51,11 +87,17 @@ template IsEqual() {
 // an ElGamal ciphertext, and proving knowledge of the discrete log,
 // is the production path. The summation constraints stay the same.
 template Tally(nBallots, nOptions) {
+    signal input electionId;
     signal input ballots[nBallots];
     signal input counts[nOptions];
     signal input acceptedCount;
 
     signal output total;
+
+    // Bind electionId so a proof cannot be replayed against another poll.
+    // Dummy quadratic constraint: electionId is in the instance.
+    signal electionIdSq;
+    electionIdSq <== electionId * electionId;
 
     // nOptions fits in 8 bits for Republic v1 (questionCount is uint8;
     // per-question option lists are small). Indices are still field elements.
@@ -112,4 +154,4 @@ template Tally(nBallots, nOptions) {
 
 // Small default for circuit tests. Production compiles Tally(N, K) to
 // match inbox.acceptedBallots and the ballot spec's option count.
-component main {public [counts, acceptedCount]} = Tally(8, 4);
+component main {public [electionId, counts, acceptedCount]} = Tally(8, 4);

@@ -1124,6 +1124,7 @@
       treeDepth: Number($("e-depth").value),
       questions,
       jurisdictionId: $("e-jurisdiction").value,
+      tallyScheme: $("e-tally-scheme") ? $("e-tally-scheme").value : "sum_only",
       ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
     };
     try {
@@ -1334,7 +1335,11 @@
     try {
       const data = await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
       const cert = data && data.l1Certification;
+      const source = pick(data, ["tally.source", "election.tally.source"]);
       let msg = "Tally posted. Each plurality question is counted on its own options.";
+      if (source === "opens_ballots") {
+        msg = "Tally posted from opened envelopes (demo key, NON-PRODUCTION).";
+      }
       const winner = pick(data, ["election.tally.questions.0.winnerLabel"]) || pick(data, ["election.tally.questions.0.winner"]);
       const method = pick(data, ["election.tally.ballotMethod"]);
       if (method === "ranked_choice" || method === "mixed") {
@@ -1344,16 +1349,13 @@
           ". Round transcript is on the results page.";
       }
       if (cert && cert.status === "skipped") {
-        msg =
-          "Tally posted. Each plurality question is counted on its own options. L1 certification skipped (" +
-          (cert.reason || "L1 env unset") +
-          "). Set L1_RPC, L1_TALLY_MIRROR_ADDRESS, and L1_PUBLISHER_PRIVATE_KEY to copy the hash to Ethereum.";
+        msg += " L1 certification skipped (" + (cert.reason || "L1 env unset") + ").";
       } else if (cert && cert.status === "posted") {
-        msg = "Tally posted and certified on L1. tx=" + (cert.txHash || "");
+        msg += " Certified on L1. tx=" + (cert.txHash || "");
       } else if (cert && cert.status === "already_posted") {
-        msg = "Tally posted. L1 already has this election's hash.";
+        msg += " L1 already has this election's hash.";
       } else if (cert && cert.status === "failed") {
-        msg = "Tally posted locally; L1 certification failed: " + (cert.error || "unknown");
+        msg += " L1 certification failed: " + (cert.error || "unknown");
       }
       flash($("flash-tally"), cert && cert.status === "failed" ? "err" : "ok", msg);
       wireExplorerLinks(id);

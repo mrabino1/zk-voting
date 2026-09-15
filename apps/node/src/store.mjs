@@ -25,6 +25,14 @@ import {
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
+import {
+  DEMO_KEY_WARNING,
+  TALLY_SCHEME_OPENS_BALLOTS,
+  TALLY_SCHEME_SUM_ONLY,
+  generateDemoGuardian,
+  normalizeTallyScheme,
+  publicCeremonyView,
+} from './tallyCrypto.mjs';
 
 /** Public aliases for an election id (numeric, UUID, or short code when stored). */
 export function electionAliases(election) {
@@ -76,6 +84,7 @@ function emptyData() {
     votes: [],
     envelopes: [],
     notifications: [],
+    tallyGuardians: [],
   };
 }
 
@@ -733,6 +742,37 @@ export class Store {
     const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
     const tree = emptyTree(params.treeDepth);
     const dq = emptyTree(params.treeDepth);
+    let tallyScheme;
+    try {
+      tallyScheme = normalizeTallyScheme(params.tallyScheme, { opensBallots: params.opensBallots });
+    } catch (err) {
+      throw new HttpError(400, err.message);
+    }
+    let tallyPubKey = params.tallyPubKey || null;
+    let tallyPubKeyX = params.tallyPubKeyX || null;
+    let tallyPubKeyY = params.tallyPubKeyY || null;
+    let tallyCeremony = null;
+    if (tallyScheme === TALLY_SCHEME_OPENS_BALLOTS) {
+      const guardian = await generateDemoGuardian();
+      if (!this.data.tallyGuardians) this.data.tallyGuardians = [];
+      this.data.tallyGuardians.push({
+        electionId: String(id),
+        scheme: guardian.scheme,
+        threshold: 1,
+        guardians: 1,
+        production: false,
+        warning: DEMO_KEY_WARNING,
+        publicKeyRaw: guardian.publicKeyRaw,
+        publicKeyX: guardian.publicKeyX,
+        publicKeyY: guardian.publicKeyY,
+        privateJwk: guardian.privateJwk,
+        createdAt: new Date().toISOString(),
+      });
+      tallyPubKey = guardian.publicKeyRaw;
+      tallyPubKeyX = guardian.publicKeyX;
+      tallyPubKeyY = guardian.publicKeyY;
+      tallyCeremony = publicCeremonyView(guardian);
+    }
     const election = {
       id,
       shortCode,
@@ -755,6 +795,11 @@ export class Store {
       tallyOperator: params.tallyOperator || '',
       verifier: params.verifier || '',
       lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
+      tallyScheme,
+      tallyPubKey,
+      tallyPubKeyX,
+      tallyPubKeyY,
+      tallyCeremony,
       onChainElectionAddress: params.onChainElectionAddress || null,
       factoryAddress: params.factoryAddress || null,
       createTxHash: params.createTxHash || null,
@@ -1132,12 +1177,20 @@ export class Store {
     return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
   }
 
+  getTallyGuardian(electionId) {
+    const list = this.data.tallyGuardians || [];
+    return list.find((g) => String(g.electionId) === String(electionId)) || null;
+  }
+
   async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
       counts: counts.map((n) => Number(n)),
       postedAt: new Date().toISOString(),
+      source: extras.source || TALLY_SCHEME_SUM_ONLY,
+      production: false,
+      openedBallots: extras.openedBallots ?? null,
       countsHash: extras.countsHash || null,
       l1: extras.l1 || null,
       ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',

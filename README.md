@@ -133,11 +133,12 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Block explorer | Node `/explorer` over `l2-chain.json` + ingest API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 | Passkeys | WebAuthn PRF helper; demo address is `republic-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
 | Person identity | Passkey / Web3 / smart card; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
+| Tally that opens ballots | **Demo slice in-tree.** `tallyScheme=opens_ballots` encrypts choices to a P-256 tally pubkey (threshold-1 operator key, **NON-PRODUCTION**). Node decrypts accepted envelopes and rejects invented `counts[]`. Legacy `sum_only` still allows any partition of `acceptedBallots`. Not MACI / not production guardians. |
 | Coercion slice | One accepted nullifier + hash-only receipts (not MACI, not last-vote-counts). |
 | Independent auditor | `tools/auditor` + [`docs/AUDITOR.md`](./docs/AUDITOR.md); no Node private DB |
-| Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`. **`RANKED` is Future.** |
+| Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED` (IRV), `MEASURE`, `ARTICLE`. |
 | Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
-| Results page `/elections/:id/results` | Linked from explorer / back-office; **no voter-SPA view yet** (tally is on the API + explorer) |
+| Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 
 ---
@@ -409,7 +410,7 @@ Circom 2, self-contained (no circomlib path in this repo). **Poseidon is the pro
 | Circuit | Role |
 | --- | --- |
 | `circuits/vote.circom` | `Vote(levels)`: membership in the eligible tree, `nullifier = Hash(nullifierSecret, electionId)`, public `[root, disqRoot, nullifier, ballotHash, electionId]` |
-| `circuits/tally.circom` | Per-option counts sum to accepted ballots (plaintext / mock-homomorphic path) |
+| `circuits/tally.circom` | Histogram of opened option indices (`CIRCOM_TALLY_V1` public signals). **Not** the same encoding as `Tally.sol` (`TALLY_SOL_MOCK_V1` in `TallyPublicInputs.sol`). MockVerifier until a translating wrapper exists. |
 | `circuits/identity.circom` | Commitment and nullifier primitives |
 
 Compile notes, snarkjs, **exact proving-path commands**, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md), [`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
@@ -423,7 +424,7 @@ npm workspaces (Node 22):
 | Package | Role |
 | --- | --- |
 | `@zk-voting/types` | JSDoc types: `ElectionParams`, `VoteEnvelope`, `Block`, `Jurisdiction`; reason codes and election states matching Solidity |
-| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; versioned `hashLeftRight` (`keccak-dev-v1` default, `standin-v0` for Circom); Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
+| `@zk-voting/proof-helpers` | `serializePublicInputs` → `[root, disqRoot, nullifier, ballotHash, electionId]`; `serializeTallyPublicInputs` → TALLY_SOL_MOCK_V1; versioned `hashLeftRight` (`keccak-dev-v1` default, `standin-v0` for Circom); Keccak-256 via **viem** when installed (Node `crypto` is SHA-256 / NIST SHA-3, **not** Ethereum keccak) |
 | `@zk-voting/chain-client` | `getFactory`, `createElection`, `submitVote` through viem `writeContract` / `encodeFunctionData`, else `fetch` JSON-RPC `eth_call` wrappers for views |
 
 ---
@@ -612,11 +613,17 @@ A **jurisdiction** is the administrative owner: it defines the roll, the reason 
 | **Registrar** | Approve registrations | Insert/remove registry commitments |
 | **Disqualification officer** | Apply/revoke reason codes | Write `DisqualificationRegistry` |
 | **Election clerk** | Create election, freeze roll, open/close | Configure `Election`, freeze roots |
-| **Tally operator** | Run the prover / batch | Submit tally proofs (cannot invent votes) |
+| **Tally operator** | Run the prover / batch; on `opens_ballots` elections, open demo envelopes | Submit tally proofs. On SUM_ONLY they can still invent a partition of the sum. On OPENS_BALLOTS, invented partitions that only match the sum are rejected. |
 | **Observer** | Read-only | Read state and verify |
 | **Platform admin** | Host the Node, keys, uptime | Not an election officer unless also granted |
 
-A **corrupt tally operator** must not be able to change outcomes or add votes. They **can** stall (never submit a tally). The README’s threat model calls that out; later work can add a forced-reveal or guardian path. They **cannot** make a disqualified voter’s proof succeed.
+A **corrupt tally operator** on the legacy **SUM_ONLY** path can still post any `counts[]` that sum to `acceptedBallots` — the operator cannot add or drop ballots, but they can rearrange which option received them. That hole is why **OPENS_BALLOTS** exists: the Node decrypts ECIES envelopes under a **threshold-1 demo key** (the operator host holds it; **NON-PRODUCTION**, not a guardian ceremony) and the contract requires `histogram(openings) == counts`. They **can** stall (never submit a tally). They **cannot** make a disqualified voter’s proof succeed. Production remains homomorphic / mixnet decryption proofs plus a real Groth16 verifier. MACI-style coercion resistance is a separate gap.
+
+### Tally encryption (honest status)
+
+- **Demo (this slice):** each `opens_ballots` election generates a P-256 keypair at create time (`p256-ecies-aesgcm-v1`). The public key is on the election record (`tallyPubKey` / `tallyPubKeyX|Y`). The private JWK stays in the Node’s `tallyGuardians` collection and is never returned by `GET /api/elections/:id/tally-key`. Voters encrypt a packed option index to that pubkey (replacing seed-keyed AES for the posted envelope). After cutoff, `POST /tally` opens every accepted envelope and posts the derived plurality vector. Submitting a different vector whose sum still matches `acceptedBallots` fails with `INVENTED_COUNTS`.
+- **On-chain:** `ElectionParams.tallyScheme` is additive (`0` keeps old tests). `submitOpenedTally` binds openings ↔ counts ↔ inbox `ballotRoot`. `Tally.sol` Groth16 inputs are versioned as `TALLY_SOL_MOCK_V1` and are **not** `tally.circom`’s public signals.
+- **Not done:** Shamir / guardian threshold > 1, mixnet permutation before opening, homomorphic ciphertext product, real Groth16 tally keys, MACI last-vote-counts. Do not run a binding election on the demo key.
 
 ---
 
@@ -751,7 +758,7 @@ npm run compose:up             # same
 
 Present: monorepo skeleton, Solidity under `smart-contracts/`, circuits, packages, Node API + vanilla JS UI, civic JSON L2, explorer and passkey docs. Choice-free receipts and independent auditor packaging are in-tree (roadmap item 10 slice). Last-vote-counts / re-vote supersession is **not** shipped: a nullifier is accepted once.
 
-Still ahead of a binding election (**Future**): Poseidon hasher swap, Groth16 **ceremony**, secp256k1 in the browser passkey helper, EVM execution on 27427, MACI-style collusion-resistant messaging. Do not treat `MockVerifier`, the circom `Hasher()` stand-in, or a local `circuits:setup` zkey as production cryptography. Dedicated results, ranked-choice IRV, UUID election ids, and L1 certification slices are already in `test/unstable`.
+Still ahead of a binding election (**Future**): Poseidon hasher swap, Groth16 **ceremony**, secp256k1 in the browser passkey helper, EVM execution on 27427, MACI-style collusion-resistant messaging, production tally guardians (threshold > 1) / mixnet. Do not treat `MockVerifier`, the circom `Hasher()` stand-in, a local `circuits:setup` zkey, or the threshold-1 tally operator key as production cryptography. Dedicated results, ranked-choice IRV, UUID election ids, L1 certification, and the demo opens-ballots tally are already in `test/unstable`.
 
 ---
 

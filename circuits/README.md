@@ -73,10 +73,25 @@ Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to matc
 - Each `ballots[i]` is either an option index in `[0, nOptions)` or the padding sentinel `nOptions`.
 - `counts[j]` equals the number of ballots equal to `j`.
 - `sum(counts) === acceptedCount`.
+- `electionId` is a public input so a tally proof is specific to one poll.
+
+**Public signals (`CIRCOM_TALLY_V1`, default `Tally(8, 4)`).** Circom puts outputs first:
+
+```text
+[total, electionId, counts[0], counts[1], counts[2], counts[3], acceptedCount]
+```
+
+**Solidity (`TALLY_SOL_MOCK_V1`, `TallyPublicInputs.sol` / `Tally.sol`):**
+
+```text
+[version=1, electionId, acceptedCount, countsHash, ballotRoot, openingsHash]
+```
+
+These encodings are versioned separately. Circom fixes `nOptions` at compile time. Solidity hashes a variable-length `counts` vector and binds `ballotRoot` / `openingsHash` for the OPENS_BALLOTS path. Do not export a Groth16 Solidity verifier from this R1CS and set `ElectionParams.verifier` to it without a translating wrapper. Foundry tests keep `MockVerifier`.
 
 Production tallying is homomorphic: inbox ciphertexts (ElGamal or equivalent) are multiplied, then a decryption proof (or mixnet) shows the same counts. The summation constraints stay; the ballot wires become decrypted shares. Do not publish decrypted ballots linked to nullifiers.
 
-Default `main` is `Tally(8, 4)` for compile tests. Production compiles to the inbox size and ballot spec.
+The first vertical slice that **opens** ballots is off-circuit: Node P-256 ECIES (threshold-1 operator key, **NON-PRODUCTION**) plus `Tally.submitOpenedTally` histogram checks. See the root README “Tally encryption (honest status)”.
 
 ---
 

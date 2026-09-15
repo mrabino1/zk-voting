@@ -3,6 +3,7 @@
  * Ballot UI: every aspect on one envelope. After accept, do not print selections.
  */
 
+import { openingIndexFromAnswers } from "./tally-crypto.js";
 import {
   buildBallotObject,
   collectAnswers,
@@ -153,12 +154,17 @@ export async function renderVote(main, ctx) {
         ),
         election.ballotSpecHash
           ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
+          : null,
+        election.tallyPubKey
+          ? h("li", {}, h("span", { class: "lbl", text: "Tally encryption" }), h("span", { text: "P-256 ECIES to the election tally pubkey (demo threshold-1 key, NON-PRODUCTION)" }))
           : null
       ),
       h(
         "p",
         {
-          text: "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
+          text: election.tallyPubKey
+            ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
+            : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       ),
       h(
@@ -554,9 +560,16 @@ export async function renderVote(main, ctx) {
       answers,
     });
     const ballotBytes = new TextEncoder().encode(JSON.stringify(ballotObject));
+    const choiceIndex = openingIndexFromAnswers(answers, questions);
+    const tallyPubKey = election.tallyPubKey || election.tallyCeremony?.publicKey || null;
 
     try {
-      const auth = await wallet.authorizeBallot({ electionId: election.id, ballotBytes });
+      const auth = await wallet.authorizeBallot({
+        electionId: election.id,
+        ballotBytes,
+        tallyPubKey,
+        choiceIndex: tallyPubKey ? choiceIndex : undefined,
+      });
       const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
       const publicInputs = mockVotePublicInputs({
         eligibleRoot: election.eligibleRoot,

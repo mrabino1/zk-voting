@@ -157,6 +157,8 @@ abstract contract RepublicStackScript is Script {
         p.verifier = verifier;
         p.questionCount = 1;
         p.jurisdictionId = keccak256("CIVIC");
+        // Default civic sample stays SUM_ONLY so existing operator scripts keep working.
+        p.tallyScheme = 0;
     }
 }
 

@@ -25,6 +25,7 @@
  * unwrapped under the new domain salts. Reset the demo wallet and create a new passkey.
  */
 
+import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
 const DB_NAME = "republic-wallet";
 const DB_VERSION = 2;
 const STORE = "wallet";
@@ -1211,10 +1212,13 @@ export async function signUserOp(hash) {
 
 /**
  * Unlock identity secrets under the **identity** PRF/HKDF domain, compute a
- * per-election nullifier, and optionally encrypt a ballot. Zeroes trapdoor and
- * account seed before return. The trapdoor is never included in the returned object.
+ * per-election nullifier, and optionally encrypt a ballot. When `tallyPubKey`
+ * is set, the posted envelope is P-256 ECIES to that key (tally-opens path).
+ * Otherwise the legacy seed-keyed AES-GCM stand-in is used (only the voter can
+ * open it). Zeroes trapdoor and account seed before return. The trapdoor is never
+ * included in the returned object.
  */
-export async function authorizeBallot({ electionId, ballotBytes }) {
+export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, choiceIndex } = {}) {
   const { rec, seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
   let trapdoor = identity.trapdoor;
   let nullifierSecret = identity.nullifierSecret;
@@ -1223,28 +1227,36 @@ export async function authorizeBallot({ electionId, ballotBytes }) {
     const nullifier = keccak256Hex(concatBytes(nullifierSecret, electionKey));
     let encryptedBallot = null;
     let ballotHash = null;
-    if (ballotBytes) {
-      const packed = coerceBytes(ballotBytes);
-      const ikm = await importHkdfIkm(seed);
-      const aesKey = await crypto.subtle.deriveKey(
-        {
-          name: "HKDF",
-          hash: "SHA-256",
-          salt: electionKey,
-          info: textEncoder.encode("republic-ballot-elgamal-standin"),
-        },
-        ikm,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt"]
-      );
-      const iv = crypto.getRandomValues(new Uint8Array(12));
-      const ciphertext = new Uint8Array(
-        await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, packed)
-      );
-      const blob = concatBytes(iv, ciphertext);
-      encryptedBallot = "0x" + bytesToHex(blob);
-      ballotHash = keccak256Hex(blob);
+    if (ballotBytes || choiceIndex != null) {
+      if (tallyPubKey) {
+        let packed;
+        if (choiceIndex != null) packed = packChoices([Number(choiceIndex)]);
+        else packed = coerceBytes(ballotBytes);
+        encryptedBallot = await encryptToTallyPub(tallyPubKey, packed);
+        ballotHash = keccak256Hex(hexToBytes(encryptedBallot));
+      } else {
+        const packed = coerceBytes(ballotBytes);
+        const ikm = await importHkdfIkm(seed);
+        const aesKey = await crypto.subtle.deriveKey(
+          {
+            name: "HKDF",
+            hash: "SHA-256",
+            salt: electionKey,
+            info: textEncoder.encode("republic-ballot-elgamal-standin"),
+          },
+          ikm,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt"]
+        );
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const ciphertext = new Uint8Array(
+          await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, packed)
+        );
+        const blob = concatBytes(iv, ciphertext);
+        encryptedBallot = "0x" + bytesToHex(blob);
+        ballotHash = keccak256Hex(blob);
+      }
     }
     const userOpMaterial = keccak256(
       concatBytes(

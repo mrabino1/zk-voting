@@ -78,6 +78,13 @@ export function configRouter(deps) {
           oneActiveEthAddress: true,
           note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
         },
+        tally: {
+          schemes: ['sum_only', 'opens_ballots'],
+          defaultScheme: 'sum_only',
+          demoEncryption: 'p256-ecies-aesgcm-v1',
+          production: false,
+          note: 'opens_ballots uses a threshold-1 operator key (NON-PRODUCTION). sum_only still accepts any counts that sum to acceptedBallots. Circuit public signals (tally.circom) are versioned separately from Tally.sol mock inputs.',
+        },
         proving: {
           path: 'in-progress',
           ceremony: 'not-done',

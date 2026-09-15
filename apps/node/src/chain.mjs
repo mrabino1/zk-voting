@@ -66,6 +66,9 @@ export const electionFactoryAbi = [
           { name: 'verifier', type: 'address' },
           { name: 'questionCount', type: 'uint8' },
           { name: 'jurisdictionId', type: 'bytes32' },
+          { name: 'tallyPubKeyX', type: 'bytes32' },
+          { name: 'tallyPubKeyY', type: 'bytes32' },
+          { name: 'tallyScheme', type: 'uint8' },
         ],
       },
     ],
@@ -265,6 +268,12 @@ export function resolveCreateElectionParams(config, input, fromAddress) {
     verifier,
     questionCount,
     jurisdictionId: toJurisdictionBytes32(input.jurisdictionId),
+    tallyPubKeyX: input.tallyPubKeyX || `0x${'00'.repeat(32)}`,
+    tallyPubKeyY: input.tallyPubKeyY || `0x${'00'.repeat(32)}`,
+    tallyScheme:
+      input.tallyScheme === 'opens_ballots' || input.tallyScheme === 1 || input.tallyScheme === '1'
+        ? 1
+        : Number(input.tallyScheme || 0) || 0,
   };
 }
 

@@ -158,5 +158,6 @@ contract FactoryFuzz is Deployer {
         assertEq(got.cutoffTime, expected.cutoffTime);
         assertEq(got.treeDepth, expected.treeDepth);
         assertEq(got.questionCount, expected.questionCount);
+        assertEq(got.tallyScheme, expected.tallyScheme);
     }
 }

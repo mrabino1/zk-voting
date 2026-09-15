@@ -57,6 +57,20 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationOfficer: election.disqualificationOfficer,
     tallyOperator: election.tallyOperator,
     verifier: election.verifier,
+    tallyScheme: election.tallyScheme || 'sum_only',
+    tallyPubKey: election.tallyPubKey || null,
+    tallyPubKeyX: election.tallyPubKeyX || null,
+    tallyPubKeyY: election.tallyPubKeyY || null,
+    tallyCeremony: election.tallyCeremony
+      ? {
+          scheme: election.tallyCeremony.scheme,
+          threshold: election.tallyCeremony.threshold,
+          guardians: election.tallyCeremony.guardians,
+          production: false,
+          warning: election.tallyCeremony.warning,
+          publicKey: election.tallyCeremony.publicKey || election.tallyPubKey || null,
+        }
+      : null,
     lateUpdateAllowed: election.lateUpdateAllowed,
     onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
     onChainElectionAddress: election.onChainElectionAddress || null,
@@ -78,7 +92,14 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationRoot: election.disqualificationRoot,
     state,
     stateName: STATE_NAMES[state],
-    tally: presentTally(election, election.acceptedBallots),
+    tally: presentTally(election, election.acceptedBallots)
+      ? {
+          ...presentTally(election, election.acceptedBallots),
+          source: election.tally.source || 'sum_only',
+          production: false,
+          openedBallots: election.tally.openedBallots ?? null,
+        }
+      : null,
     createdAt: election.createdAt,
     disclosure: disclosurePublicView(now, interval, {
       acceptedBallotsDisclosed: acceptedBallots,
