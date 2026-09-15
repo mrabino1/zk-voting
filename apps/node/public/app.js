@@ -3,11 +3,12 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
-import { startRouter, navigate } from "./router.js";
+import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
 import { renderElectionInfo, renderOptionInfo } from "./info.js";
+import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -450,6 +451,7 @@ function ctx() {
     reasonLabel,
     setTitle,
     SAMPLE_QUESTIONS,
+    mountSignInPanel,
   };
 }
 
@@ -548,6 +550,9 @@ function renderHome(main, route, bundle) {
           { class: "notice", role: "status" },
           h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
           h("p", { text: walletLine }),
+          me?.user
+            ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
+            : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
           h(
             "p",
             {
@@ -564,6 +569,7 @@ function renderHome(main, route, bundle) {
           : null
       )
     ),
+    h("div", { id: "sign-in-root" }),
     list,
     h("hr", { class: "hr" }),
     h(
@@ -637,6 +643,14 @@ function renderHome(main, route, bundle) {
       renderDeviceStatus(walletRecord, me, store)
     )
   );
+  const signInRoot = main.querySelector("#sign-in-root");
+  if (signInRoot) {
+    signInRoot.setAttribute(
+      "data-lede",
+      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
+    );
+    mountSignInPanel(signInRoot);
+  }
 }
 
 function renderDeviceStatus(walletRecord, me, store) {
@@ -751,4 +765,7 @@ async function renderRoute(route) {
 
 if (typeof document !== "undefined") {
   startRouter(renderRoute);
+  window.addEventListener(SESSION_EVENT, () => {
+    renderRoute(currentRoute());
+  });
 }

@@ -59,6 +59,35 @@ Root [`.dockerignore`](../.dockerignore) applies to every image built from this 
 
 ---
 
+## Docker Compose
+
+Root [`docker-compose.yml`](../docker-compose.yml) is the host path `system_actions.sh` already looks for. One command builds the Node (API + SPA) and Republic L2 (sequencer + prover), the same shape as a typical frontend Compose file: images from this tree, published ports, health checks, named volumes, `restart: unless-stopped`.
+
+```bash
+cp .env.example .env          # optional; defaults are enough for a local demo
+docker compose up -d --build  # or: npm run compose:up
+curl -fsS http://127.0.0.1:3000/health
+curl -fsS http://127.0.0.1:8546/health
+./system_actions.sh health
+./system_actions.sh logs
+./system_actions.sh status
+docker compose down           # or: npm run compose:down
+```
+
+| Service | Image | Host port | Role |
+| --- | --- | --- | --- |
+| `node` | `Dockerfile` | `${ZK_VOTING_PORT:-3000}` | Republic Node — voter / admin SPA + JSON API |
+| `l2` | `l2/Dockerfile` | `${L2_RPC_PORT:-8546}` | Sequencer JSON-RPC (`GET /health`, `eth_chainId`) |
+| `prover` | same as `l2` | none | Batch prover; writes proofs on the `l2-data` volume |
+
+Voter JSON lives on the `node-data` volume (`DATA_DIR=/data`). L2 blocks and proofs live on `l2-data`. Secrets stay in `.env` (gitignored). Host-specific live-reload mounts belong in `docker-compose.override.yml` (also gitignored); start from [`docker-compose.override.example.yml`](../docker-compose.override.example.yml).
+
+The Node binds `HOST=0.0.0.0` so the published port is reachable. The sequencer binds `L2_RPC_HOST=0.0.0.0` for the same reason (plain-Node local use still defaults to `127.0.0.1`). Inside the Compose network the Node reaches L2 at `http://l2:8546`. The host user should be able to run `docker compose` (membership in the `docker` group); `system_actions.sh` will use `sudo docker compose` when passwordless sudo is the only way to talk to the daemon.
+
+Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, or paymaster keys into the image.
+
+---
+
 ## First-time machine
 
 ```bash
@@ -123,6 +152,32 @@ Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in b
 ### Passkeys
 
 WebAuthn with PRF wraps a secp256k1 smart-account key. The Merkle leaf is Poseidon(trapdoor, nullifierSecret), not the address. [`docs/PASSKEYS.md`](./PASSKEYS.md).
+
+### Sign in (passkey and Ethereum wallet)
+
+Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). First-time **registration** is still `/register`.
+
+**Passkey (DFC-shaped ceremony, Republic stack)**
+
+1. `POST /api/auth/passkey/login/begin` — discoverable / resident-key options (no username). An optional `handle` scopes `allowCredentials` when the authenticator cannot discover the passkey.
+2. Browser `navigator.credentials.get` (WebAuthn assertion).
+3. `POST /api/auth/passkey/login/finish` — verify assertion, set `republic.sid`.
+4. The credential id already maps to a Person. Roles are unchanged (`voter`, `clerk`, `platform_admin`, …).
+
+This mirrors Daily Family Call’s challenge → assertion → HttpOnly session shape. Republic implements it with `@simplewebauthn/server`, Express, and the JSON store — it does not vendor DFC.
+
+**Ethereum wallet**
+
+1. Connect a wallet (EIP-1193 `eth_requestAccounts`).
+2. `POST /api/auth/web3/challenge` `{ address }` — SIWE-like **login** message (nonce stored on the Node; the client message is not trusted).
+3. Wallet `personal_sign`s that message.
+4. `POST /api/auth/web3/login` `{ address, signature }` — verify, resolve the Person who already has that web3 method or verified ETH address, set the same session cookie.
+
+Unknown passkeys and unknown wallets return `404` `UNKNOWN_CREDENTIAL` and **do not** create a person. Binding a new wallet is `POST /api/identity/web3/verify` on `/register`.
+
+`ALLOW_DEV_LOGIN=1` (or `NODE_ENV=test`) keeps `POST /api/auth/dev-login` as a **local/test fallback** only. It is not the primary officer path. Production (`master`) must leave it off.
+
+RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`docs/IDENTITY.md`](./IDENTITY.md).
 
 ---
 

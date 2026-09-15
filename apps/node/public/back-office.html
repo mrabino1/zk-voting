@@ -46,6 +46,7 @@
             <li><a href="/admin">Admin</a></li>
           </ul>
         </nav>
+        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
         <span class="office-badge">Not for profit</span>
       </div>
     </header>
@@ -61,11 +62,19 @@
           until the hour that contained the ballot has closed — a person leaving a voting office
           cannot be matched to a live increase.
         </p>
-        <p class="disclosure-banner" id="disclosure-banner" role="note">
-          Public ballot counts update once an hour. Officials do not get a live precinct tick.
-        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Public ballot counts update once an hour. Officials do not get a live precinct tick.
+          </p>
+        </aside>
         <p class="session-line" id="me-line">Checking session…</p>
       </header>
+
+      <div
+        id="sign-in-root"
+        data-heading="Sign in"
+        data-lede="Clerks, registrars, and officers sign in with a passkey or a bound Ethereum wallet. Roles are unchanged; the Node still enforces them on each action."
+      ></div>
 
       <nav class="local-nav" aria-label="Back-office sections">
         <a href="#clerk" class="active">Clerk</a>
@@ -386,6 +395,8 @@
         · AGPL-3.0-or-later
       </p>
     </footer>
+    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/signin.js"></script>
     <script src="/back-office.js" defer></script>
   </body>
 </html>

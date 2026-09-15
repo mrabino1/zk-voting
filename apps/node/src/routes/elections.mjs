@@ -9,7 +9,7 @@ import {
   presentPublicOptionInfo,
   resolveBallotSpecHash,
 } from '../ballotSpec.mjs';
-import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { reasonName } from '../reasonCodes.mjs';
@@ -208,6 +208,31 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/summary',
+    asyncHandler(async (req, res) => {
+      const { view } = await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentElection(election, deps);
+      const tallied = Boolean(election.tally);
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        title: election.title,
+        jurisdictionId: election.jurisdictionId,
+        state: dto.state,
+        stateName: dto.stateName,
+        startTime: election.startTime,
+        cutoffTime: election.cutoffTime,
+        participantCount: election.participantCount,
+        acceptedBallots: dto.acceptedBallots,
+        disclosure: electionDisclosure(election, deps, view),
+        explorerUrl: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
+        resultsUrl: tallied ? `/elections/${election.id}/results` : null,
+      });
+    }),
+  );
+
+  router.get(
     '/:id/ballots',
     asyncHandler(async (req, res) => {
       const { now, interval, view } = await publishDue(deps);
@@ -217,7 +242,7 @@ export function electionsRouter(deps) {
         electionId: String(election.id),
         acceptedBallots: published.length,
         ballots: published.map(publicVoteRecord),
-        disclosure: view,
+        disclosure: electionDisclosure(election, deps, view),
         nfp: true,
       });
     }),

@@ -4,6 +4,7 @@
  */
 
 import { bindSmartCard, bindWeb3Wallet, registerEthAccount, setActiveEthAddress } from "./identity-methods.js";
+import { mountSignInPanel } from "./signin.js";
 
 export async function renderRegister(main, ctx) {
   const {
@@ -37,8 +38,16 @@ export async function renderRegister(main, ctx) {
     selected: preselect && elections.some((e) => e.id === preselect) ? preselect : elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
   };
 
+  const signInHost = h("div", {
+    id: "sign-in-root",
+    dataset: {
+      heading: "Already registered? Sign in",
+      lede: "Use the passkey on this device or a bound Ethereum wallet. Creating a passkey below is for first-time registration.",
+    },
+  });
   const root = h("div", { class: "register-page" });
-  main.replaceChildren(root);
+  main.replaceChildren(signInHost, root);
+  mountSignInPanel(signInHost);
 
   function paint() {
     const rec = state.record;

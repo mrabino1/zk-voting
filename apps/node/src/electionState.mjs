@@ -2,7 +2,7 @@
 // 0=Created 1=RollFrozen 2=Open 3=Closed 4=Tallied
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
-import { disclosurePublicView } from './disclosure.mjs';
+import { disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -66,7 +66,9 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
       ? { counts: election.tally.counts, postedAt: election.tally.postedAt }
       : null,
     createdAt: election.createdAt,
-    disclosure: disclosurePublicView(now, interval),
+    disclosure: disclosurePublicView(now, interval, {
+      acceptedBallotsDisclosed: acceptedBallots,
+    }),
     nfp: true,
   };
 }
@@ -75,7 +77,22 @@ export async function publishDue(deps) {
   const now = deps.config.nowFn();
   const interval = deps.config.disclosureIntervalSeconds;
   if (deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
-  return { now, interval, view: disclosurePublicView(now, interval) };
+  const view = deps.explorer?.publicDisclosure
+    ? deps.explorer.publicDisclosure(now, interval)
+    : disclosurePublicView(now, interval);
+  return { now, interval, view };
+}
+
+export function electionDisclosure(election, deps, view) {
+  const now = deps.config.nowFn();
+  const interval = deps.config.disclosureIntervalSeconds;
+  const acceptedBallotsDisclosed = deps.store.publishedAcceptedBallots(
+    election.id,
+    now,
+    interval,
+  );
+  const base = view || disclosurePublicView(now, interval);
+  return withDisclosedCount(base, acceptedBallotsDisclosed);
 }
 
 export function presentElection(election, deps, opts = {}) {
@@ -87,7 +104,11 @@ export function presentElection(election, deps, opts = {}) {
     now,
     interval,
   );
-  const dto = publicElection(election, now, { intervalSeconds: interval, publishedAcceptedBallots });
+  const dto = publicElection(election, now, {
+    intervalSeconds: interval,
+    publishedAcceptedBallots,
+  });
+  dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
   if (
     opts.user &&
     deps.store.userHasJurisdictionRole(opts.user, 'tally_operator', election.jurisdictionId) &&

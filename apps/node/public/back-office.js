@@ -685,7 +685,10 @@
       try {
         const cfg = await request("/api/config");
         const banner = $("disclosure-banner");
-        if (banner && cfg.disclosure && cfg.disclosure.note) {
+        const helper = globalThis.RepublicDisclosure;
+        if (banner && cfg.disclosure && helper) {
+          helper.paint(banner, cfg.disclosure);
+        } else if (banner && cfg.disclosure && cfg.disclosure.note) {
           const next = cfg.disclosure.nextPublishAt;
           const when =
             next != null
@@ -1043,6 +1046,10 @@
   defaultTimes();
   wireBuilder();
   renderBuilder();
+  window.addEventListener("republic:session", async () => {
+    await loadMe();
+    await Promise.all([loadJurisdictions(), loadElections(), loadNotifications()]);
+  });
   (async function init() {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
