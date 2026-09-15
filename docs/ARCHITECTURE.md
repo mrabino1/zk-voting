@@ -581,8 +581,15 @@ GET  /api/elections/:id/info/:questionId/:optionId
 PATCH /api/elections/:id            (clerk of that jurisdiction; questions + option metadata until freeze)
 PUT  /api/elections/:id             (same as PATCH)
 GET  /api/elections/:id/ballots     (published vote rows only)
-POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality counts and/or IRV from envelopes; L1 postResult if env set)
 GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext; rankingPayload on ranked ballots)
+GET  /api/elections/:id/registrations
+POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
+POST /api/elections/:id/freeze      (clerk of that jurisdiction)
+POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
+POST /api/elections/:id/disqualify   (officer of that jurisdiction)
+POST /api/elections/:id/disqualify/revoke
+POST /api/elections/:id/revoke
+POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality counts and/or IRV from envelopes; L1 postResult if env set)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
