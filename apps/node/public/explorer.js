@@ -195,6 +195,14 @@
     return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   }
 
+  function fmtCountdown(seconds) {
+    const helper = globalThis.RepublicDisclosure;
+    if (helper && typeof helper.formatCountdown === "function") {
+      return helper.formatCountdown(seconds);
+    }
+    return String(seconds) + "s";
+  }
+
   function shortHex(value, left, right) {
     if (value == null || value === "") return "—";
     const s = String(value);
@@ -281,13 +289,50 @@
       Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 
-  function paintDisclosure(data) {
+  let disclosurePayload = null;
+  let disclosureFetchedAt = 0;
+  let countdownTimer = null;
+
+  function paintDisclosure(data, overlay) {
     const el = $("disclosure-banner");
-    if (!el || !data || !data.disclosure) return;
-    const d = data.disclosure;
-    const next = d.nextPublishAt != null ? fmtTime(d.nextPublishAt) : "";
-    el.textContent =
-      (d.note || el.textContent) + (next ? " Next publish: " + next + "." : "");
+    const helper = globalThis.RepublicDisclosure;
+    if (!el || !helper) return;
+    const d = {
+      ...((data && data.disclosure) || {}),
+      ...(overlay || {}),
+    };
+    if (!d.policy && !d.lastClosedHourAt && d.lastPublishedAt == null && !d.note) return;
+    disclosurePayload = d;
+    disclosureFetchedAt = helper.paint(el, d);
+    startCountdown();
+  }
+
+  function startCountdown() {
+    const helper = globalThis.RepublicDisclosure;
+    const el = $("disclosure-banner");
+    if (!helper || !el) return;
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+    if (!disclosurePayload || !(Number(disclosurePayload.intervalSeconds) > 0)) return;
+    countdownTimer = setInterval(() => {
+      const remaining = helper.tickCountdown(el, disclosurePayload, disclosureFetchedAt);
+      if (remaining <= 0) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        refreshDisclosure();
+      }
+    }, 1000);
+  }
+
+  async function refreshDisclosure(overlay) {
+    try {
+      const data = await request("/api/explorer/disclosure");
+      paintDisclosure(data, overlay);
+    } catch {
+      if (overlay) paintDisclosure({ disclosure: overlay }, overlay);
+    }
   }
 
   function txTable(txs) {
@@ -333,7 +378,7 @@
       [
         "Election",
         tx.electionId != null
-          ? `<a href="#/election/${esc(tx.electionId)}">${esc(tx.electionId)}</a> · <a href="/elections/${esc(tx.electionId)}/results">results</a>`
+          ? `<a href="#/election/${esc(tx.electionId)}">${esc(tx.electionId)}</a>`
           : "—",
       ],
     ];
@@ -436,6 +481,7 @@
       return;
     }
     const block = normalizeBlock(data.block || data);
+    paintDisclosure(data);
     const n = Number(block.number ?? id);
     $("view").innerHTML = `<section class="panel">
       <header><h2>Block #${esc(block.number ?? id)}</h2></header>
@@ -471,6 +517,7 @@
       return;
     }
     const tx = normalizeTx(data.tx || data.transaction || data);
+    await refreshDisclosure();
     $("view").innerHTML = `<section class="panel">
       <header><h2>Transaction</h2></header>
       <dl class="detail-grid">${txDetailRows(tx)}</dl>
@@ -543,10 +590,16 @@
     ]);
     let election = null;
     let ballots = [];
+    let summary = null;
     try {
       election = await request("/api/elections/" + encodeURIComponent(id));
     } catch {
       election = null;
+    }
+    try {
+      summary = await request("/api/elections/" + encodeURIComponent(id) + "/summary");
+    } catch {
+      summary = null;
     }
     try {
       const data = await request("/api/elections/" + encodeURIComponent(id) + "/ballots");
@@ -568,23 +621,52 @@
       if (!byHash.has(key)) byHash.set(key, tx);
     }
     const txs = [...byHash.values()];
-    const title = pick(election, ["title", "name"]) || "Election " + id;
-    const tally = pick(election, ["tally.counts", "tally", "counts"]);
+    const title = pick(election, ["title", "name"]) || (summary && summary.title) || "Election " + id;
+    const tallied = Boolean(pick(election, ["tally.counts", "tally", "counts"]));
+    const disclosure = (summary && summary.disclosure) || (election && election.disclosure) || null;
+    const accepted =
+      (summary && summary.acceptedBallots != null
+        ? summary.acceptedBallots
+        : pick(election, ["acceptedBallots"])) ??
+      (disclosure && disclosure.acceptedBallotsDisclosed);
+    const resultsUrl =
+      (summary && summary.resultsUrl) ||
+      (tallied ? "/elections/" + encodeURIComponent(id) + "/results" : null);
+    paintDisclosure({ disclosure: disclosure || {} }, disclosure);
+    const nextLine = !disclosure
+      ? "—"
+      : Number(disclosure.intervalSeconds) > 0
+        ? (disclosure.secondsUntilNext != null ? fmtCountdown(disclosure.secondsUntilNext) + " · " : "") +
+          fmtTime(disclosure.nextPublishAt)
+        : "Publishes immediately";
+    const stateLabel =
+      pick(election, ["stateName", "state", "status"]) || (summary && summary.stateName) || "—";
     $("view").innerHTML = `<section class="panel">
       <header>
         <h2>${esc(title)}</h2>
-        <a class="btn btn-secondary" href="/elections/${esc(id)}/results">Certified results</a>
+        ${
+          resultsUrl
+            ? `<a class="btn btn-secondary" href="${esc(resultsUrl)}">Certified results</a>`
+            : `<span class="field-hint">Tally not posted yet</span>`
+        }
       </header>
       <dl class="detail-grid">
         <dt>Election id</dt><dd>${esc(id)}</dd>
-        <dt>State</dt><dd>${esc(pick(election, ["stateName", "state", "status"]) ?? "—")}</dd>
+        <dt>State</dt><dd>${esc(stateLabel)}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
-        <dt>Public tally</dt><dd>${esc(tally ? JSON.stringify(tally) : "not posted")}</dd>
+        <dt>Last closed hour</dt><dd>${esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt)))}</dd>
+        <dt>Ballots disclosed</dt><dd>${esc(accepted != null ? accepted : "—")}</dd>
+        <dt>Next disclosure</dt><dd>${esc(nextLine)}</dd>
+        <dt>Certified results</dt><dd>${
+          resultsUrl
+            ? `<a href="${esc(resultsUrl)}">Tally posted — view results</a>`
+            : "not posted (winner page is linked after a certified tally)"
+        }</dd>
         ${pick(election, ["tally.questions.0.winnerLabel"])
           ? `<dt>IRV winner</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
           : ""}
       </dl>
-      <p class="field-hint">Linked from election results. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed.</p>
+      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. This page does not compute a winner.</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>
@@ -637,6 +719,9 @@
   async function render() {
     clearFlash();
     const route = parseRoute();
+    if (route.kind !== "list" && route.kind !== "block" && route.kind !== "election") {
+      refreshDisclosure();
+    }
     if (route.kind === "list") return loadBlockList();
     if (route.kind === "block") return loadBlock(route.id);
     if (route.kind === "tx") return loadTx(route.id);

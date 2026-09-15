@@ -110,5 +110,52 @@ jobs:
             echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
             echo "npm run test:contracts     # forge test --via-ir"
             echo "npm test                   # all of the above"
+            echo "docker compose up -d --build"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  compose:
+    name: docker compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+      - name: Build and start
+        run: docker compose up -d --build
+
+      - name: Wait for Node /health
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health | grep -q '"ok":true'; then
+              echo "node healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "node did not become healthy"
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Check L2 /health and eth_chainId
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:8546/health | tee /tmp/l2-health.json
+          grep -q '"ok":true' /tmp/l2-health.json
+          curl -fsS http://127.0.0.1:8546 \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+            | tee /tmp/l2-chain.json
+          grep -q '0x6b23' /tmp/l2-chain.json
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

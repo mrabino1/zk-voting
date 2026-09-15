@@ -494,6 +494,32 @@ export class Store {
     return election;
   }
 
+  /**
+   * Update ballot title / questions / metadata URI before the roll is frozen.
+   * `ballotSpecHash` must already be the keccak of the canonical ballot JSON.
+   */
+  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash }) {
+    const election = this.requireElection(id);
+    if (election.tally) throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll frozen; ballot spec is locked', { code: 'ROLL_FROZEN' });
+    }
+    if (title != null) {
+      const trimmed = String(title).trim();
+      if (!trimmed) throw new HttpError(400, 'title required');
+      election.title = trimmed;
+    }
+    if (metadataURI != null) election.metadataURI = String(metadataURI);
+    if (questions != null) {
+      if (!Array.isArray(questions)) throw new HttpError(400, 'questions must be an array');
+      election.questions = questions;
+      election.questionCount = questions.length;
+    }
+    if (ballotSpecHash) election.ballotSpecHash = ballotSpecHash;
+    await this.persist();
+    return election;
+  }
+
   async freezeElection(id) {
     const election = this.requireElection(id);
     if (election.rollFrozen) throw new HttpError(409, 'roll already frozen');
@@ -785,6 +811,10 @@ export class Store {
 
   publishedAcceptedBallots(electionId, now, intervalSeconds) {
     return this.listPublishedVotes(electionId, now, intervalSeconds).length;
+  }
+
+  publishedAcceptedBallotsAll(now, intervalSeconds) {
+    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds)).length;
   }
 
   listEnvelopes(electionId) {

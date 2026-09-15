@@ -31,6 +31,10 @@ verification_key.json
 .env
 .env.local
 .env.*.local
+
+# Host-specific Compose overrides (see docker-compose.override.example.yml)
+docker-compose.override.yml
+compose.override.yml
 *.pem
 *.key
 

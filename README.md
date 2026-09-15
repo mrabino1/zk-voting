@@ -203,6 +203,15 @@ npm test -w apps/node
 
 Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored).
 
+Docker Compose (Node + L2 sequencer + prover), from the repo root:
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
+See [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+
 ### Republic L2 (sequencer + prover)
 
 ```bash
@@ -219,7 +228,7 @@ export REPUBLIC_CHAIN_ID=27427
 
 ### Block explorer
 
-With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`. Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour that contained the vote has closed. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`, `GET /api/explorer/disclosure`. Public election snapshot: `GET /api/elections/:id/summary` (disclosed turnout, last closed hour, countdown; `resultsUrl` only after a certified tally — this repo does not invent a winner here). Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour that contained the vote has closed. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
 ### Passkeys and person identity
 
@@ -268,7 +277,7 @@ The Node side is the human product. It should feel operationally familiar to any
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
 | Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
 
-SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
 
 ---
 
@@ -502,7 +511,7 @@ The Node stores an IRV **round transcript** (aggregate first-preference counts p
 
 Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar).
 
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on.
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON.
 
 ---
 
@@ -648,7 +657,12 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 ./system_actions.sh deploy-prod  # pull master (confirms first)
 ```
 
-Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured.
+Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured. Root `docker-compose.yml` is that Compose target:
+
+```bash
+docker compose up -d --build   # Node :3000, L2 RPC :8546
+npm run compose:up             # same
+```
 
 ### Tooling
 

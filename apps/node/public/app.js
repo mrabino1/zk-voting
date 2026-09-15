@@ -3,10 +3,12 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
-import { startRouter, navigate } from "./router.js";
+import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { renderElectionInfo, renderOptionInfo } from "./info.js";
+import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -423,7 +425,8 @@ function updateNav(routeName) {
     const current =
       (routeName === "home" && href === "/") ||
       (routeName === "register" && href === "/register") ||
-      (routeName === "vote" && href === "/");
+      (routeName === "vote" && href === "/") ||
+      ((routeName === "election-info" || routeName === "option-info") && href === "/");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
@@ -450,6 +453,7 @@ function ctx() {
     reasonLabel,
     setTitle,
     SAMPLE_QUESTIONS,
+    mountSignInPanel,
   };
 }
 
@@ -537,7 +541,13 @@ function renderHome(main, route, bundle) {
                   : null,
                 election.state >= 3
                   ? h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
-                  : null
+                  : null,
+                h("a", {
+                  class: "btn btn-secondary",
+                  href: `/elections/${encodeURIComponent(election.id)}/info`,
+                  "data-nav": "",
+                  text: "Candidate / measure info",
+                })
               )
             );
           })
@@ -559,6 +569,9 @@ function renderHome(main, route, bundle) {
           { class: "notice", role: "status" },
           h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
           h("p", { text: walletLine }),
+          me?.user
+            ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
+            : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
           h(
             "p",
             {
@@ -575,6 +588,7 @@ function renderHome(main, route, bundle) {
           : null
       )
     ),
+    h("div", { id: "sign-in-root" }),
     list,
     h("hr", { class: "hr" }),
     h(
@@ -648,6 +662,14 @@ function renderHome(main, route, bundle) {
       renderDeviceStatus(walletRecord, me, store)
     )
   );
+  const signInRoot = main.querySelector("#sign-in-root");
+  if (signInRoot) {
+    signInRoot.setAttribute(
+      "data-lede",
+      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
+    );
+    mountSignInPanel(signInRoot);
+  }
 }
 
 function renderDeviceStatus(walletRecord, me, store) {
@@ -820,6 +842,18 @@ async function renderRoute(route) {
       const { election, source } = await loadElection(route.params.id);
       if (!election) renderNotFound(main, route);
       else renderResults(main, election, source);
+    } else if (route.name === "election-info") {
+      setTitle("Ballot information");
+      await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "option-info") {
+      setTitle("Option information");
+      await renderOptionInfo(main, {
+        ...ctx(),
+        route,
+        electionId: route.params.id,
+        questionId: route.params.questionId,
+        optionId: route.params.optionId,
+      });
     } else {
       setTitle("Not found");
       renderNotFound(main, route);
@@ -839,4 +873,7 @@ async function renderRoute(route) {
 
 if (typeof document !== "undefined") {
   startRouter(renderRoute);
+  window.addEventListener(SESSION_EVENT, () => {
+    renderRoute(currentRoute());
+  });
 }

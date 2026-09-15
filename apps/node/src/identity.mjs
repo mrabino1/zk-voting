@@ -172,6 +172,33 @@ export function buildWeb3BindMessage({ address, nonce, chainId, origin }) {
   ].join('\n');
 }
 
+export function buildWeb3LoginMessage({ address, nonce, chainId, origin }) {
+  const addr = normalizeEthAddress(address);
+  return [
+    'Republic wants you to sign in with this Ethereum wallet.',
+    '',
+    `URI: ${origin || 'republic'}`,
+    'Version: 1',
+    `Chain ID: ${chainId}`,
+    `Nonce: ${nonce}`,
+    `Address: ${addr}`,
+    '',
+    'This proves you control a wallet already bound to your person. It does not register a new person.',
+    'NOT FOR PROFIT — civic public good. Not a commercial product.',
+  ].join('\n');
+}
+
+/**
+ * Returning-user wallet login. A web3 auth method wins; otherwise a verified
+ * ETH account already mapped to a Person. Unknown addresses are not created.
+ */
+export function resolveWeb3LoginPerson(store, address) {
+  const addr = normalizeEthAddress(address);
+  const foundMethod = store.findUserByAuthMethod({ type: 'web3', address: addr });
+  if (foundMethod?.user) return foundMethod.user;
+  return store.findUserByEthAddress(addr);
+}
+
 export function buildSmartCardBindMessage({ fingerprint, nonce }) {
   return [
     'Republic smart-card digital ID binding',
@@ -223,23 +250,35 @@ export function createIdentityChallenges() {
     return rec;
   }
 
-  function issueWeb3({ address, chainId, origin }) {
+  function issueWeb3({ address, chainId, origin, purpose = 'bind' }) {
     const addr = normalizeEthAddress(address);
     const nonce = `0x${randomBytes(16).toString('hex')}`;
-    const message = buildWeb3BindMessage({
-      address: addr,
-      nonce,
-      chainId,
-      origin,
-    });
+    const isLogin = purpose === 'login';
+    const message = isLogin
+      ? buildWeb3LoginMessage({
+          address: addr,
+          nonce,
+          chainId,
+          origin,
+        })
+      : buildWeb3BindMessage({
+          address: addr,
+          nonce,
+          chainId,
+          origin,
+        });
     put({
-      type: 'web3',
+      type: isLogin ? 'web3_login' : 'web3',
       nonce,
-      key: `web3:${addr.toLowerCase()}`,
+      key: isLogin ? `web3-login:${addr.toLowerCase()}` : `web3:${addr.toLowerCase()}`,
       address: addr,
       message,
     });
-    return { nonce, message, address: addr, expiresInSeconds: CHALLENGE_TTL_MS / 1000 };
+    return { nonce, message, address: addr, expiresInSeconds: CHALLENGE_TTL_MS / 1000, purpose: isLogin ? 'login' : 'bind' };
+  }
+
+  function issueWeb3Login({ address, chainId, origin }) {
+    return issueWeb3({ address, chainId, origin, purpose: 'login' });
   }
 
   function issueSmartCard({ fingerprint }) {
@@ -254,5 +293,5 @@ export function createIdentityChallenges() {
     return { nonce, fingerprint: fp, expiresInSeconds: CHALLENGE_TTL_MS / 1000 };
   }
 
-  return { issueWeb3, issueSmartCard, take, put, challenges };
+  return { issueWeb3, issueWeb3Login, issueSmartCard, take, put, challenges };
 }

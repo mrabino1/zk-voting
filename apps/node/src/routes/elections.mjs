@@ -1,14 +1,18 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import { keccak256, stringToHex } from 'viem';
 import { Router } from 'express';
 
-import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
-import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import {
+  presentPublicBallotInfo,
+  presentPublicOptionInfo,
+  resolveBallotSpecHash,
+} from '../ballotSpec.mjs';
+import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
+import { asyncHandler, HttpError } from '../http.mjs';
+import { emptyTree } from '../merkle.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
-import { emptyTree } from '../merkle.mjs';
 import { publicVoteRecord } from '../store.mjs';
 import {
   normalizeBallotMethod,
@@ -27,19 +31,6 @@ function unixSeconds(value, fallback) {
   const ms = Date.parse(s);
   if (Number.isNaN(ms)) throw new HttpError(400, 'invalid timestamp');
   return Math.floor(ms / 1000);
-}
-
-function stableStringify(value) {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function specHash(title, ballotMethod, questions) {
-  return keccak256(stringToHex(stableStringify({ title, ballotMethod, questions })));
 }
 
 async function revokeHandler(req, store, explorer) {
@@ -105,7 +96,11 @@ export function electionsRouter(deps) {
       }
       const ballotMethod = normalizeBallotMethod(body.ballotMethod);
       const questions = normalizeQuestions(body.questions, ballotMethod);
-      const ballotSpecHash = body.ballotSpecHash || specHash(title, ballotMethod, questions);
+      const ballotSpecHash = resolveBallotSpecHash({
+        title,
+        questions,
+        ballotSpecHash: body.ballotSpecHash,
+      });
       const jurisdictionId = String(body.jurisdictionId || 'demo');
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
@@ -146,35 +141,73 @@ export function electionsRouter(deps) {
     }),
   );
 
-  router.patch(
-    '/:id',
-    requireAuth,
-    requireRole('clerk'),
-    asyncHandler(async (req, res) => {
-      const current = store.requireElection(req.params.id);
-      const body = req.body || {};
-      const title = body.title != null ? String(body.title).trim() : current.title;
-      if (!title) throw new HttpError(400, 'title required');
-      const ballotMethod = normalizeBallotMethod(
-        body.ballotMethod != null ? body.ballotMethod : current.ballotMethod,
-      );
-      const questions = body.questions
+  const saveBallot = asyncHandler(async (req, res) => {
+    const current = store.requireElection(req.params.id);
+    const body = req.body || {};
+    const title = body.title != null ? String(body.title).trim() : current.title;
+    if (!title) throw new HttpError(400, 'title required');
+    const ballotMethod = normalizeBallotMethod(
+      body.ballotMethod != null ? body.ballotMethod : current.ballotMethod,
+    );
+    const questions =
+      body.questions != null
         ? normalizeQuestions(body.questions, ballotMethod)
-        : normalizeQuestions(current.questions, ballotMethod);
-      const startTime = body.startTime != null ? unixSeconds(body.startTime, current.startTime) : current.startTime;
-      const cutoffTime =
-        body.cutoffTime != null ? unixSeconds(body.cutoffTime, current.cutoffTime) : current.cutoffTime;
-      if (!(startTime < cutoffTime)) throw new HttpError(400, 'startTime must be before cutoffTime');
-      const election = await store.updateElection(req.params.id, {
-        title,
-        metadataURI: body.metadataURI != null ? String(body.metadataURI) : current.metadataURI,
-        startTime,
-        cutoffTime,
-        ballotMethod,
-        questions,
-        ballotSpecHash: body.ballotSpecHash || specHash(title, ballotMethod, questions),
-      });
-      res.json({ ok: true, election: presentElection(election, deps), nfp: true });
+        : body.ballotMethod != null
+          ? normalizeQuestions(current.questions, ballotMethod)
+          : current.questions;
+    const startTime = body.startTime != null ? unixSeconds(body.startTime, current.startTime) : current.startTime;
+    const cutoffTime =
+      body.cutoffTime != null ? unixSeconds(body.cutoffTime, current.cutoffTime) : current.cutoffTime;
+    if (!(startTime < cutoffTime)) throw new HttpError(400, 'startTime must be before cutoffTime');
+    const metadataURI = body.metadataURI != null ? String(body.metadataURI) : current.metadataURI;
+    const ballotSpecHash = resolveBallotSpecHash({
+      title,
+      questions,
+      ballotSpecHash: body.ballotSpecHash,
+    });
+    const election = await store.updateElection(req.params.id, {
+      title,
+      metadataURI,
+      startTime,
+      cutoffTime,
+      ballotMethod,
+      questions,
+      ballotSpecHash,
+    });
+    res.json({
+      ok: true,
+      id: election.id,
+      electionId: election.id,
+      election: presentElection(election, deps),
+      nfp: true,
+    });
+  });
+
+  router.patch('/:id', requireAuth, requireRole('clerk'), saveBallot);
+  router.put('/:id', requireAuth, requireRole('clerk'), saveBallot);
+
+  router.get(
+    '/:id/info',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentPublicBallotInfo(election, deps.config.nowFn()));
+    }),
+  );
+
+  router.get(
+    '/:id/info/:questionId/:optionId',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentPublicOptionInfo(
+        election,
+        req.params.questionId,
+        req.params.optionId,
+        deps.config.nowFn(),
+      );
+      if (!dto) throw new HttpError(404, 'option not found');
+      res.json(dto);
     }),
   );
 
@@ -192,6 +225,31 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/summary',
+    asyncHandler(async (req, res) => {
+      const { view } = await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentElection(election, deps);
+      const tallied = Boolean(election.tally);
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        title: election.title,
+        jurisdictionId: election.jurisdictionId,
+        state: dto.state,
+        stateName: dto.stateName,
+        startTime: election.startTime,
+        cutoffTime: election.cutoffTime,
+        participantCount: election.participantCount,
+        acceptedBallots: dto.acceptedBallots,
+        disclosure: electionDisclosure(election, deps, view),
+        explorerUrl: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
+        resultsUrl: tallied ? `/elections/${election.id}/results` : null,
+      });
+    }),
+  );
+
+  router.get(
     '/:id/ballots',
     asyncHandler(async (req, res) => {
       const { now, interval, view } = await publishDue(deps);
@@ -201,7 +259,7 @@ export function electionsRouter(deps) {
         electionId: String(election.id),
         acceptedBallots: published.length,
         ballots: published.map(publicVoteRecord),
-        disclosure: view,
+        disclosure: electionDisclosure(election, deps, view),
         nfp: true,
       });
     }),

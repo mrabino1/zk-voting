@@ -172,12 +172,14 @@ struct ElectionParams {
 }
 ```
 
-`ballotSpecHash` is keccak256 of the canonical ballot JSON, which includes
-the election `ballotMethod` (`plurality` | `ranked_choice`) and per-question
-types (`YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED`, …). On-chain v1
-does **not** add a method enum to `ElectionParams`; IRV lives in that hash
-and in the Node tally transcript. `submitTally` still posts a concatenated
-per-option count vector (first-round first preferences for ranked questions).
+`ballotSpecHash` is keccak256 of the canonical ballot JSON `{ title, questions }`.
+Questions carry option supporting metadata when present, and IRV via type
+`RANKED` and/or per-question `ballotMethod: "ranked_choice"` (election-level
+plurality is the default and is omitted so `{ id, label }` hashes stay stable).
+On-chain v1 does **not** add a method enum to `ElectionParams`; IRV lives in
+that hash and in the Node tally transcript. `submitTally` still posts a
+concatenated per-option count vector (first-round first preferences for ranked
+questions).
 
 ### `IElectionFactory`
 
@@ -444,6 +446,10 @@ GET  /api/elections
 POST /api/elections                 (clerk)
 PATCH /api/elections/:id           (clerk; before roll freeze)
 GET  /api/elections/:id
+GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
+GET  /api/elections/:id/info
+GET  /api/elections/:id/info/:questionId/:optionId
+PATCH /api/elections/:id            (clerk; questions + option metadata until freeze)
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 POST /api/elections/:id/disqualify   (officer)
@@ -453,9 +459,13 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure       (last closed hour, disclosed turnout, countdown)
 POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
 GET  /api/config                    (includes hourly disclosure + identity policy)
 GET  /api/identity/methods
@@ -519,6 +529,8 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 - `/admin` — platform admin (hosts, keys, jurisdictions)
 - `/back-office` — clerks / registrars / disqualification officers
 - `/explorer` — Republic L2 block explorer (every block's outcomes)
+- `/elections/:id/info` — voter punch-list of options (read-only supporting info)
+- `/elections/:id/info/:questionId/:optionId` — mini page for one option + external links
 - `/elections/:id/results`
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.

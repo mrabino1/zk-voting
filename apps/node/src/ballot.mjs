@@ -3,6 +3,7 @@
 // inside ballotSpecHash (ElectionParams has no method enum).
 
 import { HttpError } from './http.mjs';
+import { normalizeOption } from './ballotSpec.mjs';
 import { computeIrv, firstRoundCounts } from './irv.mjs';
 
 export const BALLOT_METHODS = Object.freeze(['plurality', 'ranked_choice']);
@@ -84,20 +85,12 @@ export function electionHasRanked(election) {
   return (election?.questions || []).some((q) => isRankedQuestion(q, method));
 }
 
-function normalizeOption(option, index) {
-  if (typeof option === 'string' || typeof option === 'number') {
-    return { id: `o${index + 1}`, label: String(option) };
-  }
-  if (!option || typeof option !== 'object') {
-    throw new HttpError(400, 'option must be a string or {id, label}');
-  }
-  return {
-    id: String(option.id || option.value || `o${index + 1}`),
-    label: String(option.label || option.name || option.id || `Option ${index + 1}`),
-  };
-}
-
 /**
+ * Canonical questions for storage and `ballotSpecHash`. Option metadata
+ * (`summary`, `body`, `links`) is omitted when empty so `{id,label}` hashes
+ * stay stable. `ballotMethod` is stored only when the question is IRV so
+ * plurality elections keep the same keccak preimage as option-metadata v1.
+ *
  * @param {unknown} input
  * @param {'plurality'|'ranked_choice'} [electionMethod]
  */
@@ -135,15 +128,19 @@ export function normalizeQuestions(input, electionMethod = 'plurality') {
     if (ballotMethod === 'ranked_choice' && options.length < 2) {
       throw new HttpError(400, 'ranked_choice questions need at least two options', { code: 'RANKED_OPTIONS' });
     }
-    return {
+    const question = {
       id: String(q.id || `q${i + 1}`),
       type,
       prompt: String(q.prompt || q.title || q.text || `Question ${i + 1}`),
-      description: q.description ? String(q.description) : '',
-      maxSelections: Number(q.maxSelections ?? q.max ?? (type === 'MULTI_CHOICE' ? 2 : 1)) || 1,
-      ballotMethod,
       options,
     };
+    const description = q.description ? String(q.description) : '';
+    if (description) question.description = description;
+    if (q.maxSelections != null || q.max != null || type === 'MULTI_CHOICE') {
+      question.maxSelections = Number(q.maxSelections ?? q.max ?? 2) || 1;
+    }
+    if (ballotMethod === 'ranked_choice') question.ballotMethod = 'ranked_choice';
+    return question;
   });
 }
 

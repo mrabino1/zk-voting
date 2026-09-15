@@ -116,6 +116,7 @@ const QuestionType = Object.freeze({
  * @property {string} tallyOperator Address allowed to submit tally proofs.
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
+ * @property {BallotQuestion[]} [questions] Canonical questions hashed into `ballotSpecHash`.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
  * @property {"plurality"|"ranked_choice"} [ballotMethod] Counting flavor. Default
  *   `plurality`. `ranked_choice` is instant-runoff. On-chain v1 may omit this
@@ -132,7 +133,7 @@ const QuestionType = Object.freeze({
  * @property {string} prompt
  * @property {string} [description]
  * @property {number} [maxSelections]
- * @property {{id: string, label: string}[]} options Ordered options. For RANKED
+ * @property {BallotOption[]} options Ordered options. For RANKED
  *   this is the printed candidate order, not the voter's ranking.
  */
 
@@ -161,6 +162,28 @@ const QuestionType = Object.freeze({
  * @property {IrvRound[]} [rounds]
  * @property {boolean} [tieBroken]
  * @property {number} [exhausted]
+ */
+
+/**
+ * One external page linked from a ballot option's supporting-info card.
+ *
+ * @typedef {Object} BallotOptionLink
+ * @property {string} label
+ * @property {string} url http(s) URL
+ */
+
+/**
+ * One candidate / measure choice. Legacy ballots may be a plain string or
+ * `{ id, label }` only. Empty optional fields are omitted from the keccak
+ * preimage so old elections keep a stable `ballotSpecHash`.
+ *
+ * @typedef {Object} BallotOption
+ * @property {string} id
+ * @property {string} label Display name (candidate, Yes/No, measure choice).
+ * @property {string} [summary] Short blurb on the option list.
+ * @property {string} [body] Plain or markdown supporting information.
+ * @property {string} [imageUrl] Optional portrait / logo http(s) URL.
+ * @property {BallotOptionLink[]} [links] External pages (campaign site, full text).
  */
 
 /**

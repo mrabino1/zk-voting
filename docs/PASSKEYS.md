@@ -132,6 +132,10 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login              (ALLOW_DEV_LOGIN / NODE_ENV=test only)
 POST /api/elections/:id/register    (after passkey; commitment, not name)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 GET  /api/identity/methods

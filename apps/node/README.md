@@ -29,7 +29,9 @@ Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "nod
 The Node never writes a passkey user id onto the same record as an encrypted
 ballot or a choice. The UI must not print “I voted for X”. Public dashboards
 and the explorer show vote proofs only after the hour that contained the vote
-has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests).
+has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0` in tests). The
+explorer snapshot lists last closed hour, ballots disclosed so far, and a
+countdown to the next hour close — never a pending-per-election count.
 
 ---
 
@@ -55,10 +57,27 @@ npm test -w apps/node
 ./system_actions.sh restart   # pm2 / systemd / compose when configured
 ```
 
+Docker Compose from the **repository root** (not this directory):
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
 `GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
 
 The process serves `public/` and `dist/` if present. Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
+Voter info pages: `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId`.
+
+### Ballot option information
+
+Each question option may be a plain string, `{ id, label }`, or a supporting-info
+object (`summary`, `body`, optional `imageUrl`, `links: [{ label, url }]`). Clerks
+edit that as a punch-list on `/back-office` (JSON remains under Advanced). The Node
+canonicalizes options and keccak-hashes `{ title, questions }` as `ballotSpecHash`.
+Empty optional fields are omitted so older elections without metadata keep working.
+`GET /api/elections/:id/info` returns the public copy (no `createdBy` / clerk notes).
 
 ---
 
@@ -67,6 +86,7 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
+| `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
@@ -83,6 +103,8 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 
 Passkey rpName is always **Republic**.
 
+Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and **Sign in with Ethereum**. Register a person first (`/register`). Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
+
 ---
 
 ## HTTP
@@ -91,8 +113,12 @@ Passkey rpName is always **Republic**.
 GET  /health
 GET  /api/elections
 POST /api/elections                 (clerk / platform_admin)
-PATCH /api/elections/:id           (clerk; before roll freeze; ballot method + questions)
+PATCH /api/elections/:id            (clerk; before roll freeze; method, questions, option metadata)
 GET  /api/elections/:id
+GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
+GET  /api/elections/:id/ballots
+GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
+GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
@@ -114,9 +140,14 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login            (ALLOW_DEV_LOGIN / tests only)
 GET  /api/explorer/blocks
 GET  /api/explorer/blocks/:n
 GET  /api/explorer/txs/:hash
+GET  /api/explorer/disclosure         (last closed hour, disclosed ballots, countdown)
 POST /api/explorer/ingest
 GET  /api/config
 ```
