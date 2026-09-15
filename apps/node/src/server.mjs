@@ -11,6 +11,7 @@ import express from 'express';
 import { attachAuth } from './auth.mjs';
 import { createChain } from './chain.mjs';
 import { getConfig } from './config.mjs';
+import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { createPasskeyService } from './passkey.mjs';
@@ -38,7 +39,7 @@ const LOADING_SHELL = `<!DOCTYPE html>
 <body>
   <p class="nfp">NOT FOR PROFIT</p>
   <h1>Republic</h1>
-  <p class="muted">The UI is loading. This Node process serves the civic voting API and will host the React SPA from <code>public/</code> or <code>dist/</code> when present.</p>
+  <p class="muted">The UI is loading. This Node process serves the civic voting API and vanilla JS pages from <code>public/</code> (or <code>dist/</code> if present).</p>
   <p class="muted">Product: zk-voting · civic public good, not a commercial product.</p>
 </body>
 </html>
@@ -77,12 +78,14 @@ function spaFallback(config) {
 }
 
 export async function createApp(overrides = {}) {
-  const config = getConfig(overrides);
+  const { passkeyHooks, ...configOverrides } = overrides;
+  const config = getConfig(configOverrides);
   const store = await Store.open(config);
   const explorer = await Explorer.open(config);
   const chain = createChain(config);
-  const passkeys = createPasskeyService(config, store);
-  const deps = { config, store, explorer, chain, passkeys };
+  const l1 = overrides.l1 || createL1Certifier(config, overrides.l1Hooks || {});
+  const passkeys = createPasskeyService(config, store, passkeyHooks);
+  const deps = { config, store, explorer, chain, l1, passkeys };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -140,20 +143,22 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, config };
+  return { app, store, explorer, chain, l1, config };
 }
 
 export async function startServer(overrides = {}) {
   const created = await createApp(overrides);
   const { app, config } = created;
   const server = await new Promise((resolve, reject) => {
-    const s = app.listen(config.port, () => resolve(s));
+    const s = app.listen(config.port, config.host, () => resolve(s));
     s.on('error', reject);
   });
   const addr = server.address();
   const port = typeof addr === 'object' && addr ? addr.port : config.port;
   if (!config.quiet) {
-    console.log(`Republic Node (NOT FOR PROFIT) listening on :${port}  chainId=${config.chainId}`);
+    console.log(
+      `Republic Node (NOT FOR PROFIT) listening on ${config.host}:${port}  chainId=${config.chainId}`,
+    );
   }
   return { ...created, server, port };
 }

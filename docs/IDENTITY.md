@@ -23,7 +23,7 @@ Person (one Node user)
 | Ethereum address | Belongs to at most one person (`ADDRESS_OWNED`). |
 | Optional registrar `personKeyHash` | keccak256 of a civil-file token. Unique (`PERSON_KEY_OWNED`). The Node stores the hash, never a legal name. |
 
-Signing a Web3 challenge with a wallet that is **already a web3 auth method** logs that person in. Signing a wallet that is only on someone else’s **internal** `ethAccounts` list does **not** log you in as them; it returns `ADDRESS_OWNED`.
+Signing a Web3 challenge with a wallet that is **already a web3 auth method** logs that person in (`POST /api/identity/web3/verify` still does this as a bind+session side effect). Dedicated returning-user login is `POST /api/auth/web3/challenge` then `POST /api/auth/web3/login`. Signing a wallet that is only on someone else’s **internal** `ethAccounts` list does **not** register you as them on the bind route; it returns `ADDRESS_OWNED`. The login route resolves that address to the bound Person when you control the key.
 
 ---
 
@@ -40,14 +40,22 @@ Signing a Web3 challenge with a wallet that is **already a web3 auth method** lo
 
 ### Passkey
 
-WebAuthn resident credential. `POST /api/auth/passkey/register/finish` creates the session and records a `passkey` auth method. The device may also register its derived local address via `POST /api/me/eth-accounts` after login. See [`PASSKEYS.md`](./PASSKEYS.md).
+WebAuthn resident credential. `POST /api/auth/passkey/register/finish` creates the session and records a `passkey` auth method. Returning users call `POST /api/auth/passkey/login/begin` (username-less discoverable assertion) then `POST /api/auth/passkey/login/finish`. The device may also register its derived local address via `POST /api/me/eth-accounts` after login. See [`PASSKEYS.md`](./PASSKEYS.md).
 
 ### Web3 wallet
 
-1. `POST /api/identity/web3/challenge` `{ address }` → SIWE-like message (nonce stored on the Node).
+**Register / bind**
+
+1. `POST /api/identity/web3/challenge` `{ address }` → SIWE-like bind message (nonce stored on the Node).
 2. Wallet `personal_sign`s that message.
 3. `POST /api/identity/web3/verify` `{ address, signature }` reconstructs the message from the **stored** challenge (the client message is not trusted).
-4. Adds `web3` auth method **and** an internally verified ETH account. First account becomes active.
+4. Adds `web3` auth method **and** an internally verified ETH account. First account becomes active. Establishes a session.
+
+**Login (returning user)**
+
+1. `POST /api/auth/web3/challenge` `{ address }` → SIWE-like **login** message (different text from bind; stored nonce).
+2. Wallet `personal_sign`s that message.
+3. `POST /api/auth/web3/login` `{ address, signature }` verifies against the stored message and resolves the Person who already has that web3 method or verified ETH address. Unknown wallets are `404 UNKNOWN_CREDENTIAL` — login does not create a person.
 
 ### Smart-card digital ID
 
@@ -62,9 +70,15 @@ Kiosk or clerk desk. Fingerprint is a hex digest or keccak256 of a PEM. Live X.5
 
 ```
 GET  /api/identity/methods
-GET  /api/config                      (identity.methods, identity.oneActiveEthAddress)
+GET  /api/config                      (identity.methods, identity.oneActiveEthAddress, auth.allowDevLogin)
 GET  /api/me                          (identity + user.activeEthAddress)
 GET  /api/me/identity
+
+POST /api/auth/passkey/login/begin    (username-less discoverable; optional handle)
+POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
 
 POST /api/identity/web3/challenge
 POST /api/identity/web3/verify
@@ -80,7 +94,7 @@ POST /api/persons/:id/eth-accounts
 POST /api/persons/:id/eth-accounts/active
 ```
 
-Passkey begin/finish stay under `/api/auth/passkey/*`. Identity bind routes are **not** under `/api/auth/web3` so the auth router cannot swallow them.
+Passkey begin/finish stay under `/api/auth/passkey/*`. Wallet **login** is `/api/auth/web3/*`. Identity **bind** routes stay under `/api/identity/web3` so registration cannot be confused with returning-user login.
 
 ---
 

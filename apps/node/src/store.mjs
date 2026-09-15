@@ -17,8 +17,8 @@ import {
   sameEthAddress,
 } from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
-import { isRole } from './roles.mjs';
-import { isValidReasonCode } from './reasonCodes.mjs';
+import { isOfficerRole, isRole } from './roles.mjs';
+import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 
 /** Public aliases for an election id (numeric, UUID, or short code when stored). */
 export function electionAliases(election) {
@@ -45,12 +45,19 @@ export function publicVoteRecord(vote) {
   };
 }
 
+/** Hourly-safe view of a stored vote. Null if the accept is still sealed. */
+export function publishedVoteSlice(vote, now, intervalSeconds) {
+  if (!vote) return null;
+  if (!isDisclosed(vote.acceptedAt, now, intervalSeconds)) return null;
+  return vote;
+}
+
 function emptyData() {
   return {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 2,
+      version: 3,
       nextElectionId: 1,
     },
     users: [],
@@ -68,6 +75,26 @@ function emptyData() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+/** Keep a successful L1 post if a later retry fails or is AlreadyPosted. */
+export function mergeTallyL1(prev, next) {
+  if (!next || typeof next !== 'object') return prev || next;
+  if (!prev || typeof prev !== 'object') return next;
+  const prevOnChain = prev.posted || prev.alreadyPosted;
+  if (prevOnChain && next.status === 'failed') {
+    return { ...prev, lastError: next.error || null };
+  }
+  if (next.alreadyPosted || next.status === 'already_posted') {
+    return {
+      ...next,
+      txHash: next.txHash || prev.txHash || null,
+      chainId: next.chainId || prev.chainId || null,
+      mirror: next.mirror || prev.mirror || null,
+      settlement: next.settlement || prev.settlement || null,
+    };
+  }
+  return next;
 }
 
 export class Store {
@@ -101,6 +128,7 @@ export class Store {
       }
     }
     await store.seed(config);
+    store.rebuildAllEligibility();
     await store.persist();
     return store;
   }
@@ -442,27 +470,170 @@ export class Store {
     return jurisdiction;
   }
 
-  async grantJurisdictionRole(jurisdictionId, { address, role, handle }) {
+  resolveOfficerUser({ userId, handle, address } = {}) {
+    if (userId) {
+      const user = this.getUser(userId);
+      if (user) return user;
+    }
+    if (handle) {
+      const user = this.getUserByHandle(handle);
+      if (user) return user;
+    }
+    if (address) {
+      const byEth = this.findUserByEthAddress(address);
+      if (byEth) return byEth;
+      const byHandle = this.getUserByHandle(address);
+      if (byHandle) return byHandle;
+    }
+    return null;
+  }
+
+  officerMatchesUser(grant, user) {
+    if (!grant || !user) return false;
+    if (grant.userId && grant.userId === user.id) return true;
+    const grantHandle = String(grant.handle || '').trim().toLowerCase();
+    const userHandle = String(user.handle || '').trim().toLowerCase();
+    if (grantHandle && grantHandle === userHandle) return true;
+    const grantAddr = String(grant.address || '').trim();
+    if (!grantAddr) return false;
+    if (grantAddr.toLowerCase() === userHandle) return true;
+    if (sameEthAddress(user.activeEthAddress, grantAddr)) return true;
+    return (user.ethAccounts || []).some((a) => sameEthAddress(a.address, grantAddr));
+  }
+
+  userHasJurisdictionRole(user, roles, jurisdictionId) {
+    if (!user) return false;
+    if (user.role === 'platform_admin') return true;
+    const wanted = new Set((Array.isArray(roles) ? roles : [roles]).filter(Boolean));
+    if (!wanted.size || jurisdictionId == null || jurisdictionId === '') return false;
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) return false;
+    return (jurisdiction.officers || []).some(
+      (grant) => wanted.has(grant.role) && this.officerMatchesUser(grant, user),
+    );
+  }
+
+  userHasAnyJurisdictionRole(user, roles) {
+    if (!user) return false;
+    if (user.role === 'platform_admin') return true;
+    return this.data.jurisdictions.some((jurisdiction) =>
+      this.userHasJurisdictionRole(user, roles, jurisdiction.id),
+    );
+  }
+
+  listJurisdictionRolesForUser(user) {
+    if (!user) return [];
+    const out = [];
+    for (const jurisdiction of this.data.jurisdictions) {
+      for (const grant of jurisdiction.officers || []) {
+        if (this.officerMatchesUser(grant, user)) {
+          out.push({
+            jurisdictionId: jurisdiction.id,
+            jurisdictionName: jurisdiction.name,
+            role: grant.role,
+            grantedAt: grant.grantedAt || null,
+            address: grant.address || '',
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  _matchingOfficerGrant(jurisdiction, role, { user, handle, address, userId }) {
+    const handleKey = String(handle || '').trim().toLowerCase();
+    const addressKey = String(address || '').trim().toLowerCase();
+    const idKey = String(userId || '').trim();
+    return (jurisdiction.officers || []).find((grant) => {
+      if (grant.role !== role) return false;
+      if (user && this.officerMatchesUser(grant, user)) return true;
+      if (idKey && grant.userId === idKey) return true;
+      if (handleKey && String(grant.handle || '').trim().toLowerCase() === handleKey) return true;
+      if (addressKey && String(grant.address || '').trim().toLowerCase() === addressKey) return true;
+      return false;
+    });
+  }
+
+  async grantJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
     const jurisdiction = this.getJurisdiction(jurisdictionId);
     if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
-    if (!isRole(role)) throw new HttpError(400, 'invalid role');
+    if (!isOfficerRole(role)) throw new HttpError(400, 'invalid role');
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
     jurisdiction.officers = jurisdiction.officers || [];
+    const existing = this._matchingOfficerGrant(jurisdiction, role, {
+      user,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+      userId: trimmedUserId,
+    });
+    if (existing) {
+      if (user && !existing.userId) existing.userId = user.id;
+      if (user && !existing.handle) existing.handle = user.handle;
+      await this.persist();
+      return { jurisdiction, grant: existing, user };
+    }
     const grant = {
-      address: address || '',
-      handle: handle || '',
+      userId: user?.id || trimmedUserId || '',
+      address: trimmedAddress || user?.activeEthAddress || '',
+      handle: user?.handle || trimmedHandle,
       role,
       grantedAt: new Date().toISOString(),
     };
     jurisdiction.officers.push(grant);
-    const user =
-      (handle && this.getUserByHandle(handle)) ||
-      (address && this.getUserByHandle(address)) ||
-      null;
-    if (user && user.role !== 'platform_admin') {
-      user.role = role;
-    }
     await this.persist();
     return { jurisdiction, grant, user };
+  }
+
+  async revokeJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
+    const jurisdiction = this.getJurisdiction(jurisdictionId);
+    if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
+    if (!isOfficerRole(role)) throw new HttpError(400, 'invalid role');
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
+    const before = jurisdiction.officers || [];
+    const next = before.filter((grant) => {
+      if (grant.role !== role) return true;
+      if (user && this.officerMatchesUser(grant, user)) return false;
+      if (trimmedUserId && grant.userId === trimmedUserId) return false;
+      if (
+        trimmedHandle &&
+        String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        trimmedAddress &&
+        String(grant.address || '').trim().toLowerCase() === trimmedAddress.toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+    if (next.length === before.length) {
+      throw new HttpError(404, 'officer grant not found');
+    }
+    jurisdiction.officers = next;
+    await this.persist();
+    return { jurisdiction, role, user };
   }
 
   async createElection(params) {
@@ -479,6 +650,7 @@ export class Store {
       maxParticipants: params.maxParticipants,
       treeDepth: params.treeDepth,
       ballotSpecHash: params.ballotSpecHash,
+      ballotMethod: params.ballotMethod || 'plurality',
       questions: params.questions,
       questionCount: params.questions.length,
       jurisdictionId: params.jurisdictionId,
@@ -490,7 +662,10 @@ export class Store {
       lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
       rollFrozen: false,
       frozenAt: null,
+      frozenEligibleRoot: null,
+      frozenDisqualificationRoot: null,
       participantCount: 0,
+      eligibleCount: 0,
       acceptedBallots: 0,
       eligibleRoot: tree.root,
       disqualificationRoot: dq.root,
@@ -505,11 +680,44 @@ export class Store {
     return election;
   }
 
+  /**
+   * Update ballot title / questions / metadata URI before the roll is frozen.
+   * `ballotSpecHash` must already be the keccak of the canonical ballot JSON.
+   */
+  async updateElectionBallot(id, { title, metadataURI, questions, ballotSpecHash, ballotMethod, startTime, cutoffTime }) {
+    const election = this.requireElection(id);
+    if (election.tally) throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll frozen; ballot spec is locked', { code: 'ROLL_FROZEN' });
+    }
+    if (title != null) {
+      const trimmed = String(title).trim();
+      if (!trimmed) throw new HttpError(400, 'title required');
+      election.title = trimmed;
+    }
+    if (metadataURI != null) election.metadataURI = String(metadataURI);
+    if (startTime != null) election.startTime = Number(startTime);
+    if (cutoffTime != null) election.cutoffTime = Number(cutoffTime);
+    if (ballotMethod) election.ballotMethod = ballotMethod;
+    if (questions != null) {
+      if (!Array.isArray(questions)) throw new HttpError(400, 'questions must be an array');
+      election.questions = questions;
+      election.questionCount = questions.length;
+    }
+    if (ballotSpecHash) election.ballotSpecHash = ballotSpecHash;
+    await this.persist();
+    return election;
+  }
+
   async freezeElection(id) {
     const election = this.requireElection(id);
     if (election.rollFrozen) throw new HttpError(409, 'roll already frozen');
+    this.rebuildEligibleTree(election);
+    this.rebuildDisqualificationTree(election);
     election.rollFrozen = true;
     election.frozenAt = new Date().toISOString();
+    election.frozenEligibleRoot = election.eligibleRoot;
+    election.frozenDisqualificationRoot = election.disqualificationRoot;
     await this.persist();
     return election;
   }
@@ -534,8 +742,7 @@ export class Store {
     if (election.maxParticipants !== 0 && election.participantCount >= election.maxParticipants) {
       throw new HttpError(409, 'participant cap reached', { code: 'CAP' });
     }
-    const { leafIndex, root } = insertLeaf(election.eligibleTree, key);
-    election.eligibleRoot = root;
+    const leafIndex = election.participantCount;
     election.participantCount += 1;
     this.data.registrations.push({
       electionId: String(election.id),
@@ -556,8 +763,15 @@ export class Store {
         });
       }
     }
+    this.rebuildEligibleTree(election);
+    const eligibleLeafIndex = election.eligibleTree.leaves.indexOf(key);
     await this.persist();
-    return { election, leafIndex, identityCommitment: key, eligibleRoot: root };
+    return {
+      election,
+      leafIndex: eligibleLeafIndex >= 0 ? eligibleLeafIndex : leafIndex,
+      identityCommitment: key,
+      eligibleRoot: election.eligibleRoot,
+    };
   }
 
   findLink(electionId, userId) {
@@ -587,6 +801,32 @@ export class Store {
     return rec || null;
   }
 
+  isEligible(electionId, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    return this.isRegistered(electionId, key) && !this.isDisqualified(electionId, key);
+  }
+
+  listEligibleRegistrations(electionId) {
+    return this.listRegistrations(electionId).filter(
+      (r) => !this.isDisqualified(electionId, r.identityCommitment),
+    );
+  }
+
+  /**
+   * Node eligible set: registered ∩ ¬currently-disqualified, in registration order.
+   * Incremental Merkle trees cannot delete; disqualify/revoke rebuild this tree.
+   */
+  rebuildEligibleTree(election) {
+    const tree = emptyTree(election.treeDepth);
+    for (const r of this.listEligibleRegistrations(election.id)) {
+      insertLeaf(tree, r.identityCommitment);
+    }
+    election.eligibleTree = tree;
+    election.eligibleRoot = tree.root;
+    election.eligibleCount = tree.leaves.length;
+    return tree;
+  }
+
   rebuildDisqualificationTree(election) {
     const tree = emptyTree(election.treeDepth);
     for (const d of this.data.disqualifications) {
@@ -595,6 +835,62 @@ export class Store {
     }
     election.disqualificationTree = tree;
     election.disqualificationRoot = tree.root;
+  }
+
+  rebuildAllEligibility() {
+    for (const election of this.data.elections) {
+      if (!Number.isInteger(Number(election.treeDepth))) continue;
+      this.rebuildDisqualificationTree(election);
+      this.rebuildEligibleTree(election);
+      if (election.rollFrozen) {
+        if (!election.frozenEligibleRoot) election.frozenEligibleRoot = election.eligibleRoot;
+        if (!election.frozenDisqualificationRoot) {
+          election.frozenDisqualificationRoot = election.disqualificationRoot;
+        }
+      }
+    }
+  }
+
+  votingRoots(election) {
+    if (election.rollFrozen && !election.lateUpdateAllowed && election.frozenEligibleRoot) {
+      return {
+        eligibleRoot: election.frozenEligibleRoot,
+        disqualificationRoot: election.frozenDisqualificationRoot || election.disqualificationRoot,
+      };
+    }
+    return {
+      eligibleRoot: election.eligibleRoot,
+      disqualificationRoot: election.disqualificationRoot,
+    };
+  }
+
+  /**
+   * Node-path vote gate. The circuit still may not prove non-disqualification;
+   * this is the product control when CHAIN_RPC is unset.
+   */
+  assertCanVote(electionId, identityCommitment) {
+    if (identityCommitment == null || identityCommitment === '') {
+      throw new HttpError(400, 'identityCommitment required to vote on the Node path', {
+        code: 'IDENTITY_COMMITMENT_REQUIRED',
+      });
+    }
+    let key;
+    try {
+      key = toBytes32(identityCommitment);
+    } catch {
+      throw new HttpError(400, 'invalid identityCommitment', { code: 'INVALID_COMMITMENT' });
+    }
+    const dq = this.isDisqualified(electionId, key);
+    if (dq) {
+      throw new HttpError(403, 'identity is disqualified', {
+        code: 'DISQUALIFIED',
+        reasonCode: dq.reasonCode,
+        reasonName: reasonName(dq.reasonCode),
+      });
+    }
+    if (!this.isRegistered(electionId, key)) {
+      throw new HttpError(403, 'identity is not registered', { code: 'NOT_REGISTERED' });
+    }
   }
 
   async disqualify(electionId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
@@ -622,6 +918,7 @@ export class Store {
     };
     this.data.disqualifications.push(record);
     this.rebuildDisqualificationTree(election);
+    this.rebuildEligibleTree(election);
     await this.persist();
     return { election, record };
   }
@@ -643,14 +940,21 @@ export class Store {
     rec.revokeEvidenceHash = evidenceHash ? toBytes32(evidenceHash) : toBytes32(0);
     rec.revokedBy = issuer || 'node';
     this.rebuildDisqualificationTree(election);
+    this.rebuildEligibleTree(election);
     await this.persist();
     return { election, record: rec };
   }
 
   nullifierUsed(electionId, nullifier) {
+    return Boolean(this.findVote(electionId, nullifier));
+  }
+
+  findVote(electionId, nullifier) {
     const key = toBytes32(nullifier);
-    return this.data.votes.some(
-      (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+    return (
+      this.data.votes.find(
+        (v) => String(v.electionId) === String(electionId) && toBytes32(v.nullifier) === key,
+      ) || null
     );
   }
 
@@ -658,17 +962,22 @@ export class Store {
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
    * they wait for hourly disclosure. No passkey user id, no choice.
+   *
+   * One ballot per nullifier: any second submit (including a new ciphertext)
+   * is 409 NULLIFIER_USED. Double voting is impossible.
    */
   async acceptVote(vote, envelope) {
-    if (this.nullifierUsed(vote.electionId, vote.nullifier)) {
+    const existing = this.findVote(vote.electionId, vote.nullifier);
+    if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
     const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
       ? Math.floor(Number(vote.acceptedAt))
       : Math.floor(Date.now() / 1000);
+    const ballotHash = toBytes32(vote.ballotHash);
     const record = {
       nullifier: toBytes32(vote.nullifier),
-      ballotHash: toBytes32(vote.ballotHash),
+      ballotHash,
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
@@ -680,6 +989,7 @@ export class Store {
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
         encryptedBallot: envelope.encryptedBallot,
+        ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
     const election = this.requireElection(vote.electionId);
@@ -692,12 +1002,23 @@ export class Store {
     return this.data.votes.filter((v) => String(v.electionId) === String(electionId));
   }
 
+  /**
+   * Votes whose accept is past the disclosure horizon. Each nullifier appears
+   * at most once.
+   */
   listPublishedVotes(electionId, now, intervalSeconds) {
-    return this.listVotes(electionId).filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds));
+    return this.listVotes(electionId).flatMap((vote) => {
+      const slice = publishedVoteSlice(vote, now, intervalSeconds);
+      return slice ? [slice] : [];
+    });
   }
 
   publishedAcceptedBallots(electionId, now, intervalSeconds) {
     return this.listPublishedVotes(electionId, now, intervalSeconds).length;
+  }
+
+  publishedAcceptedBallotsAll(now, intervalSeconds) {
+    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds)).length;
   }
 
   listEnvelopes(electionId) {
@@ -712,13 +1033,30 @@ export class Store {
     return this.data.disqualifications.filter((d) => String(d.electionId) === String(electionId));
   }
 
-  async setTally(id, counts) {
+  async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {
       counts: counts.map((n) => Number(n)),
       postedAt: new Date().toISOString(),
+      countsHash: extras.countsHash || null,
+      l1: extras.l1 || null,
+      ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
+    if (Array.isArray(extras.questions) && extras.questions.length) {
+      election.tally.questions = extras.questions;
+    }
+    await this.persist();
+    return election;
+  }
+
+  async setTallyL1(id, l1) {
+    const election = this.requireElection(id);
+    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
+    election.tally.l1 = mergeTallyL1(election.tally.l1, l1);
+    if (l1?.resultHash && !election.tally.countsHash) {
+      election.tally.countsHash = l1.resultHash;
+    }
     await this.persist();
     return election;
   }
@@ -757,12 +1095,20 @@ export class Store {
   voterStatus(electionId, userId) {
     const link = this.findLink(electionId, userId);
     if (!link) {
-      return { registered: false, disqualified: false, reasonCode: null, identityCommitment: null };
+      return {
+        registered: false,
+        disqualified: false,
+        eligible: false,
+        reasonCode: null,
+        identityCommitment: null,
+      };
     }
     const dq = this.isDisqualified(electionId, link.identityCommitment);
+    const disqualified = Boolean(dq);
     return {
       registered: true,
-      disqualified: Boolean(dq),
+      disqualified,
+      eligible: !disqualified,
       reasonCode: dq ? dq.reasonCode : null,
       identityCommitment: link.identityCommitment,
     };

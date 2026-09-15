@@ -2,6 +2,7 @@
 // Certified election results from a posted tally. Plurality only (no IRV).
 // Public option counts exist after tally; never invent unofficial choice totals.
 
+import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
 
 const RANKED_TYPES = new Set(['RANKED', 'IRV', 'RCV', 'RANKED_CHOICE']);
@@ -159,13 +160,23 @@ function normalizeOptions(question) {
   return [];
 }
 
-export function questionResult(question, optionCounts, { available } = {}) {
+export function questionResult(question, optionCounts, { available, labeled } = {}) {
   const type = String(question.type || 'YES_NO');
-  const ranked = isRankedType(type);
+  const ranked = isRankedType(type) || labeled?.tallyMethod === 'irv' || labeled?.ballotMethod === 'ranked_choice';
   const seats = seatsForQuestion(question);
+  const irvReady = Boolean(ranked && labeled && labeled.tallied !== false && (labeled.winner != null || Array.isArray(labeled.rounds)));
   const meta = normalizeOptions(question);
+  const countsFromLabeled =
+    irvReady && Array.isArray(labeled.options)
+      ? labeled.options.map((o) => (o.count == null ? null : Number(o.count) || 0))
+      : optionCounts;
   const options = meta.map((opt, i) => {
-    const count = available && Array.isArray(optionCounts) ? Number(optionCounts[i]) || 0 : null;
+    const count =
+      available && Array.isArray(countsFromLabeled) && countsFromLabeled[i] != null
+        ? Number(countsFromLabeled[i]) || 0
+        : available && Array.isArray(optionCounts)
+          ? Number(optionCounts[i]) || 0
+          : null;
     return { ...opt, count, share: null };
   });
   const totalVotes = available ? options.reduce((n, o) => n + (Number(o.count) || 0), 0) : null;
@@ -178,13 +189,41 @@ export function questionResult(question, optionCounts, { available } = {}) {
     type,
     prompt: String(question.prompt || question.title || ''),
     seats,
-    method: ranked ? 'ranked_choice_not_computed' : 'plurality',
+    method: ranked ? (irvReady ? 'irv' : 'ranked_choice_not_computed') : 'plurality',
     totalVotes,
     options,
+    rounds: irvReady ? labeled.rounds || [] : undefined,
+    tieBroken: irvReady ? Boolean(labeled.tieBroken) : undefined,
+    undervotes: labeled?.undervotes ?? null,
   };
 
   if (!available) {
     return { ...base, outcome: null };
+  }
+  if (ranked && irvReady) {
+    const winnerId = labeled.winner != null ? String(labeled.winner) : null;
+    const winnerOpt = winnerId ? options.find((o) => String(o.id) === winnerId) : null;
+    const winner = winnerOpt
+      ? { id: winnerOpt.id, label: labeled.winnerLabel || winnerOpt.label, count: winnerOpt.count }
+      : winnerId
+        ? { id: winnerId, label: labeled.winnerLabel || winnerId, count: null }
+        : null;
+    return {
+      ...base,
+      outcome: {
+        status: winner ? 'winner' : 'not_computed',
+        method: 'irv',
+        seats,
+        winner,
+        winners: winner ? [winner] : [],
+        tied: [],
+        rounds: labeled.rounds || [],
+        tieBroken: Boolean(labeled.tieBroken),
+        note: winner
+          ? `${winner.label} wins by instant-runoff.${labeled.tieBroken ? ' A first-place tie was broken by lexicographic option id.' : ''}`
+          : 'Ranked-choice / IRV was posted without a winner.',
+      },
+    };
   }
   if (ranked) {
     return {
@@ -196,7 +235,7 @@ export function questionResult(question, optionCounts, { available } = {}) {
         winner: null,
         winners: [],
         tied: [],
-        note: 'Ranked-choice / IRV winner is not computed on this page. Option counts are shown when a tally exists; they are not an IRV result.',
+        note: labeled?.note || 'Ranked-choice / IRV winner is not computed on this page. Option counts are shown when a tally exists; they are not an IRV result.',
       },
     };
   }
@@ -214,11 +253,13 @@ export function buildResults(election, extra = {}) {
   const publishedAcceptedBallots = extra.publishedAcceptedBallots;
   const state = electionState(election, now);
   const status = STATUS_BY_STATE[state] || 'created';
-  const available = Boolean(election?.tally && Array.isArray(election.tally.counts));
+  const available = Boolean(election?.tally && (Array.isArray(election.tally.counts) || Array.isArray(election.tally.questions)));
   const slices = sliceOptionCounts(election?.questions || [], available ? election.tally.counts : null);
-  const questions = slices.map(({ question, counts }) =>
-    questionResult(question, counts, { available }),
-  );
+  const labeledTally = presentTally(election, election.acceptedBallots);
+  const questions = slices.map(({ question, counts }) => {
+    const labeled = labeledTally?.questions?.find((row) => String(row.id) === String(question.id));
+    return questionResult(question, counts, { available, labeled });
+  });
   return {
     available,
     status,

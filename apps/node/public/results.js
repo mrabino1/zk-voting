@@ -54,11 +54,15 @@ function outcomeBanner(question, h) {
   }
   if (outcome.status === "winner") {
     const names = (outcome.winners || []).map((w) => w.label).join(", ") || outcome.winner?.label;
+    const irv = outcome.method === "irv" || question.method === "irv";
     return h(
       "div",
       { class: "notice notice-ok results-winner", role: "status" },
-      h("p", { class: "results-kicker", text: outcome.winners?.length > 1 ? "Plurality winners" : "Plurality winner" }),
-      h("p", { text: outcome.note || `${names} declared.` })
+      h("p", { class: "results-kicker", text: irv ? "IRV winner" : outcome.winners?.length > 1 ? "Plurality winners" : "Plurality winner" }),
+      h("p", { text: outcome.note || `${names} declared.` }),
+      outcome.tieBroken
+        ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." })
+        : null
     );
   }
   if (outcome.status === "no_votes") {
@@ -99,8 +103,50 @@ function optionRow(opt, question, h) {
   );
 }
 
+function irvRoundsTable(question, h) {
+  const rounds = question.rounds || question.outcome?.rounds;
+  if (!Array.isArray(rounds) || !rounds.length) return null;
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      { class: "irv-rounds" },
+      h(
+        "thead",
+        {},
+        h(
+          "tr",
+          {},
+          h("th", { text: "Round" }),
+          h("th", { text: "Continuing" }),
+          h("th", { text: "Exhausted" }),
+          h("th", { text: "Eliminated" }),
+          h("th", { text: "Counts" })
+        )
+      ),
+      h(
+        "tbody",
+        {},
+        ...rounds.map((round) =>
+          h(
+            "tr",
+            {},
+            h("td", { text: String(round.round) }),
+            h("td", { text: String(round.continuing ?? "—") }),
+            h("td", { text: String(round.exhausted ?? "—") }),
+            h("td", { text: round.eliminated || "—" }),
+            h("td", { text: round.counts ? JSON.stringify(round.counts) : "—" })
+          )
+        )
+      )
+    )
+  );
+}
+
 function questionBlock(question, h) {
-  const ranked = question.method === "ranked_choice_not_computed";
+  const ranked = question.method === "ranked_choice_not_computed" || question.method === "irv";
+  const irv = question.method === "irv";
   return h(
     "section",
     { class: "question results-question", "aria-labelledby": `results-q-${question.id}` },
@@ -109,14 +155,17 @@ function questionBlock(question, h) {
       "p",
       {
         class: "field-hint",
-        text: ranked
-          ? "Ranked-choice / IRV is not computed here."
-          : question.seats > 1
-            ? `Plurality, ${question.seats} seats.`
-            : "Plurality (most votes).",
+        text: irv
+          ? "Instant-runoff (ranked choice)."
+          : ranked
+            ? "Ranked-choice / IRV is not computed here."
+            : question.seats > 1
+              ? `Plurality, ${question.seats} seats.`
+              : "Plurality (most votes).",
       }
     ),
     outcomeBanner(question, h),
+    irvRoundsTable(question, h),
     h(
       "div",
       { class: "table-wrap" },
@@ -290,6 +339,15 @@ export async function renderResults(main, ctx) {
       h(
         "a",
         { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id || electionId)}`, "data-nav": "", text: "Ballot" }
+      ),
+      h(
+        "a",
+        {
+          class: "btn btn-secondary",
+          href: `/elections/${encodeURIComponent(election.id || electionId)}/info`,
+          "data-nav": "",
+          text: "Candidate / measure info",
+        }
       ),
       h("a", { class: "btn btn-secondary", href: payload.explorerPath || `/explorer#/election/${encodeURIComponent(election.id || electionId)}`, text: "Explorer" })
     )

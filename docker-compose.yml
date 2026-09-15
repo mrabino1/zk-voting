@@ -1,0 +1,146 @@
+# NOT FOR PROFIT — civic public good, not a commercial product.
+#
+# Host the Republic Node (API + SPA) and local L2 the same way a frontend
+# repo is hosted: one compose file, images built from this tree, data on
+# volumes, secrets via .env (never baked into the image).
+#
+#   cp .env.example .env    # optional for a local demo
+#   docker compose up -d --build
+#   curl -fsS http://127.0.0.1:3000/health
+#
+# system_actions.sh restart/logs/status pick this file up automatically.
+
+name: zk-voting
+
+services:
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zk-voting-node:${ZK_VOTING_IMAGE_TAG:-local}
+    container_name: zk-voting-node
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${ZK_VOTING_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      DATA_DIR: /data
+      CHAIN_ID: ${CHAIN_ID:-27427}
+      CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
+      RP_ID: ${RP_ID:-localhost}
+      WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
+      ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
+      RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY:-}
+      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
+      ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
+      ALLOW_SMART_CARD_MOCK: ${ALLOW_SMART_CARD_MOCK:-}
+      # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
+      # mainnet publisher keys in committed Compose files. Not the L2 prover key.
+      L1_RPC: ${L1_RPC:-}
+      L1_TALLY_MIRROR_ADDRESS: ${L1_TALLY_MIRROR_ADDRESS:-}
+      L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
+      L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+    volumes:
+      - node-data:/data
+    depends_on:
+      l2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "/healthcheck.mjs", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - republic
+
+  l2:
+    build:
+      context: .
+      dockerfile: l2/Dockerfile
+    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
+    container_name: zk-voting-l2
+    restart: unless-stopped
+    init: true
+    command: ["node", "sequencer/index.mjs"]
+    ports:
+      - "${L2_RPC_PORT:-8546}:8546"
+    environment:
+      L2_RPC_HOST: "0.0.0.0"
+      L2_RPC_PORT: "8546"
+      L2_DATA_DIR: /data
+      L2_CHAIN_ID: ${CHAIN_ID:-27427}
+      L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
+      DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
+      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
+      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+    volumes:
+      - l2-data:/data
+    healthcheck:
+      test: ["CMD", "node", "/healthcheck.mjs", "http://127.0.0.1:8546/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - republic
+
+  prover:
+    build:
+      context: .
+      dockerfile: l2/Dockerfile
+    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
+    container_name: zk-voting-prover
+    restart: unless-stopped
+    init: true
+    command: ["node", "prover/index.mjs"]
+    environment:
+      L2_RPC_URL: http://l2:8546
+      L2_DATA_DIR: /data
+      L2_CHAIN_ID: ${CHAIN_ID:-27427}
+      L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
+      DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
+      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
+      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      L1_RPC: ${L1_RPC:-}
+      SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
+      PRIVATE_KEY: ${PRIVATE_KEY:-}
+    volumes:
+      - l2-data:/data
+    depends_on:
+      l2:
+        condition: service_healthy
+    # Worker: do not inherit the sequencer image HEALTHCHECK on :8546.
+    healthcheck:
+      disable: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - republic
+
+volumes:
+  node-data:
+  l2-data:
+
+networks:
+  republic:
+    driver: bridge

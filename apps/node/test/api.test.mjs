@@ -239,12 +239,18 @@ describe('Republic Node API', () => {
     const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.json?.error);
     assert.equal(freeze.json.election.rollFrozen, true);
+    assert.equal(freeze.json.election.frozenEligibleRoot, freeze.json.election.eligibleRoot);
+    assert.equal(
+      freeze.json.election.frozenDisqualificationRoot,
+      freeze.json.election.disqualificationRoot,
+    );
 
     const { status, json } = await api('POST', `/api/elections/${electionId}/vote`, {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '99', electionId, root: freeze.json.election.eligibleRoot },
         encryptedBallot: '0xc0ffee',
+        identityCommitment: '0x1234',
         userId: 'should-never-be-stored',
         choice: 1,
         optionId: 'yes',
@@ -268,6 +274,7 @@ describe('Republic Node API', () => {
         proof: { accept: true },
         publicInputs: { nullifier: '99', electionId },
         encryptedBallot: '0xc0ffee',
+        identityCommitment: '0x1234',
       },
     });
     assert.equal(status, 409);
@@ -330,6 +337,7 @@ describe('Republic Node API', () => {
         proof: { accept: true },
         publicInputs: { nullifier: 100, electionId },
         encryptedBallot: '0xdd',
+        identityCommitment: '0x1234',
       },
     });
     assert.equal(v2.status, 201, v2.json?.error);
@@ -362,13 +370,20 @@ describe('Republic Node API', () => {
     assert.equal(ok.status, 200, ok.json?.error);
     assert.equal(ok.json.election.stateName, 'Tallied');
     assert.deepEqual(ok.json.election.tally.counts, [2, 0]);
+    assert.equal(ok.json.l1Certification.status, 'skipped');
+    assert.equal(ok.json.election.tally.l1.status, 'skipped');
   });
 
   test('disqualify after freeze is rejected', async () => {
     await api('POST', '/api/auth/dev-login', {
-      body: { handle: 'officer', role: 'disqualification_officer' },
+      body: { handle: 'officer', role: 'voter' },
       jar: officerJar,
     });
+    const grant = await api('POST', '/api/jurisdictions/demo/roles', {
+      jar: adminJar,
+      body: { handle: 'officer', role: 'disqualification_officer' },
+    });
+    assert.equal(grant.status, 200, grant.json?.error);
     const { status, json } = await api('POST', `/api/elections/${electionId}/disqualify`, {
       jar: officerJar,
       body: { identityCommitment: '0x1234', reasonCode: 2 },
@@ -411,6 +426,7 @@ describe('Republic Node API', () => {
     assert.equal(dq.json.disqualification.reasonCode, 1);
     const detail = await api('GET', `/api/elections/${id}`, { jar: voterJar });
     assert.equal(detail.json.me.disqualified, true);
+    assert.equal(detail.json.me.eligible, false);
     assert.equal(detail.json.me.reasonCode, 1);
   });
 
@@ -458,7 +474,7 @@ describe('Republic Node API', () => {
     assert.equal(freeze.status, 200, freeze.json?.error);
     const { status, json } = await api('POST', `/api/elections/${id}/vote`, {
       body: {
-        identityCommitment: 'should-not-land-on-vote',
+        identityCommitment: '0xabc1',
         address: '0xdead',
         credentialId: 'cred',
         nullifier: '0xfeed',
@@ -472,7 +488,13 @@ describe('Republic Node API', () => {
             ['0x0', '0x0'],
           ],
           c: ['0x0', '0x0'],
-          publicInputs: [freeze.json.election.eligibleRoot, '0xfeed', `0x${'11'.repeat(32)}`, String(id)],
+          publicInputs: [
+            freeze.json.election.eligibleRoot,
+            freeze.json.election.disqualificationRoot,
+            '0xfeed',
+            `0x${'11'.repeat(32)}`,
+            String(id),
+          ],
         },
       },
     });
@@ -481,5 +503,46 @@ describe('Republic Node API', () => {
     assert.equal(json.vote.relayer, 'node');
     assert.equal(json.vote.userId, undefined);
     assert.equal(json.vote.identityCommitment, undefined);
+  });
+
+  test('vote rejects a 4-signal publicInputs array (disqRoot required)', async () => {
+    const created = await api('POST', '/api/elections', {
+      jar: adminJar,
+      body: {
+        title: 'Four-signal rejected',
+        startTime: nowSec() - 10,
+        cutoffTime: nowSec() + 3600,
+        treeDepth: 16,
+        questions: [{ type: 'YES_NO', prompt: '?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    const id = created.json.id;
+    const reg = await api('POST', `/api/elections/${id}/register`, {
+      jar: voterJar,
+      body: { identityCommitment: '0xabc2' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+    const { status, json } = await api('POST', `/api/elections/${id}/vote`, {
+      body: {
+        nullifier: '0xfeed',
+        ballotHash: `0x${'11'.repeat(32)}`,
+        encryptedBallot: '0xc0ffee22',
+        proof: {
+          mock: true,
+          a: ['0x0', '0x0'],
+          b: [
+            ['0x0', '0x0'],
+            ['0x0', '0x0'],
+          ],
+          c: ['0x0', '0x0'],
+          publicInputs: [freeze.json.election.eligibleRoot, '0xfeed', `0x${'11'.repeat(32)}`, String(id)],
+        },
+      },
+    });
+    assert.equal(status, 400);
+    assert.equal(json.code, 'INVALID_PUBLIC_INPUTS');
   });
 });

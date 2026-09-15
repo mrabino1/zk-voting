@@ -353,6 +353,7 @@ describe('results API', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: 11, electionId: id },
+        identityCommitment: '0xabc1',
         encryptedBallot: '0xaa',
       },
     });
@@ -361,6 +362,7 @@ describe('results API', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: 12, electionId: id },
+        identityCommitment: '0xabc1',
         encryptedBallot: '0xbb',
       },
     });
@@ -424,6 +426,7 @@ describe('results API', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: 21, electionId: id },
+        identityCommitment: '0xabc2',
         encryptedBallot: '0xcc',
       },
     });
@@ -431,6 +434,7 @@ describe('results API', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: 22, electionId: id },
+        identityCommitment: '0xabc2',
         encryptedBallot: '0xdd',
       },
     });

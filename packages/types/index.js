@@ -16,6 +16,20 @@ const AUTH_METHOD_TYPES = Object.freeze(["passkey", "web3", "smart_card"]);
 /** Republic L2 chain id (see docs/L2.md). */
 const REPUBLIC_CHAIN_ID = 27427;
 
+const BallotMethod = Object.freeze({
+  PLURALITY: "plurality",
+  RANKED_CHOICE: "ranked_choice",
+});
+
+const QuestionType = Object.freeze({
+  YES_NO: "YES_NO",
+  SINGLE_CHOICE: "SINGLE_CHOICE",
+  MULTI_CHOICE: "MULTI_CHOICE",
+  RANKED: "RANKED",
+  MEASURE: "MEASURE",
+  ARTICLE: "ARTICLE",
+});
+
 /** Ethereum mainnet. Canonical court-grade settlement when chosen. */
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
 
@@ -89,7 +103,50 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} tallyOperator Address allowed to submit tally proofs.
  * @property {string} verifier Groth16 verifier (`IGroth16Verifier`) or MockVerifier in tests.
  * @property {number} questionCount Number of aspects / questions on the ballot.
+ * @property {BallotQuestion[]} [questions] Canonical questions hashed into `ballotSpecHash`.
  * @property {string} jurisdictionId bytes32 id of the owning jurisdiction.
+ * @property {"plurality"|"ranked_choice"} [ballotMethod] Counting flavor. Default
+ *   `plurality`. `ranked_choice` is instant-runoff. On-chain v1 may omit this
+ *   field and keep it only inside `ballotSpecHash`.
+ */
+
+/**
+ * One external page linked from a ballot option's supporting-info card.
+ *
+ * @typedef {Object} BallotOptionLink
+ * @property {string} label
+ * @property {string} url http(s) URL
+ */
+
+/**
+ * One candidate / measure choice. Legacy ballots may be a plain string or
+ * `{ id, label }` only. Empty optional fields are omitted from the keccak
+ * preimage so old elections keep a stable `ballotSpecHash`.
+ *
+ * @typedef {Object} BallotOption
+ * @property {string} id
+ * @property {string} label Display name (candidate, Yes/No, measure choice).
+ * @property {string} [summary] Short blurb on the option list.
+ * @property {string} [body] Plain or markdown supporting information.
+ * @property {string} [imageUrl] Optional portrait / logo http(s) URL.
+ * @property {BallotOptionLink[]} [links] External pages (campaign site, full text).
+ */
+
+/**
+ * One decision on a ballot (office, measure, article). Node authoring +
+ * plurality or instant-runoff (IRV) tally. `RANKED` always uses IRV.
+ *
+ * @typedef {Object} BallotQuestion
+ * @property {string} id
+ * @property {"YES_NO"|"SINGLE_CHOICE"|"MULTI_CHOICE"|"MEASURE"|"ARTICLE"|"RANKED"} type
+ * @property {"plurality"|"ranked_choice"} [ballotMethod]
+ * @property {string} prompt
+ * @property {string} [description]
+ * @property {number} [maxSelections] Required for MULTI_CHOICE; omitted from the
+ *   keccak preimage for single-choice / yes-no so older hashes stay stable.
+ *   RANKED uses options.length.
+ * @property {BallotOption[]} options Ordered options. For RANKED this is the
+ *   printed candidate order, not the voter's ranking.
  */
 
 /**
@@ -134,6 +191,21 @@ const REASON_CODE_LABELS = Object.freeze({
  */
 
 /**
+ * Instant-runoff round. Counts are aggregate; individual rankings stay in the
+ * operator envelope on the Node demo path.
+ *
+ * @typedef {Object} IrvRound
+ * @property {number} round
+ * @property {Record<string, number>} counts First-preference among remaining.
+ * @property {number} continuing
+ * @property {number} exhausted
+ * @property {string[]} remaining
+ * @property {string|null} eliminated
+ * @property {string|null} winner
+ * @property {boolean} [tieBroken]
+ */
+
+/**
  * Encrypted / committed ballot plus the Groth16 proof that the voter is
  * eligible, not double-voting, and bound to this election. Choice is
  * not a public field.
@@ -145,7 +217,8 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string|bigint} electionId Election id (uint256).
  * @property {string} root Eligible-set Merkle root (bytes32 / uint256 hex).
  * @property {string} disqRoot Disqualification-set Merkle root.
- * @property {string} nullifier Unique per (voter, election). Spent on accept.
+ * @property {string} nullifier Unique per (voter, election). Spent at most once;
+ *   a second ballot for the same nullifier is rejected. Double voting is impossible.
  * @property {string} ballotHash Hash / commitment of `encryptedBallot`.
  * @property {string} [identityCommitment] Optional; MUST NOT be required to
  *   submit a vote. Present only in clerk-side debug tooling, never in the
@@ -197,13 +270,14 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * @typedef {Object} BlockOutcome
- * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"batch"|"freeze"} type
+ * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"l1_certify"|"batch"|"freeze"} type
  * @property {string|bigint} [electionId]
  * @property {string} [identityCommitment] Registration leaf only; never a name.
  * @property {string} [nullifier]
  * @property {string} [ballotHash]
  * @property {number} [reasonCode]
  * @property {string} [countsHash]
+ * @property {string} [resultHash] L1TallyMirror result hash (same as countsHash).
  * @property {string} [dataHash] Rollup batch calldata hash.
  */
 
@@ -262,6 +336,8 @@ module.exports = {
   ReasonCode,
   REASON_CODE_LABELS,
   AUTH_METHOD_TYPES,
+  BallotMethod,
+  QuestionType,
   reasonCodeLabel,
   electionStateLabel,
 };
