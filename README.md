@@ -9,9 +9,17 @@ This repository holds two tightly coupled pieces of software (and the circuits, 
 1. A **Node application** (same operational shape as [DealPunchList](https://dealpunchlist.com) / `dealpunchlist-node`): the product surface for voters, election officials, and public observers (`apps/node`).
 2. A **`smart-contracts/`** package: Solidity for Ethereum that registers voters, opens ballots, records (or commits to) votes with zero-knowledge proofs, and **enforces disqualification** so that a person who is on the roll can still be barred from a given election for jurisdiction-defined reasons.
 
-The same contracts are meant to run **on Ethereum mainnet (L1)** and on **Republic L2** (this repo’s sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): a ZK rollup that settles proofs and state to Ethereum. Cheap, high-volume voter activity belongs on L2. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there. Portable EVM bytecode still deploys to Lighter’s EVM surface and to other EVM L2s if needed.
+The same **Solidity** is meant to run **on Ethereum mainnet (L1)** and on any EVM venue a jurisdiction chooses (Lighter, other L2s, Foundry Anvil). Cheap, high-volume civic activity in *this* repo lands on **Republic L2** (this repo’s civic JSON sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): prove the operations, settle proofs and state to Ethereum. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there.
 
-**Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only. The product spec in this README remains the source of truth for intent; [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) is the interface contract. If this file and the code disagree, treat that as a bug in the code or an overdue README update.
+Republic L2 **as implemented** is an application-specific civic sequencer (JSON transactions: register / vote / disqualify / tally / userop). It is **not** a general-purpose EVM and it does **not** proxy to Anvil. Portable EVM bytecode still deploys to Anvil, Ethereum L1, Lighter’s EVM surface, and other EVM L2s. Executing that bytecode *on* 27427 is **Future**.
+
+**Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, civic L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only.
+
+How to read this README:
+
+- **Product intent** (privacy, disqualification, roles) is the spec for what Republic is for.
+- **Implemented today** (status table, how to run, Node/L2 sections) must match the tree. If those paragraphs lie, this file is overdue.
+- **Future** work is labeled. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) is the package map and Solidity/circuit interface contract.
 
 ---
 
@@ -114,16 +122,19 @@ Code is **present** in this monorepo. Local tests use Foundry `MockVerifier` unt
 
 | Area | State |
 | --- | --- |
-| This README | Source of truth for intent; updated for the implemented tree |
-| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Interface contract (Solidity, circuits, Node, L2) |
-| Node application (`apps/node`) | In-tree (DealPunchList-style API + SPA, `system_actions.sh`) |
-| `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry: factory, registries, inbox, tally, account, L2 settlement) |
+| This README | Product intent + honest stack (must match the tree) |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Implemented map + Solidity/circuit interfaces; **Future** labeled |
+| Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/republic.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
+| `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry `via_ir = true`: factory, registries, inbox, `Tally.sol`, account, L2 settlement) |
 | Circuits (`circuits/`) | In-tree (`vote.circom`, `tally.circom`, `identity.circom`; Poseidon stand-in labeled) |
 | Shared packages | `@zk-voting/types`, `proof-helpers`, `chain-client` |
-| Republic L2 (`l2/`) | Own sequencer + prover, chainId **27427**, L1 `RollupSettlement` |
-| Block explorer | Node `/explorer` + API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
-| Passkeys | WebAuthn PRF; see [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
+| Republic L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
+| Block explorer | Node `/explorer` over `l2-chain.json` + ingest API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
+| Passkeys | WebAuthn PRF helper; demo address is `republic-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
 | Person identity | Passkey / Web3 / smart card; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
+| Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`. **`RANKED` is Future.** |
+| Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
+| Results page `/elections/:id/results` | Linked from explorer / back-office; **no voter-SPA view yet** (tally is on the API + explorer) |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 
 ---
@@ -140,25 +151,26 @@ zk-voting/
   CONTRIBUTING.md
   system_actions.sh            host/operator menu (DealPunchList pattern)
   package.json                 npm workspaces
+  docker-compose.yml           Node + L2 host path
   docs/
-    ARCHITECTURE.md            interface contract
+    ARCHITECTURE.md            implemented map + Solidity/circuit interfaces
     OPERATOR.md
     BLOCK_EXPLORER.md
     PASSKEYS.md
     IDENTITY.md
     L2.md
   apps/
-    node/                      DealPunchList-style Node app (API + SPA)
+    node/                      Express API + vanilla JS pages (public/)
   packages/
     types/                     JSDoc: ElectionParams, VoteEnvelope, Block, Jurisdiction
     proof-helpers/             publicInputs [root, disqRoot, nullifier, ballotHash, electionId]
     chain-client/              getFactory, createElection, submitVote (viem or eth_call)
-  smart-contracts/             Foundry, Solidity 0.8.24
+  smart-contracts/             Foundry, Solidity 0.8.24, via_ir = true
     src/
     test/                      unit, fuzz, invariant
     script/                    DeployLocal, DeployL1, DeployL2, CreateElection
   circuits/                    vote.circom, tally.circom, identity.circom
-  l2/                          sequencer, prover, genesis (chainId 27427)
+  l2/                          civic JSON sequencer, prover, genesis (chainId 27427, :8546)
 ```
 
 Invariants:
@@ -175,7 +187,7 @@ Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Branch policy: wor
 
 ### Foundry tests (`smart-contracts/`)
 
-Requires [Foundry](https://book.getfoundry.sh/) (`foundryup`). solc **0.8.24**, optimizer on, fuzz 256 runs (`foundry.toml`).
+Requires [Foundry](https://book.getfoundry.sh/) (`foundryup`). solc **0.8.24**, optimizer on, **`via_ir = true`**, fuzz 256 runs (`foundry.toml`).
 
 ```bash
 cd smart-contracts
@@ -195,37 +207,53 @@ Tests must pass with `MockVerifier`. Invariants include: nullifier used at most 
 
 ```bash
 npm install
-npm run dev                 # API + SPA (workspace script)
+npm run dev                 # node --watch apps/node (Express + public/)
 npm run start               # long-lived process for system_actions.sh
 npm test -w apps/node
 ./system_actions.sh health  # GET http://127.0.0.1:3000/health
 ```
 
-Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored).
+Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored). **Not SQLite.** The UI is vanilla JS in `apps/node/public/` (no Vite, no React).
+
+Docker Compose (Node + L2 sequencer + prover), from the repo root:
+
+```bash
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
+See [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ### Republic L2 (sequencer + prover)
 
 ```bash
-npm run l2:sequencer        # node l2/sequencer/index.mjs
+npm run l2:sequencer        # node l2/sequencer/index.mjs   JSON-RPC :8546
 npm run l2:prover           # node l2/prover/index.mjs
+./l2/bin/start-local.sh     # both
 ```
 
-Genesis **chainId 27427**, 2s blocks, one sequencer. May proxy EVM to Anvil in dev. Settlement: L1 `RollupSettlement.submitBatch`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md).
+Genesis **chainId 27427**, 2s blocks, one sequencer. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md).
 
 ```bash
-export REPUBLIC_RPC_URL=http://127.0.0.1:8545
+export L2_RPC_PORT=8546
 export REPUBLIC_CHAIN_ID=27427
+# Civic sequencer (implemented):
+export REPUBLIC_L2_RPC_URL=http://127.0.0.1:8546
+# Foundry Anvil for Solidity (optional contract path), default in chain-client:
+export REPUBLIC_RPC_URL=http://127.0.0.1:8545
 ```
+
+`@zk-voting/chain-client` still defaults `REPUBLIC_RPC_URL` to Anvil **:8545**. Point `CHAIN_RPC` at Anvil only when `BallotInbox` is actually deployed there. Do not treat `:8545` as the civic sequencer.
 
 ### Block explorer
 
-With the Node up: open `/explorer`. API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`. Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour that contained the vote has closed. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-chain.json` (Node writes + sequencer `POST /api/explorer/ingest`). API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`, `GET /api/explorer/disclosure`, plus search / nullifier / per-election. Public election snapshot: `GET /api/elections/:id/summary` (disclosed turnout, last closed hour, countdown; `resultsUrl` only after a certified tally — this repo does not invent a winner here). Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour that contained the vote has closed. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
 ### Passkeys and person identity
 
 A person identifies with a **passkey**, a **Web3 wallet**, or a **smart-card digital ID**. Many Ethereum addresses can be verified internally; **exactly one** is active. The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
 
-Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF → wrap/derive secp256k1 smart-account key; **separate** PRF domain → `(trapdoor, nullifierSecret)`. UserOps are bundled; `RepublicPaymaster` sponsors register/vote. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
+Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `republic-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `RepublicPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
 ### Host actions
 
@@ -246,15 +274,15 @@ The Node side is the human product. It should feel operationally familiar to any
 
 - **Voter UI:** registration intake, identity/document collection as required by the jurisdiction, status (“registered”, “eligible”, “disqualified”, “ballot accepted”), ballot UI, confirmation.
 - **Official UI:** create a jurisdiction and an election, define questions and options, manage the roll, record disqualifications with a reason code and evidence reference, freeze the roll, open/close voting, publish the tally.
-- **Public UI:** election calendar, certified parameters (chain, contract addresses, merkle roots, proving-key hashes), **hourly** published ballot counts (never a live precinct tick), final results and verifier artifacts.
+- **Public UI:** election calendar, **hourly** published ballot counts (never a live precinct tick), explorer, tallies when posted.
 - **API:** the same jobs as HTTP, so a jurisdiction’s own systems or a kiosk can be wired in without scraping the frontend.
-- **Proof client:** help the browser or a local helper build the witness for registration, vote, and (when needed) eligibility refresh. The Node may **orchestrate** proving; it must not be the only place a proof can be produced.
-- **Relaying (optional):** submit a voter’s already-signed/proofed transaction to L2 so the voter does not need gas, without learning their choice.
+- **Relaying:** `POST /api/elections/:id/vote` accepts a proof + ciphertext. Without `CHAIN_RPC`, the Node stores the accept in JSON (demo). With `CHAIN_RPC`, it calls EVM `BallotInbox.submitVote` via viem.
+- **Proof client (Future / partial):** help the browser or a local helper build a real Groth16 witness. Today the demo path does not require a ceremony-backed proof.
 
 ### What it is not responsible for
 
-- Being the canonical roll. The canonical eligible-set and disqualification-set commitments live in the contracts.
-- Silently “fixing” a tally. If the chain says the proof is invalid, the UI reports failure.
+- Being the canonical roll **when contracts are deployed**. The canonical eligible-set and disqualification-set commitments live in the contracts. **Demo path:** `CHAIN_RPC` unset — the JSON store is the operator cache and the only roll.
+- Silently “fixing” a tally. If the chain rejects a proof, the UI reports failure. Do not edit `republic.json` to change counts after freeze.
 - Inventing disqualification law. The app presents **coded reasons** the jurisdiction configured; clerks apply them.
 
 ### Shape (DealPunchList parallel)
@@ -268,7 +296,19 @@ The Node side is the human product. It should feel operationally familiar to any
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
 | Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
 
-SPA routes (Vite + React, served by Express): `/`, `/vote/:id`, `/register`, `/admin`, `/back-office`, `/explorer`, `/elections/:id/results`. Every page footer: **NOT FOR PROFIT**.
+**Implemented UI (vanilla JS, Express static):**
+
+| Path | What |
+| --- | --- |
+| `/`, `/register`, `/vote/:id` | Voter pages (`public/index.html` + `app.js`) |
+| `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
+| `/elections/:id/info/:questionId/:optionId` | One option + external links |
+| `/admin` | Platform admin (`admin.html`) |
+| `/back-office` | Clerks / registrars / officers (`back-office.html`) |
+| `/explorer` | Civic L2 explorer (`explorer.html`) |
+| `/elections/:id/results` | **Future** as a voter page. Explorer and back-office already link here; the voter router does not handle it. Tally JSON is on `GET /api/elections/:id`. |
+
+Every page footer: **NOT FOR PROFIT**. There is **no Vite** and **no React** in this tree.
 
 ---
 
@@ -281,16 +321,16 @@ The contract set covers:
 | Contract (working name) | Role |
 | --- | --- |
 | `JurisdictionRegistry` | Who may create elections, which chain roles exist, which reason codes are valid. |
-| `VoterRegistry` | Commitments to registered persons (identity commitments / public keys), per jurisdiction. Registration is not a vote. |
+| `VoterRegistry` | Commitments to registered persons (identity commitments / public keys), per election. Registration is not a vote. |
 | `PersonRegistry` | One person (`bytes32` id, never a name): many internally verified ETH addresses, exactly one active. Not the vote leaf. |
-| `DisqualificationRegistry` | Registered persons who **must not** be able to vote in a given election (or on a given question), with reason codes, effective times, and issuer. |
 | `DisqualificationRegistry` | Registered persons who **must not** be able to vote in a given election (or on a given question), with reason codes, effective times, and issuer. |
 | `Election` / `Poll` | Parameters: questions (“aspects”), options, open/close, eligible-set root, disqualification-set root, voting rules. |
 | `ElectionFactory` | Unbounded elections via EIP-1167 clones. `maxParticipants = 0` means unlimited voters. |
 | `BallotInbox` | Accepts vote messages + ZK proofs. Rejects proofs that fail eligibility, disqualification, uniqueness, or time window. |
-| `TallyVerifier` | Verifies the coordinator/prover’s batch proofs that the published totals match the inbox. |
-| `BridgeOrMirror` / `L1TallyMirror` | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
+| `Tally` (`ITallyVerifier`) | Verifies the coordinator/prover’s batch proofs that the published totals match the inbox. File: `src/Tally.sol`. |
+| `L1TallyMirror` | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
 | `RollupSettlement` | L1 contract: `submitBatch` for Republic L2 state roots. |
+| `RepublicMailbox` | L1/L2 message mailbox. |
 | Passkey AA + paymaster | `PasskeyAccount`, factory, `RepublicPaymaster`, local `RepublicEntryPoint`. |
 
 Exact names follow the Solidity tree. The **behaviors** are the spec:
@@ -352,18 +392,21 @@ npm workspaces (Node 22):
 
 ### Why two layers (plus a named L2 in this repo)
 
-| Layer | Job |
-| --- | --- |
-| **Republic L2** (this repo, chainId **27427**) | High-volume voter actions: registration commitments, vote messages, frequent eligibility-set updates. **Own sequencer + prover.** Execution is proven; Ethereum verifies `RollupSettlement` batches. Gasless for voters (paymaster). |
-| **Lighter** ([lighter.xyz](https://lighter.xyz)) | Prior art and a possible alternate venue: a **ZK rollup on Ethereum**. Lighter’s original core is application-specific; it has also moved toward a general-purpose EVM surface. |
-| **Ethereum mainnet (L1)** | Canonical settlement. Deploy the same Solidity when the election must live where any Ethereum full node can verify it without an L2 client: national-scale certification, dispute windows, or “this result is an L1 transaction.” `L1TallyMirror` copies a tallied hash when the jurisdiction asks. |
+| Layer | Job | Implemented today |
+| --- | --- | --- |
+| **Republic L2** (this repo, chainId **27427**) | High-volume civic actions: registration, vote messages, disqualifications, tallies. **Own sequencer + prover.** Gasless for voters. | Civic **JSON** sequencer on **:8546**. Prover writes mock proofs or calls L1 `RollupSettlement`. Not an EVM. |
+| **Foundry Anvil** (dev EVM, typically **:8545**) | Run the portable Solidity stack locally (`DeployLocal`). | Yes. Separate from 27427. |
+| **Lighter** ([lighter.xyz](https://lighter.xyz)) | Prior art and a possible alternate **EVM** venue. | Not operated from this repo. |
+| **Ethereum mainnet (L1)** | Canonical settlement. `RollupSettlement` + optional `L1TallyMirror`. Deploy the same Solidity when the election must live where any Ethereum full node can verify it. | Contracts in-tree. No production deploy. |
 
 Lighter’s original core is an application-specific ZK rollup (verifiable exchange operations, proofs verified on Ethereum). Lighter has also moved toward a **general-purpose EVM** surface so ordinary Solidity can be deployed beside that core. This repo’s contracts are written as **portable EVM bytecode**:
 
 - Deploy to **Ethereum mainnet** when L1 is the required venue.
-- Deploy to **Republic L2 (27427)** for the default high-throughput, gasless path.
-- Deploy to **Lighter** (Lighter EVM / the L2’s contract environment) when a jurisdiction wants that operator instead, with L1 used to verify the rollup (and, if we add it, to mirror the certified tally).
-- If a given Lighter environment is not yet suitable for these contracts, the same artifacts should still deploy to Ethereum L1 and to any other EVM L2. The product requirement is “L2 like Lighter, plus L1,” not a hard dependency on a single third-party sequencer remaining available.
+- Deploy to **Anvil / other EVM L2s** (including Lighter’s EVM) when a jurisdiction wants that operator.
+- Run **Republic L2 (27427)** for the default high-throughput civic JSON path in this repo.
+- **Future:** execute the same Solidity *on* 27427 (EVM or validity VM). Do not document that as present.
+
+If a given Lighter environment is not yet suitable for these contracts, the same artifacts should still deploy to Ethereum L1 and to any other EVM L2. The product requirement is “L2 like Lighter, plus L1,” not a hard dependency on a single third-party sequencer remaining available.
 
 Republic L2 details (genesis, sequencer, prover, settlement): [`docs/L2.md`](./docs/L2.md).
 
@@ -459,6 +502,10 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
    The vote proof shows membership in that set (or non-membership in the disqualification set plus membership in the registry), so a disqualified person **cannot** produce an accepting proof.
 
+   **Node path today:** `apps/node` rebuilds `eligibleRoot` from that intersection and the vote relay rejects currently-disqualified (and unregistered) commitments when `CHAIN_RPC` is unset. Freeze snapshots those roots for the open window.
+
+   **Remaining ZK gap:** the vote circuit still only *binds* `disqRoot`; it does not prove non-membership. `MockVerifier` still accepts any proof. Do not treat a local demo accept as circuit-enforced exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
 4. **Visibility.**
 
    - **Public:** that a disqualification exists, which election it applies to, reason **code**, issuer role, timestamps.
@@ -484,17 +531,20 @@ A clerk who can quietly drop a person from a private database at 7:59 p.m. That 
 
 An election is not only “choose one candidate.” Officials and voters need to vote on **aspects**: questions, measures, offices, ranked choices, yes/no articles.
 
-Each **Election** contains one or more **questions**:
+Each **Election** contains one or more **questions**. **Implemented in the Node UI** (`public/vote.js`):
 
 - `SINGLE_CHOICE` — one option
 - `MULTI_CHOICE` — up to *k* options
 - `YES_NO`
-- `RANKED` — if the jurisdiction wants it (later)
-- `MEASURE` / `ARTICLE` — labeled text plus options
 
-Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar).
+**Future (not tabulated in the UI):**
 
-The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on.
+- `RANKED` — if the jurisdiction wants it
+- `MEASURE` / `ARTICLE` — labeled text plus options (clerk authoring may store a `MEASURE` type string; there is no distinct circuit)
+
+Rules per question (quorum, supermajority, “eligible to vote on this aspect even if disqualified from another”) are parameters. Disqualification can be **election-wide** or **per question** (example: eligible for a local measure, barred from a national office in the same calendar). **Per-question disqualification in circuits is Future**; v1 eligible root is `registered ∩ ¬disqualified` for the election.
+
+The Node is the authoring tool for this ballot. The contracts store the hash of the full ballot definition so the UI cannot later show a different question than the one that was voted on. Option supporting information (blurb, body, external links) is part of that hashed JSON.
 
 ---
 
@@ -554,7 +604,7 @@ A **corrupt tally operator** must not be able to change outcomes or add votes. T
 
 1. Poll closes. Inbox no longer accepts messages.
 2. Operator processes messages and proves the tally.
-3. `TallyVerifier` accepts only a correct proof.
+3. `Tally` (`ITallyVerifier` / `src/Tally.sol`) accepts only a correct proof.
 4. If the election is L2, a hash of the result can be posted to L1.
 5. Node publishes the human-readable result plus verifier artifacts.
 
@@ -640,36 +690,42 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 ./system_actions.sh deploy-prod  # pull master (confirms first)
 ```
 
-Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured.
+Install / build / restart use npm workspaces, then pm2, systemd, or Compose when configured. Root `docker-compose.yml` is that Compose target:
+
+```bash
+docker compose up -d --build   # Node :3000, L2 RPC :8546
+npm run compose:up             # same
+```
 
 ### Tooling
 
-- Solidity: Foundry 1.8+, solc 0.8.24.
-- Node: Node 22, npm workspaces.
+- Solidity: Foundry 1.8+, solc 0.8.24, **via-ir on** (`foundry.toml`).
+- Node: Node 22, npm workspaces. Frontend: vanilla JS in `apps/node/public/` (no bundler).
 - Circuits: Circom 2 (optional on the host until leaving MockVerifier).
-- Tests: `forge test` with MockVerifier; `npm test -w apps/node` for API tests.
+- Tests: `forge test --via-ir` with MockVerifier; `npm test -w apps/node` for API tests; `npm run test:l2` for the civic sequencer.
 
 ### What is in the tree vs what remains
 
-Present: monorepo skeleton, Solidity interfaces and implementations under `smart-contracts/`, circuits, packages, Node app, L2, explorer and passkey docs.
+Present: monorepo skeleton, Solidity under `smart-contracts/`, circuits, packages, Node API + vanilla JS UI, civic JSON L2, explorer and passkey docs.
 
-Still ahead of a binding election: Poseidon hasher swap, Groth16 ceremony, coercion-resistance upgrades, independent auditor packaging. Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
+Still ahead of a binding election (**Future**): Poseidon hasher swap, Groth16 ceremony, secp256k1 in the browser passkey helper, dedicated `/elections/:id/results` view, `RANKED` ballots, EVM execution on 27427, coercion-resistance upgrades, independent auditor packaging. Do not treat `MockVerifier` or the circom `Hasher()` stand-in as production cryptography.
 
 ---
 
 ## Roadmap
 
-Dates are not committed.
+Dates are not committed. Items 1–4 are **in the tree** (with the honest caveats in Current status). Everything after that is **Future**.
 
 1. **Spec freeze (this README)** — purpose, monorepo, L1 + L2, registration, disqualification. **Done (kept current as code landed).**
-2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and Republic L2. **In-tree.**
-3. **Node skeleton** — DealPunchList-style app: jurisdictions, users, roles, election admin, voter home. **In-tree.**
+2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and an EVM configured as Republic L2. **In-tree.**
+3. **Node skeleton** — DealPunchList-style app: jurisdictions, users, roles, election admin, voter home. **In-tree** (vanilla JS + JSON store, not Vite/React/SQLite).
 4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
-5. **First proving path** — eligible vote on a single yes/no question on L2 test deployment (MockVerifier locally).
-6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof.
-7. **Multi-question ballots** — “aspects.”
-8. **L1 certification** — tally or tally hash on Ethereum mainnet.
-9. **Coercion-resistance upgrades** and independent auditor tooling.
+5. **First proving path** — eligible vote on a single yes/no question with real Groth16 (MockVerifier locally today). **Future.**
+6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof against production keys. **Future** (eligible-root membership is in the circuit topology today).
+7. **Multi-question ballots** — “aspects” beyond yes/no + multi-choice; **`RANKED`**. **Future.**
+8. **L1 certification** — tally or tally hash on Ethereum mainnet. **Future** as a live deploy; contracts exist.
+9. **EVM (or validity) execution on chainId 27427** so the same bytecode runs on the civic L2. **Future.**
+10. **Coercion-resistance upgrades** and independent auditor tooling. **Future.**
 
 ---
 
@@ -686,7 +742,7 @@ Dates are not committed.
 | **Nullifier** | A unique value revealed at vote time so the same person cannot vote twice, without publishing their name. |
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
-| **L2** | Republic L2 (chainId **27427**) by default; Lighter and other EVM L2s as portable venues. Execution off L1, security anchored to Ethereum. |
+| **L2** | Republic L2 (chainId **27427**) by default: civic JSON sequencer in `l2/`. Lighter and other EVM L2s as portable Solidity venues. Execution off L1, security anchored to Ethereum. |
 | **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. One of three ways to identify a person (with Web3 wallet and smart-card digital ID). |
 | **Person** | One Node user. Uniquely identified. Authenticators and ETH addresses cannot be shared across people. |
 | **Active Ethereum address** | The single ETH address currently registered for that person’s gasless ops. Other verified addresses stay internal. Not the Merkle leaf. |
@@ -699,7 +755,7 @@ This project is **not** a fork of any of the following. They are the prior art t
 
 - [MACI](https://maci.pse.dev/) — on-chain polls, signup policies, collusion-resistant messaging, proven tallies.
 - [Semaphore](https://semaphore.pse.dev/) — anonymous group membership proofs (a likely building block for “I am still in the eligible set”).
-- [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 *family* this repo treats as the high-throughput venue. Republic L2 is operated from `l2/` (chainId 27427), not as a Lighter-hosted sequencer.
+- [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 *family* this repo treats as the high-throughput venue. Republic L2 is operated from `l2/` (chainId 27427) as a **civic JSON** sequencer, not as a Lighter-hosted or Anvil-proxied EVM.
 - DealPunchList / `dealpunchlist-node` — the Node/product and hosting pattern this monorepo’s application side follows.
 
 ---

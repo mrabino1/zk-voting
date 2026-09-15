@@ -93,7 +93,9 @@ contract PrivacyUnlinkabilityTest is Deployer {
         assertTrue(seen);
     }
 
-    function testNullifierUniquenessDoesNotIdentifyWallet() public {
+    /// @notice Per-election spent nullifier rejects a second ballot in **that**
+    ///         election and is not the voter wallet. Not a lifetime ban.
+    function testPerElection_nullifierUniquenessDoesNotIdentifyWallet() public {
         registerVoter(electionId, identityCommitment);
         freezeRoll(election);
         warpOpen(election);
@@ -101,5 +103,14 @@ contract PrivacyUnlinkabilityTest is Deployer {
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertTrue(nullifier != uint256(uint160(voterWallet)));
         expectSubmitVoteRevert(electionId, election, nullifier);
+        assertEq(inbox.acceptedBallots(electionId), 1, "double-vote must not increment acceptedBallots");
+    }
+
+    function testOnceOnly_nullifierUniquenessDoesNotIdentifyWallet() public {
+        testPerElection_nullifierUniquenessDoesNotIdentifyWallet();
+    }
+
+    function testNullifierUniquenessDoesNotIdentifyWallet() public {
+        testPerElection_nullifierUniquenessDoesNotIdentifyWallet();
     }
 }

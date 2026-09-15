@@ -7,7 +7,12 @@ Republic voters do not handle seed phrases. A **WebAuthn** credential on the dev
 1. An **Ethereum smart-account** key (secp256k1), used only to authorize a UserOperation.
 2. A **ZK identity** `(identityTrapdoor, nullifierSecret)`, used only inside the vote circuit.
 
-The ballot is unlinkable from the smart-account address. L2 gas is **sponsored** (paymaster). This document is the implementation note for that construction; the interface contract is [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+The ballot is unlinkable from the smart-account address. L2 gas is **sponsored** (paymaster). This document is the implementation note for that construction; the package map
+is [`ARCHITECTURE.md`](./ARCHITECTURE.md). **Implemented today** in
+`apps/node/public/passkey-wallet.js`: WebAuthn + PRF wrap of a 32-byte seed in
+IndexedDB. `getAddress()` returns `republic-local-address` (SHA-256 of the seed).
+Production Ethereum addresses (keccak256 of the uncompressed secp256k1 pubkey)
+are **Future** in that helper — it does not ship a curve implementation.
 
 ---
 
@@ -101,7 +106,7 @@ account wrap key = HKDF(ikm = prf.first,  salt = "republic:account:v1",  info = 
 
 If the authenticator returns `first` but not `second`, the wallet runs a **second assertion** with `eval.first = saltIdentity`. It will not fold identity into the account seed.
 
-`jurisdictionId` is bound when the wallet is provisioned (selected election, else `demo`) and stored on the IndexedDB record so later votes re-derive the same leaf. Default chain id is Republic L2 `27427`. Login work can reuse `prfEvalSaltsForCredential` / `buildPrfEvalExtension` without changing this file’s wrap path.
+`jurisdictionId` is bound when the wallet is provisioned (selected election, else `demo`) and stored on the IndexedDB record so later votes re-derive the same leaf. Default chain id is Republic L2 `27427`. Returning-user `loginPasskey` is session-only and does not eval these salts; wallet unwrap still uses `prfEvalSaltsForCredential` / `buildPrfEvalExtension`.
 
 #### IndexedDB v1 → v2 (breaking demo reset)
 
@@ -166,6 +171,10 @@ POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
+POST /api/auth/web3/challenge
+POST /api/auth/web3/login
+POST /api/auth/logout
+POST /api/auth/dev-login              (ALLOW_DEV_LOGIN / NODE_ENV=test only)
 POST /api/elections/:id/register    (after passkey; commitment, not name)
 POST /api/elections/:id/vote        (relays UserOp / proof)
 GET  /api/identity/methods

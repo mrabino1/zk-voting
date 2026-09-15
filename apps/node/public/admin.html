@@ -46,6 +46,7 @@
             <li><a href="/admin" aria-current="page">Admin</a></li>
           </ul>
         </nav>
+        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
         <span class="office-badge">Not for profit</span>
       </div>
     </header>
@@ -60,9 +61,11 @@
           and no console that takes fees. Dashboards do not show live vote ticks; public
           proof of ballots is published once an hour.
         </p>
-        <p class="disclosure-banner" id="disclosure-banner" role="note">
-          Public vote proofs publish at the top of each hour. This console does not show a live jurisdiction increase.
-        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Public vote proofs publish at the top of each hour. This console does not show a live jurisdiction increase.
+          </p>
+        </aside>
         <p class="session-line" id="session-line">Checking session…</p>
       </header>
 
@@ -88,26 +91,13 @@
         </div>
       </section>
 
-      <section class="panel" aria-labelledby="session-heading">
-        <header>
-          <h2 id="session-heading">Sign in</h2>
-        </header>
-        <p class="field-hint">
-          Platform admin uses the same passkey session as voters. Dev-login exists only when the host set
-          <code>ALLOW_DEV_LOGIN=1</code>.
-        </p>
-        <form id="form-dev" class="form-grid">
-          <div class="field">
-            <label class="field-label" for="dev-handle">Handle</label>
-            <input id="dev-handle" name="handle" value="admin" autocomplete="username" />
-          </div>
-          <div class="actions">
-            <button class="btn" type="submit">Dev sign-in</button>
-            <a class="btn btn-secondary" href="/register">Passkey register / login</a>
-          </div>
-          <div class="flash" id="flash-dev" role="status"></div>
-        </form>
-      </section>
+      <div
+        id="sign-in-root"
+        data-heading="Sign in"
+        data-dev-handle="admin"
+        data-dev-role="platform_admin"
+        data-lede="Platform admin uses the same passkey or Ethereum session as every other person. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
+      ></div>
 
       <div class="grid-2">
         <section class="panel" aria-labelledby="create-j-heading">
@@ -261,6 +251,8 @@
         · AGPL-3.0-or-later
       </p>
     </footer>
+    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/signin.js"></script>
     <script src="/admin.js" defer></script>
   </body>
 </html>

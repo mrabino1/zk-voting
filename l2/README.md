@@ -21,7 +21,9 @@ We do **not** rent a commercial sequencer. We do **not** issue a gas token.
 | **Ethereum L1** | Court-grade settlement. `RollupSettlement` stores `prevStateRoot`, `newStateRoot`, and `dataHash`. Anyone can re-derive `dataHash` from public batch data. |
 
 Voters never hold an L2 gas token. The sequencer / paymaster / bundler is the
-transaction origin. The paymaster sponsors UserOps that touch the civic
+transaction origin. On an **EVM**, the paymaster sponsors UserOps that touch the
+civic contracts. This civic sequencer is **not** Anvil and does **not** execute
+Solidity; Foundry Anvil (default `:8545`) is only for compiling and testing
 contracts. `eth_getBalance` for ordinary voter addresses is always `0`. The
 sequencer and paymaster report a **fake** sponsored balance so tooling that
 checks “can this paymaster pay?” is satisfied without introducing a token.
@@ -94,9 +96,9 @@ submits `submitBatch` with [viem](https://viem.sh). Otherwise it writes
 This is **not** a proving-as-a-service company. The jurisdiction that runs an
 election runs the prover.
 
-## Run locally (pure Node, no Docker)
+## Run locally (pure Node)
 
-Docker is not required and is not used here.
+Docker is not required. From the repository root, `docker compose up -d --build` also starts this sequencer (`l2`) and the prover (`prover`); see [`docs/OPERATOR.md`](../docs/OPERATOR.md).
 
 ```bash
 ./l2/bin/start-local.sh

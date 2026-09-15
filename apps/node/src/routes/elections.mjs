@@ -1,14 +1,19 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import { keccak256, stringToHex } from 'viem';
 import { Router } from 'express';
 
-import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
-import { presentElection, electionState, publishDue } from '../electionState.mjs';
+import {
+  normalizeQuestions,
+  presentPublicBallotInfo,
+  presentPublicOptionInfo,
+  resolveBallotSpecHash,
+} from '../ballotSpec.mjs';
+import { presentElection, electionState, publishDue, electionDisclosure } from '../electionState.mjs';
+import { asyncHandler, HttpError } from '../http.mjs';
+import { emptyTree } from '../merkle.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
-import { emptyTree } from '../merkle.mjs';
 import { publicVoteRecord } from '../store.mjs';
 
 function unixSeconds(value, fallback) {
@@ -19,36 +24,6 @@ function unixSeconds(value, fallback) {
   const ms = Date.parse(s);
   if (Number.isNaN(ms)) throw new HttpError(400, 'invalid timestamp');
   return Math.floor(ms / 1000);
-}
-
-function stableStringify(value) {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function normalizeQuestions(input) {
-  if (!input) return [];
-  if (!Array.isArray(input)) throw new HttpError(400, 'questions must be an array');
-  return input.map((q, i) => ({
-    id: String(q.id || `q${i + 1}`),
-    type: String(q.type || 'YES_NO'),
-    prompt: String(q.prompt || q.title || `Question ${i + 1}`),
-    options: Array.isArray(q.options)
-      ? q.options.map((o, j) => ({
-          id: String(o.id || `o${j + 1}`),
-          label: String(o.label || o.name || String(o)),
-        }))
-      : q.type === 'YES_NO' || !q.type
-        ? [
-            { id: 'yes', label: 'Yes' },
-            { id: 'no', label: 'No' },
-          ]
-        : [],
-  }));
 }
 
 function expectedCountLength(questions) {
@@ -70,6 +45,9 @@ async function revokeHandler(req, store, explorer) {
     electionId: String(election.id),
     identityCommitment: record.identityCommitment,
     evidenceHash: record.revokeEvidenceHash,
+    eligibleRoot: election.eligibleRoot,
+    disqualificationRoot: election.disqualificationRoot,
+    eligibleCount: election.eligibleCount,
   });
   return election;
 }
@@ -115,8 +93,11 @@ export function electionsRouter(deps) {
         throw new HttpError(400, 'maxParticipants must be >= 0 (0 = unlimited)');
       }
       const questions = normalizeQuestions(body.questions);
-      const ballotSpecHash =
-        body.ballotSpecHash || keccak256(stringToHex(stableStringify({ title, questions })));
+      const ballotSpecHash = resolveBallotSpecHash({
+        title,
+        questions,
+        ballotSpecHash: body.ballotSpecHash,
+      });
       const jurisdictionId = String(body.jurisdictionId || 'demo');
       if (!store.getJurisdiction(jurisdictionId)) {
         throw new HttpError(400, 'unknown jurisdictionId');
@@ -157,6 +138,63 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/info',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      res.json(presentPublicBallotInfo(election, deps.config.nowFn()));
+    }),
+  );
+
+  router.get(
+    '/:id/info/:questionId/:optionId',
+    asyncHandler(async (req, res) => {
+      await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentPublicOptionInfo(
+        election,
+        req.params.questionId,
+        req.params.optionId,
+        deps.config.nowFn(),
+      );
+      if (!dto) throw new HttpError(404, 'option not found');
+      res.json(dto);
+    }),
+  );
+
+  const patchBallot = asyncHandler(async (req, res) => {
+    const election = store.requireElection(req.params.id);
+    const body = req.body || {};
+    const title = body.title != null ? String(body.title).trim() : election.title;
+    if (!title) throw new HttpError(400, 'title required');
+    const questions =
+      body.questions != null ? normalizeQuestions(body.questions) : election.questions;
+    const metadataURI =
+      body.metadataURI != null ? String(body.metadataURI) : election.metadataURI;
+    const ballotSpecHash = resolveBallotSpecHash({
+      title,
+      questions,
+      ballotSpecHash: body.ballotSpecHash,
+    });
+    const updated = await store.updateElectionBallot(req.params.id, {
+      title,
+      metadataURI,
+      questions,
+      ballotSpecHash,
+    });
+    res.json({
+      ok: true,
+      id: updated.id,
+      electionId: updated.id,
+      election: presentElection(updated, deps),
+      nfp: true,
+    });
+  });
+
+  router.patch('/:id', requireAuth, requireRole('clerk'), patchBallot);
+  router.put('/:id', requireAuth, requireRole('clerk'), patchBallot);
+
+  router.get(
     '/:id',
     asyncHandler(async (req, res) => {
       await publishDue(deps);
@@ -170,6 +208,31 @@ export function electionsRouter(deps) {
   );
 
   router.get(
+    '/:id/summary',
+    asyncHandler(async (req, res) => {
+      const { view } = await publishDue(deps);
+      const election = store.requireElection(req.params.id);
+      const dto = presentElection(election, deps);
+      const tallied = Boolean(election.tally);
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        title: election.title,
+        jurisdictionId: election.jurisdictionId,
+        state: dto.state,
+        stateName: dto.stateName,
+        startTime: election.startTime,
+        cutoffTime: election.cutoffTime,
+        participantCount: election.participantCount,
+        acceptedBallots: dto.acceptedBallots,
+        disclosure: electionDisclosure(election, deps, view),
+        explorerUrl: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
+        resultsUrl: tallied ? `/elections/${election.id}/results` : null,
+      });
+    }),
+  );
+
+  router.get(
     '/:id/ballots',
     asyncHandler(async (req, res) => {
       const { now, interval, view } = await publishDue(deps);
@@ -179,7 +242,7 @@ export function electionsRouter(deps) {
         electionId: String(election.id),
         acceptedBallots: published.length,
         ballots: published.map(publicVoteRecord),
-        disclosure: view,
+        disclosure: electionDisclosure(election, deps, view),
         nfp: true,
       });
     }),
@@ -270,7 +333,10 @@ export function electionsRouter(deps) {
         electionId: String(election.id),
         eligibleRoot: election.eligibleRoot,
         disqualificationRoot: election.disqualificationRoot,
+        frozenEligibleRoot: election.frozenEligibleRoot,
+        frozenDisqualificationRoot: election.frozenDisqualificationRoot,
         participantCount: election.participantCount,
+        eligibleCount: election.eligibleCount,
       });
       res.json({ ok: true, election: presentElection(election, deps), nfp: true });
     }),
@@ -322,6 +388,9 @@ export function electionsRouter(deps) {
         identityCommitment: record.identityCommitment,
         reasonCode: record.reasonCode,
         evidenceHash: record.evidenceHash,
+        eligibleRoot: election.eligibleRoot,
+        disqualificationRoot: election.disqualificationRoot,
+        eligibleCount: election.eligibleCount,
       });
       const linked = store.findUserIdForCommitment(election.id, record.identityCommitment);
       await store.addNotification({
@@ -340,6 +409,7 @@ export function electionsRouter(deps) {
           evidenceHash: record.evidenceHash,
           issuedAt: record.issuedAt,
         },
+        eligibleRoot: election.eligibleRoot,
         election: presentElection(election, deps),
         nfp: true,
       });
