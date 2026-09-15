@@ -8,9 +8,10 @@
 #
 #   npm install
 #   npm run test:node          # apps/node
+#   npm run test:packages      # @zk-voting/chain-client (L1 tally-hash; no keys)
 #   npm run test:l2            # skipped in CI if l2/test has no *.test.mjs
 #   npm run test:contracts     # forge test --via-ir
-#   npm test                   # node + L2 + contracts
+#   npm test                   # node + packages + L2 + contracts
 #
 name: CI
 
@@ -51,8 +52,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          # Root has workspaces but no root lockfile; apps/node holds the deps.
-          cache-dependency-path: apps/node/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -83,6 +83,9 @@ jobs:
       - name: Node tests
         run: npm run test:node
 
+      - name: Package tests
+        run: npm run test:packages
+
       - name: L2 tests
         run: |
           shopt -s nullglob
@@ -107,6 +110,7 @@ jobs:
             echo '```bash'
             echo "npm install"
             echo "npm run test:node          # apps/node"
+            echo "npm run test:packages      # chain-client L1 helpers (no keys)"
             echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
             echo "npm run test:contracts     # forge test --via-ir"
             echo "npm test                   # all of the above"

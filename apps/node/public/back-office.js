@@ -992,9 +992,47 @@
       }
     }
     try {
-      await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
-      flash($("flash-tally"), "ok", "Tally posted. Sum(counts) must equal accepted ballots.");
+      const data = await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
+      const cert = data && data.l1Certification;
+      let msg = "Tally posted. Sum(counts) must equal accepted ballots.";
+      if (cert && cert.status === "skipped") {
+        msg =
+          "Tally posted. L1 certification skipped (" +
+          (cert.reason || "L1 env unset") +
+          "). Set L1_RPC, L1_TALLY_MIRROR_ADDRESS, and L1_PUBLISHER_PRIVATE_KEY to copy the hash to Ethereum.";
+      } else if (cert && cert.status === "posted") {
+        msg = "Tally posted and certified on L1. tx=" + (cert.txHash || "");
+      } else if (cert && cert.status === "already_posted") {
+        msg = "Tally posted. L1 already has this election's hash.";
+      } else if (cert && cert.status === "failed") {
+        msg = "Tally posted locally; L1 certification failed: " + (cert.error || "unknown");
+      }
+      flash($("flash-tally"), cert && cert.status === "failed" ? "err" : "ok", msg);
       wireExplorerLinks(id);
+    } catch (err) {
+      flash($("flash-tally"), "err", errText(err));
+    }
+  });
+
+  $("btn-certify-l1").addEventListener("click", async () => {
+    const id = $("t-election").value;
+    if (!id) {
+      flash($("flash-tally"), "err", "Choose an election first.");
+      return;
+    }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(id) + "/certify-l1", {
+        method: "POST",
+        body: {},
+      });
+      const cert = data && data.l1Certification;
+      if (cert && cert.status === "skipped") {
+        flash($("flash-tally"), "ok", "L1 no-op: " + (cert.reason || "L1 env unset"));
+      } else if (cert && (cert.status === "posted" || cert.status === "already_posted")) {
+        flash($("flash-tally"), "ok", "L1 certification " + cert.status + (cert.txHash ? " tx=" + cert.txHash : ""));
+      } else {
+        flash($("flash-tally"), "err", (cert && (cert.error || cert.reason)) || "L1 certification did not post");
+      }
     } catch (err) {
       flash($("flash-tally"), "err", errText(err));
     }

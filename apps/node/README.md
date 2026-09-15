@@ -94,6 +94,11 @@ Empty optional fields are omitted so older elections without metadata keep worki
 | `CHAIN_RPC` | _empty_ | If set, `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for on-chain submit |
+| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postResult`. Unset → tally still works (no-op certify) |
+| `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
+| `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
+| `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
+| `L1_CHAIN_ID` | RPC | Optional override |
 | `RP_ID` | `localhost` | WebAuthn rpID |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
@@ -125,7 +130,9 @@ GET  /api/elections/:id/info/:questionId/:optionId
 POST /api/elections/:id/register    (after passkey)
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer)
-POST /api/elections/:id/tally       (tally operator)
+POST /api/elections/:id/tally       (tally operator; attempts L1 certify if env set)
+POST /api/elections/:id/certify-l1  (retry L1 postResult; no-op if env unset)
+GET  /api/elections/:id/l1
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods
@@ -165,6 +172,11 @@ accepts still wait for hourly public disclosure unless the interval is `0`.
 Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified.
 Freeze snapshots the roots used for the open window. The circuit may still not
 prove non-disqualification; Node enforcement is the product control on this path.
+
+Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
+`POST /tally` still records counts. `l1Certification.status` is `skipped`.
+Operator details: [`docs/OPERATOR.md`](../../docs/OPERATOR.md). `npm run certify:l1`
+from the repo root is the same no-op unless those vars are set.
 
 ---
 

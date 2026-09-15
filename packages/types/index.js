@@ -228,13 +228,14 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * @typedef {Object} BlockOutcome
- * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"batch"|"freeze"} type
+ * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"l1_certify"|"batch"|"freeze"} type
  * @property {string|bigint} [electionId]
  * @property {string} [identityCommitment] Registration leaf only; never a name.
  * @property {string} [nullifier]
  * @property {string} [ballotHash]
  * @property {number} [reasonCode]
  * @property {string} [countsHash]
+ * @property {string} [resultHash] L1TallyMirror result hash (same as countsHash).
  * @property {string} [dataHash] Rollup batch calldata hash.
  */
 

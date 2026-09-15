@@ -232,7 +232,7 @@ npm run l2:prover           # node l2/prover/index.mjs
 ./l2/bin/start-local.sh     # both
 ```
 
-Genesis **chainId 27427**, 2s blocks, one sequencer. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md).
+Genesis **chainId 27427**, 2s blocks, one sequencer. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ```bash
 export L2_RPC_PORT=8546
@@ -723,7 +723,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 5. **First proving path** — eligible vote on a single yes/no question with real Groth16 (MockVerifier locally today). **Future.**
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof against production keys. **Future** (eligible-root membership is in the circuit topology today).
 7. **Multi-question ballots** — “aspects” beyond yes/no + multi-choice; **`RANKED`**. **Future.**
-8. **L1 certification** — tally or tally hash on Ethereum mainnet. **Future** as a live deploy; contracts exist.
+8. **L1 certification** — tally or tally hash on Ethereum mainnet. **In-tree (testnet-friendly):** after Node tally, `L1TallyMirror.postResult` when L1 env is set; graceful no-op otherwise. See [`docs/OPERATOR.md`](./docs/OPERATOR.md). A live jurisdiction deploy on Ethereum mainnet (pinned addresses on `master`) is still **Future**.
 9. **EVM (or validity) execution on chainId 27427** so the same bytecode runs on the civic L2. **Future.**
 10. **Coercion-resistance upgrades** and independent auditor tooling. **Future.**
 

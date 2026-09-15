@@ -348,7 +348,7 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots after cutoff (the operator inbox, not the hourly public snapshot). You cannot invent votes. The election must be past cutoff.</p>
+        <p class="field-hint">Post per-option counts (concatenated per question). Sum must equal accepted ballots after cutoff (the operator inbox, not the hourly public snapshot). You cannot invent votes. The election must be past cutoff. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>
@@ -368,6 +368,7 @@
           </details>
           <div class="actions">
             <button class="btn" type="submit">Post counts</button>
+            <button class="btn btn-secondary" type="button" id="btn-certify-l1">Certify hash on L1</button>
             <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
             <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
           </div>

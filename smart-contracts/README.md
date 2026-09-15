@@ -14,7 +14,7 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 - `src/l2/` — `RollupSettlement`, mailbox, L1 tally mirror
 - `src/zk/` — `MockVerifier` (tests) and structural `VoteVerifier`
 - `test/` — unit, fuzz (`test/fuzz`), invariant (`test/invariant`)
-- `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`
+- `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`, `CertifyL1` (tally hash → `L1TallyMirror`; `certify_l1.sh` no-ops if L1 env unset)
 
 ## Test
 
