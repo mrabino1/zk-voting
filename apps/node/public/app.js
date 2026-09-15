@@ -7,6 +7,7 @@ import { startRouter, navigate } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
 import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { renderElectionInfo, renderOptionInfo } from "./info.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -421,7 +422,8 @@ function updateNav(routeName) {
     const current =
       (routeName === "home" && href === "/") ||
       (routeName === "register" && href === "/register") ||
-      (routeName === "vote" && href === "/");
+      (routeName === "vote" && href === "/") ||
+      ((routeName === "election-info" || routeName === "option-info") && href === "/");
     if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
@@ -518,7 +520,13 @@ function renderHome(main, route, bundle) {
                       : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
                 canRegister
                   ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-                  : null
+                  : null,
+                h("a", {
+                  class: "btn btn-secondary",
+                  href: `/elections/${encodeURIComponent(election.id)}/info`,
+                  "data-nav": "",
+                  text: "Candidate / measure info",
+                })
               )
             );
           })
@@ -712,6 +720,18 @@ async function renderRoute(route) {
     } else if (route.name === "vote") {
       setTitle("Ballot");
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "election-info") {
+      setTitle("Ballot information");
+      await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });
+    } else if (route.name === "option-info") {
+      setTitle("Option information");
+      await renderOptionInfo(main, {
+        ...ctx(),
+        route,
+        electionId: route.params.id,
+        questionId: route.params.questionId,
+        optionId: route.params.optionId,
+      });
     } else {
       setTitle("Not found");
       renderNotFound(main, route);
