@@ -1094,6 +1094,13 @@
     }
   }
 
+  function shortHash(value) {
+    const s = String(value || "");
+    if (!s) return "—";
+    if (s.length <= 22) return s;
+    return s.slice(0, 10) + "…" + s.slice(-8);
+  }
+
   function credentialSummary(row) {
     const creds = row.credentials || [];
     if (!creds.length) return "none";
@@ -1128,7 +1135,7 @@
           const commit = String(row.identityCommitment || "");
           return `<tr>
             <td>${esc(row.handle || row.userId || "—")}</td>
-            <td class="hash">${esc(commit.slice(0, 18))}${commit.length > 18 ? "…" : ""}</td>
+            <td class="hash">${esc(shortHash(commit))}</td>
             <td>${esc(String(row.requestedAt || "").slice(0, 16))}</td>
             <td>${esc(credentialSummary(row))}</td>
             <td>
@@ -1165,7 +1172,7 @@
             <td>${esc(row.issuer || "—")}</td>
             <td><span class="pill-status status-${esc(row.status || "active")}">${esc(row.status || "active")}</span></td>
             <td>${esc(row.expiresAt ? String(row.expiresAt).slice(0, 10) : "—")}</td>
-            <td class="hash">${esc(String(hash).slice(0, 18))}${hash ? "…" : "—"}</td>
+            <td class="hash">${esc(hash ? shortHash(hash) : "—")}</td>
             <td>
               ${
                 row.status === "revoked"
