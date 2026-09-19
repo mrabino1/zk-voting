@@ -645,8 +645,7 @@ export async function renderVote(main, ctx) {
               type: "submit",
               disabled: Boolean(
                 state.busy ||
-                  !publicRecord ||
-                  publicRecord.staleWrap ||
+                  publicRecord?.staleWrap ||
                   (signedIn() && !pinBound()) ||
                   (source !== "sample" && !signedIn())
               ),
@@ -665,13 +664,6 @@ export async function renderVote(main, ctx) {
   async function onSubmit(event) {
     event.preventDefault();
     if (state.busy) return;
-    if (!publicRecord || publicRecord.staleWrap) {
-      state.error = publicRecord?.staleWrap
-        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
-        : "Register a passkey on this device before voting.";
-      paint();
-      return;
-    }
     const form = event.target;
     const answers = collectAnswers(form, questions);
     const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : (a.optionIds || []).length === 0));
@@ -691,11 +683,20 @@ export async function renderVote(main, ctx) {
       return;
     }
 
+    // PIN is the last keypad step before the passkey ceremony.
     if (needsVotePin() && !state.pinToken) {
       state.pendingAnswers = answers;
       state.step = "pin";
       state.pinDigits = "";
       state.pinKeypad = null;
+      paint();
+      return;
+    }
+
+    if (!publicRecord || publicRecord.staleWrap) {
+      state.error = publicRecord?.staleWrap
+        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
+        : "Register a passkey on this device before voting.";
       paint();
       return;
     }
