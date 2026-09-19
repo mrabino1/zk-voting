@@ -615,6 +615,7 @@ function renderDesk(main, route, bundle) {
   const others = elections.filter((election) => voterStatusForElection(election, me, store).key === "not_registered");
 
   main.replaceChildren(
+    ...[
     h(
       "div",
       { class: "page-head" },
@@ -688,7 +689,8 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "more-heading" },
       h("h2", { id: "more-heading", text: "Register for more elections" }),
       electionGrid(others, me, store, "No additional published elections on this Node.")
-    )
+    ),
+    ].filter(Boolean)
   );
   const signInRoot = main.querySelector("#sign-in-root");
   if (signInRoot) {

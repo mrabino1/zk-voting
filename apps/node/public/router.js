@@ -7,6 +7,8 @@
  * `/elections`, `/elections/:id/results`, `/elections/:id/info`
  */
 
+import { isStandaloneHtmlPath } from "./audience.js";
+
 const listeners = new Set();
 
 function pathFromLocation(loc = window.location) {
@@ -113,6 +115,12 @@ function emit() {
 
 export function navigate(path, { replace = false } = {}) {
   const next = path.startsWith("/") ? path : `/${path}`;
+  const pathOnly = next.split("?")[0].split("#")[0];
+  if (typeof window !== "undefined" && isStandaloneHtmlPath(pathOnly)) {
+    if (replace) window.location.replace(next);
+    else window.location.assign(next);
+    return;
+  }
   if (shouldUseHash()) {
     const url = `${window.location.pathname}${window.location.search}#${next}`;
     if (replace) window.location.replace(url);
@@ -136,6 +144,7 @@ export function startRouter(onChange) {
     if (!href || href.startsWith("mailto:") || href.startsWith("http")) return;
     const url = new URL(href, window.location.origin);
     if (url.origin !== window.location.origin) return;
+    if (isStandaloneHtmlPath(url.pathname)) return;
     event.preventDefault();
     if (url.hash === "#how-it-works") {
       navigate("/public");

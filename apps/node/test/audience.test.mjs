@@ -122,7 +122,12 @@ describe('audience helpers and FAQ', () => {
     assert.equal(homeDestination('registered'), '/me');
     assert.equal(homeDestination('officer'), '/me');
     assert.equal(postLoginPath({ user: { role: 'voter' } }, null), '/me');
-    assert.equal(postLoginPath({ user: { role: 'platform_admin' } }, '/admin'), '/admin');
+    assert.equal(postLoginPath({ user: { role: 'voter' } }, '/admin'), '/me');
+    assert.equal(postLoginPath({ user: { role: 'voter' } }, '/back-office'), '/me');
+    assert.equal(
+      postLoginPath({ user: { role: 'platform_admin' }, officer: true, audience: 'officer' }, '/admin'),
+      '/admin',
+    );
     assert.equal(safeNextPath('https://evil.example/'), null);
     assert.equal(safeNextPath('//evil.example'), null);
   });

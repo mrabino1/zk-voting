@@ -71,8 +71,9 @@ export function safeNextPath(value) {
 
 export function postLoginPath(me, next) {
   const safe = safeNextPath(next);
-  if (safe) return safe;
-  return "/me";
+  if (!safe) return "/me";
+  if (isOfficePath(safe) && !isOfficer(me)) return "/me";
+  return safe;
 }
 
 export function signInHref(next) {
@@ -153,4 +154,17 @@ export const OFFICE_PATHS = ["/admin", "/back-office", "/office"];
 export function isOfficePath(pathname) {
   const path = currentPathOf(pathname);
   return OFFICE_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
+/** Multi-page HTML (not the voter SPA). Use a full load, not history.pushState. */
+export function isStandaloneHtmlPath(pathname) {
+  const path = currentPathOf(pathname);
+  return (
+    path === "/admin" ||
+    path.startsWith("/admin/") ||
+    path === "/back-office" ||
+    path.startsWith("/back-office/") ||
+    path === "/explorer" ||
+    path.startsWith("/explorer/")
+  );
 }
