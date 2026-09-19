@@ -123,9 +123,9 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   return false;
 }
 
-export function paintMainNav(nav, { audience, currentPath, routeName, spa = true } = {}) {
+export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [] } = {}) {
   if (!nav) return;
-  const items = mainNav(audience || "public", options.extraNav);
+  const items = mainNav(audience || "public", extraNav);
   const ul = document.createElement("ul");
   for (const item of items) {
     const li = document.createElement("li");
