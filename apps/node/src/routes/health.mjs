@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../http.mjs';
 import { disclosurePublicView } from '../disclosure.mjs';
 import { AUTH_METHOD_TYPES, identityCaps } from '../identity.mjs';
+import { PIN_MAX_LEN, PIN_MIN_LEN } from '../pin.mjs';
 import { credentialProviderPublic } from '../credentials.mjs';
 import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 
@@ -116,7 +117,15 @@ export function configRouter(deps) {
           civicIdKinds: ['drivers_license', 'passport'],
           credentialProvider: credentialProviderPublic(deps.config),
           registrationApproval: 'civil_officer',
-          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 licenses/passports; exactly one email is primary. Extra Ethereum addresses must be signature-verified. Only one Ethereum address is active. A voter requests election registration; a registrar or clerk of that election’s jurisdiction approves. Civil officers may revoke an expired card or license. Document images and full ID numbers are not stored.',
+          votePin: {
+            required: true,
+            minLength: PIN_MIN_LEN,
+            maxLength: PIN_MAX_LEN,
+            keypad: 'phone-3x3-zero',
+            scrambleOnVote: true,
+            keyboardEntry: false,
+          },
+          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 licenses/passports; exactly one email is primary. Extra Ethereum addresses must be signature-verified. Only one Ethereum address is active. Profile setup includes a 4–8 digit vote PIN, entered on a scrambled phone keypad at ballot submit (no keyboard). A voter requests election registration; a registrar or clerk of that election’s jurisdiction approves. Civil officers may revoke an expired card or license. Document images and full ID numbers are not stored.',
         },
         tally: {
           schemes: ['sum_only', 'opens_ballots'],
@@ -158,7 +167,7 @@ export function configRouter(deps) {
             hashOf: 'pdf-bytes',
             note: 'Acceptance records SHA-256 of the exact Terms PDF bytes (the SES attachment). Markdown SHA-256 is published too.',
           },
-          note: 'Sign in with email, a bound Ethereum wallet (signature), a smart-card reader, or a hashed driver’s license/passport. Every path completes with an email one-time code via AWS SES when MFA is on. Dev login is a local/test fallback only.',
+          note: 'Sign in with email, a bound Ethereum wallet (signature), a smart-card reader, or a hashed driver’s license/passport. Every path completes with an email one-time code via AWS SES when MFA is on. A vote PIN is set on the profile and entered on a scrambled keypad at ballot submit. Dev login is a local/test fallback only.',
         },
       });
     }),

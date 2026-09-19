@@ -248,6 +248,8 @@ This mirrors Daily Family Call’s challenge → assertion → HttpOnly session 
 
 Unknown passkeys, emails, cards, licenses, and wallets return `404` `UNKNOWN_CREDENTIAL` and **do not** create a person. Revoked or expired cards and licenses return `403 CREDENTIAL_REVOKED` / `CREDENTIAL_EXPIRED`. Binding a new wallet is `POST /api/identity/web3/verify` on `/register`. Extra wallets while signed in must sign `POST /api/me/eth-accounts`.
 
+Each person sets a **vote PIN** (4–8 digits) on Identify yourself. Change it anytime. Forgot PIN emails an MFA code (`POST /api/pin/forgot` or `POST /api/me/pin/forgot`) and then the person sets a new PIN on the phone keypad. At ballot submit the keypad **layout stays 3×3+0** but the **numbers are shuffled per person**; the UI does not accept keyboard PIN entry. A signed-in vote needs a one-use `pinToken`.
+
 `ALLOW_DEV_LOGIN=1` (or `NODE_ENV=test`) keeps `POST /api/auth/dev-login` as a **local/test fallback** only. It skips MFA. It is not the primary officer path. Production (`master`) must leave it off.
 
 RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`docs/IDENTITY.md`](./IDENTITY.md).

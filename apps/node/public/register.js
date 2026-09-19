@@ -4,6 +4,7 @@
  */
 
 import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, removeBoundEmail, removePasskey, setActiveEthAddress, setPrimaryEmail, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
+import { renderPinManager } from "./pin-pad.js";
 import { atEmailCap, atPasskeyCap, identityCapNote, renderCivicCredentials, renderEmailAccounts, renderEthAccounts, renderPasskeyAccounts } from "./identity-accounts.js";
 import { mountSignInPanel } from "./signin.js";
 
@@ -41,6 +42,7 @@ export async function renderRegister(main, ctx) {
     identity: me?.identity || me?.me?.identity || null,
     methodTab: "email",
     mfa: null,
+    pin: null,
     selected: matchPre?.id || elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
     acceptedTerms: false,
   };
@@ -74,6 +76,7 @@ export async function renderRegister(main, ctx) {
         "ol",
         { class: "steps" },
         h("li", {}, h("strong", { text: "Prove who you are" }), " with email, Ethereum, a smart-card reader, or a driver’s license / passport."),
+        h("li", {}, h("strong", { text: "Set a vote PIN" }), " — 4–8 digits on a phone keypad. At the ballot the numbers are shuffled so a watcher cannot copy a tap pattern."),
         h("li", {}, h("strong", { text: "Keep one active Ethereum address" }), " — more can be verified internally."),
         h("li", {}, h("strong", { text: "Submit a commitment" }), " to an election roll — never a name, never the wallet as the leaf.")
       ),
@@ -554,6 +557,26 @@ export async function renderRegister(main, ctx) {
         renderCivicCredentials(h, state.identity, { busy: state.busy }),
         h("p", { class: "field-hint", text: identityCapNote(state.identity) })
       ),
+      me?.user
+        ? renderPinManager(h, {
+            api,
+            identity: state.identity,
+            ui: state,
+            announce,
+            busy: state.busy,
+            onUpdated: async () => {
+              await refreshIdentity();
+              paint();
+            },
+          })
+        : h(
+            "section",
+            { class: "panel", "aria-labelledby": "vote-pin-heading" },
+            h("h2", { id: "vote-pin-heading", text: "Vote PIN" }),
+            h("p", {
+              text: "After you identify yourself, set a 4–8 digit PIN on this page. You will tap it on a scrambled phone keypad when you finalize a ballot. Keyboard typing is not allowed.",
+            })
+          ),
       h(
         "section",
         { class: "panel", "aria-labelledby": "roll-heading" },

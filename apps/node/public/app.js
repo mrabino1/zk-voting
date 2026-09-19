@@ -30,6 +30,7 @@ import {
   renderEthAccounts,
   renderPasskeyAccounts,
 } from "./identity-accounts.js";
+import { renderPinManager } from "./pin-pad.js";
 import {
   applyAudienceChrome,
   audienceOf,
@@ -787,6 +788,8 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
     h("dd", { class: me?.identity?.activeEthAddress ? "hex" : "", text: me?.identity?.activeEthAddress || "—" }),
     h("dt", { text: "Primary email" }),
     h("dd", { text: identity?.primaryEmail || "—" }),
+    h("dt", { text: "Vote PIN" }),
+    h("dd", { text: identity?.pinBound ? "Set — scrambled keypad at ballot submit" : "Not set — required before you vote" }),
     h("dt", { text: "Verified methods" }),
     h(
       "dd",
@@ -935,6 +938,16 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
             text: "Civil officers may revoke a card or license when that registration has expired. Bind additional IDs on Identify yourself.",
           }),
           renderCivicCredentials(h, identity, { busy: ui.busy }),
+          renderPinManager(h, {
+            api,
+            identity,
+            ui,
+            announce: () => {},
+            busy: ui.busy,
+            onUpdated: async () => {
+              if (onRefresh) await onRefresh();
+            },
+          }),
         ]
       : null,
     ui.error ? h("p", { class: "error-inline", role: "alert", text: ui.error }) : null,

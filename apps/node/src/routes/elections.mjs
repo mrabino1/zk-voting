@@ -67,7 +67,7 @@ async function revokeHandler(req, store, explorer) {
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain, config, l1 } = deps;
+  const { store, explorer, chain, config, l1, pin } = deps;
   const router = Router();
 
   router.get(
@@ -568,6 +568,9 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
+      if (req.user && pin) {
+        pin.assertVoteAllowed(req.user, req.body?.pinToken);
+      }
       const result = await relayVote({
         store,
         explorer,

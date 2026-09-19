@@ -18,6 +18,7 @@ import { createPasskeyService } from './passkey.mjs';
 import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
 import { createMfaService } from './mfa.mjs';
+import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
 import { loadReceiptPdfSecret } from './receipts.mjs';
@@ -27,6 +28,7 @@ import { electionsRouter } from './routes/elections.mjs';
 import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
+import { pinRouter } from './routes/pin.mjs';
 import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
@@ -151,7 +153,8 @@ export async function createApp(overrides = {}) {
   const mailer = configOverrides.mailer || createMailer(config);
   const terms = configOverrides.terms || createTermsService({ store, mailer, config });
   const mfa = createMfaService({ config, store, mailer, terms });
-  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms };
+  const pin = createPinService({ store });
+  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms, pin };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -190,6 +193,7 @@ export async function createApp(overrides = {}) {
   app.use('/api/elections', electionsRouter(deps));
   app.use('/api/explorer', explorerRouter(deps));
   app.use('/api', identityRouter(deps));
+  app.use('/api', pinRouter(deps));
   app.use('/api', meRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
@@ -217,7 +221,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin };
 }
 
 export async function startServer(overrides = {}) {

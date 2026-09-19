@@ -294,6 +294,15 @@ export const FAQ_ENTRIES = [
     ],
   },
   {
+    id: "vote-pin",
+    topic: "vote-pin",
+    q: "Why do I enter a PIN on a scrambled keypad when I vote?",
+    a: [
+      "Every person sets a 4–8 digit vote PIN while they set up their profile — the same idea as a password, not a sign-in password product. You can change it anytime. If you forget it, email MFA sends a one-time code and you set a new PIN on the phone keypad (forgot PIN is the same flow as forgot password).",
+      "The pad is a standard 3×3 with zero at the bottom. When you finalize a ballot the numbers on those keys are shuffled for you, and the keyboard cannot type the PIN, so a watcher cannot copy a tap or keystroke pattern. The Node stores a hash, never the digits. A signed-in vote is rejected until that PIN is confirmed.",
+    ],
+  },
+  {
     id: "civic-id",
     topic: "civic-id",
     q: "Can I sign in with a driver’s license or passport?",
@@ -334,6 +343,7 @@ export const FAQ_REQUIRED_TOPICS = [
   "open-source",
   "security-limits",
   "email-mfa",
+  "vote-pin",
   "civic-id",
   "terms",
 ];

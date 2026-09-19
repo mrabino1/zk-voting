@@ -17,6 +17,7 @@ import {
   publicCredential,
 } from './credentials.mjs';
 import { HttpError } from './http.mjs';
+import { pinPublicFields } from './pin.mjs';
 
 /** DealPunchList-shaped product caps: per Person, not per Node. */
 export const MAX_PASSKEYS_PER_PERSON = 5;
@@ -103,6 +104,15 @@ export function ensurePersonFields(user) {
   }
   if (!Object.prototype.hasOwnProperty.call(user, 'termsEmailHash')) {
     user.termsEmailHash = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'pinHash')) {
+    user.pinHash = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'pinSetAt')) {
+    user.pinSetAt = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'pinResetUntil')) {
+    user.pinResetUntil = null;
   }
   for (const method of user.authMethods) {
     if (isCredentialMethodType(method.type)) ensureCredentialFields(method);
@@ -484,7 +494,8 @@ export function publicIdentity(user) {
       .map((m) => publicCredential(m, { owner: true })),
     smartCardCount: liveCredentialCount(user, 'smart_card'),
     civicIdCount: liveCredentialCount(user, 'civic_id'),
-    note: 'Many methods and addresses may be verified internally. Only one Ethereum address is active. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 driver’s licenses or passports; exactly one email is primary when any email exists. Civil officers may revoke an expired card or license. Sign-in completes with email MFA when SES is configured.',
+    ...pinPublicFields(user),
+    note: 'Many methods and addresses may be verified internally. Only one Ethereum address is active. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 driver’s licenses or passports; exactly one email is primary when any email exists. Each person sets a vote PIN (4–8 digits) used on a scrambled phone keypad at ballot submit. Civil officers may revoke an expired card or license. Sign-in completes with email MFA when SES is configured.',
   };
 }
 

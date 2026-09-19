@@ -365,8 +365,29 @@ export class Store {
       ethAccounts: [],
       activeEthAddress: null,
       personKeyHash: null,
+      pinHash: null,
+      pinSetAt: null,
+      pinResetUntil: null,
     });
     this.data.users.push(user);
+    return user;
+  }
+
+  async setPinHash(userId, pinHash) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.pinHash = String(pinHash);
+    user.pinSetAt = new Date().toISOString();
+    user.pinResetUntil = null;
+    await this.persist();
+    return user;
+  }
+
+  async grantPinReset(userId, untilMs = 15 * 60 * 1000) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.pinResetUntil = new Date(Date.now() + Number(untilMs || 0)).toISOString();
+    await this.persist();
     return user;
   }
 

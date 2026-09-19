@@ -195,3 +195,20 @@ export async function removeBoundEmail(api, id) {
 export async function removePasskey(api, credentialId) {
   return api(`/api/me/passkeys/${encodeURIComponent(credentialId)}`, { method: "DELETE" });
 }
+
+export async function fetchPinKeypad(api, { purpose } = {}) {
+  return api("/api/me/pin/keypad", { method: "POST", body: { purpose: purpose || "setup" } });
+}
+
+export async function setVotePin(api, { pin, currentPin, confirmPin } = {}) {
+  return api("/api/me/pin", { method: "POST", body: { pin, currentPin, confirmPin } });
+}
+
+export async function verifyVotePin(api, { pin, purpose } = {}) {
+  return api("/api/me/pin/verify", { method: "POST", body: { pin, purpose: purpose || "vote" } });
+}
+
+export async function forgotVotePin(api, { email } = {}) {
+  if (email) return api("/api/pin/forgot", { method: "POST", body: { email } });
+  return api("/api/me/pin/forgot", { method: "POST", body: {} });
+}

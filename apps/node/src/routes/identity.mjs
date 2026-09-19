@@ -64,7 +64,7 @@ export function identityRouter(deps) {
       caps: identityCaps(),
       onePrimaryEmail: true,
       credentialProvider: credentialProviderPublic(config),
-      note: 'A person may verify every method. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 driver’s licenses or passports; exactly one email is primary. Only one Ethereum address is active. Additional Ethereum addresses must be signature-verified. Civil officers may revoke an expired card or license. Sign-in completes with email MFA when SES is configured.',
+      note: 'A person may verify every method. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 driver’s licenses or passports; exactly one email is primary. Only one Ethereum address is active. Additional Ethereum addresses must be signature-verified. Each person sets a vote PIN used on a scrambled keypad at ballot submit. Civil officers may revoke an expired card or license. Sign-in completes with email MFA when SES is configured.',
     });
   });
 

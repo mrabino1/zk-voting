@@ -173,7 +173,7 @@ POST /api/elections/:id/register    (voter: pending civil review; officer of tha
 GET  /api/elections/:id/registration-requests
 POST /api/elections/:id/registration-requests/:requestId/approve
 POST /api/elections/:id/registration-requests/:requestId/deny
-POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
+POST /api/elections/:id/vote        (relays proof; signed-in ballots need a vote PIN token)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
 GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
@@ -200,6 +200,11 @@ POST /api/me/eth-accounts
 POST /api/me/eth-accounts/active
 GET  /api/me/credentials
 GET  /api/office/credentials
+POST /api/me/pin/keypad
+POST /api/me/pin
+POST /api/me/pin/verify
+POST /api/me/pin/forgot
+POST /api/pin/forgot
 POST /api/persons/:id/methods/:methodId/review
 POST /api/persons/:id/methods/:methodId/revoke
 POST /api/integrations/credentials/status

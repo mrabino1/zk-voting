@@ -126,6 +126,9 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
     assert.equal(config.json.identity.maxSmartCards, 5);
     assert.equal(config.json.identity.maxCivicIds, 5);
     assert.equal(config.json.identity.registrationApproval, 'civil_officer');
+    assert.equal(config.json.identity.votePin.required, true);
+    assert.equal(config.json.identity.votePin.scrambleOnVote, true);
+    assert.equal(config.json.identity.votePin.keyboardEntry, false);
     assert.deepEqual(config.json.identity.methods, ['email', 'web3', 'smart_card', 'civic_id', 'passkey']);
     assert.equal(methods.json.caps.emails, 5);
     assert.equal(methods.json.caps.passkeys, 5);

@@ -151,7 +151,8 @@ addresses can be internally verified; exactly one is **active** (gasless ops).
 A voter **requests** election registration; a registrar or clerk of that
 election’s jurisdiction **approves** before the commitment is on the roll.
 Authenticators and addresses cannot belong to two people. Officers may
-revoke an expired card or license. The vote leaf stays `identityCommitment`.
+revoke an expired card or license. Each person sets a vote PIN (hashed;
+scrambled phone keypad at ballot submit). The vote leaf stays `identityCommitment`.
 Details: [`IDENTITY.md`](./IDENTITY.md).
 
 ---
@@ -708,6 +709,11 @@ POST /api/identity/smart-card/challenge
 POST /api/identity/smart-card/verify
 POST /api/me/eth-accounts            (signature-verified; first becomes active)
 POST /api/me/eth-accounts/active
+POST /api/me/pin/keypad
+POST /api/me/pin
+POST /api/me/pin/verify
+POST /api/me/pin/forgot
+POST /api/pin/forgot
 GET  /api/me/credentials
 GET  /api/office/credentials
 POST /api/persons/:id/methods/:methodId/revoke
@@ -742,6 +748,7 @@ are accepted in the local JSON store so the explorer and UI can run a demo.
 Those accepts still wait for hourly public disclosure unless the interval is `0`.
 
 A person identifies with **email, Ethereum (signature), a smart-card reader, a driver’s license or passport, or a passkey**. Every path completes with email MFA via AWS SES when configured.
+Each person also sets a **vote PIN** used on a scrambled keypad at ballot submit.
 Many ETH addresses may be verified internally; only one is active. The
 Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 

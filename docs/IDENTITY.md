@@ -19,7 +19,8 @@ Person (one Node user)
   ├── smart cards[]     up to 5; each has status active | revoked | expired
   ├── civic IDs[]       up to 5 driver’s licenses / passports (hash only)
   ├── ethAccounts[]     many signature- or registrar-verified addresses
-  └── activeEthAddress   exactly one (or none until the first address is verified)
+  ├── activeEthAddress   exactly one (or none until the first address is verified)
+  └── pinHash            scrypt of a 4–8 digit vote PIN (never stored in the clear)
 ```
 
 ---
@@ -49,6 +50,25 @@ Signing a Web3 challenge with a wallet that is **already a web3 auth method** lo
 When `SES_FROM_ADDRESS` and `AWS_REGION` are set, `requireEmailMfa` is on for production. Tests default it off (capture mailer still drives the **email** first-factor path, which always uses OTP). `REQUIRE_EMAIL_MFA=1` forces MFA in tests.
 
 Dev login (`ALLOW_DEV_LOGIN`) never requires MFA.
+
+---
+
+## Vote PIN
+
+Every person sets a **4–8 digit vote PIN** while they set up their profile. It is not a sign-in password. The Node stores a **scrypt hash**, never the digits. Weak values (all the same digit, straight sequences) are rejected.
+
+**At ballot submit** the person taps that PIN on a phone keypad (3×3 with 0 at the bottom). The **geometry stays the same**; the **digits on the keys are shuffled for that person and challenge** so a watcher cannot copy a tap pattern. Keyboard typing and paste are disabled in the UI.
+
+**Change anytime** with the current PIN (`POST /api/me/pin` `{ pin, currentPin, confirmPin }`).
+
+**Forgot PIN** is the same idea as forgot password: email MFA, then set a new PIN on the standard keypad.
+
+1. Signed in: `POST /api/me/pin/forgot`. Signed out: `POST /api/pin/forgot` `{ email }`.
+2. SES 6-digit code (`purpose: pin-reset`).
+3. `POST /api/auth/mfa/verify` `{ code }` grants a short PIN-reset window (`pinResetGranted`).
+4. `POST /api/me/pin` `{ pin, confirmPin }` — current PIN is not required during that window.
+
+A **signed-in** `POST /api/elections/:id/vote` requires a one-use `pinToken` from `POST /api/me/pin/verify` `{ pin, purpose: "vote" }`. Missing PIN is `403 PIN_REQUIRED`. Missing token is `403 PIN_TOKEN_REQUIRED`. Relays without a session (existing Node tests / demo accepts) are unchanged.
 
 ---
 
@@ -162,6 +182,11 @@ GET  /api/me/eth-accounts
 POST /api/me/eth-accounts            (signature required)
 POST /api/me/eth-accounts/active
 GET  /api/me/credentials
+POST /api/me/pin/keypad             ({ purpose: setup | verify | vote }; vote/verify scramble digits)
+POST /api/me/pin                    (set or change; currentPin unless pinResetGranted)
+POST /api/me/pin/verify             ({ pin, purpose: vote } → one-use pinToken)
+POST /api/me/pin/forgot             (signed in; SES code)
+POST /api/pin/forgot                ({ email }; SES code, then set a new PIN)
 
 GET  /api/elections/:id/registration-requests
 POST /api/elections/:id/register     (voter → 202 pending; officer → 201 on the roll)
