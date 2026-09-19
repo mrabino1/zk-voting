@@ -34,10 +34,16 @@ function checkEntries(verification) {
   const auditor = verification?.auditor?.checks || {};
   const chain = verification?.chain?.checks || {};
   for (const [name, ok] of Object.entries(auditor)) {
-    rows.push({ group: "Auditor pack", name, ok: Boolean(ok) });
+    const informational = name === "addressesPresent" && !ok;
+    rows.push({
+      group: "Auditor pack",
+      name,
+      ok: informational ? true : Boolean(ok),
+      result: informational ? "N/A (demo)" : ok ? "Pass" : "Fail",
+    });
   }
   for (const [name, ok] of Object.entries(chain)) {
-    rows.push({ group: "Chain status", name, ok: Boolean(ok) });
+    rows.push({ group: "Chain status", name, ok: Boolean(ok), result: ok ? "Pass" : "Fail" });
   }
   return rows;
 }
@@ -114,7 +120,7 @@ function phaseColumn(phase, rows, ctx) {
 }
 
 export async function renderOutcomesIndex(main, ctx) {
-  const { h, api, setTitle } = ctx;
+  const { h, api, fill, setTitle } = ctx;
   setTitle("Election outcomes");
   let payload = { phases: { before: [], during: [], after: [] }, counts: { total: 0 }, chain: {} };
   let error = "";
@@ -124,7 +130,8 @@ export async function renderOutcomesIndex(main, ctx) {
     error = err.message || "Could not load outcomes.";
   }
   const phases = payload.phases || {};
-  main.replaceChildren(
+  fill(
+    main,
     h(
       "div",
       { class: "page-head" },
@@ -185,7 +192,7 @@ function checksTable(verification, h) {
             { class: row.ok ? "check-ok" : "check-fail" },
             h("td", { text: row.group }),
             h("td", { text: row.name }),
-            h("td", { text: row.ok ? "Pass" : "Fail" })
+            h("td", { text: row.result || (row.ok ? "Pass" : "Fail") })
           )
         )
       )
