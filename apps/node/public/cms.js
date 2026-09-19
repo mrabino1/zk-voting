@@ -9,6 +9,10 @@ import { logout } from "./signin.js";
 export const SHARED_DEPLOYMENT_NOTE =
   "Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here like a WordPress site.";
 
+function mount(node, ...children) {
+  node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+}
+
 const BLOCK_TYPES = [
   { type: "heading", label: "Heading" },
   { type: "paragraph", label: "Paragraph" },
@@ -149,7 +153,7 @@ export function renderCmsPage(main, ctx, page) {
   const { h, setTitle } = ctx;
   if (!page) {
     setTitle("Page not found");
-    main.replaceChildren(
+    mount(main,
       h("div", { class: "page-head" }, h("h1", { text: "Page not found" })),
       h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Public home" }))
     );
@@ -157,7 +161,7 @@ export function renderCmsPage(main, ctx, page) {
   }
   setTitle(page.title || "Page");
   const audience = audienceOf(ctx.me);
-  main.replaceChildren(
+  mount(main, 
     h(
       "div",
       { class: "page-head" },
@@ -187,7 +191,7 @@ export async function renderOfficePages(main, ctx, bundle) {
   const gate = clerkGate(h, ctx, me, route.path);
   if (gate === true) return;
   if (gate) {
-    main.replaceChildren(gateScreen(h, me, gate));
+    mount(main, gateScreen(h, me, gate));
     return;
   }
 
@@ -195,7 +199,7 @@ export async function renderOfficePages(main, ctx, bundle) {
   try {
     list = await api("/api/office/pages");
   } catch (err) {
-    main.replaceChildren(
+    mount(main,
       cmsSubnav(h, "pages"),
       h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: err.message }))
     );
@@ -203,7 +207,7 @@ export async function renderOfficePages(main, ctx, bundle) {
   }
 
   const rows = list.pages || [];
-  main.replaceChildren(
+  mount(main, 
     h(
       "div",
       { class: "page-head" },
@@ -446,7 +450,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
   const gate = clerkGate(h, ctx, me, route.path);
   if (gate === true) return;
   if (gate) {
-    main.replaceChildren(gateScreen(h, me, gate));
+    mount(main, gateScreen(h, me, gate));
     return;
   }
 
@@ -475,7 +479,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
       page = { ...page, ...data.page, blocks: Array.isArray(data.page.blocks) ? data.page.blocks.map((b) => ({ ...b })) : [] };
       if (!page.blocks.length) page.blocks = [{ type: "paragraph", text: "" }];
     } catch (err) {
-      main.replaceChildren(
+      mount(main,
         cmsSubnav(h, "pages"),
         h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: err.message || "Page not found." })),
         h("p", {}, h("a", { class: "btn", href: "/office/pages", "data-nav": "", text: "Back to pages" }))
@@ -488,7 +492,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
   const preview = h("div", { class: "cms-preview prose", "aria-live": "polite" });
 
   function refreshPreview() {
-    preview.replaceChildren(h("h2", { class: "cms-preview-title", text: page.title || "Untitled" }), ...renderBlocks(h, page.blocks));
+    mount(preview, h("h2", { class: "cms-preview-title", text: page.title || "Untitled" }), ...renderBlocks(h, page.blocks));
   }
 
   const titleInput = h("input", { type: "text", value: page.title, id: "cms-title" });
@@ -601,7 +605,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
 
   refreshPreview();
 
-  main.replaceChildren(
+  mount(main, 
     h(
       "div",
       { class: "page-head" },
@@ -672,7 +676,7 @@ export async function renderOfficeSite(main, ctx, bundle) {
   const gate = clerkGate(h, ctx, me, route.path);
   if (gate === true) return;
   if (gate) {
-    main.replaceChildren(gateScreen(h, me, gate));
+    mount(main, gateScreen(h, me, gate));
     return;
   }
 
@@ -680,7 +684,7 @@ export async function renderOfficeSite(main, ctx, bundle) {
   try {
     payload = await api("/api/office/site");
   } catch (err) {
-    main.replaceChildren(
+    mount(main,
       cmsSubnav(h, "site"),
       h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: err.message }))
     );
@@ -742,7 +746,7 @@ export async function renderOfficeSite(main, ctx, bundle) {
     }
   }
 
-  main.replaceChildren(
+  mount(main, 
     h(
       "div",
       { class: "page-head" },

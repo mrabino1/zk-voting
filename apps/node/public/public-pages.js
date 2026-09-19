@@ -11,6 +11,10 @@ import { logout, mountSignInPanel } from "./signin.js";
 const DEMO_NOTE =
   "This Node is a working demo on the test/unstable line. Local tests still use MockVerifier; Poseidon is not wired; there is no production Groth16 ceremony. The passkey helper may show republic-local-address. Tally that opens ballots uses a threshold-1 operator key (NON-PRODUCTION). Republic is not claiming this deploy is court-ready.";
 
+function mount(node, ...children) {
+  node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+}
+
 function paragraphs(h, texts) {
   return (Array.isArray(texts) ? texts : [texts]).filter(Boolean).map((text) => h("p", { text }));
 }
@@ -130,7 +134,7 @@ export function renderPublicHome(main, ctx, bundle) {
   const heading = replace ? overlay.title : "Republic — civic elections you can check";
   const ledeDefault =
     "Republic is a not-for-profit zero-knowledge voting system. The people vote for representatives, and those representatives vote. A city, county, state, nation, union, or cooperative should be able to run an election with private ballots and a public process — without a token, a paid tier, or a vendor black box.";
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
@@ -262,7 +266,7 @@ export function renderAbout(main, ctx) {
       h("a", { href: "/register", "data-nav": "", text: "Register" })
     ),
   ];
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
@@ -312,7 +316,7 @@ export function renderFaq(main, ctx) {
       h("div", { class: "faq-a" }, h("p", { text: block.a || "" }))
     )
   );
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
@@ -351,7 +355,7 @@ export async function renderSignIn(main, ctx) {
           : "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Register.",
     },
   });
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
@@ -387,7 +391,7 @@ export function renderOffice(main, ctx, bundle) {
     return;
   }
   if (!isOfficer(me)) {
-    main.replaceChildren(
+    mount(main,
       h(
         "div",
         { class: "page-head audience-gate", id: "officer-gate" },
@@ -467,7 +471,7 @@ export function renderOffice(main, ctx, bundle) {
     },
   ];
 
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
