@@ -56,9 +56,13 @@ export function parseFrontMatter(raw) {
   return { meta, body: match[2].replace(/^\r?\n/, '') };
 }
 
-export function markdownToPdfLines(markdown) {
+export function markdownToPdfLines(markdown, { skipTitle } = {}) {
   const lines = [];
   const src = String(markdown || '').replace(/\r\n/g, '\n');
+  let skippedTitle = false;
+  const skip = String(skipTitle || '')
+    .trim()
+    .toLowerCase();
   for (const raw of src.split('\n')) {
     const line = raw.replace(/\s+$/, '');
     if (!line.trim()) {
@@ -66,7 +70,12 @@ export function markdownToPdfLines(markdown) {
       continue;
     }
     if (line.startsWith('# ')) {
-      lines.push(line.slice(2).trim().toUpperCase());
+      const heading = line.slice(2).trim();
+      if (!skippedTitle && skip && heading.toLowerCase() === skip) {
+        skippedTitle = true;
+        continue;
+      }
+      lines.push(heading.toUpperCase());
       lines.push('');
       continue;
     }
@@ -135,7 +144,7 @@ export function loadTermsDocument({ filePath = TERMS_MARKDOWN_PATH } = {}) {
   const filename = meta.filename || TERMS_PDF_FILENAME;
   const pdf = buildDeterministicPdf({
     title,
-    lines: markdownToPdfLines(markdown),
+    lines: markdownToPdfLines(markdown, { skipTitle: title }),
     created: lastUpdated,
   });
   return {
