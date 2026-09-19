@@ -64,7 +64,7 @@ Root [`.dockerignore`](../.dockerignore) applies to every image built from this 
 Root [`docker-compose.yml`](../docker-compose.yml) is the host path `system_actions.sh` already looks for. One command builds the Node (API + SPA) and Republic L2 (sequencer + prover), the same shape as a typical frontend Compose file: images from this tree, published ports, health checks, named volumes, `restart: unless-stopped`.
 
 ```bash
-cp .env.example .env          # optional for a local demo; required to pin a shared factory
+cp .env.example .env          # or paste README § Copy-paste credentials into .env
 docker compose up -d --build  # or: npm run compose:up
 curl -fsS http://127.0.0.1:3000/health
 curl -fsS http://127.0.0.1:8546/health
@@ -90,7 +90,7 @@ Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_K
 
 ### Forked jurisdiction Nodes
 
-Forking this Node is **intentional**. Copy [`.env.example`](../.env.example), set this host’s `RP_ID` / origins / SES, and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
+Forking this Node is **intentional**. Paste the [copy-paste credentials](../README.md#copy-paste-credentials) block (or copy [`.env.example`](../.env.example)), set this host’s `RP_ID` / origins / SES / AWS keys (or the host IAM role), and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
 
 ---
 
@@ -296,7 +296,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 ## Secrets and production
 
 - Deploy keys, paymaster keys, sequencer keys, and proving keys are **not** in git.
-- `.env` is gitignored. Do not paste production RPC URLs with credentials into issues.
+- `.env` is gitignored. Copy-paste the host file from the root README [Copy-paste credentials](../README.md#copy-paste-credentials). Do not paste production RPC URLs with credentials into issues.
 - `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.

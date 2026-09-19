@@ -141,8 +141,12 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `ALLOW_CIVIC_ID_MOCK` | off (`1` in tests) | Self-service driver’s license / passport bind `{ mock: true }` |
 | `SES_FROM_ADDRESS` | _empty_ | AWS SES From address. With `AWS_REGION`, turns on email MFA for every non-dev login **and** emails the Terms PDF on accept |
 | `AWS_REGION` | _empty_ | SES region (also `SES_REGION`) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | host IAM role | Optional static SES credentials. Leave empty to use the default AWS credential chain |
 | `SES_CONFIGURATION_SET` | _empty_ | Optional SESv2 configuration set |
+| `SES_ENDPOINT` | AWS default | Optional SES endpoint override (local stack) |
 | `REQUIRE_EMAIL_MFA` | off in tests; on when SES is configured | Force or disable email OTP MFA |
+| `CREDENTIAL_PROVIDER_SECRET` | _empty_ | Shared secret for `POST /api/integrations/credentials/status`. Unset = manual officer review |
+| `CREDENTIAL_PROVIDER_ID` | `manual` | Label stored on credential methods until a DMV / eID connector exists |
 | `RECEIPT_PDF_SECRET` | `$DATA_DIR/receipt-pdf.secret` | HMAC + PDF owner password for locked vote-receipt **and** official outcome PDFs. Unset → Node mints a file |
 | `PUBLIC_BASE_URL` | first WebAuthn origin | Origin printed in official-outcome QR codes (`/o/<reportId>`) |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
