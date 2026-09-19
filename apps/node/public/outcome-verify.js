@@ -160,6 +160,7 @@ export async function renderOutcomeVerify(main, ctx) {
           h("input", {
             id: "outcome-report-id",
             name: "reportId",
+            type: "text",
             value: state.reportId,
             autocomplete: "off",
             spellcheck: "false",
