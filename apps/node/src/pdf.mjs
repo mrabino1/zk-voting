@@ -7,6 +7,8 @@
 
 import { createHash } from 'node:crypto';
 
+import { qrPdfOperators } from './qr.mjs';
+
 const PAGE_W = 612;
 const PAGE_H = 792;
 const MARGIN = 54;
@@ -279,6 +281,51 @@ export function pdfFileIdFromCanonical({ title, lines, created }) {
   return createHash('sha256').update(canonical, 'utf8').digest().subarray(0, 16);
 }
 
+function authenticityContentStream(authenticity) {
+  const heading = authenticity.heading || 'Authenticity seal';
+  const lines = authenticity.lines || [];
+  const ops = [
+    'BT',
+    `/F1 ${TITLE_SIZE} Tf`,
+    `${MARGIN} ${PAGE_H - MARGIN} Td`,
+    `0 ${-(TITLE_SIZE + 6)} Td`,
+    `(${pdfEscape(heading)}) Tj`,
+    `/F1 ${FONT_SIZE} Tf`,
+  ];
+  for (const line of lines) {
+    for (const chunk of wrapPdfLine(line, PDF_MAX_CHARS)) {
+      ops.push(`0 ${-LEADING} Td`);
+      ops.push(`(${pdfEscape(chunk)}) Tj`);
+    }
+  }
+  ops.push('ET');
+  let graphics = '';
+  if (authenticity.modules && authenticity.modules.length) {
+    const n = authenticity.modules.length;
+    const moduleSize = Number(authenticity.moduleSize) || 2.6;
+    const qrW = n * moduleSize;
+    const originX = authenticity.x != null ? Number(authenticity.x) : MARGIN;
+    const originY = authenticity.y != null ? Number(authenticity.y) : MARGIN + 36;
+    graphics = qrPdfOperators(authenticity.modules, originX, originY, moduleSize);
+    const caption = authenticity.caption || '';
+    if (caption) {
+      const capX = originX + qrW + 16;
+      const capY = originY + qrW - 12;
+      const capOps = ['BT', `/F1 9 Tf`, `${capX.toFixed(2)} ${capY.toFixed(2)} Td`];
+      const capWidth = Math.max(24, Math.floor((PAGE_W - capX - MARGIN) / (9 * CHAR_WIDTH)));
+      let first = true;
+      for (const chunk of wrapPdfLine(caption, capWidth)) {
+        if (!first) capOps.push(`0 ${-12} Td`);
+        capOps.push(`(${pdfEscape(chunk)}) Tj`);
+        first = false;
+      }
+      capOps.push('ET');
+      graphics += `${capOps.join('\n')}\n`;
+    }
+  }
+  return `${ops.join('\n')}\n${graphics}`;
+}
+
 /**
  * @param {{
  *   title: string,
@@ -289,20 +336,31 @@ export function pdfFileIdFromCanonical({ title, lines, created }) {
  *     userPassword?: string,
  *     permissions?: number,
  *     fileId?: Buffer,
+ *   },
+ *   authenticity?: null | {
+ *     heading?: string,
+ *     lines?: string[],
+ *     modules?: boolean[][],
+ *     caption?: string,
+ *     moduleSize?: number,
+ *     x?: number,
+ *     y?: number,
  *   }
  * }} input
  * @returns {Buffer}
  */
-export function buildDeterministicPdf({ title, lines, created = '2026-09-19', protect = null }) {
+export function buildDeterministicPdf({ title, lines, created = '2026-09-19', protect = null, authenticity = null }) {
   const pageRows = paginate(title, lines);
+  const hasAuth = Boolean(authenticity && (authenticity.modules || (authenticity.lines && authenticity.lines.length)));
   const catalogId = 1;
   const pagesId = 2;
   const fontId = 3;
   const infoId = 4;
   const firstPageId = 5;
-  const pageCount = pageRows.length;
-  const pageIds = pageRows.map((_, i) => firstPageId + i);
-  const contentIds = pageRows.map((_, i) => firstPageId + pageCount + i);
+  const extraPages = hasAuth ? 1 : 0;
+  const pageCount = pageRows.length + extraPages;
+  const pageIds = Array.from({ length: pageCount }, (_, i) => firstPageId + i);
+  const contentIds = Array.from({ length: pageCount }, (_, i) => firstPageId + pageCount + i);
   let maxId = contentIds[contentIds.length - 1];
 
   const locked = Boolean(protect && protect.ownerPassword);
@@ -312,7 +370,18 @@ export function buildDeterministicPdf({ title, lines, created = '2026-09-19', pr
   let encryptId = null;
   let encryptBody = null;
   if (locked) {
-    fileId = protect.fileId ? Buffer.from(protect.fileId).subarray(0, 16) : pdfFileIdFromCanonical({ title, lines, created });
+    fileId = protect.fileId
+      ? Buffer.from(protect.fileId).subarray(0, 16)
+      : pdfFileIdFromCanonical({
+          title,
+          lines: [
+            ...(lines || []),
+            authenticity?.heading || '',
+            ...(authenticity?.lines || []),
+            authenticity?.caption || '',
+          ],
+          created,
+        });
     if (fileId.length !== 16) {
       throw new Error('PDF file ID must be 16 bytes');
     }
@@ -344,7 +413,8 @@ export function buildDeterministicPdf({ title, lines, created = '2026-09-19', pr
   for (let i = 0; i < pageCount; i += 1) {
     bodies[pageIds[i]] =
       `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${contentIds[i]} 0 R /Resources << /Font << /F1 ${fontId} 0 R >> >> >>`;
-    const stream = contentStream(pageRows[i]);
+    const stream =
+      i < pageRows.length ? contentStream(pageRows[i]) : authenticityContentStream(authenticity);
     if (locked) {
       const cipher = encryptPdfBytes(fileKey, contentIds[i], Buffer.from(stream, 'utf8'));
       bodies[contentIds[i]] = streamBuffer(`<< /Length ${cipher.length} >>\nstream\n`, cipher);

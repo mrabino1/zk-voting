@@ -152,7 +152,7 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
 
 ### Creating elections (chain vs demo)
 
@@ -254,7 +254,11 @@ The PDF is emailed with **AWS SES** on first accept of a hash, using the same en
 
 A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; certified option counts appear after a tally. It is not the receipt portal.
 
+After `cutoffTime` has fully expired **and** a certified tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Voters who cast a ballot are subscribed to that email by default and unsubscribe only by exception on `/me`. Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
+
 | Variable | Role |
+| --- | --- |
+| `PUBLIC_BASE_URL` | Origin printed in the official-PDF QR (defaults to the first WebAuthn origin) |
 | --- | --- |
 | `SES_FROM_ADDRESS` | From address (required to send) |
 | `AWS_REGION` (alias `SES_REGION`) | SES region |
@@ -278,7 +282,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 
 - Deploy keys, paymaster keys, sequencer keys, and proving keys are **not** in git.
 - `.env` is gitignored. Do not paste production RPC URLs with credentials into issues.
-- `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
+- `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
 - `opens_ballots` elections store a **threshold-1** P-256 private JWK in the Node data file (`tallyGuardians`). That key decrypts every ballot. It is a demo, labeled NON-PRODUCTION. Do not use it for a binding election. Production guardians / mixnet are not this host’s JSON file.

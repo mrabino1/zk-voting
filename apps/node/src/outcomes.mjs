@@ -15,6 +15,7 @@ import {
 import { buildAuditorPack } from './auditorPack.mjs';
 import { buildResults } from './results.mjs';
 import { verifyAuditorBundle } from '../../../tools/auditor/verify.mjs';
+import { OUTCOME_VERIFY_PATH } from './outcomeReports.mjs';
 
 export const OUTCOMES_SCHEMA = 'republic.outcomes.v1';
 
@@ -247,6 +248,9 @@ function linksFor(election, { tallied } = {}) {
     l1: `/api/elections/${enc}/l1`,
     receipt: '/receipt',
     vote: `/vote/${enc}`,
+    officialReport: `/api/outcomes/reports/${enc}`,
+    officialPdf: `/api/outcomes/reports/${enc}/pdf`,
+    verify: OUTCOME_VERIFY_PATH,
   };
 }
 
@@ -261,6 +265,7 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
   const phase = outcomePhase(state);
   const verification = verifyOutcome(election, deps, now, state, phase);
   const tallied = Boolean(election.tally);
+  const official = deps.store.getOutcomeReportForElection?.(election.id) || null;
   return {
     nfp: true,
     ...publicIdFields(election),
@@ -282,6 +287,14 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
       typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
     verificationOk: verification.ok,
     l1Status: l1StatusOf(election),
+    officialReport: official
+      ? {
+          id: official.id,
+          pdfSha256: official.pdfSha256,
+          issuedAt: official.issuedAt,
+          verifyPath: OUTCOME_VERIFY_PATH,
+        }
+      : null,
     href: `/outcomes/${encodeURIComponent(String(election.id))}`,
   };
 }
@@ -297,6 +310,7 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
   const phase = outcomePhase(state);
   const verification = verifyOutcome(election, deps, now, state, phase);
   const tallied = Boolean(election.tally);
+  const official = deps.store.getOutcomeReportForElection?.(election.id) || null;
   const publishedAcceptedBallots = dto.acceptedBallots;
   const certified =
     phase === PHASE_AFTER && tallied
@@ -335,6 +349,17 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
     certified,
     tallyPostedAt: election.tally?.postedAt || null,
     countsHash: election.tally?.countsHash || null,
+    officialReport: official
+      ? {
+          id: official.id,
+          pdfSha256: official.pdfSha256,
+          integrity: official.integrity,
+          issuedAt: official.issuedAt,
+          pdfProtected: true,
+          pdfModify: false,
+          verifyPath: OUTCOME_VERIFY_PATH,
+        }
+      : null,
     links: linksFor(election, { tallied }),
     coercion: {
       policy: 'one-ballot-per-nullifier',

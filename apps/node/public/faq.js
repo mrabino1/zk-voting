@@ -102,7 +102,16 @@ export const FAQ_ENTRIES = [
     q: "What is the /outcomes portal?",
     a: [
       "It is a public monitor of every election on this Node, separate from certified results at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
-      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. Certified counts appear only after a tally is posted.",
+      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. Certified counts appear only after a tally is posted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
+    ],
+  },
+  {
+    id: "official-outcome-pdf",
+    topic: "outcome-reports",
+    q: "What is the official outcome PDF?",
+    a: [
+      "Once voting time has completely expired and a certified tally is posted, Republic issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.",
+      "If you vote, you are subscribed to that contest’s official report by default. Unsubscribe from My desk only if you do not want the email. Drop the file at /outcomes/verify (or scan the QR) to confirm the bytes still match the Node fingerprint. A changed copy will fail.",
     ],
   },
   {
@@ -137,7 +146,7 @@ export const FAQ_ENTRIES = [
     topic: "admins",
     q: "How do election officials work in Republic?",
     a: [
-      "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll. Registrar: insert identity commitments (never names). Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction.",
+      "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll. Registrar: insert identity commitments (never names). Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction, and design the official outcome PDF letterhead (QR and hash seals stay required).",
       "Clerk / registrar / disqualification officer / tally operator are granted per jurisdiction. platform_admin is a global override, not a token admin. If you are not signed in as an officer, the admin hub sends you to sign-in. The Node still enforces roles on each API action even if a form is visible.",
     ],
   },
@@ -324,6 +333,7 @@ export const FAQ_REQUIRED_TOPICS = [
   "ranked-choice",
   "results",
   "outcomes",
+  "outcome-reports",
   "receipts",
   "receipt-check",
   "not-for-profit",

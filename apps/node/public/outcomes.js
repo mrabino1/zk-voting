@@ -200,6 +200,53 @@ function checksTable(verification, h) {
   );
 }
 
+function officialReportBlock(detail, ctx) {
+  const { h } = ctx;
+  const report = detail.officialReport;
+  if (!report) {
+    if (detail.phase !== "after") return null;
+    return h(
+      "div",
+      { class: "notice", role: "status" },
+      h("h2", { text: "Official PDF" }),
+      h("p", {
+        text: "The locked official outcome PDF is issued after voting time expires and a certified tally is posted. Drop that file at /outcomes/verify to confirm it was not changed.",
+      })
+    );
+  }
+  return h(
+    "section",
+    { class: "panel", "aria-labelledby": "official-pdf-heading" },
+    h("h2", { id: "official-pdf-heading", text: "Official outcome PDF" }),
+    h("p", {
+      text: "This report is encrypted and locked against modification. QR and hash seals are always included. Drop the file at Verify to confirm authenticity.",
+    }),
+    h(
+      "ul",
+      { class: "meta-list" },
+      h("li", {}, h("span", { class: "lbl", text: "SHA-256" }), h("span", { class: "hex", text: report.pdfSha256 || "—" })),
+      report.issuedAt
+        ? h("li", {}, h("span", { class: "lbl", text: "Issued" }), h("span", { text: report.issuedAt }))
+        : null
+    ),
+    h(
+      "div",
+      { class: "cluster" },
+      h("a", {
+        class: "btn",
+        href: `/api/outcomes/reports/${encodeURIComponent(detail.electionId)}/pdf`,
+        text: "Download official PDF",
+      }),
+      h("a", {
+        class: "btn btn-secondary",
+        href: `/outcomes/verify?id=${encodeURIComponent(report.id)}`,
+        "data-nav": "",
+        text: "Verify this PDF",
+      })
+    )
+  );
+}
+
 function certifiedBlock(detail, ctx) {
   const { h } = ctx;
   const certified = detail.certified;
@@ -435,6 +482,7 @@ export async function renderOutcomesDetail(main, ctx) {
       checksTable(v, h)
     ),
     certifiedBlock(detail, ctx),
+    officialReportBlock(detail, ctx),
     h(
       "div",
       { class: "toolbar" },
@@ -444,6 +492,7 @@ export async function renderOutcomesDetail(main, ctx) {
         ? h("a", { class: "btn btn-secondary", href: detail.links.results, "data-nav": "", text: "Results page" })
         : null,
       h("a", { class: "btn btn-secondary", href: detail.links?.explorer || "/explorer", text: "Explorer" }),
+      h("a", { class: "btn btn-secondary", href: "/outcomes/verify", "data-nav": "", text: "Verify official PDF" }),
       h("a", { class: "btn btn-secondary", href: "/receipt", "data-nav": "", text: "Check a receipt" })
     )
   );
