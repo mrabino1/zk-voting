@@ -259,7 +259,7 @@ describe('vote PIN HTTP', () => {
     const id = created.json.election.id;
     const reg = await api('POST', `/api/elections/${id}/register`, {
       jar: adminJar,
-      body: { identityCommitment: '0xpin01' },
+      body: { identityCommitment: '0xaaa1' },
     });
     assert.equal(reg.status, 201, reg.json?.error);
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -268,9 +268,9 @@ describe('vote PIN HTTP', () => {
     const anon = await api('POST', `/api/elections/${id}/vote`, {
       body: {
         proof: { accept: true },
-        publicInputs: { nullifier: '0xpin-anon', electionId: id },
+        publicInputs: { nullifier: '0xb01', electionId: id },
         encryptedBallot: '0xaa',
-        identityCommitment: '0xpin01',
+        identityCommitment: '0xaaa1',
       },
     });
     assert.equal(anon.status, 201, anon.json?.error);
@@ -279,9 +279,9 @@ describe('vote PIN HTTP', () => {
       jar: sessionJar,
       body: {
         proof: { accept: true },
-        publicInputs: { nullifier: '0xpin-session', electionId: id },
+        publicInputs: { nullifier: '0xb02', electionId: id },
         encryptedBallot: '0xbb',
-        identityCommitment: '0xpin01',
+        identityCommitment: '0xaaa1',
       },
     });
     assert.equal(noToken.status, 403);
@@ -298,9 +298,9 @@ describe('vote PIN HTTP', () => {
       jar: sessionJar,
       body: {
         proof: { accept: true },
-        publicInputs: { nullifier: '0xpin-ok', electionId: id },
+        publicInputs: { nullifier: '0xb03', electionId: id },
         encryptedBallot: '0xcc',
-        identityCommitment: '0xpin01',
+        identityCommitment: '0xaaa1',
         pinToken: verified.json.pinToken,
       },
     });
@@ -310,9 +310,9 @@ describe('vote PIN HTTP', () => {
       jar: sessionJar,
       body: {
         proof: { accept: true },
-        publicInputs: { nullifier: '0xpin-reuse', electionId: id },
+        publicInputs: { nullifier: '0xb04', electionId: id },
         encryptedBallot: '0xdd',
-        identityCommitment: '0xpin01',
+        identityCommitment: '0xaaa1',
         pinToken: verified.json.pinToken,
       },
     });
@@ -404,16 +404,16 @@ describe('vote PIN HTTP', () => {
     const id = created.json.election.id;
     await api('POST', `/api/elections/${id}/register`, {
       jar: adminJar,
-      body: { identityCommitment: '0xpin02' },
+      body: { identityCommitment: '0xaaa2' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
     const voted = await api('POST', `/api/elections/${id}/vote`, {
       jar: fresh,
       body: {
         proof: { accept: true },
-        publicInputs: { nullifier: '0xnopin', electionId: id },
+        publicInputs: { nullifier: '0xb05', electionId: id },
         encryptedBallot: '0xee',
-        identityCommitment: '0xpin02',
+        identityCommitment: '0xaaa2',
       },
     });
     assert.equal(voted.status, 403);
