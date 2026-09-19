@@ -435,6 +435,7 @@ The Node side is the human product. It should feel operationally familiar to any
 | `/back-office` | Clerks / registrars / officers (file `back-office.html`) |
 | `/explorer` | Civic L2 explorer (file `explorer.html`) |
 | `/elections/:id/results` | Certified plurality / IRV results |
+| `/outcomes`, `/outcomes/:id` | Public monitor of every election before / during / after voting, with auditor + chain verification |
 
 Public election ids are UUID v4. On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`.
 
@@ -866,8 +867,9 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 9. **EVM (or validity) execution on chainId 27427** so the same bytecode runs on the civic L2. **Future.**
 10. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice in-tree (not full MACI, not last-vote-counts):**
    - **One accepted nullifier:** `submitVote` for a spent nullifier reverts `NullifierUsed`, including a new ciphertext. Double voting remains impossible. `acceptedBallots` is unique nullifiers, so tally `sum(counts)` is a unique-voter invariant. Voters may change their mind privately on the ballot form **before** submit; the inbox does not accept a second ballot.
-   - **Receipts cannot prove choice:** the Node receipt lists `ballotHash`, nullifier, UserOp hash — never the marked options or the opening. A receipt is not “I voted for X,” and it is not a second ballot.
+   - **Receipts cannot prove choice:** the Node receipt lists `ballotHash`, nullifier, UserOp hash — never the marked options or the opening. After accept, the voter may email that receipt (body + PDF locked against modification) and paste it, or drop the PDF, at `/receipt` to confirm it counted and that the file was not changed. Hourly turnout on that page is how many ballots were disclosed and when each hour closed, not a count by candidate. A receipt is not “I voted for X,” and it is not a second ballot.
    - **Auditor pack:** `tools/auditor` CLI + [`docs/AUDITOR.md`](./docs/AUDITOR.md) + `GET /api/elections/:id/artifacts` export public roots, disclosed ballot hashes, tally, and contract addresses and verify sum/invariants **without** the Node private DB. Packs assert unique nullifiers and `receiptsProveChoice: false`.
+   - **Outcomes monitor:** a separate public portal at `/outcomes` (alias `/monitor`) lists every election in before / during / after columns from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). It runs the auditor pack plus freeze-root and L1 hash checks. During voting it shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. This is not `/receipt` and not a live horse race.
    - **Still later / Future:** MACI-style encrypted message queues / key-changing; guardian / forced-reveal if a tally operator stalls. Last-vote-counts / re-vote supersession is **out of scope** for this slice.
 
 ---

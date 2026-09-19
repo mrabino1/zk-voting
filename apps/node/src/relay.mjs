@@ -14,6 +14,12 @@ import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
+import {
+  issueAndStoreReceiptPdf,
+  mintHolderToken,
+  optionalUserOpHash,
+  presentHolderReceipt,
+} from './receipts.mjs';
 import { publicVoteRecord } from './store.mjs';
 import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from './ballot.mjs';
 
@@ -193,7 +199,7 @@ function assertBoundRoots(election, parsed, store) {
  * Node cannot write "this user voted for X" even if the client sends it.
  * identityCommitment is checked then discarded; it is never persisted on the vote.
  */
-export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds }) {
+export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds, config }) {
   const election = store.requireElection(electionId);
   const parsed = parseVoteBody(body, election);
   const questions = election.questions || [];
@@ -231,6 +237,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     });
   }
 
+  const holder = mintHolderToken();
   const vote = await store.acceptVote(
     {
       nullifier: parsed.nullifier,
@@ -238,6 +245,8 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       electionId: election.id,
       relayer: 'node',
       acceptedAt: ts,
+      receiptTokenHash: holder.receiptTokenHash,
+      userOpHash: optionalUserOpHash(body?.userOpHash || body?.userOp?.hash),
     },
     { encryptedBallot: parsed.encryptedBallot, rankingPayload },
   );
@@ -254,10 +263,31 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   );
 
   const published = isDisclosed(vote.acceptedAt, ts, interval);
+  const nextAt = nextPublishAt(ts, interval);
+  const receiptRow = store.findReceiptForVote(vote.electionId, vote.nullifier);
+  const artifact = await issueAndStoreReceiptPdf(
+    { store, config: config || {} },
+    {
+      election,
+      vote,
+      receiptRow,
+      token: holder.token,
+    },
+  );
   return {
     ok: true,
     vote: publicVoteRecord(vote),
     published,
-    nextPublishAt: nextPublishAt(ts, interval),
+    nextPublishAt: nextAt,
+    receipt: presentHolderReceipt({
+      election,
+      vote: { ...vote, userOpHash: receiptRow?.userOpHash || null },
+      token: holder.token,
+      published,
+      nextPublishAt: nextAt,
+      pdfSha256: artifact.pdfSha256,
+      integrity: artifact.integrity,
+      pdfProtected: true,
+    }),
   };
 }

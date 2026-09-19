@@ -108,9 +108,21 @@ When they vote:
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
 The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
-ciphertext. Double voting remains impossible. This is **not** MACI and **not**
-last-vote-counts: a coercer who can force the first (and only) submit still
-wins that ballot.
+ciphertext. After accept, the voter may email that receipt: the message body
+and a PDF attachment are the same evidence. That PDF uses PDF Standard Security
+so it cannot be edited (print and copy remain allowed). The Node records
+SHA-256 of the exact bytes; `/receipt` accepts the proof or the file and
+rejects a modified PDF. A public `/receipt` portal answers whether the ballot
+counted, plus hourly turnout (when hours closed, how many ballots were
+disclosed) — never a candidate or option. A holder token on the receipt can
+confirm a count before the hour closes; looking up public hashes still waits
+for disclosure. Double voting remains impossible. A separate public `/outcomes`
+portal monitors every election before, during, and after voting from chain
+status, running the same auditor pack plus freeze-root and L1 checks. During
+the open window it still does not invent unofficial option counts. This is
+**not** MACI and
+**not** last-vote-counts: a coercer who can force the first (and only) submit
+still wins that ballot.
 
 ### Hourly public disclosure (polling-place unlinkability)
 
@@ -667,6 +679,8 @@ GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
+GET  /api/outcomes                  (public monitor: every election before/during/after)
+GET  /api/outcomes/:id              (verification + certified outcome after tally)
 POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
 DELETE /api/jurisdictions/:id/roles
 GET  /api/me

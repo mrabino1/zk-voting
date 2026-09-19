@@ -26,6 +26,8 @@ function ctaRow(h, audience) {
       { class: "cta-row" },
       h("a", { class: "btn", href: "/register", "data-nav": "", text: "Register" }),
       h("a", { class: "btn btn-secondary", href: "/signin", "data-nav": "", text: "Sign in" }),
+      h("a", { class: "btn btn-secondary", href: "/receipt", "data-nav": "", text: "Check a receipt" }),
+      h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "Outcomes monitor" }),
       h("a", { class: "btn btn-secondary", href: "/about", "data-nav": "", text: "About us" }),
       h("a", { class: "btn btn-secondary", href: "/faq", "data-nav": "", text: "FAQ" })
     );
@@ -191,7 +193,7 @@ export function renderPublicHome(main, ctx, bundle) {
           {},
           h("h3", { text: "Public verifiability" }),
           h("p", {
-            text: "Anyone can inspect registration commitments, disqualification codes, hourly disclosed proofs, and the posted tally. Officials still maintain the legal roll; counting should not be a second invisible database.",
+            text: "Anyone can inspect registration commitments, disqualification codes, hourly disclosed proofs, and the posted tally. The /outcomes portal groups every contest before, during, and after voting from chain status and runs those checks. Paste a vote receipt at /receipt to confirm that ballot counted — never which option it carried. Officials still maintain the legal roll; counting should not be a second invisible database.",
           })
         ),
         h(

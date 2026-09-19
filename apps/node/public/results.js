@@ -338,6 +338,15 @@ export async function renderResults(main, ctx) {
       h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "All elections" }),
       h(
         "a",
+        {
+          class: "btn btn-secondary",
+          href: `/outcomes/${encodeURIComponent(election.id || electionId)}`,
+          "data-nav": "",
+          text: "Outcomes monitor",
+        }
+      ),
+      h(
+        "a",
         { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id || electionId)}`, "data-nav": "", text: "Ballot" }
       ),
       h(

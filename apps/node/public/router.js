@@ -5,7 +5,8 @@
  * Routes: `/`, `/public`, `/about`, `/faq`, `/p/:slug`, `/signin`, `/me`, `/app`,
  * `/office`, `/office/pages`, `/office/site`,
  * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
- * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`
+ * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/receipt`,
+ * `/outcomes`, `/outcomes/:id`, `/monitor`
  */
 
 import { isStandaloneHtmlPath } from "./audience.js";
@@ -59,6 +60,17 @@ export function parseRoute(loc = window.location) {
       name: "cmsPage",
       path,
       params: { slug: decodeURIComponent(cmsPage[1]) },
+      query,
+    };
+  }
+  if (path === "/receipt" || path === "/proof") return { name: "receipt", path, params: {}, query };
+  if (path === "/outcomes" || path === "/monitor") return { name: "outcomes", path, params: {}, query };
+  const outcome = path.match(/^\/(?:outcomes|monitor)\/([^/]+)$/);
+  if (outcome) {
+    return {
+      name: "outcome",
+      path,
+      params: { id: decodeURIComponent(outcome[1]) },
       query,
     };
   }

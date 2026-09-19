@@ -489,6 +489,7 @@ label.field,
 
 input[type="text"],
 input[type="search"],
+input[type="email"],
 select,
 textarea {
   width: 100%;
@@ -994,6 +995,49 @@ th {
   background: var(--paper);
 }
 
+.proof-paste {
+  max-width: 100%;
+  min-height: 12rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.receipt-email-form,
+.receipt-verify-form {
+  margin-top: 1rem;
+}
+
+.receipt-pdf-file {
+  display: block;
+  margin-top: 0.4rem;
+}
+
+.receipt-hours {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.receipt-hours caption {
+  text-align: left;
+  font-size: 0.92rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.receipt-hours th,
+.receipt-hours td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.receipt-hours td.num {
+  font-variant-numeric: tabular-nums;
+}
+
 .cluster {
   display: flex;
   flex-wrap: wrap;
@@ -1248,6 +1292,55 @@ a.session-chrome-btn:hover {
 
 .empty-results h2 {
   margin-top: 0;
+}
+
+.outcomes-board {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .outcomes-board {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.outcomes-column {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 1rem 1.05rem 1.15rem;
+  min-height: 12rem;
+}
+
+.outcomes-column h2 {
+  margin-top: 0.15rem;
+}
+
+.outcomes-stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.outcomes-card h3 {
+  margin-top: 0;
+  font-size: 1.12rem;
+}
+
+.outcomes-checks td,
+.outcomes-checks th {
+  vertical-align: top;
+}
+
+.outcomes-checks .check-fail td {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.outcomes-certified h3 {
+  margin-top: 1.1rem;
 }
 
 .cta-row {

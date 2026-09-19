@@ -152,7 +152,7 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
 
 ### Creating elections (chain vs demo)
 
@@ -194,6 +194,10 @@ Details: [`docs/L2.md`](./L2.md).
 ### Block explorer
 
 Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in block N: commitments, nullifiers, reason codes, tallies, batches — **not** ballot choices. Vote proofs and public turnout publish **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. Local instant demo: `DISCLOSURE_INTERVAL_SECONDS=0`. [`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
+
+### Outcomes monitor
+
+Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. This is not `/receipt` and not `/elections/:id/results`.
 
 ### Passkeys
 
@@ -242,7 +246,9 @@ Public page `/terms` (nav on public, registered, and officer chrome). Canonical 
 
 Acceptance (checkbox on `/register`, or “I agree” while signed in on `/terms`) writes **who, when, version, both hashes, and whether the PDF was emailed**. New-person identity APIs require `{ acceptedTerms: true }` (`TERMS_REQUIRED` otherwise). Viewing `/terms` while signed in records one `view` per session + current PDF hash. Public `GET /api/terms` does not include PII.
 
-The PDF is emailed with **AWS SES** on first accept of a hash, using the same env as MFA:
+The PDF is emailed with **AWS SES** on first accept of a hash, using the same env as MFA. Vote-receipt PDFs use PDF Standard Security so they cannot be edited; `/receipt` checks SHA-256 of the exact bytes.
+
+A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; certified option counts appear after a tally. It is not the receipt portal.
 
 | Variable | Role |
 | --- | --- |
@@ -268,6 +274,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 
 - Deploy keys, paymaster keys, sequencer keys, and proving keys are **not** in git.
 - `.env` is gitignored. Do not paste production RPC URLs with credentials into issues.
+- `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
 - `opens_ballots` elections store a **threshold-1** P-256 private JWK in the Node data file (`tallyGuardians`). That key decrypts every ballot. It is a demo, labeled NON-PRODUCTION. Do not use it for a binding election. Production guardians / mixnet are not this host’s JSON file.

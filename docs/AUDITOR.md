@@ -54,6 +54,8 @@ Node convenience route (same JSON the CLI consumes):
 ```http
 GET /api/elections/:id/artifacts
 GET /api/config
+GET /api/outcomes
+GET /api/outcomes/:id
 ```
 
 `/api/config` includes public contract addresses when configured. It never includes the relayer key.
@@ -85,3 +87,5 @@ This is **not** MACI. Full collusion-resistant messaging remains later work.
 ## Threat model (auditor vs Node)
 
 A lying Node can omit or delay disclosure (hourly policy) or refuse to serve `/artifacts`. It cannot make `sum(counts) != inbox.acceptedBallots` succeed on chain, and it cannot invent a choice that is not in the ciphertext. Prefer `export-chain` when a JSON-RPC endpoint is available; use `export-node` as a convenience over already-public HTTP.
+
+The Node also hosts `/outcomes`, which runs `verifyAuditorBundle` plus freeze-root and L1 hash checks for every election and groups them before / during / after voting from chain status. That page is a convenience monitor, not a substitute for an independent export.

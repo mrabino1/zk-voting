@@ -14,6 +14,7 @@ import {
   questionsOf,
   typeLabel,
 } from "./ballot.js";
+import { copyText, rememberProof } from "./receipt.js";
 
 export const SAMPLE_QUESTIONS = [
   {
@@ -112,6 +113,9 @@ export async function renderVote(main, ctx) {
     step: prior ? "receipt" : "ballot",
     receipt: prior || null,
     answersPreview: null,
+    emailTo: "",
+    emailBusy: false,
+    downloadBusy: false,
   };
 
   const root = h("div", { class: "ballot-page" });
@@ -162,9 +166,12 @@ export async function renderVote(main, ctx) {
       h(
         "p",
         {
-          text: election.tallyPubKey
-            ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
-            : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
+          text:
+            state.step === "receipt"
+              ? "Your ballot was accepted. The receipt below cannot prove how you voted."
+              : election.tallyPubKey
+                ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
+                : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       ),
       h(
@@ -422,12 +429,13 @@ export async function renderVote(main, ctx) {
     if (state.info) children.push(h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })));
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
-      children.push(renderReceipt(state.receipt, h));
+      children.push(renderReceipt(state, { h, api, announce, election, paint }));
       children.push(
         h(
           "p",
           { class: "cluster" },
           h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }),
+          h("a", { class: "btn btn-secondary", href: `/receipt`, "data-nav": "", text: "Check this proof" }),
           h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
         )
       );
@@ -631,15 +639,26 @@ export async function renderVote(main, ctx) {
         }
       }
 
+      const serverReceipt = res?.receipt && typeof res.receipt === "object" ? res.receipt : {};
       const receipt = {
-        at: new Date().toISOString(),
-        ballotHash: auth.ballotHash,
-        nullifier: auth.nullifier,
-        userOpHash: auth.userOpHash,
+        at: serverReceipt.acceptedAtIso || new Date().toISOString(),
+        ballotHash: serverReceipt.ballotHash || auth.ballotHash,
+        nullifier: serverReceipt.nullifier || auth.nullifier,
+        userOpHash: serverReceipt.userOpHash || auth.userOpHash,
+        token: serverReceipt.token || null,
+        proofText: serverReceipt.proofText || null,
+        published: serverReceipt.published,
+        nextPublishAt: serverReceipt.nextPublishAt,
+        pdfSha256: serverReceipt.pdfSha256 || null,
+        pdfProtected: serverReceipt.pdfProtected !== false,
+        pdfModify: false,
+        integrity: serverReceipt.integrity || null,
         accepted,
         message,
+        receiptsProveChoice: false,
       };
       recordVoteReceipt(election.id, receipt);
+      if (receipt.proofText) rememberProof(receipt.proofText);
       state.receipt = receipt;
       state.step = "receipt";
       state.info = "";
@@ -657,7 +676,103 @@ export async function renderVote(main, ctx) {
   paint();
 }
 
-function renderReceipt(receipt, h) {
+function renderReceipt(state, { h, api, announce, election, paint }) {
+  const receipt = state.receipt || {};
+  const proof =
+    receipt.proofText ||
+    [
+      "-----BEGIN REPUBLIC VOTE RECEIPT-----",
+      "schema: republic.receipt.v1",
+      election?.id ? `electionId: ${election.id}` : null,
+      receipt.nullifier ? `nullifier: ${receipt.nullifier}` : null,
+      receipt.ballotHash ? `ballotHash: ${receipt.ballotHash}` : null,
+      receipt.userOpHash ? `userOpHash: ${receipt.userOpHash}` : null,
+      receipt.token ? `token: ${receipt.token}` : null,
+      "-----END REPUBLIC VOTE RECEIPT-----",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+  async function onEmail(event) {
+    event.preventDefault();
+    if (state.emailBusy) return;
+    if (!receipt.token) {
+      state.error = "This device only has a local receipt. The Node token is required to email a PDF copy.";
+      announce(state.error);
+      paintFromReceipt();
+      return;
+    }
+    state.emailBusy = true;
+    state.error = "";
+    paintFromReceipt();
+    try {
+      const res = await api("/api/receipts/email", {
+        method: "POST",
+        body: { token: receipt.token, proof, email: state.emailTo || undefined },
+      });
+      state.info = res?.toHint
+        ? `Receipt emailed to ${res.toHint}. The message and locked PDF do not list your choices.`
+        : "Receipt emailed. The message and locked PDF do not list your choices.";
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Could not email this receipt.";
+      announce(state.error);
+    } finally {
+      state.emailBusy = false;
+      paintFromReceipt();
+    }
+  }
+
+  async function onDownload() {
+    if (state.downloadBusy) return;
+    if (!receipt.token) {
+      state.error = "This device only has a local receipt. The Node token is required to download the PDF.";
+      announce(state.error);
+      paintFromReceipt();
+      return;
+    }
+    state.downloadBusy = true;
+    state.error = "";
+    paintFromReceipt();
+    try {
+      const res = await fetch("/api/receipts/pdf", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/pdf", "Content-Type": "application/json" },
+        body: JSON.stringify({ token: receipt.token, proof }),
+      });
+      if (!res.ok) {
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        throw new Error(data?.error || res.statusText || "PDF download failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "republic-vote-receipt.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      const sha = res.headers.get("x-pdf-sha256");
+      if (sha) receipt.pdfSha256 = sha;
+      announce("Locked PDF downloaded. It cannot be edited and does not list your choices.");
+    } catch (err) {
+      state.error = err.message || "Could not download the PDF.";
+      announce(state.error);
+    } finally {
+      state.downloadBusy = false;
+      paintFromReceipt();
+    }
+  }
+
+  function paintFromReceipt() {
+    paint?.();
+  }
+
   return h(
     "section",
     { class: "receipt", "aria-labelledby": "receipt-heading" },
@@ -668,14 +783,92 @@ function renderReceipt(receipt, h) {
         text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
       }
     ),
+    h("p", {
+      class: "field-hint",
+      text: "The PDF is encrypted and locked against modification. Printing and copying are allowed; editing is not. A changed file will not match the SHA-256 the Node recorded.",
+    }),
     receipt.message ? h("p", { text: receipt.message }) : null,
     h(
       "ul",
       { class: "meta-list" },
-      h("li", {}, h("span", { class: "lbl", text: "Recorded" }), h("span", { text: receipt.at || "—" })),
+      h("li", {}, h("span", { class: "lbl", text: "Recorded" }), h("span", { text: receipt.at || receipt.acceptedAtIso || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Ballot hash" }), h("span", { class: "hex", text: receipt.ballotHash || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Nullifier" }), h("span", { class: "hex", text: receipt.nullifier || "—" })),
-      h("li", {}, h("span", { class: "lbl", text: "UserOp hash" }), h("span", { class: "hex", text: receipt.userOpHash || "—" }))
+      h("li", {}, h("span", { class: "lbl", text: "UserOp hash" }), h("span", { class: "hex", text: receipt.userOpHash || "—" })),
+      h("li", {}, h("span", { class: "lbl", text: "PDF" }), h("span", { text: "Locked against modification" })),
+      receipt.pdfSha256
+        ? h("li", {}, h("span", { class: "lbl", text: "PDF SHA-256" }), h("span", { class: "hex", text: receipt.pdfSha256 }))
+        : null,
+      receipt.published === false
+        ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))
+        : receipt.published
+          ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Disclosed" }))
+          : null
+    ),
+    h("label", { class: "field", for: "receipt-proof-copy" }, "Copy-paste proof"),
+    h("textarea", {
+      id: "receipt-proof-copy",
+      class: "proof-paste",
+      readOnly: true,
+      rows: 10,
+      value: proof,
+    }),
+    h(
+      "div",
+      { class: "cluster" },
+      h("button", {
+        class: "btn",
+        type: "button",
+        text: "Copy proof",
+        onClick: () => {
+          rememberProof(proof);
+          return copyText(proof, announce);
+        },
+      }),
+      h("button", {
+        class: "btn btn-secondary",
+        type: "button",
+        disabled: state.downloadBusy || !receipt.token,
+        text: state.downloadBusy ? "Preparing locked PDF…" : "Download locked PDF",
+        onClick: onDownload,
+      }),
+      h("a", {
+        class: "btn btn-secondary",
+        href: "/receipt",
+        "data-nav": "",
+        text: "Open receipt check",
+        onClick: () => rememberProof(proof),
+      })
+    ),
+    h(
+      "form",
+      { class: "stack receipt-email-form", onSubmit: onEmail },
+      h("h3", { text: "Email this receipt" }),
+      h("p", {
+        class: "field-hint",
+        text: "The email body and the attached PDF are the same evidence: hashes only. The PDF is encrypted so it cannot be edited. They do not list a candidate or an option. If you are signed in with email, you can leave the address blank.",
+      }),
+      h(
+        "label",
+        { class: "field", for: "receipt-email" },
+        "Email address",
+        h("input", {
+          id: "receipt-email",
+          name: "email",
+          type: "email",
+          autocomplete: "email",
+          value: state.emailTo,
+          onInput: (event) => {
+            state.emailTo = event.target.value;
+          },
+        })
+      ),
+      h("button", {
+        class: "btn",
+        type: "submit",
+        disabled: state.emailBusy || !receipt.token,
+        text: state.emailBusy ? "Sending…" : "Email me the receipt",
+      })
     )
   );
 }

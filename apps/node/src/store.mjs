@@ -81,7 +81,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 4,
+      version: 5,
       nextElectionId: 1,
     },
     users: [],
@@ -92,6 +92,7 @@ function emptyData() {
     identityLinks: [],
     disqualifications: [],
     votes: [],
+    receipts: [],
     envelopes: [],
     notifications: [],
     tallyGuardians: [],
@@ -141,6 +142,7 @@ export class Store {
       data = { ...emptyData(), ...JSON.parse(raw) };
       data.pages = Array.isArray(data.pages) ? data.pages : [];
       data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
+      data.receipts = Array.isArray(data.receipts) ? data.receipts : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
@@ -163,8 +165,9 @@ export class Store {
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
     if (!Array.isArray(store.data.termsAcceptances)) store.data.termsAcceptances = [];
+    if (!Array.isArray(store.data.receipts)) store.data.receipts = [];
     store.data.meta = store.data.meta || {};
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 4);
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 5);
     await store.persist();
     return store;
   }
@@ -1160,6 +1163,53 @@ export class Store {
     );
   }
 
+  findReceiptByTokenHash(tokenHash) {
+    if (!tokenHash) return null;
+    const key = String(tokenHash).toLowerCase();
+    return (this.data.receipts || []).find((r) => String(r.tokenHash || '').toLowerCase() === key) || null;
+  }
+
+  findReceiptForVote(electionId, nullifier) {
+    const key = toBytes32(nullifier);
+    return (
+      (this.data.receipts || []).find(
+        (r) => String(r.electionId) === String(electionId) && toBytes32(r.nullifier) === key,
+      ) || null
+    );
+  }
+
+  async markReceiptEmailed(id, { emailHint } = {}) {
+    const rec = (this.data.receipts || []).find((r) => r.id === id);
+    if (!rec) return null;
+    rec.emailedAt = new Date().toISOString();
+    if (emailHint) rec.emailHint = emailHint;
+    await this.persist();
+    return rec;
+  }
+
+  findReceiptByPdfSha256(pdfSha256) {
+    const key = String(pdfSha256 || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(key)) return null;
+    return (this.data.receipts || []).find((r) => String(r.pdfSha256 || '').toLowerCase() === key) || null;
+  }
+
+  async markReceiptPdfIssued(id, { pdfSha256, pdfProtected = true, pdfIntegrity = null } = {}) {
+    const rec = (this.data.receipts || []).find((r) => r.id === id);
+    if (!rec) return null;
+    const hash = String(pdfSha256 || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) {
+      throw new HttpError(500, 'receipt PDF fingerprint missing', { code: 'RECEIPT_PDF_DRIFT' });
+    }
+    if (rec.pdfSha256 && String(rec.pdfSha256).toLowerCase() !== hash) {
+      throw new HttpError(500, 'receipt PDF fingerprint changed', { code: 'RECEIPT_PDF_DRIFT' });
+    }
+    rec.pdfSha256 = hash;
+    rec.pdfProtected = Boolean(pdfProtected);
+    if (pdfIntegrity) rec.pdfIntegrity = String(pdfIntegrity);
+    await this.persist();
+    return rec;
+  }
+
   /**
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
@@ -1185,6 +1235,23 @@ export class Store {
       acceptedAt,
     };
     this.data.votes.push(record);
+    if (vote.receiptTokenHash) {
+      if (!Array.isArray(this.data.receipts)) this.data.receipts = [];
+      this.data.receipts.push({
+        id: randomUUID(),
+        electionId: record.electionId,
+        nullifier: record.nullifier,
+        ballotHash: record.ballotHash,
+        tokenHash: String(vote.receiptTokenHash),
+        userOpHash: vote.userOpHash ? String(vote.userOpHash) : null,
+        acceptedAt,
+        emailedAt: null,
+        emailHint: null,
+        pdfSha256: null,
+        pdfProtected: true,
+        pdfIntegrity: null,
+      });
+    }
     if (envelope) {
       this.data.envelopes.push({
         electionId: record.electionId,
