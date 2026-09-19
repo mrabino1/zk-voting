@@ -100,7 +100,7 @@ function panelOptions(root) {
     heading: root.getAttribute("data-heading") || "Sign in",
     lede:
       root.getAttribute("data-lede") ||
-      "Sign in with email, a bound Ethereum wallet, a smart-card reader, or a driver’s license / passport. Each path sends a one-time code to your email (AWS SES).",
+      "Sign in with any bound email or passkey, a bound Ethereum wallet, a smart-card reader, or a driver’s license / passport. MFA codes go to your primary email by default (AWS SES). Signing in with a specific email sends the code to that inbox.",
     devHandle: root.getAttribute("data-dev-handle") || "",
     devRole: root.getAttribute("data-dev-role") || "",
     compact: root.getAttribute("data-compact") === "true",
@@ -206,7 +206,7 @@ function renderMfa(state, statusEl) {
       class: "field-hint",
       text: needsEmail
         ? "This person has no email on file yet. Enter the address that will receive the sign-in code (AWS SES)."
-        : `Enter the 6-digit code sent to ${mfa.emailHint || "your email"}.`,
+        : `Enter the 6-digit code sent to ${mfa.emailHint || "your email"} (primary unless you signed in with a specific address).`,
     }),
     needsEmail
       ? el(
@@ -348,7 +348,7 @@ function renderForm(state, opts, statusEl) {
           el(
             "div",
             { class: "field" },
-            el("label", { class: "field-label", for: "signin-email", text: "Email (username)" }),
+            el("label", { class: "field-label", for: "signin-email", text: "Email (any bound address)" }),
             el("input", {
               id: "signin-email",
               name: "email",

@@ -3,11 +3,15 @@
 // Exactly one active Ethereum address. The vote Merkle leaf is never that
 // address.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { getAddress, isAddress, keccak256, toHex, verifyMessage } from 'viem';
 
 import { HttpError } from './http.mjs';
+
+/** DealPunchList-shaped product caps: per Person, not per Node. */
+export const MAX_PASSKEYS_PER_PERSON = 5;
+export const MAX_EMAILS_PER_PERSON = 5;
 
 export const AUTH_METHOD_TYPES = Object.freeze([
   'email',
@@ -23,7 +27,8 @@ export const AUTH_METHOD_CATALOG = Object.freeze([
   {
     type: 'email',
     label: 'Email',
-    summary: 'Username is an email address. Sign-in always completes with a one-time code (AWS SES).',
+    summary:
+      'Up to 5 addresses. Exactly one is primary (MFA and SES default). Sign-in always completes with a one-time code (AWS SES).',
   },
   {
     type: 'web3',
@@ -44,7 +49,8 @@ export const AUTH_METHOD_CATALOG = Object.freeze([
   {
     type: 'passkey',
     label: 'Passkey',
-    summary: 'Device WebAuthn credential (Touch ID, Windows Hello, hardware key), then email MFA when SES is on.',
+    summary:
+      'Up to 5 device WebAuthn credentials (Touch ID, Windows Hello, hardware key). Any of them can sign in, then email MFA when SES is on.',
   },
 ]);
 
@@ -68,6 +74,7 @@ export function ensurePersonFields(user) {
   if (!Object.prototype.hasOwnProperty.call(user, 'email')) {
     user.email = null;
   }
+  syncPersonEmails(user);
   if (!Object.prototype.hasOwnProperty.call(user, 'termsHash')) {
     user.termsHash = null;
   }
@@ -111,6 +118,95 @@ export function emailHint(value) {
   }
 }
 
+export function sameEmail(a, b) {
+  if (!a || !b) return false;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+export function personEmailMethods(user) {
+  if (!user) return [];
+  if (!Array.isArray(user.authMethods)) user.authMethods = [];
+  return user.authMethods.filter((m) => m.type === 'email' && m.email);
+}
+
+export function countEmails(user) {
+  return personEmailMethods(user).length;
+}
+
+export function personPasskeys(user) {
+  if (!user) return [];
+  if (!Array.isArray(user.credentials)) user.credentials = [];
+  return user.credentials;
+}
+
+export function countPasskeys(user) {
+  const ids = new Set();
+  for (const cred of personPasskeys(user)) {
+    if (cred?.id) ids.add(String(cred.id));
+  }
+  for (const method of user?.authMethods || []) {
+    if (method.type === 'passkey' && method.credentialId) ids.add(String(method.credentialId));
+  }
+  return ids.size;
+}
+
+/**
+ * Keep `user.email` as the primary address. When ≥1 email exists, exactly one
+ * auth method is `primary`. Legacy rows that only had `user.email` get a method.
+ */
+export function syncPersonEmails(user) {
+  if (!user) return user;
+  if (!Array.isArray(user.authMethods)) user.authMethods = [];
+  let email;
+  if (user.email) {
+    try {
+      email = normalizeEmail(user.email);
+      user.email = email;
+    } catch {
+      user.email = null;
+      email = null;
+    }
+  }
+  const methods = personEmailMethods(user);
+  if (email && !methods.some((m) => sameEmail(m.email, email))) {
+    const method = {
+      id: randomUUID(),
+      type: 'email',
+      verified: true,
+      verifiedBy: 'self',
+      verifiedAt: user.createdAt || new Date().toISOString(),
+      label: 'Email',
+      credentialId: null,
+      address: null,
+      fingerprint: null,
+      subject: null,
+      issuer: null,
+      email,
+      kind: null,
+      civicIdHash: null,
+      primary: methods.length === 0,
+    };
+    user.authMethods.push(method);
+    methods.push(method);
+  }
+  if (!methods.length) {
+    user.email = email || null;
+    return user;
+  }
+  let chosen = methods.find((m) => m.primary);
+  if (!chosen && email) chosen = methods.find((m) => sameEmail(m.email, email));
+  if (!chosen) chosen = methods[0];
+  for (const method of methods) {
+    method.primary = method.id === chosen.id;
+  }
+  try {
+    user.email = normalizeEmail(chosen.email);
+  } catch {
+    user.email = String(chosen.email || '').trim().toLowerCase() || null;
+  }
+  return user;
+}
+
 export function userEmail(user) {
   if (!user) return null;
   ensurePersonFields(user);
@@ -121,13 +217,93 @@ export function userEmail(user) {
       /* ignore */
     }
   }
-  const method = user.authMethods.find((m) => m.type === 'email' && m.email);
+  const marked = personEmailMethods(user).find((m) => m.primary && m.email);
+  const method = marked || personEmailMethods(user).find((m) => m.email);
   if (!method) return null;
   try {
     return normalizeEmail(method.email);
   } catch {
     return null;
   }
+}
+
+/**
+ * MFA / SES destination. Email-as-username and “bind this address” send to the
+ * address given. Every other factor uses the primary email by default.
+ */
+export function mfaDestinationEmail({ user, factor, email, bindEmail } = {}) {
+  const existing = userEmail(user);
+  const provided = email || null;
+  if (bindEmail && provided) return provided;
+  if (String(factor || '') === 'email' && provided) return provided;
+  return existing || provided;
+}
+
+export function assertEmailRoom(user, addingEmail) {
+  if (!user) return;
+  let next = null;
+  if (addingEmail) {
+    try {
+      next = normalizeEmail(addingEmail);
+    } catch {
+      next = null;
+    }
+  }
+  const methods = personEmailMethods(user);
+  if (next && methods.some((m) => sameEmail(m.email, next))) return;
+  if (methods.length >= MAX_EMAILS_PER_PERSON) {
+    throw new HttpError(
+      409,
+      `A person may bind at most ${MAX_EMAILS_PER_PERSON} email addresses`,
+      {
+        code: 'EMAIL_CAP',
+        limit: MAX_EMAILS_PER_PERSON,
+        count: methods.length,
+      },
+    );
+  }
+}
+
+export function assertPasskeyRoom(user) {
+  if (!user) return;
+  const count = countPasskeys(user);
+  if (count >= MAX_PASSKEYS_PER_PERSON) {
+    throw new HttpError(
+      409,
+      `A person may register at most ${MAX_PASSKEYS_PER_PERSON} passkeys`,
+      {
+        code: 'PASSKEY_CAP',
+        limit: MAX_PASSKEYS_PER_PERSON,
+        count,
+      },
+    );
+  }
+}
+
+export function publicEmail(method, primaryAddress) {
+  if (!method) return null;
+  const email = method.email || null;
+  return {
+    id: method.id,
+    email,
+    primary: Boolean(method.primary) || sameEmail(email, primaryAddress),
+    verified: Boolean(method.verified),
+    verifiedAt: method.verifiedAt || null,
+    label: method.label || 'Email',
+  };
+}
+
+export function publicPasskey(credential, method) {
+  if (!credential) return null;
+  return {
+    id: credential.id,
+    credentialId: credential.id,
+    label: method?.label || credential.label || 'Passkey',
+    createdAt: credential.createdAt || null,
+    deviceType: credential.deviceType || null,
+    backedUp: Boolean(credential.backedUp),
+    transports: credential.transports || [],
+  };
 }
 
 export function isCivicIdKind(kind) {
@@ -219,7 +395,10 @@ export function publicAuthMethod(method) {
   };
   if (method.type === 'web3') out.address = method.address;
   if (method.type === 'passkey') out.credentialId = method.credentialId;
-  if (method.type === 'email') out.email = method.email;
+  if (method.type === 'email') {
+    out.email = method.email;
+    out.primary = Boolean(method.primary);
+  }
   if (method.type === 'smart_card') {
     out.fingerprint = method.fingerprint;
     out.subject = method.subject || null;
@@ -243,19 +422,44 @@ export function publicEthAccount(account, activeEthAddress) {
   };
 }
 
+export function identityCaps() {
+  return {
+    emails: MAX_EMAILS_PER_PERSON,
+    passkeys: MAX_PASSKEYS_PER_PERSON,
+  };
+}
+
 export function publicIdentity(user) {
   if (!user) return null;
   ensurePersonFields(user);
+  const primary = userEmail(user);
+  const emailMethods = personEmailMethods(user);
+  const passkeys = personPasskeys(user).map((cred) =>
+    publicPasskey(
+      cred,
+      user.authMethods.find((m) => m.type === 'passkey' && m.credentialId === cred.id),
+    ),
+  );
   return {
     personId: user.id,
     personKeyBound: Boolean(user.personKeyHash),
-    emailBound: Boolean(userEmail(user)),
-    emailHint: userEmail(user) ? emailHint(userEmail(user)) : null,
-    authMethods: user.authMethods.map(publicAuthMethod),
+    emailBound: Boolean(primary),
+    emailHint: primary ? emailHint(primary) : null,
+    primaryEmail: primary,
+    emails: emailMethods.map((m) => publicEmail(m, primary)),
+    emailCount: emailMethods.length,
+    passkeys,
+    passkeyCount: countPasskeys(user),
+    caps: identityCaps(),
+    authMethods: user.authMethods.map((m) => {
+      const out = publicAuthMethod(m);
+      if (out && out.type === 'email') out.primary = Boolean(m.primary) || sameEmail(m.email, primary);
+      return out;
+    }),
     ethAccounts: user.ethAccounts.map((a) => publicEthAccount(a, user.activeEthAddress)),
     activeEthAddress: user.activeEthAddress,
     verifiedEthAddressCount: user.ethAccounts.length,
-    note: 'Many methods and addresses may be verified internally. Only one Ethereum address is active. Sign-in completes with email MFA when SES is configured.',
+    note: 'Many methods and addresses may be verified internally. Only one Ethereum address is active. Up to 5 passkeys and 5 emails; exactly one email is primary when any email exists. Sign-in completes with email MFA when SES is configured.',
   };
 }
 

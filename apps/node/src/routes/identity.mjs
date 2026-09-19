@@ -9,10 +9,12 @@ import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireAnyJurisdictionRole, publicUser } from '../auth.mjs';
 import {
   AUTH_METHOD_CATALOG,
+  assertEmailRoom,
   civicIdHash,
   civicIdLabel,
   createIdentityChallenges,
   fingerprintFromCertificate,
+  identityCaps,
   isAuthMethodType,
   isCivicIdKind,
   normalizeEmail,
@@ -45,7 +47,9 @@ export function identityRouter(deps) {
         vendor: 'ses',
         required: Boolean(config.requireEmailMfa),
       },
-      note: 'A person may verify every method. Only one Ethereum address is active. Sign-in completes with email MFA when SES is configured.',
+      caps: identityCaps(),
+      onePrimaryEmail: true,
+      note: 'A person may verify every method. Up to 5 passkeys and 5 emails; exactly one email is primary. Only one Ethereum address is active. Sign-in completes with email MFA when SES is configured.',
     });
   });
 
@@ -67,6 +71,7 @@ export function identityRouter(deps) {
         if (owner && owner.id !== req.user.id) {
           throw new HttpError(409, 'email already bound to another person', { code: 'METHOD_OWNED' });
         }
+        assertEmailRoom(req.user, email);
         const payload = await mfa.startMfa(res, {
           user: req.user,
           factor: 'email',
@@ -291,6 +296,65 @@ export function identityRouter(deps) {
         acceptedTerms: req.body?.acceptedTerms,
       });
       res.json(payload);
+    }),
+  );
+
+  router.get(
+    '/me/emails',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const identity = publicIdentity(req.user);
+      res.json({
+        nfp: true,
+        emails: identity.emails,
+        primaryEmail: identity.primaryEmail,
+        emailCount: identity.emailCount,
+        caps: identity.caps,
+      });
+    }),
+  );
+
+  router.post(
+    '/me/emails/primary',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const user = await store.setPrimaryEmail(req.user.id, {
+        emailId: req.body?.id || req.body?.emailId,
+        email: req.body?.email,
+      });
+      res.json({ nfp: true, identity: publicIdentity(user), user: publicUser(user) });
+    }),
+  );
+
+  router.delete(
+    '/me/emails/:id',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const user = await store.removeEmail(req.user.id, req.params.id);
+      res.json({ nfp: true, identity: publicIdentity(user), user: publicUser(user) });
+    }),
+  );
+
+  router.get(
+    '/me/passkeys',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const identity = publicIdentity(req.user);
+      res.json({
+        nfp: true,
+        passkeys: identity.passkeys,
+        passkeyCount: identity.passkeyCount,
+        caps: identity.caps,
+      });
+    }),
+  );
+
+  router.delete(
+    '/me/passkeys/:credentialId',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const user = await store.removeCredential(req.user.id, req.params.credentialId);
+      res.json({ nfp: true, identity: publicIdentity(user), user: publicUser(user) });
     }),
   );
 

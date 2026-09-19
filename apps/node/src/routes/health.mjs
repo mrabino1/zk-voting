@@ -4,7 +4,7 @@ import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
 import { disclosurePublicView } from '../disclosure.mjs';
-import { AUTH_METHOD_TYPES } from '../identity.mjs';
+import { AUTH_METHOD_TYPES, identityCaps } from '../identity.mjs';
 import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 
 export function healthRouter(deps) {
@@ -85,8 +85,11 @@ export function configRouter(deps) {
         identity: {
           methods: [...AUTH_METHOD_TYPES],
           oneActiveEthAddress: true,
+          onePrimaryEmail: true,
+          maxPasskeys: identityCaps().passkeys,
+          maxEmails: identityCaps().emails,
           civicIdKinds: ['drivers_license', 'passport'],
-          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Only one Ethereum address is active. Document images and full ID numbers are not stored.',
+          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Up to 5 passkeys and 5 emails; exactly one email is primary. Only one Ethereum address is active. Document images and full ID numbers are not stored.',
         },
         tally: {
           schemes: ['sum_only', 'opens_ballots'],

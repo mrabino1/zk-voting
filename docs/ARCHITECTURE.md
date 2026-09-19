@@ -132,9 +132,9 @@ Hasher note: production circuits use Poseidon (`republic.hash.poseidon-bn254-x5-
 
 ### Person (unique) vs one active Ethereum address
 
-A Node user is one **person**. They may bind email, Web3 wallet,
-smart-card reader, driver’s license or passport, and passkey. Several ETH
-addresses can be internally verified;
+A Node user is one **person**. They may bind up to 5 emails (exactly one
+primary), a Web3 wallet, a smart-card reader, a driver’s license or passport,
+and up to 5 passkeys. Several ETH addresses can be internally verified;
 exactly one is **active** (gasless ops). Authenticators and addresses cannot
 belong to two people. The vote leaf stays `identityCommitment`. Details:
 [`IDENTITY.md`](./IDENTITY.md).

@@ -5,7 +5,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto
 
 import { establishSession } from './auth.mjs';
 import { HttpError, setMfaCookie, clearMfaCookie } from './http.mjs';
-import { emailHint, normalizeEmail, publicIdentity, userEmail } from './identity.mjs';
+import { emailHint, mfaDestinationEmail, normalizeEmail, publicIdentity, userEmail, assertEmailRoom } from './identity.mjs';
 import { publicUser } from './roles.mjs';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -139,7 +139,12 @@ export function createMfaService({ config, store, mailer, terms }) {
     const nonce = randomBytes(18).toString('hex');
     const now = Date.now();
     const existing = userEmail(user);
-    const nextEmail = existing || email || null;
+    const nextEmail = mfaDestinationEmail({
+      user,
+      factor,
+      email: email ? normalizeEmail(email) : null,
+      bindEmail,
+    });
     return {
       type: 'email_otp',
       nonce,
@@ -214,6 +219,10 @@ export function createMfaService({ config, store, mailer, terms }) {
     }
     if (owner && !rec.userId && rec.purpose === 'register') {
       throw new HttpError(409, 'email already bound to another person', { code: 'METHOD_OWNED' });
+    }
+    if (rec.userId) {
+      const account = store.getUser(rec.userId);
+      if (account) assertEmailRoom(account, email);
     }
     rec.email = email;
     rec.bindEmail = true;
