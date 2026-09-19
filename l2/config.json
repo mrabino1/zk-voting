@@ -1,0 +1,23 @@
+{
+  "nfp": "NOT FOR PROFIT — civic public good. Not a commercial sequencer business.",
+  "chainId": 27427,
+  "blockTimeMs": 2000,
+  "batchSize": 4,
+  "rpcHost": "127.0.0.1",
+  "rpcPort": 8546,
+  "dataDir": "data",
+  "maxTxsPerBlock": 4096,
+  "paymasterBalanceWei": "1000000000000000000000000000",
+  "devMockProof": true,
+  "disclosureIntervalSeconds": 3600,
+  "l1Rpc": "",
+  "settlementAddress": "",
+  "republicNodeUrl": "",
+  "contracts": {
+    "voterRegistry": "0x0000000000000000000000000000000000001001",
+    "ballotInbox": "0x0000000000000000000000000000000000001002",
+    "disqualificationRegistry": "0x0000000000000000000000000000000000001003",
+    "tallyVerifier": "0x0000000000000000000000000000000000001004",
+    "entryPoint": "0x0000000000000000000000000000000000001005"
+  }
+}

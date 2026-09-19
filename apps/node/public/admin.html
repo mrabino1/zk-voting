@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#13294b" />
+    <meta name="robots" content="noindex" />
+    <title>Platform admin · Republic</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+  </head>
+  <body>
+    <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <div class="nfp-banner" role="note">
+      NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
+    </div>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="Republic home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
+              <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M10 26 V10 h8.5 a5 5 0 0 1 0 10 H10 m8.5 0 L26 26"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Republic</span>
+            <span class="brand-sub">Office of civic elections</span>
+          </span>
+        </a>
+        <nav class="nav-main" aria-label="Primary">
+          <ul>
+            <li><a href="/">Elections</a></li>
+            <li><a href="/register">Register</a></li>
+            <li><a href="/back-office">Back office</a></li>
+            <li><a href="/explorer">Explorer</a></li>
+            <li><a href="/admin" aria-current="page">Admin</a></li>
+          </ul>
+        </nav>
+        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
+        <span class="office-badge">Not for profit</span>
+      </div>
+    </header>
+
+    <main id="main" class="site-main" tabindex="-1">
+      <header class="page-head">
+        <p class="kicker">Platform administration</p>
+        <h1>Host this Node</h1>
+        <p class="lede">
+          Jurisdictions are the organizations of this public-good stack. Grant clerks,
+          registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
+          and no console that takes fees. Dashboards do not show live vote ticks; public
+          proof of ballots is published once an hour.
+        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Public vote proofs publish at the top of each hour. This console does not show a live jurisdiction increase.
+          </p>
+        </aside>
+        <p class="session-line" id="session-line">Checking session…</p>
+      </header>
+
+      <section aria-labelledby="host-heading">
+        <h2 id="host-heading" class="visually-hidden">Host status</h2>
+        <div class="stat-grid" id="host-stats">
+          <div class="stat">
+            <dt>Health</dt>
+            <dd class="plain" id="stat-health"><span class="status-dot"></span>Checking…</dd>
+          </div>
+          <div class="stat">
+            <dt>Chain ID</dt>
+            <dd id="stat-chain">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Election factory</dt>
+            <dd id="stat-factory">—</dd>
+          </div>
+          <div class="stat">
+            <dt>NOT FOR PROFIT</dt>
+            <dd class="plain" id="stat-nfp">—</dd>
+          </div>
+        </div>
+      </section>
+
+      <div
+        id="sign-in-root"
+        data-heading="Sign in"
+        data-dev-handle="admin"
+        data-dev-role="platform_admin"
+        data-lede="Platform admin uses the same passkey or Ethereum session as every other person. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
+      ></div>
+
+      <div class="grid-2">
+        <section class="panel" aria-labelledby="create-j-heading">
+          <header>
+            <h2 id="create-j-heading">Create jurisdiction</h2>
+          </header>
+          <p class="field-hint">A jurisdiction owns a roll and elections (nation, state, county, city, or other body).</p>
+          <form id="form-jurisdiction" class="form-grid">
+            <div class="field">
+              <label class="field-label" for="j-name">Name <span class="req">*</span></label>
+              <input id="j-name" name="name" required maxlength="120" autocomplete="organization" placeholder="County of Example" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="j-code">Public id</label>
+              <input id="j-code" name="id" maxlength="64" placeholder="demo" />
+              <span class="field-hint">Optional slug. Legal names stay off-chain.</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="j-uri">Metadata URI</label>
+              <input id="j-uri" name="metadataURI" inputmode="url" placeholder="ipfs://… or https://…" />
+            </div>
+            <div class="actions">
+              <button class="btn" type="submit">Create jurisdiction</button>
+            </div>
+            <div class="flash" id="flash-jurisdiction" role="status"></div>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="grant-heading">
+          <header>
+            <h2 id="grant-heading">Grant officers</h2>
+          </header>
+          <p class="field-hint">
+            Clerk, registrar, disqualification officer, and tally operator are scoped to one
+            jurisdiction. <code>platform_admin</code> remains a global override and is not granted here.
+          </p>
+          <form id="form-grant" class="form-grid">
+            <div class="field">
+              <label class="field-label" for="g-user">User <span class="req">*</span></label>
+              <select id="g-user" name="userId" required>
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-jurisdiction">Jurisdiction <span class="req">*</span></label>
+              <select id="g-jurisdiction" name="jurisdictionId" required>
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-role">Role <span class="req">*</span></label>
+              <select id="g-role" name="role" required>
+                <option value="clerk">clerk — create elections, freeze roll</option>
+                <option value="registrar">registrar — insert identity commitments</option>
+                <option value="disqualification_officer">disqualification_officer — reason codes</option>
+                <option value="tally_operator">tally_operator — post counts</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="btn" type="submit">Grant role</button>
+            </div>
+            <div class="flash" id="flash-grant" role="status"></div>
+          </form>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="list-j-heading">
+        <header>
+          <h2 id="list-j-heading">Jurisdictions</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-j">Refresh</button>
+        </header>
+        <div class="table-wrap">
+          <table class="data-table" id="table-jurisdictions">
+            <caption class="visually-hidden">Known jurisdictions</caption>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Id</th>
+                <th>Officers</th>
+                <th>Metadata</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="officers-heading">
+        <header>
+          <h2 id="officers-heading">Jurisdiction officers</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-o">Refresh</button>
+        </header>
+        <p class="field-hint">
+          Grants live on the jurisdiction, not as a single global user role. Revoke removes that
+          office for that jurisdiction only.
+        </p>
+        <div class="table-wrap">
+          <table class="data-table" id="table-officers">
+            <caption class="visually-hidden">Officers granted per jurisdiction</caption>
+            <thead>
+              <tr>
+                <th>Jurisdiction</th>
+                <th>Handle</th>
+                <th>Role</th>
+                <th>Granted</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flash" id="flash-officers" role="status"></div>
+      </section>
+        <header>
+          <h2 id="users-heading">Users</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-u">Refresh</button>
+        </header>
+        <div class="table-wrap">
+          <table class="data-table" id="table-users">
+            <caption class="visually-hidden">Node users and roles</caption>
+            <thead>
+              <tr>
+                <th>Handle</th>
+                <th>Global role</th>
+                <th>Jurisdiction offices</th>
+                <th>Methods</th>
+                <th>Active ETH</th>
+                <th>Person key</th>
+                <th>Id</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="addrs-heading">
+        <header>
+          <h2 id="addrs-heading">Public host facts</h2>
+        </header>
+        <p class="field-hint">These are not secrets. Private keys never belong in this console.</p>
+        <div class="table-wrap">
+          <table class="data-table" id="table-addresses">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="2" class="empty">Waiting for host status…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel danger-none" aria-labelledby="danger-heading">
+        <h2 id="danger-heading">Danger zone</h2>
+        <p>
+          There is none that takes fees. This software will not mint a token, charge a voter,
+          skim ETH, or open a paid tier. Gas sponsorship is paid by the jurisdiction at cost.
+        </p>
+        <p class="field-hint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-nfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+      <p class="footer-meta">
+        Product name Republic. No token. No ads.
+        <a href="/explorer">L2 explorer</a>
+        · AGPL-3.0-or-later
+      </p>
+    </footer>
+    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/signin.js"></script>
+    <script src="/admin.js" defer></script>
+  </body>
+</html>

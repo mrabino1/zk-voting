@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+apps/node/node_modules/
+packages/*/node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+out/
+cache/
+broadcast/
+coverage/
+lcov.info
+*.tsbuildinfo
+
+# Foundry
+smart-contracts/out/
+smart-contracts/cache/
+smart-contracts/broadcast/
+
+# Circom / snarkjs
+circuits/build/
+circuits/pot*.ptau
+*.zkey
+*.wtns
+verification_key.json
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Host-specific Compose overrides (see docker-compose.override.example.yml)
+docker-compose.override.yml
+compose.override.yml
+*.pem
+*.key
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs / runtime
+logs/
+*.log
+apps/node/data/
+*.sqlite
+*.sqlite-journal
+
+# L2 local data
+l2/data/
+l2/.anvil*
+
+# Nested tool repos
+smart-contracts/lib/**/.git
+
+# vendored forge-std extras (src/ is tracked)
+smart-contracts/lib/forge-std/test/
+smart-contracts/lib/forge-std/.github/
+smart-contracts/lib/forge-std/scripts/

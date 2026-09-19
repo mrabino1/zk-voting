@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#13294b" />
+    <title>Republic L2 explorer</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+    <link rel="stylesheet" href="/explorer.css" />
+  </head>
+  <body class="explorer">
+    <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <div class="nfp-banner" role="note">
+      NOT FOR PROFIT — civic public good. Not a commercial product. No token. No ads.
+    </div>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="Republic home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
+              <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M10 26 V10 h8.5 a5 5 0 0 1 0 10 H10 m8.5 0 L26 26"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Republic</span>
+            <span class="brand-sub">L2 block explorer</span>
+          </span>
+        </a>
+        <nav class="nav-main" aria-label="Primary">
+          <ul>
+            <li><a href="/">Elections</a></li>
+            <li><a href="/register">Register</a></li>
+            <li><a href="/back-office">Back office</a></li>
+            <li><a href="/explorer" aria-current="page">Explorer</a></li>
+            <li><a href="/admin">Admin</a></li>
+          </ul>
+        </nav>
+        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
+        <span class="office-badge">Not for profit</span>
+      </div>
+    </header>
+
+    <main id="main" class="site-main" tabindex="-1">
+      <header class="page-head">
+        <p class="kicker">Republic L2 · chain 27427</p>
+        <h1>Block explorer</h1>
+        <p class="lede">
+          Public record of every block: registrations (commitments only), accepted ballots
+          (nullifier + ballot hash — never the choice), disqualifications, tallies, and
+          rollup batches.         Vote proofs appear only after the hour that contained them closes,
+          so a person leaving a voting office cannot be matched to a live jurisdiction tick.
+          The snapshot below is the last closed UTC hour: disclosed ballot count, when that
+          hour ended, and the countdown to the next update. Choice is never shown here.
+          No ads. No tokens.
+        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Vote proofs and turnout counts are published once an hour, after that hour closes.
+          </p>
+        </aside>
+      </header>
+
+      <section class="explorer-search" aria-label="Search the ledger">
+        <form id="form-search">
+          <label class="field-label" for="q">Search by block number, transaction hash, or nullifier</label>
+          <div class="search-row">
+            <input
+              id="q"
+              name="q"
+              type="search"
+              enterkeyhint="search"
+              spellcheck="false"
+              placeholder="12 · 0xabc… · nullifier"
+              autocomplete="off"
+            />
+            <button class="btn" type="submit">Search</button>
+            <button class="btn btn-secondary" type="button" id="btn-latest">Latest blocks</button>
+          </div>
+        </form>
+        <p class="field-hint">Press <kbd>/</kbd> to focus search. Vote transactions never include choice plaintext.</p>
+        <div class="flash" id="flash-search" role="status"></div>
+      </section>
+
+      <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+      <div id="view" aria-live="polite"></div>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-nfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+      <p class="footer-meta">
+        Republic L2 explorer. Ballot plaintext is not a field on this chain.
+        <a href="/elections">Election results</a>
+        · AGPL-3.0-or-later
+      </p>
+    </footer>
+    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/signin.js"></script>
+    <script src="/explorer.js" defer></script>
+  </body>
+</html>

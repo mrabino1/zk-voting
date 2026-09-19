@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+// NOT FOR PROFIT — civic public good, not a commercial sequencer.
+// Republic L2 sequencer: civic mempool, ~2s blocks, JSON-RPC on 127.0.0.1:8546.
+import { loadConfig, ChainState } from './state.mjs';
+import { createRpcServer } from '../rpc/server.mjs';
+
+const config = loadConfig();
+const state = ChainState.open(config);
+const rpc = createRpcServer(state);
+
+const { host, port } = await rpc.listen();
+state.startProducer();
+
+console.log(
+  `Republic L2 sequencer  chainId=${config.chainId}  rpc=http://${host}:${port}  head=${state.latestNumber}`,
+);
+console.log('NOT FOR PROFIT — our L2, our prover. Voters are gasless. No token.');
+
+const shutdown = async () => {
+  console.log('sequencer stopping');
+  await state.stop();
+  await rpc.close();
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

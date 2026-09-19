@@ -1,0 +1,170 @@
+# NOT FOR PROFIT — civic public good, not a commercial product.
+#
+# Default CI for the zk-voting monorepo. No repository secrets are required:
+# Node and L2 tests are in-process, and Solidity tests use Foundry's MockVerifier
+# (no RPC fork, no Etherscan key, no circom ceremony artifacts).
+#
+# Local equivalents (repo root). Need Node 22+ and Foundry (`foundryup`):
+#
+#   npm install
+#   npm run test:node          # apps/node
+#   npm run test:packages      # @zk-voting/chain-client (L1 tally-hash; no keys)
+#   npm run test:l2            # skipped in CI if l2/test has no *.test.mjs
+#   npm run test:contracts     # forge test --via-ir
+#   npm run test:auditor       # tools/auditor
+#   npm test                   # node + packages + L2 + contracts + auditor
+#
+name: CI
+
+on:
+  push:
+    branches:
+      - test/unstable
+      - master
+  pull_request:
+    branches:
+      - test/unstable
+      - master
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: install / node / l2 / forge
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+          cache: true
+
+      - name: Cache Forge artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.svm
+            smart-contracts/cache
+            smart-contracts/out
+          key: ${{ runner.os }}-forge-via-ir-${{ hashFiles('smart-contracts/foundry.toml', 'smart-contracts/remappings.txt', 'smart-contracts/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-forge-via-ir-
+
+      - name: Install npm workspaces
+        run: npm install --no-audit --no-fund
+
+      - name: Show toolchain
+        run: |
+          node --version
+          npm --version
+          forge --version
+
+      - name: Node tests
+        run: npm run test:node
+
+      - name: Package tests
+        run: npm run test:packages
+
+      - name: L2 tests
+        run: |
+          shopt -s nullglob
+          files=(l2/test/*.test.mjs l2/test/*.test.js)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No L2 tests present under l2/test/; skipping."
+            exit 0
+          fi
+          npm run test:l2
+
+      - name: Forge tests
+        run: npm run test:contracts
+
+      - name: Auditor tests
+        run: npm run test:auditor
+
+      - name: How to run locally
+        if: always()
+        run: |
+          {
+            echo "## Local equivalents"
+            echo
+            echo "From the repository root (Node 22+ and Foundry via \`foundryup\`). No API keys."
+            echo
+            echo '```bash'
+            echo "npm install"
+            echo "npm run test:node          # apps/node"
+            echo "npm run test:packages      # chain-client L1 helpers (no keys)"
+            echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
+            echo "npm run test:contracts     # forge test --via-ir"
+            echo "npm run test:auditor       # tools/auditor"
+            echo "npm test                   # all of the above"
+            echo "docker compose up -d --build"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  compose:
+    name: docker compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+      - name: Build and start
+        run: docker compose up -d --build
+
+      - name: Wait for Node /health
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health | grep -q '"ok":true'; then
+              echo "node healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "node did not become healthy"
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Check L2 /health and eth_chainId
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:8546/health | tee /tmp/l2-health.json
+          grep -q '"ok":true' /tmp/l2-health.json
+          curl -fsS http://127.0.0.1:8546 \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+            | tee /tmp/l2-chain.json
+          grep -q '0x6b23' /tmp/l2-chain.json
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
