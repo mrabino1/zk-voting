@@ -28,16 +28,24 @@ function expandedRoles(store, user) {
 
 function electionsMap(store, user) {
   if (!user) return {};
-  const out = {};
-  for (const election of store.listElections()) {
-    const status = store.voterStatus(election.id, user.id);
-    if (!status.registered) continue;
-    out[String(election.id)] = {
-      status: status.disqualified ? 'disqualified' : 'registered',
-      reasonCode: status.reasonCode,
-    };
-  }
-  return out;
+    const out = {};
+    for (const election of store.listElections()) {
+      const status = store.voterStatus(election.id, user.id);
+      if (status.pending) {
+        out[String(election.id)] = {
+          status: 'pending',
+          requestId: status.requestId,
+          reasonCode: null,
+        };
+        continue;
+      }
+      if (!status.registered) continue;
+      out[String(election.id)] = {
+        status: status.disqualified ? 'disqualified' : 'registered',
+        reasonCode: status.reasonCode,
+      };
+    }
+    return out;
 }
 
 export function meRouter(deps) {

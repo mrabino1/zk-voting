@@ -13,8 +13,10 @@ import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
 import {
   isMfaChallenge,
+  registerEthAccount,
   removeBoundEmail,
   removePasskey,
+  setActiveEthAddress,
   setPrimaryEmail,
   startEmailRegister,
   verifyMfaCode,
@@ -23,7 +25,9 @@ import {
   atEmailCap,
   atPasskeyCap,
   identityCapNote,
+  renderCivicCredentials,
   renderEmailAccounts,
+  renderEthAccounts,
   renderPasskeyAccounts,
 } from "./identity-accounts.js";
 import {
@@ -901,6 +905,36 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
           atPasskeyCap(identity)
             ? h("p", { class: "notice notice-warn", text: "Passkey cap reached (5). Remove one before registering another." })
             : h("p", { class: "field-hint", text: "Add another passkey on Identify yourself. Any of your passkeys can sign in." }),
+          h("h3", { text: "Ethereum addresses" }),
+          h("p", {
+            class: "field-hint",
+            text: "Each extra wallet must sign a challenge. Exactly one address is active for gasless ops. The vote leaf is still the identity commitment.",
+          }),
+          renderEthAccounts(h, identity, {
+            busy: ui.busy,
+            onActive: (row) => run(() => setActiveEthAddress(api, row.address)),
+          }),
+          h(
+            "div",
+            { class: "toolbar" },
+            h("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              disabled: Boolean(ui.busy),
+              text: "Verify another wallet",
+              onClick: () =>
+                run(async () => {
+                  await registerEthAccount(api, { source: "web3" });
+                  ui.info = "Wallet verified.";
+                }),
+            })
+          ),
+          h("h3", { text: "Smart cards and driver’s licenses" }),
+          h("p", {
+            class: "field-hint",
+            text: "Civil officers may revoke a card or license when that registration has expired. Bind additional IDs on Identify yourself.",
+          }),
+          renderCivicCredentials(h, identity, { busy: ui.busy }),
         ]
       : null,
     ui.error ? h("p", { class: "error-inline", role: "alert", text: ui.error }) : null,

@@ -142,7 +142,7 @@ describe('hourly polling-place unlinkability', () => {
     assert.equal(created.json.election.acceptedBallots, 0);
 
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xabc1' },
     });
     assert.equal(reg.status, 201, reg.json?.error);
@@ -350,7 +350,7 @@ describe('disclosure hour-boundary vote', () => {
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.election.id;
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: boundaryVoterJar,
+      jar: boundaryAdminJar,
       body: { identityCommitment: '0xabc1' },
     });
     assert.equal(reg.status, 201, reg.json?.error);

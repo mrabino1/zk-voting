@@ -169,7 +169,10 @@ GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout
 GET  /api/elections/:id/ballots
 GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
 GET  /api/elections/:id/info/:questionId/:optionId
-POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
+POST /api/elections/:id/register    (voter: pending civil review; officer of that jurisdiction: insert now)
+GET  /api/elections/:id/registration-requests
+POST /api/elections/:id/registration-requests/:requestId/approve
+POST /api/elections/:id/registration-requests/:requestId/deny
 POST /api/elections/:id/vote        (relays proof; no passkey identity on the ballot)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
@@ -195,6 +198,11 @@ POST /api/identity/smart-card/verify
 POST /api/identity/civic-id/verify
 POST /api/me/eth-accounts
 POST /api/me/eth-accounts/active
+GET  /api/me/credentials
+GET  /api/office/credentials
+POST /api/persons/:id/methods/:methodId/review
+POST /api/persons/:id/methods/:methodId/revoke
+POST /api/integrations/credentials/status
 POST /api/persons/:id/person-key     (registrar / platform_admin)
 POST /api/persons/:id/methods
 POST /api/persons/:id/eth-accounts

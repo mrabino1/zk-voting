@@ -421,6 +421,9 @@ describe('passkey and email caps (primary email)', () => {
     assert.equal(status, 200);
     assert.equal(json.identity.maxPasskeys, 5);
     assert.equal(json.identity.maxEmails, 5);
+    assert.equal(json.identity.maxSmartCards, 5);
+    assert.equal(json.identity.maxCivicIds, 5);
     assert.equal(json.identity.onePrimaryEmail, true);
+    assert.equal(json.identity.registrationApproval, 'civil_officer');
   });
 });

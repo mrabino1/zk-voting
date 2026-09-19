@@ -235,7 +235,7 @@ describe('outcomes monitor HTTP', () => {
     assert.deepEqual(leakChoice(before.json), []);
 
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0x0a11' },
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -354,7 +354,7 @@ describe('outcomes monitor HTTP', () => {
       cutoffTime: clock + 500,
     });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0x0c01' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });

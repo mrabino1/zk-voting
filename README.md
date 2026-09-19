@@ -588,11 +588,13 @@ The Node stores what the jurisdiction is legally required to keep. That store is
 ### Status the voter should see
 
 - **Not registered**
-- **Pending review** (documents in with the clerk)
+- **Pending review** (the person requested a place on the roll; a registrar or clerk of that election’s jurisdiction has not approved yet)
 - **Registered** (on the roll commitment)
 - **Eligible for election E** (registered, and not disqualified for E)
 - **Disqualified for election E** (registered, but a live disqualification applies)
 - **Ballot recorded** (nullifier spent; the accepted `ballotHash` is what the tally uses; choice not shown)
+
+A voter’s `POST /api/elections/:id/register` is **pending** until civil approval. Officers of that jurisdiction may insert a commitment immediately from the back office. Smart cards and driver’s licenses on the person file can be **revoked** when that civil registration has expired (`GET /api/office/credentials`). Automated DMV lookup is Future (`CREDENTIAL_PROVIDER_SECRET` / `POST /api/integrations/credentials/status`); review is manual today.
 
 ---
 

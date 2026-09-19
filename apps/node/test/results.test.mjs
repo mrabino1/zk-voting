@@ -345,7 +345,7 @@ describe('results API', () => {
     });
     const id = created.json.election.id;
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xabc1' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -418,7 +418,7 @@ describe('results API', () => {
     });
     const id = created.json.election.id;
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xabc2' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });

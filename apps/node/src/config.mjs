@@ -108,6 +108,12 @@ export function getConfig(overrides = {}) {
     sesConfigurationSet: String(process.env.SES_CONFIGURATION_SET || '').trim(),
     sesEndpoint: String(process.env.SES_ENDPOINT || '').trim(),
     sesDryRun: envFlag(process.env.SES_DRY_RUN, false),
+    credentialProviderSecret: String(
+      overrides.credentialProviderSecret ?? process.env.CREDENTIAL_PROVIDER_SECRET ?? '',
+    ).trim(),
+    credentialProviderId: String(
+      overrides.credentialProviderId ?? process.env.CREDENTIAL_PROVIDER_ID ?? 'manual',
+    ).trim() || 'manual',
     requireEmailMfa: (() => {
       if (overrides.requireEmailMfa !== undefined) return Boolean(overrides.requireEmailMfa);
       if (process.env.REQUIRE_EMAIL_MFA !== undefined && process.env.REQUIRE_EMAIL_MFA !== '') {

@@ -16,6 +16,15 @@ import {
 } from './electionIds.mjs';
 import { HttpError } from './http.mjs';
 import {
+  applyCredentialReview,
+  assertCivicIdRoom,
+  assertSmartCardRoom,
+  ensureCredentialFields,
+  isCredentialMethodType,
+  parseExpiresAt,
+  publicCredential,
+} from './credentials.mjs';
+import {
   assertEmailRoom,
   assertPasskeyRoom,
   ensurePersonFields,
@@ -24,6 +33,7 @@ import {
   normalizeEthAddress,
   normalizeFingerprint,
   personEmailMethods,
+  publicIdentity,
   sameEmail,
   sameEthAddress,
   syncPersonEmails,
@@ -87,7 +97,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 5,
+      version: 6,
       nextElectionId: 1,
     },
     users: [],
@@ -95,6 +105,7 @@ function emptyData() {
     jurisdictions: [],
     elections: [],
     registrations: [],
+    registrationRequests: [],
     identityLinks: [],
     disqualifications: [],
     votes: [],
@@ -172,8 +183,9 @@ export class Store {
     store.rebuildAllEligibility();
     if (!Array.isArray(store.data.termsAcceptances)) store.data.termsAcceptances = [];
     if (!Array.isArray(store.data.receipts)) store.data.receipts = [];
+    if (!Array.isArray(store.data.registrationRequests)) store.data.registrationRequests = [];
     store.data.meta = store.data.meta || {};
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 5);
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 6);
     await store.persist();
     return store;
   }
@@ -540,6 +552,8 @@ export class Store {
       return existing.method;
     }
     const emailCountBefore = personEmailMethods(user).length;
+    if (type === 'smart_card' && !existing) assertSmartCardRoom(user);
+    if (type === 'civic_id' && !existing) assertCivicIdRoom(user);
     const method = {
       id: randomUUID(),
       type,
@@ -556,7 +570,21 @@ export class Store {
       kind: fields.kind || null,
       civicIdHash: fields.civicIdHash || (type === 'civic_id' ? fields.fingerprint : null),
       primary: type === 'email' ? emailCountBefore === 0 : undefined,
+      status: isCredentialMethodType(type) ? fields.status || 'active' : undefined,
+      expiresAt: isCredentialMethodType(type)
+        ? fields.expiresAt
+          ? parseExpiresAt(fields.expiresAt)
+          : null
+        : undefined,
+      claimedExpiresAt: isCredentialMethodType(type)
+        ? fields.claimedExpiresAt
+          ? parseExpiresAt(fields.claimedExpiresAt)
+          : null
+        : undefined,
+      provider: isCredentialMethodType(type) ? fields.provider || 'manual' : undefined,
+      providerRef: isCredentialMethodType(type) ? fields.providerRef || null : undefined,
     };
+    if (isCredentialMethodType(type)) ensureCredentialFields(method);
     if (type === 'email' && method.email) {
       try {
         method.email = normalizeEmail(method.email);
@@ -629,7 +657,7 @@ export class Store {
     return { user, method };
   }
 
-  async addEthAccount(userId, { address, source = 'web3', methodId = null }) {
+  async addEthAccount(userId, { address, source = 'web3', methodId = null, verified = true, verifiedBy = 'self' } = {}) {
     const user = this.getUser(userId);
     if (!user) throw new HttpError(404, 'user not found');
     const addr = normalizeEthAddress(address);
@@ -641,17 +669,25 @@ export class Store {
     }
     const existing = user.ethAccounts.find((a) => sameEthAddress(a.address, addr));
     if (existing) {
+      if (verified && !existing.verified) {
+        existing.verified = true;
+        existing.verifiedBy = verifiedBy || 'self';
+        existing.verifiedAt = new Date().toISOString();
+        if (!user.activeEthAddress) user.activeEthAddress = addr;
+        await this.persist();
+      }
       return { user, account: existing, created: false };
     }
     const account = {
       address: addr,
       source: String(source || 'web3'),
-      verified: true,
-      verifiedAt: new Date().toISOString(),
+      verified: Boolean(verified),
+      verifiedBy: verified ? verifiedBy || 'self' : null,
+      verifiedAt: verified ? new Date().toISOString() : null,
       methodId: methodId || null,
     };
     user.ethAccounts.push(account);
-    if (!user.activeEthAddress) user.activeEthAddress = addr;
+    if (verified && !user.activeEthAddress) user.activeEthAddress = addr;
     await this.persist();
     return { user, account, created: true };
   }
@@ -1379,6 +1415,237 @@ export class Store {
     return this.data.envelopes.filter((e) => String(e.electionId) === String(electionId));
   }
 
+  canApproveRegistration(user, election) {
+    if (!user || !election) return false;
+    return this.userHasJurisdictionRole(user, ['registrar', 'clerk'], election.jurisdictionId);
+  }
+
+  publicRegistrationRequest(request) {
+    if (!request) return null;
+    const user = this.getUser(request.userId);
+    return {
+      id: request.id,
+      electionId: String(request.electionId),
+      userId: request.userId,
+      handle: user?.handle || null,
+      identityCommitment: request.identityCommitment,
+      status: request.status,
+      note: request.note || null,
+      requestedAt: request.requestedAt,
+      reviewedAt: request.reviewedAt || null,
+      reviewedBy: request.reviewedBy || null,
+      denyReason: request.denyReason || null,
+      credentials: user
+        ? (user.authMethods || [])
+            .filter((m) => isCredentialMethodType(m.type))
+            .map((m) => publicCredential(m, { officer: true }))
+        : [],
+      ethAccounts: user ? publicIdentity(user).ethAccounts : [],
+    };
+  }
+
+  listRegistrationRequests(electionId, { status } = {}) {
+    const id = String(electionId);
+    return this.data.registrationRequests
+      .filter((r) => String(r.electionId) === id && (!status || r.status === status))
+      .map((r) => this.publicRegistrationRequest(r));
+  }
+
+  getRegistrationRequest(electionId, requestId) {
+    const rec = this.data.registrationRequests.find(
+      (r) => String(r.electionId) === String(electionId) && r.id === String(requestId),
+    );
+    return rec || null;
+  }
+
+  findPendingRequestForUser(electionId, userId) {
+    return (
+      this.data.registrationRequests.find(
+        (r) =>
+          String(r.electionId) === String(electionId) &&
+          r.userId === userId &&
+          r.status === 'pending',
+      ) || null
+    );
+  }
+
+  findPendingRequestForCommitment(electionId, identityCommitment) {
+    let key;
+    try {
+      key = toBytes32(identityCommitment);
+    } catch {
+      return null;
+    }
+    return (
+      this.data.registrationRequests.find(
+        (r) =>
+          String(r.electionId) === String(electionId) &&
+          r.identityCommitment === key &&
+          r.status === 'pending',
+      ) || null
+    );
+  }
+
+  async createRegistrationRequest(electionId, { userId, identityCommitment, note } = {}) {
+    const election = this.requireElection(electionId);
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll is frozen', { code: 'ROLL_FROZEN' });
+    }
+    if (election.tally) throw new HttpError(409, 'election already tallied');
+    if (!userId) throw new HttpError(400, 'userId required');
+    const key = toBytes32(identityCommitment);
+    if (this.isRegistered(election.id, key)) {
+      throw new HttpError(409, 'already registered', { code: 'DUPLICATE_COMMITMENT' });
+    }
+    if (this.findLink(election.id, userId)) {
+      throw new HttpError(409, 'already registered for this election', { code: 'ALREADY_REGISTERED' });
+    }
+    const pendingSameUser = this.findPendingRequestForUser(election.id, userId);
+    if (pendingSameUser) {
+      throw new HttpError(409, 'registration already pending civil review', {
+        code: 'REQUEST_PENDING',
+        requestId: pendingSameUser.id,
+      });
+    }
+    const pendingSameLeaf = this.findPendingRequestForCommitment(election.id, key);
+    if (pendingSameLeaf && pendingSameLeaf.userId !== userId) {
+      throw new HttpError(409, 'this identity commitment is already pending for another person', {
+        code: 'COMMITMENT_PENDING',
+      });
+    }
+    if (pendingSameLeaf) {
+      return { election, request: pendingSameLeaf, created: false };
+    }
+    const request = {
+      id: randomUUID(),
+      electionId: String(election.id),
+      userId,
+      identityCommitment: key,
+      status: 'pending',
+      note: note ? String(note).slice(0, 500) : null,
+      requestedAt: new Date().toISOString(),
+      reviewedAt: null,
+      reviewedBy: null,
+      denyReason: null,
+    };
+    this.data.registrationRequests.push(request);
+    await this.persist();
+    return { election, request, created: true };
+  }
+
+  async approveRegistrationRequest(electionId, requestId, { reviewer } = {}) {
+    const election = this.requireElection(electionId);
+    const request = this.getRegistrationRequest(election.id, requestId);
+    if (!request) throw new HttpError(404, 'registration request not found');
+    if (request.status === 'approved') {
+      const row = this.listRegistrations(election.id).find(
+        (r) => r.identityCommitment === request.identityCommitment,
+      );
+      return {
+        election,
+        request,
+        alreadyApproved: true,
+        identityCommitment: request.identityCommitment,
+        leafIndex: row?.leafIndex ?? null,
+        eligibleRoot: election.eligibleRoot,
+      };
+    }
+    if (request.status !== 'pending') {
+      throw new HttpError(409, 'registration request is not pending', {
+        code: 'REQUEST_NOT_PENDING',
+        status: request.status,
+      });
+    }
+    const result = await this.registerCommitment(election.id, request.identityCommitment, {
+      userId: request.userId,
+    });
+    request.status = 'approved';
+    request.reviewedAt = new Date().toISOString();
+    request.reviewedBy = reviewer?.id || reviewer?.handle || null;
+    await this.persist();
+    return { ...result, request };
+  }
+
+  async denyRegistrationRequest(electionId, requestId, { reviewer, reason } = {}) {
+    const election = this.requireElection(electionId);
+    const request = this.getRegistrationRequest(election.id, requestId);
+    if (!request) throw new HttpError(404, 'registration request not found');
+    if (request.status !== 'pending') {
+      throw new HttpError(409, 'registration request is not pending', {
+        code: 'REQUEST_NOT_PENDING',
+        status: request.status,
+      });
+    }
+    request.status = 'denied';
+    request.reviewedAt = new Date().toISOString();
+    request.reviewedBy = reviewer?.id || reviewer?.handle || null;
+    request.denyReason = reason ? String(reason).slice(0, 500) : 'DENIED';
+    await this.persist();
+    return { election, request };
+  }
+
+  getAuthMethod(userId, methodId) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const method = (user.authMethods || []).find((m) => m.id === String(methodId));
+    if (!method) throw new HttpError(404, 'credential not found', { code: 'CREDENTIAL_NOT_FOUND' });
+    return { user, method };
+  }
+
+  async reviewCredential(userId, methodId, patch, actor) {
+    const { user, method } = this.getAuthMethod(userId, methodId);
+    if (!isCredentialMethodType(method.type)) {
+      throw new HttpError(400, 'only smart cards and civic IDs can be reviewed this way');
+    }
+    applyCredentialReview(method, patch, actor);
+    await this.persist();
+    return { user, method };
+  }
+
+  listOfficeCredentials({ type, status } = {}) {
+    const out = [];
+    for (const user of this.data.users) {
+      ensurePersonFields(user);
+      for (const method of user.authMethods || []) {
+        if (!isCredentialMethodType(method.type)) continue;
+        if (type && method.type !== type) continue;
+        const pub = publicCredential(method, { officer: true });
+        if (status && pub.status !== status) continue;
+        out.push({
+          ...pub,
+          personId: user.id,
+          handle: user.handle,
+        });
+      }
+    }
+    out.sort((a, b) => String(a.handle || '').localeCompare(String(b.handle || '')));
+    return out;
+  }
+
+  findCredentialBySelector({ methodId, civicIdHash, fingerprint, personId } = {}) {
+    const wantMethod = methodId ? String(methodId) : '';
+    const wantCivic = civicIdHash ? String(civicIdHash).toLowerCase() : '';
+    const wantFp = fingerprint ? String(fingerprint).toLowerCase() : '';
+    for (const user of this.data.users) {
+      if (personId && user.id !== personId) continue;
+      ensurePersonFields(user);
+      for (const method of user.authMethods || []) {
+        if (!isCredentialMethodType(method.type)) continue;
+        if (wantMethod && method.id === wantMethod) return { user, method };
+        if (
+          wantCivic &&
+          String(method.civicIdHash || method.fingerprint || '').toLowerCase() === wantCivic
+        ) {
+          return { user, method };
+        }
+        if (wantFp && String(method.fingerprint || '').toLowerCase() === wantFp) {
+          return { user, method };
+        }
+      }
+    }
+    return null;
+  }
+
   listRegistrations(electionId) {
     return this.data.registrations.filter((r) => String(r.electionId) === String(electionId));
   }
@@ -1601,19 +1868,36 @@ export class Store {
 
   voterStatus(electionId, userId) {
     const link = this.findLink(electionId, userId);
+    const pending = this.findPendingRequestForUser(electionId, userId);
+    const denied =
+      !pending &&
+      [...this.data.registrationRequests]
+        .reverse()
+        .find(
+          (r) =>
+            String(r.electionId) === String(electionId) &&
+            r.userId === userId &&
+            r.status === 'denied',
+        );
     if (!link) {
       return {
         registered: false,
+        pending: Boolean(pending),
+        requestId: pending?.id || denied?.id || null,
+        requestStatus: pending ? 'pending' : denied ? 'denied' : null,
         disqualified: false,
         eligible: false,
         reasonCode: null,
-        identityCommitment: null,
+        identityCommitment: pending?.identityCommitment || denied?.identityCommitment || null,
       };
     }
     const dq = this.isDisqualified(electionId, link.identityCommitment);
     const disqualified = Boolean(dq);
     return {
       registered: true,
+      pending: false,
+      requestId: null,
+      requestStatus: 'approved',
       disqualified,
       eligible: !disqualified,
       reasonCode: dq ? dq.reasonCode : null,

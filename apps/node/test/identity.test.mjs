@@ -123,9 +123,14 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
     assert.equal(config.json.identity.onePrimaryEmail, true);
     assert.equal(config.json.identity.maxPasskeys, 5);
     assert.equal(config.json.identity.maxEmails, 5);
+    assert.equal(config.json.identity.maxSmartCards, 5);
+    assert.equal(config.json.identity.maxCivicIds, 5);
+    assert.equal(config.json.identity.registrationApproval, 'civil_officer');
     assert.deepEqual(config.json.identity.methods, ['email', 'web3', 'smart_card', 'civic_id', 'passkey']);
     assert.equal(methods.json.caps.emails, 5);
     assert.equal(methods.json.caps.passkeys, 5);
+    assert.equal(methods.json.caps.smartCards, 5);
+    assert.equal(methods.json.caps.civicIds, 5);
     assert.equal(methods.json.onePrimaryEmail, true);
   });
 
@@ -147,9 +152,20 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
   });
 
   test('a person may verify many ETH addresses internally and switch the one active address', async () => {
+    const challenge = await api('POST', '/api/identity/web3/challenge', {
+      jar: aliceJar,
+      body: { address: account1.address },
+    });
+    assert.equal(challenge.status, 200, challenge.json?.error);
+    const signature = await account1.signMessage({ message: challenge.json.message });
     const second = await api('POST', '/api/me/eth-accounts', {
       jar: aliceJar,
-      body: { address: account1.address, source: 'passkey' },
+      body: {
+        address: account1.address,
+        signature,
+        nonce: challenge.json.nonce,
+        source: 'web3',
+      },
     });
     assert.equal(second.status, 201, second.json?.error);
     assert.equal(second.json.identity.verifiedEthAddressCount, 2);
@@ -208,8 +224,24 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
       jar: bobJar,
       body: { address: account0.address },
     });
-    assert.equal(grab.status, 409);
-    assert.equal(grab.json.code, 'ADDRESS_OWNED');
+    assert.equal(grab.status, 400);
+    assert.equal(grab.json.code, 'SIGNATURE_REQUIRED');
+
+    const stealChal = await api('POST', '/api/identity/web3/challenge', {
+      jar: bobJar,
+      body: { address: account0.address },
+    });
+    const stealSig = await account0.signMessage({ message: stealChal.json.message });
+    const stealAcct = await api('POST', '/api/me/eth-accounts', {
+      jar: bobJar,
+      body: {
+        address: account0.address,
+        signature: stealSig,
+        nonce: stealChal.json.nonce,
+      },
+    });
+    assert.equal(stealAcct.status, 409);
+    assert.equal(stealAcct.json.code, 'ADDRESS_OWNED');
   });
 
   test('smart-card mock bind uniquely identifies a person', async () => {

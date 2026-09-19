@@ -180,7 +180,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     assert.equal(created.json.election.questions[0].ballotMethod, 'ranked_choice');
 
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0x51' },
     });
     assert.equal(reg.status, 201, reg.json?.error);
@@ -235,7 +235,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.election.id;
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0x61' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -290,7 +290,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     const id = created.json.election.id;
     assert.equal(created.json.election.ballotMethod, 'plurality');
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0x71' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });

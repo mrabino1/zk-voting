@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../http.mjs';
 import { disclosurePublicView } from '../disclosure.mjs';
 import { AUTH_METHOD_TYPES, identityCaps } from '../identity.mjs';
+import { credentialProviderPublic } from '../credentials.mjs';
 import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 
 export function healthRouter(deps) {
@@ -110,8 +111,12 @@ export function configRouter(deps) {
           onePrimaryEmail: true,
           maxPasskeys: identityCaps().passkeys,
           maxEmails: identityCaps().emails,
+          maxSmartCards: identityCaps().smartCards,
+          maxCivicIds: identityCaps().civicIds,
           civicIdKinds: ['drivers_license', 'passport'],
-          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Up to 5 passkeys and 5 emails; exactly one email is primary. Only one Ethereum address is active. Document images and full ID numbers are not stored.',
+          credentialProvider: credentialProviderPublic(deps.config),
+          registrationApproval: 'civil_officer',
+          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 licenses/passports; exactly one email is primary. Extra Ethereum addresses must be signature-verified. Only one Ethereum address is active. A voter requests election registration; a registrar or clerk of that election’s jurisdiction approves. Civil officers may revoke an expired card or license. Document images and full ID numbers are not stored.',
         },
         tally: {
           schemes: ['sum_only', 'opens_ballots'],

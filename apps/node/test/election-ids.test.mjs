@@ -217,7 +217,7 @@ describe('election UUID + short code', () => {
     assert.match(votePage.text, /NOT FOR PROFIT/);
 
     const regShort = await api('POST', `/api/elections/${short}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xabc1' },
     });
     assert.equal(regShort.status, 201, regShort.json?.error);

@@ -186,11 +186,11 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('disqualify rebuilds eligibleRoot as registered ∩ ¬currently-disqualified', async () => {
     const id = await createOpenElection({ title: 'Rebuild eligible' });
     const a = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xa1' },
     });
     const b = await api('POST', `/api/elections/${id}/register`, {
-      jar: voter2Jar,
+      jar: adminJar,
       body: { identityCommitment: '0xb2' },
     });
     assert.equal(a.status, 201, a.json?.error);
@@ -216,11 +216,11 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('disqualified person cannot vote; still-eligible peer can', async () => {
     const id = await createOpenElection({ title: 'Block vote' });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xc1' },
     });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voter2Jar,
+      jar: adminJar,
       body: { identityCommitment: '0xc2' },
     });
     const dq = await api('POST', `/api/elections/${id}/disqualify`, {
@@ -253,7 +253,7 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('unregistered commitment cannot vote', async () => {
     const id = await createOpenElection({ title: 'Unregistered' });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xd1' },
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -266,7 +266,7 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('Node path requires identityCommitment', async () => {
     const id = await createOpenElection({ title: 'Need commitment' });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xe1' },
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -285,7 +285,7 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('revoke restores the ability to vote if still registered and freeze has not locked the roll', async () => {
     const id = await createOpenElection({ title: 'Revoke restores' });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xf1' },
     });
     const dq = await api('POST', `/api/elections/${id}/disqualify`, {
@@ -313,7 +313,7 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('after freeze, revoke is rejected unless lateUpdateAllowed', async () => {
     const id = await createOpenElection({ title: 'Frozen revoke' });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xf2' },
     });
     await api('POST', `/api/elections/${id}/disqualify`, {
@@ -344,7 +344,7 @@ describe('reason codes and Node disqualification vote gate', () => {
   test('lateUpdateAllowed: post-freeze disqualify blocks, revoke restores', async () => {
     const id = await createOpenElection({ title: 'Late update', lateUpdateAllowed: true });
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xf3' },
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });

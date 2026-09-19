@@ -975,6 +975,32 @@ textarea {
   padding: 0.12rem 0.45rem;
 }
 
+.pill-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--line);
+}
+
+.pill-status.status-active {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.pill-status.status-pending_review {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.pill-status.status-revoked,
+.pill-status.status-expired {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 dl.status-dl {
   display: grid;
   grid-template-columns: 11rem 1fr;

@@ -2,11 +2,18 @@
 // Bind email / web3 wallet / smart-card / civic ID / passkey to one person.
 // Many internally verified ETH addresses; exactly one active.
 
+import { timingSafeEqual } from 'node:crypto';
+
 import { Router } from 'express';
 import { keccak256, stringToHex } from 'viem';
 
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireAnyJurisdictionRole, publicUser } from '../auth.mjs';
+import {
+  credentialProviderPublic,
+  isCredentialMethodType,
+  publicCredential,
+} from '../credentials.mjs';
 import {
   AUTH_METHOD_CATALOG,
   assertEmailRoom,
@@ -26,6 +33,13 @@ import {
   verifyWeb3Bind,
 } from '../identity.mjs';
 import { requireAcceptedTerms } from '../terms.mjs';
+
+function providerSecretsEqual(expected, provided) {
+  const a = Buffer.from(String(expected || ''));
+  const b = Buffer.from(String(provided || ''));
+  if (!a.length || a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 export function identityRouter(deps) {
   const { store, config, mfa } = deps;
@@ -49,7 +63,8 @@ export function identityRouter(deps) {
       },
       caps: identityCaps(),
       onePrimaryEmail: true,
-      note: 'A person may verify every method. Up to 5 passkeys and 5 emails; exactly one email is primary. Only one Ethereum address is active. Sign-in completes with email MFA when SES is configured.',
+      credentialProvider: credentialProviderPublic(config),
+      note: 'A person may verify every method. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 driver’s licenses or passports; exactly one email is primary. Only one Ethereum address is active. Additional Ethereum addresses must be signature-verified. Civil officers may revoke an expired card or license. Sign-in completes with email MFA when SES is configured.',
     });
   });
 
@@ -233,6 +248,8 @@ export function identityRouter(deps) {
         fingerprint,
         subject: req.body?.subject || null,
         issuer: req.body?.issuer || null,
+        claimedExpiresAt: req.body?.expiresAt || req.body?.claimedExpiresAt || null,
+        expiresAt: null,
         label: req.body?.label || 'Smart card digital ID',
         verifiedBy: 'self',
       });
@@ -288,6 +305,7 @@ export function identityRouter(deps) {
         issuer,
         label: civicIdLabel(kind),
         verifiedBy: mockOk ? 'self' : 'registrar',
+        claimedExpiresAt: req.body?.expiresAt || req.body?.claimedExpiresAt || null,
       });
       const payload = await mfa.completeFactor(res, {
         user: store.getUser(user.id),
@@ -363,13 +381,64 @@ export function identityRouter(deps) {
     requireAuth,
     asyncHandler(async (req, res) => {
       const address = normalizeEthAddress(req.body?.address);
-      const source = String(req.body?.source || 'passkey');
+      const signature = req.body?.signature;
+      if (!signature) {
+        throw new HttpError(400, 'signature required to verify this Ethereum address', {
+          code: 'SIGNATURE_REQUIRED',
+        });
+      }
+      const pending =
+        challenges.take(`web3:${address.toLowerCase()}`) || challenges.take(req.body?.nonce);
+      if (!pending || pending.type !== 'web3') {
+        throw new HttpError(400, 'no web3 challenge');
+      }
+      if (normalizeEthAddress(pending.address) !== address) {
+        throw new HttpError(400, 'address mismatch');
+      }
+      await verifyWeb3Bind({ address, message: pending.message, signature });
+      const owner = store.findUserByEthAddress(address);
+      if (owner && owner.id !== req.user.id) {
+        throw new HttpError(409, 'Ethereum address already bound to another person', {
+          code: 'ADDRESS_OWNED',
+        });
+      }
       const { user } = await store.addEthAccount(req.user.id, {
         address,
-        source,
+        source: String(req.body?.source || 'web3'),
         methodId: req.body?.methodId || null,
+        verified: true,
+        verifiedBy: 'self',
       });
       res.status(201).json({ nfp: true, identity: publicIdentity(user) });
+    }),
+  );
+
+  router.get(
+    '/me/eth-accounts',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const identity = publicIdentity(req.user);
+      res.json({
+        nfp: true,
+        ethAccounts: identity.ethAccounts,
+        activeEthAddress: identity.activeEthAddress,
+        verifiedEthAddressCount: identity.verifiedEthAddressCount,
+      });
+    }),
+  );
+
+  router.get(
+    '/me/credentials',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const identity = publicIdentity(req.user);
+      res.json({
+        nfp: true,
+        credentials: identity.credentials,
+        smartCardCount: identity.smartCardCount,
+        civicIdCount: identity.civicIdCount,
+        caps: identity.caps,
+      });
     }),
   );
 
@@ -419,6 +488,11 @@ export function identityRouter(deps) {
         email: req.body?.email ? normalizeEmail(req.body.email) : null,
         kind: req.body?.kind || null,
         civicIdHash: req.body?.civicIdHash || null,
+        expiresAt: req.body?.expiresAt || null,
+        claimedExpiresAt: req.body?.claimedExpiresAt || null,
+        status: req.body?.status || 'active',
+        provider: req.body?.provider || 'manual',
+        providerRef: req.body?.providerRef || null,
       };
       if (type === 'civic_id') {
         if (!isCivicIdKind(fields.kind)) throw new HttpError(400, 'invalid civic id kind');
@@ -459,6 +533,8 @@ export function identityRouter(deps) {
       const { user } = await store.addEthAccount(req.params.id, {
         address: req.body?.address,
         source: req.body?.source || 'registrar',
+        verified: true,
+        verifiedBy: 'registrar',
       });
       res.status(201).json({ nfp: true, identity: publicIdentity(user) });
     }),
@@ -471,6 +547,143 @@ export function identityRouter(deps) {
     asyncHandler(async (req, res) => {
       const user = await store.setActiveEthAddress(req.params.id, req.body?.address);
       res.json({ nfp: true, identity: publicIdentity(user), activeEthAddress: user.activeEthAddress });
+    }),
+  );
+
+  router.get(
+    '/persons/:id/identity',
+    requireAuth,
+    requireAnyJurisdictionRole(store, 'registrar', 'clerk'),
+    asyncHandler(async (req, res) => {
+      const user = store.getUser(req.params.id);
+      if (!user) throw new HttpError(404, 'user not found');
+      res.json({
+        nfp: true,
+        user: publicUser(user),
+        identity: publicIdentity(user),
+        credentials: (user.authMethods || [])
+          .filter((m) => isCredentialMethodType(m.type))
+          .map((m) => publicCredential(m, { officer: true })),
+      });
+    }),
+  );
+
+  router.get(
+    '/office/credentials',
+    requireAuth,
+    requireAnyJurisdictionRole(store, 'registrar', 'clerk'),
+    asyncHandler(async (req, res) => {
+      const type = req.query?.type ? String(req.query.type) : undefined;
+      const status = req.query?.status ? String(req.query.status) : undefined;
+      res.json({
+        nfp: true,
+        credentials: store.listOfficeCredentials({ type, status }),
+        provider: credentialProviderPublic(config),
+      });
+    }),
+  );
+
+  router.post(
+    '/persons/:id/methods/:methodId/review',
+    requireAuth,
+    requireAnyJurisdictionRole(store, 'registrar', 'clerk'),
+    asyncHandler(async (req, res) => {
+      const { user, method } = await store.reviewCredential(
+        req.params.id,
+        req.params.methodId,
+        {
+          status: req.body?.status,
+          expiresAt: req.body?.expiresAt,
+          claimedExpiresAt: req.body?.claimedExpiresAt,
+          reason: req.body?.reason || req.body?.revokeReason,
+          provider: req.body?.provider,
+          providerRef: req.body?.providerRef,
+          verifiedBy: 'registrar',
+        },
+        req.user,
+      );
+      res.json({
+        nfp: true,
+        identity: publicIdentity(user),
+        credential: publicCredential(method, { officer: true }),
+      });
+    }),
+  );
+
+  router.post(
+    '/persons/:id/methods/:methodId/revoke',
+    requireAuth,
+    requireAnyJurisdictionRole(store, 'registrar', 'clerk'),
+    asyncHandler(async (req, res) => {
+      const { user, method } = await store.reviewCredential(
+        req.params.id,
+        req.params.methodId,
+        {
+          status: 'revoked',
+          reason: req.body?.reason || req.body?.revokeReason || 'MANUAL',
+          expiresAt: req.body?.expiresAt,
+          verifiedBy: 'registrar',
+        },
+        req.user,
+      );
+      res.json({
+        nfp: true,
+        identity: publicIdentity(user),
+        credential: publicCredential(method, { officer: true }),
+      });
+    }),
+  );
+
+  router.post(
+    '/integrations/credentials/status',
+    asyncHandler(async (req, res) => {
+      const secret = String(config.credentialProviderSecret || '').trim();
+      if (!secret) {
+        throw new HttpError(
+          501,
+          'No credential provider secret is configured. Civil officers review smart cards and driver’s licenses by hand.',
+          { code: 'CREDENTIAL_PROVIDER_MANUAL', provider: credentialProviderPublic(config) },
+        );
+      }
+      const provided = String(
+        req.headers['x-republic-provider-secret'] ||
+          String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''),
+      );
+      if (!providerSecretsEqual(secret, provided)) {
+        throw new HttpError(401, 'invalid credential provider secret', {
+          code: 'PROVIDER_UNAUTHORIZED',
+        });
+      }
+      const found = store.findCredentialBySelector({
+        methodId: req.body?.methodId || req.body?.credentialId,
+        civicIdHash: req.body?.civicIdHash,
+        fingerprint: req.body?.fingerprint
+          ? normalizeFingerprint(req.body.fingerprint)
+          : null,
+        personId: req.body?.personId,
+      });
+      if (!found) {
+        throw new HttpError(404, 'credential not found', { code: 'CREDENTIAL_NOT_FOUND' });
+      }
+      const { user, method } = await store.reviewCredential(
+        found.user.id,
+        found.method.id,
+        {
+          status: req.body?.status,
+          expiresAt: req.body?.expiresAt,
+          reason: req.body?.reason || 'PROVIDER',
+          provider: req.body?.provider || config.credentialProviderId || 'manual',
+          providerRef: req.body?.providerRef,
+          verifiedBy: 'provider',
+        },
+        { id: 'credential-provider', handle: req.body?.provider || 'provider' },
+      );
+      res.json({
+        nfp: true,
+        ok: true,
+        personId: user.id,
+        credential: publicCredential(method, { officer: true }),
+      });
     }),
   );
 
