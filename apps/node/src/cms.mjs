@@ -23,6 +23,7 @@ export const RESERVED_SLUGS = new Set([
   'index',
   'me',
   'monitor',
+  'o',
   'office',
   'outcomes',
   'p',

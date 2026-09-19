@@ -351,6 +351,28 @@
     }
   }
 
+  async function loadOutcomeTemplate() {
+    const form = $("form-outcome-pdf");
+    if (!form) return;
+    try {
+      const data = await request("/api/admin/outcome-report-template");
+      const t = data.template || {};
+      $("op-heading").value = t.heading || "";
+      $("op-letterhead").value = t.letterhead || "";
+      $("op-intro").value = t.intro || "";
+      $("op-footer").value = t.footer || "";
+      $("op-contact").value = t.contactLine || "";
+      $("op-jurisdiction").checked = t.showJurisdiction !== false;
+      if (t.authenticity) {
+        $("op-locked-note").textContent =
+          t.authenticity.note ||
+          "Locked: QR verification, SHA-256 of the PDF bytes, and HMAC integrity. Admins cannot turn these off.";
+      }
+    } catch (err) {
+      flash($("flash-outcome-pdf"), "err", errText(err));
+    }
+  }
+
   $("form-jurisdiction").addEventListener("submit", async (event) => {
     event.preventDefault();
     const body = {
@@ -453,8 +475,62 @@
   const refreshOfficers = $("btn-refresh-o");
   if (refreshOfficers) refreshOfficers.addEventListener("click", () => loadJurisdictions());
 
+  const outcomeForm = $("form-outcome-pdf");
+  if (outcomeForm) {
+    outcomeForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await request("/api/admin/outcome-report-template", {
+          method: "PATCH",
+          body: {
+            heading: $("op-heading").value,
+            letterhead: $("op-letterhead").value,
+            intro: $("op-intro").value,
+            footer: $("op-footer").value,
+            contactLine: $("op-contact").value,
+            showJurisdiction: $("op-jurisdiction").checked,
+          },
+        });
+        flash($("flash-outcome-pdf"), "ok", "Saved. QR and hash seals remain required.");
+      } catch (err) {
+        flash($("flash-outcome-pdf"), "err", errText(err));
+      }
+    });
+  }
+  const previewBtn = $("btn-outcome-preview");
+  if (previewBtn) {
+    previewBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/admin/outcome-report-template/preview", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", Accept: "application/pdf" },
+          body: JSON.stringify({
+            heading: $("op-heading").value,
+            letterhead: $("op-letterhead").value,
+            intro: $("op-intro").value,
+            footer: $("op-footer").value,
+            contactLine: $("op-contact").value,
+            showJurisdiction: $("op-jurisdiction").checked,
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || res.statusText);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank", "noopener");
+        flash($("flash-outcome-pdf"), "ok", "Opened a locked preview. Authenticity page is required.");
+      } catch (err) {
+        flash($("flash-outcome-pdf"), "err", errText(err));
+      }
+    });
+  }
+
   loadHealth();
   loadMe();
   loadJurisdictions();
   loadUsers();
+  loadOutcomeTemplate();
 })();

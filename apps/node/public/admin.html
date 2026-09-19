@@ -291,6 +291,54 @@
         </div>
       </section>
 
+      <section class="panel" aria-labelledby="outcome-pdf-heading">
+        <header>
+          <h2 id="outcome-pdf-heading">Official outcome PDF</h2>
+        </header>
+        <p class="field-hint">
+          Customize the letterhead and intro for official reports emailed after voting time
+          expires. The QR verification mark and SHA-256 / HMAC seals are always included and
+          cannot be removed.
+        </p>
+        <form id="form-outcome-pdf" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="op-heading">Heading</label>
+            <input id="op-heading" name="heading" maxlength="120" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-letterhead">Letterhead</label>
+            <input id="op-letterhead" name="letterhead" maxlength="160" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-intro">Intro</label>
+            <textarea id="op-intro" name="intro" rows="4" maxlength="4000"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-footer">Footer</label>
+            <input id="op-footer" name="footer" maxlength="500" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-contact">Contact line</label>
+            <input id="op-contact" name="contactLine" maxlength="240" />
+          </div>
+          <div class="field">
+            <label class="field-label">
+              <input id="op-jurisdiction" name="showJurisdiction" type="checkbox" checked />
+              Show jurisdiction name
+            </label>
+          </div>
+          <p class="field-hint" id="op-locked-note">
+            Locked: QR verification, SHA-256 of the PDF bytes, and HMAC integrity. Admins cannot
+            turn these off.
+          </p>
+          <div class="actions">
+            <button class="btn" type="submit">Save template</button>
+            <button class="btn btn-secondary" type="button" id="btn-outcome-preview">Preview PDF</button>
+          </div>
+          <div class="flash" id="flash-outcome-pdf" role="status"></div>
+        </form>
+      </section>
+
       <section class="panel danger-none" aria-labelledby="danger-heading">
         <h2 id="danger-heading">Danger zone</h2>
         <p>

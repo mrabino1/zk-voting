@@ -6,7 +6,7 @@
  * `/office`, `/office/pages`, `/office/site`,
  * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
  * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/receipt`,
- * `/outcomes`, `/outcomes/:id`, `/monitor`
+ * `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/monitor`
  */
 
 import { isStandaloneHtmlPath } from "./audience.js";
@@ -64,6 +64,9 @@ export function parseRoute(loc = window.location) {
     };
   }
   if (path === "/receipt" || path === "/proof") return { name: "receipt", path, params: {}, query };
+  if (path === "/outcomes/verify" || path === "/monitor/verify") {
+    return { name: "outcomeVerify", path, params: {}, query };
+  }
   if (path === "/outcomes" || path === "/monitor") return { name: "outcomes", path, params: {}, query };
   const outcome = path.match(/^\/(?:outcomes|monitor)\/([^/]+)$/);
   if (outcome) {
