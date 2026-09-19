@@ -39,11 +39,10 @@
         </a>
         <nav class="nav-main" aria-label="Primary">
           <ul>
-            <li><a href="/">Elections</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/signin">Sign in</a></li>
             <li><a href="/register">Register</a></li>
-            <li><a href="/back-office">Back office</a></li>
-            <li><a href="/explorer" aria-current="page">Explorer</a></li>
-            <li><a href="/admin">Admin</a></li>
           </ul>
         </nav>
         <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
@@ -101,11 +100,16 @@
       <p class="footer-meta">
         Republic L2 explorer. Ballot plaintext is not a field on this chain.
         <a href="/elections">Election results</a>
+        ·
+        <a href="/about">About</a>
+        ·
+        <a href="/faq">FAQ</a>
         · AGPL-3.0-or-later
       </p>
     </footer>
     <script src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
+    <script type="module" src="/audience-chrome.js"></script>
     <script src="/explorer.js" defer></script>
   </body>
 </html>

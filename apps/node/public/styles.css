@@ -1207,6 +1207,80 @@ a.session-chrome-btn:hover {
   margin-top: 0;
 }
 
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 1rem 0 0;
+}
+
+.prose {
+  max-width: 46rem;
+}
+
+.faq-list {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 52rem;
+}
+
+.faq-item {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 0.15rem 0.9rem 0.15rem;
+}
+
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-family: var(--font-serif);
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item .faq-a {
+  padding: 0 0 0.75rem;
+}
+
+.audience-gate {
+  margin: 1rem 0 1.5rem;
+}
+
+.office-hub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 1.25rem;
+}
+
+.office-hub a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  text-decoration: none;
+  font-weight: 650;
+}
+
+.office-hub a[aria-current="page"] {
+  border-color: var(--navy);
+  background: var(--info-bg);
+}
+
+.hub-cards h2 {
+  margin-top: 0;
+}
+
 @media print {
   .skip-link,
   .nfp-banner,

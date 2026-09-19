@@ -44,7 +44,7 @@ export async function fetchJson(path, options = {}) {
 
 export async function loadAuthState() {
   const [me, config] = await Promise.all([
-    fetchJson("/api/me").catch(() => ({ user: null, identity: null })),
+    fetchJson("/api/me").catch(() => ({ user: null, identity: null, audience: "public", officer: false })),
     fetchJson("/api/config").catch(() => ({ auth: {} })),
   ]);
   return {
@@ -52,6 +52,10 @@ export async function loadAuthState() {
     identity: me?.identity || null,
     allowDevLogin: Boolean(config?.auth?.allowDevLogin),
     config,
+    me,
+    audience: me?.audience || (me?.user ? "registered" : "public"),
+    officer: Boolean(me?.officer),
+    jurisdictionRoles: me?.jurisdictionRoles || [],
   };
 }
 
@@ -353,12 +357,11 @@ export function mountSessionChrome(root) {
       );
       return;
     }
-    const panel = document.getElementById("sign-in-root");
-    const href = panel ? `#${panel.id}` : "/#sign-in";
     root.replaceChildren(
       el("a", {
         class: "btn btn-secondary session-chrome-btn",
-        href,
+        href: "/signin",
+        "data-nav": "",
         text: "Sign in",
       })
     );

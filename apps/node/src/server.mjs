@@ -59,6 +59,21 @@ function htmlCandidate(config, pathname) {
   ];
 }
 
+const OFFICE_PAGE_RE = /^\/(admin|back-office|office)(\/|$)/i;
+
+function officePageGuard() {
+  return function officeGuardMiddleware(req, res, next) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const clean = req.path.replace(/\/+$/, '') || '/';
+    if (!OFFICE_PAGE_RE.test(clean) && !/^\/(admin|back-office)\.html$/i.test(clean)) {
+      return next();
+    }
+    if (req.user) return next();
+    const nextUrl = req.originalUrl || clean;
+    res.redirect(302, `/signin?next=${encodeURIComponent(nextUrl)}`);
+  };
+}
+
 function electionShortLinks(store) {
   return function shortLinkMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
@@ -148,6 +163,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(electionShortLinks(store));
+  app.use(officePageGuard());
   app.use(express.static(config.distDir));
   app.use(express.static(config.publicDir));
   app.use(spaFallback(config));

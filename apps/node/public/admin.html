@@ -39,11 +39,10 @@
         </a>
         <nav class="nav-main" aria-label="Primary">
           <ul>
-            <li><a href="/">Elections</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/signin">Sign in</a></li>
             <li><a href="/register">Register</a></li>
-            <li><a href="/back-office">Back office</a></li>
-            <li><a href="/explorer">Explorer</a></li>
-            <li><a href="/admin" aria-current="page">Admin</a></li>
           </ul>
         </nav>
         <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
@@ -53,7 +52,7 @@
 
     <main id="main" class="site-main" tabindex="-1">
       <header class="page-head">
-        <p class="kicker">Platform administration</p>
+        <p class="kicker">Voting admin</p>
         <h1>Host this Node</h1>
         <p class="lede">
           Jurisdictions are the organizations of this public-good stack. Grant clerks,
@@ -68,6 +67,26 @@
         </aside>
         <p class="session-line" id="session-line">Checking session…</p>
       </header>
+
+      <div id="officer-gate" class="audience-gate" hidden>
+        <div class="panel">
+          <h2>Officer access required</h2>
+          <p id="officer-gate-copy">This desk is for election officials. Sign in with an officer session.</p>
+          <div class="cta-row">
+            <a class="btn" href="/signin?next=/admin">Sign in</a>
+            <a class="btn btn-secondary" href="/me">My desk</a>
+            <button class="btn btn-secondary" type="button" id="officer-gate-signout">Sign out</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="office-work">
+      <nav class="office-hub" aria-label="Voting admin">
+        <a href="/office">Admin hub</a>
+        <a href="/back-office">Elections, roll, tally</a>
+        <a href="/admin" aria-current="page">Jurisdictions and roles</a>
+        <a href="/explorer">Explorer</a>
+      </nav>
 
       <section aria-labelledby="host-heading">
         <h2 id="host-heading" class="visually-hidden">Host status</h2>
@@ -220,6 +239,7 @@
         </div>
         <div class="flash" id="flash-officers" role="status"></div>
       </section>
+      <section class="panel" aria-labelledby="users-heading">
         <header>
           <h2 id="users-heading">Users</h2>
           <button class="btn btn-secondary" type="button" id="btn-refresh-u">Refresh</button>
@@ -277,6 +297,7 @@
         </p>
         <p class="field-hint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
       </section>
+      </div>
     </main>
 
     <footer class="site-footer">
@@ -289,6 +310,7 @@
     </footer>
     <script src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
+    <script type="module" src="/office-gate.js"></script>
     <script src="/admin.js" defer></script>
   </body>
 </html>

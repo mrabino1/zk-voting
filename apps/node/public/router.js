@@ -2,7 +2,8 @@
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
  *
  * History router with hash fallback for static hosting.
- * Routes: `/`, `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
+ * Routes: `/`, `/public`, `/about`, `/faq`, `/signin`, `/me`, `/app`, `/office`,
+ * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
  * `/elections`, `/elections/:id/results`, `/elections/:id/info`
  */
 
@@ -29,6 +30,12 @@ export function parseRoute(loc = window.location) {
   const path = pathFromLocation(loc);
   const query = queryFromLocation(loc);
   if (path === "/") return { name: "home", path, params: {}, query };
+  if (path === "/public") return { name: "publicHome", path, params: {}, query };
+  if (path === "/about") return { name: "about", path, params: {}, query };
+  if (path === "/faq") return { name: "faq", path, params: {}, query };
+  if (path === "/signin") return { name: "signin", path, params: {}, query };
+  if (path === "/me" || path === "/app") return { name: "desk", path, params: {}, query };
+  if (path === "/office") return { name: "office", path, params: {}, query };
   if (path === "/register") return { name: "register", path, params: {}, query };
   if (path === "/elections") return { name: "resultsIndex", path, params: {}, query };
   const results = path.match(/^\/elections\/([^/]+)\/results$/);
@@ -131,7 +138,7 @@ export function startRouter(onChange) {
     if (url.origin !== window.location.origin) return;
     event.preventDefault();
     if (url.hash === "#how-it-works") {
-      navigate("/");
+      navigate("/public");
       queueMicrotask(() => {
         document.getElementById("how-it-works")?.scrollIntoView({ block: "start" });
         document.getElementById("how-it-works")?.focus?.();

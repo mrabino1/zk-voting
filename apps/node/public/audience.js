@@ -1,0 +1,156 @@
+/**
+ * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * Session-aware audience: public (logged-out), registered voter, voting admin.
+ */
+
+export const OFFICER_ROLES = [
+  "clerk",
+  "registrar",
+  "disqualification_officer",
+  "tally_operator",
+];
+
+export function normalizeRole(role) {
+  return String(role || "").toLowerCase();
+}
+
+export function isOfficerRoleName(role) {
+  return OFFICER_ROLES.includes(normalizeRole(role));
+}
+
+export function meUser(me) {
+  if (!me) return null;
+  return me.user || (me.id && me.handle ? me : null);
+}
+
+export function isOfficer(me) {
+  if (me?.officer === true) return true;
+  const user = meUser(me);
+  if (!user) return false;
+  const role = normalizeRole(user.role);
+  if (role === "platform_admin") return true;
+  if (OFFICER_ROLES.includes(role)) return true;
+  const grants = me?.jurisdictionRoles || me?.me?.jurisdictionRoles || user.jurisdictionRoles || [];
+  if (grants.some((g) => isOfficerRoleName(g?.role))) return true;
+  const roles = me?.roles || user.roles || [];
+  return roles.some((r) => {
+    const n = normalizeRole(r);
+    return n === "platform_admin" || OFFICER_ROLES.includes(n);
+  });
+}
+
+export function audienceOf(me) {
+  if (me?.audience === "public" || me?.audience === "registered" || me?.audience === "officer") {
+    return me.audience;
+  }
+  const user = meUser(me);
+  if (!user) return "public";
+  return isOfficer(me) ? "officer" : "registered";
+}
+
+export function homeDestination(audience) {
+  return audience === "public" ? "/" : "/me";
+}
+
+export function brandHref(audience) {
+  return homeDestination(audience);
+}
+
+export function safeNextPath(value) {
+  if (value == null || value === "") return null;
+  let path = String(value);
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    /* keep raw */
+  }
+  if (!path.startsWith("/") || path.startsWith("//") || /[a-z]+:/i.test(path)) return null;
+  if (path.includes("\\")) return null;
+  return path;
+}
+
+export function postLoginPath(me, next) {
+  const safe = safeNextPath(next);
+  if (safe) return safe;
+  return "/me";
+}
+
+export function signInHref(next) {
+  const safe = safeNextPath(next);
+  if (!safe) return "/signin";
+  return `/signin?next=${encodeURIComponent(safe)}`;
+}
+
+export function mainNav(audience) {
+  if (audience === "public") {
+    return [
+      { href: "/about", label: "About" },
+      { href: "/faq", label: "FAQ" },
+      { href: "/signin", label: "Sign in" },
+      { href: "/register", label: "Register" },
+    ];
+  }
+  const items = [
+    { href: "/me", label: "My desk" },
+    { href: "/register", label: "Register" },
+    { href: "/elections", label: "Results" },
+  ];
+  if (audience === "officer") {
+    items.push({ href: "/office", label: "Admin" });
+  }
+  return items;
+}
+
+function currentPathOf(currentPath) {
+  return String(currentPath || "/").replace(/\/+$/, "") || "/";
+}
+
+export function navItemIsCurrent(item, currentPath, routeName) {
+  const path = currentPathOf(currentPath);
+  const href = String(item.href || "").split("?")[0];
+  if (href === path) return true;
+  if (href === "/me" && (routeName === "desk" || routeName === "app")) return true;
+  if (href === "/office" && routeName === "office") return true;
+  if (href === "/about" && routeName === "about") return true;
+  if (href === "/faq" && routeName === "faq") return true;
+  if (href === "/signin" && routeName === "signin") return true;
+  if (href === "/register" && routeName === "register") return true;
+  if (href === "/elections" && (routeName === "results" || routeName === "resultsIndex")) return true;
+  return false;
+}
+
+export function paintMainNav(nav, { audience, currentPath, routeName, spa = true } = {}) {
+  if (!nav) return;
+  const items = mainNav(audience || "public");
+  const ul = document.createElement("ul");
+  for (const item of items) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = item.href;
+    a.textContent = item.label;
+    if (spa) a.setAttribute("data-nav", "");
+    if (navItemIsCurrent(item, currentPath, routeName)) a.setAttribute("aria-current", "page");
+    li.append(a);
+    ul.append(li);
+  }
+  nav.replaceChildren(ul);
+}
+
+export function paintBrand(brand, audience) {
+  if (!brand) return;
+  brand.setAttribute("href", brandHref(audience));
+}
+
+export function applyAudienceChrome(root, options) {
+  const doc = root?.ownerDocument || (typeof document !== "undefined" ? document : null);
+  if (!doc) return;
+  paintMainNav(doc.querySelector(".nav-main"), options);
+  paintBrand(doc.querySelector("a.brand"), options.audience);
+}
+
+export const OFFICE_PATHS = ["/admin", "/back-office", "/office"];
+
+export function isOfficePath(pathname) {
+  const path = currentPathOf(pathname);
+  return OFFICE_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+}
