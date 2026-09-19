@@ -975,6 +975,32 @@ textarea {
   padding: 0.12rem 0.45rem;
 }
 
+.pill-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--line);
+}
+
+.pill-status.status-active {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.pill-status.status-pending_review {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.pill-status.status-revoked,
+.pill-status.status-expired {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 dl.status-dl {
   display: grid;
   grid-template-columns: 11rem 1fr;
@@ -1247,6 +1273,61 @@ a.session-chrome-btn:hover {
   letter-spacing: 0.28em;
   font-variant-numeric: tabular-nums;
   max-width: 10rem;
+}
+
+.pin-pad {
+  max-width: 18rem;
+  margin: 0.75rem 0;
+}
+
+.pin-dots {
+  font-size: 1.5rem;
+  letter-spacing: 0.35em;
+  text-align: center;
+  min-height: 2rem;
+  margin: 0 0 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pin-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+
+.pin-key {
+  min-height: 3rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: 2px solid var(--ink, #13294b);
+  background: var(--paper, #fff);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.pin-key:hover:not(:disabled) {
+  background: var(--wash, #eef2f7);
+}
+
+.pin-key:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pin-key-spacer {
+  visibility: hidden;
+  pointer-events: none;
+  border: 0;
+  background: transparent;
+}
+
+.pin-key-back {
+  font-size: 1rem;
+}
+
+.pin-pad-actions {
+  margin-top: 0.75rem;
 }
 
 .sign-in-mfa .form-grid,

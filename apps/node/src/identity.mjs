@@ -7,11 +7,22 @@ import { randomBytes, randomUUID } from 'node:crypto';
 
 import { getAddress, isAddress, keccak256, toHex, verifyMessage } from 'viem';
 
+import {
+  MAX_CIVIC_IDS_PER_PERSON,
+  MAX_SMART_CARDS_PER_PERSON,
+  assertCredentialUsable,
+  ensureCredentialFields,
+  isCredentialMethodType,
+  liveCredentialCount,
+  publicCredential,
+} from './credentials.mjs';
 import { HttpError } from './http.mjs';
+import { pinPublicFields } from './pin.mjs';
 
 /** DealPunchList-shaped product caps: per Person, not per Node. */
 export const MAX_PASSKEYS_PER_PERSON = 5;
 export const MAX_EMAILS_PER_PERSON = 5;
+export { MAX_CIVIC_IDS_PER_PERSON, MAX_SMART_CARDS_PER_PERSON };
 
 export const AUTH_METHOD_TYPES = Object.freeze([
   'email',
@@ -38,13 +49,14 @@ export const AUTH_METHOD_CATALOG = Object.freeze([
   {
     type: 'smart_card',
     label: 'Smart card reader',
-    summary: 'PIV, CAC, or national eID presented at a kiosk reader, then email MFA.',
+    summary:
+      'PIV, CAC, or national eID. A person may bind up to 5. Civil officers can inspect each card and revoke it when the civil registration has expired. Then email MFA.',
   },
   {
     type: 'civic_id',
     label: 'Driver’s license or passport',
     summary:
-      'Socially certified photo ID. The Node stores a hash, never the document image or full number. Then email MFA.',
+      'Socially certified photo ID. A person may bind up to 5 licenses or passports. The Node stores a hash, never the document image or full number. Civil officers revoke an expired registration by hand until a third-party DMV connector is wired. Then email MFA.',
   },
   {
     type: 'passkey',
@@ -92,6 +104,18 @@ export function ensurePersonFields(user) {
   }
   if (!Object.prototype.hasOwnProperty.call(user, 'termsEmailHash')) {
     user.termsEmailHash = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'pinHash')) {
+    user.pinHash = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'pinSetAt')) {
+    user.pinSetAt = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'pinResetUntil')) {
+    user.pinResetUntil = null;
+  }
+  for (const method of user.authMethods) {
+    if (isCredentialMethodType(method.type)) ensureCredentialFields(method);
   }
   return user;
 }
@@ -403,10 +427,12 @@ export function publicAuthMethod(method) {
     out.fingerprint = method.fingerprint;
     out.subject = method.subject || null;
     out.issuer = method.issuer || null;
+    Object.assign(out, publicCredential(method, { owner: true }));
   }
   if (method.type === 'civic_id') {
     out.kind = method.kind || null;
     out.issuer = method.issuer || null;
+    Object.assign(out, publicCredential(method, { owner: true }));
   }
   return out;
 }
@@ -417,6 +443,7 @@ export function publicEthAccount(account, activeEthAddress) {
     address: account.address,
     source: account.source,
     verified: Boolean(account.verified),
+    verifiedBy: account.verifiedBy || (account.verified ? 'self' : null),
     active: sameEthAddress(account.address, activeEthAddress),
     verifiedAt: account.verifiedAt || null,
   };
@@ -426,6 +453,9 @@ export function identityCaps() {
   return {
     emails: MAX_EMAILS_PER_PERSON,
     passkeys: MAX_PASSKEYS_PER_PERSON,
+    smartCards: MAX_SMART_CARDS_PER_PERSON,
+    civicIds: MAX_CIVIC_IDS_PER_PERSON,
+    ethAccounts: null,
   };
 }
 
@@ -458,8 +488,14 @@ export function publicIdentity(user) {
     }),
     ethAccounts: user.ethAccounts.map((a) => publicEthAccount(a, user.activeEthAddress)),
     activeEthAddress: user.activeEthAddress,
-    verifiedEthAddressCount: user.ethAccounts.length,
-    note: 'Many methods and addresses may be verified internally. Only one Ethereum address is active. Up to 5 passkeys and 5 emails; exactly one email is primary when any email exists. Sign-in completes with email MFA when SES is configured.',
+    verifiedEthAddressCount: user.ethAccounts.filter((a) => a.verified).length,
+    credentials: user.authMethods
+      .filter((m) => isCredentialMethodType(m.type))
+      .map((m) => publicCredential(m, { owner: true })),
+    smartCardCount: liveCredentialCount(user, 'smart_card'),
+    civicIdCount: liveCredentialCount(user, 'civic_id'),
+    ...pinPublicFields(user),
+    note: 'Many methods and addresses may be verified internally. Only one Ethereum address is active. Up to 5 passkeys, 5 emails, 5 smart cards, and 5 driver’s licenses or passports; exactly one email is primary when any email exists. Each person sets a vote PIN (4–8 digits) used on a scrambled phone keypad at ballot submit. Civil officers may revoke an expired card or license. Sign-in completes with email MFA when SES is configured.',
   };
 }
 
@@ -538,15 +574,22 @@ export function resolveEmailLoginPerson(store, email) {
 
 export function resolveSmartCardLoginPerson(store, fingerprint) {
   const fp = normalizeFingerprint(fingerprint);
-  return store.findUserByAuthMethod({ type: 'smart_card', fingerprint: fp })?.user || null;
+  const found = store.findUserByAuthMethod({ type: 'smart_card', fingerprint: fp });
+  if (!found?.user) return null;
+  assertCredentialUsable(found.method, { kind: 'smart card' });
+  return found.user;
 }
 
 export function resolveCivicIdLoginPerson(store, { kind, issuer, documentNumber }) {
   const hash = civicIdHash({ kind, issuer, documentNumber });
-  return (
-    store.findUserByAuthMethod({ type: 'civic_id', fingerprint: hash, civicIdHash: hash })?.user ||
-    null
-  );
+  const found = store.findUserByAuthMethod({
+    type: 'civic_id',
+    fingerprint: hash,
+    civicIdHash: hash,
+  });
+  if (!found?.user) return null;
+  assertCredentialUsable(found.method, { kind: civicIdLabel(found.method.kind) });
+  return found.user;
 }
 
 export function buildSmartCardBindMessage({ fingerprint, nonce }) {

@@ -157,6 +157,23 @@ describe('official outcome PDF HTTP', () => {
     return created.json.election.id;
   }
 
+  async function officerEnroll(electionId, identityCommitment, userId) {
+    const registered = await api('POST', `/api/elections/${electionId}/register`, {
+      jar: adminJar,
+      body: { identityCommitment, userId },
+    });
+    assert.equal(registered.status, 201, registered.json?.error);
+  }
+
+  async function votePinToken(jar, pin = '2580') {
+    const verified = await api('POST', '/api/me/pin/verify', {
+      jar,
+      body: { pin, purpose: 'vote' },
+    });
+    assert.equal(verified.status, 200, verified.json?.error);
+    return verified.json.pinToken;
+  }
+
   before(async () => {
     tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-outcome-pdf-'));
     const created = await createApp({
@@ -182,6 +199,11 @@ describe('official outcome PDF HTTP', () => {
     const other = store.getUserByHandle('other');
     other.email = 'other@example.gov';
     await store.persist();
+    const pin = await api('POST', '/api/me/pin', {
+      jar: voterJar,
+      body: { pin: '2580', confirmPin: '2580' },
+    });
+    assert.equal(pin.status, 200, pin.json?.error);
   });
 
   after(async () => {
@@ -210,11 +232,7 @@ describe('official outcome PDF HTTP', () => {
   test('vote default-subscribes; unsubscribe is the exception; PDF after cutoff+tally', async () => {
     const id = await createOpenElection('Outcome PDF race');
     const commit = '0xabc111';
-    const registered = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
-      body: { identityCommitment: commit },
-    });
-    assert.equal(registered.status, 201, registered.json?.error);
+    await officerEnroll(id, commit, store.getUserByHandle('voter1').id);
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
     const voted = await api('POST', `/api/elections/${id}/vote`, {
       jar: voterJar,
@@ -223,6 +241,7 @@ describe('official outcome PDF HTTP', () => {
         publicInputs: { nullifier: 501, electionId: id },
         identityCommitment: commit,
         encryptedBallot: '0xaa',
+        pinToken: await votePinToken(voterJar),
       },
     });
     assert.equal(voted.status, 201, voted.json?.error);
@@ -308,20 +327,19 @@ describe('official outcome PDF HTTP', () => {
   test('unsubscribed voter is not emailed; optional subscribe still works', async () => {
     const id = await createOpenElection('Unsubscribe exception');
     const commit = '0xabc222';
-    await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
-      body: { identityCommitment: commit },
-    });
+    await officerEnroll(id, commit, store.getUserByHandle('voter1').id);
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
-    await api('POST', `/api/elections/${id}/vote`, {
+    const voted = await api('POST', `/api/elections/${id}/vote`, {
       jar: voterJar,
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: 601, electionId: id },
         identityCommitment: commit,
         encryptedBallot: '0xbb',
+        pinToken: await votePinToken(voterJar),
       },
     });
+    assert.equal(voted.status, 201, voted.json?.error);
     const off = await api('PUT', `/api/me/outcome-subscriptions/${id}`, {
       jar: voterJar,
       body: { subscribed: false },

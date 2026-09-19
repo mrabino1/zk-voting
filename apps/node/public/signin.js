@@ -5,6 +5,7 @@
  */
 
 import { loginPasskey, hasWebAuthn, webAuthnUnavailableMessage } from "./passkey-wallet.js";
+import { navigate } from "./router.js";
 import {
   isMfaChallenge,
   loginCivicId,
@@ -15,6 +16,7 @@ import {
   resendMfaCode,
   startEmailLogin,
   verifyMfaCode,
+  forgotVotePin,
 } from "./identity-methods.js";
 
 export const SESSION_EVENT = "republic:session";
@@ -126,6 +128,7 @@ function finishOrMfa(state, result, method) {
     return result;
   }
   notifySession({ user: result.user, identity: result.identity, method });
+  if (result?.pinResetGranted) navigate("/register");
   return result;
 }
 
@@ -205,8 +208,12 @@ function renderMfa(state, statusEl) {
     el("p", {
       class: "field-hint",
       text: needsEmail
-        ? "This person has no email on file yet. Enter the address that will receive the sign-in code (AWS SES)."
-        : `Enter the 6-digit code sent to ${mfa.emailHint || "your email"} (primary unless you signed in with a specific address).`,
+        ? mfa.pinReset
+          ? "Enter the email that will receive your vote PIN reset code (AWS SES)."
+          : "This person has no email on file yet. Enter the address that will receive the sign-in code (AWS SES)."
+        : mfa.pinReset
+          ? `Enter the 6-digit code sent to ${mfa.emailHint || "your email"} to set a new vote PIN.`
+          : `Enter the 6-digit code sent to ${mfa.emailHint || "your email"} (primary unless you signed in with a specific address).`,
     }),
     needsEmail
       ? el(
@@ -252,6 +259,7 @@ function renderMfa(state, statusEl) {
                 const result = await verifyMfaCode(fetchJson, code);
                 state.mfa = null;
                 notifySession({ user: result.user, identity: result.identity, method: mfa.factor || "mfa" });
+                if (result.pinResetGranted) navigate("/register");
                 return result;
               });
             },
@@ -336,37 +344,85 @@ function renderForm(state, opts, statusEl) {
     ),
     tab === "email"
       ? el(
-          "form",
-          {
-            class: "form-grid",
-            onSubmit: (event) => {
-              event.preventDefault();
-              const email = event.target.email?.value?.trim();
-              runAction(state, statusEl, "email", () => signInWithEmail(email, state));
-            },
-          },
+          "div",
+          {},
           el(
-            "div",
-            { class: "field" },
-            el("label", { class: "field-label", for: "signin-email", text: "Email (any bound address)" }),
-            el("input", {
-              id: "signin-email",
-              name: "email",
-              type: "email",
-              autocomplete: "username email",
-              required: true,
-            })
+            "form",
+            {
+              class: "form-grid",
+              onSubmit: (event) => {
+                event.preventDefault();
+                const email = event.target.email?.value?.trim();
+                runAction(state, statusEl, "email", () => signInWithEmail(email, state));
+              },
+            },
+            el(
+              "div",
+              { class: "field" },
+              el("label", { class: "field-label", for: "signin-email", text: "Email (any bound address)" }),
+              el("input", {
+                id: "signin-email",
+                name: "email",
+                type: "email",
+                autocomplete: "username email",
+                required: true,
+              })
+            ),
+            el(
+              "div",
+              { class: "actions" },
+              el("button", {
+                class: "btn",
+                type: "submit",
+                "data-signin": "email",
+                disabled: busy,
+                text: state.busy === "email" ? "Sending code…" : "Email me a sign-in code",
+              })
+            )
           ),
           el(
-            "div",
-            { class: "actions" },
-            el("button", {
-              class: "btn",
-              type: "submit",
-              "data-signin": "email",
-              disabled: busy,
-              text: state.busy === "email" ? "Sending code…" : "Email me a sign-in code",
-            })
+            "details",
+            { class: "sign-in-handle" },
+            el("summary", { text: "Forgot vote PIN" }),
+            el("p", {
+              class: "field-hint",
+              text: "Same process as a password reset: we email a one-time code, then you set a new PIN on the phone keypad. Keyboard typing of the PIN is disabled.",
+            }),
+            el(
+              "form",
+              {
+                class: "form-grid",
+                onSubmit: (event) => {
+                  event.preventDefault();
+                  const email = event.target.email?.value?.trim();
+                  runAction(state, statusEl, "pin-forgot", () =>
+                    forgotVotePin(fetchJson, { email }).then((result) => finishOrMfa(state, result, "pin-reset"))
+                  );
+                },
+              },
+              el(
+                "div",
+                { class: "field" },
+                el("label", { class: "field-label", for: "signin-forgot-pin-email", text: "Email" }),
+                el("input", {
+                  id: "signin-forgot-pin-email",
+                  name: "email",
+                  type: "email",
+                  autocomplete: "email",
+                  required: true,
+                })
+              ),
+              el(
+                "div",
+                { class: "actions" },
+                el("button", {
+                  class: "btn btn-secondary",
+                  type: "submit",
+                  disabled: busy,
+                  text: state.busy === "pin-forgot" ? "Sending code…" : "Email me a PIN reset code",
+                })
+              )
+            )
           )
         )
       : null,
@@ -620,12 +676,18 @@ async function runAction(state, statusEl, kind, fn) {
         result.message ||
           (result.needsEmail
             ? "Enter the email that will receive your sign-in code."
-            : `Check ${result.emailHint || "your email"} for a 6-digit code.`)
+            : result.pinReset
+              ? `Check ${result.emailHint || "your email"} for a vote PIN reset code.`
+              : `Check ${result.emailHint || "your email"} for a 6-digit code.`)
       );
       return;
     }
     const who = result?.user?.handle || "signed in";
-    setStatus(statusEl, "ok", `Signed in as ${who}.`);
+    setStatus(
+      statusEl,
+      "ok",
+      result?.pinResetGranted ? `Signed in as ${who}. Set a new vote PIN on Identify yourself.` : `Signed in as ${who}.`
+    );
   } catch (err) {
     const cancelled = /cancel|not allowed|abort/i.test(err.message || "");
     setStatus(

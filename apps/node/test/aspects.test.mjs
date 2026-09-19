@@ -157,7 +157,7 @@ describe('multi-question ballots (aspects)', () => {
     assert.ok(election.ballotSpecHash);
 
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xa1' },
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
@@ -293,7 +293,7 @@ describe('multi-question ballots (aspects)', () => {
     const id = created.json.election.id;
     assert.equal(created.json.election.questions[1].type, 'RANKED');
     await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xb2' },
     });
     await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });

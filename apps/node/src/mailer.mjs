@@ -8,23 +8,31 @@ import { HttpError } from './http.mjs';
 
 const OTP_SUBJECT = 'Republic sign-in code';
 
-export function otpEmailBodies({ code, product = 'Republic' }) {
+export function otpEmailBodies({ code, product = 'Republic', purpose } = {}) {
+  const pinReset = purpose === 'pin-reset';
+  const subject = pinReset ? 'Republic vote PIN reset code' : OTP_SUBJECT;
+  const lead = pinReset
+    ? `Your ${product} vote PIN reset code is ${code}.`
+    : `Your ${product} verification code is ${code}.`;
+  const ignore = pinReset
+    ? 'It expires in 10 minutes. If you did not ask to reset a vote PIN, ignore this message.'
+    : 'It expires in 10 minutes. If you did not try to sign in, ignore this message.';
   const text = [
-    `Your ${product} verification code is ${code}.`,
+    lead,
     '',
-    'It expires in 10 minutes. If you did not try to sign in, ignore this message.',
+    ignore,
     '',
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
   ].join('\n');
   const html = `<!DOCTYPE html>
 <html lang="en"><body style="font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5;color:#111">
 <p class="nfp" style="font-weight:700;letter-spacing:0.04em">NOT FOR PROFIT</p>
-<p>Your ${product} verification code is:</p>
+<p>${pinReset ? `Your ${product} vote PIN reset code is:` : `Your ${product} verification code is:`}</p>
 <p style="font-size:1.6rem;font-weight:700;letter-spacing:0.12em">${code}</p>
-<p>It expires in 10 minutes. If you did not try to sign in, ignore this message.</p>
+<p>${ignore}</p>
 <p style="color:#444">Civic public good. Not a commercial product.</p>
 </body></html>`;
-  return { subject: OTP_SUBJECT, text, html };
+  return { subject, text, html };
 }
 
 export function otpFromText(text) {
@@ -194,7 +202,7 @@ export function createMailer(config = {}) {
   }
 
   async function sendOtp({ to, code, purpose, factor }) {
-    const bodies = otpEmailBodies({ code, product: config.product || 'Republic' });
+    const bodies = otpEmailBodies({ code, product: config.product || 'Republic', purpose });
     return send({
       to,
       ...bodies,

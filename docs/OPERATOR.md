@@ -207,9 +207,22 @@ WebAuthn with PRF wraps a secp256k1 smart-account key. The Merkle leaf is Poseid
 
 Up to **5** addresses per person. Exactly one is **primary** whenever any email exists. MFA (except email-as-username login) and the Terms PDF use the primary inbox. Caps are code constants — **no new env vars**. [`docs/IDENTITY.md`](./IDENTITY.md).
 
+### Civil registration approval and credential review
+
+A voter’s `POST /api/elections/:id/register` is **pending** until a registrar or clerk of that election’s jurisdiction approves (`POST .../registration-requests/:requestId/approve`) or denies. Officers of that jurisdiction may still insert a commitment immediately from the back office.
+
+Smart cards and driver’s licenses / passports (up to **5** live of each) are listed at `GET /api/office/credentials`. Officers revoke an expired civil registration with `POST /api/persons/:id/methods/:methodId/revoke`. Login on a revoked or expired credential is `403 CREDENTIAL_REVOKED` / `CREDENTIAL_EXPIRED`.
+
+A later DMV / AAMVA / national-eID connector can `POST /api/integrations/credentials/status` with `CREDENTIAL_PROVIDER_SECRET` (header `x-republic-provider-secret` or `Authorization: Bearer`). Unset secret → `501 CREDENTIAL_PROVIDER_MANUAL`. Review is **manual** until that secret is set. [`docs/IDENTITY.md`](./IDENTITY.md).
+
+| Env | Role |
+| --- | --- |
+| `CREDENTIAL_PROVIDER_SECRET` | Shared secret for the status webhook. Empty = manual officer review only. |
+| `CREDENTIAL_PROVIDER_ID` | Provider id recorded on updates (`manual` by default). |
+
 ### Sign in (email, Ethereum, smart card, license/passport)
 
-Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). First-time **registration** is still `/register`. Every path except gated `dev-login` completes with a **6-digit email code via AWS SES** when `SES_FROM_ADDRESS` and `AWS_REGION` are set.
+Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). First-time **registration** is still `/register`. Requesting a place on an election roll waits for a **registrar or clerk** of that election’s jurisdiction to approve. Every path except gated `dev-login` completes with a **6-digit email code via AWS SES** when `SES_FROM_ADDRESS` and `AWS_REGION` are set.
 
 **Email (username)**
 
@@ -233,7 +246,9 @@ This mirrors Daily Family Call’s challenge → assertion → HttpOnly session 
 3. Wallet `personal_sign`s that message.
 4. `POST /api/auth/web3/login` `{ address, signature }` — verify, resolve the Person, then email MFA.
 
-Unknown passkeys, emails, cards, licenses, and wallets return `404` `UNKNOWN_CREDENTIAL` and **do not** create a person. Binding a new wallet is `POST /api/identity/web3/verify` on `/register`.
+Unknown passkeys, emails, cards, licenses, and wallets return `404` `UNKNOWN_CREDENTIAL` and **do not** create a person. Revoked or expired cards and licenses return `403 CREDENTIAL_REVOKED` / `CREDENTIAL_EXPIRED`. Binding a new wallet is `POST /api/identity/web3/verify` on `/register`. Extra wallets while signed in must sign `POST /api/me/eth-accounts`.
+
+Each person sets a **vote PIN** (4–8 digits) on Identify yourself. Change it anytime. Forgot PIN emails an MFA code (`POST /api/pin/forgot` or `POST /api/me/pin/forgot`) and then the person sets a new PIN on the phone keypad. At ballot submit the keypad **layout stays 3×3+0** but the **numbers are shuffled per person**; the UI does not accept keyboard PIN entry. A signed-in vote needs a one-use `pinToken`.
 
 `ALLOW_DEV_LOGIN=1` (or `NODE_ENV=test`) keeps `POST /api/auth/dev-login` as a **local/test fallback** only. It skips MFA. It is not the primary officer path. Production (`master`) must leave it off.
 

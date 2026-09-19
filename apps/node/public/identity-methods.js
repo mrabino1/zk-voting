@@ -143,8 +143,33 @@ export async function resendMfaCode(api) {
   return api("/api/auth/mfa/resend", { method: "POST", body: {} });
 }
 
-export async function registerEthAccount(api, { address, source }) {
-  return api("/api/me/eth-accounts", { method: "POST", body: { address, source } });
+export async function registerEthAccount(api, { address, source, signature, nonce } = {}) {
+  let addr = address;
+  let sig = signature;
+  let nce = nonce;
+  if (!sig) {
+    if (!window.ethereum) {
+      throw new Error("No Ethereum wallet in this browser. Connect a wallet that supports personal_sign to verify an address.");
+    }
+    if (!addr) {
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      addr = accounts && accounts[0];
+    }
+    if (!addr) throw new Error("Wallet did not return an address.");
+    const challenge = await api("/api/identity/web3/challenge", {
+      method: "POST",
+      body: { address: addr },
+    });
+    sig = await window.ethereum.request({
+      method: "personal_sign",
+      params: [challenge.message, addr],
+    });
+    nce = challenge.nonce;
+  }
+  return api("/api/me/eth-accounts", {
+    method: "POST",
+    body: { address: addr, signature: sig, nonce: nce, source },
+  });
 }
 
 export async function setActiveEthAddress(api, address) {
@@ -169,4 +194,21 @@ export async function removeBoundEmail(api, id) {
 
 export async function removePasskey(api, credentialId) {
   return api(`/api/me/passkeys/${encodeURIComponent(credentialId)}`, { method: "DELETE" });
+}
+
+export async function fetchPinKeypad(api, { purpose } = {}) {
+  return api("/api/me/pin/keypad", { method: "POST", body: { purpose: purpose || "setup" } });
+}
+
+export async function setVotePin(api, { pin, currentPin, confirmPin } = {}) {
+  return api("/api/me/pin", { method: "POST", body: { pin, currentPin, confirmPin } });
+}
+
+export async function verifyVotePin(api, { pin, purpose } = {}) {
+  return api("/api/me/pin/verify", { method: "POST", body: { pin, purpose: purpose || "vote" } });
+}
+
+export async function forgotVotePin(api, { email } = {}) {
+  if (email) return api("/api/pin/forgot", { method: "POST", body: { email } });
+  return api("/api/me/pin/forgot", { method: "POST", body: {} });
 }

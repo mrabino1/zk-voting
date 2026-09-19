@@ -150,11 +150,15 @@ Hasher note: production circuits use Poseidon (`republic.hash.poseidon-bn254-x5-
 ### Person (unique) vs one active Ethereum address
 
 A Node user is one **person**. They may bind up to 5 emails (exactly one
-primary), a Web3 wallet, a smart-card reader, a driver’s license or passport,
-and up to 5 passkeys. Several ETH addresses can be internally verified;
-exactly one is **active** (gasless ops). Authenticators and addresses cannot
-belong to two people. The vote leaf stays `identityCommitment`. Details:
-[`IDENTITY.md`](./IDENTITY.md).
+primary), several Web3 wallets (signature-verified), up to 5 smart cards,
+up to 5 driver’s licenses or passports, and up to 5 passkeys. Several ETH
+addresses can be internally verified; exactly one is **active** (gasless ops).
+A voter **requests** election registration; a registrar or clerk of that
+election’s jurisdiction **approves** before the commitment is on the roll.
+Authenticators and addresses cannot belong to two people. Officers may
+revoke an expired card or license. Each person sets a vote PIN (hashed;
+scrambled phone keypad at ballot submit). The vote leaf stays `identityCommitment`.
+Details: [`IDENTITY.md`](./IDENTITY.md).
 
 ---
 
@@ -673,7 +677,8 @@ PUT  /api/elections/:id             (same as PATCH)
 GET  /api/elections/:id/ballots     (published vote rows only)
 GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after cutoff; ciphertext; rankingPayload on ranked ballots)
 GET  /api/elections/:id/registrations
-POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
+GET  /api/elections/:id/registration-requests
+POST /api/elections/:id/register    (voter: pending civil review; registrar/clerk of that jurisdiction: insert now; registrar may register another person)
 POST /api/elections/:id/freeze      (clerk of that jurisdiction)
 POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
 POST /api/elections/:id/disqualify   (officer of that jurisdiction)
@@ -716,7 +721,17 @@ POST /api/identity/web3/challenge
 POST /api/identity/web3/verify
 POST /api/identity/smart-card/challenge
 POST /api/identity/smart-card/verify
-POST /api/me/eth-accounts            (many internally verified; first becomes active)
+POST /api/me/eth-accounts            (signature-verified; first becomes active)
+POST /api/me/eth-accounts/active
+POST /api/me/pin/keypad
+POST /api/me/pin
+POST /api/me/pin/verify
+POST /api/me/pin/forgot
+POST /api/pin/forgot
+GET  /api/me/credentials
+GET  /api/office/credentials
+POST /api/persons/:id/methods/:methodId/revoke
+POST /api/integrations/credentials/status
 POST /api/me/eth-accounts/active
 POST /api/persons/:id/person-key     (registrar; keccak256 civil-file token)
 POST /api/persons/:id/methods
@@ -747,6 +762,7 @@ are accepted in the local JSON store so the explorer and UI can run a demo.
 Those accepts still wait for hourly public disclosure unless the interval is `0`.
 
 A person identifies with **email, Ethereum (signature), a smart-card reader, a driver’s license or passport, or a passkey**. Every path completes with email MFA via AWS SES when configured.
+Each person also sets a **vote PIN** used on a scrambled keypad at ballot submit.
 Many ETH addresses may be verified internally; only one is active. The
 Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 

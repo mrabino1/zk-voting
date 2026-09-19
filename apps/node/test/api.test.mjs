@@ -234,15 +234,25 @@ describe('Republic Node API', () => {
     assert.equal(status, 403);
   });
 
-  test('register after passkey inserts a commitment, not a name', async () => {
+  test('register after passkey is pending until a civil officer approves', async () => {
     const { status, json } = await api('POST', `/api/elections/${electionId}/register`, {
       jar: voterJar,
       body: { identityCommitment: '0x1234' },
     });
-    assert.equal(status, 201, json?.error);
-    assert.equal(json.identityCommitment, toBytes32('0x1234'));
-    assert.equal(json.leafIndex, 0);
-    assert.equal(json.eligibleRoot.startsWith('0x'), true);
+    assert.equal(status, 202, json?.error);
+    assert.equal(json.status, 'pending');
+    assert.equal(json.code, 'PENDING_REVIEW');
+    const empty = await api('GET', `/api/elections/${electionId}/registrations`, { jar: adminJar });
+    assert.equal(empty.json.registrations.length, 0);
+    const approved = await api(
+      'POST',
+      `/api/elections/${electionId}/registration-requests/${json.request.id}/approve`,
+      { jar: adminJar, body: {} },
+    );
+    assert.equal(approved.status, 200, approved.json?.error);
+    assert.equal(approved.json.identityCommitment, toBytes32('0x1234'));
+    assert.equal(approved.json.leafIndex, 0);
+    assert.equal(approved.json.eligibleRoot.startsWith('0x'), true);
     const list = await api('GET', `/api/elections/${electionId}/registrations`, { jar: adminJar });
     assert.equal(list.json.registrations.length, 1);
     assert.equal(list.json.registrations[0].userId, undefined);
@@ -432,13 +442,15 @@ describe('Republic Node API', () => {
     });
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.election.id;
+    const voterMe = await api('GET', '/api/me', { jar: voterJar });
+    const voterId = voterMe.json.user.id;
     const r1 = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
-      body: { identityCommitment: 1 },
+      jar: adminJar,
+      body: { identityCommitment: 1, userId: voterId },
     });
     assert.equal(r1.status, 201, r1.json?.error);
     const r2 = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: 2 },
     });
     assert.equal(r2.status, 409);
@@ -491,7 +503,7 @@ describe('Republic Node API', () => {
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.id;
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xabc1' },
     });
     assert.equal(reg.status, 201, reg.json?.error);
@@ -544,7 +556,7 @@ describe('Republic Node API', () => {
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.id;
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xabc2' },
     });
     assert.equal(reg.status, 201, reg.json?.error);

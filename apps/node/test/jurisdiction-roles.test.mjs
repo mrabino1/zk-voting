@@ -331,7 +331,14 @@ describe('per-jurisdiction officer roles', () => {
       jar: voter2Jar,
       body: { identityCommitment: '0x22' },
     });
-    assert.equal(self.status, 201, self.json?.error);
+    assert.equal(self.status, 202, self.json?.error);
+    assert.equal(self.json.code, 'PENDING_REVIEW');
+    const approved = await api(
+      'POST',
+      `/api/elections/${sId}/registration-requests/${self.json.request.id}/approve`,
+      { jar: southRegistrarJar, body: {} },
+    );
+    assert.equal(approved.status, 200, approved.json?.error);
   });
 
   test('disqualify is allowed only for the election jurisdiction officer', async () => {
@@ -341,10 +348,17 @@ describe('per-jurisdiction officer roles', () => {
     });
     assert.equal(election.status, 201, election.json?.error);
     const id = election.json.election.id;
-    await api('POST', `/api/elections/${id}/register`, {
+    const pending = await api('POST', `/api/elections/${id}/register`, {
       jar: voterJar,
       body: { identityCommitment: '0x33' },
     });
+    assert.equal(pending.status, 202, pending.json?.error);
+    const enrolled = await api(
+      'POST',
+      `/api/elections/${id}/registration-requests/${pending.json.request.id}/approve`,
+      { jar: northRegistrarJar, body: {} },
+    );
+    assert.equal(enrolled.status, 200, enrolled.json?.error);
 
     const denied = await api('POST', `/api/elections/${id}/disqualify`, {
       jar: southDqJar,

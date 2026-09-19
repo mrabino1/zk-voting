@@ -227,7 +227,7 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.id;
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xca11' },
     });
     assert.equal(reg.status, 201, reg.json?.error);
@@ -430,7 +430,7 @@ describe('instant disclosure still hides choice on receipts', () => {
     });
     const id = createdEl.json.id;
     await call('POST', `/api/elections/${id}/register`, {
-      jar: localVoter,
+      jar: localAdmin,
       body: { identityCommitment: '0x1' },
     });
     await call('POST', `/api/elections/${id}/freeze`, { jar: localAdmin });

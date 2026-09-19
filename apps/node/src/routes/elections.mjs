@@ -72,7 +72,7 @@ async function revokeHandler(req, store, explorer) {
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain, config, l1 } = deps;
+  const { store, explorer, chain, config, l1, pin } = deps;
   const router = Router();
 
   router.get(
@@ -387,7 +387,27 @@ export function electionsRouter(deps) {
       res.json({
         electionId: String(election.id),
         registrations: store.listRegistrations(election.id),
+        requests: store.listRegistrationRequests(election.id),
         nfp: true,
+      });
+    }),
+  );
+
+  router.get(
+    '/:id/registration-requests',
+    requireAuth,
+    requireElectionRole(store, 'clerk', 'registrar'),
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const status = req.query?.status ? String(req.query.status) : undefined;
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        requests: store.listRegistrationRequests(election.id, { status }),
+        provider: {
+          mode: 'manual',
+          note: 'Civil officers of this election’s jurisdiction approve each request by hand. A later connector can automate document checks; it does not skip this approval.',
+        },
       });
     }),
   );
@@ -410,7 +430,42 @@ export function electionsRouter(deps) {
         }
         userId = forUser;
       }
+      const officerInsert = store.canApproveRegistration(req.user, election);
+      if (!officerInsert) {
+        const { request, created } = await store.createRegistrationRequest(election.id, {
+          userId,
+          identityCommitment,
+          note: req.body?.note,
+        });
+        if (created) {
+          await store.addNotification({
+            userId,
+            type: 'registration_pending',
+            title: 'Registration pending civil review',
+            body: `A registrar or clerk of this election must approve before you are on the roll for ${election.title}. Choice is never shown here.`,
+            electionId: election.id,
+          });
+        }
+        res.status(202).json({
+          ok: true,
+          nfp: true,
+          status: 'pending',
+          code: 'PENDING_REVIEW',
+          electionId: String(election.id),
+          request: store.publicRegistrationRequest(request),
+          message:
+            'Registration submitted for civil review. A registrar or clerk of this election’s jurisdiction must approve before you are on the roll.',
+        });
+        return;
+      }
       const result = await store.registerCommitment(req.params.id, identityCommitment, { userId });
+      const pending = store.findPendingRequestForCommitment(election.id, result.identityCommitment);
+      if (pending && pending.status === 'pending') {
+        pending.status = 'approved';
+        pending.reviewedAt = new Date().toISOString();
+        pending.reviewedBy = req.user.id;
+        await store.persist();
+      }
       await explorer.append('register', {
         electionId: String(result.election.id),
         identityCommitment: result.identityCommitment,
@@ -425,11 +480,73 @@ export function electionsRouter(deps) {
       });
       res.status(201).json({
         ok: true,
+        status: 'registered',
         electionId: String(result.election.id),
         identityCommitment: result.identityCommitment,
         leafIndex: result.leafIndex,
         eligibleRoot: result.eligibleRoot,
         nfp: true,
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/registration-requests/:requestId/approve',
+    requireAuth,
+    requireElectionRole(store, 'clerk', 'registrar'),
+    asyncHandler(async (req, res) => {
+      const result = await store.approveRegistrationRequest(req.params.id, req.params.requestId, {
+        reviewer: req.user,
+      });
+      if (!result.alreadyApproved) {
+        await explorer.append('register', {
+          electionId: String(result.election.id),
+          identityCommitment: result.identityCommitment,
+          leafIndex: result.leafIndex,
+        });
+        await store.addNotification({
+          userId: result.request.userId,
+          type: 'registered',
+          title: 'You are registered',
+          body: `A civil officer approved your registration for ${result.election.title}. Choice is never shown here.`,
+          electionId: result.election.id,
+        });
+      }
+      res.json({
+        ok: true,
+        nfp: true,
+        status: 'registered',
+        electionId: String(result.election.id),
+        identityCommitment: result.identityCommitment,
+        leafIndex: result.leafIndex,
+        eligibleRoot: result.eligibleRoot,
+        request: store.publicRegistrationRequest(result.request),
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/registration-requests/:requestId/deny',
+    requireAuth,
+    requireElectionRole(store, 'clerk', 'registrar'),
+    asyncHandler(async (req, res) => {
+      const result = await store.denyRegistrationRequest(req.params.id, req.params.requestId, {
+        reviewer: req.user,
+        reason: req.body?.reason,
+      });
+      await store.addNotification({
+        userId: result.request.userId,
+        type: 'registration_denied',
+        title: 'Registration not approved',
+        body: `A civil officer declined your registration for ${result.election.title}. You may bind another credential and request again.`,
+        electionId: result.election.id,
+      });
+      res.json({
+        ok: true,
+        nfp: true,
+        status: 'denied',
+        electionId: String(result.election.id),
+        request: store.publicRegistrationRequest(result.request),
       });
     }),
   );
@@ -456,6 +573,9 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
+      if (req.user && pin) {
+        pin.assertVoteAllowed(req.user, req.body?.pinToken);
+      }
       const result = await relayVote({
         store,
         explorer,

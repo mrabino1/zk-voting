@@ -122,7 +122,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     assert.equal(created.status, 201, created.json?.error);
     const id = created.json.id;
     const reg = await api('POST', `/api/elections/${id}/register`, {
-      jar: voterJar,
+      jar: adminJar,
       body: { identityCommitment: '0xca11' },
     });
     assert.equal(reg.status, 201, reg.json?.error);

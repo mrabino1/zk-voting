@@ -1033,8 +1033,10 @@
     try {
       const data = await request("/api/elections");
       const rows = asList(data, ["elections", "items"]);
-      const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election")];
-      for (const sel of selects) fillSelect(sel, rows, electionIdOf, electionLabel);
+      const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election"), $("rr-election")];
+      for (const sel of selects) {
+        if (sel) fillSelect(sel, rows, electionIdOf, electionLabel);
+      }
       const loader = $("e-load");
       if (loader) {
         const current = loader.value;
@@ -1046,9 +1048,11 @@
         if (current && [...loader.options].some((o) => o.value === current)) loader.value = current;
       }
       if (rows[0]) wireExplorerLinks(electionIdOf(rows[0]));
+      await loadRegistrationRequests();
+      await loadCredentials();
     } catch (err) {
-      for (const id of ["f-election", "r-election", "d-election", "t-election"]) {
-        $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
+      for (const id of ["f-election", "r-election", "d-election", "t-election", "rr-election"]) {
+        if ($(id)) $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
       }
     }
   }
@@ -1087,6 +1091,100 @@
         return;
       }
       list.innerHTML = `<li class="empty">${esc(errText(err))}</li>`;
+    }
+  }
+
+  function shortHash(value) {
+    const s = String(value || "");
+    if (!s) return "—";
+    if (s.length <= 22) return s;
+    return s.slice(0, 10) + "…" + s.slice(-8);
+  }
+
+  function credentialSummary(row) {
+    const creds = row.credentials || [];
+    if (!creds.length) return "none";
+    return creds
+      .map((c) => {
+        const kind = c.kind === "passport" ? "passport" : c.type === "smart_card" ? "card" : "license";
+        return kind + ":" + (c.status || "active");
+      })
+      .join(", ");
+  }
+
+  async function loadRegistrationRequests() {
+    const table = $("table-registration-requests");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const electionId = ($("rr-election") && $("rr-election").value) || ($("r-election") && $("r-election").value);
+    if (!electionId) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Choose an election.</td></tr>';
+      return;
+    }
+    try {
+      const data = await request(
+        "/api/elections/" + encodeURIComponent(electionId) + "/registration-requests?status=pending"
+      );
+      const rows = asList(data, ["requests", "items"]).filter((r) => (r.status || "pending") === "pending");
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No pending requests.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows
+        .map((row) => {
+          const commit = String(row.identityCommitment || "");
+          return `<tr>
+            <td>${esc(row.handle || row.userId || "—")}</td>
+            <td class="hash">${esc(shortHash(commit))}</td>
+            <td>${esc(String(row.requestedAt || "").slice(0, 16))}</td>
+            <td>${esc(credentialSummary(row))}</td>
+            <td>
+              <button type="button" class="btn btn-inline" data-approve-request="${esc(row.id)}" data-election="${esc(electionId)}">Approve</button>
+              <button type="button" class="btn btn-secondary btn-inline" data-deny-request="${esc(row.id)}" data-election="${esc(electionId)}">Deny</button>
+            </td>
+          </tr>`;
+        })
+        .join("");
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(errText(err))}</td></tr>`;
+    }
+  }
+
+  async function loadCredentials() {
+    const table = $("table-credentials");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    try {
+      const data = await request("/api/office/credentials");
+      const rows = asList(data, ["credentials", "items"]);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">No smart cards or licenses bound yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows
+        .map((row) => {
+          const hash = row.civicIdHash || row.fingerprint || "";
+          const typeLabel =
+            row.type === "smart_card" ? "smart card" : row.kind === "passport" ? "passport" : "driver’s license";
+          return `<tr>
+            <td>${esc(row.handle || row.personId || "—")}</td>
+            <td>${esc(typeLabel)}</td>
+            <td>${esc(row.issuer || "—")}</td>
+            <td><span class="pill-status status-${esc(row.status || "active")}">${esc(row.status || "active")}</span></td>
+            <td>${esc(row.expiresAt ? String(row.expiresAt).slice(0, 10) : "—")}</td>
+            <td class="hash">${esc(hash ? shortHash(hash) : "—")}</td>
+            <td>
+              ${
+                row.status === "revoked"
+                  ? "—"
+                  : `<button type="button" class="btn btn-secondary btn-inline" data-revoke-cred="${esc(row.id)}" data-person="${esc(row.personId)}">Revoke</button>`
+              }
+            </td>
+          </tr>`;
+        })
+        .join("");
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(errText(err))}</td></tr>`;
     }
   }
 
@@ -1190,6 +1288,7 @@
       });
       flash($("flash-register"), "ok", "Commitment inserted. The leaf is not a name or wallet.");
       $("r-commit").value = "";
+      await loadRegistrationRequests();
     } catch (err) {
       flash($("flash-register"), "err", errText(err));
     }
@@ -1222,6 +1321,10 @@
       type,
       address: $("pm-addr").value.trim() || undefined,
       credentialId: $("pm-cred").value.trim() || undefined,
+      kind: $("pm-kind") ? $("pm-kind").value || undefined : undefined,
+      issuer: $("pm-issuer") ? $("pm-issuer").value.trim() || undefined : undefined,
+      documentNumber: $("pm-doc") ? $("pm-doc").value.trim() || undefined : undefined,
+      expiresAt: $("pm-exp") ? $("pm-exp").value || undefined : undefined,
     };
     if (fp) {
       if (looksPem) body.certificate = fp;
@@ -1230,6 +1333,7 @@
     try {
       await request("/api/persons/" + encodeURIComponent(id) + "/methods", { method: "POST", body });
       flash($("flash-person-method"), "ok", "Authenticator attested to this person. It cannot be bound to a second person.");
+      await loadCredentials();
     } catch (err) {
       flash($("flash-person-method"), "err", errText(err));
     }
@@ -1496,6 +1600,81 @@
   $("btn-refresh-notices").addEventListener("click", async () => {
     await loadMe();
     await loadNotifications();
+  });
+
+  if ($("rr-election")) {
+    $("rr-election").addEventListener("change", () => loadRegistrationRequests());
+  }
+  if ($("r-election")) {
+    $("r-election").addEventListener("change", () => {
+      if ($("rr-election") && !$("rr-election").value) {
+        $("rr-election").value = $("r-election").value;
+      }
+      loadRegistrationRequests();
+    });
+  }
+  if ($("btn-refresh-credentials")) {
+    $("btn-refresh-credentials").addEventListener("click", () => loadCredentials());
+  }
+
+  document.addEventListener("click", async (event) => {
+    const approveBtn = event.target.closest("[data-approve-request]");
+    if (approveBtn) {
+      const electionId = approveBtn.getAttribute("data-election");
+      const requestId = approveBtn.getAttribute("data-approve-request");
+      try {
+        await request(
+          "/api/elections/" +
+            encodeURIComponent(electionId) +
+            "/registration-requests/" +
+            encodeURIComponent(requestId) +
+            "/approve",
+          { method: "POST", body: {} }
+        );
+        flash($("flash-requests"), "ok", "Approved. The identity commitment is on the roll.");
+        await loadRegistrationRequests();
+      } catch (err) {
+        flash($("flash-requests"), "err", errText(err));
+      }
+      return;
+    }
+    const denyBtn = event.target.closest("[data-deny-request]");
+    if (denyBtn) {
+      const electionId = denyBtn.getAttribute("data-election");
+      const requestId = denyBtn.getAttribute("data-deny-request");
+      const reason = window.prompt("Reason for denying this registration? (optional)") || "DENIED";
+      try {
+        await request(
+          "/api/elections/" +
+            encodeURIComponent(electionId) +
+            "/registration-requests/" +
+            encodeURIComponent(requestId) +
+            "/deny",
+          { method: "POST", body: { reason } }
+        );
+        flash($("flash-requests"), "ok", "Denied. The person is not on the roll.");
+        await loadRegistrationRequests();
+      } catch (err) {
+        flash($("flash-requests"), "err", errText(err));
+      }
+      return;
+    }
+    const revokeBtn = event.target.closest("[data-revoke-cred]");
+    if (revokeBtn) {
+      const personId = revokeBtn.getAttribute("data-person");
+      const methodId = revokeBtn.getAttribute("data-revoke-cred");
+      const reason = window.prompt("Revoke reason (EXPIRED, SUSPENDED, SUPERSEDED, FRAUD, MANUAL):", "EXPIRED") || "EXPIRED";
+      try {
+        await request(
+          "/api/persons/" + encodeURIComponent(personId) + "/methods/" + encodeURIComponent(methodId) + "/revoke",
+          { method: "POST", body: { reason } }
+        );
+        flash($("flash-credentials"), "ok", "Credential revoked. It can no longer be used to sign in.");
+        await loadCredentials();
+      } catch (err) {
+        flash($("flash-credentials"), "err", errText(err));
+      }
+    }
   });
 
   document.querySelectorAll(".local-nav a").forEach((link) => {

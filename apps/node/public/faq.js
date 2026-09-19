@@ -137,8 +137,8 @@ export const FAQ_ENTRIES = [
     topic: "how-to-register",
     q: "How do I register to vote?",
     a: [
-      "Open Register (or Identify yourself). Bind email, a Web3 wallet, a smart-card reader, a driver’s license or passport, or a passkey. Submit an identity commitment to an election whose roll is still open. The public tree holds that commitment hex, not your name and not a document number.",
-      "A clerk or registrar may still need to match you to the civil roll. After you have a method, Sign in on later visits — each path still uses email MFA. Register separately for each election you are eligible for; being on one roll does not silently enroll you in every contest on the Node.",
+      "Open Register (or Identify yourself). Bind email, a Web3 wallet, a smart-card reader, one or more driver’s licenses or passports, or a passkey. You may verify several Ethereum addresses by signing a challenge; exactly one is active. Then request a place on an election whose roll is still open. A registrar or clerk of that election’s jurisdiction must approve before the identity commitment is on the roll. The public tree holds that commitment hex, not your name and not a document number.",
+      "Civil officers can inspect each smart card and license and revoke one whose registration has expired. Automated DMV checks are Future; review is manual today. After you have a method, Sign in on later visits — each path still uses email MFA. Register separately for each election you are eligible for; being on one roll does not silently enroll you in every contest on the Node.",
     ],
   },
   {
@@ -146,7 +146,7 @@ export const FAQ_ENTRIES = [
     topic: "admins",
     q: "How do election officials work in Republic?",
     a: [
-      "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll. Registrar: insert identity commitments (never names). Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction, and design the official outcome PDF letterhead (QR and hash seals stay required).",
+      "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll, and (with the registrar) approve voter registration requests. Registrar: approve those requests, insert identity commitments (never names), and revoke expired smart cards or driver’s licenses. Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction, and design the official outcome PDF letterhead (QR and hash seals stay required).",
       "Clerk / registrar / disqualification officer / tally operator are granted per jurisdiction. platform_admin is a global override, not a token admin. If you are not signed in as an officer, the admin hub sends you to sign-in. The Node still enforces roles on each API action even if a form is visible.",
     ],
   },
@@ -303,6 +303,15 @@ export const FAQ_ENTRIES = [
     ],
   },
   {
+    id: "vote-pin",
+    topic: "vote-pin",
+    q: "Why do I enter a PIN on a scrambled keypad when I vote?",
+    a: [
+      "Every person sets a 4–8 digit vote PIN while they set up their profile — the same idea as a password, not a sign-in password product. You can change it anytime. If you forget it, email MFA sends a one-time code and you set a new PIN on the phone keypad (forgot PIN is the same flow as forgot password).",
+      "The pad is a standard 3×3 with zero at the bottom. When you finalize a ballot the numbers on those keys are shuffled for you, and the keyboard cannot type the PIN, so a watcher cannot copy a tap or keystroke pattern. The Node stores a hash, never the digits. A signed-in vote is rejected until that PIN is confirmed.",
+    ],
+  },
+  {
     id: "civic-id",
     topic: "civic-id",
     q: "Can I sign in with a driver’s license or passport?",
@@ -344,6 +353,7 @@ export const FAQ_REQUIRED_TOPICS = [
   "open-source",
   "security-limits",
   "email-mfa",
+  "vote-pin",
   "civic-id",
   "terms",
 ];

@@ -11,7 +11,7 @@
 
 "use strict";
 
-const AUTH_METHOD_TYPES = Object.freeze(["passkey", "web3", "smart_card"]);
+const AUTH_METHOD_TYPES = Object.freeze(["email", "passkey", "web3", "smart_card", "civic_id"]);
 
 /** Republic L2 chain id (see docs/L2.md). */
 const REPUBLIC_CHAIN_ID = 27427;
@@ -171,9 +171,9 @@ const REASON_CODE_LABELS = Object.freeze({
  *
  * @typedef {Object} AuthMethod
  * @property {string} id
- * @property {"passkey"|"web3"|"smart_card"} type
+ * @property {"email"|"passkey"|"web3"|"smart_card"|"civic_id"} type
  * @property {boolean} verified
- * @property {"self"|"registrar"} [verifiedBy]
+ * @property {"self"|"registrar"|"provider"} [verifiedBy]
  * @property {string} [verifiedAt] ISO-8601
  * @property {string} [label]
  * @property {string} [credentialId] passkey
@@ -181,6 +181,10 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} [fingerprint] smart-card digest
  * @property {string} [subject]
  * @property {string} [issuer]
+ * @property {"drivers_license"|"passport"} [kind]
+ * @property {"active"|"pending_review"|"revoked"|"expired"} [status]
+ * @property {string} [expiresAt]
+ * @property {string} [provider] `manual` until a DMV connector is configured
  */
 
 /**
@@ -190,6 +194,7 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} address Checksummed EOA or smart-account address.
  * @property {string} [source] passkey | web3 | registrar
  * @property {boolean} verified
+ * @property {"self"|"registrar"} [verifiedBy]
  * @property {boolean} active Exactly one verified account is active per person.
  * @property {string} [verifiedAt]
  */

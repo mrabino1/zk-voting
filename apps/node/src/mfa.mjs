@@ -53,11 +53,17 @@ export function mfaPayload(rec) {
     needsEmail: Boolean(rec.needsEmail) && !rec.email,
     factor: rec.factor,
     emailHint: rec.email ? emailHint(rec.email) : null,
+    purpose: rec.purpose || 'mfa',
+    pinReset: rec.purpose === 'pin-reset',
     nfp: true,
     message:
       rec.needsEmail && !rec.email
-        ? 'Enter the email that will receive your sign-in code.'
-        : 'Enter the 6-digit code sent to your email.',
+        ? rec.purpose === 'pin-reset'
+          ? 'Enter the email that will receive your vote PIN reset code.'
+          : 'Enter the email that will receive your sign-in code.'
+        : rec.purpose === 'pin-reset'
+          ? 'Enter the 6-digit code sent to your email to set a new vote PIN.'
+          : 'Enter the 6-digit code sent to your email.',
   };
 }
 
@@ -263,6 +269,7 @@ export function createMfaService({ config, store, mailer, terms }) {
       throw new HttpError(400, 'invalid or expired code', { code: 'OTP_INVALID' });
     }
 
+    const isPinReset = rec.purpose === 'pin-reset';
     let user = rec.userId ? store.getUser(rec.userId) : null;
     if (!user && rec.purpose === 'register' && rec.email) {
       user = store.createUser({
@@ -276,7 +283,11 @@ export function createMfaService({ config, store, mailer, terms }) {
       throw new HttpError(400, 'invalid or expired code', { code: 'OTP_INVALID' });
     }
 
-    if (rec.email && (rec.bindEmail || rec.purpose === 'register' || rec.factor === 'email')) {
+    if (
+      !isPinReset &&
+      rec.email &&
+      (rec.bindEmail || rec.purpose === 'register' || rec.factor === 'email')
+    ) {
       await store.addAuthMethod(user.id, {
         type: 'email',
         email: rec.email,
@@ -288,6 +299,9 @@ export function createMfaService({ config, store, mailer, terms }) {
     drop(rec);
     await establishSession(res, store, config, store.getUser(user.id));
     clearMfaCookie(res, config);
+    if (isPinReset) {
+      await store.grantPinReset(user.id);
+    }
     if (terms && rec.acceptedTerms) {
       await terms.maybeAcceptNewPerson(store.getUser(user.id), {
         acceptedTerms: rec.acceptedTerms,
@@ -295,7 +309,12 @@ export function createMfaService({ config, store, mailer, terms }) {
         source: rec.purpose || rec.factor || 'register',
       });
     }
-    return sessionPayload(store.getUser(user.id));
+    const payload = sessionPayload(store.getUser(user.id));
+    if (isPinReset) {
+      payload.pinResetGranted = true;
+      payload.pinReset = true;
+    }
+    return payload;
   }
 
   function status(req) {

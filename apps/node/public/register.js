@@ -4,7 +4,8 @@
  */
 
 import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, removeBoundEmail, removePasskey, setActiveEthAddress, setPrimaryEmail, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
-import { atEmailCap, atPasskeyCap, identityCapNote, renderEmailAccounts, renderPasskeyAccounts } from "./identity-accounts.js";
+import { renderPinManager } from "./pin-pad.js";
+import { atEmailCap, atPasskeyCap, identityCapNote, renderCivicCredentials, renderEmailAccounts, renderEthAccounts, renderPasskeyAccounts } from "./identity-accounts.js";
 import { mountSignInPanel } from "./signin.js";
 
 export async function renderRegister(main, ctx) {
@@ -41,6 +42,7 @@ export async function renderRegister(main, ctx) {
     identity: me?.identity || me?.me?.identity || null,
     methodTab: "email",
     mfa: null,
+    pin: null,
     selected: matchPre?.id || elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
     acceptedTerms: false,
   };
@@ -74,6 +76,7 @@ export async function renderRegister(main, ctx) {
         "ol",
         { class: "steps" },
         h("li", {}, h("strong", { text: "Prove who you are" }), " with email, Ethereum, a smart-card reader, or a driver’s license / passport."),
+        h("li", {}, h("strong", { text: "Set a vote PIN" }), " — 4–8 digits on a phone keypad. At the ballot the numbers are shuffled so a watcher cannot copy a tap pattern."),
         h("li", {}, h("strong", { text: "Keep one active Ethereum address" }), " — more can be verified internally."),
         h("li", {}, h("strong", { text: "Submit a commitment" }), " to an election roll — never a name, never the wallet as the leaf.")
       ),
@@ -510,47 +513,29 @@ export async function renderRegister(main, ctx) {
           "p",
           {
             text: state.identity?.activeEthAddress
-              ? `Active: ${state.identity.activeEthAddress}. ${state.identity.verifiedEthAddressCount || 0} address(es) verified internally.`
-              : "No active Ethereum address yet. Bind a wallet or register the passkey-derived address. Only one can be active.",
+              ? `Active: ${state.identity.activeEthAddress}. ${state.identity.verifiedEthAddressCount || 0} address(es) verified internally. Additional wallets must sign a challenge.`
+              : "No active Ethereum address yet. Connect a wallet and sign a challenge. Several addresses may be verified; only one can be active.",
           }
         ),
-        state.identity?.ethAccounts?.length
-          ? h(
-              "ul",
-              { class: "meta-list" },
-              ...state.identity.ethAccounts.map((a) =>
-                h(
-                  "li",
-                  {},
-                  h("span", { class: "lbl", text: a.active ? "Active" : "Verified" }),
-                  h("span", { class: "hex", text: `${a.address} · ${a.source}` }),
-                  a.active
-                    ? null
-                    : h(
-                        "button",
-                        {
-                          class: "btn btn-secondary",
-                          type: "button",
-                          onClick: () => onSetActive(a.address),
-                          text: "Make active",
-                        }
-                      )
-                )
-              )
-            )
-          : null,
-        rec
-          ? h(
-              "form",
-              { class: "stack", onSubmit: onRegisterLocalAddress },
-              h("p", { class: "field-hint", text: `Passkey local address on this device: ${rec.address}` }),
-              h(
-                "div",
-                { class: "toolbar" },
-                h("button", { class: "btn btn-secondary", type: "submit", text: "Verify this device address" })
-              )
-            )
-          : null,
+        renderEthAccounts(h, state.identity, {
+          busy: state.busy,
+          onActive: (row) => onSetActive(row.address),
+        }),
+        h(
+          "form",
+          { class: "stack", onSubmit: onRegisterLocalAddress },
+          h("p", {
+            class: "field-hint",
+            text: rec
+              ? `This device’s passkey helper address is ${rec.address} (${rec.addressScheme}). Production wallets are verified by signature, not by that demo label.`
+              : "Connect a browser wallet and sign to verify another Ethereum address.",
+          }),
+          h(
+            "div",
+            { class: "toolbar" },
+            h("button", { class: "btn btn-secondary", type: "submit", text: "Verify a wallet (signature)" })
+          )
+        ),
         state.identity?.authMethods?.length
           ? h(
               "p",
@@ -563,12 +548,43 @@ export async function renderRegister(main, ctx) {
       ),
       h(
         "section",
+        { class: "panel", "aria-labelledby": "cred-heading" },
+        h("h2", { id: "cred-heading", text: "Smart cards and driver’s licenses" }),
+        h("p", {
+          class: "field-hint",
+          text: "You may bind several. A civil officer can inspect each one and revoke it if that license or card registration has expired. Automated DMV checks are Future; review is manual today.",
+        }),
+        renderCivicCredentials(h, state.identity, { busy: state.busy }),
+        h("p", { class: "field-hint", text: identityCapNote(state.identity) })
+      ),
+      me?.user
+        ? renderPinManager(h, {
+            api,
+            identity: state.identity,
+            ui: state,
+            announce,
+            busy: state.busy,
+            onUpdated: async () => {
+              await refreshIdentity();
+              paint();
+            },
+          })
+        : h(
+            "section",
+            { class: "panel", "aria-labelledby": "vote-pin-heading" },
+            h("h2", { id: "vote-pin-heading", text: "Vote PIN" }),
+            h("p", {
+              text: "After you identify yourself, set a 4–8 digit PIN on this page. You will tap it on a scrambled phone keypad when you finalize a ballot. Keyboard typing is not allowed.",
+            })
+          ),
+      h(
+        "section",
         { class: "panel", "aria-labelledby": "roll-heading" },
-        h("h2", { id: "roll-heading", text: "3. Submit to an election roll" }),
+        h("h2", { id: "roll-heading", text: "3. Request a place on an election roll" }),
         h(
           "p",
           {
-            text: "POST /api/elections/:id/register after the passkey exists. The Node (or a clerk) posts the commitment, not your name.",
+            text: "You submit an identity commitment. A registrar or clerk of this election’s jurisdiction must approve before you are on the roll. The leaf is never your name or wallet.",
           }
         ),
         source === "sample"
@@ -610,7 +626,7 @@ export async function renderRegister(main, ctx) {
             h(
               "span",
               {
-                text: "I am registering for this election, I understand the clerk may still require documents, and I know this screen will never show a seed phrase or my trapdoor.",
+                text: "I am requesting registration for this election. I understand a civil officer must approve, the clerk may still require documents, and this screen will never show a seed phrase or my trapdoor.",
               }
             )
           ),
@@ -623,7 +639,7 @@ export async function renderRegister(main, ctx) {
                 class: "btn",
                 type: "submit",
                 disabled: Boolean(state.busy || !rec),
-                text: "Submit registration (passkey + relay)",
+                text: "Request registration (civil review)",
               }
             )
           )
@@ -904,15 +920,14 @@ export async function renderRegister(main, ctx) {
 
   async function onRegisterLocalAddress(event) {
     event.preventDefault();
-    if (!state.record?.address) return;
     state.busy = true;
     state.error = "";
     try {
-      const result = await registerEthAccount(api, { address: state.record.address, source: "passkey" });
+      const result = await registerEthAccount(api, { source: "web3" });
       state.identity = result.identity;
-      state.info = "Device address verified internally.";
+      state.info = "Wallet signed a challenge. That Ethereum address is now verified internally.";
     } catch (err) {
-      state.error = err.message || "Could not verify device address. Sign in first.";
+      state.error = err.message || "Could not verify the wallet. Sign in first, then sign the challenge.";
     } finally {
       state.busy = false;
       paint();
@@ -1004,16 +1019,18 @@ export async function renderRegister(main, ctx) {
           callData: "register",
         },
       };
-      let status = "registered";
+      let status = "pending";
       try {
         const res = await api(`/api/elections/${encodeURIComponent(electionId)}/register`, {
           method: "POST",
           body,
         });
-        status = res?.status || res?.state || "registered";
+        status = res?.status || res?.state || (res?.code === "PENDING_REVIEW" ? "pending" : "registered");
         state.info =
           res?.message ||
-          `Registration accepted by the Node for election ${electionId}. Commitment ${auth.identityCommitment.slice(0, 12)}… was relayed.`;
+          (status === "pending"
+            ? `Registration requested for election ${electionId}. A registrar or clerk must approve before you are on the roll.`
+            : `Registration accepted by the Node for election ${electionId}. Commitment ${auth.identityCommitment.slice(0, 12)}… was relayed.`);
       } catch (err) {
         if (source === "sample" && err.status) {
           status = "pending";

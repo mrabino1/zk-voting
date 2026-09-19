@@ -239,7 +239,10 @@
           <h2 id="reg-heading">Registrar</h2>
           <span class="pill" id="role-registrar">registrar</span>
         </header>
-        <p class="field-hint">Insert an identity commitment (hex uint). Never a wallet address, never a legal name.</p>
+        <p class="field-hint">
+          Voters request a place on the roll. A registrar or clerk of this election’s jurisdiction
+          must approve. You may still insert a commitment directly at a clerk desk (never a name or wallet).
+        </p>
         <form id="form-register" class="form-grid">
           <div class="field">
             <label class="field-label" for="r-election">Election <span class="req">*</span></label>
@@ -255,6 +258,37 @@
           </div>
           <div class="flash" id="flash-register" role="status"></div>
         </form>
+
+        <hr class="hr-office" />
+        <h3>Pending registration requests</h3>
+        <p class="field-hint">
+          Manual civil review. Inspect the requester’s smart cards and driver’s licenses below, then
+          approve or deny. A later third-party connector can flag expired licenses; it does not skip this step.
+        </p>
+        <div class="field">
+          <label class="field-label" for="rr-election">Election</label>
+          <select id="rr-election" name="requestElectionId"></select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="table-registration-requests">
+            <caption class="visually-hidden">Pending registration requests</caption>
+            <thead>
+              <tr>
+                <th>Handle</th>
+                <th>Commitment</th>
+                <th>Requested</th>
+                <th>Cards / licenses</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Choose an election.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flash" id="flash-requests" role="status"></div>
       </section>
 
       <section class="panel" id="person" aria-labelledby="person-heading">
@@ -299,6 +333,7 @@
               <option value="passkey">passkey</option>
               <option value="web3">web3 wallet</option>
               <option value="smart_card">smart card digital ID</option>
+              <option value="civic_id">driver’s license / passport</option>
             </select>
           </div>
           <div class="field">
@@ -312,6 +347,27 @@
           <div class="field">
             <label class="field-label" for="pm-fp">Smart-card fingerprint</label>
             <input id="pm-fp" name="fingerprint" spellcheck="false" placeholder="0x… or PEM" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-kind">Civic ID kind</label>
+            <select id="pm-kind" name="kind">
+              <option value="">—</option>
+              <option value="drivers_license">Driver’s license</option>
+              <option value="passport">Passport</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-issuer">Issuing jurisdiction</label>
+            <input id="pm-issuer" name="issuer" maxlength="16" placeholder="US-CA" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-doc">Document number (hashed, not stored)</label>
+            <input id="pm-doc" name="documentNumber" spellcheck="false" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pm-exp">Expires</label>
+            <input id="pm-exp" name="expiresAt" type="date" />
+            <span class="field-hint">Civil expiry. Officers revoke when this registration lapses.</span>
           </div>
           <div class="actions">
             <button class="btn" type="submit">Attest method</button>
@@ -337,6 +393,39 @@
           </div>
           <div class="flash" id="flash-person-eth" role="status"></div>
         </form>
+
+        <hr class="hr-office" />
+        <h3>Review smart cards and driver’s licenses</h3>
+        <p class="field-hint">
+          Look at each card or license. Revoke it if the civil registration has expired. Status checks
+          are manual until <code>CREDENTIAL_PROVIDER_SECRET</code> enables
+          <code>POST /api/integrations/credentials/status</code>.
+        </p>
+        <div class="actions" style="margin-bottom:0.6rem">
+          <button class="btn btn-secondary" type="button" id="btn-refresh-credentials">Refresh credentials</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="table-credentials">
+            <caption class="visually-hidden">Bound smart cards and civic IDs</caption>
+            <thead>
+              <tr>
+                <th>Handle</th>
+                <th>Type</th>
+                <th>Issuer</th>
+                <th>Status</th>
+                <th>Expires</th>
+                <th>Hash / fingerprint</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flash" id="flash-credentials" role="status"></div>
       </section>
 
       <section class="panel" id="disqualify" aria-labelledby="dq-heading">

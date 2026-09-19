@@ -113,7 +113,7 @@ The properties we are aiming for:
 
 Zero-knowledge does **not** mean “nobody is in charge.” Someone still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, **counting and eligibility checks are not a second trust sink**.
 
-Privacy construction (implementation): a person uniquely identifies with **email** (up to 5, exactly one primary), an **Ethereum wallet** (signature), a **smart-card reader**, a **driver’s license or passport** (hashed; no images or full numbers stored), or a **passkey** (up to 5; any of them can sign in). Several ETH addresses may be verified internally; only one is active. **Every sign-in path uses email MFA via AWS SES** (primary inbox by default). WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the active wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Person identity](./docs/IDENTITY.md), [Passkeys](./docs/PASSKEYS.md), and [ARCHITECTURE](./docs/ARCHITECTURE.md).
+Privacy construction (implementation): a person uniquely identifies with **email** (up to 5, exactly one primary), an **Ethereum wallet** (signature), a **smart-card reader**, a **driver’s license or passport** (hashed; no images or full numbers stored), or a **passkey** (up to 5; any of them can sign in). Several ETH addresses may be verified internally; only one is active. **Every sign-in path uses email MFA via AWS SES** (primary inbox by default). Profile setup includes a **vote PIN** (4–8 digits; scrambled phone keypad at ballot submit; forgot PIN via the same email MFA). WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the active wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Person identity](./docs/IDENTITY.md), [Passkeys](./docs/PASSKEYS.md), and [ARCHITECTURE](./docs/ARCHITECTURE.md).
 
 ---
 
@@ -133,7 +133,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Republic L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
 | Block explorer | Node `/explorer` over `l2-chain.json` + ingest API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 | Passkeys | WebAuthn PRF helper; demo address is `republic-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
-| Person identity | Passkey / Web3 / smart card; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
+| Person identity | Passkey / Web3 / smart card / email / civic ID; vote PIN at ballot submit; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
 | Tally that opens ballots | **Demo slice in-tree.** `tallyScheme=opens_ballots` encrypts choices to a P-256 tally pubkey (threshold-1 operator key, **NON-PRODUCTION**). Node decrypts accepted envelopes and rejects invented `counts[]`. Legacy `sum_only` still allows any partition of `acceptedBallots`. Not MACI / not production guardians. |
 | Coercion slice | One accepted nullifier + hash-only receipts (not MACI, not last-vote-counts). |
 | Independent auditor | `tools/auditor` + [`docs/AUDITOR.md`](./docs/AUDITOR.md); no Node private DB |
@@ -282,7 +282,7 @@ With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-c
 
 ### Passkeys and person identity
 
-A person identifies with **email** (up to 5, one primary), an **Ethereum wallet**, a **smart-card reader**, a **driver’s license or passport**, or a **passkey** (up to 5). Many Ethereum addresses can be verified internally; **exactly one** is active. Sign-in completes with **email MFA (AWS SES)** to the primary inbox by default. The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
+A person identifies with **email** (up to 5, one primary), an **Ethereum wallet**, a **smart-card reader**, a **driver’s license or passport**, or a **passkey** (up to 5). Many Ethereum addresses can be verified internally; **exactly one** is active. Sign-in completes with **email MFA (AWS SES)** to the primary inbox by default. Profile setup includes a **vote PIN** (4–8 digits; scrambled phone keypad at ballot submit; forgot-PIN via the same email MFA). The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
 
 Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `republic-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `RepublicPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
@@ -570,6 +570,7 @@ Registration is a **legal and operational** process that **ends** in an on-chain
 Typical intake (jurisdiction-configurable, not all required for every election):
 
 - **Email, Ethereum, smart-card reader, driver’s license/passport, or passkey** (a person may verify all of them; email MFA on every path)
+- A **vote PIN** (4–8 digits) set on the profile; scrambled 3×3+0 keypad at ballot submit; forgot PIN via email MFA
 - Several Ethereum addresses verified internally; **exactly one active** (the roll leaf is still the identity commitment, never that address)
 - Legal name, date of birth, address / residency evidence (clerk file; not on chain)
 - Citizenship or membership evidence
@@ -589,11 +590,13 @@ The Node stores what the jurisdiction is legally required to keep. That store is
 ### Status the voter should see
 
 - **Not registered**
-- **Pending review** (documents in with the clerk)
+- **Pending review** (the person requested a place on the roll; a registrar or clerk of that election’s jurisdiction has not approved yet)
 - **Registered** (on the roll commitment)
 - **Eligible for election E** (registered, and not disqualified for E)
 - **Disqualified for election E** (registered, but a live disqualification applies)
 - **Ballot recorded** (nullifier spent; the accepted `ballotHash` is what the tally uses; choice not shown)
+
+A voter’s `POST /api/elections/:id/register` is **pending** until civil approval. Officers of that jurisdiction may insert a commitment immediately from the back office. Smart cards and driver’s licenses on the person file can be **revoked** when that civil registration has expired (`GET /api/office/credentials`). Automated DMV lookup is Future (`CREDENTIAL_PROVIDER_SECRET` / `POST /api/integrations/credentials/status`); review is manual today.
 
 ---
 

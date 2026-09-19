@@ -15,6 +15,8 @@ import {
   typeLabel,
 } from "./ballot.js";
 import { copyText, rememberProof } from "./receipt.js";
+import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
+import { verifyVotePin } from "./identity-methods.js";
 
 export const SAMPLE_QUESTIONS = [
   {
@@ -113,6 +115,10 @@ export async function renderVote(main, ctx) {
     step: prior ? "receipt" : "ballot",
     receipt: prior || null,
     answersPreview: null,
+    pendingAnswers: null,
+    pinDigits: "",
+    pinKeypad: null,
+    pinToken: null,
     emailTo: "",
     emailBusy: false,
     downloadBusy: false,
@@ -421,12 +427,106 @@ export async function renderVote(main, ctx) {
     }
   }
 
+  function signedIn() {
+    return Boolean(me?.user);
+  }
+
+  function identityOf() {
+    return me?.identity || me?.user?.identity || null;
+  }
+
+  function pinBound() {
+    const id = identityOf();
+    return Boolean(id?.pinBound || me?.user?.pinBound);
+  }
+
+  function needsVotePin() {
+    return signedIn();
+  }
+
+  function renderPinStep() {
+    if (!state.pinKeypad && !state.busy) {
+      state.busy = true;
+      api("/api/me/pin/keypad", { method: "POST", body: { purpose: "vote" } })
+        .then((issued) => {
+          state.pinKeypad = issued;
+        })
+        .catch((err) => {
+          state.error = err.message || "Could not load the vote keypad.";
+        })
+        .finally(() => {
+          state.busy = false;
+          paint();
+        });
+    }
+    return h(
+      "section",
+      { class: "panel pin-panel", "aria-labelledby": "vote-pin-final-heading" },
+      h("h2", { id: "vote-pin-final-heading", text: "Enter your vote PIN" }),
+      h("p", {
+        text: "Tap your PIN on this scrambled phone keypad. Keyboard typing is disabled so a watcher cannot copy a keystroke pattern. Then confirm your passkey. The receipt will not list your choices.",
+      }),
+      renderPinPad(h, {
+        layout: state.pinKeypad?.layout || STANDARD_PAD,
+        scramble: true,
+        value: state.pinDigits,
+        disabled: Boolean(state.busy || !state.pinKeypad),
+        labelledBy: "vote-pin-final-heading",
+        confirmText: state.busy ? "Checking PIN…" : "Confirm PIN and continue",
+        onChange: (next) => {
+          state.pinDigits = next;
+          paint();
+        },
+        onConfirm: (pin) => submitPinThenBallot(pin),
+      }),
+      h(
+        "p",
+        { class: "cluster" },
+        h("button", {
+          type: "button",
+          class: "btn btn-secondary",
+          text: "Back to ballot",
+          onClick: () => {
+            state.step = "ballot";
+            state.pinDigits = "";
+            paint();
+          },
+        }),
+        h("a", { href: "/register", "data-nav": "", text: "Forgot PIN" })
+      )
+    );
+  }
+
+  async function submitPinThenBallot(pin) {
+    if (state.busy) return;
+    state.busy = true;
+    state.error = "";
+    paint();
+    try {
+      const verified = await verifyVotePin(api, { pin, purpose: "vote" });
+      state.pinToken = verified.pinToken;
+      state.pinDigits = "";
+      await submitBallot(state.pendingAnswers);
+    } catch (err) {
+      state.error = err.message || "PIN is incorrect.";
+      announce(state.error);
+      state.busy = false;
+      paint();
+    }
+  }
+
   function paint() {
     const closed = election.state >= 3;
     const notOpen = election.state !== 2;
     const children = [header()];
     if (state.error) children.push(h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })));
     if (state.info) children.push(h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })));
+
+    if (state.step === "pin") {
+      children.push(renderPinStep());
+      fill(root, ...children);
+      return;
+    }
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
       children.push(renderReceipt(state, { h, api, announce, election, paint }));
@@ -486,6 +586,26 @@ export async function renderVote(main, ctx) {
       children.push(h("p", { text: `Node status for you: ${me.elections[election.id].status}.` }));
     }
 
+    if (source !== "sample" && !signedIn()) {
+      children.push(
+        h(
+          "div",
+          { class: "notice notice-warn" },
+          h("p", { text: "Sign in and set a vote PIN before finalizing a live ballot. Sample ballots can still be marked on this device." }),
+          h("a", { class: "btn", href: "/signin", "data-nav": "", text: "Sign in" })
+        )
+      );
+    } else if (signedIn() && !pinBound()) {
+      children.push(
+        h(
+          "div",
+          { class: "notice notice-warn" },
+          h("p", { text: "Set a vote PIN on Identify yourself before submitting this ballot. You will tap it on a scrambled keypad at finalization." }),
+          h("a", { class: "btn", href: "/register", "data-nav": "", text: "Set vote PIN" })
+        )
+      );
+    }
+
     if (!questions.length) {
       children.push(
         h(
@@ -523,9 +643,14 @@ export async function renderVote(main, ctx) {
             {
               class: "btn",
               type: "submit",
-              disabled: Boolean(state.busy || !publicRecord || publicRecord.staleWrap),
+              disabled: Boolean(
+                state.busy ||
+                  publicRecord?.staleWrap ||
+                  (signedIn() && !pinBound()) ||
+                  (source !== "sample" && !signedIn())
+              ),
               "aria-busy": state.busy ? "true" : "false",
-              text: state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
+              text: signedIn() ? "Continue to vote PIN" : state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
             }
           ),
           h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "Cancel" })
@@ -539,13 +664,6 @@ export async function renderVote(main, ctx) {
   async function onSubmit(event) {
     event.preventDefault();
     if (state.busy) return;
-    if (!publicRecord || publicRecord.staleWrap) {
-      state.error = publicRecord?.staleWrap
-        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
-        : "Register a passkey on this device before voting.";
-      paint();
-      return;
-    }
     const form = event.target;
     const answers = collectAnswers(form, questions);
     const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : (a.optionIds || []).length === 0));
@@ -554,6 +672,39 @@ export async function renderVote(main, ctx) {
       if (!window.confirm("This election is not open. Try to relay anyway? The Node should reject the vote.")) return;
     }
 
+    if (source !== "sample" && !signedIn()) {
+      state.error = "Sign in and enter your vote PIN before submitting a live ballot.";
+      paint();
+      return;
+    }
+    if (signedIn() && !pinBound()) {
+      state.error = "Set a vote PIN on Identify yourself before submitting this ballot.";
+      paint();
+      return;
+    }
+
+    // PIN is the last keypad step before the passkey ceremony.
+    if (needsVotePin() && !state.pinToken) {
+      state.pendingAnswers = answers;
+      state.step = "pin";
+      state.pinDigits = "";
+      state.pinKeypad = null;
+      paint();
+      return;
+    }
+
+    if (!publicRecord || publicRecord.staleWrap) {
+      state.error = publicRecord?.staleWrap
+        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
+        : "Register a passkey on this device before voting.";
+      paint();
+      return;
+    }
+
+    await submitBallot(answers);
+  }
+
+  async function submitBallot(answers) {
     state.busy = true;
     state.error = "";
     state.info = "";
@@ -596,6 +747,7 @@ export async function renderVote(main, ctx) {
         ballotHash: auth.ballotHash,
         encryptedBallot: auth.encryptedBallot,
         answers,
+        pinToken: state.pinToken || undefined,
         signature: auth.signature,
         userOpHash: auth.userOpHash,
         userOp: {
@@ -663,6 +815,9 @@ export async function renderVote(main, ctx) {
       state.step = "receipt";
       state.info = "";
       state.answersPreview = null;
+      state.pendingAnswers = null;
+      state.pinToken = null;
+      state.pinDigits = "";
       announce("Ballot submitted. Receipt does not include your choices.");
     } catch (err) {
       state.error = err.message || "The relay rejected this ballot.";
