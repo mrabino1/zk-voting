@@ -166,9 +166,12 @@ export async function renderVote(main, ctx) {
       h(
         "p",
         {
-          text: election.tallyPubKey
-            ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
-            : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
+          text:
+            state.step === "receipt"
+              ? "Your ballot was accepted. The receipt below cannot prove how you voted."
+              : election.tallyPubKey
+                ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
+                : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       ),
       h(
