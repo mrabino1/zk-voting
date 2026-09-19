@@ -201,7 +201,11 @@ Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api
 
 ### Passkeys
 
-WebAuthn with PRF wraps a secp256k1 smart-account key. The Merkle leaf is Poseidon(trapdoor, nullifierSecret), not the address. [`docs/PASSKEYS.md`](./PASSKEYS.md).
+WebAuthn with PRF wraps a secp256k1 smart-account key. The Merkle leaf is Poseidon(trapdoor, nullifierSecret), not the address. A person may register **up to 5** passkeys; any of them can sign in. [`docs/PASSKEYS.md`](./PASSKEYS.md).
+
+### Emails (primary)
+
+Up to **5** addresses per person. Exactly one is **primary** whenever any email exists. MFA (except email-as-username login) and the Terms PDF use the primary inbox. Caps are code constants — **no new env vars**. [`docs/IDENTITY.md`](./IDENTITY.md).
 
 ### Sign in (email, Ethereum, smart card, license/passport)
 

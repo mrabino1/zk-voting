@@ -120,7 +120,13 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
     const config = await api('GET', '/api/config');
     assert.equal(config.status, 200);
     assert.equal(config.json.identity.oneActiveEthAddress, true);
+    assert.equal(config.json.identity.onePrimaryEmail, true);
+    assert.equal(config.json.identity.maxPasskeys, 5);
+    assert.equal(config.json.identity.maxEmails, 5);
     assert.deepEqual(config.json.identity.methods, ['email', 'web3', 'smart_card', 'civic_id', 'passkey']);
+    assert.equal(methods.json.caps.emails, 5);
+    assert.equal(methods.json.caps.passkeys, 5);
+    assert.equal(methods.json.onePrimaryEmail, true);
   });
 
   test('web3 bind uniquely identifies a person and registers the first address as active', async () => {

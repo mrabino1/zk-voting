@@ -944,6 +944,37 @@ textarea {
   margin-top: 0;
 }
 
+.identity-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.identity-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.identity-list-main {
+  font-weight: 600;
+  flex: 1 1 12rem;
+}
+
+.pill-primary {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  padding: 0.12rem 0.45rem;
+}
+
 dl.status-dl {
   display: grid;
   grid-template-columns: 11rem 1fr;

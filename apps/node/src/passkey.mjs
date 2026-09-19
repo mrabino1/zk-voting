@@ -10,6 +10,7 @@ import {
 } from '@simplewebauthn/server';
 
 import { HttpError } from './http.mjs';
+import { assertPasskeyRoom } from './identity.mjs';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -80,6 +81,7 @@ export function createPasskeyService(config, store, hooks = {}) {
     if (!user && !handle) throw new HttpError(400, 'handle required');
     const userName = user?.handle || String(handle).trim();
     if (!userName) throw new HttpError(400, 'handle required');
+    if (user) assertPasskeyRoom(user);
     const options = await generateReg({
       rpName: config.rpName,
       rpID: config.rpID,
@@ -140,6 +142,7 @@ export function createPasskeyService(config, store, hooks = {}) {
     if (!account) {
       account = await store.ensureUser({ handle: pending.handle, role: 'voter' });
     }
+    assertPasskeyRoom(account);
     store.addCredential(account.id, {
       id: b64urlFromBytes(cred.id),
       publicKey: b64urlFromBytes(cred.publicKey),

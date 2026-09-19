@@ -150,3 +150,23 @@ export async function registerEthAccount(api, { address, source }) {
 export async function setActiveEthAddress(api, address) {
   return api("/api/me/eth-accounts/active", { method: "POST", body: { address } });
 }
+
+export async function listEmails(api) {
+  return api("/api/me/emails");
+}
+
+export async function listPasskeys(api) {
+  return api("/api/me/passkeys");
+}
+
+export async function setPrimaryEmail(api, { id, email } = {}) {
+  return api("/api/me/emails/primary", { method: "POST", body: { id, email } });
+}
+
+export async function removeBoundEmail(api, id) {
+  return api(`/api/me/emails/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function removePasskey(api, credentialId) {
+  return api(`/api/me/passkeys/${encodeURIComponent(credentialId)}`, { method: "DELETE" });
+}

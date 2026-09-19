@@ -148,7 +148,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 
 Passkey rpName is always **Republic**.
 
-Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **smart-card reader**, **license/passport**, and passkey. Register a person first (`/register`). Every path completes with an email one-time code when SES MFA is on. Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
+Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **smart-card reader**, **license/passport**, and passkey. A person may bind **up to 5 emails** (exactly one primary) and **up to 5 passkeys**. Register a person first (`/register`). Manage them on `/me`. Every path completes with an email one-time code when SES MFA is on (primary inbox by default). Caps are code constants — no extra env vars. Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
 
 ---
 
@@ -181,6 +181,11 @@ POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/ta
 DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
 GET  /api/me
 GET  /api/me/identity
+GET  /api/me/emails
+POST /api/me/emails/primary
+DELETE /api/me/emails/:id
+GET  /api/me/passkeys
+DELETE /api/me/passkeys/:credentialId
 GET  /api/identity/methods
 POST /api/identity/email/start
 POST /api/identity/web3/challenge

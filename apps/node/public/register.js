@@ -3,7 +3,8 @@
  * Passkey registration + identity commitment display (commitment hex only).
  */
 
-import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, setActiveEthAddress, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
+import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, removeBoundEmail, removePasskey, setActiveEthAddress, setPrimaryEmail, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
+import { atEmailCap, atPasskeyCap, identityCapNote, renderEmailAccounts, renderPasskeyAccounts } from "./identity-accounts.js";
 import { mountSignInPanel } from "./signin.js";
 
 export async function renderRegister(main, ctx) {
@@ -66,7 +67,7 @@ export async function renderRegister(main, ctx) {
         h(
           "p",
           { class: "lede" },
-          "A person is unique. You may verify email, a Web3 wallet, a smart-card reader, a driver’s license or passport, and a passkey. Several Ethereum addresses can be internally verified; only one is active. The public roll still stores an identity commitment, never your name, never a document number, and never the active address as the Merkle leaf."
+          "A person is unique. You may verify email, a Web3 wallet, a smart-card reader, a driver’s license or passport, and a passkey. Up to 5 emails (exactly one primary) and 5 passkeys. Several Ethereum addresses can be internally verified; only one is active. The public roll still stores an identity commitment, never your name, never a document number, and never the active address as the Merkle leaf."
         )
       ),
       h(
@@ -190,10 +191,22 @@ export async function renderRegister(main, ctx) {
             h(
               "p",
               {
-                text: "Your username is an email address. Republic sends a 6-digit sign-in code through AWS SES. That is the MFA step for every other method as well.",
+                text: "You may bind up to 5 addresses. Exactly one is primary — MFA and Terms PDF use that inbox by default. Sign-in with any bound address still sends the code to that inbox.",
               }
             ),
-            h(
+            me?.user && state.identity
+              ? [
+                  h("p", { class: "field-hint", text: identityCapNote(state.identity) }),
+                  renderEmailAccounts(h, state.identity, {
+                    busy: state.busy,
+                    onPrimary: (row) => onSetPrimaryEmail(row),
+                    onRemove: (row) => onRemoveEmail(row),
+                  }),
+                ]
+              : null,
+            atEmailCap(state.identity)
+              ? h("p", { class: "notice notice-warn", text: "Email cap reached (5). Remove a non-primary address, or switch primary first, before adding another." })
+              : h(
               "form",
               { class: "stack", onSubmit: onBindEmail },
               h(
@@ -384,11 +397,22 @@ export async function renderRegister(main, ctx) {
                 text: rec
                   ? rec.staleWrap
                     ? "This browser still has a v1 passkey wrap. v1 derived the vote identity from the account seed (weaker than the spec). Reset it, then create a new passkey so account and identity use separate PRF domains."
-                    : "A passkey wallet is already stored on this browser profile. Creating another one replaces the wrapped seed on this device."
-                  : "Use the platform authenticator (Touch ID, Windows Hello, a hardware key). You will be asked to verify it is you. The account key and the vote identity are derived under separate PRF domains.",
+                    : "A passkey wallet is already stored on this browser profile. Creating another one replaces the wrapped seed on this device (and still counts toward the 5-passkey cap if the Node records a new credential)."
+                  : "Use the platform authenticator (Touch ID, Windows Hello, a hardware key). You will be asked to verify it is you. You may register up to 5 passkeys; any of them can sign in.",
               }
             ),
-            h(
+            me?.user && state.identity
+              ? [
+                  h("p", { class: "field-hint", text: identityCapNote(state.identity) }),
+                  renderPasskeyAccounts(h, state.identity, {
+                    busy: state.busy,
+                    onRemove: (row) => onRemovePasskey(row),
+                  }),
+                ]
+              : null,
+            atPasskeyCap(state.identity)
+              ? h("p", { class: "notice notice-warn", text: "Passkey cap reached (5). Remove one on this page or My desk before registering another." })
+              : h(
               "form",
               {
                 class: "stack",
@@ -689,7 +713,7 @@ export async function renderRegister(main, ctx) {
     if (state.busy) return;
     const email = event.target.email?.value?.trim();
     const handle = event.target.handle?.value?.trim();
-    if (!requireTerms()) return;
+    if (!me?.user && !requireTerms()) return;
     state.busy = true;
     state.error = "";
     state.info = "";
@@ -700,6 +724,68 @@ export async function renderRegister(main, ctx) {
       announce(state.info);
     } catch (err) {
       state.error = err.message || "Email registration failed.";
+      announce(state.error);
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
+  async function onSetPrimaryEmail(row) {
+    if (state.busy || !row?.id) return;
+    state.busy = true;
+    state.error = "";
+    state.info = "";
+    paint();
+    try {
+      const result = await setPrimaryEmail(api, { id: row.id });
+      state.identity = result.identity;
+      state.info = `${row.email} is now your primary email.`;
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Could not set primary email.";
+      announce(state.error);
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
+  async function onRemoveEmail(row) {
+    if (state.busy || !row?.id) return;
+    state.busy = true;
+    state.error = "";
+    state.info = "";
+    paint();
+    try {
+      const result = await removeBoundEmail(api, row.id);
+      state.identity = result.identity;
+      state.info = "Email removed.";
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Could not remove email.";
+      announce(state.error);
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
+  async function onRemovePasskey(row) {
+    if (state.busy) return;
+    const id = row?.credentialId || row?.id;
+    if (!id) return;
+    state.busy = true;
+    state.error = "";
+    state.info = "";
+    paint();
+    try {
+      const result = await removePasskey(api, id);
+      state.identity = result.identity;
+      state.info = "Passkey removed from this person.";
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Could not remove passkey.";
       announce(state.error);
     } finally {
       state.busy = false;
@@ -851,7 +937,7 @@ export async function renderRegister(main, ctx) {
   async function onCreatePasskey(event) {
     event.preventDefault();
     if (state.busy) return;
-    if (!requireTerms()) return;
+    if (!me?.user && !requireTerms()) return;
     const displayName = event.target.displayName?.value?.trim() || "voter";
     state.busy = true;
     state.error = "";

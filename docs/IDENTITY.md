@@ -13,7 +13,9 @@ This Node does **not** store passport or license **images** or **full document n
 ```
 Person (one Node user)
   ├── authMethods[]     email | web3 | smart_card | civic_id | passkey
-  ├── email             MFA destination (also an email auth method)
+  ├── emails[]          up to 5; exactly one `primary` when any exist
+  ├── email             MFA/SES default = the primary address
+  ├── credentials[]     up to 5 WebAuthn passkeys (any of them can sign in)
   ├── ethAccounts[]      many verified addresses, globally unique to that person
   └── activeEthAddress   exactly one (or none until the first address is verified)
 ```
@@ -25,6 +27,8 @@ Person (one Node user)
 | Binding | Rule |
 | --- | --- |
 | Authenticator (email, credential id, wallet, card fingerprint, civic-id hash) | Belongs to at most one person (`METHOD_OWNED`). |
+| Emails per person | At most **5** (`EMAIL_CAP`). Exactly one is `primary` whenever any email exists. |
+| Passkeys per person | At most **5** (`PASSKEY_CAP`). Any of them can complete WebAuthn login. |
 | Ethereum address | Belongs to at most one person (`ADDRESS_OWNED`). |
 | Optional registrar `personKeyHash` | keccak256 of a civil-file token. Unique (`PERSON_KEY_OWNED`). The Node stores the hash, never a legal name. |
 
@@ -49,9 +53,13 @@ Dev login (`ALLOW_DEV_LOGIN`) never requires MFA.
 
 ### Email (username)
 
-**Register:** `POST /api/identity/email/start` `{ email, handle? }` → SES code → `POST /api/auth/mfa/verify`.
+**Register:** `POST /api/identity/email/start` `{ email, handle? }` → SES code → `POST /api/auth/mfa/verify`. The first address becomes **primary**. Further addresses (up to 5) are added the same way while signed in.
 
-**Login:** `POST /api/auth/email/start` `{ email }` → SES code → verify. Unknown emails are `404 UNKNOWN_CREDENTIAL` (does not create a person).
+**Login:** `POST /api/auth/email/start` `{ email }` → SES code to **that** address → verify. Unknown emails are `404 UNKNOWN_CREDENTIAL` (does not create a person).
+
+**Primary:** `POST /api/me/emails/primary` `{ id }` or `{ email }` makes that bound address primary and clears the previous one. `DELETE /api/me/emails/:id` cannot remove the primary (`PRIMARY_REQUIRED`); set another primary first. `GET /api/me/emails` and `GET /api/me` / `GET /api/me/identity` list every address and which is primary.
+
+Login/MFA after passkey, wallet, smart card, or civic ID, and the Terms PDF, send to the **primary** address by default. Caps are code constants (`MAX_EMAILS_PER_PERSON = 5`); no extra env vars.
 
 ### Web3 wallet
 
@@ -87,7 +95,7 @@ Socially certified photo ID. Hash only: `keccak256(utf8("republic:civic_id:v1|{k
 
 ### Passkey
 
-WebAuthn resident credential. `POST /api/auth/passkey/register/finish` records a `passkey` auth method, then MFA when required. Returning users call `POST /api/auth/passkey/login/begin` then `finish`. See [`PASSKEYS.md`](./PASSKEYS.md).
+WebAuthn resident credential. A person may register **up to 5** passkeys (`PASSKEY_CAP` on the 6th). `POST /api/auth/passkey/register/begin` then `finish` records a `passkey` auth method, then MFA when required. Returning users call `POST /api/auth/passkey/login/begin` then `finish` with **any** of their credentials. `GET /api/me/passkeys` lists them; `DELETE /api/me/passkeys/:credentialId` unbinds one. See [`PASSKEYS.md`](./PASSKEYS.md).
 
 ---
 
@@ -117,6 +125,13 @@ POST /api/identity/web3/verify
 POST /api/identity/smart-card/challenge
 POST /api/identity/smart-card/verify
 POST /api/identity/civic-id/verify
+
+GET  /api/me/identity
+GET  /api/me/emails
+POST /api/me/emails/primary          ({ id } or { email }; exactly one primary)
+DELETE /api/me/emails/:id            (not the primary — PRIMARY_REQUIRED)
+GET  /api/me/passkeys
+DELETE /api/me/passkeys/:credentialId
 
 POST /api/persons/:id/methods         (registrar; type email | web3 | smart_card | civic_id | passkey)
 ```

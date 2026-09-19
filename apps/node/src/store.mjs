@@ -16,11 +16,17 @@ import {
 } from './electionIds.mjs';
 import { HttpError } from './http.mjs';
 import {
+  assertEmailRoom,
+  assertPasskeyRoom,
   ensurePersonFields,
   isAuthMethodType,
+  normalizeEmail,
   normalizeEthAddress,
   normalizeFingerprint,
+  personEmailMethods,
+  sameEmail,
   sameEthAddress,
+  syncPersonEmails,
 } from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isRole } from './roles.mjs';
@@ -406,14 +412,31 @@ export class Store {
     if (user.credentials.some((c) => c.id === credential.id)) {
       throw new HttpError(409, 'credential already registered');
     }
+    assertPasskeyRoom(user);
     user.credentials.push(credential);
     this._addAuthMethodUnchecked(user, {
       type: 'passkey',
       credentialId: credential.id,
-      label: 'Passkey',
+      label: credential.label || 'Passkey',
       verifiedBy: 'self',
     });
     return credential;
+  }
+
+  async removeCredential(userId, credentialId) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const id = String(credentialId || '');
+    const cred = (user.credentials || []).find((c) => c.id === id);
+    if (!cred) {
+      throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
+    }
+    user.credentials = user.credentials.filter((c) => c.id !== id);
+    user.authMethods = (user.authMethods || []).filter(
+      (m) => !(m.type === 'passkey' && m.credentialId === id),
+    );
+    await this.persist();
+    return user;
   }
 
   findCredential(credentialId) {
@@ -512,7 +535,11 @@ export class Store {
         code: 'METHOD_OWNED',
       });
     }
-    if (existing && existing.user.id === user.id) return existing.method;
+    if (existing && existing.user.id === user.id) {
+      if (type === 'email') syncPersonEmails(user);
+      return existing.method;
+    }
+    const emailCountBefore = personEmailMethods(user).length;
     const method = {
       id: randomUUID(),
       type,
@@ -528,17 +555,75 @@ export class Store {
       email: fields.email || null,
       kind: fields.kind || null,
       civicIdHash: fields.civicIdHash || (type === 'civic_id' ? fields.fingerprint : null),
+      primary: type === 'email' ? emailCountBefore === 0 : undefined,
     };
-    user.authMethods.push(method);
-    if (type === 'email' && method.email && !user.email) {
-      user.email = method.email;
+    if (type === 'email' && method.email) {
+      try {
+        method.email = normalizeEmail(method.email);
+      } catch {
+        /* keep raw; caller already validated on HTTP paths */
+      }
     }
+    user.authMethods.push(method);
+    if (type === 'email') syncPersonEmails(user);
     return method;
+  }
+
+  async setPrimaryEmail(userId, { emailId, email } = {}) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const methods = personEmailMethods(user);
+    let target = null;
+    if (emailId) target = methods.find((m) => m.id === String(emailId));
+    if (!target && email) {
+      const want = normalizeEmail(email);
+      target = methods.find((m) => sameEmail(m.email, want));
+    }
+    if (!target) {
+      throw new HttpError(404, 'email not bound to this person', { code: 'EMAIL_NOT_FOUND' });
+    }
+    for (const method of methods) {
+      method.primary = method.id === target.id;
+    }
+    user.email = target.email;
+    syncPersonEmails(user);
+    await this.persist();
+    return user;
+  }
+
+  async removeEmail(userId, emailId) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const methods = personEmailMethods(user);
+    const target = methods.find((m) => m.id === String(emailId));
+    if (!target) {
+      throw new HttpError(404, 'email not bound to this person', { code: 'EMAIL_NOT_FOUND' });
+    }
+    if (target.primary) {
+      throw new HttpError(
+        400,
+        methods.length === 1
+          ? 'Cannot remove the only email until another address is added and set as primary'
+          : 'Set another email as primary before removing this one',
+        { code: 'PRIMARY_REQUIRED' },
+      );
+    }
+    user.authMethods = user.authMethods.filter((m) => m.id !== target.id);
+    syncPersonEmails(user);
+    await this.persist();
+    return user;
   }
 
   async addAuthMethod(userId, fields) {
     const user = this.getUser(userId);
     if (!user) throw new HttpError(404, 'user not found');
+    if (fields?.type === 'email' && fields.email) {
+      assertEmailRoom(user, fields.email);
+    }
+    if (fields?.type === 'passkey' && fields.credentialId) {
+      const alreadyCred = (user.credentials || []).some((c) => c.id === fields.credentialId);
+      if (!alreadyCred) assertPasskeyRoom(user);
+    }
     const method = this._addAuthMethodUnchecked(user, fields);
     await this.persist();
     return { user, method };

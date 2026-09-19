@@ -12,6 +12,21 @@ import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
 import {
+  isMfaChallenge,
+  removeBoundEmail,
+  removePasskey,
+  setPrimaryEmail,
+  startEmailRegister,
+  verifyMfaCode,
+} from "./identity-methods.js";
+import {
+  atEmailCap,
+  atPasskeyCap,
+  identityCapNote,
+  renderEmailAccounts,
+  renderPasskeyAccounts,
+} from "./identity-accounts.js";
+import {
   applyAudienceChrome,
   audienceOf,
   homeDestination,
@@ -647,7 +662,7 @@ function renderDesk(main, route, bundle) {
         h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
         h("p", { text: walletLine }),
         me?.user
-          ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
+          ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}. ${identityCapNote(me.identity)}` })
           : h("p", { text: "Sign in below with email, Ethereum, a smart card, or a license/passport if you already have a person record on this Node." }),
         h("p", {
           text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
@@ -686,7 +701,13 @@ function renderDesk(main, route, bundle) {
       "section",
       { "aria-labelledby": "identity-heading" },
       h("h2", { id: "identity-heading", text: "Identity status" }),
-      renderDeviceStatus(walletRecord, me, store)
+      renderDeviceStatus(walletRecord, me, store, {
+        api,
+        onRefresh: async () => {
+          const next = await loadDeskBundle();
+          renderDesk(main, route, next);
+        },
+      })
     ),
     h(
       "section",
@@ -713,7 +734,7 @@ function renderDesk(main, route, bundle) {
   if (signInRoot) {
     signInRoot.setAttribute(
       "data-lede",
-      "Returning users: email, Ethereum, a smart-card reader, or a license/passport already bound to your person. First-time registration is on Identify yourself."
+      "Returning users: any bound email or passkey, Ethereum, a smart-card reader, or a license/passport. MFA codes go to your primary email unless you sign in with a specific address. First-time registration is on Identify yourself."
     );
     mountSignInPanel(signInRoot);
   }
@@ -731,12 +752,23 @@ function aspectPreview(election, h) {
   );
 }
 
-function renderDeviceStatus(walletRecord, me, store) {
+function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
   const nReg = Object.keys(store.registrations).length;
   const nVote = Object.keys(store.votes).length;
+  const identity = me?.identity;
+  const signedIn = Boolean(me?.user);
   const rows = [
-    h("dt", { text: "Passkey" }),
-    h("dd", { text: walletRecord?.staleWrap ? "v1 wrap — reset required" : walletRecord ? "Present" : "Not created" }),
+    h("dt", { text: "Passkeys" }),
+    h("dd", {
+      text: identity
+        ? `${identity.passkeyCount || 0}/${identity.caps?.passkeys || 5} on this person` +
+          (walletRecord?.staleWrap ? " · this device has a v1 wrap — reset required" : walletRecord ? " · this device has a wrap" : "")
+        : walletRecord?.staleWrap
+          ? "v1 wrap — reset required"
+          : walletRecord
+            ? "Present on this device"
+            : "Not created",
+    }),
     h("dt", { text: "Identity commitment" }),
     h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || "—" }),
     h("dt", { text: "Local address" }),
@@ -749,12 +781,14 @@ function renderDeviceStatus(walletRecord, me, store) {
     ),
     h("dt", { text: "Active Ethereum address" }),
     h("dd", { class: me?.identity?.activeEthAddress ? "hex" : "", text: me?.identity?.activeEthAddress || "—" }),
+    h("dt", { text: "Primary email" }),
+    h("dd", { text: identity?.primaryEmail || "—" }),
     h("dt", { text: "Verified methods" }),
     h(
       "dd",
       {
         text: me?.identity?.authMethods?.length
-          ? me.identity.authMethods.map((m) => m.type).join(", ")
+          ? me.identity.authMethods.map((m) => (m.type === "email" && m.primary ? "email (primary)" : m.type)).join(", ")
           : "—",
       }
     ),
@@ -766,11 +800,111 @@ function renderDeviceStatus(walletRecord, me, store) {
   if (me?.status) {
     rows.push(h("dt", { text: "Node /api/me" }), h("dd", { text: String(me.status) }));
   }
+
+  const ui = deskIdentityUi;
+
+  async function run(fn) {
+    ui.error = "";
+    ui.info = "";
+    ui.busy = true;
+    try {
+      await fn();
+    } catch (err) {
+      ui.error = err.message || "Request failed.";
+    } finally {
+      ui.busy = false;
+      if (onRefresh) await onRefresh();
+    }
+  }
+
   return h(
     "div",
     { class: "panel" },
     h("dl", { class: "status-dl" }, ...rows),
+    h("p", { class: "field-hint", text: identityCapNote(identity) }),
     h("p", { class: "field-hint", text: wallet.PRODUCTION_ADDRESS_NOTE }),
+    signedIn
+      ? [
+          h("h3", { text: "Emails" }),
+          h("p", {
+            class: "field-hint",
+            text: "Login, MFA, and Terms PDF use the primary address by default. Sign-in with a specific bound email still sends the code to that inbox.",
+          }),
+          renderEmailAccounts(h, identity, {
+            busy: ui.busy,
+            onPrimary: (row) => run(() => setPrimaryEmail(api, { id: row.id })),
+            onRemove: (row) => run(() => removeBoundEmail(api, row.id)),
+          }),
+          ui.mfa
+            ? h(
+                "form",
+                {
+                  class: "stack",
+                  onSubmit: (event) => {
+                    event.preventDefault();
+                    const code = event.target.code?.value?.trim();
+                    run(async () => {
+                      const result = await verifyMfaCode(api, code);
+                      if (isMfaChallenge(result)) ui.mfa = result;
+                      else {
+                        ui.mfa = null;
+                        ui.info = "Email verified.";
+                      }
+                    });
+                  },
+                },
+                h("p", { text: `Enter the 6-digit code sent to ${ui.mfa.emailHint || "your email"}.` }),
+                h("label", { class: "field", for: "desk-mfa-code" }, "One-time code", h("input", {
+                  id: "desk-mfa-code",
+                  name: "code",
+                  class: "otp-input",
+                  inputmode: "numeric",
+                  maxlength: "6",
+                  required: true,
+                })),
+                h("div", { class: "toolbar" }, h("button", { class: "btn", type: "submit", text: "Verify code" }))
+              )
+            : atEmailCap(identity)
+              ? h("p", { class: "notice notice-warn", text: `Email cap reached (${identityCapsOfSafe(identity)}). Remove one before adding another.` })
+              : h(
+                  "form",
+                  {
+                    class: "stack",
+                    onSubmit: (event) => {
+                      event.preventDefault();
+                      const email = event.target.email?.value?.trim();
+                      run(async () => {
+                        const result = await startEmailRegister(api, { email });
+                        if (isMfaChallenge(result)) {
+                          ui.mfa = result;
+                          ui.info = result.message || "Check your email for a 6-digit code.";
+                        } else {
+                          ui.info = "Email bound.";
+                        }
+                      });
+                    },
+                  },
+                  h("label", { class: "field", for: "desk-add-email" }, "Add another email", h("input", {
+                    id: "desk-add-email",
+                    name: "email",
+                    type: "email",
+                    autocomplete: "email",
+                    required: true,
+                  })),
+                  h("div", { class: "toolbar" }, h("button", { class: "btn btn-secondary", type: "submit", text: "Email me a code" }))
+                ),
+          h("h3", { text: "Passkeys" }),
+          renderPasskeyAccounts(h, identity, {
+            busy: ui.busy,
+            onRemove: (row) => run(() => removePasskey(api, row.credentialId || row.id)),
+          }),
+          atPasskeyCap(identity)
+            ? h("p", { class: "notice notice-warn", text: "Passkey cap reached (5). Remove one before registering another." })
+            : h("p", { class: "field-hint", text: "Add another passkey on Identify yourself. Any of your passkeys can sign in." }),
+        ]
+      : null,
+    ui.error ? h("p", { class: "error-inline", role: "alert", text: ui.error }) : null,
+    ui.info ? h("p", { class: "field-hint", text: ui.info }) : null,
     h(
       "div",
       { class: "toolbar" },
@@ -778,6 +912,14 @@ function renderDeviceStatus(walletRecord, me, store) {
     )
   );
 }
+
+function identityCapsOfSafe(identity) {
+  const n = identity?.emailCount ?? identity?.emails?.length ?? 0;
+  const cap = identity?.caps?.emails || 5;
+  return `${n}/${cap}`;
+}
+
+const deskIdentityUi = { mfa: null, error: "", info: "", busy: false };
 
 function renderNotFound(main, route, me) {
   const home = homeDestination(audienceOf(me));
