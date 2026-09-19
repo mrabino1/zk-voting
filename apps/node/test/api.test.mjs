@@ -172,7 +172,7 @@ describe('Republic Node API', () => {
 
   test('passkey register begin uses rpName Republic', async () => {
     const { status, json } = await api('POST', '/api/auth/passkey/register/begin', {
-      body: { handle: 'alice' },
+      body: { handle: 'alice', acceptedTerms: true },
     });
     assert.equal(status, 200);
     assert.equal(json.rp?.name || json.rpName, 'Republic');

@@ -507,6 +507,41 @@ textarea {
   gap: 1rem;
 }
 
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.check-row input[type="checkbox"] {
+  margin-top: 0.2rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+
+.terms-doc h1 {
+  font-size: 1.5rem;
+}
+
+.terms-doc h2 {
+  font-size: 1.15rem;
+  margin-top: 1.25rem;
+}
+
+.terms-doc p,
+.terms-doc li {
+  max-width: 42rem;
+}
+
+.terms-meta code.hex {
+  display: inline-block;
+  word-break: break-all;
+  font-size: 0.82rem;
+}
+
 .grid-cards {
   display: grid;
   gap: 1rem;

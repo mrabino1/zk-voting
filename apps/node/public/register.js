@@ -41,6 +41,7 @@ export async function renderRegister(main, ctx) {
     methodTab: "email",
     mfa: null,
     selected: matchPre?.id || elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
+    acceptedTerms: false,
   };
 
   const signInHost = h("div", {
@@ -80,6 +81,37 @@ export async function renderRegister(main, ctx) {
         : null,
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
       state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,
+      h(
+        "section",
+        { class: "panel terms-agree", "aria-labelledby": "terms-agree-heading" },
+        h("h2", { id: "terms-agree-heading", text: "Terms of Use" }),
+        h(
+          "p",
+          {
+            text: "First-time registration records the SHA-256 of the current Terms PDF on your person and emails you that PDF through AWS SES when configured.",
+          }
+        ),
+        h(
+          "label",
+          { class: "check-row", for: "reg-accepted-terms" },
+          h("input", {
+            id: "reg-accepted-terms",
+            name: "acceptedTerms",
+            type: "checkbox",
+            checked: state.acceptedTerms,
+            onChange: (event) => {
+              state.acceptedTerms = Boolean(event.target.checked);
+            },
+          }),
+          h(
+            "span",
+            {},
+            "I agree to the ",
+            h("a", { href: "/terms", "data-nav": "", text: "Terms of Use" }),
+            " (PDF SHA-256 is stored on this person)."
+          )
+        )
+      ),
       state.mfa
         ? h(
             "section",
@@ -644,17 +676,26 @@ export async function renderRegister(main, ctx) {
     state.info = okMessage;
   }
 
+  function requireTerms() {
+    if (state.acceptedTerms) return true;
+    state.error = "You must accept the Terms of Use to create an account.";
+    paint();
+    announce(state.error);
+    return false;
+  }
+
   async function onBindEmail(event) {
     event.preventDefault();
     if (state.busy) return;
     const email = event.target.email?.value?.trim();
     const handle = event.target.handle?.value?.trim();
+    if (!requireTerms()) return;
     state.busy = true;
     state.error = "";
     state.info = "";
     paint();
     try {
-      const result = await startEmailRegister(api, { email, handle });
+      const result = await startEmailRegister(api, { email, handle, acceptedTerms: true });
       await applyAuthResult(result, "Check your email for a 6-digit code.");
       announce(state.info);
     } catch (err) {
@@ -669,6 +710,7 @@ export async function renderRegister(main, ctx) {
   async function onBindCivic(event) {
     event.preventDefault();
     if (state.busy) return;
+    if (!requireTerms()) return;
     const kind = event.target.kind?.value;
     const issuer = event.target.issuer?.value?.trim();
     const documentNumber = event.target.documentNumber?.value;
@@ -679,7 +721,7 @@ export async function renderRegister(main, ctx) {
     state.info = "";
     paint();
     try {
-      const result = await bindCivicId(api, { kind, issuer, documentNumber, email });
+      const result = await bindCivicId(api, { kind, issuer, documentNumber, email, acceptedTerms: true });
       await applyAuthResult(result, "License or passport hashed and bound. Complete the email code.");
       announce(state.info);
     } catch (err) {
@@ -729,12 +771,13 @@ export async function renderRegister(main, ctx) {
   async function onBindWeb3(event) {
     event.preventDefault();
     if (state.busy) return;
+    if (!requireTerms()) return;
     state.busy = true;
     state.error = "";
     state.info = "";
     paint();
     try {
-      const result = await bindWeb3Wallet(api);
+      const result = await bindWeb3Wallet(api, { acceptedTerms: true });
       await applyAuthResult(
         result,
         "Web3 wallet bound to this person. It is verified internally. If it is your first address it is now active.",
@@ -752,6 +795,7 @@ export async function renderRegister(main, ctx) {
   async function onBindCard(event) {
     event.preventDefault();
     if (state.busy) return;
+    if (!requireTerms()) return;
     const raw = event.target.fingerprint?.value?.trim();
     if (!raw) return;
     const looksPem = raw.includes("-----BEGIN");
@@ -760,7 +804,7 @@ export async function renderRegister(main, ctx) {
     state.info = "";
     paint();
     try {
-      const result = await bindSmartCard(api, looksPem ? { certificate: raw } : { fingerprint: raw });
+      const result = await bindSmartCard(api, looksPem ? { certificate: raw, acceptedTerms: true } : { fingerprint: raw, acceptedTerms: true });
       await applyAuthResult(result, "Smart-card digital ID bound to this person.");
       announce("Smart card bound.");
     } catch (err) {
@@ -807,6 +851,7 @@ export async function renderRegister(main, ctx) {
   async function onCreatePasskey(event) {
     event.preventDefault();
     if (state.busy) return;
+    if (!requireTerms()) return;
     const displayName = event.target.displayName?.value?.trim() || "voter";
     state.busy = true;
     state.error = "";
@@ -819,6 +864,7 @@ export async function renderRegister(main, ctx) {
         api,
         displayName,
         jurisdictionId: election?.jurisdictionId || undefined,
+        acceptedTerms: true,
       });
       state.record = record;
       await refreshIdentity();

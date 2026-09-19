@@ -68,6 +68,24 @@ export function ensurePersonFields(user) {
   if (!Object.prototype.hasOwnProperty.call(user, 'email')) {
     user.email = null;
   }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsHash')) {
+    user.termsHash = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsVersion')) {
+    user.termsVersion = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsMarkdownSha256')) {
+    user.termsMarkdownSha256 = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsAcceptedAt')) {
+    user.termsAcceptedAt = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsEmailSentAt')) {
+    user.termsEmailSentAt = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsEmailHash')) {
+    user.termsEmailHash = null;
+  }
   return user;
 }
 

@@ -61,7 +61,7 @@ export function mfaPayload(rec) {
   };
 }
 
-export function createMfaService({ config, store, mailer }) {
+export function createMfaService({ config, store, mailer, terms }) {
   const pending = new Map();
   const byUser = new Map();
   const byEmail = new Map();
@@ -135,7 +135,7 @@ export function createMfaService({ config, store, mailer }) {
     return rec;
   }
 
-  function newRecord({ user, factor, email, bindEmail, handle, purpose }) {
+  function newRecord({ user, factor, email, bindEmail, handle, purpose, acceptedTerms }) {
     const nonce = randomBytes(18).toString('hex');
     const now = Date.now();
     const existing = userEmail(user);
@@ -149,6 +149,7 @@ export function createMfaService({ config, store, mailer }) {
       handle: handle || user?.handle || null,
       purpose: purpose || 'mfa',
       factor: factor || 'email',
+      acceptedTerms: Boolean(acceptedTerms),
       needsEmail: false,
       codeHash: null,
       attempts: 0,
@@ -158,7 +159,7 @@ export function createMfaService({ config, store, mailer }) {
     };
   }
 
-  async function startMfa(res, { user, factor, bindEmail, handle, purpose, email } = {}) {
+  async function startMfa(res, { user, factor, bindEmail, handle, purpose, email, acceptedTerms } = {}) {
     const rec = newRecord({
       user,
       factor,
@@ -166,6 +167,7 @@ export function createMfaService({ config, store, mailer }) {
       bindEmail,
       handle,
       purpose,
+      acceptedTerms,
     });
     if (!rec.email) {
       rec.needsEmail = true;
@@ -182,14 +184,21 @@ export function createMfaService({ config, store, mailer }) {
   /**
    * First factor succeeded. Either set the session or start email OTP.
    */
-  async function completeFactor(res, { user, factor, bindEmail, handle, purpose, email } = {}) {
+  async function completeFactor(res, { user, factor, bindEmail, handle, purpose, email, acceptedTerms } = {}) {
     if (!mfaRequiredFor(config, factor)) {
       if (!user) throw new HttpError(500, 'session user missing');
       await establishSession(res, store, config, user);
       clearMfaCookie(res, config);
+      if (terms && acceptedTerms) {
+        await terms.maybeAcceptNewPerson(store.getUser(user.id) || user, {
+          acceptedTerms,
+          email,
+          source: factor || purpose || 'register',
+        });
+      }
       return sessionPayload(store.getUser(user.id) || user);
     }
-    return startMfa(res, { user, factor, bindEmail, handle, purpose, email });
+    return startMfa(res, { user, factor, bindEmail, handle, purpose, email, acceptedTerms });
   }
 
   async function provideEmail(req, res, rawEmail) {
@@ -270,6 +279,13 @@ export function createMfaService({ config, store, mailer }) {
     drop(rec);
     await establishSession(res, store, config, store.getUser(user.id));
     clearMfaCookie(res, config);
+    if (terms && rec.acceptedTerms) {
+      await terms.maybeAcceptNewPerson(store.getUser(user.id), {
+        acceptedTerms: rec.acceptedTerms,
+        email: rec.email,
+        source: rec.purpose || rec.factor || 'register',
+      });
+    }
     return sessionPayload(store.getUser(user.id));
   }
 

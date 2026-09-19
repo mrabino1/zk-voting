@@ -1058,14 +1058,14 @@ async function resolveDerivationContext({ api, chainId, jurisdictionId } = {}) {
  * PRF domain, derive (trapdoor, nullifierSecret) under the identity PRF domain,
  * and optionally finish with the Node (`POST /api/auth/passkey/register/{begin,finish}`).
  */
-export async function registerPasskey({ api, displayName, chainId, jurisdictionId } = {}) {
+export async function registerPasskey({ api, displayName, chainId, jurisdictionId, acceptedTerms } = {}) {
   let server = null;
   let finishError = null;
   if (typeof api === "function") {
     try {
       server = await api("/api/auth/passkey/register/begin", {
         method: "POST",
-        body: { displayName: displayName || "voter", handle: displayName || "voter" },
+        body: { displayName: displayName || "voter", handle: displayName || "voter", acceptedTerms },
       });
     } catch {
       server = null;
@@ -1092,6 +1092,7 @@ export async function registerPasskey({ api, displayName, chainId, jurisdictionI
         body: {
           ...serializeAttestation(credential, publicRecord),
           handle: displayName || "voter",
+          acceptedTerms,
         },
       });
     } catch (err) {

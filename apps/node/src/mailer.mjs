@@ -2,6 +2,8 @@
 // Transactional email via AWS SES (SESv2). Tests use an in-memory capture
 // mailer so OTP codes are never sent off-box.
 
+import { createHash, randomBytes } from 'node:crypto';
+
 import { HttpError } from './http.mjs';
 
 const OTP_SUBJECT = 'Republic sign-in code';
@@ -30,7 +32,75 @@ export function otpFromText(text) {
   return m ? m[1] : null;
 }
 
-async function sendViaSesv2(config, { to, subject, text, html }) {
+function headerSafe(value) {
+  return String(value || '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+function foldBase64(value) {
+  const s = String(value || '');
+  const lines = [];
+  for (let i = 0; i < s.length; i += 76) lines.push(s.slice(i, i + 76));
+  return lines.join('\r\n');
+}
+
+function attachmentMeta(file) {
+  const content = Buffer.isBuffer(file.content)
+    ? file.content
+    : Buffer.from(file.content || '', 'utf8');
+  return {
+    filename: headerSafe(file.filename || 'attachment'),
+    contentType: headerSafe(file.contentType || 'application/octet-stream'),
+    bytes: content.length,
+    sha256: createHash('sha256').update(content).digest('hex'),
+    content,
+  };
+}
+
+/**
+ * SES Simple content cannot carry attachments. DealPunchList emails the terms
+ * PDF as an attachment; SESv2 Raw MIME is the same vendor path as OTP mail.
+ */
+export function buildRawMime({ from, to, subject, text, html, attachments = [] }) {
+  const mixed = `RepublicMixed_${randomBytes(12).toString('hex')}`;
+  const alt = `RepublicAlt_${randomBytes(12).toString('hex')}`;
+  const lines = [
+    `From: ${headerSafe(from)}`,
+    `To: ${headerSafe(to)}`,
+    `Subject: ${headerSafe(subject)}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${mixed}"`,
+    '',
+    `--${mixed}`,
+    `Content-Type: multipart/alternative; boundary="${alt}"`,
+    '',
+    `--${alt}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    String(text || ''),
+    `--${alt}`,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    String(html || ''),
+    `--${alt}--`,
+  ];
+  for (const file of attachments) {
+    const att = attachmentMeta(file);
+    lines.push(
+      `--${mixed}`,
+      `Content-Type: ${att.contentType}; name="${att.filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${att.filename}"`,
+      '',
+      foldBase64(att.content.toString('base64')),
+    );
+  }
+  lines.push(`--${mixed}--`, '');
+  return Buffer.from(lines.join('\r\n'), 'utf8');
+}
+
+async function sendViaSesv2(config, { to, subject, text, html, attachments = [] }) {
   let SESv2Client;
   let SendEmailCommand;
   try {
@@ -45,7 +115,22 @@ async function sendViaSesv2(config, { to, subject, text, html }) {
   const input = {
     FromEmailAddress: config.sesFromAddress,
     Destination: { ToAddresses: [to] },
-    Content: {
+  };
+  if (attachments.length) {
+    input.Content = {
+      Raw: {
+        Data: buildRawMime({
+          from: config.sesFromAddress,
+          to,
+          subject,
+          text,
+          html,
+          attachments,
+        }),
+      },
+    };
+  } else {
+    input.Content = {
       Simple: {
         Subject: { Data: subject, Charset: 'UTF-8' },
         Body: {
@@ -53,8 +138,8 @@ async function sendViaSesv2(config, { to, subject, text, html }) {
           Html: { Data: html, Charset: 'UTF-8' },
         },
       },
-    },
-  };
+    };
+  }
   if (config.sesConfigurationSet) {
     input.ConfigurationSetName = config.sesConfigurationSet;
   }
@@ -69,19 +154,33 @@ export function createMailer(config = {}) {
   const sesReady = Boolean(config.sesFromAddress && config.awsRegion);
   const captureCodes = config.includeOtpInCapture !== false && (config.captureEmail || !sesReady);
 
-  async function send({ to, subject, text, html, meta = {} }) {
+  async function send({ to, subject, text, html, attachments = [], meta = {} }) {
+    const files = Array.isArray(attachments) ? attachments.map(attachmentMeta) : [];
     const record = {
       to,
       subject,
       text,
       html,
+      attachments: files.map((f) => ({
+        filename: f.filename,
+        contentType: f.contentType,
+        bytes: f.bytes,
+        sha256: f.sha256,
+        content: f.content,
+      })),
       meta: captureCodes ? { ...meta } : { ...meta, code: undefined },
       at: Date.now(),
     };
     sent.push(record);
 
     if (sesReady && !config.sesDryRun) {
-      await sendViaSesv2(config, { to, subject, text, html });
+      await sendViaSesv2(config, {
+        to,
+        subject,
+        text,
+        html,
+        attachments: files,
+      });
       return record;
     }
 
@@ -116,6 +215,12 @@ export function createMailer(config = {}) {
     sendOtp,
     sent,
     lastOtp,
+    lastTermsPdf() {
+      for (let i = sent.length - 1; i >= 0; i -= 1) {
+        if (sent[i]?.meta?.purpose === 'terms-pdf') return sent[i];
+      }
+      return null;
+    },
     sesReady,
     vendor: 'ses',
   };

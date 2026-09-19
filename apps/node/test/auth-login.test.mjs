@@ -299,7 +299,7 @@ describe('passkey and Ethereum wallet login (returning users)', () => {
     });
     const bindSig = await account0.signMessage({ message: bindChallenge.json.message });
     const bound = await api('POST', '/api/identity/web3/verify', {
-      body: { address: account0.address, signature: bindSig, handle: 'wallet-alice' },
+      body: { address: account0.address, signature: bindSig, handle: 'wallet-alice', acceptedTerms: true },
     });
     assert.equal(bound.status, 200, bound.json?.error);
     assert.equal(bound.json.user.handle, 'wallet-alice');

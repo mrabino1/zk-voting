@@ -75,7 +75,7 @@ async function bindWeb3(account, { handle, jar } = {}) {
   assert.equal(challenge.status, 200, challenge.json?.error);
   const signature = await account.signMessage({ message: challenge.json.message });
   return api('POST', '/api/identity/web3/verify', {
-    body: { address: account.address, signature, handle },
+    body: { address: account.address, signature, handle, acceptedTerms: true },
     jar,
   });
 }
@@ -219,6 +219,7 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
         mock: true,
         handle: 'cardholder',
         subject: 'CN=Card Holder',
+        acceptedTerms: true,
       },
     });
     assert.equal(verify.status, 200, verify.json?.error);

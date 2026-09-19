@@ -17,6 +17,7 @@ import {
   homeDestination,
 } from "./audience.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
+import { renderTerms } from "./terms.js";
 import {
   loadPublicCms,
   renderCmsPage,
@@ -822,6 +823,9 @@ async function renderRoute(route) {
       renderAbout(main, context);
     } else if (route.name === "faq") {
       renderFaq(main, context);
+    } else if (route.name === "terms") {
+      setTitle("Terms of Use");
+      await renderTerms(main, context);
     } else if (route.name === "cmsPage") {
       let page = (cms.pages || []).find((p) => p.slug === route.params.slug) || null;
       if (!page) {
