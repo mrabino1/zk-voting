@@ -4,7 +4,7 @@
 # repo is hosted: one compose file, images built from this tree, data on
 # volumes, secrets via .env (never baked into the image).
 #
-#   cp .env.example .env    # optional for a local demo; pin shared factory on a fork
+#   cp .env.example .env    # paste credentials; see README § Copy-paste credentials
 #   docker compose up -d --build
 #   curl -fsS http://127.0.0.1:3000/health
 #
@@ -46,7 +46,13 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET:-}
+      SES_ENDPOINT: ${SES_ENDPOINT:-}
+      SES_DRY_RUN: ${SES_DRY_RUN:-}
       REQUIRE_EMAIL_MFA: ${REQUIRE_EMAIL_MFA:-}
+      CREDENTIAL_PROVIDER_SECRET: ${CREDENTIAL_PROVIDER_SECRET:-}
+      CREDENTIAL_PROVIDER_ID: ${CREDENTIAL_PROVIDER_ID:-manual}
+      RECEIPT_PDF_SECRET: ${RECEIPT_PDF_SECRET:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
       # mainnet publisher keys in committed Compose files. Not the L2 prover key.
       L1_RPC: ${L1_RPC:-}

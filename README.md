@@ -45,6 +45,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Current status](#current-status)
 - [Monorepo layout](#monorepo-layout)
 - [How to run](#how-to-run)
+- [Copy-paste credentials](#copy-paste-credentials)
 - [Intentional forking](#intentional-forking)
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
@@ -243,17 +244,15 @@ npm test -w apps/node
 
 Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored). **Not SQLite.** The UI is vanilla JS in `apps/node/public/` (no Vite, no React).
 
-Docker Compose (Node + L2 sequencer + prover), from the repo root. Copy the env template first (forked hosts pin the shared factory here — see [Intentional forking](#intentional-forking)):
+Docker Compose (Node + L2 sequencer + prover), from the repo root. Credentials are one paste — [Copy-paste credentials](#copy-paste-credentials):
 
 ```bash
-cp .env.example .env
-# fill ELECTION_FACTORY_ADDRESS / BALLOT_INBOX_ADDRESS / VERIFIER_ADDRESS
-# from the shared deploy. Do not run DeployLocal again for a new city.
+cp .env.example .env          # or paste the credentials block into .env
 docker compose up -d --build
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-See [`.env.example`](./.env.example) and [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+See [`.env.example`](./.env.example) and [`docs/OPERATOR.md`](./docs/OPERATOR.md). Forked hosts pin the shared factory in that same file — [Intentional forking](#intentional-forking).
 
 ### Republic L2 (sequencer + prover)
 
@@ -309,6 +308,94 @@ node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
 
 ---
 
+## Copy-paste credentials
+
+**NOT FOR PROFIT.** Production secrets stay out of git. `.env` is gitignored. Compose interpolates this file into the Node / L2 / prover containers.
+
+Simple deploy:
+
+```bash
+cp .env.example .env
+# or paste the block below into .env at the repository root
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health
+```
+
+Paste **as-is** for a local demo (empty keys, mock L2 proofs, no SES). For a public jurisdiction Node, fill the lines in the table after the block. Do not commit the filled file. Do not paste real keys into issues or chat.
+
+```env
+# NOT FOR PROFIT — civic public good, not a commercial product.
+# cp .env.example .env && docker compose up -d --build
+
+# --- this host ---
+ZK_VOTING_PORT=3000
+CHAIN_ID=27427
+CHAIN_RPC=http://l2:8546
+RP_ID=localhost
+WEBAUTHN_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+PUBLIC_BASE_URL=
+ADMIN_HANDLE=admin
+DISCLOSURE_INTERVAL_SECONDS=3600
+ALLOW_DEV_LOGIN=
+ALLOW_SMART_CARD_MOCK=
+ALLOW_CIVIC_ID_MOCK=
+
+# --- AWS SES (email MFA + Terms PDF). Empty = local demo, no outbound mail. ---
+SES_FROM_ADDRESS=
+AWS_REGION=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+SES_CONFIGURATION_SET=
+SES_ENDPOINT=
+SES_DRY_RUN=
+REQUIRE_EMAIL_MFA=
+
+# --- civil credential connector. Empty secret = manual officer review. ---
+CREDENTIAL_PROVIDER_SECRET=
+CREDENTIAL_PROVIDER_ID=manual
+
+# --- locked receipt / official-outcome PDFs. Empty = Node mints a file on disk. ---
+RECEIPT_PDF_SECRET=
+
+# --- pin the ONE shared deploy (do not DeployLocal again for a new city) ---
+ELECTION_FACTORY_ADDRESS=
+BALLOT_INBOX_ADDRESS=
+VERIFIER_ADDRESS=
+RELAYER_PRIVATE_KEY=
+
+# --- Republic L2 ---
+L2_RPC_PORT=8546
+L2_BATCH_SIZE=4
+DEV_MOCK_PROOF=true
+REPUBLIC_NODE_URL=http://node:3000
+
+# --- optional L1 (prover settlement + Node tally-hash). Empty = no-op. ---
+L1_RPC=
+SETTLEMENT_ADDRESS=
+PRIVATE_KEY=
+L1_TALLY_MIRROR_ADDRESS=
+L1_PUBLISHER_PRIVATE_KEY=
+L1_SETTLEMENT_ADDRESS=
+L1_CHAIN_ID=
+```
+
+| Fill this | When |
+| --- | --- |
+| `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Public site (hostname, not `localhost`) |
+| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA and Terms PDF mail. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+| `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | Pin the **shared** factory / inbox / verifier. Env wins over `/office/site`. Do not run `DeployLocal` again for a new city |
+| `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |
+| `CREDENTIAL_PROVIDER_SECRET` | Optional later DMV / eID webhook. Unset = officers review credentials by hand |
+| `RECEIPT_PDF_SECRET` | Stable HMAC for locked PDFs across restarts. Unset = Node writes `$DATA_DIR/receipt-pdf.secret` |
+| `L1_RPC`, `L1_TALLY_MIRROR_ADDRESS`, `L1_PUBLISHER_PRIVATE_KEY` | Certify tally hashes on Ethereum. Unset = tally still works (`skipped`) |
+| `SETTLEMENT_ADDRESS`, `PRIVATE_KEY` | L2 prover posts `RollupSettlement.submitBatch`. **Not** the Node `L1_PUBLISHER_PRIVATE_KEY` |
+| `ALLOW_DEV_LOGIN` | Local fallback only. Must stay empty on `master` |
+| `CHAIN_RPC` | Empty = JSON-only demo (no factory call). Compose default `http://l2:8546` is the civic sequencer |
+
+Committed template (same keys): [`.env.example`](./.env.example). Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+
+---
+
 ## Intentional forking
 
 Forking this repository is **the intended way** a jurisdiction runs Republic. A city, county, union, cooperative, or other body copies the **Node** (voter pages, clerk desk, CMS, host) and pins the **one shared** `ElectionFactory`, `BallotInbox`, and verifier. That is how there is no vendor lock-in: you host your clerk desk; you do not pay a SaaS; you do not get a private factory.
@@ -331,13 +418,13 @@ Do **not** run `forge script script/DeployLocal.s.sol` again for a new city. Env
 ### Instructions
 
 1. Fork [github.com/mrabino1/zk-voting](https://github.com/mrabino1/zk-voting) (or clone). Work on **`test/unstable`** until a jurisdiction is ready to pin **`master`**.
-2. Copy the committed env template. `.env` is gitignored — do not commit secrets.
+2. Copy the committed env template, or paste [Copy-paste credentials](#copy-paste-credentials) into `.env`. `.env` is gitignored — do not commit secrets.
 
 ```bash
 cp .env.example .env
 ```
 
-3. Fill **this host’s** RP id, origins, SES, and relayer key. Paste the **existing** shared factory / inbox / verifier addresses. Leave those addresses empty only for a JSON-only demo (`CHAIN_RPC` unset) or to pin them later as `platform_admin` on `/office/site`.
+3. Fill **this host’s** RP id, origins, SES, AWS keys (or rely on the host IAM role), and relayer key. Paste the **existing** shared factory / inbox / verifier addresses. Leave those addresses empty only for a JSON-only demo (`CHAIN_RPC` unset) or to pin them later as `platform_admin` on `/office/site`.
 4. Start the Node (Compose is the host path `system_actions.sh` already looks for):
 
 ```bash
@@ -353,38 +440,22 @@ Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Site pin: `/office
 
 ### Environment example
 
-Committed template: [`.env.example`](./.env.example). Compose interpolates that file. A forked jurisdiction Node looks like this (placeholders only — never commit real keys):
+The full copy-paste file (every credential Compose reads) is [Copy-paste credentials](#copy-paste-credentials). Committed template: [`.env.example`](./.env.example).
 
-```bash
-# NOT FOR PROFIT — civic public good, not a commercial product.
-# cp .env.example .env
+A forked city typically changes only these lines (placeholders — never commit real keys):
 
-# --- this host ---
-ZK_VOTING_PORT=3000
-CHAIN_ID=27427
-CHAIN_RPC=http://l2:8546          # empty = JSON-only demo (no factory call)
-RP_ID=votes.example.gov           # WebAuthn rpID for this public site
+```env
+RP_ID=votes.example.gov
 WEBAUTHN_ORIGINS=https://votes.example.gov
-ADMIN_HANDLE=admin
-DISCLOSURE_INTERVAL_SECONDS=3600  # 0 = publish immediately (local demo)
-ALLOW_DEV_LOGIN=                  # must stay unset on master
+PUBLIC_BASE_URL=https://votes.example.gov
 SES_FROM_ADDRESS=elections@example.gov
 AWS_REGION=us-east-1
-
-# --- pin the ONE shared deploy (do not DeployLocal again) ---
-# Env wins over /office/site. Aliases: FACTORY, VERIFIER.
-ELECTION_FACTORY_ADDRESS=0x…  # shared DeployLocal FACTORY= (or FACTORY alias)
-BALLOT_INBOX_ADDRESS=0x…      # shared inbox
-VERIFIER_ADDRESS=0x…          # shared verifier (VERIFIER alias)
-RELAYER_PRIVATE_KEY=              # this host’s relayer; not a mainnet key in git
-
-# --- optional L1 tally-hash / prover settlement ---
-L1_RPC=
-L1_TALLY_MIRROR_ADDRESS=
-L1_PUBLISHER_PRIVATE_KEY=
-L1_SETTLEMENT_ADDRESS=
-SETTLEMENT_ADDRESS=
-PRIVATE_KEY=                      # L2 prover key, not L1_PUBLISHER_PRIVATE_KEY
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+ELECTION_FACTORY_ADDRESS=0x…   # shared FACTORY= ; env wins over /office/site
+BALLOT_INBOX_ADDRESS=0x…
+VERIFIER_ADDRESS=0x…           # VERIFIER alias
+RELAYER_PRIVATE_KEY=
 ```
 
 `GET /api/config` reports `sharedDeployment: true` and which pin source won (`env` or `site`). `GET /health` includes `electionFactoryAddress`.
