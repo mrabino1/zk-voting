@@ -4,11 +4,16 @@
  */
 
 import { audienceOf, isOfficer, postLoginPath, safeNextPath, signInHref } from "./audience.js";
+import { canEditPages, renderBlocks } from "./cms.js";
 import { FAQ_ENTRIES, faqAnswerText } from "./faq.js";
 import { logout, mountSignInPanel } from "./signin.js";
 
 const DEMO_NOTE =
   "This Node is a working demo on the test/unstable line. Local tests still use MockVerifier; Poseidon is not wired; there is no production Groth16 ceremony. The passkey helper may show republic-local-address. Tally that opens ballots uses a threshold-1 operator key (NON-PRODUCTION). Republic is not claiming this deploy is court-ready.";
+
+function mount(node, ...children) {
+  node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+}
 
 function paragraphs(h, texts) {
   return (Array.isArray(texts) ? texts : [texts]).filter(Boolean).map((text) => h("p", { text }));
@@ -120,19 +125,24 @@ function publicCalendar(h, ctx, elections, source) {
 export function renderPublicHome(main, ctx, bundle) {
   const { h, setTitle } = ctx;
   const { elections, source, audience } = bundle;
-  setTitle("Republic");
+  const overlay = bundle.cms?.overlays?.home;
+  const siteTitle = bundle.cms?.site?.title;
+  const tagline = overlay?.blocks?.length && overlay.replaceBuiltin ? null : bundle.cms?.site?.tagline;
+  setTitle(siteTitle || "Republic");
   const openCount = elections.filter((e) => e.state === 2).length;
-  main.replaceChildren(
+  const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
+  const heading = replace ? overlay.title : "Republic — civic elections you can check";
+  const ledeDefault =
+    "Republic is a not-for-profit zero-knowledge voting system. The people vote for representatives, and those representatives vote. A city, county, state, nation, union, or cooperative should be able to run an election with private ballots and a public process — without a token, a paid tier, or a vendor black box.";
+  mount(main,
     h(
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "Public home" }),
-      h("h1", { text: "Republic — civic elections you can check" }),
-      h(
-        "p",
-        { class: "lede" },
-        "Republic is a not-for-profit zero-knowledge voting system. The people vote for representatives, and those representatives vote. A city, county, state, nation, union, or cooperative should be able to run an election with private ballots and a public process — without a token, a paid tier, or a vendor black box."
-      ),
+      h("h1", { text: heading }),
+      replace
+        ? null
+        : h("p", { class: "lede", text: tagline || ledeDefault }),
       ctaRow(h, audience || "public"),
       demoBanner(h),
       h(
@@ -146,6 +156,10 @@ export function renderPublicHome(main, ctx, bundle) {
         })
       )
     ),
+    replace ? h("div", { class: "prose cms-prose" }, ...renderBlocks(h, overlay.blocks)) : null,
+    overlay && !replace && overlay.blocks?.length
+      ? h("section", { class: "prose cms-prose", "aria-label": "From this Node" }, ...renderBlocks(h, overlay.blocks))
+      : null,
     h(
       "section",
       { "aria-labelledby": "calendar-heading" },
@@ -155,11 +169,12 @@ export function renderPublicHome(main, ctx, bundle) {
       }),
       publicCalendar(h, ctx, elections, source)
     ),
-    h("hr", { class: "hr" }),
-    h(
-      "section",
-      { id: "how-it-works", tabindex: "-1" },
-      h("h2", { text: "How Republic is supposed to work" }),
+    replace
+      ? null
+      : h(
+          "section",
+          { id: "how-it-works", tabindex: "-1" },
+          h("h2", { text: "How Republic is supposed to work" }),
       h(
         "div",
         { class: "how-grid" },
@@ -184,7 +199,7 @@ export function renderPublicHome(main, ctx, bundle) {
           {},
           h("h3", { text: "One person, several authenticators" }),
           h("p", {
-            text: "Passkey, Web3 wallet, or smart-card digital ID. Several ETH addresses may be verified; only one is active. The Merkle leaf is an identity commitment, never that address.",
+            text: "Email, Ethereum, smart-card reader, driver’s license or passport, or passkey. Several ETH addresses may be verified; only one is active. The Merkle leaf is an identity commitment, never that address and never a document number.",
           })
         ),
         h(
@@ -211,58 +226,68 @@ export function renderPublicHome(main, ctx, bundle) {
 export function renderAbout(main, ctx) {
   const { h, setTitle } = ctx;
   const audience = audienceOf(ctx.me);
-  setTitle("About us");
-  main.replaceChildren(
+  const overlay = ctx.cms?.overlays?.about;
+  const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
+  setTitle(overlay?.title || "About us");
+  const builtin = [
+    h("h2", { text: "Purpose" }),
+    h("p", {
+      text: "Democratic processes still depend on a small set of trusted operators: who is on the roll, who was turned away, whether a ballot was counted, and whether the published result matches the ballots. Paper and proprietary machines can work. They do not, by themselves, let a voter, a losing candidate, or a court verify those claims without re-trusting the same operators.",
+    }),
+    h("p", {
+      text: "This project exists to make those claims checkable: register, cast a private ballot, publish a tally anyone can inspect, and record disqualification as an auditable state change — not an invisible database flag.",
+    }),
+    h("h2", { text: "Privacy of choice" }),
+    h("p", {
+      text: "A voter’s choice is not published. Eligibility and “this person already voted / is barred” are. Zero-knowledge is used so the chain can check facts about a voter without putting the ballot (and, where the jurisdiction requires it, civil identity) in the clear.",
+    }),
+    h("h2", { text: "Public verifiability" }),
+    h("p", {
+      text: "Registration events, disqualification reason codes, poll parameters, hourly disclosed vote proofs, and final tallies are attributable to known roles. Independent auditors can reconstruct an election from chain data, proofs, and published artifacts without a vendor’s private database.",
+    }),
+    h("h2", { text: "Jurisdictions" }),
+    h("p", {
+      text: "A jurisdiction is any body that needs a roll, a ballot, and a binding result: government, county, nation, union, board, cooperative. Nested districts are a registry concern. The same machinery is not limited to national general elections. Fork this Node to run your clerk desk; pin the one shared ElectionFactory instead of deploying a new contract.",
+    }),
+    h("h2", { text: "License (AGPL)" }),
+    h("p", {
+      text: "The software is licensed AGPL-3.0-or-later. If you run a modified Node as a network service, you must offer the corresponding source to its users. Keep the NOT FOR PROFIT label. Do not sell the software or wrap it in a token.",
+    }),
+    h("h2", { text: "Honest maturity" }),
+    demoBanner(h),
+    h("p", {
+      text: "We will not claim that a local demo is court-ready, that MockVerifier is a ceremony, or that using this repository satisfies a given elections statute. Legal adoption is a jurisdiction question. This page is about civic purpose, not a sales pitch.",
+    }),
+    h(
+      "p",
+      {},
+      h("a", { href: "/faq", "data-nav": "", text: "Read the FAQ" }),
+      " · ",
+      h("a", { href: "/register", "data-nav": "", text: "Register" })
+    ),
+  ];
+  mount(main,
     h(
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "About us" }),
-      h("h1", { text: "A civic public good, not a product" }),
-      h(
-        "p",
-        { class: "lede" },
-        "Republic exists to protect and preserve a republic driven by democracy. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in."
-      ),
+      h("h1", { text: replace ? overlay.title : "A civic public good, not a product" }),
+      replace
+        ? null
+        : h(
+            "p",
+            { class: "lede" },
+            "Republic exists to protect and preserve a republic driven by democracy. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in."
+          ),
       ctaRow(h, audience)
     ),
     h(
       "div",
       { class: "prose" },
-      h("h2", { text: "Purpose" }),
-      h("p", {
-        text: "Democratic processes still depend on a small set of trusted operators: who is on the roll, who was turned away, whether a ballot was counted, and whether the published result matches the ballots. Paper and proprietary machines can work. They do not, by themselves, let a voter, a losing candidate, or a court verify those claims without re-trusting the same operators.",
-      }),
-      h("p", {
-        text: "This project exists to make those claims checkable: register, cast a private ballot, publish a tally anyone can inspect, and record disqualification as an auditable state change — not an invisible database flag.",
-      }),
-      h("h2", { text: "Privacy of choice" }),
-      h("p", {
-        text: "A voter’s choice is not published. Eligibility and “this person already voted / is barred” are. Zero-knowledge is used so the chain can check facts about a voter without putting the ballot (and, where the jurisdiction requires it, civil identity) in the clear.",
-      }),
-      h("h2", { text: "Public verifiability" }),
-      h("p", {
-        text: "Registration events, disqualification reason codes, poll parameters, hourly disclosed vote proofs, and final tallies are attributable to known roles. Independent auditors can reconstruct an election from chain data, proofs, and published artifacts without a vendor’s private database.",
-      }),
-      h("h2", { text: "Jurisdictions" }),
-      h("p", {
-        text: "A jurisdiction is any body that needs a roll, a ballot, and a binding result: government, county, nation, union, board, cooperative. Nested districts are a registry concern. The same machinery is not limited to national general elections.",
-      }),
-      h("h2", { text: "License (AGPL)" }),
-      h("p", {
-        text: "The software is licensed AGPL-3.0-or-later. If you run a modified Node as a network service, you must offer the corresponding source to its users. Keep the NOT FOR PROFIT label. Do not sell the software or wrap it in a token.",
-      }),
-      h("h2", { text: "Honest maturity" }),
-      demoBanner(h),
-      h("p", {
-        text: "We will not claim that a local demo is court-ready, that MockVerifier is a ceremony, or that using this repository satisfies a given elections statute. Legal adoption is a jurisdiction question. This page is about civic purpose, not a sales pitch.",
-      }),
-      h(
-        "p",
-        {},
-        h("a", { href: "/faq", "data-nav": "", text: "Read the FAQ" }),
-        " · ",
-        h("a", { href: "/register", "data-nav": "", text: "Register" })
-      )
+      ...(replace ? renderBlocks(h, overlay.blocks) : builtin),
+      !replace && overlay?.blocks?.length ? h("hr", { class: "hr" }) : null,
+      !replace && overlay?.blocks?.length ? h("h2", { text: overlay.title || "From this Node" }) : null,
+      !replace && overlay?.blocks?.length ? renderBlocks(h, overlay.blocks) : null
     )
   );
 }
@@ -270,32 +295,44 @@ export function renderAbout(main, ctx) {
 export function renderFaq(main, ctx) {
   const { h, setTitle } = ctx;
   const audience = audienceOf(ctx.me);
+  const overlay = ctx.cms?.overlays?.faq;
+  const replace = Boolean(overlay?.replaceBuiltin);
+  const extraFaq = (overlay?.blocks || []).filter((b) => b.type === "faq");
+  const extraOther = (overlay?.blocks || []).filter((b) => b.type !== "faq");
   setTitle("FAQ");
-  main.replaceChildren(
+  const builtin = FAQ_ENTRIES.map((entry, index) =>
+    h(
+      "details",
+      { class: "faq-item", id: entry.id, open: index === 0 && !replace },
+      h("summary", {}, h("span", { class: "faq-q", text: entry.q })),
+      h("div", { class: "faq-a" }, ...paragraphs(h, Array.isArray(entry.a) ? entry.a : [faqAnswerText(entry)]))
+    )
+  );
+  const overlayFaq = extraFaq.map((block, index) =>
+    h(
+      "details",
+      { class: "faq-item", open: replace && index === 0 },
+      h("summary", {}, h("span", { class: "faq-q", text: block.q })),
+      h("div", { class: "faq-a" }, h("p", { text: block.a || "" }))
+    )
+  );
+  mount(main,
     h(
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "FAQ" }),
-      h("h1", { text: "Questions people actually ask" }),
+      h("h1", { text: overlay?.title && replace ? overlay.title : "Questions people actually ask" }),
       h(
         "p",
         { class: "lede" },
-        `Answers for voters, officials, and observers. ${FAQ_ENTRIES.length} entries. Copy matches the honest status of this branch — including MockVerifier and other demo limits.`
+        replace
+          ? "Answers published by this Node’s clerks."
+          : `Answers for voters, officials, and observers. ${FAQ_ENTRIES.length} built-in entries. Copy matches the honest status of this branch — including MockVerifier and other demo limits.`
       ),
       ctaRow(h, audience)
     ),
-    h(
-      "div",
-      { class: "faq-list", id: "faq-list" },
-      ...FAQ_ENTRIES.map((entry, index) =>
-        h(
-          "details",
-          { class: "faq-item", id: entry.id, open: index === 0 },
-          h("summary", {}, h("span", { class: "faq-q", text: entry.q })),
-          h("div", { class: "faq-a" }, ...paragraphs(h, Array.isArray(entry.a) ? entry.a : [faqAnswerText(entry)]))
-        )
-      )
-    )
+    extraOther.length ? h("div", { class: "prose" }, ...renderBlocks(h, extraOther)) : null,
+    h("div", { class: "faq-list", id: "faq-list" }, ...(replace ? overlayFaq : [...builtin, ...overlayFaq]))
   );
 }
 
@@ -314,11 +351,11 @@ export async function renderSignIn(main, ctx) {
       heading: "Sign in",
       lede:
         next && isOfficeish(next)
-          ? "Election officials sign in with a passkey or a bound Ethereum wallet. The Node still enforces roles on every action."
-          : "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Register.",
+          ? "Election officials sign in with email, Ethereum, a smart-card reader, or a license/passport. Every path uses an email one-time code. The Node still enforces roles on every action."
+          : "Returning users: email, a bound Ethereum wallet, a smart-card reader, or a driver’s license / passport already bound to your person. First-time registration is on Register.",
     },
   });
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
@@ -327,7 +364,7 @@ export async function renderSignIn(main, ctx) {
       h(
         "p",
         { class: "lede" },
-        "Use a passkey or a bound wallet. There is no password product and no token login. If you have never identified yourself on this Node, register first."
+        "Use email, Ethereum (signature), a smart-card reader, or a driver’s license / passport. There is no password product and no token login. Every path completes with an email one-time code via AWS SES. If you have never identified yourself on this Node, register first."
       ),
       h(
         "div",
@@ -354,7 +391,7 @@ export function renderOffice(main, ctx, bundle) {
     return;
   }
   if (!isOfficer(me)) {
-    main.replaceChildren(
+    mount(main,
       h(
         "div",
         { class: "page-head audience-gate", id: "officer-gate" },
@@ -411,6 +448,18 @@ export function renderOffice(main, ctx, bundle) {
       body: "Post counts after cutoff. opens_ballots demo keys are NON-PRODUCTION.",
     },
     {
+      href: "/office/pages",
+      title: "Pages (WordPress-style)",
+      body: "Update Home, About, FAQ, and extra pages for this Node. Any clerk can publish. HTML is stripped.",
+      spa: true,
+    },
+    {
+      href: "/office/site",
+      title: "Shared contracts",
+      body: "Fork the UI; pin the one ElectionFactory. Do not deploy a new factory per jurisdiction.",
+      spa: true,
+    },
+    {
       href: "/admin",
       title: "Jurisdictions and roles",
       body: "Host this Node: create jurisdictions and grant clerks, registrars, DQ, and tally officers.",
@@ -422,7 +471,7 @@ export function renderOffice(main, ctx, bundle) {
     },
   ];
 
-  main.replaceChildren(
+  mount(main,
     h(
       "div",
       { class: "page-head" },
@@ -439,13 +488,18 @@ export function renderOffice(main, ctx, bundle) {
     h(
       "div",
       { class: "grid-cards hub-cards", role: "list" },
-      ...cards.map((card) =>
+      ...cards
+        .filter((card) => {
+          if (card.href === "/office/pages" || card.href === "/office/site") return canEditPages(me);
+          return true;
+        })
+        .map((card) =>
         h(
           "article",
           { class: "election-card", role: "listitem" },
           h("h2", { text: card.title }),
           h("p", { text: card.body }),
-          h("a", { class: "btn", href: card.href, text: "Open" })
+          h("a", { class: "btn", href: card.href, "data-nav": card.spa ? "" : undefined, text: "Open" })
         )
       )
     ),

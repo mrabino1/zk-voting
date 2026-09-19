@@ -3,35 +3,32 @@
 import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
-import { establishSession, destroySession, requireAuth, publicUser } from '../auth.mjs';
+import { destroySession, publicUser, requireAuth } from '../auth.mjs';
 import {
   createIdentityChallenges,
+  fingerprintFromCertificate,
+  normalizeEmail,
   normalizeEthAddress,
+  normalizeFingerprint,
   publicIdentity,
+  resolveCivicIdLoginPerson,
+  resolveEmailLoginPerson,
+  resolveSmartCardLoginPerson,
   resolveWeb3LoginPerson,
   verifyWeb3Bind,
 } from '../identity.mjs';
 import { isRole } from '../roles.mjs';
 
 export function authRouter(deps) {
-  const { store, config, passkeys } = deps;
+  const { store, config, passkeys, mfa } = deps;
   const router = Router();
   const web3Challenges = createIdentityChallenges();
+  const cardChallenges = createIdentityChallenges();
 
   function originOf(req) {
     const origin = req.headers.origin;
     if (origin) return String(origin);
     return config.origins?.[0] || `http://localhost:${config.port}`;
-  }
-
-  function sessionPayload(user) {
-    return {
-      ok: true,
-      verified: true,
-      user: publicUser(user),
-      identity: publicIdentity(user),
-      nfp: true,
-    };
   }
 
   router.post(
@@ -54,8 +51,13 @@ export function authRouter(deps) {
         user: req.user,
         handle: req.body?.handle,
       });
-      await establishSession(res, store, config, result.user);
-      res.json({ ...sessionPayload(result.user) });
+      const payload = await mfa.completeFactor(res, {
+        user: result.user,
+        factor: 'passkey',
+        email: req.body?.email,
+        bindEmail: Boolean(req.body?.email),
+      });
+      res.json(payload);
     }),
   );
 
@@ -75,8 +77,8 @@ export function authRouter(deps) {
     '/passkey/login/finish',
     asyncHandler(async (req, res) => {
       const result = await passkeys.finishLogin({ body: req.body });
-      await establishSession(res, store, config, result.user);
-      res.json({ ...sessionPayload(result.user) });
+      const payload = await mfa.completeFactor(res, { user: result.user, factor: 'passkey' });
+      res.json(payload);
     }),
   );
 
@@ -113,10 +115,125 @@ export function authRouter(deps) {
       if (!user) {
         throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
       }
-      await establishSession(res, store, config, user);
-      res.json({ ...sessionPayload(store.getUser(user.id)) });
+      const payload = await mfa.completeFactor(res, {
+        user,
+        factor: 'web3',
+        email: req.body?.email,
+      });
+      res.json(payload);
     }),
   );
+
+  router.post(
+    '/email/start',
+    asyncHandler(async (req, res) => {
+      const email = normalizeEmail(req.body?.email);
+      const user = resolveEmailLoginPerson(store, email);
+      if (!user) {
+        throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
+      }
+      const payload = await mfa.completeFactor(res, { user, factor: 'email', email });
+      res.json(payload);
+    }),
+  );
+
+  router.post(
+    '/smart-card/challenge',
+    asyncHandler(async (req, res) => {
+      const fingerprint = req.body?.fingerprint
+        ? normalizeFingerprint(req.body.fingerprint)
+        : req.body?.certificate
+          ? fingerprintFromCertificate(req.body.certificate)
+          : null;
+      const issued = cardChallenges.issueSmartCardLogin({ fingerprint });
+      res.json({ nfp: true, ...issued });
+    }),
+  );
+
+  router.post(
+    '/smart-card/login',
+    asyncHandler(async (req, res) => {
+      const nonce = req.body?.nonce;
+      const pending =
+        cardChallenges.take(nonce) ||
+        (req.body?.fingerprint
+          ? cardChallenges.take(`card-login:${normalizeFingerprint(req.body.fingerprint)}`)
+          : null);
+      if (!pending || pending.type !== 'smart_card_login') {
+        throw new HttpError(400, 'no smart-card login challenge');
+      }
+      const fingerprint = req.body?.certificate
+        ? fingerprintFromCertificate(req.body.certificate)
+        : normalizeFingerprint(req.body?.fingerprint || pending.fingerprint);
+      if (pending.fingerprint && pending.fingerprint !== fingerprint) {
+        throw new HttpError(400, 'fingerprint mismatch');
+      }
+      const mockOk = Boolean(req.body?.mock) && Boolean(config.allowSmartCardMock);
+      if (!mockOk) {
+        throw new HttpError(
+          400,
+          'live X.509 card verification is clerk-attested in this Node build; use registrar attest or ALLOW_SMART_CARD_MOCK=1',
+        );
+      }
+      const user = resolveSmartCardLoginPerson(store, fingerprint);
+      if (!user) {
+        throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
+      }
+      const payload = await mfa.completeFactor(res, {
+        user,
+        factor: 'smart_card',
+        email: req.body?.email,
+      });
+      res.json(payload);
+    }),
+  );
+
+  router.post(
+    '/civic-id/login',
+    asyncHandler(async (req, res) => {
+      const kind = req.body?.kind;
+      const issuer = req.body?.issuer;
+      const documentNumber = req.body?.documentNumber;
+      const user = resolveCivicIdLoginPerson(store, { kind, issuer, documentNumber });
+      if (!user) {
+        throw new HttpError(404, 'unknown credential', { code: 'UNKNOWN_CREDENTIAL' });
+      }
+      const payload = await mfa.completeFactor(res, {
+        user,
+        factor: 'civic_id',
+        email: req.body?.email,
+      });
+      res.json(payload);
+    }),
+  );
+
+  router.post(
+    '/mfa/email',
+    asyncHandler(async (req, res) => {
+      const payload = await mfa.provideEmail(req, res, req.body?.email);
+      res.json(payload);
+    }),
+  );
+
+  router.post(
+    '/mfa/resend',
+    asyncHandler(async (req, res) => {
+      const payload = await mfa.resend(req, res);
+      res.json(payload);
+    }),
+  );
+
+  router.post(
+    '/mfa/verify',
+    asyncHandler(async (req, res) => {
+      const payload = await mfa.verify(req, res, req.body?.code || req.body?.otp);
+      res.json(payload);
+    }),
+  );
+
+  router.get('/mfa/status', (req, res) => {
+    res.json(mfa.status(req));
+  });
 
   router.post(
     '/logout',
@@ -140,13 +257,13 @@ export function authRouter(deps) {
         user = store.createUser({ handle, role });
         await store.persist();
       }
-      await establishSession(res, store, config, user);
-      res.json({ ok: true, user: publicUser(user), identity: publicIdentity(user), nfp: true, dev: true });
+      const payload = await mfa.completeFactor(res, { user, factor: 'dev' });
+      res.json({ ...payload, nfp: true, dev: true });
     }),
   );
 
   router.get('/session', requireAuth, (req, res) => {
-    res.json({ ok: true, user: req.publicUser, identity: publicIdentity(req.user), nfp: true });
+    res.json({ ok: true, user: publicUser(req.user), identity: publicIdentity(req.user), nfp: true });
   });
 
   return router;

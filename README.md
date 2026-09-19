@@ -112,7 +112,7 @@ The properties we are aiming for:
 
 Zero-knowledge does **not** mean “nobody is in charge.” Someone still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, **counting and eligibility checks are not a second trust sink**.
 
-Privacy construction (implementation): a person uniquely identifies with a **passkey**, a **Web3 wallet**, or a **smart-card digital ID**. Several ETH addresses may be verified internally; only one is active. WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the active wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Person identity](./docs/IDENTITY.md), [Passkeys](./docs/PASSKEYS.md), and [ARCHITECTURE](./docs/ARCHITECTURE.md).
+Privacy construction (implementation): a person uniquely identifies with **email**, an **Ethereum wallet** (signature), a **smart-card reader**, a **driver’s license or passport** (hashed; no images or full numbers stored), or a **passkey**. Several ETH addresses may be verified internally; only one is active. **Every sign-in path uses email MFA via AWS SES**. WebAuthn **PRF** derives a secp256k1 smart-account key **and**, under a separate domain, `(identityTrapdoor, nullifierSecret)`. The Merkle leaf is the identity commitment, never the active wallet address. The vote transaction is submitted by a **bundler**; the paymaster pays L2 gas. Public dashboards publish vote proofs **once an hour**, after that hour closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. See [Person identity](./docs/IDENTITY.md), [Passkeys](./docs/PASSKEYS.md), and [ARCHITECTURE](./docs/ARCHITECTURE.md).
 
 ---
 
@@ -277,7 +277,7 @@ With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-c
 
 ### Passkeys and person identity
 
-A person identifies with a **passkey**, a **Web3 wallet**, or a **smart-card digital ID**. Many Ethereum addresses can be verified internally; **exactly one** is active. The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
+A person identifies with **email**, an **Ethereum wallet**, a **smart-card reader**, a **driver’s license or passport**, or a **passkey**. Many Ethereum addresses can be verified internally; **exactly one** is active. Sign-in completes with **email MFA (AWS SES)**. The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
 
 Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `republic-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `RepublicPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
@@ -342,9 +342,11 @@ The Node side is the human product. It should feel operationally familiar to any
 | `/v/:shortCode`, `/e/:shortCode` | 302 to `/vote/<uuid>` |
 | `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
 | `/elections/:id/info/:questionId/:optionId` | One option + external links |
-| `/admin` | Platform admin (`admin.html`) |
-| `/back-office` | Clerks / registrars / officers (`back-office.html`) |
-| `/explorer` | Civic L2 explorer (`explorer.html`) |
+| `/about`, `/faq`, `/p/:slug` | Public CMS pages. Clerks publish from `/office/pages`. |
+| `/office/pages`, `/office/site` | WordPress-style page editor and shared factory pin |
+| `/admin` | Platform admin (file `admin.html`, URL has no `.html`) |
+| `/back-office` | Clerks / registrars / officers (file `back-office.html`) |
+| `/explorer` | Civic L2 explorer (file `explorer.html`) |
 | `/elections/:id/results` | Certified plurality / IRV results |
 
 Public election ids are UUID v4. On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`.
@@ -478,7 +480,7 @@ Registration is a **legal and operational** process that **ends** in an on-chain
 
 Typical intake (jurisdiction-configurable, not all required for every election):
 
-- **Passkey, Web3 wallet, or smart-card digital ID** (a person may verify all three)
+- **Email, Ethereum, smart-card reader, driver’s license/passport, or passkey** (a person may verify all of them; email MFA on every path)
 - Several Ethereum addresses verified internally; **exactly one active** (the roll leaf is still the identity commitment, never that address)
 - Legal name, date of birth, address / residency evidence (clerk file; not on chain)
 - Citizenship or membership evidence
@@ -797,7 +799,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
 | **L2** | Republic L2 (chainId **27427**) by default: civic JSON sequencer in `l2/`. Lighter and other EVM L2s as portable Solidity venues. Execution off L1, security anchored to Ethereum. |
-| **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. One of three ways to identify a person (with Web3 wallet and smart-card digital ID). |
+| **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. One of several ways to identify a person (with email, Web3 wallet, smart-card reader, and hashed license/passport). |
 | **Person** | One Node user. Uniquely identified. Authenticators and ETH addresses cannot be shared across people. |
 | **Active Ethereum address** | The single ETH address currently registered for that person’s gasless ops. Other verified addresses stay internal. Not the Merkle leaf. |
 

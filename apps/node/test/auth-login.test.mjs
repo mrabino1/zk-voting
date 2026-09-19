@@ -146,6 +146,11 @@ describe('passkey and Ethereum wallet login (returning users)', () => {
     assert.equal(status, 200);
     assert.equal(json.auth.passkeyLogin, true);
     assert.equal(json.auth.web3Login, true);
+    assert.equal(json.auth.emailLogin, true);
+    assert.equal(json.auth.smartCardLogin, true);
+    assert.equal(json.auth.civicIdLogin, true);
+    assert.equal(json.auth.requireEmailMfa, false);
+    assert.equal(json.auth.emailMfaVendor, 'ses');
     assert.equal(json.auth.allowDevLogin, true);
   });
 

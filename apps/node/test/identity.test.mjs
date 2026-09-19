@@ -109,18 +109,18 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('catalog advertises three methods and one active Ethereum address', async () => {
+  test('catalog advertises email, web3, smart card, civic id, passkey, and one active Ethereum address', async () => {
     const methods = await api('GET', '/api/identity/methods');
     assert.equal(methods.status, 200);
     assert.equal(methods.json.nfp, true);
     assert.deepEqual(
       methods.json.methods.map((m) => m.type),
-      ['passkey', 'web3', 'smart_card'],
+      ['email', 'web3', 'smart_card', 'civic_id', 'passkey'],
     );
     const config = await api('GET', '/api/config');
     assert.equal(config.status, 200);
     assert.equal(config.json.identity.oneActiveEthAddress, true);
-    assert.deepEqual(config.json.identity.methods, ['passkey', 'web3', 'smart_card']);
+    assert.deepEqual(config.json.identity.methods, ['email', 'web3', 'smart_card', 'civic_id', 'passkey']);
   });
 
   test('web3 bind uniquely identifies a person and registers the first address as active', async () => {

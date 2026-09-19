@@ -4,6 +4,8 @@ import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
 import { disclosurePublicView } from '../disclosure.mjs';
+import { AUTH_METHOD_TYPES } from '../identity.mjs';
+import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 
 export function healthRouter(deps) {
   const router = Router();
@@ -13,6 +15,7 @@ export function healthRouter(deps) {
     const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
       ? deps.store.publishedAcceptedBallotsAll(now, interval)
       : undefined;
+    const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
     res.json({
       ok: true,
       app: 'zk-voting',
@@ -20,7 +23,8 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
-      electionFactoryAddress: deps.config.electionFactoryAddress || '',
+      sharedDeployment: true,
+      electionFactoryAddress: contracts.factory || '',
       chainConfigured: deps.chain.isConfigured(),
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
       disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
@@ -38,6 +42,7 @@ export function configRouter(deps) {
       const chainConfigured = deps.chain.isConfigured();
       const factoryReady =
         typeof deps.chain.isFactoryReady === 'function' ? deps.chain.isFactoryReady() : false;
+      const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
       res.json({
         nfp: true,
         app: 'zk-voting',
@@ -47,21 +52,25 @@ export function configRouter(deps) {
         chainId: deps.config.chainId,
         origins: deps.config.origins,
         chainConfigured,
-        electionFactoryAddress: deps.config.electionFactoryAddress || '',
+        sharedDeployment: true,
+        sharedDeploymentNote: SHARED_DEPLOYMENT_NOTE,
+        electionFactoryAddress: contracts.factory || '',
         factoryReady,
         chain: {
           configured: chainConfigured,
-          factoryAddress: deps.config.electionFactoryAddress || '',
+          factoryAddress: contracts.factory || '',
           factoryReady,
           voteReady: deps.chain.isReady(),
           note: chainConfigured
-            ? 'POST /api/elections calls ElectionFactory.createElection. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
-            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo).',
+            ? 'POST /api/elections calls the one shared ElectionFactory. Fork the Node UI; do not deploy a new factory per jurisdiction. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
+            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo). Pin the shared factory on /office/site when you connect a chain.',
         },
         addresses: {
-          factory: deps.config.electionFactoryAddress || null,
-          ballotInbox: deps.config.ballotInboxAddress || null,
+          factory: contracts.factory || null,
+          ballotInbox: contracts.ballotInbox || null,
+          verifier: contracts.verifier || null,
         },
+        contracts,
         coercion: {
           policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,
@@ -74,9 +83,10 @@ export function configRouter(deps) {
             : undefined,
         }),
         identity: {
-          methods: ['passkey', 'web3', 'smart_card'],
+          methods: [...AUTH_METHOD_TYPES],
           oneActiveEthAddress: true,
-          note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
+          civicIdKinds: ['drivers_license', 'passport'],
+          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Only one Ethereum address is active. Document images and full ID numbers are not stored.',
         },
         tally: {
           schemes: ['sum_only', 'opens_ballots'],
@@ -103,7 +113,15 @@ export function configRouter(deps) {
           allowDevLogin: Boolean(deps.config.allowDevLogin),
           passkeyLogin: true,
           web3Login: true,
-          note: 'Sign in with a registered passkey or a bound Ethereum wallet. Dev login is a local/test fallback only.',
+          emailLogin: true,
+          smartCardLogin: true,
+          civicIdLogin: true,
+          requireEmailMfa: Boolean(deps.config.requireEmailMfa),
+          emailMfaVendor: 'ses',
+          sesConfigured: Boolean(deps.config.sesFromAddress && deps.config.awsRegion),
+          allowSmartCardMock: Boolean(deps.config.allowSmartCardMock),
+          allowCivicIdMock: Boolean(deps.config.allowCivicIdMock),
+          note: 'Sign in with email, a bound Ethereum wallet (signature), a smart-card reader, or a hashed driver’s license/passport. Every path completes with an email one-time code via AWS SES when MFA is on. Dev login is a local/test fallback only.',
         },
       });
     }),

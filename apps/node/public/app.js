@@ -17,6 +17,13 @@ import {
   homeDestination,
 } from "./audience.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
+import {
+  loadPublicCms,
+  renderCmsPage,
+  renderOfficePageEditor,
+  renderOfficePages,
+  renderOfficeSite,
+} from "./cms.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -475,12 +482,13 @@ export async function loadMe() {
   }
 }
 
-function updateNav(route, me) {
+function updateNav(route, me, extraNav = []) {
   applyAudienceChrome(document, {
     audience: audienceOf(me),
     currentPath: route.path,
     routeName: route.name,
     spa: true,
+    extraNav,
   });
 }
 
@@ -615,6 +623,7 @@ function renderDesk(main, route, bundle) {
   const others = elections.filter((election) => voterStatusForElection(election, me, store).key === "not_registered");
 
   main.replaceChildren(
+    ...[
     h(
       "div",
       { class: "page-head" },
@@ -632,7 +641,7 @@ function renderDesk(main, route, bundle) {
         h("p", { text: walletLine }),
         me?.user
           ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
-          : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
+          : h("p", { text: "Sign in below with email, Ethereum, a smart card, or a license/passport if you already have a person record on this Node." }),
         h("p", {
           text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
         }),
@@ -688,13 +697,14 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "more-heading" },
       h("h2", { id: "more-heading", text: "Register for more elections" }),
       electionGrid(others, me, store, "No additional published elections on this Node.")
-    )
+    ),
+    ].filter(Boolean)
   );
   const signInRoot = main.querySelector("#sign-in-root");
   if (signInRoot) {
     signInRoot.setAttribute(
       "data-lede",
-      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
+      "Returning users: email, Ethereum, a smart-card reader, or a license/passport already bound to your person. First-time registration is on Identify yourself."
     );
     mountSignInPanel(signInRoot);
   }
@@ -789,8 +799,9 @@ async function renderRoute(route) {
   main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
   try {
     const meHint = await loadMe();
-    updateNav(route, meHint);
-    const context = { ...ctx(), route, me: meHint };
+    const cms = await loadPublicCms(api);
+    updateNav(route, meHint, cms.nav || []);
+    const context = { ...ctx(), route, me: meHint, cms };
 
     if (route.name === "home") {
       const audience = audienceOf(meHint);
@@ -799,10 +810,10 @@ async function renderRoute(route) {
         return;
       }
       const bundle = await loadDeskBundle();
-      renderPublicHome(main, { ...context, me: bundle.me }, { ...bundle, audience: "public" });
+      renderPublicHome(main, { ...context, me: bundle.me }, { ...bundle, audience: "public", cms });
     } else if (route.name === "publicHome") {
       const bundle = await loadDeskBundle();
-      renderPublicHome(main, { ...context, me: bundle.me }, { ...bundle, audience: audienceOf(bundle.me) });
+      renderPublicHome(main, { ...context, me: bundle.me }, { ...bundle, audience: audienceOf(bundle.me), cms });
     } else if (route.name === "desk") {
       setTitle("My desk");
       const bundle = await loadDeskBundle();
@@ -811,10 +822,29 @@ async function renderRoute(route) {
       renderAbout(main, context);
     } else if (route.name === "faq") {
       renderFaq(main, context);
+    } else if (route.name === "cmsPage") {
+      let page = (cms.pages || []).find((p) => p.slug === route.params.slug) || null;
+      if (!page) {
+        try {
+          const data = await api(`/api/pages/${encodeURIComponent(route.params.slug)}`);
+          page = data.page;
+        } catch {
+          page = null;
+        }
+      }
+      renderCmsPage(main, context, page);
     } else if (route.name === "signin") {
       await renderSignIn(main, context);
     } else if (route.name === "office") {
       renderOffice(main, context, { me: meHint });
+    } else if (route.name === "officePages") {
+      await renderOfficePages(main, context, { me: meHint });
+    } else if (route.name === "officePageNew") {
+      await renderOfficePageEditor(main, context, { me: meHint }, { isNew: true });
+    } else if (route.name === "officePageEdit") {
+      await renderOfficePageEditor(main, context, { me: meHint }, { isNew: false });
+    } else if (route.name === "officeSite") {
+      await renderOfficeSite(main, context, { me: meHint });
     } else if (route.name === "register") {
       setTitle("Register");
       await renderRegister(main, context);

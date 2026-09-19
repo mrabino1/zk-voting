@@ -56,6 +56,26 @@ export function brandHref(audience) {
   return homeDestination(audience);
 }
 
+export function canonicalPublicPath(pathname) {
+  let raw = String(pathname || "");
+  let search = "";
+  let hash = "";
+  const hashAt = raw.indexOf("#");
+  if (hashAt !== -1) {
+    hash = raw.slice(hashAt);
+    raw = raw.slice(0, hashAt);
+  }
+  const qAt = raw.indexOf("?");
+  if (qAt !== -1) {
+    search = raw.slice(qAt);
+    raw = raw.slice(0, qAt);
+  }
+  raw = raw.replace(/\.html$/i, "");
+  if (!raw || raw === "/index") raw = "/";
+  else raw = raw.replace(/\/+$/, "") || "/";
+  return `${raw}${search}${hash}`;
+}
+
 export function safeNextPath(value) {
   if (value == null || value === "") return null;
   let path = String(value);
@@ -66,13 +86,14 @@ export function safeNextPath(value) {
   }
   if (!path.startsWith("/") || path.startsWith("//") || /[a-z]+:/i.test(path)) return null;
   if (path.includes("\\")) return null;
-  return path;
+  return canonicalPublicPath(path);
 }
 
 export function postLoginPath(me, next) {
   const safe = safeNextPath(next);
-  if (safe) return safe;
-  return "/me";
+  if (!safe) return "/me";
+  if (isOfficePath(safe) && !isOfficer(me)) return "/me";
+  return safe;
 }
 
 export function signInHref(next) {
@@ -81,11 +102,13 @@ export function signInHref(next) {
   return `/signin?next=${encodeURIComponent(safe)}`;
 }
 
-export function mainNav(audience) {
+export function mainNav(audience, extraNav = []) {
+  const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
   if (audience === "public") {
     return [
       { href: "/about", label: "About" },
       { href: "/faq", label: "FAQ" },
+      ...extra,
       { href: "/signin", label: "Sign in" },
       { href: "/register", label: "Register" },
     ];
@@ -110,18 +133,19 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   const href = String(item.href || "").split("?")[0];
   if (href === path) return true;
   if (href === "/me" && (routeName === "desk" || routeName === "app")) return true;
-  if (href === "/office" && routeName === "office") return true;
+  if (href === "/office" && String(routeName || "").startsWith("office")) return true;
   if (href === "/about" && routeName === "about") return true;
   if (href === "/faq" && routeName === "faq") return true;
+  if (href.startsWith("/p/") && path === href) return true;
   if (href === "/signin" && routeName === "signin") return true;
   if (href === "/register" && routeName === "register") return true;
   if (href === "/elections" && (routeName === "results" || routeName === "resultsIndex")) return true;
   return false;
 }
 
-export function paintMainNav(nav, { audience, currentPath, routeName, spa = true } = {}) {
+export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [] } = {}) {
   if (!nav) return;
-  const items = mainNav(audience || "public");
+  const items = mainNav(audience || "public", extraNav);
   const ul = document.createElement("ul");
   for (const item of items) {
     const li = document.createElement("li");
@@ -151,6 +175,19 @@ export function applyAudienceChrome(root, options) {
 export const OFFICE_PATHS = ["/admin", "/back-office", "/office"];
 
 export function isOfficePath(pathname) {
-  const path = currentPathOf(pathname);
+  const path = canonicalPublicPath(currentPathOf(pathname));
   return OFFICE_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
+/** Multi-page HTML (not the voter SPA). Use a full load, not history.pushState. */
+export function isStandaloneHtmlPath(pathname) {
+  const path = canonicalPublicPath(currentPathOf(pathname));
+  return (
+    path === "/admin" ||
+    path.startsWith("/admin/") ||
+    path === "/back-office" ||
+    path.startsWith("/back-office/") ||
+    path === "/explorer" ||
+    path.startsWith("/explorer/")
+  );
 }

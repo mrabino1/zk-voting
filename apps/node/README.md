@@ -3,8 +3,9 @@
 **Republic** Node — civic public good, not a commercial product.
 
 This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
-(product name Republic): JSON HTTP API, WebAuthn passkeys, Web3 and smart-card
-person identity, a gasless vote relayer, an L2 block-explorer backend, and a
+(product name Republic): JSON HTTP API, WebAuthn passkeys, email / Web3 /
+smart-card / license-passport person identity with AWS SES email MFA, a gasless
+vote relayer, an L2 block-explorer backend, and a
 static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
 
 There is no token. There is no paid tier. Do not commercialize this software.
@@ -81,10 +82,10 @@ New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
 `onChainElectionId` on the Node record.
 
-Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
-Admin / back-office / explorer are separate HTML files.
+Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.
 
 ### Ballot option information
 
@@ -110,7 +111,7 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 | `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, clerk `POST /api/elections` calls `ElectionFactory.createElection` and `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem. Unset = JSON-only demo. |
-| `ELECTION_FACTORY_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for create-election (`FACTORY` alias matches Foundry scripts). Also published on `GET /api/config` and auditor artifacts. |
+| `ELECTION_FACTORY_ADDRESS` | _empty_ | Shared factory for every forked Node (`FACTORY` alias). Env wins over `/office/site`. Required when `CHAIN_RPC` is set unless the site pin is set. |
 | `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for vote relay |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for factory create and on-chain submit |
@@ -126,6 +127,11 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
 | `ALLOW_SMART_CARD_MOCK` | off (`1` in tests) | Self-service smart-card `{ mock: true }` (kiosk demo). Production uses registrar attest |
+| `ALLOW_CIVIC_ID_MOCK` | off (`1` in tests) | Self-service driver’s license / passport bind `{ mock: true }` |
+| `SES_FROM_ADDRESS` | _empty_ | AWS SES From address. With `AWS_REGION`, turns on email MFA for every non-dev login |
+| `AWS_REGION` | _empty_ | SES region (also `SES_REGION`) |
+| `SES_CONFIGURATION_SET` | _empty_ | Optional SESv2 configuration set |
+| `REQUIRE_EMAIL_MFA` | off in tests; on when SES is configured | Force or disable email OTP MFA |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 | `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
@@ -133,7 +139,7 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 
 Passkey rpName is always **Republic**.
 
-Sign-in UX: `/`, `/admin`, and `/back-office` share **Sign in with passkey** and **Sign in with Ethereum**. Register a person first (`/register`). Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
+Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **smart-card reader**, **license/passport**, and passkey. Register a person first (`/register`). Every path completes with an email one-time code when SES MFA is on. Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
 
 ---
 
@@ -165,22 +171,32 @@ DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer gra
 GET  /api/me
 GET  /api/me/identity
 GET  /api/identity/methods
+POST /api/identity/email/start
 POST /api/identity/web3/challenge
 POST /api/identity/web3/verify
 POST /api/identity/smart-card/challenge
 POST /api/identity/smart-card/verify
+POST /api/identity/civic-id/verify
 POST /api/me/eth-accounts
 POST /api/me/eth-accounts/active
 POST /api/persons/:id/person-key     (registrar / platform_admin)
 POST /api/persons/:id/methods
 POST /api/persons/:id/eth-accounts
 POST /api/persons/:id/eth-accounts/active
+POST /api/auth/email/start
 POST /api/auth/passkey/register/begin
 POST /api/auth/passkey/register/finish
 POST /api/auth/passkey/login/begin
 POST /api/auth/passkey/login/finish
 POST /api/auth/web3/challenge
 POST /api/auth/web3/login
+POST /api/auth/smart-card/challenge
+POST /api/auth/smart-card/login
+POST /api/auth/civic-id/login
+POST /api/auth/mfa/email
+POST /api/auth/mfa/resend
+POST /api/auth/mfa/verify
+GET  /api/auth/mfa/status
 POST /api/auth/logout
 POST /api/auth/dev-login            (ALLOW_DEV_LOGIN / tests only)
 GET  /api/explorer/blocks

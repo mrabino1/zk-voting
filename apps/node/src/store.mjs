@@ -26,6 +26,16 @@ import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 import {
+  defaultSite,
+  normalizeKind,
+  normalizeSlug,
+  normalizeStatus,
+  pageSlugForKind,
+  sanitizeAddress,
+  sanitizeBlocks,
+  sanitizeText,
+} from './cms.mjs';
+import {
   DEMO_KEY_WARNING,
   TALLY_SCHEME_OPENS_BALLOTS,
   TALLY_SCHEME_SUM_ONLY,
@@ -85,6 +95,8 @@ function emptyData() {
     envelopes: [],
     notifications: [],
     tallyGuardians: [],
+    pages: [],
+    site: defaultSite(),
   };
 }
 
@@ -126,6 +138,9 @@ export class Store {
     try {
       const raw = await fs.readFile(filePath, 'utf8');
       data = { ...emptyData(), ...JSON.parse(raw) };
+      data.pages = Array.isArray(data.pages) ? data.pages : [];
+      data.site = { ...defaultSite(), ...(data.site || {}) };
+      data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
       data = emptyData();
@@ -176,6 +191,7 @@ export class Store {
           ethAccounts: [],
           activeEthAddress: null,
           personKeyHash: null,
+          email: null,
         });
       }
     }
@@ -305,7 +321,7 @@ export class Store {
     return user ? ensurePersonFields(user) : null;
   }
 
-  createUser({ handle, role = 'voter' }) {
+  createUser({ handle, role = 'voter', email = null }) {
     const trimmed = String(handle || '').trim();
     if (!trimmed) throw new HttpError(400, 'handle required');
     if (!isRole(role)) throw new HttpError(400, 'invalid role');
@@ -314,6 +330,7 @@ export class Store {
       id: randomUUID(),
       handle: trimmed,
       role,
+      email: email || null,
       createdAt: new Date().toISOString(),
       credentials: [],
       authMethods: [],
@@ -425,7 +442,25 @@ export class Store {
     return user ? ensurePersonFields(user) : null;
   }
 
-  findUserByAuthMethod({ type, credentialId, address, fingerprint }) {
+  findUserByEmail(email) {
+    const want = String(email || '')
+      .trim()
+      .toLowerCase();
+    if (!want) return null;
+    for (const user of this.data.users) {
+      ensurePersonFields(user);
+      if (String(user.email || '').trim().toLowerCase() === want) return user;
+      const hit = user.authMethods.find(
+        (m) => m.type === 'email' && String(m.email || '').trim().toLowerCase() === want,
+      );
+      if (hit) return user;
+    }
+    return null;
+  }
+
+  findUserByAuthMethod({ type, credentialId, address, fingerprint, email, civicIdHash }) {
+    const wantEmail = email ? String(email).trim().toLowerCase() : '';
+    const wantCivic = civicIdHash ? String(civicIdHash).toLowerCase() : '';
     for (const user of this.data.users) {
       ensurePersonFields(user);
       const hit = user.authMethods.find((m) => {
@@ -434,6 +469,11 @@ export class Store {
         if (address && sameEthAddress(m.address, address)) return true;
         if (fingerprint && String(m.fingerprint || '').toLowerCase() === String(fingerprint).toLowerCase()) {
           return true;
+        }
+        if (wantEmail && String(m.email || '').trim().toLowerCase() === wantEmail) return true;
+        if (wantCivic) {
+          const stored = String(m.civicIdHash || m.fingerprint || '').toLowerCase();
+          if (stored === wantCivic) return true;
         }
         return false;
       });
@@ -446,11 +486,16 @@ export class Store {
     ensurePersonFields(user);
     const type = fields.type;
     if (!isAuthMethodType(type)) throw new HttpError(400, 'invalid auth method type');
+    if (Object.prototype.hasOwnProperty.call(fields, 'documentNumber') && fields.documentNumber) {
+      throw new HttpError(400, 'document numbers are not stored; send a civicIdHash');
+    }
     const existing = this.findUserByAuthMethod({
       type,
       credentialId: fields.credentialId,
       address: fields.address,
       fingerprint: fields.fingerprint,
+      email: fields.email,
+      civicIdHash: fields.civicIdHash,
     });
     if (existing && existing.user.id !== user.id) {
       throw new HttpError(409, 'authenticator already bound to another person', {
@@ -470,8 +515,14 @@ export class Store {
       fingerprint: fields.fingerprint || null,
       subject: fields.subject || null,
       issuer: fields.issuer || null,
+      email: fields.email || null,
+      kind: fields.kind || null,
+      civicIdHash: fields.civicIdHash || (type === 'civic_id' ? fields.fingerprint : null),
     };
     user.authMethods.push(method);
+    if (type === 'email' && method.email && !user.email) {
+      user.email = method.email;
+    }
     return method;
   }
 
@@ -1242,6 +1293,132 @@ export class Store {
     n.read = true;
     await this.persist();
     return n;
+  }
+
+  getSite() {
+    if (!this.data.site) this.data.site = defaultSite();
+    this.data.site = { ...defaultSite(), ...this.data.site };
+    this.data.site.contracts = { ...defaultSite().contracts, ...(this.data.site.contracts || {}) };
+    this.data.site.sharedDeployment = true;
+    this.data.site.nfp = true;
+    return this.data.site;
+  }
+
+  async updateSite(patch = {}, actor = null) {
+    const site = this.getSite();
+    if (patch.title != null) site.title = sanitizeText(patch.title, 120) || 'Republic';
+    if (patch.tagline != null) site.tagline = sanitizeText(patch.tagline, 400);
+    if (patch.contracts && typeof patch.contracts === 'object') {
+      for (const key of ['factory', 'ballotInbox', 'verifier']) {
+        if (patch.contracts[key] == null) continue;
+        const addr = sanitizeAddress(patch.contracts[key]);
+        if (patch.contracts[key] !== '' && addr === null) {
+          throw new HttpError(400, `invalid ${key} address`);
+        }
+        site.contracts[key] = addr || '';
+      }
+    }
+    site.sharedDeployment = true;
+    site.updatedAt = new Date().toISOString();
+    if (actor?.id) site.updatedBy = actor.id;
+    await this.persist();
+    return this.getSite();
+  }
+
+  listPages({ publishedOnly = false, kind = null } = {}) {
+    if (!Array.isArray(this.data.pages)) this.data.pages = [];
+    let rows = this.data.pages.slice();
+    if (publishedOnly) rows = rows.filter((p) => p.status === 'published');
+    if (kind) rows = rows.filter((p) => p.kind === kind);
+    return rows.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  }
+
+  getPage(idOrSlug) {
+    if (!Array.isArray(this.data.pages)) this.data.pages = [];
+    const want = String(idOrSlug || '').trim();
+    if (!want) return null;
+    return (
+      this.data.pages.find((p) => p.id === want) ||
+      this.data.pages.find((p) => p.slug === want) ||
+      null
+    );
+  }
+
+  overlayPage(kind) {
+    return this.listPages({ publishedOnly: true, kind }).find((p) => p.kind === kind) || null;
+  }
+
+  _assertUniqueSlug(slug, exceptId) {
+    const taken = this.data.pages.some((p) => p.slug === slug && p.id !== exceptId);
+    if (taken) throw new HttpError(409, 'slug taken');
+  }
+
+  async createPage(input = {}, actor = null) {
+    if (!Array.isArray(this.data.pages)) this.data.pages = [];
+    const kind = normalizeKind(input.kind);
+    const slug = pageSlugForKind(kind, input.slug);
+    if (!slug) throw new HttpError(400, 'invalid slug');
+    if (kind === 'custom' && !normalizeSlug(slug)) throw new HttpError(400, 'invalid slug');
+    this._assertUniqueSlug(slug, null);
+    const title = sanitizeText(input.title, 200) || 'Untitled';
+    const page = {
+      id: randomUUID(),
+      slug,
+      kind,
+      title,
+      status: normalizeStatus(input.status),
+      navLabel: sanitizeText(input.navLabel, 40),
+      showInNav: Boolean(input.showInNav) && kind === 'custom',
+      replaceBuiltin: Boolean(input.replaceBuiltin) && kind !== 'custom',
+      jurisdictionId: input.jurisdictionId ? String(input.jurisdictionId) : null,
+      blocks: sanitizeBlocks(input.blocks),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: actor?.id || null,
+    };
+    if (page.jurisdictionId && !this.getJurisdiction(page.jurisdictionId)) {
+      throw new HttpError(400, 'unknown jurisdictionId');
+    }
+    this.data.pages.push(page);
+    await this.persist();
+    return page;
+  }
+
+  async updatePage(id, input = {}, actor = null) {
+    const page = this.getPage(id);
+    if (!page) throw new HttpError(404, 'page not found');
+    if (input.kind != null) page.kind = normalizeKind(input.kind);
+    if (input.slug != null || input.kind != null) {
+      const slug = pageSlugForKind(page.kind, input.slug != null ? input.slug : page.slug);
+      if (!slug) throw new HttpError(400, 'invalid slug');
+      this._assertUniqueSlug(slug, page.id);
+      page.slug = slug;
+    }
+    if (input.title != null) page.title = sanitizeText(input.title, 200) || page.title;
+    if (input.status != null) page.status = normalizeStatus(input.status);
+    if (input.navLabel != null) page.navLabel = sanitizeText(input.navLabel, 40);
+    if (input.showInNav != null) page.showInNav = Boolean(input.showInNav) && page.kind === 'custom';
+    if (input.replaceBuiltin != null) {
+      page.replaceBuiltin = Boolean(input.replaceBuiltin) && page.kind !== 'custom';
+    }
+    if (input.jurisdictionId !== undefined) {
+      const jid = input.jurisdictionId ? String(input.jurisdictionId) : null;
+      if (jid && !this.getJurisdiction(jid)) throw new HttpError(400, 'unknown jurisdictionId');
+      page.jurisdictionId = jid;
+    }
+    if (input.blocks != null) page.blocks = sanitizeBlocks(input.blocks);
+    page.updatedAt = new Date().toISOString();
+    page.updatedBy = actor?.id || null;
+    await this.persist();
+    return page;
+  }
+
+  async deletePage(id) {
+    const page = this.getPage(id);
+    if (!page) throw new HttpError(404, 'page not found');
+    this.data.pages = this.data.pages.filter((p) => p.id !== page.id);
+    await this.persist();
+    return page;
   }
 
   voterStatus(electionId, userId) {

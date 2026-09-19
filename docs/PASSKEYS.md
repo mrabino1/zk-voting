@@ -71,7 +71,7 @@ prf.eval(saltIdentity) ──► HKDF ──► (identityTrapdoor, nullifierSecr
 
 The commitment is the **Merkle leaf** `VoterRegistry.register` inserts. It is not the smart-account address, not the credential id, and not a name.
 
-A person may also bind a **Web3 wallet** or a **smart-card digital ID**. Those authenticators identify the same person. Several ETH addresses can be verified internally; only one is active. Details: [`IDENTITY.md`](./IDENTITY.md).
+A person may also bind **email**, a **Web3 wallet**, a **smart-card reader**, or a hashed **driver’s license / passport**. Those authenticators identify the same person. Sign-in still completes with email MFA. Several ETH addresses can be verified internally; only one is active. Details: [`IDENTITY.md`](./IDENTITY.md).
 
 At vote time the circuit (`circuits/vote.circom`) proves knowledge of trapdoor + secret whose leaf is in the **eligible** tree, and reveals
 

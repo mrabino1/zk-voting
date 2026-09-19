@@ -15,6 +15,9 @@ import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { createPasskeyService } from './passkey.mjs';
+import { applySiteContractPins } from './cms.mjs';
+import { createMailer } from './mailer.mjs';
+import { createMfaService } from './mfa.mjs';
 import { Store } from './store.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { authRouter } from './routes/auth.mjs';
@@ -23,6 +26,8 @@ import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { meRouter } from './routes/me.mjs';
+import { pagesRouter } from './routes/pages.mjs';
+import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
 <html lang="en">
@@ -61,16 +66,35 @@ function htmlCandidate(config, pathname) {
 
 const OFFICE_PAGE_RE = /^\/(admin|back-office|office)(\/|$)/i;
 
+/** Public URLs are /admin not /admin.html. Files on disk stay *.html. */
+export function cleanHtmlUrls() {
+  return function cleanHtmlMiddleware(req, res, next) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const pathOnly = req.path || '';
+    if (!/\.html$/i.test(pathOnly)) return next();
+    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(301, `${canonicalPublicPath(pathOnly)}${q}`);
+  };
+}
+
+function serveStaticNoHtml(root) {
+  const serve = express.static(root, { index: false, redirect: false });
+  return function staticNoHtml(req, res, next) {
+    if (/\.html$/i.test(req.path || '')) return next();
+    return serve(req, res, next);
+  };
+}
+
 function officePageGuard() {
   return function officeGuardMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-    const clean = req.path.replace(/\/+$/, '') || '/';
-    if (!OFFICE_PAGE_RE.test(clean) && !/^\/(admin|back-office)\.html$/i.test(clean)) {
+    const clean = canonicalPublicPath(req.path);
+    if (!OFFICE_PAGE_RE.test(clean)) {
       return next();
     }
     if (req.user) return next();
-    const nextUrl = req.originalUrl || clean;
-    res.redirect(302, `/signin?next=${encodeURIComponent(nextUrl)}`);
+    const search = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `/signin?next=${encodeURIComponent(`${clean}${search}`)}`);
   };
 }
 
@@ -113,11 +137,14 @@ export async function createApp(overrides = {}) {
   const { chain: chainOverride, passkeyHooks, l1: l1Override, l1Hooks, ...configOverrides } = overrides;
   const config = getConfig(configOverrides);
   const store = await Store.open(config);
+  applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
-  const deps = { config, store, explorer, chain, l1, passkeys };
+  const mailer = configOverrides.mailer || createMailer(config);
+  const mfa = createMfaService({ config, store, mailer });
+  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -157,15 +184,17 @@ export async function createApp(overrides = {}) {
   app.use('/api', identityRouter(deps));
   app.use('/api', meRouter(deps));
   app.use('/api', adminRouter(deps));
+  app.use('/api', pagesRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });
 
   app.use(electionShortLinks(store));
+  app.use(cleanHtmlUrls());
   app.use(officePageGuard());
-  app.use(express.static(config.distDir));
-  app.use(express.static(config.publicDir));
+  app.use(serveStaticNoHtml(config.distDir));
+  app.use(serveStaticNoHtml(config.publicDir));
   app.use(spaFallback(config));
 
   app.use((req, res) => {
@@ -177,7 +206,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config };
+  return { app, store, explorer, chain, l1, config, mailer, mfa };
 }
 
 export async function startServer(overrides = {}) {

@@ -1,26 +1,31 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Bind passkey / web3 wallet / smart-card digital ID to one person.
+// Bind email / web3 wallet / smart-card / civic ID / passkey to one person.
 // Many internally verified ETH addresses; exactly one active.
 
 import { Router } from 'express';
 import { keccak256, stringToHex } from 'viem';
 
 import { asyncHandler, HttpError } from '../http.mjs';
-import { requireAuth, requireAnyJurisdictionRole, publicUser, establishSession } from '../auth.mjs';
+import { requireAuth, requireAnyJurisdictionRole, publicUser } from '../auth.mjs';
 import {
   AUTH_METHOD_CATALOG,
+  civicIdHash,
+  civicIdLabel,
   createIdentityChallenges,
   fingerprintFromCertificate,
   isAuthMethodType,
+  isCivicIdKind,
+  normalizeEmail,
   normalizeEthAddress,
   normalizeFingerprint,
+  normalizeIssuer,
   publicIdentity,
   resolveBoundPerson,
   verifyWeb3Bind,
 } from '../identity.mjs';
 
 export function identityRouter(deps) {
-  const { store, config } = deps;
+  const { store, config, mfa } = deps;
   const challenges = createIdentityChallenges();
   const router = Router();
 
@@ -34,7 +39,12 @@ export function identityRouter(deps) {
     res.json({
       nfp: true,
       methods: AUTH_METHOD_CATALOG,
-      note: 'A person may verify every method. Only one Ethereum address is active.',
+      mfa: {
+        email: true,
+        vendor: 'ses',
+        required: Boolean(config.requireEmailMfa),
+      },
+      note: 'A person may verify every method. Only one Ethereum address is active. Sign-in completes with email MFA when SES is configured.',
     });
   });
 
@@ -43,6 +53,41 @@ export function identityRouter(deps) {
     requireAuth,
     asyncHandler(async (req, res) => {
       res.json({ nfp: true, identity: publicIdentity(req.user), user: publicUser(req.user) });
+    }),
+  );
+
+  router.post(
+    '/identity/email/start',
+    asyncHandler(async (req, res) => {
+      const email = normalizeEmail(req.body?.email);
+      const handle = String(req.body?.handle || '').trim() || null;
+      const owner = store.findUserByEmail(email);
+      if (req.user) {
+        if (owner && owner.id !== req.user.id) {
+          throw new HttpError(409, 'email already bound to another person', { code: 'METHOD_OWNED' });
+        }
+        const payload = await mfa.startMfa(res, {
+          user: req.user,
+          factor: 'email',
+          email,
+          bindEmail: true,
+          purpose: 'mfa',
+        });
+        res.json(payload);
+        return;
+      }
+      if (owner) {
+        throw new HttpError(409, 'email already bound to another person', { code: 'METHOD_OWNED' });
+      }
+      const payload = await mfa.startMfa(res, {
+        user: null,
+        factor: 'email',
+        email,
+        handle,
+        purpose: 'register',
+        bindEmail: true,
+      });
+      res.json(payload);
     }),
   );
 
@@ -114,15 +159,12 @@ export function identityRouter(deps) {
         verifiedBy: 'self',
       });
       await store.addEthAccount(user.id, { address, source: 'web3', methodId: method.id });
-      await establishSession(res, store, config, store.getUser(user.id));
-      const fresh = store.getUser(user.id);
-      res.json({
-        ok: true,
-        verified: true,
-        nfp: true,
-        user: publicUser(fresh),
-        identity: publicIdentity(fresh),
+      const payload = await mfa.completeFactor(res, {
+        user: store.getUser(user.id),
+        factor: 'web3',
+        email: req.body?.email,
       });
+      res.json(payload);
     }),
   );
 
@@ -183,15 +225,63 @@ export function identityRouter(deps) {
         label: req.body?.label || 'Smart card digital ID',
         verifiedBy: 'self',
       });
-      await establishSession(res, store, config, store.getUser(user.id));
-      const fresh = store.getUser(user.id);
-      res.json({
-        ok: true,
-        verified: true,
-        nfp: true,
-        user: publicUser(fresh),
-        identity: publicIdentity(fresh),
+      const payload = await mfa.completeFactor(res, {
+        user: store.getUser(user.id),
+        factor: 'smart_card',
+        email: req.body?.email,
       });
+      res.json(payload);
+    }),
+  );
+
+  router.post(
+    '/identity/civic-id/verify',
+    asyncHandler(async (req, res) => {
+      const kind = req.body?.kind;
+      if (!isCivicIdKind(kind)) throw new HttpError(400, 'invalid civic id kind');
+      const issuer = normalizeIssuer(req.body?.issuer);
+      const hash = req.body?.civicIdHash
+        ? String(req.body.civicIdHash).toLowerCase()
+        : civicIdHash({ kind, issuer, documentNumber: req.body?.documentNumber });
+      const mockOk = Boolean(req.body?.mock) && Boolean(config.allowCivicIdMock);
+      if (!mockOk) {
+        throw new HttpError(
+          400,
+          'license/passport self-service is clerk-attested in this Node build; use registrar attest or ALLOW_CIVIC_ID_MOCK=1',
+        );
+      }
+      const found = store.findUserByAuthMethod({
+        type: 'civic_id',
+        fingerprint: hash,
+        civicIdHash: hash,
+      });
+      let user = resolveBoundPerson({
+        sessionUser: req.user || null,
+        methodOwner: found?.user || null,
+        addressOwner: null,
+      });
+      if (!user) {
+        const handle =
+          String(req.body?.handle || '').trim() ||
+          `id-${kind === 'passport' ? 'pp' : 'dl'}-${hash.slice(2, 12)}`;
+        if (store.getUserByHandle(handle)) throw new HttpError(409, 'handle taken');
+        user = store.createUser({ handle, role: 'voter' });
+      }
+      await store.addAuthMethod(user.id, {
+        type: 'civic_id',
+        fingerprint: hash,
+        civicIdHash: hash,
+        kind,
+        issuer,
+        label: civicIdLabel(kind),
+        verifiedBy: mockOk ? 'self' : 'registrar',
+      });
+      const payload = await mfa.completeFactor(res, {
+        user: store.getUser(user.id),
+        factor: 'civic_id',
+        email: req.body?.email,
+      });
+      res.json(payload);
     }),
   );
 
@@ -253,7 +343,25 @@ export function identityRouter(deps) {
             : null,
         subject: req.body?.subject || null,
         issuer: req.body?.issuer || null,
+        email: req.body?.email ? normalizeEmail(req.body.email) : null,
+        kind: req.body?.kind || null,
+        civicIdHash: req.body?.civicIdHash || null,
       };
+      if (type === 'civic_id') {
+        if (!isCivicIdKind(fields.kind)) throw new HttpError(400, 'invalid civic id kind');
+        fields.issuer = normalizeIssuer(req.body?.issuer);
+        const hash = fields.civicIdHash
+          ? String(fields.civicIdHash).toLowerCase()
+          : civicIdHash({
+              kind: fields.kind,
+              issuer: fields.issuer,
+              documentNumber: req.body?.documentNumber,
+            });
+        fields.fingerprint = hash;
+        fields.civicIdHash = hash;
+        fields.label = fields.label || civicIdLabel(fields.kind);
+      }
+      if (type === 'email' && !fields.email) throw new HttpError(400, 'email required');
       const { user, method } = await store.addAuthMethod(req.params.id, fields);
       if (type === 'web3' && fields.address) {
         await store.addEthAccount(user.id, { address: fields.address, source: 'web3', methodId: method.id });
@@ -261,7 +369,11 @@ export function identityRouter(deps) {
       res.status(201).json({
         nfp: true,
         identity: publicIdentity(store.getUser(user.id)),
-        method,
+        method: publicIdentity(store.getUser(user.id)).authMethods.find((m) => m.id === method.id) || {
+          id: method.id,
+          type: method.type,
+          verified: true,
+        },
       });
     }),
   );

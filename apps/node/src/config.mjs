@@ -97,8 +97,34 @@ export function getConfig(overrides = {}) {
     allowDevLogin: process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_LOGIN === '1',
     allowSmartCardMock:
       process.env.NODE_ENV === 'test' || process.env.ALLOW_SMART_CARD_MOCK === '1',
+    allowCivicIdMock:
+      process.env.NODE_ENV === 'test' ||
+      process.env.ALLOW_CIVIC_ID_MOCK === '1' ||
+      process.env.ALLOW_SMART_CARD_MOCK === '1',
+    sesFromAddress: String(
+      overrides.sesFromAddress ?? process.env.SES_FROM_ADDRESS ?? process.env.AWS_SES_FROM ?? '',
+    ).trim(),
+    awsRegion: String(overrides.awsRegion ?? process.env.AWS_REGION ?? process.env.SES_REGION ?? '').trim(),
+    sesConfigurationSet: String(process.env.SES_CONFIGURATION_SET || '').trim(),
+    sesEndpoint: String(process.env.SES_ENDPOINT || '').trim(),
+    sesDryRun: envFlag(process.env.SES_DRY_RUN, false),
+    requireEmailMfa: (() => {
+      if (overrides.requireEmailMfa !== undefined) return Boolean(overrides.requireEmailMfa);
+      if (process.env.REQUIRE_EMAIL_MFA !== undefined && process.env.REQUIRE_EMAIL_MFA !== '') {
+        return envFlag(process.env.REQUIRE_EMAIL_MFA, false);
+      }
+      if (isTest) return false;
+      const from = String(process.env.SES_FROM_ADDRESS || process.env.AWS_SES_FROM || '').trim();
+      const region = String(process.env.AWS_REGION || process.env.SES_REGION || '').trim();
+      return Boolean(from && region);
+    })(),
+    captureEmail: isTest,
+    includeOtpInCapture: isTest,
+    allowCaptureMailer: isTest || envFlag(process.env.ALLOW_CAPTURE_MAILER, false),
     sessionCookie: 'republic.sid',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
+    mfaCookie: 'republic.mfa',
+    mfaTtlMs: 10 * 60 * 1000,
     quiet: process.env.NODE_ENV === 'test',
     publicDir: path.join(PKG_ROOT, 'public'),
     distDir: path.join(PKG_ROOT, 'dist'),
