@@ -489,6 +489,7 @@ label.field,
 
 input[type="text"],
 input[type="search"],
+input[type="email"],
 select,
 textarea {
   width: 100%;
