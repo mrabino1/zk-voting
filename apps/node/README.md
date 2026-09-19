@@ -105,6 +105,8 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 
 ## Environment
 
+Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example) to `.env` and **pin the one shared factory**. Env wins over `/office/site`. Do not deploy a new `ElectionFactory` per city. Root README: [Intentional forking](../../README.md#intentional-forking).
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |

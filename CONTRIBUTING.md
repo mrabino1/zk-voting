@@ -15,6 +15,8 @@ Do not open production deploy PRs against `test/unstable`. Do not merge experime
 
 Feature work may use short-lived branches, but the integration line the host script tracks is `test/unstable`.
 
+Jurisdictions are **meant to fork** this repository: run your own Node, pin the one shared `ElectionFactory`. Do not deploy a new factory per city. Instructions and env template: root [`README.md`](./README.md#intentional-forking), [`.env.example`](./.env.example).
+
 ## Operator script
 
 Hosts use [`system_actions.sh`](./system_actions.sh) (DealPunchList / `dealpunchlist-node` pattern):
