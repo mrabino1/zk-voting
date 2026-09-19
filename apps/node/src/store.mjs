@@ -26,6 +26,16 @@ import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 import {
+  defaultSite,
+  normalizeKind,
+  normalizeSlug,
+  normalizeStatus,
+  pageSlugForKind,
+  sanitizeAddress,
+  sanitizeBlocks,
+  sanitizeText,
+} from './cms.mjs';
+import {
   DEMO_KEY_WARNING,
   TALLY_SCHEME_OPENS_BALLOTS,
   TALLY_SCHEME_SUM_ONLY,
@@ -85,6 +95,8 @@ function emptyData() {
     envelopes: [],
     notifications: [],
     tallyGuardians: [],
+    pages: [],
+    site: defaultSite(),
   };
 }
 
@@ -126,6 +138,9 @@ export class Store {
     try {
       const raw = await fs.readFile(filePath, 'utf8');
       data = { ...emptyData(), ...JSON.parse(raw) };
+      data.pages = Array.isArray(data.pages) ? data.pages : [];
+      data.site = { ...defaultSite(), ...(data.site || {}) };
+      data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
       data = emptyData();
@@ -1242,6 +1257,132 @@ export class Store {
     n.read = true;
     await this.persist();
     return n;
+  }
+
+  getSite() {
+    if (!this.data.site) this.data.site = defaultSite();
+    this.data.site = { ...defaultSite(), ...this.data.site };
+    this.data.site.contracts = { ...defaultSite().contracts, ...(this.data.site.contracts || {}) };
+    this.data.site.sharedDeployment = true;
+    this.data.site.nfp = true;
+    return this.data.site;
+  }
+
+  async updateSite(patch = {}, actor = null) {
+    const site = this.getSite();
+    if (patch.title != null) site.title = sanitizeText(patch.title, 120) || 'Republic';
+    if (patch.tagline != null) site.tagline = sanitizeText(patch.tagline, 400);
+    if (patch.contracts && typeof patch.contracts === 'object') {
+      for (const key of ['factory', 'ballotInbox', 'verifier']) {
+        if (patch.contracts[key] == null) continue;
+        const addr = sanitizeAddress(patch.contracts[key]);
+        if (patch.contracts[key] !== '' && addr === null) {
+          throw new HttpError(400, `invalid ${key} address`);
+        }
+        site.contracts[key] = addr || '';
+      }
+    }
+    site.sharedDeployment = true;
+    site.updatedAt = new Date().toISOString();
+    if (actor?.id) site.updatedBy = actor.id;
+    await this.persist();
+    return this.getSite();
+  }
+
+  listPages({ publishedOnly = false, kind = null } = {}) {
+    if (!Array.isArray(this.data.pages)) this.data.pages = [];
+    let rows = this.data.pages.slice();
+    if (publishedOnly) rows = rows.filter((p) => p.status === 'published');
+    if (kind) rows = rows.filter((p) => p.kind === kind);
+    return rows.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  }
+
+  getPage(idOrSlug) {
+    if (!Array.isArray(this.data.pages)) this.data.pages = [];
+    const want = String(idOrSlug || '').trim();
+    if (!want) return null;
+    return (
+      this.data.pages.find((p) => p.id === want) ||
+      this.data.pages.find((p) => p.slug === want) ||
+      null
+    );
+  }
+
+  overlayPage(kind) {
+    return this.listPages({ publishedOnly: true, kind }).find((p) => p.kind === kind) || null;
+  }
+
+  _assertUniqueSlug(slug, exceptId) {
+    const taken = this.data.pages.some((p) => p.slug === slug && p.id !== exceptId);
+    if (taken) throw new HttpError(409, 'slug taken');
+  }
+
+  async createPage(input = {}, actor = null) {
+    if (!Array.isArray(this.data.pages)) this.data.pages = [];
+    const kind = normalizeKind(input.kind);
+    const slug = pageSlugForKind(kind, input.slug);
+    if (!slug) throw new HttpError(400, 'invalid slug');
+    if (kind === 'custom' && !normalizeSlug(slug)) throw new HttpError(400, 'invalid slug');
+    this._assertUniqueSlug(slug, null);
+    const title = sanitizeText(input.title, 200) || 'Untitled';
+    const page = {
+      id: randomUUID(),
+      slug,
+      kind,
+      title,
+      status: normalizeStatus(input.status),
+      navLabel: sanitizeText(input.navLabel, 40),
+      showInNav: Boolean(input.showInNav) && kind === 'custom',
+      replaceBuiltin: Boolean(input.replaceBuiltin) && kind !== 'custom',
+      jurisdictionId: input.jurisdictionId ? String(input.jurisdictionId) : null,
+      blocks: sanitizeBlocks(input.blocks),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: actor?.id || null,
+    };
+    if (page.jurisdictionId && !this.getJurisdiction(page.jurisdictionId)) {
+      throw new HttpError(400, 'unknown jurisdictionId');
+    }
+    this.data.pages.push(page);
+    await this.persist();
+    return page;
+  }
+
+  async updatePage(id, input = {}, actor = null) {
+    const page = this.getPage(id);
+    if (!page) throw new HttpError(404, 'page not found');
+    if (input.kind != null) page.kind = normalizeKind(input.kind);
+    if (input.slug != null || input.kind != null) {
+      const slug = pageSlugForKind(page.kind, input.slug != null ? input.slug : page.slug);
+      if (!slug) throw new HttpError(400, 'invalid slug');
+      this._assertUniqueSlug(slug, page.id);
+      page.slug = slug;
+    }
+    if (input.title != null) page.title = sanitizeText(input.title, 200) || page.title;
+    if (input.status != null) page.status = normalizeStatus(input.status);
+    if (input.navLabel != null) page.navLabel = sanitizeText(input.navLabel, 40);
+    if (input.showInNav != null) page.showInNav = Boolean(input.showInNav) && page.kind === 'custom';
+    if (input.replaceBuiltin != null) {
+      page.replaceBuiltin = Boolean(input.replaceBuiltin) && page.kind !== 'custom';
+    }
+    if (input.jurisdictionId !== undefined) {
+      const jid = input.jurisdictionId ? String(input.jurisdictionId) : null;
+      if (jid && !this.getJurisdiction(jid)) throw new HttpError(400, 'unknown jurisdictionId');
+      page.jurisdictionId = jid;
+    }
+    if (input.blocks != null) page.blocks = sanitizeBlocks(input.blocks);
+    page.updatedAt = new Date().toISOString();
+    page.updatedBy = actor?.id || null;
+    await this.persist();
+    return page;
+  }
+
+  async deletePage(id) {
+    const page = this.getPage(id);
+    if (!page) throw new HttpError(404, 'page not found');
+    this.data.pages = this.data.pages.filter((p) => p.id !== page.id);
+    await this.persist();
+    return page;
   }
 
   voterStatus(electionId, userId) {

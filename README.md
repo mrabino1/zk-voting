@@ -342,9 +342,11 @@ The Node side is the human product. It should feel operationally familiar to any
 | `/v/:shortCode`, `/e/:shortCode` | 302 to `/vote/<uuid>` |
 | `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
 | `/elections/:id/info/:questionId/:optionId` | One option + external links |
-| `/admin` | Platform admin (`admin.html`) |
-| `/back-office` | Clerks / registrars / officers (`back-office.html`) |
-| `/explorer` | Civic L2 explorer (`explorer.html`) |
+| `/about`, `/faq`, `/p/:slug` | Public CMS pages. Clerks publish from `/office/pages`. |
+| `/office/pages`, `/office/site` | WordPress-style page editor and shared factory pin |
+| `/admin` | Platform admin (file `admin.html`, URL has no `.html`) |
+| `/back-office` | Clerks / registrars / officers (file `back-office.html`) |
+| `/explorer` | Civic L2 explorer (file `explorer.html`) |
 | `/elections/:id/results` | Certified plurality / IRV results |
 
 Public election ids are UUID v4. On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`.

@@ -81,10 +81,10 @@ New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
 `onChainElectionId` on the Node record.
 
-Voter client routes in `public/router.js`: `/`, `/register`, `/vote/:id`,
+Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
-Admin / back-office / explorer are separate HTML files.
+Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.
 
 ### Ballot option information
 
@@ -110,7 +110,7 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 | `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
 | `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, clerk `POST /api/elections` calls `ElectionFactory.createElection` and `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem. Unset = JSON-only demo. |
-| `ELECTION_FACTORY_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for create-election (`FACTORY` alias matches Foundry scripts). Also published on `GET /api/config` and auditor artifacts. |
+| `ELECTION_FACTORY_ADDRESS` | _empty_ | Shared factory for every forked Node (`FACTORY` alias). Env wins over `/office/site`. Required when `CHAIN_RPC` is set unless the site pin is set. |
 | `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for vote relay |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for factory create and on-chain submit |

@@ -101,6 +101,9 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/me')).name, 'desk');
     assert.equal(parseRoute(loc('/app')).name, 'desk');
     assert.equal(parseRoute(loc('/office')).name, 'office');
+    assert.equal(parseRoute(loc('/office/pages')).name, 'officePages');
+    assert.equal(parseRoute(loc('/office/site')).name, 'officeSite');
+    assert.equal(parseRoute(loc('/p/hours')).name, 'cmsPage');
     assert.equal(parseRoute(loc('/register')).name, 'register');
     const uuid = '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01';
     assert.equal(parseRoute(loc(`/vote/${uuid}`)).name, 'vote');

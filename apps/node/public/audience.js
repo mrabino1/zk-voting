@@ -82,11 +82,13 @@ export function signInHref(next) {
   return `/signin?next=${encodeURIComponent(safe)}`;
 }
 
-export function mainNav(audience) {
+export function mainNav(audience, extraNav = []) {
+  const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
   if (audience === "public") {
     return [
       { href: "/about", label: "About" },
       { href: "/faq", label: "FAQ" },
+      ...extra,
       { href: "/signin", label: "Sign in" },
       { href: "/register", label: "Register" },
     ];
@@ -111,9 +113,10 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   const href = String(item.href || "").split("?")[0];
   if (href === path) return true;
   if (href === "/me" && (routeName === "desk" || routeName === "app")) return true;
-  if (href === "/office" && routeName === "office") return true;
+  if (href === "/office" && String(routeName || "").startsWith("office")) return true;
   if (href === "/about" && routeName === "about") return true;
   if (href === "/faq" && routeName === "faq") return true;
+  if (href.startsWith("/p/") && path === href) return true;
   if (href === "/signin" && routeName === "signin") return true;
   if (href === "/register" && routeName === "register") return true;
   if (href === "/elections" && (routeName === "results" || routeName === "resultsIndex")) return true;
@@ -122,7 +125,7 @@ export function navItemIsCurrent(item, currentPath, routeName) {
 
 export function paintMainNav(nav, { audience, currentPath, routeName, spa = true } = {}) {
   if (!nav) return;
-  const items = mainNav(audience || "public");
+  const items = mainNav(audience || "public", options.extraNav);
   const ul = document.createElement("ul");
   for (const item of items) {
     const li = document.createElement("li");

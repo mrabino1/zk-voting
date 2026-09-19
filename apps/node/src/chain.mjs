@@ -279,15 +279,13 @@ export function resolveCreateElectionParams(config, input, fromAddress) {
 
 export function createChain(config) {
   const rpc = config.chainRpc;
-  const inbox = config.ballotInboxAddress;
-  const factoryAddr = config.electionFactoryAddress;
   let key = config.relayerPrivateKey || '';
   if (key && !key.startsWith('0x')) key = `0x${key}`;
 
   const configured = Boolean(rpc);
   const hasWallet = Boolean(rpc && key);
-  const voteReady = Boolean(hasWallet && inbox);
-  const factoryReady = Boolean(hasWallet && factoryAddr);
+  const factoryAddress = () => config.electionFactoryAddress || '';
+  const inboxAddress = () => config.ballotInboxAddress || '';
 
   let wallet;
   let publicClient;
@@ -302,16 +300,18 @@ export function createChain(config) {
 
   return {
     configured,
-    ready: voteReady,
+    get ready() {
+      return Boolean(hasWallet && inboxAddress());
+    },
     account,
     isConfigured() {
       return configured;
     },
     isReady() {
-      return voteReady;
+      return Boolean(hasWallet && inboxAddress());
     },
     isFactoryReady() {
-      return factoryReady;
+      return Boolean(hasWallet && factoryAddress());
     },
     /**
      * @returns {Promise<null|{onChainElectionId: string, onChainElectionAddress: string|null, createTxHash: string|null, factoryAddress: string, chainId: number, params: object}>}
@@ -323,10 +323,11 @@ export function createChain(config) {
           code: 'CHAIN_NOT_READY',
         });
       }
+      const factoryAddr = factoryAddress();
       if (!factoryAddr) {
         throw new HttpError(
           503,
-          'CHAIN_RPC is set but ELECTION_FACTORY_ADDRESS is missing. Deploy with smart-contracts/script/DeployLocal.s.sol (or CreateElection.s.sol on an existing factory) and set the printed FACTORY= address.',
+          'CHAIN_RPC is set but ELECTION_FACTORY_ADDRESS is missing. Deploy once, then pin the shared factory on this Node (env or /office/site). Do not deploy a new factory per jurisdiction fork.',
           { code: 'CHAIN_NOT_READY' },
         );
       }
@@ -373,7 +374,8 @@ export function createChain(config) {
     },
     async submitVote({ electionId, proof, publicInputs, encryptedBallot }) {
       if (!configured) return null;
-      if (!voteReady) {
+      const inbox = inboxAddress();
+      if (!hasWallet || !inbox) {
         throw new HttpError(
           503,
           'CHAIN_RPC is set but BALLOT_INBOX_ADDRESS or RELAYER_PRIVATE_KEY is missing',

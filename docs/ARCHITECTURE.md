@@ -623,15 +623,26 @@ DealPunchList "organizations". Elections are the "rooms".
 
 **UI:** vanilla JS modules and HTML in `apps/node/public/`. Express
 `express.static` + a GET fallback that serves `admin.html` / `back-office.html`
-/ `explorer.html` / `index.html`. There is no Vite dev server and no React
-build. `npm run build` in this package is a no-op log line.
+/ `explorer.html` / `index.html` for clean paths `/admin`, `/back-office`,
+`/explorer`, `/`. Requests to `*.html` 301 to the path without the suffix.
+There is no Vite dev server and no React build. `npm run build` in this package
+is a no-op log line. Jurisdictions fork this Node and pin one ElectionFactory.
 
 ### HTTP (implemented)
 
 ```
 GET  /health
 GET  /api/health
-GET  /api/config                    (hourly disclosure + identity policy + l1CertificationConfigured)
+GET  /api/config                    (hourly disclosure + identity policy + shared factory pin)
+GET  /api/pages                     (published CMS pages + nav + overlays)
+GET  /api/pages/:slug
+GET  /api/site
+GET  /api/office/pages              (clerk / platform_admin)
+POST /api/office/pages
+PATCH /api/office/pages/:id
+DELETE /api/office/pages/:id
+GET  /api/office/site
+PATCH /api/office/site              (title/tagline: clerk; contract pin: platform_admin)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
@@ -753,9 +764,11 @@ admin tools, notifications) and Inertia-style passkey-held wallets
 | `/v/:shortCode`, `/e/:shortCode` | Node 302 + SPA vote route | Implemented |
 | `/elections/:id/info` | `public/info.js` | Implemented (option supporting info) |
 | `/elections/:id/info/:questionId/:optionId` | `public/info.js` | Implemented |
-| `/admin` | `public/admin.html` + `admin.js` | Implemented |
+| `/admin` | `public/admin.html` + `admin.js` | Implemented. URL is `/admin`, not `/admin.html`. |
 | `/back-office` | `public/back-office.html` + `back-office.js` | Implemented |
 | `/explorer` | `public/explorer.html` + `explorer.js` | Implemented |
+| `/office/pages`, `/office/site` | `public/cms.js` | Clerk CMS; pin shared factory |
+| `/p/:slug` | published custom pages | Implemented |
 | `/elections/:id/results` | `public/results.js` | Implemented certified plurality / IRV |
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.

@@ -24,6 +24,15 @@ export const FAQ_ENTRIES = [
     ],
   },
   {
+    id: "fork-shared-contracts",
+    topic: "who-runs",
+    q: "Do we deploy a new smart contract when we fork this Node?",
+    a: [
+      "No. Fork the Node UI for your jurisdiction’s clerk desk and public pages. Pin the one shared ElectionFactory, BallotInbox, and verifier on Site & contracts (or with ELECTION_FACTORY_ADDRESS). Do not run a new factory deploy for each city.",
+      "Clerks update About, FAQ, home copy, and extra pages from the admin hub like a WordPress site. The chain addresses stay the shared deployment. This line is still a demo: MockVerifier, unwired Poseidon, no production ceremony.",
+    ],
+  },
+  {
     id: "who-can-run",
     topic: "who-runs",
     q: "Who can run Republic?",

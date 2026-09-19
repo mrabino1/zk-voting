@@ -1281,6 +1281,71 @@ a.session-chrome-btn:hover {
   margin-top: 0;
 }
 
+.cms-editor {
+  display: grid;
+  gap: 1.1rem;
+  max-width: 52rem;
+}
+
+.cms-editor input[type="text"],
+.cms-editor textarea,
+.cms-editor select,
+.cms-preview {
+  max-width: none;
+}
+
+.cms-block-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.cms-add-blocks {
+  margin-top: 0.5rem;
+}
+
+.cms-pages-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--paper);
+}
+
+.cms-pages-table th,
+.cms-pages-table td {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.cms-pages-table th {
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.cms-preview {
+  border: 1px dashed var(--line);
+  padding: 1rem 1.1rem;
+  background: var(--cream);
+}
+
+.cms-preview-title {
+  margin-top: 0;
+}
+
+label.choice {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-weight: 650;
+}
+
 @media print {
   .skip-link,
   .nfp-banner,

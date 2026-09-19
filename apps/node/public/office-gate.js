@@ -18,7 +18,7 @@ async function refresh() {
   const audience = state.audience || (state.user ? (isOfficer(me) ? "officer" : "registered") : "public");
   applyAudienceChrome(document, {
     audience,
-    currentPath: window.location.pathname,
+    currentPath: window.location.pathname.replace(/\.html$/i, "") || "/",
     spa: false,
   });
 

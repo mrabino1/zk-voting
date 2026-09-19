@@ -4,6 +4,7 @@ import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
 import { disclosurePublicView } from '../disclosure.mjs';
+import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 
 export function healthRouter(deps) {
   const router = Router();
@@ -13,6 +14,7 @@ export function healthRouter(deps) {
     const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
       ? deps.store.publishedAcceptedBallotsAll(now, interval)
       : undefined;
+    const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
     res.json({
       ok: true,
       app: 'zk-voting',
@@ -20,7 +22,8 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
-      electionFactoryAddress: deps.config.electionFactoryAddress || '',
+      sharedDeployment: true,
+      electionFactoryAddress: contracts.factory || '',
       chainConfigured: deps.chain.isConfigured(),
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
       disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
@@ -38,6 +41,7 @@ export function configRouter(deps) {
       const chainConfigured = deps.chain.isConfigured();
       const factoryReady =
         typeof deps.chain.isFactoryReady === 'function' ? deps.chain.isFactoryReady() : false;
+      const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
       res.json({
         nfp: true,
         app: 'zk-voting',
@@ -47,21 +51,25 @@ export function configRouter(deps) {
         chainId: deps.config.chainId,
         origins: deps.config.origins,
         chainConfigured,
-        electionFactoryAddress: deps.config.electionFactoryAddress || '',
+        sharedDeployment: true,
+        sharedDeploymentNote: SHARED_DEPLOYMENT_NOTE,
+        electionFactoryAddress: contracts.factory || '',
         factoryReady,
         chain: {
           configured: chainConfigured,
-          factoryAddress: deps.config.electionFactoryAddress || '',
+          factoryAddress: contracts.factory || '',
           factoryReady,
           voteReady: deps.chain.isReady(),
           note: chainConfigured
-            ? 'POST /api/elections calls ElectionFactory.createElection. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
-            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo).',
+            ? 'POST /api/elections calls the one shared ElectionFactory. Fork the Node UI; do not deploy a new factory per jurisdiction. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
+            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo). Pin the shared factory on /office/site when you connect a chain.',
         },
         addresses: {
-          factory: deps.config.electionFactoryAddress || null,
-          ballotInbox: deps.config.ballotInboxAddress || null,
+          factory: contracts.factory || null,
+          ballotInbox: contracts.ballotInbox || null,
+          verifier: contracts.verifier || null,
         },
+        contracts,
         coercion: {
           policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,

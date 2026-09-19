@@ -15,6 +15,7 @@ import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { createPasskeyService } from './passkey.mjs';
+import { applySiteContractPins } from './cms.mjs';
 import { Store } from './store.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { authRouter } from './routes/auth.mjs';
@@ -23,6 +24,7 @@ import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { meRouter } from './routes/me.mjs';
+import { pagesRouter } from './routes/pages.mjs';
 
 const LOADING_SHELL = `<!DOCTYPE html>
 <html lang="en">
@@ -60,6 +62,19 @@ function htmlCandidate(config, pathname) {
 }
 
 const OFFICE_PAGE_RE = /^\/(admin|back-office|office)(\/|$)/i;
+
+/** Public URLs are /admin not /admin.html. Files on disk stay *.html. */
+export function cleanHtmlUrls() {
+  return function cleanHtmlMiddleware(req, res, next) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const pathOnly = req.path || '';
+    if (!/\.html$/i.test(pathOnly)) return next();
+    let nextPath = pathOnly.replace(/\.html$/i, '');
+    if (!nextPath || nextPath === '/index') nextPath = '/';
+    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(301, `${nextPath}${q}`);
+  };
+}
 
 function officePageGuard() {
   return function officeGuardMiddleware(req, res, next) {
@@ -113,6 +128,7 @@ export async function createApp(overrides = {}) {
   const { chain: chainOverride, passkeyHooks, l1: l1Override, l1Hooks, ...configOverrides } = overrides;
   const config = getConfig(configOverrides);
   const store = await Store.open(config);
+  applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
@@ -157,12 +173,14 @@ export async function createApp(overrides = {}) {
   app.use('/api', identityRouter(deps));
   app.use('/api', meRouter(deps));
   app.use('/api', adminRouter(deps));
+  app.use('/api', pagesRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });
 
   app.use(electionShortLinks(store));
+  app.use(cleanHtmlUrls());
   app.use(officePageGuard());
   app.use(express.static(config.distDir));
   app.use(express.static(config.publicDir));
