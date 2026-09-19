@@ -195,15 +195,21 @@ Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in b
 
 WebAuthn with PRF wraps a secp256k1 smart-account key. The Merkle leaf is Poseidon(trapdoor, nullifierSecret), not the address. [`docs/PASSKEYS.md`](./PASSKEYS.md).
 
-### Sign in (passkey and Ethereum wallet)
+### Sign in (email, Ethereum, smart card, license/passport)
 
-Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). First-time **registration** is still `/register`.
+Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). First-time **registration** is still `/register`. Every path except gated `dev-login` completes with a **6-digit email code via AWS SES** when `SES_FROM_ADDRESS` and `AWS_REGION` are set.
+
+**Email (username)**
+
+1. `POST /api/auth/email/start` `{ email }`
+2. SES delivers the OTP
+3. `POST /api/auth/mfa/verify` `{ code }` — set `republic.sid`
 
 **Passkey (DFC-shaped ceremony, Republic stack)**
 
 1. `POST /api/auth/passkey/login/begin` — discoverable / resident-key options (no username). An optional `handle` scopes `allowCredentials` when the authenticator cannot discover the passkey.
 2. Browser `navigator.credentials.get` (WebAuthn assertion).
-3. `POST /api/auth/passkey/login/finish` — verify assertion, set `republic.sid`.
+3. `POST /api/auth/passkey/login/finish` — verify assertion, then email MFA when required.
 4. The credential id already maps to a Person. Roles are unchanged (`voter`, `clerk`, `platform_admin`, …).
 
 This mirrors Daily Family Call’s challenge → assertion → HttpOnly session shape. Republic implements it with `@simplewebauthn/server`, Express, and the JSON store — it does not vendor DFC.
@@ -213,11 +219,11 @@ This mirrors Daily Family Call’s challenge → assertion → HttpOnly session 
 1. Connect a wallet (EIP-1193 `eth_requestAccounts`).
 2. `POST /api/auth/web3/challenge` `{ address }` — SIWE-like **login** message (nonce stored on the Node; the client message is not trusted).
 3. Wallet `personal_sign`s that message.
-4. `POST /api/auth/web3/login` `{ address, signature }` — verify, resolve the Person who already has that web3 method or verified ETH address, set the same session cookie.
+4. `POST /api/auth/web3/login` `{ address, signature }` — verify, resolve the Person, then email MFA.
 
-Unknown passkeys and unknown wallets return `404` `UNKNOWN_CREDENTIAL` and **do not** create a person. Binding a new wallet is `POST /api/identity/web3/verify` on `/register`.
+Unknown passkeys, emails, cards, licenses, and wallets return `404` `UNKNOWN_CREDENTIAL` and **do not** create a person. Binding a new wallet is `POST /api/identity/web3/verify` on `/register`.
 
-`ALLOW_DEV_LOGIN=1` (or `NODE_ENV=test`) keeps `POST /api/auth/dev-login` as a **local/test fallback** only. It is not the primary officer path. Production (`master`) must leave it off.
+`ALLOW_DEV_LOGIN=1` (or `NODE_ENV=test`) keeps `POST /api/auth/dev-login` as a **local/test fallback** only. It skips MFA. It is not the primary officer path. Production (`master`) must leave it off.
 
 RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`docs/IDENTITY.md`](./IDENTITY.md).
 

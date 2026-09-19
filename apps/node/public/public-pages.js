@@ -199,7 +199,7 @@ export function renderPublicHome(main, ctx, bundle) {
           {},
           h("h3", { text: "One person, several authenticators" }),
           h("p", {
-            text: "Passkey, Web3 wallet, or smart-card digital ID. Several ETH addresses may be verified; only one is active. The Merkle leaf is an identity commitment, never that address.",
+            text: "Email, Ethereum, smart-card reader, driver’s license or passport, or passkey. Several ETH addresses may be verified; only one is active. The Merkle leaf is an identity commitment, never that address and never a document number.",
           })
         ),
         h(
@@ -351,8 +351,8 @@ export async function renderSignIn(main, ctx) {
       heading: "Sign in",
       lede:
         next && isOfficeish(next)
-          ? "Election officials sign in with a passkey or a bound Ethereum wallet. The Node still enforces roles on every action."
-          : "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Register.",
+          ? "Election officials sign in with email, Ethereum, a smart-card reader, or a license/passport. Every path uses an email one-time code. The Node still enforces roles on every action."
+          : "Returning users: email, a bound Ethereum wallet, a smart-card reader, or a driver’s license / passport already bound to your person. First-time registration is on Register.",
     },
   });
   mount(main,
@@ -364,7 +364,7 @@ export async function renderSignIn(main, ctx) {
       h(
         "p",
         { class: "lede" },
-        "Use a passkey or a bound wallet. There is no password product and no token login. If you have never identified yourself on this Node, register first."
+        "Use email, Ethereum (signature), a smart-card reader, or a driver’s license / passport. There is no password product and no token login. Every path completes with an email one-time code via AWS SES. If you have never identified yourself on this Node, register first."
       ),
       h(
         "div",

@@ -3,7 +3,7 @@
  * Passkey registration + identity commitment display (commitment hex only).
  */
 
-import { bindSmartCard, bindWeb3Wallet, registerEthAccount, setActiveEthAddress } from "./identity-methods.js";
+import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, setActiveEthAddress, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
 import { mountSignInPanel } from "./signin.js";
 
 export async function renderRegister(main, ctx) {
@@ -38,7 +38,8 @@ export async function renderRegister(main, ctx) {
     info: "",
     record: publicRecord,
     identity: me?.identity || me?.me?.identity || null,
-    methodTab: "passkey",
+    methodTab: "email",
+    mfa: null,
     selected: matchPre?.id || elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
   };
 
@@ -46,7 +47,7 @@ export async function renderRegister(main, ctx) {
     id: "sign-in-root",
     dataset: {
       heading: "Already registered? Sign in",
-      lede: "Use the passkey on this device or a bound Ethereum wallet. Creating a passkey below is for first-time registration.",
+      lede: "Use email, a bound Ethereum wallet, a smart-card reader, a driver’s license / passport, or a passkey. First-time registration is below. Every path still uses an email one-time code.",
     },
   });
   const root = h("div", { class: "register-page" });
@@ -64,13 +65,13 @@ export async function renderRegister(main, ctx) {
         h(
           "p",
           { class: "lede" },
-          "A person is unique. You may verify a passkey, a Web3 wallet, and a smart-card digital ID. Several Ethereum addresses can be internally verified; only one is active. The public roll still stores an identity commitment, never your name and never the active address as the Merkle leaf."
+          "A person is unique. You may verify email, a Web3 wallet, a smart-card reader, a driver’s license or passport, and a passkey. Several Ethereum addresses can be internally verified; only one is active. The public roll still stores an identity commitment, never your name, never a document number, and never the active address as the Merkle leaf."
         )
       ),
       h(
         "ol",
         { class: "steps" },
-        h("li", {}, h("strong", { text: "Prove who you are" }), " with a passkey, Web3 wallet, or smart-card digital ID."),
+        h("li", {}, h("strong", { text: "Prove who you are" }), " with email, Ethereum, a smart-card reader, or a driver’s license / passport."),
         h("li", {}, h("strong", { text: "Keep one active Ethereum address" }), " — more can be verified internally."),
         h("li", {}, h("strong", { text: "Submit a commitment" }), " to an election roll — never a name, never the wallet as the leaf.")
       ),
@@ -79,17 +80,68 @@ export async function renderRegister(main, ctx) {
         : null,
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
       state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,
+      state.mfa
+        ? h(
+            "section",
+            { class: "panel", "aria-labelledby": "reg-mfa-heading" },
+            h("h2", { id: "reg-mfa-heading", text: "Email verification code" }),
+            h("p", {
+              text: state.mfa.needsEmail
+                ? "Enter the email that will receive your sign-in code (AWS SES)."
+                : `Enter the 6-digit code sent to ${state.mfa.emailHint || "your email"}.`,
+            }),
+            state.mfa.needsEmail
+              ? h(
+                  "form",
+                  { class: "stack", onSubmit: onMfaEmail },
+                  h(
+                    "label",
+                    { class: "field", for: "reg-mfa-email" },
+                    "Email",
+                    h("input", { id: "reg-mfa-email", name: "email", type: "email", required: true })
+                  ),
+                  h("div", { class: "toolbar" }, h("button", { class: "btn", type: "submit", text: "Send code" }))
+                )
+              : h(
+                  "form",
+                  { class: "stack", onSubmit: onMfaVerify },
+                  h(
+                    "label",
+                    { class: "field", for: "reg-mfa-code" },
+                    "One-time code",
+                    h("input", {
+                      id: "reg-mfa-code",
+                      name: "code",
+                      class: "otp-input",
+                      inputmode: "numeric",
+                      maxlength: "6",
+                      required: true,
+                    })
+                  ),
+                  h("div", { class: "toolbar" }, h("button", { class: "btn", type: "submit", text: "Verify code" }))
+                )
+          )
+        : null,
       h(
         "div",
         { class: "method-tabs", role: "tablist", "aria-label": "How you identify" },
-        ...["passkey", "web3", "smart_card"].map((tab) =>
+        ...["email", "web3", "smart_card", "civic_id", "passkey"].map((tab) =>
           h(
             "button",
             {
               type: "button",
               role: "tab",
               "aria-selected": state.methodTab === tab ? "true" : "false",
-              text: tab === "passkey" ? "Passkey" : tab === "web3" ? "Web3 wallet" : "Smart card ID",
+              text:
+                tab === "email"
+                  ? "Email"
+                  : tab === "web3"
+                    ? "Web3 wallet"
+                    : tab === "smart_card"
+                      ? "Smart card"
+                      : tab === "civic_id"
+                        ? "License / passport"
+                        : "Passkey",
               onClick: () => {
                 state.methodTab = tab;
                 paint();
@@ -98,6 +150,124 @@ export async function renderRegister(main, ctx) {
           )
         )
       ),
+      state.methodTab === "email"
+        ? h(
+            "section",
+            { class: "panel", "aria-labelledby": "email-heading" },
+            h("h2", { id: "email-heading", text: "Email username" }),
+            h(
+              "p",
+              {
+                text: "Your username is an email address. Republic sends a 6-digit sign-in code through AWS SES. That is the MFA step for every other method as well.",
+              }
+            ),
+            h(
+              "form",
+              { class: "stack", onSubmit: onBindEmail },
+              h(
+                "label",
+                { class: "field", for: "reg-email" },
+                "Email",
+                h("input", {
+                  id: "reg-email",
+                  name: "email",
+                  type: "email",
+                  autocomplete: "email",
+                  required: true,
+                })
+              ),
+              h(
+                "label",
+                { class: "field", for: "reg-email-handle" },
+                "Public handle (optional)",
+                h("input", {
+                  id: "reg-email-handle",
+                  name: "handle",
+                  type: "text",
+                  autocomplete: "username",
+                })
+              ),
+              h(
+                "div",
+                { class: "toolbar" },
+                h(
+                  "button",
+                  {
+                    class: "btn",
+                    type: "submit",
+                    disabled: Boolean(state.busy),
+                    text: state.busy ? "Sending code…" : "Email me a code",
+                  }
+                )
+              )
+            )
+          )
+        : null,
+      state.methodTab === "civic_id"
+        ? h(
+            "section",
+            { class: "panel", "aria-labelledby": "civic-heading" },
+            h("h2", { id: "civic-heading", text: "Driver’s license or passport" }),
+            h(
+              "p",
+              {
+                text: "Socially certified photo ID. The Node stores a hash of the document type, issuing jurisdiction, and number — never the image and never the number itself. This desk is not a court-ready identity-verification product.",
+              }
+            ),
+            h(
+              "form",
+              { class: "stack", onSubmit: onBindCivic },
+              h(
+                "label",
+                { class: "field", for: "civic-kind" },
+                "Document",
+                h(
+                  "select",
+                  { id: "civic-kind", name: "kind", required: true },
+                  h("option", { value: "drivers_license", text: "Driver’s license" }),
+                  h("option", { value: "passport", text: "Passport" })
+                )
+              ),
+              h(
+                "label",
+                { class: "field", for: "civic-issuer" },
+                "Issuing jurisdiction (for example US-CA)",
+                h("input", { id: "civic-issuer", name: "issuer", type: "text", required: true })
+              ),
+              h(
+                "label",
+                { class: "field", for: "civic-number" },
+                "Document number (hashed, not stored)",
+                h("input", {
+                  id: "civic-number",
+                  name: "documentNumber",
+                  type: "password",
+                  autocomplete: "off",
+                  required: true,
+                })
+              ),
+              h(
+                "label",
+                { class: "field", for: "civic-email" },
+                "Email for MFA",
+                h("input", { id: "civic-email", name: "email", type: "email", autocomplete: "email" })
+              ),
+              h(
+                "div",
+                { class: "toolbar" },
+                h(
+                  "button",
+                  {
+                    class: "btn",
+                    type: "submit",
+                    disabled: Boolean(state.busy),
+                    text: "Bind ID and send email code",
+                  }
+                )
+              )
+            )
+          )
+        : null,
       state.methodTab === "web3"
         ? h(
             "section",
@@ -106,7 +276,7 @@ export async function renderRegister(main, ctx) {
             h(
               "p",
               {
-                text: "Sign a Republic binding message. The address is uniquely yours. It can be verified internally even if another address is the active one.",
+                text: "Sign a Republic binding message. The address is uniquely yours. After the signature, email MFA still runs.",
               }
             ),
             h(
@@ -136,7 +306,7 @@ export async function renderRegister(main, ctx) {
             h(
               "p",
               {
-                text: "PIV, CAC, or national eID. A clerk can also attest a card at the desk. This Node demo accepts a certificate fingerprint (kiosk / mock path).",
+                text: "PIV, CAC, or national eID at a reader. A clerk can also attest a card at the desk. This Node demo accepts a certificate fingerprint (kiosk / mock path), then email MFA.",
               }
             ),
             h(
@@ -463,6 +633,99 @@ export async function renderRegister(main, ctx) {
     }
   }
 
+  async function applyAuthResult(result, okMessage) {
+    if (isMfaChallenge(result)) {
+      state.mfa = result;
+      state.info = result.message || okMessage;
+      return;
+    }
+    state.mfa = null;
+    state.identity = result.identity;
+    state.info = okMessage;
+  }
+
+  async function onBindEmail(event) {
+    event.preventDefault();
+    if (state.busy) return;
+    const email = event.target.email?.value?.trim();
+    const handle = event.target.handle?.value?.trim();
+    state.busy = true;
+    state.error = "";
+    state.info = "";
+    paint();
+    try {
+      const result = await startEmailRegister(api, { email, handle });
+      await applyAuthResult(result, "Check your email for a 6-digit code.");
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Email registration failed.";
+      announce(state.error);
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
+  async function onBindCivic(event) {
+    event.preventDefault();
+    if (state.busy) return;
+    const kind = event.target.kind?.value;
+    const issuer = event.target.issuer?.value?.trim();
+    const documentNumber = event.target.documentNumber?.value;
+    const email = event.target.email?.value?.trim();
+    event.target.documentNumber.value = "";
+    state.busy = true;
+    state.error = "";
+    state.info = "";
+    paint();
+    try {
+      const result = await bindCivicId(api, { kind, issuer, documentNumber, email });
+      await applyAuthResult(result, "License or passport hashed and bound. Complete the email code.");
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Civic ID bind failed.";
+      announce(state.error);
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
+  async function onMfaEmail(event) {
+    event.preventDefault();
+    const email = event.target.email?.value?.trim();
+    state.busy = true;
+    state.error = "";
+    try {
+      const result = await provideMfaEmail(api, email);
+      await applyAuthResult(result, "Code sent.");
+    } catch (err) {
+      state.error = err.message || "Could not send code.";
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
+  async function onMfaVerify(event) {
+    event.preventDefault();
+    const code = event.target.code?.value?.trim();
+    state.busy = true;
+    state.error = "";
+    try {
+      const result = await verifyMfaCode(api, code);
+      state.mfa = null;
+      state.identity = result.identity;
+      state.info = `Signed in as ${result.user?.handle || "registered"}.`;
+      announce(state.info);
+    } catch (err) {
+      state.error = err.message || "Invalid code.";
+    } finally {
+      state.busy = false;
+      paint();
+    }
+  }
+
   async function onBindWeb3(event) {
     event.preventDefault();
     if (state.busy) return;
@@ -472,8 +735,10 @@ export async function renderRegister(main, ctx) {
     paint();
     try {
       const result = await bindWeb3Wallet(api);
-      state.identity = result.identity;
-      state.info = "Web3 wallet bound to this person. It is verified internally. If it is your first address it is now active.";
+      await applyAuthResult(
+        result,
+        "Web3 wallet bound to this person. It is verified internally. If it is your first address it is now active.",
+      );
       announce("Web3 wallet bound.");
     } catch (err) {
       state.error = err.message || "Web3 bind failed.";
@@ -496,8 +761,7 @@ export async function renderRegister(main, ctx) {
     paint();
     try {
       const result = await bindSmartCard(api, looksPem ? { certificate: raw } : { fingerprint: raw });
-      state.identity = result.identity;
-      state.info = "Smart-card digital ID bound to this person.";
+      await applyAuthResult(result, "Smart-card digital ID bound to this person.");
       announce("Smart card bound.");
     } catch (err) {
       state.error = err.message || "Smart-card bind failed.";

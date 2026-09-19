@@ -16,6 +16,8 @@ import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { createPasskeyService } from './passkey.mjs';
 import { applySiteContractPins } from './cms.mjs';
+import { createMailer } from './mailer.mjs';
+import { createMfaService } from './mfa.mjs';
 import { Store } from './store.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { authRouter } from './routes/auth.mjs';
@@ -140,7 +142,9 @@ export async function createApp(overrides = {}) {
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
-  const deps = { config, store, explorer, chain, l1, passkeys };
+  const mailer = configOverrides.mailer || createMailer(config);
+  const mfa = createMfaService({ config, store, mailer });
+  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -202,7 +206,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config };
+  return { app, store, explorer, chain, l1, config, mailer, mfa };
 }
 
 export async function startServer(overrides = {}) {

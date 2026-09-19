@@ -1132,7 +1132,15 @@ a.session-chrome-btn:hover {
   margin-top: 0.35rem;
 }
 
-.sign-in-dev .form-grid {
+.otp-input {
+  font-size: 1.35rem;
+  letter-spacing: 0.28em;
+  font-variant-numeric: tabular-nums;
+  max-width: 10rem;
+}
+
+.sign-in-mfa .form-grid,
+.sign-in-form .form-grid {
   display: grid;
   gap: 0.85rem;
   margin-top: 0.5rem;

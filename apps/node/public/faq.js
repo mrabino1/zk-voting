@@ -46,8 +46,8 @@ export const FAQ_ENTRIES = [
     topic: "passkey-wallet",
     q: "Should I use a passkey or a Web3 wallet?",
     a: [
-      "A person is unique. You may verify a passkey, a Web3 wallet, and a smart-card digital ID. Several Ethereum addresses can be verified internally; only one is active. The vote Merkle leaf is an identity commitment, never the active wallet address and never a seed phrase.",
-      "Passkeys (WebAuthn, discoverable) are the default desk path. A production design derives a secp256k1 smart-account key from WebAuthn PRF and, under a separate domain, identity secrets. This Node demo may display a keccak256 commitment hex and a local address labeled republic-local-address — that is not production secp256k1. Prefer the passkey on the device you will vote from. Use a bound Ethereum wallet if you already have one on this person record.",
+      "A person is unique. You may verify email, a Web3 wallet, a smart-card reader, a driver’s license or passport, and a passkey. Several Ethereum addresses can be verified internally; only one is active. The vote Merkle leaf is an identity commitment, never the active wallet address, never a document number, and never a seed phrase.",
+      "Passkeys (WebAuthn, discoverable) remain available on the device you will vote from. Ethereum login is a SIWE-like personal_sign. Smart cards are a kiosk reader fingerprint in this build. License/passport login hashes the document; it is not Jumio or court-ready IDV. Every path still sends a one-time code to email via AWS SES.",
     ],
   },
   {
@@ -118,8 +118,8 @@ export const FAQ_ENTRIES = [
     topic: "how-to-register",
     q: "How do I register to vote?",
     a: [
-      "Open Register (or Identify yourself). Create a passkey on this device, or bind a Web3 wallet / smart-card method the jurisdiction accepts. Submit an identity commitment to an election whose roll is still open. The public tree holds that commitment hex, not your name.",
-      "A clerk or registrar may still need to match you to the civil roll. After you have a passkey, Sign in on later visits. Register separately for each election you are eligible for; being on one roll does not silently enroll you in every contest on the Node.",
+      "Open Register (or Identify yourself). Bind email, a Web3 wallet, a smart-card reader, a driver’s license or passport, or a passkey. Submit an identity commitment to an election whose roll is still open. The public tree holds that commitment hex, not your name and not a document number.",
+      "A clerk or registrar may still need to match you to the civil roll. After you have a method, Sign in on later visits — each path still uses email MFA. Register separately for each election you are eligible for; being on one roll does not silently enroll you in every contest on the Node.",
     ],
   },
   {
@@ -217,7 +217,7 @@ export const FAQ_ENTRIES = [
     topic: "smart-card",
     q: "Can I use a smart-card digital ID?",
     a: [
-      "Yes, as one of the three person methods (passkey, Web3, smart card). Officials can attest a smart-card fingerprint on the person record. It does not become the Merkle leaf. The same uniqueness rules apply: one person, one active ETH address.",
+      "Yes. Kiosk or clerk desk. This Node hashes a certificate fingerprint (or PEM). Live X.509 path verification is not in this build — production registrars attest the card. It does not become the Merkle leaf. Sign-in still completes with an email one-time code.",
     ],
   },
   {
@@ -234,7 +234,7 @@ export const FAQ_ENTRIES = [
     topic: "sign-in",
     q: "What is the difference between Sign in and Register?",
     a: [
-      "Register (Identify yourself) creates or reviews the passkey / wallet / smart-card methods and submits a commitment to a chosen election roll. Sign in is for returning people who already have a passkey on this device or a bound Ethereum wallet.",
+      "Register (Identify yourself) creates or reviews email, wallet, smart-card, license/passport, and passkey methods and submits a commitment to a chosen election roll. Sign in is for returning people who already have a method on this Node.",
       "If you are not signed in, the public home, About, and FAQ are the unregistered surface. After a session, you land on My desk (/me) instead of the marketing home.",
     ],
   },
@@ -264,6 +264,24 @@ export const FAQ_ENTRIES = [
       "Evidence files stay off-chain. A court can still match a sealed file to the on-chain evidence hash.",
     ],
   },
+  {
+    id: "email-mfa",
+    topic: "email-mfa",
+    q: "Why does every sign-in ask for an email code?",
+    a: [
+      "Email is the username and the second factor. After email, Ethereum signature, smart-card reader, or license/passport, Republic sends a 6-digit code through AWS SES (the same transactional-mail pattern as DealPunchList). Dev login on a local host can skip that; a production desk should not.",
+      "The Node does not invent a password product. The code expires in ten minutes. If SES is not configured, product MFA stays off except for the email-first path, which always uses a captured or sent OTP.",
+    ],
+  },
+  {
+    id: "civic-id",
+    topic: "civic-id",
+    q: "Can I sign in with a driver’s license or passport?",
+    a: [
+      "Yes, as the socially certified photo ID this desk expects. You (or a registrar) bind the document once. Later visits re-enter the type, issuing jurisdiction, and number. The Node stores only a keccak hash — never the image, never the full number. Then you still complete email MFA.",
+      "This is not Jumio, not NFC ePassport chip reading, and not a claim that a court must accept the binding. Clerks attest in production; the mock path is for demos when ALLOW_CIVIC_ID_MOCK=1.",
+    ],
+  },
 ];
 
 export const FAQ_REQUIRED_TOPICS = [
@@ -283,6 +301,8 @@ export const FAQ_REQUIRED_TOPICS = [
   "fees-gas",
   "open-source",
   "security-limits",
+  "email-mfa",
+  "civic-id",
 ];
 
 export function faqAnswerText(entry) {

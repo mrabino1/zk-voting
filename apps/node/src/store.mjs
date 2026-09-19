@@ -191,6 +191,7 @@ export class Store {
           ethAccounts: [],
           activeEthAddress: null,
           personKeyHash: null,
+          email: null,
         });
       }
     }
@@ -320,7 +321,7 @@ export class Store {
     return user ? ensurePersonFields(user) : null;
   }
 
-  createUser({ handle, role = 'voter' }) {
+  createUser({ handle, role = 'voter', email = null }) {
     const trimmed = String(handle || '').trim();
     if (!trimmed) throw new HttpError(400, 'handle required');
     if (!isRole(role)) throw new HttpError(400, 'invalid role');
@@ -329,6 +330,7 @@ export class Store {
       id: randomUUID(),
       handle: trimmed,
       role,
+      email: email || null,
       createdAt: new Date().toISOString(),
       credentials: [],
       authMethods: [],
@@ -440,7 +442,25 @@ export class Store {
     return user ? ensurePersonFields(user) : null;
   }
 
-  findUserByAuthMethod({ type, credentialId, address, fingerprint }) {
+  findUserByEmail(email) {
+    const want = String(email || '')
+      .trim()
+      .toLowerCase();
+    if (!want) return null;
+    for (const user of this.data.users) {
+      ensurePersonFields(user);
+      if (String(user.email || '').trim().toLowerCase() === want) return user;
+      const hit = user.authMethods.find(
+        (m) => m.type === 'email' && String(m.email || '').trim().toLowerCase() === want,
+      );
+      if (hit) return user;
+    }
+    return null;
+  }
+
+  findUserByAuthMethod({ type, credentialId, address, fingerprint, email, civicIdHash }) {
+    const wantEmail = email ? String(email).trim().toLowerCase() : '';
+    const wantCivic = civicIdHash ? String(civicIdHash).toLowerCase() : '';
     for (const user of this.data.users) {
       ensurePersonFields(user);
       const hit = user.authMethods.find((m) => {
@@ -449,6 +469,11 @@ export class Store {
         if (address && sameEthAddress(m.address, address)) return true;
         if (fingerprint && String(m.fingerprint || '').toLowerCase() === String(fingerprint).toLowerCase()) {
           return true;
+        }
+        if (wantEmail && String(m.email || '').trim().toLowerCase() === wantEmail) return true;
+        if (wantCivic) {
+          const stored = String(m.civicIdHash || m.fingerprint || '').toLowerCase();
+          if (stored === wantCivic) return true;
         }
         return false;
       });
@@ -461,11 +486,16 @@ export class Store {
     ensurePersonFields(user);
     const type = fields.type;
     if (!isAuthMethodType(type)) throw new HttpError(400, 'invalid auth method type');
+    if (Object.prototype.hasOwnProperty.call(fields, 'documentNumber') && fields.documentNumber) {
+      throw new HttpError(400, 'document numbers are not stored; send a civicIdHash');
+    }
     const existing = this.findUserByAuthMethod({
       type,
       credentialId: fields.credentialId,
       address: fields.address,
       fingerprint: fields.fingerprint,
+      email: fields.email,
+      civicIdHash: fields.civicIdHash,
     });
     if (existing && existing.user.id !== user.id) {
       throw new HttpError(409, 'authenticator already bound to another person', {
@@ -485,8 +515,14 @@ export class Store {
       fingerprint: fields.fingerprint || null,
       subject: fields.subject || null,
       issuer: fields.issuer || null,
+      email: fields.email || null,
+      kind: fields.kind || null,
+      civicIdHash: fields.civicIdHash || (type === 'civic_id' ? fields.fingerprint : null),
     };
     user.authMethods.push(method);
+    if (type === 'email' && method.email && !user.email) {
+      user.email = method.email;
+    }
     return method;
   }
 

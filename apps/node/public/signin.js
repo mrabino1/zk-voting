@@ -1,11 +1,21 @@
 /**
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Shared Sign in chrome: passkey (DFC-style discoverable WebAuthn) and
- * Sign in with Ethereum. Dev login is a gated local fallback only.
+ * Sign in: email, Ethereum (signature), smart-card reader, driver’s license /
+ * passport, passkey. Every path completes with email MFA (AWS SES).
  */
 
 import { loginPasskey, hasWebAuthn, webAuthnUnavailableMessage } from "./passkey-wallet.js";
-import { loginWeb3Wallet } from "./identity-methods.js";
+import {
+  isMfaChallenge,
+  loginCivicId,
+  loginSmartCard,
+  loginWeb3Wallet,
+  presentSmartCard,
+  provideMfaEmail,
+  resendMfaCode,
+  startEmailLogin,
+  verifyMfaCode,
+} from "./identity-methods.js";
 
 export const SESSION_EVENT = "republic:session";
 
@@ -51,6 +61,9 @@ export async function loadAuthState() {
     user: me?.user || null,
     identity: me?.identity || null,
     allowDevLogin: Boolean(config?.auth?.allowDevLogin),
+    requireEmailMfa: Boolean(config?.auth?.requireEmailMfa),
+    allowSmartCardMock: Boolean(config?.auth?.allowSmartCardMock),
+    allowCivicIdMock: Boolean(config?.auth?.allowCivicIdMock),
     config,
     me,
     audience: me?.audience || (me?.user ? "registered" : "public"),
@@ -87,7 +100,7 @@ function panelOptions(root) {
     heading: root.getAttribute("data-heading") || "Sign in",
     lede:
       root.getAttribute("data-lede") ||
-      "Returning users sign in with a passkey on this device or an Ethereum wallet already bound to their person.",
+      "Sign in with email, a bound Ethereum wallet, a smart-card reader, or a driver’s license / passport. Each path sends a one-time code to your email (AWS SES).",
     devHandle: root.getAttribute("data-dev-handle") || "",
     devRole: root.getAttribute("data-dev-role") || "",
     compact: root.getAttribute("data-compact") === "true",
@@ -107,16 +120,38 @@ export async function logout() {
   notifySession({ user: null });
 }
 
-export async function signInWithPasskey(handle) {
-  const result = await loginPasskey({ api: fetchJson, handle });
-  notifySession({ user: result.user, identity: result.identity, method: "passkey" });
+function finishOrMfa(state, result, method) {
+  if (isMfaChallenge(result)) {
+    state.mfa = result;
+    return result;
+  }
+  notifySession({ user: result.user, identity: result.identity, method });
   return result;
 }
 
-export async function signInWithEthereum() {
+export async function signInWithPasskey(handle, state) {
+  const result = await loginPasskey({ api: fetchJson, handle });
+  return finishOrMfa(state, result, "passkey");
+}
+
+export async function signInWithEthereum(state) {
   const result = await loginWeb3Wallet(fetchJson);
-  notifySession({ user: result.user, identity: result.identity, method: "web3" });
-  return result;
+  return finishOrMfa(state, result, "web3");
+}
+
+export async function signInWithEmail(email, state) {
+  const result = await startEmailLogin(fetchJson, email);
+  return finishOrMfa(state, result, "email");
+}
+
+export async function signInWithSmartCard({ fingerprint, certificate }, state) {
+  const result = await loginSmartCard(fetchJson, { fingerprint, certificate });
+  return finishOrMfa(state, result, "smart_card");
+}
+
+export async function signInWithCivicId({ kind, issuer, documentNumber }, state) {
+  const result = await loginCivicId(fetchJson, { kind, issuer, documentNumber });
+  return finishOrMfa(state, result, "civic_id");
 }
 
 export async function signInDev({ handle, role }) {
@@ -161,9 +196,121 @@ function renderSignedIn(state) {
   );
 }
 
+function renderMfa(state, statusEl) {
+  const mfa = state.mfa || {};
+  const needsEmail = Boolean(mfa.needsEmail);
+  return el(
+    "div",
+    { class: "sign-in-mfa" },
+    el("p", {
+      class: "field-hint",
+      text: needsEmail
+        ? "This person has no email on file yet. Enter the address that will receive the sign-in code (AWS SES)."
+        : `Enter the 6-digit code sent to ${mfa.emailHint || "your email"}.`,
+    }),
+    needsEmail
+      ? el(
+          "form",
+          {
+            class: "form-grid",
+            onSubmit: (event) => {
+              event.preventDefault();
+              const email = event.target.email?.value?.trim();
+              runAction(state, statusEl, "mfa-email", async () => {
+                const result = await provideMfaEmail(fetchJson, email);
+                state.mfa = result;
+                return result;
+              });
+            },
+          },
+          el(
+            "div",
+            { class: "field" },
+            el("label", { class: "field-label", for: "signin-mfa-email", text: "Email" }),
+            el("input", {
+              id: "signin-mfa-email",
+              name: "email",
+              type: "email",
+              autocomplete: "email",
+              required: true,
+            })
+          ),
+          el(
+            "div",
+            { class: "actions" },
+            el("button", { class: "btn", type: "submit", text: "Send code" })
+          )
+        )
+      : el(
+          "form",
+          {
+            class: "form-grid",
+            onSubmit: (event) => {
+              event.preventDefault();
+              const code = event.target.code?.value?.trim();
+              runAction(state, statusEl, "mfa", async () => {
+                const result = await verifyMfaCode(fetchJson, code);
+                state.mfa = null;
+                notifySession({ user: result.user, identity: result.identity, method: mfa.factor || "mfa" });
+                return result;
+              });
+            },
+          },
+          el(
+            "div",
+            { class: "field" },
+            el("label", { class: "field-label", for: "signin-otp", text: "One-time code" }),
+            el("input", {
+              id: "signin-otp",
+              name: "code",
+              class: "otp-input",
+              inputmode: "numeric",
+              autocomplete: "one-time-code",
+              maxlength: "6",
+              pattern: "[0-9]{6}",
+              required: true,
+            })
+          ),
+          el(
+            "div",
+            { class: "sign-in-actions" },
+            el("button", { class: "btn", type: "submit", text: "Verify code" }),
+            el("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              text: "Resend code",
+              onClick: () =>
+                runAction(state, statusEl, "mfa-resend", async () => {
+                  const result = await resendMfaCode(fetchJson);
+                  state.mfa = result;
+                  return result;
+                }),
+            }),
+            el("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              text: "Start over",
+              onClick: () => {
+                state.mfa = null;
+                state.repaint();
+              },
+            })
+          )
+        )
+  );
+}
+
 function renderForm(state, opts, statusEl) {
   const webauthn = hasWebAuthn();
   const busy = Boolean(state.busy);
+  const tab = state.tab || "email";
+  const tabs = [
+    { id: "email", label: "Email" },
+    { id: "web3", label: "Ethereum" },
+    { id: "smart_card", label: "Smart card" },
+    { id: "civic_id", label: "License / passport" },
+    { id: "passkey", label: "Passkey" },
+  ];
   return el(
     "div",
     { class: "sign-in-form" },
@@ -171,49 +318,250 @@ function renderForm(state, opts, statusEl) {
       class: "field-hint",
       text: opts.lede,
     }),
-    !webauthn ? el("p", { class: "field-hint", text: webAuthnUnavailableMessage() }) : null,
     el(
       "div",
-      { class: "sign-in-actions" },
-      el("button", {
-        class: "btn",
-        type: "button",
-        "data-signin": "passkey",
-        disabled: busy || !webauthn,
-        "aria-busy": busy && state.busy === "passkey" ? "true" : "false",
-        text: state.busy === "passkey" ? "Waiting for passkey…" : "Sign in with passkey",
-        onClick: () => runAction(state, statusEl, "passkey", () => signInWithPasskey(state.handle)),
-      }),
-      el("button", {
-        class: "btn",
-        type: "button",
-        "data-signin": "wallet",
-        disabled: busy,
-        "aria-busy": busy && state.busy === "wallet" ? "true" : "false",
-        text: state.busy === "wallet" ? "Waiting for wallet…" : "Sign in with Ethereum",
-        onClick: () => runAction(state, statusEl, "wallet", () => signInWithEthereum()),
-      })
+      { class: "method-tabs", role: "tablist", "aria-label": "How you sign in" },
+      ...tabs.map((item) =>
+        el("button", {
+          type: "button",
+          role: "tab",
+          "aria-selected": tab === item.id ? "true" : "false",
+          text: item.label,
+          onClick: () => {
+            state.tab = item.id;
+            state.repaint();
+          },
+        })
+      )
     ),
-    el(
-      "details",
-      { class: "sign-in-handle" },
-      el("summary", { text: "Use a handle (optional)" }),
-      el("p", {
-        class: "field-hint",
-        text: "Username-less passkey login is the default (resident / discoverable credential). Enter a handle only if your authenticator cannot discover the passkey on its own.",
-      }),
-      el("label", { class: "field-label", for: "signin-handle", text: "Handle" }),
-      el("input", {
-        id: "signin-handle",
-        name: "handle",
-        type: "text",
-        autocomplete: "username webauthn",
-        value: state.handle || "",
-        onInput: (event) => {
-          state.handle = event.target.value;
-        },
-      })
-    ),
+    tab === "email"
+      ? el(
+          "form",
+          {
+            class: "form-grid",
+            onSubmit: (event) => {
+              event.preventDefault();
+              const email = event.target.email?.value?.trim();
+              runAction(state, statusEl, "email", () => signInWithEmail(email, state));
+            },
+          },
+          el(
+            "div",
+            { class: "field" },
+            el("label", { class: "field-label", for: "signin-email", text: "Email (username)" }),
+            el("input", {
+              id: "signin-email",
+              name: "email",
+              type: "email",
+              autocomplete: "username email",
+              required: true,
+            })
+          ),
+          el(
+            "div",
+            { class: "actions" },
+            el("button", {
+              class: "btn",
+              type: "submit",
+              "data-signin": "email",
+              disabled: busy,
+              text: state.busy === "email" ? "Sending code…" : "Email me a sign-in code",
+            })
+          )
+        )
+      : null,
+    tab === "web3"
+      ? el(
+          "div",
+          { class: "sign-in-actions" },
+          el("button", {
+            class: "btn",
+            type: "button",
+            "data-signin": "wallet",
+            disabled: busy,
+            text: state.busy === "wallet" ? "Waiting for wallet…" : "Sign in with Ethereum",
+            onClick: () => runAction(state, statusEl, "wallet", () => signInWithEthereum(state)),
+          })
+        )
+      : null,
+    tab === "smart_card"
+      ? el(
+          "form",
+          {
+            class: "form-grid",
+            onSubmit: (event) => {
+              event.preventDefault();
+              const raw = event.target.fingerprint?.value?.trim();
+              const looksPem = raw?.includes("-----BEGIN");
+              runAction(state, statusEl, "card", () =>
+                signInWithSmartCard(looksPem ? { certificate: raw } : { fingerprint: raw }, state)
+              );
+            },
+          },
+          el("p", {
+            class: "field-hint",
+            text: "Present a PIV, CAC, or national eID at the reader. This Node hashes a certificate fingerprint; live X.509 path verification is clerk-attested.",
+          }),
+          el(
+            "div",
+            { class: "field" },
+            el("label", {
+              class: "field-label",
+              for: "signin-card-fp",
+              text: "Certificate fingerprint or PEM",
+            }),
+            el("input", {
+              id: "signin-card-fp",
+              name: "fingerprint",
+              type: "text",
+              spellcheck: "false",
+              required: true,
+              placeholder: "0x… or paste PEM",
+            })
+          ),
+          el(
+            "div",
+            { class: "sign-in-actions" },
+            el("button", {
+              class: "btn",
+              type: "submit",
+              "data-signin": "smart-card",
+              disabled: busy,
+              text: "Read card and sign in",
+            }),
+            el("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              text: "Detect reader",
+              onClick: () =>
+                runAction(state, statusEl, "card-detect", async () => {
+                  const info = await presentSmartCard();
+                  setStatus(statusEl, info.available ? "ok" : "", info.note);
+                  return { mfaRequired: true, needsEmail: false, skip: true, message: info.note };
+                }),
+            })
+          )
+        )
+      : null,
+    tab === "civic_id"
+      ? el(
+          "form",
+          {
+            class: "form-grid",
+            onSubmit: (event) => {
+              event.preventDefault();
+              runAction(state, statusEl, "civic", () =>
+                signInWithCivicId(
+                  {
+                    kind: event.target.kind?.value,
+                    issuer: event.target.issuer?.value?.trim(),
+                    documentNumber: event.target.documentNumber?.value,
+                  },
+                  state
+                )
+              );
+              event.target.documentNumber.value = "";
+            },
+          },
+          el("p", {
+            class: "field-hint",
+            text: "Use the driver’s license or passport already bound to your person. The Node hashes the number and does not store it. This is not court-ready commercial IDV.",
+          }),
+          el(
+            "div",
+            { class: "field" },
+            el("label", { class: "field-label", for: "signin-civic-kind", text: "Document" }),
+            el(
+              "select",
+              { id: "signin-civic-kind", name: "kind", required: true },
+              el("option", { value: "drivers_license", text: "Driver’s license" }),
+              el("option", { value: "passport", text: "Passport" })
+            )
+          ),
+          el(
+            "div",
+            { class: "field" },
+            el("label", {
+              class: "field-label",
+              for: "signin-civic-issuer",
+              text: "Issuing jurisdiction (for example US-CA or US)",
+            }),
+            el("input", {
+              id: "signin-civic-issuer",
+              name: "issuer",
+              type: "text",
+              autocomplete: "off",
+              required: true,
+            })
+          ),
+          el(
+            "div",
+            { class: "field" },
+            el("label", {
+              class: "field-label",
+              for: "signin-civic-number",
+              text: "Document number",
+            }),
+            el("input", {
+              id: "signin-civic-number",
+              name: "documentNumber",
+              type: "password",
+              autocomplete: "off",
+              required: true,
+            })
+          ),
+          el(
+            "div",
+            { class: "actions" },
+            el("button", {
+              class: "btn",
+              type: "submit",
+              "data-signin": "civic-id",
+              disabled: busy,
+              text: "Continue to email code",
+            })
+          )
+        )
+      : null,
+    tab === "passkey"
+      ? el(
+          "div",
+          {},
+          !webauthn ? el("p", { class: "field-hint", text: webAuthnUnavailableMessage() }) : null,
+          el(
+            "div",
+            { class: "sign-in-actions" },
+            el("button", {
+              class: "btn",
+              type: "button",
+              "data-signin": "passkey",
+              disabled: busy || !webauthn,
+              text: state.busy === "passkey" ? "Waiting for passkey…" : "Sign in with passkey",
+              onClick: () => runAction(state, statusEl, "passkey", () => signInWithPasskey(state.handle, state)),
+            })
+          ),
+          el(
+            "details",
+            { class: "sign-in-handle" },
+            el("summary", { text: "Use a handle (optional)" }),
+            el("p", {
+              class: "field-hint",
+              text: "Username-less passkey login is the default. Enter a handle only if your authenticator cannot discover the passkey on its own.",
+            }),
+            el("label", { class: "field-label", for: "signin-handle", text: "Handle" }),
+            el("input", {
+              id: "signin-handle",
+              name: "handle",
+              type: "text",
+              autocomplete: "username webauthn",
+              value: state.handle || "",
+              onInput: (event) => {
+                state.handle = event.target.value;
+              },
+            })
+          )
+        )
+      : null,
     state.allowDevLogin
       ? el(
           "details",
@@ -221,7 +569,7 @@ function renderForm(state, opts, statusEl) {
           el("summary", { text: "Dev sign-in (local / tests only)" }),
           el("p", {
             class: "field-hint",
-            text: "ALLOW_DEV_LOGIN is on for this host. Do not use this as the primary path on a live desk.",
+            text: "ALLOW_DEV_LOGIN is on for this host. It skips email MFA. Do not use this as the primary path on a live desk.",
           }),
           el(
             "form",
@@ -264,6 +612,18 @@ async function runAction(state, statusEl, kind, fn) {
   state.repaint();
   try {
     const result = await fn();
+    if (result?.skip) return;
+    if (isMfaChallenge(result)) {
+      setStatus(
+        statusEl,
+        "ok",
+        result.message ||
+          (result.needsEmail
+            ? "Enter the email that will receive your sign-in code."
+            : `Check ${result.emailHint || "your email"} for a 6-digit code.`)
+      );
+      return;
+    }
     const who = result?.user?.handle || "signed in";
     setStatus(statusEl, "ok", `Signed in as ${who}.`);
   } catch (err) {
@@ -290,6 +650,8 @@ export function mountSignInPanel(root, extra = {}) {
     identity: extra.identity || null,
     allowDevLogin: Boolean(extra.allowDevLogin),
     handle: "",
+    tab: "email",
+    mfa: extra.mfa || null,
     busy: false,
     repaint() {},
     async reload() {},
@@ -308,7 +670,9 @@ export function mountSignInPanel(root, extra = {}) {
   root.replaceChildren(section);
 
   function paint() {
-    body.replaceChildren(state.user ? renderSignedIn(state) : renderForm(state, opts, statusEl));
+    if (state.user) body.replaceChildren(renderSignedIn(state));
+    else if (state.mfa) body.replaceChildren(renderMfa(state, statusEl));
+    else body.replaceChildren(renderForm(state, opts, statusEl));
   }
   state.repaint = paint;
 
@@ -317,7 +681,8 @@ export function mountSignInPanel(root, extra = {}) {
     state.user = next.user;
     state.identity = next.identity;
     state.allowDevLogin = next.allowDevLogin;
-    if (!next.user) setStatus(statusEl, "", "");
+    if (next.user) state.mfa = null;
+    if (!next.user && !state.mfa) setStatus(statusEl, "", "");
     paint();
     return next;
   };

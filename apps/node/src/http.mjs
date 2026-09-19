@@ -57,6 +57,24 @@ export function clearSessionCookie(res, config) {
   );
 }
 
+export function setMfaCookie(res, config, nonce) {
+  const maxAge = Math.floor((config.mfaTtlMs || 10 * 60 * 1000) / 1000);
+  const name = config.mfaCookie || 'republic.mfa';
+  const parts = [
+    `${name}=${encodeURIComponent(nonce)}`,
+    'HttpOnly',
+    'Path=/',
+    'SameSite=Lax',
+    `Max-Age=${maxAge}`,
+  ];
+  res.append('Set-Cookie', parts.join('; '));
+}
+
+export function clearMfaCookie(res, config) {
+  const name = config.mfaCookie || 'republic.mfa';
+  res.append('Set-Cookie', `${name}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`);
+}
+
 export function errorHandler(err, req, res, _next) {
   const status = Number(err.status || err.statusCode || 500);
   const hideInternals = status >= 500 && !(err instanceof HttpError);

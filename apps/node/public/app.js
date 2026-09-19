@@ -641,7 +641,7 @@ function renderDesk(main, route, bundle) {
         h("p", { text: walletLine }),
         me?.user
           ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
-          : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
+          : h("p", { text: "Sign in below with email, Ethereum, a smart card, or a license/passport if you already have a person record on this Node." }),
         h("p", {
           text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
         }),
@@ -704,7 +704,7 @@ function renderDesk(main, route, bundle) {
   if (signInRoot) {
     signInRoot.setAttribute(
       "data-lede",
-      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
+      "Returning users: email, Ethereum, a smart-card reader, or a license/passport already bound to your person. First-time registration is on Identify yourself."
     );
     mountSignInPanel(signInRoot);
   }

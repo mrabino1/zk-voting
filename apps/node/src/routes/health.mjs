@@ -4,6 +4,7 @@ import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
 import { disclosurePublicView } from '../disclosure.mjs';
+import { AUTH_METHOD_TYPES } from '../identity.mjs';
 import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 
 export function healthRouter(deps) {
@@ -82,9 +83,10 @@ export function configRouter(deps) {
             : undefined,
         }),
         identity: {
-          methods: ['passkey', 'web3', 'smart_card'],
+          methods: [...AUTH_METHOD_TYPES],
           oneActiveEthAddress: true,
-          note: 'A person may verify passkey, Web3 wallet, and smart-card digital ID. Only one Ethereum address is active.',
+          civicIdKinds: ['drivers_license', 'passport'],
+          note: 'A person may verify email, Web3 wallet, smart-card reader, driver’s license or passport, and passkey. Only one Ethereum address is active. Document images and full ID numbers are not stored.',
         },
         tally: {
           schemes: ['sum_only', 'opens_ballots'],
@@ -111,7 +113,15 @@ export function configRouter(deps) {
           allowDevLogin: Boolean(deps.config.allowDevLogin),
           passkeyLogin: true,
           web3Login: true,
-          note: 'Sign in with a registered passkey or a bound Ethereum wallet. Dev login is a local/test fallback only.',
+          emailLogin: true,
+          smartCardLogin: true,
+          civicIdLogin: true,
+          requireEmailMfa: Boolean(deps.config.requireEmailMfa),
+          emailMfaVendor: 'ses',
+          sesConfigured: Boolean(deps.config.sesFromAddress && deps.config.awsRegion),
+          allowSmartCardMock: Boolean(deps.config.allowSmartCardMock),
+          allowCivicIdMock: Boolean(deps.config.allowCivicIdMock),
+          note: 'Sign in with email, a bound Ethereum wallet (signature), a smart-card reader, or a hashed driver’s license/passport. Every path completes with an email one-time code via AWS SES when MFA is on. Dev login is a local/test fallback only.',
         },
       });
     }),

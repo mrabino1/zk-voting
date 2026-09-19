@@ -1,16 +1,18 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import { parseCookies, setSessionCookie, clearSessionCookie, HttpError } from './http.mjs';
+import { parseCookies, setSessionCookie, clearSessionCookie, clearMfaCookie, HttpError } from './http.mjs';
 import { publicUser } from './roles.mjs';
 
 export function attachAuth(store, config) {
   return function authMiddleware(req, _res, next) {
     const cookies = parseCookies(req.headers.cookie);
     const sid = cookies[config.sessionCookie];
+    const mfaName = config.mfaCookie || 'republic.mfa';
     req.sessionId = sid || null;
     req.session = sid ? store.getSession(sid) : null;
     req.user = req.session ? store.getUser(req.session.userId) : null;
     req.publicUser = publicUser(req.user);
+    req.mfaNonce = cookies[mfaName] || null;
     next();
   };
 }
@@ -107,6 +109,7 @@ export async function establishSession(res, store, config, user) {
 export async function destroySession(req, res, store, config) {
   if (req.sessionId) await store.deleteSession(req.sessionId);
   clearSessionCookie(res, config);
+  clearMfaCookie(res, config);
 }
 
 export { publicUser };

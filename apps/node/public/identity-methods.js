@@ -1,11 +1,15 @@
 /**
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Client helpers: bind Web3 wallet or smart-card digital ID, set the one active ETH address.
+ * Client helpers: email, Web3, smart-card reader, civic ID, and MFA.
  */
 
-export async function loginWeb3Wallet(api) {
+export function isMfaChallenge(result) {
+  return Boolean(result && result.mfaRequired && !result.verified);
+}
+
+export async function loginWeb3Wallet(api, { email } = {}) {
   if (!window.ethereum) {
-    throw new Error("No Ethereum wallet in this browser. Use a passkey, or install a wallet that supports personal_sign.");
+    throw new Error("No Ethereum wallet in this browser. Use email, a smart card, or install a wallet that supports personal_sign.");
   }
   const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
   const address = accounts && accounts[0];
@@ -20,13 +24,13 @@ export async function loginWeb3Wallet(api) {
   });
   return api("/api/auth/web3/login", {
     method: "POST",
-    body: { address, signature, nonce: challenge.nonce },
+    body: { address, signature, nonce: challenge.nonce, email },
   });
 }
 
-export async function bindWeb3Wallet(api, { handle } = {}) {
+export async function bindWeb3Wallet(api, { handle, email } = {}) {
   if (!window.ethereum) {
-    throw new Error("No Web3 wallet in this browser. Install a wallet or use a passkey / smart card.");
+    throw new Error("No Web3 wallet in this browser. Install a wallet or use email / smart card / license.");
   }
   const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
   const address = accounts && accounts[0];
@@ -41,11 +45,11 @@ export async function bindWeb3Wallet(api, { handle } = {}) {
   });
   return api("/api/identity/web3/verify", {
     method: "POST",
-    body: { address, signature, handle },
+    body: { address, signature, handle, email },
   });
 }
 
-export async function bindSmartCard(api, { fingerprint, certificate, subject, issuer, handle, mock } = {}) {
+export async function bindSmartCard(api, { fingerprint, certificate, subject, issuer, handle, email, mock } = {}) {
   const challenge = await api("/api/identity/smart-card/challenge", {
     method: "POST",
     body: { fingerprint, certificate },
@@ -59,9 +63,82 @@ export async function bindSmartCard(api, { fingerprint, certificate, subject, is
       subject,
       issuer,
       handle,
+      email,
       mock: mock !== false,
     },
   });
+}
+
+export async function loginSmartCard(api, { fingerprint, certificate, email, mock } = {}) {
+  const challenge = await api("/api/auth/smart-card/challenge", {
+    method: "POST",
+    body: { fingerprint, certificate },
+  });
+  return api("/api/auth/smart-card/login", {
+    method: "POST",
+    body: {
+      nonce: challenge.nonce,
+      fingerprint: fingerprint || challenge.fingerprint,
+      certificate,
+      email,
+      mock: mock !== false,
+    },
+  });
+}
+
+export async function presentSmartCard() {
+  const api = typeof navigator !== "undefined" ? navigator.smartCard : null;
+  if (!api) {
+    return {
+      available: false,
+      note: "No Web Smart Card API in this browser. Use a kiosk reader that pastes a certificate fingerprint, or the mock path on a demo host.",
+    };
+  }
+  return {
+    available: true,
+    note: "A smart-card API is present. This Node still hashes a certificate fingerprint; live X.509 path verification is clerk-attested.",
+  };
+}
+
+export async function startEmailLogin(api, email) {
+  return api("/api/auth/email/start", { method: "POST", body: { email } });
+}
+
+export async function startEmailRegister(api, { email, handle } = {}) {
+  return api("/api/identity/email/start", { method: "POST", body: { email, handle } });
+}
+
+export async function bindCivicId(api, { kind, issuer, documentNumber, handle, email, mock } = {}) {
+  return api("/api/identity/civic-id/verify", {
+    method: "POST",
+    body: {
+      kind,
+      issuer,
+      documentNumber,
+      handle,
+      email,
+      mock: mock !== false,
+    },
+  });
+}
+
+export async function loginCivicId(api, { kind, issuer, documentNumber, email } = {}) {
+  return api("/api/auth/civic-id/login", {
+    method: "POST",
+    body: { kind, issuer, documentNumber, email },
+  });
+}
+
+export async function provideMfaEmail(api, email) {
+  return api("/api/auth/mfa/email", { method: "POST", body: { email } });
+}
+
+export async function verifyMfaCode(api, code) {
+  return api("/api/auth/mfa/verify", { method: "POST", body: { code } });
+}
+
+export async function resendMfaCode(api) {
+  return api("/api/auth/mfa/resend", { method: "POST", body: {} });
 }
 
 export async function registerEthAccount(api, { address, source }) {

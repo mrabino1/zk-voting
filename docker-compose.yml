@@ -39,6 +39,13 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
       ALLOW_SMART_CARD_MOCK: ${ALLOW_SMART_CARD_MOCK:-}
+      ALLOW_CIVIC_ID_MOCK: ${ALLOW_CIVIC_ID_MOCK:-}
+      SES_FROM_ADDRESS: ${SES_FROM_ADDRESS:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET:-}
+      REQUIRE_EMAIL_MFA: ${REQUIRE_EMAIL_MFA:-}
       # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
       # mainnet publisher keys in committed Compose files. Not the L2 prover key.
       L1_RPC: ${L1_RPC:-}

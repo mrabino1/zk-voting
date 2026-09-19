@@ -132,8 +132,9 @@ Hasher note: production circuits use Poseidon (`republic.hash.poseidon-bn254-x5-
 
 ### Person (unique) vs one active Ethereum address
 
-A Node user is one **person**. They may bind passkey, Web3 wallet, and
-smart-card digital ID. Several ETH addresses can be internally verified;
+A Node user is one **person**. They may bind email, Web3 wallet,
+smart-card reader, driver’s license or passport, and passkey. Several ETH
+addresses can be internally verified;
 exactly one is **active** (gasless ops). Authenticators and addresses cannot
 belong to two people. The vote leaf stays `identityCommitment`. Details:
 [`IDENTITY.md`](./IDENTITY.md).
@@ -717,7 +718,7 @@ Node eligibility (`identityCommitment` registered and not currently disqualified
 are accepted in the local JSON store so the explorer and UI can run a demo.
 Those accepts still wait for hourly public disclosure unless the interval is `0`.
 
-A person identifies with a **passkey, Web3 wallet, or smart-card digital ID**.
+A person identifies with **email, Ethereum (signature), a smart-card reader, a driver’s license or passport, or a passkey**. Every path completes with email MFA via AWS SES when configured.
 Many ETH addresses may be verified internally; only one is active. The
 Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 
