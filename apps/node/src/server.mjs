@@ -25,6 +25,7 @@ import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
+import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
 <html lang="en">
@@ -69,23 +70,29 @@ export function cleanHtmlUrls() {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const pathOnly = req.path || '';
     if (!/\.html$/i.test(pathOnly)) return next();
-    let nextPath = pathOnly.replace(/\.html$/i, '');
-    if (!nextPath || nextPath === '/index') nextPath = '/';
     const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-    res.redirect(301, `${nextPath}${q}`);
+    res.redirect(301, `${canonicalPublicPath(pathOnly)}${q}`);
+  };
+}
+
+function serveStaticNoHtml(root) {
+  const serve = express.static(root, { index: false, redirect: false });
+  return function staticNoHtml(req, res, next) {
+    if (/\.html$/i.test(req.path || '')) return next();
+    return serve(req, res, next);
   };
 }
 
 function officePageGuard() {
   return function officeGuardMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-    const clean = req.path.replace(/\/+$/, '') || '/';
-    if (!OFFICE_PAGE_RE.test(clean) && !/^\/(admin|back-office)\.html$/i.test(clean)) {
+    const clean = canonicalPublicPath(req.path);
+    if (!OFFICE_PAGE_RE.test(clean)) {
       return next();
     }
     if (req.user) return next();
-    const nextUrl = req.originalUrl || clean;
-    res.redirect(302, `/signin?next=${encodeURIComponent(nextUrl)}`);
+    const search = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `/signin?next=${encodeURIComponent(`${clean}${search}`)}`);
   };
 }
 
@@ -182,8 +189,8 @@ export async function createApp(overrides = {}) {
   app.use(electionShortLinks(store));
   app.use(cleanHtmlUrls());
   app.use(officePageGuard());
-  app.use(express.static(config.distDir));
-  app.use(express.static(config.publicDir));
+  app.use(serveStaticNoHtml(config.distDir));
+  app.use(serveStaticNoHtml(config.publicDir));
   app.use(spaFallback(config));
 
   app.use((req, res) => {

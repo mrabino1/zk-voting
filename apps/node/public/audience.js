@@ -56,6 +56,26 @@ export function brandHref(audience) {
   return homeDestination(audience);
 }
 
+export function canonicalPublicPath(pathname) {
+  let raw = String(pathname || "");
+  let search = "";
+  let hash = "";
+  const hashAt = raw.indexOf("#");
+  if (hashAt !== -1) {
+    hash = raw.slice(hashAt);
+    raw = raw.slice(0, hashAt);
+  }
+  const qAt = raw.indexOf("?");
+  if (qAt !== -1) {
+    search = raw.slice(qAt);
+    raw = raw.slice(0, qAt);
+  }
+  raw = raw.replace(/\.html$/i, "");
+  if (!raw || raw === "/index") raw = "/";
+  else raw = raw.replace(/\/+$/, "") || "/";
+  return `${raw}${search}${hash}`;
+}
+
 export function safeNextPath(value) {
   if (value == null || value === "") return null;
   let path = String(value);
@@ -66,7 +86,7 @@ export function safeNextPath(value) {
   }
   if (!path.startsWith("/") || path.startsWith("//") || /[a-z]+:/i.test(path)) return null;
   if (path.includes("\\")) return null;
-  return path;
+  return canonicalPublicPath(path);
 }
 
 export function postLoginPath(me, next) {
@@ -155,13 +175,13 @@ export function applyAudienceChrome(root, options) {
 export const OFFICE_PATHS = ["/admin", "/back-office", "/office"];
 
 export function isOfficePath(pathname) {
-  const path = currentPathOf(pathname);
+  const path = canonicalPublicPath(currentPathOf(pathname));
   return OFFICE_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
 /** Multi-page HTML (not the voter SPA). Use a full load, not history.pushState. */
 export function isStandaloneHtmlPath(pathname) {
-  const path = currentPathOf(pathname);
+  const path = canonicalPublicPath(currentPathOf(pathname));
   return (
     path === "/admin" ||
     path.startsWith("/admin/") ||

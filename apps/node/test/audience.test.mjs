@@ -131,6 +131,13 @@ describe('audience helpers and FAQ', () => {
       postLoginPath({ user: { role: 'platform_admin' }, officer: true, audience: 'officer' }, '/admin'),
       '/admin',
     );
+    assert.equal(
+      postLoginPath({ user: { role: 'platform_admin' }, officer: true, audience: 'officer' }, '/admin.html'),
+      '/admin',
+    );
+    assert.equal(safeNextPath('/admin.html'), '/admin');
+    assert.equal(safeNextPath('/back-office.html'), '/back-office');
+    assert.equal(safeNextPath('/index.html'), '/');
     assert.equal(safeNextPath('https://evil.example/'), null);
     assert.equal(safeNextPath('//evil.example'), null);
   });
@@ -211,6 +218,13 @@ describe('audience HTTP routes and admin gates', () => {
     }
     const stillPublic = await api('GET', '/about', { redirect: 'manual' });
     assert.equal(stillPublic.status, 200);
+    const htmlUrl = await api('GET', '/admin.html', { redirect: 'manual' });
+    assert.equal(htmlUrl.status, 301);
+    assert.equal(htmlUrl.res.headers.get('location'), '/admin');
+    const followed = await api('GET', '/admin.html', { redirect: 'follow' });
+    assert.doesNotMatch(followed.res.url, /\.html/i);
+    assert.match(followed.res.url, /\/signin\?next=/);
+    assert.match(decodeURIComponent(new URL(followed.res.url).searchParams.get('next') || ''), /^\/admin$/);
   });
 
   test('POST /api/elections still requires auth', async () => {
@@ -247,6 +261,12 @@ describe('audience HTTP routes and admin gates', () => {
     assert.equal(officerAdmin.status, 200);
     assert.match(officerAdmin.text, /office-work/);
     assert.match(officerAdmin.text, /Host this Node/);
+    assert.match(officerAdmin.text, /canonical-url\.js/);
+
+    const officerFromHtml = await api('GET', '/admin.html', { jar: adminJar, redirect: 'follow' });
+    assert.equal(officerFromHtml.status, 200);
+    assert.doesNotMatch(officerFromHtml.res.url, /\.html/i);
+    assert.match(officerFromHtml.res.url, /\/admin$/);
 
     const officerOffice = await api('GET', '/office', { jar: adminJar, redirect: 'manual' });
     assert.equal(officerOffice.status, 200);

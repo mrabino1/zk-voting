@@ -250,6 +250,7 @@ describe('pages HTTP CMS and clean URLs', () => {
       const page = await api('GET', from, { redirect: 'manual' });
       assert.equal(page.status, 301, from);
       assert.equal(page.res.headers.get('location'), to, from);
+      assert.notEqual(page.status, 200, from);
     }
     const adminClean = await api('GET', '/admin', { jar: adminJar, redirect: 'manual' });
     assert.equal(adminClean.status, 200);
