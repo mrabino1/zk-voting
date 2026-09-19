@@ -10,7 +10,13 @@ import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
 import { questionsOf, typeLabel } from "./ballot.js";
 import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { renderResults, renderResultsIndex } from "./results.js";
-import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
+import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
+import {
+  applyAudienceChrome,
+  audienceOf,
+  homeDestination,
+} from "./audience.js";
+import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
@@ -469,17 +475,12 @@ export async function loadMe() {
   }
 }
 
-function updateNav(routeName) {
-  document.querySelectorAll(".nav-main a[data-nav]").forEach((a) => {
-    const href = a.getAttribute("href");
-    const current =
-      (routeName === "home" && href === "/") ||
-      (routeName === "register" && href === "/register") ||
-      (routeName === "vote" && href === "/") ||
-      ((routeName === "results" || routeName === "resultsIndex") && href === "/elections") ||
-      ((routeName === "election-info" || routeName === "option-info") && href === "/");
-    if (current) a.setAttribute("aria-current", "page");
-    else a.removeAttribute("aria-current");
+function updateNav(route, me) {
+  applyAudienceChrome(document, {
+    audience: audienceOf(me),
+    currentPath: route.path,
+    routeName: route.name,
+    spa: true,
   });
 }
 
@@ -507,215 +508,186 @@ function ctx() {
     setTitle,
     SAMPLE_QUESTIONS,
     mountSignInPanel,
+    me: null,
   };
 }
 
-function renderHome(main, route, bundle) {
+function electionCard(election, me, store) {
+  const st = electionStateInfo(election.state);
+  const vs = voterStatusForElection(election, me, store);
+  const canVote = election.state === 2 && vs.key !== "disqualified" && vs.key !== "recorded";
+  const canRegister = election.state <= 2 && vs.key === "not_registered";
+  return h(
+    "article",
+    { class: "election-card", role: "listitem" },
+    h("p", { class: "kicker", text: election.jurisdiction }),
+    h("h2", { text: election.title }),
+    h(
+      "p",
+      { class: "cluster" },
+      h("span", { class: `status-pill ${st.className}`, text: st.label }),
+      h("span", { class: `status-pill ${vs.className}`, text: vs.label })
+    ),
+    h(
+      "ul",
+      { class: "meta-list" },
+      h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
+      h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+      election.shortCode
+        ? h(
+            "li",
+            {},
+            h("span", { class: "lbl", text: "Short link" }),
+            h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
+          )
+        : null,
+      h(
+        "li",
+        {},
+        h("span", { class: "lbl", text: "Roll" }),
+        h(
+          "span",
+          {
+            text: `${election.participantCount} registered${
+              election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
+            }`,
+          }
+        )
+      ),
+      h(
+        "li",
+        {},
+        h("span", { class: "lbl", text: "Questions" }),
+        h("span", { text: String(election.questionCount || election.questions?.length || "—") })
+      )
+    ),
+    election.description ? h("p", { text: election.description }) : null,
+    aspectPreview(election, h),
+    h(
+      "div",
+      { class: "cluster" },
+      canVote
+        ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
+        : vs.key === "recorded"
+          ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
+          : election.state === 2
+            ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Open ballot" })
+            : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
+      canRegister
+        ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+        : null,
+      h(
+        "a",
+        {
+          class: election.state >= 4 ? "btn" : "btn btn-secondary",
+          href: `/elections/${encodeURIComponent(election.id)}/results`,
+          "data-nav": "",
+          text: election.state >= 4 ? "Results" : "Results status",
+        }
+      ),
+      h("a", {
+        class: "btn btn-secondary",
+        href: `/elections/${encodeURIComponent(election.id)}/info`,
+        "data-nav": "",
+        text: "Candidate / measure info",
+      })
+    )
+  );
+}
+
+function electionGrid(elections, me, store, emptyText) {
+  if (!elections.length) {
+    return h("div", { class: "notice" }, h("p", { text: emptyText }));
+  }
+  return h("div", { class: "grid-cards", role: "list" }, ...elections.map((election) => electionCard(election, me, store)));
+}
+
+function renderDesk(main, route, bundle) {
   const { elections, source, me, walletRecord, store } = bundle;
+  const signedIn = Boolean(me?.user);
   const openCount = elections.filter((e) => e.state === 2).length;
   const walletLine = walletRecord?.staleWrap
     ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
     : walletRecord
       ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
       : "No passkey on this device yet.";
-
-  const list =
-    elections.length === 0
-      ? h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }))
-      : h(
-          "div",
-          { class: "grid-cards", role: "list" },
-          ...elections.map((election) => {
-            const st = electionStateInfo(election.state);
-            const vs = voterStatusForElection(election, me, store);
-            const canVote = election.state === 2 && vs.key !== "disqualified" && vs.key !== "recorded";
-            const canRegister = election.state <= 2 && vs.key === "not_registered";
-            return h(
-              "article",
-              { class: "election-card", role: "listitem" },
-              h("p", { class: "kicker", text: election.jurisdiction }),
-              h("h2", { text: election.title }),
-              h(
-                "p",
-                { class: "cluster" },
-                h("span", { class: `status-pill ${st.className}`, text: st.label }),
-                h("span", { class: `status-pill ${vs.className}`, text: vs.label })
-              ),
-              h(
-                "ul",
-                { class: "meta-list" },
-                h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-                election.shortCode
-                  ? h(
-                      "li",
-                      {},
-                      h("span", { class: "lbl", text: "Short link" }),
-                      h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
-                    )
-                  : null,
-                h(
-                  "li",
-                  {},
-                  h("span", { class: "lbl", text: "Roll" }),
-                  h(
-                    "span",
-                    {
-                      text: `${election.participantCount} registered${
-                        election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
-                      }`,
-                    }
-                  )
-                ),
-                h(
-                  "li",
-                  {},
-                  h("span", { class: "lbl", text: "Questions" }),
-                  h("span", { text: String(election.questionCount || election.questions?.length || "—") })
-                )
-              ),
-              election.description ? h("p", { text: election.description }) : null,
-              aspectPreview(election, h),
-              h(
-                "div",
-                { class: "cluster" },
-                canVote
-                  ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
-                  : vs.key === "recorded"
-                    ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
-                    : election.state === 2
-                      ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Open ballot" })
-                      : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
-                canRegister
-                  ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-                  : null,
-                h(
-                  "a",
-                  {
-                    class: election.state >= 4 ? "btn" : "btn btn-secondary",
-                    href: `/elections/${encodeURIComponent(election.id)}/results`,
-                    "data-nav": "",
-                    text: election.state >= 4 ? "Results" : "Results status",
-                  }
-                ),
-                h("a", {
-                  class: "btn btn-secondary",
-                  href: `/elections/${encodeURIComponent(election.id)}/info`,
-                  "data-nav": "",
-                  text: "Candidate / measure info",
-                })
-              )
-            );
-          })
-        );
+  const yours = elections.filter((election) => voterStatusForElection(election, me, store).key !== "not_registered");
+  const others = elections.filter((election) => voterStatusForElection(election, me, store).key === "not_registered");
 
   main.replaceChildren(
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "Voter home" }),
-      h("h1", { text: "Elections on this Node" }),
+      h("p", { class: "kicker", text: "Registered desk" }),
+      h("h1", { text: signedIn ? "Your elections" : "Sign in to your desk" }),
       h(
         "p",
         { class: "lede" },
-        "This is the voter desk for Republic: register with a device passkey, check whether you are on the roll, and mark a ballot while polls are open. Republic is not a commercial product."
+        "This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. Republic is not a commercial product."
       ),
-        h(
-          "div",
-          { class: "notice", role: "status" },
-          h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
-          h("p", { text: walletLine }),
-          me?.user
-            ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
-            : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
-          h(
-            "p",
-            {
-              text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
-            }
-          ),
-        source === "sample"
-          ? h(
-              "p",
-              {
-                text: "Showing the built-in sample roll because /api/elections is not available. When the Node API is up, this list is the live calendar.",
-              }
-            )
-          : null
-      )
-    ),
-    h("div", { id: "sign-in-root" }),
-    list,
-    h("hr", { class: "hr" }),
-    h(
-      "section",
-      { id: "how-it-works", tabindex: "-1" },
-      h("h2", { text: "How this desk works" }),
       h(
         "div",
-        { class: "how-grid" },
-        h(
-          "article",
-          {},
-          h("h3", { text: "1. One person, several ways to prove it" }),
-          h(
-            "p",
-            {
-              text: "Identify yourself with a passkey, a Web3 wallet, or a smart-card digital ID. You may verify several Ethereum addresses internally; only one is active. The vote Merkle leaf is still an identity commitment, never that address and never a seed phrase.",
-            }
+        { class: "notice", role: "status" },
+        h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
+        h("p", { text: walletLine }),
+        me?.user
+          ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
+          : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
+        h("p", {
+          text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
+        }),
+        source === "sample"
+          ? h("p", {
+              text: "Showing the built-in sample roll because /api/elections is not available. When the Node API is up, this list is the live calendar.",
+            })
+          : null
+      ),
+      signedIn
+        ? h(
+            "div",
+            { class: "cta-row" },
+            h("a", { class: "btn", href: "/register", "data-nav": "", text: "Register for more elections" }),
+            h("a", { class: "btn btn-secondary", href: "/elections", "data-nav": "", text: "All results" }),
+            audienceOf(me) === "officer"
+              ? h("a", { class: "btn btn-secondary", href: "/office", "data-nav": "", text: "Admin hub" })
+              : null,
+            h("button", {
+              class: "btn btn-secondary",
+              type: "button",
+              text: "Sign out",
+              onClick: async () => {
+                await logout();
+                navigate("/");
+              },
+            })
           )
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "2. The roll stores a commitment" }),
-          h(
-            "p",
-            {
-              text: "The public tree holds an identity commitment hex, not your name and not the trapdoor. A coercer who sees that you registered still cannot read your choice.",
-            }
-          )
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "3. Registered is not the same as eligible" }),
-          h(
-            "p",
-            {
-              text: "A clerk or disqualification officer may bar a registered person for a coded reason (residency, court order, duplicate identity, and others). The code is public; the ballot is not.",
-            }
-          )
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "4. The relay pays gas" }),
-          h(
-            "p",
-            {
-              text: "You authorize a UserOp with the passkey. The Node relays it; the jurisdiction paymaster sponsors L2 gas. The bundler is the visible sender, not your local address.",
-            }
-          )
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "5. Proofs wait for the hour to close" }),
-          h(
-            "p",
-            {
-              text: "Your ballot is accepted immediately so the nullifier cannot be reused. Dashboards and the explorer only show that vote after the hour that contained it has closed, so walking out of a voting office cannot be matched to a live increase in any jurisdiction.",
-            }
-          )
-        )
+        : null
+    ),
+    signedIn ? null : h("div", { id: "sign-in-root" }),
+    h(
+      "section",
+      { "aria-labelledby": "identity-heading" },
+      h("h2", { id: "identity-heading", text: "Identity status" }),
+      renderDeviceStatus(walletRecord, me, store)
+    ),
+    h(
+      "section",
+      { "aria-labelledby": "yours-heading" },
+      h("h2", { id: "yours-heading", text: "Elections you are on" }),
+      electionGrid(
+        yours,
+        me,
+        store,
+        signedIn
+          ? "You are not on a roll for any published election yet. Register below."
+          : "Sign in to see elections you are registered or eligible for."
       )
     ),
     h(
       "section",
-      {},
-      h("h2", { text: "Your status on this device" }),
-      renderDeviceStatus(walletRecord, me, store)
+      { "aria-labelledby": "more-heading" },
+      h("h2", { id: "more-heading", text: "Register for more elections" }),
+      electionGrid(others, me, store, "No additional published elections on this Node.")
     )
   );
   const signInRoot = main.querySelector("#sign-in-root");
@@ -788,60 +760,87 @@ function renderDeviceStatus(walletRecord, me, store) {
   );
 }
 
-function renderNotFound(main, route) {
+function renderNotFound(main, route, me) {
+  const home = homeDestination(audienceOf(me));
   main.replaceChildren(
     h("div", { class: "page-head" }, h("h1", { text: "Page not found" }), h("p", { text: `No voter page at ${route.path}.` })),
-    h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }))
+    h("p", {}, h("a", { class: "btn", href: home, "data-nav": "", text: "Return home" }))
   );
+}
+
+async function loadDeskBundle() {
+  const [{ elections, source }, me, walletRecord] = await Promise.all([
+    loadElections(),
+    loadMe(),
+    wallet.getPublicRecord().catch(() => null),
+  ]);
+  return {
+    elections,
+    source,
+    me,
+    walletRecord,
+    store: readVoterStore(),
+  };
 }
 
 async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
-  updateNav(route.name);
   main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
   try {
+    const meHint = await loadMe();
+    updateNav(route, meHint);
+    const context = { ...ctx(), route, me: meHint };
+
     if (route.name === "home") {
-      setTitle("Elections");
-      const [{ elections, source }, me, walletRecord] = await Promise.all([
-        loadElections(),
-        loadMe(),
-        wallet.getPublicRecord().catch(() => null),
-      ]);
-      renderHome(main, route, {
-        elections,
-        source,
-        me,
-        walletRecord,
-        store: readVoterStore(),
-      });
+      const audience = audienceOf(meHint);
+      if (audience !== "public") {
+        navigate("/me", { replace: true });
+        return;
+      }
+      const bundle = await loadDeskBundle();
+      renderPublicHome(main, { ...context, me: bundle.me }, { ...bundle, audience: "public" });
+    } else if (route.name === "publicHome") {
+      const bundle = await loadDeskBundle();
+      renderPublicHome(main, { ...context, me: bundle.me }, { ...bundle, audience: audienceOf(bundle.me) });
+    } else if (route.name === "desk") {
+      setTitle("My desk");
+      const bundle = await loadDeskBundle();
+      renderDesk(main, route, bundle);
+    } else if (route.name === "about") {
+      renderAbout(main, context);
+    } else if (route.name === "faq") {
+      renderFaq(main, context);
+    } else if (route.name === "signin") {
+      await renderSignIn(main, context);
+    } else if (route.name === "office") {
+      renderOffice(main, context, { me: meHint });
     } else if (route.name === "register") {
       setTitle("Register");
-      await renderRegister(main, { ...ctx(), route });
+      await renderRegister(main, context);
     } else if (route.name === "vote") {
       setTitle("Ballot");
-      await renderVote(main, { ...ctx(), route, electionId: route.params.id });
+      await renderVote(main, { ...context, electionId: route.params.id });
     } else if (route.name === "results") {
       setTitle("Results");
-      await renderResults(main, { ...ctx(), route, electionId: route.params.id });
+      await renderResults(main, { ...context, electionId: route.params.id });
     } else if (route.name === "resultsIndex") {
       setTitle("Results");
-      await renderResultsIndex(main, { ...ctx(), route });
+      await renderResultsIndex(main, context);
     } else if (route.name === "election-info") {
       setTitle("Ballot information");
-      await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });
+      await renderElectionInfo(main, { ...context, electionId: route.params.id });
     } else if (route.name === "option-info") {
       setTitle("Option information");
       await renderOptionInfo(main, {
-        ...ctx(),
-        route,
+        ...context,
         electionId: route.params.id,
         questionId: route.params.questionId,
         optionId: route.params.optionId,
       });
     } else {
       setTitle("Not found");
-      renderNotFound(main, route);
+      renderNotFound(main, route, meHint);
     }
   } catch (err) {
     main.replaceChildren(
@@ -850,7 +849,7 @@ async function renderRoute(route) {
         { class: "notice notice-error", role: "alert" },
         h("p", { text: err.message || "Something went wrong loading this page." })
       ),
-      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }))
+      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return home" }))
     );
   }
   main.focus({ preventScroll: true });

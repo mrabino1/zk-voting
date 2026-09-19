@@ -39,11 +39,10 @@
         </a>
         <nav class="nav-main" aria-label="Primary">
           <ul>
-            <li><a href="/">Elections</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/signin">Sign in</a></li>
             <li><a href="/register">Register</a></li>
-            <li><a href="/back-office" aria-current="page">Back office</a></li>
-            <li><a href="/explorer">Explorer</a></li>
-            <li><a href="/admin">Admin</a></li>
           </ul>
         </nav>
         <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
@@ -53,7 +52,7 @@
 
     <main id="main" class="site-main" tabindex="-1">
       <header class="page-head">
-        <p class="kicker">Election officials</p>
+        <p class="kicker">Voting admin</p>
         <h1>Back office</h1>
         <p class="lede">
           Clerks stand up elections. Registrars insert identity commitments (never names).
@@ -69,6 +68,26 @@
         </aside>
         <p class="session-line" id="me-line">Checking session…</p>
       </header>
+
+      <div id="officer-gate" class="audience-gate" hidden>
+        <div class="panel">
+          <h2>Officer access required</h2>
+          <p id="officer-gate-copy">This desk is for election officials. Sign in with an officer session.</p>
+          <div class="cta-row">
+            <a class="btn" href="/signin?next=/back-office">Sign in</a>
+            <a class="btn btn-secondary" href="/me">My desk</a>
+            <button class="btn btn-secondary" type="button" id="officer-gate-signout">Sign out</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="office-work">
+      <nav class="office-hub" aria-label="Voting admin">
+        <a href="/office">Admin hub</a>
+        <a href="/back-office" aria-current="page">Elections, roll, tally</a>
+        <a href="/admin">Jurisdictions and roles</a>
+        <a href="/explorer">Explorer</a>
+      </nav>
 
       <div
         id="sign-in-root"
@@ -411,6 +430,7 @@
           <li class="empty">Loading…</li>
         </ul>
       </section>
+      </div>
     </main>
 
     <footer class="site-footer">
@@ -423,6 +443,7 @@
     </footer>
     <script src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
+    <script type="module" src="/office-gate.js"></script>
     <script src="/back-office.js" defer></script>
   </body>
 </html>

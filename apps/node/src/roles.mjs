@@ -23,7 +23,25 @@ export function isRole(role) {
 }
 
 export function isOfficerRole(role) {
-  return OFFICER_ROLES.includes(role);
+  return OFFICER_ROLES.includes(String(role || '').toLowerCase());
+}
+
+/**
+ * Election officials: platform_admin (global) or a jurisdiction grant
+ * (clerk / registrar / disqualification_officer / tally_operator).
+ * A global user.role of those officer names also counts (dev-login tests).
+ */
+export function userIsOfficer(user, jurisdictionRoles = []) {
+  if (!user) return false;
+  const role = String(user.role || '').toLowerCase();
+  if (role === 'platform_admin') return true;
+  if (OFFICER_ROLES.includes(role)) return true;
+  return (jurisdictionRoles || []).some((grant) => isOfficerRole(grant?.role));
+}
+
+export function audienceOfUser(user, jurisdictionRoles = []) {
+  if (!user) return 'public';
+  return userIsOfficer(user, jurisdictionRoles) ? 'officer' : 'registered';
 }
 
 export function publicUser(user) {

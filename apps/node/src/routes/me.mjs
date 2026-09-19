@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
+import { audienceOfUser, userIsOfficer } from '../roles.mjs';
 
 function expandedRoles(store, user) {
   if (!user) return [];
@@ -49,6 +50,8 @@ export function meRouter(deps) {
     const jurisdictionRoles = req.user ? store.listJurisdictionRolesForUser(req.user) : [];
     const roles = user ? expandedRoles(store, req.user) : [];
     const elections = electionsMap(store, req.user);
+    const officer = userIsOfficer(req.user, jurisdictionRoles);
+    const audience = audienceOfUser(req.user, jurisdictionRoles);
     const me = user
       ? {
           ...user,
@@ -57,6 +60,8 @@ export function meRouter(deps) {
           jurisdictionRoles,
           elections,
           identity: publicIdentity(req.user),
+          officer,
+          audience,
         }
       : null;
     return {
@@ -66,6 +71,8 @@ export function meRouter(deps) {
       roles,
       jurisdictionRoles,
       elections,
+      officer,
+      audience,
       identity: req.user ? publicIdentity(req.user) : null,
       unreadCount: notifications.filter((n) => !n.read).length,
     };
