@@ -100,6 +100,7 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/terms')).name, 'terms');
     assert.equal(parseRoute(loc('/receipt')).name, 'receipt');
     assert.equal(parseRoute(loc('/outcomes')).name, 'outcomes');
+    assert.equal(parseRoute(loc('/outcomes/verify')).name, 'outcomeVerify');
     assert.equal(parseRoute(loc('/monitor')).name, 'outcomes');
     assert.equal(parseRoute(loc('/signin')).name, 'signin');
     assert.equal(parseRoute(loc('/me')).name, 'desk');

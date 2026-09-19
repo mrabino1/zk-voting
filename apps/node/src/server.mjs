@@ -33,6 +33,7 @@ import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
 import { outcomesRouter } from './routes/outcomes.mjs';
+import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
@@ -108,6 +109,17 @@ function officePageGuard() {
 function electionShortLinks(store) {
   return function shortLinkMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const outcomeQr = /^\/o\/([^/]+)\/?$/.exec(req.path);
+    if (outcomeQr) {
+      let token = outcomeQr[1];
+      try {
+        token = decodeURIComponent(token);
+      } catch {
+        /* keep raw */
+      }
+      res.redirect(302, `/outcomes/verify?id=${encodeURIComponent(token)}`);
+      return;
+    }
     const match = /^\/(v|e)\/([^/]+)\/?$/.exec(req.path);
     if (!match) return next();
     let code = match[2];
@@ -199,6 +211,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));
   app.use('/api', receiptsRouter(deps));
+  app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', (_req, res) => {

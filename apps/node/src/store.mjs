@@ -116,6 +116,10 @@ function emptyData() {
     pages: [],
     site: defaultSite(),
     termsAcceptances: [],
+    outcomeSubscriptions: [],
+    outcomeReports: [],
+    outcomeReportDeliveries: [],
+    outcomeReportTemplate: null,
   };
 }
 
@@ -160,6 +164,11 @@ export class Store {
       data.pages = Array.isArray(data.pages) ? data.pages : [];
       data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
       data.receipts = Array.isArray(data.receipts) ? data.receipts : [];
+      data.outcomeSubscriptions = Array.isArray(data.outcomeSubscriptions) ? data.outcomeSubscriptions : [];
+      data.outcomeReports = Array.isArray(data.outcomeReports) ? data.outcomeReports : [];
+      data.outcomeReportDeliveries = Array.isArray(data.outcomeReportDeliveries)
+        ? data.outcomeReportDeliveries
+        : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
@@ -184,6 +193,9 @@ export class Store {
     if (!Array.isArray(store.data.termsAcceptances)) store.data.termsAcceptances = [];
     if (!Array.isArray(store.data.receipts)) store.data.receipts = [];
     if (!Array.isArray(store.data.registrationRequests)) store.data.registrationRequests = [];
+    if (!Array.isArray(store.data.outcomeSubscriptions)) store.data.outcomeSubscriptions = [];
+    if (!Array.isArray(store.data.outcomeReports)) store.data.outcomeReports = [];
+    if (!Array.isArray(store.data.outcomeReportDeliveries)) store.data.outcomeReportDeliveries = [];
     store.data.meta = store.data.meta || {};
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 6);
     await store.persist();
@@ -1885,6 +1897,142 @@ export class Store {
     this.data.pages = this.data.pages.filter((p) => p.id !== page.id);
     await this.persist();
     return page;
+  }
+
+  getOutcomeReportTemplate() {
+    return this.data.outcomeReportTemplate && typeof this.data.outcomeReportTemplate === 'object'
+      ? this.data.outcomeReportTemplate
+      : {
+          heading: 'Official election outcome',
+          letterhead: 'Office of civic elections',
+          intro:
+            'This certified report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Individual choices are never shown.',
+          footer: 'NOT FOR PROFIT — civic public good. Not a commercial product.',
+          contactLine: '',
+          showJurisdiction: true,
+        };
+  }
+
+  async updateOutcomeReportTemplate(template) {
+    this.data.outcomeReportTemplate = template;
+    this.data.outcomeReportTemplate.updatedAt = new Date().toISOString();
+    await this.persist();
+    return this.getOutcomeReportTemplate();
+  }
+
+  findOutcomeSubscription(userId, electionId) {
+    if (!Array.isArray(this.data.outcomeSubscriptions)) this.data.outcomeSubscriptions = [];
+    return (
+      this.data.outcomeSubscriptions.find(
+        (s) => s.userId === userId && String(s.electionId) === String(electionId),
+      ) || null
+    );
+  }
+
+  listOutcomeSubscriptions(userId) {
+    if (!Array.isArray(this.data.outcomeSubscriptions)) this.data.outcomeSubscriptions = [];
+    return this.data.outcomeSubscriptions
+      .filter((s) => s.userId === userId)
+      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+  }
+
+  listActiveOutcomeSubscribers(electionId) {
+    if (!Array.isArray(this.data.outcomeSubscriptions)) this.data.outcomeSubscriptions = [];
+    return this.data.outcomeSubscriptions.filter(
+      (s) => String(s.electionId) === String(electionId) && s.subscribed !== false,
+    );
+  }
+
+  async upsertOutcomeSubscription({ userId, electionId, subscribed = true, source = 'manual' }) {
+    if (!userId) throw new HttpError(400, 'userId required');
+    this.requireElection(electionId);
+    if (!Array.isArray(this.data.outcomeSubscriptions)) this.data.outcomeSubscriptions = [];
+    const now = new Date().toISOString();
+    let row = this.findOutcomeSubscription(userId, electionId);
+    if (!row) {
+      row = {
+        id: randomUUID(),
+        userId,
+        electionId: String(electionId),
+        subscribed: Boolean(subscribed),
+        source,
+        createdAt: now,
+        updatedAt: now,
+        unsubscribedAt: subscribed ? null : now,
+      };
+      this.data.outcomeSubscriptions.push(row);
+    } else {
+      row.subscribed = Boolean(subscribed);
+      row.updatedAt = now;
+      if (!subscribed) row.unsubscribedAt = now;
+      else row.unsubscribedAt = null;
+      if (source && !row.source) row.source = source;
+    }
+    await this.persist();
+    return row;
+  }
+
+  getOutcomeReport(id) {
+    if (!Array.isArray(this.data.outcomeReports)) this.data.outcomeReports = [];
+    const want = String(id || '').trim();
+    if (!want) return null;
+    const compact = want.replace(/-/g, '').toLowerCase();
+    return (
+      this.data.outcomeReports.find((r) => r.id === want) ||
+      this.data.outcomeReports.find((r) => String(r.id).replace(/-/g, '').toLowerCase() === compact) ||
+      null
+    );
+  }
+
+  getOutcomeReportForElection(electionId) {
+    if (!Array.isArray(this.data.outcomeReports)) this.data.outcomeReports = [];
+    const election = this.getElection(electionId);
+    const id = election ? String(election.id) : String(electionId);
+    return this.data.outcomeReports.find((r) => String(r.electionId) === id) || null;
+  }
+
+  findOutcomeReportByPdfSha256(hash) {
+    if (!Array.isArray(this.data.outcomeReports)) this.data.outcomeReports = [];
+    const key = String(hash || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(key)) return null;
+    return this.data.outcomeReports.find((r) => String(r.pdfSha256 || '').toLowerCase() === key) || null;
+  }
+
+  listOutcomeReports() {
+    if (!Array.isArray(this.data.outcomeReports)) this.data.outcomeReports = [];
+    return this.data.outcomeReports.slice().sort((a, b) => String(b.issuedAt || '').localeCompare(String(a.issuedAt || '')));
+  }
+
+  async saveOutcomeReport(row) {
+    if (!Array.isArray(this.data.outcomeReports)) this.data.outcomeReports = [];
+    const existing = this.getOutcomeReport(row.id) || this.getOutcomeReportForElection(row.electionId);
+    if (existing) return existing;
+    this.data.outcomeReports.push(row);
+    await this.persist();
+    return row;
+  }
+
+  hasOutcomeDelivery(reportId, userId) {
+    if (!Array.isArray(this.data.outcomeReportDeliveries)) this.data.outcomeReportDeliveries = [];
+    return this.data.outcomeReportDeliveries.some((d) => d.reportId === reportId && d.userId === userId);
+  }
+
+  async addOutcomeDelivery(row) {
+    if (!Array.isArray(this.data.outcomeReportDeliveries)) this.data.outcomeReportDeliveries = [];
+    if (this.hasOutcomeDelivery(row.reportId, row.userId)) {
+      return this.data.outcomeReportDeliveries.find((d) => d.reportId === row.reportId && d.userId === row.userId);
+    }
+    const rec = {
+      id: randomUUID(),
+      reportId: row.reportId,
+      userId: row.userId,
+      emailHint: row.emailHint || null,
+      emailed: Boolean(row.emailed),
+      createdAt: new Date().toISOString(),
+    };
+    this.data.outcomeReportDeliveries.push(rec);
+    await this.persist();
+    return rec;
   }
 
   voterStatus(electionId, userId) {

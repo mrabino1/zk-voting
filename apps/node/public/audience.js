@@ -144,7 +144,7 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   if (href === "/faq" && routeName === "faq") return true;
   if (href === "/terms" && routeName === "terms") return true;
   if (href === "/receipt" && routeName === "receipt") return true;
-  if (href === "/outcomes" && (routeName === "outcomes" || routeName === "outcome")) return true;
+  if (href === "/outcomes" && (routeName === "outcomes" || routeName === "outcome" || routeName === "outcomeVerify")) return true;
   if (href.startsWith("/p/") && path === href) return true;
   if (href === "/signin" && routeName === "signin") return true;
   if (href === "/register" && routeName === "register") return true;

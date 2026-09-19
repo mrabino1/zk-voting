@@ -40,6 +40,7 @@ import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } 
 import { renderTerms } from "./terms.js";
 import { renderReceiptPortal } from "./receipt.js";
 import { renderOutcomesIndex, renderOutcomesDetail } from "./outcomes.js";
+import { renderOutcomeVerify } from "./outcome-verify.js";
 import {
   loadPublicCms,
   renderCmsPage,
@@ -638,7 +639,7 @@ function electionGrid(elections, me, store, emptyText) {
 }
 
 function renderDesk(main, route, bundle) {
-  const { elections, source, me, walletRecord, store } = bundle;
+  const { elections, source, me, walletRecord, store, outcomeSubscriptions } = bundle;
   const signedIn = Boolean(me?.user);
   const openCount = elections.filter((e) => e.state === 2).length;
   const walletLine = walletRecord?.staleWrap
@@ -685,6 +686,7 @@ function renderDesk(main, route, bundle) {
             h("a", { class: "btn", href: "/register", "data-nav": "", text: "Register for more elections" }),
             h("a", { class: "btn btn-secondary", href: "/receipt", "data-nav": "", text: "Check a receipt" }),
             h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "Outcomes monitor" }),
+            h("a", { class: "btn btn-secondary", href: "/outcomes/verify", "data-nav": "", text: "Verify outcome PDF" }),
             h("a", { class: "btn btn-secondary", href: "/elections", "data-nav": "", text: "All results" }),
             audienceOf(me) === "officer"
               ? h("a", { class: "btn btn-secondary", href: "/office", "data-nav": "", text: "Admin hub" })
@@ -707,6 +709,22 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "identity-heading" },
       h("h2", { id: "identity-heading", text: "Identity status" }),
       renderDeviceStatus(walletRecord, me, store, {
+        api,
+        onRefresh: async () => {
+          const next = await loadDeskBundle();
+          renderDesk(main, route, next);
+        },
+      })
+    ),
+    h(
+      "section",
+      { "aria-labelledby": "outcome-sub-heading" },
+      h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
+      h("p", {
+        text: "When you vote, you are subscribed to that contest’s official PDF by default. The report is emailed only after voting time has completely expired and a certified tally is posted. Unsubscribe here only if you do not want that file.",
+      }),
+      renderOutcomeSubscriptions(outcomeSubscriptions, {
+        h,
         api,
         onRefresh: async () => {
           const next = await loadDeskBundle();
@@ -743,6 +761,71 @@ function renderDesk(main, route, bundle) {
     );
     mountSignInPanel(signInRoot);
   }
+}
+
+function renderOutcomeSubscriptions(payload, { h, api, onRefresh } = {}) {
+  const rows = Array.isArray(payload?.subscriptions)
+    ? payload.subscriptions
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  if (!payload) {
+    return h("p", { class: "field-hint", text: "Sign in to manage official outcome PDFs for contests you vote in." });
+  }
+  if (!rows.length) {
+    return h("p", {
+      class: "field-hint",
+      text: "No outcome subscriptions yet. After you vote, this contest appears here as subscribed. You can also verify a PDF at /outcomes/verify.",
+    });
+  }
+  return h(
+    "ul",
+    { class: "stack" },
+    ...rows.map((row) =>
+      h(
+        "li",
+        { class: "panel" },
+        h("p", { text: row.electionTitle || row.electionId }),
+        h(
+          "p",
+          { class: "field-hint", text: row.subscribed ? "Subscribed (default after you vote)." : "Unsubscribed — you will not be emailed this official PDF." }
+        ),
+        h(
+          "div",
+          { class: "cluster" },
+          h("button", {
+            class: "btn btn-secondary",
+            type: "button",
+            text: row.subscribed ? "Unsubscribe" : "Subscribe",
+            onClick: async () => {
+              try {
+                await api(`/api/me/outcome-subscriptions/${encodeURIComponent(row.electionId)}`, {
+                  method: "PUT",
+                  body: { subscribed: !row.subscribed },
+                });
+                await onRefresh?.();
+              } catch (err) {
+                announce(err.message || "Could not update subscription.");
+              }
+            },
+          }),
+          row.reportIssued
+            ? h("a", {
+                class: "btn",
+                href: `/api/outcomes/reports/${encodeURIComponent(row.electionId)}/pdf`,
+                text: "Download official PDF",
+              })
+            : null,
+          h("a", {
+            class: "btn btn-secondary",
+            href: "/outcomes/verify",
+            "data-nav": "",
+            text: "Verify a PDF",
+          })
+        )
+      )
+    )
+  );
 }
 
 function aspectPreview(election, h) {
@@ -982,11 +1065,20 @@ async function loadDeskBundle() {
     loadMe(),
     wallet.getPublicRecord().catch(() => null),
   ]);
+  let outcomeSubscriptions = null;
+  if (me?.user) {
+    try {
+      outcomeSubscriptions = await api("/api/me/outcome-subscriptions");
+    } catch {
+      outcomeSubscriptions = { subscriptions: [] };
+    }
+  }
   return {
     elections,
     source,
     me,
     walletRecord,
+    outcomeSubscriptions,
     store: readVoterStore(),
   };
 }
@@ -1025,6 +1117,8 @@ async function renderRoute(route) {
       await renderTerms(main, context);
     } else if (route.name === "receipt") {
       await renderReceiptPortal(main, context);
+    } else if (route.name === "outcomeVerify") {
+      await renderOutcomeVerify(main, context);
     } else if (route.name === "outcomes") {
       await renderOutcomesIndex(main, context);
     } else if (route.name === "outcome") {

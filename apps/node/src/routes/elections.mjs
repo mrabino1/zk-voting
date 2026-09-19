@@ -30,6 +30,11 @@ import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.
 import { DEMO_KEY_WARNING, publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash } from '../l1Certify.mjs';
+import {
+  dispatchOfficialOutcomeReports,
+  resolveVoterForOutcomeSubscribe,
+  subscribeVoterToOutcome,
+} from '../outcomeReports.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -581,6 +586,19 @@ export function electionsRouter(deps) {
         now: config.nowFn(),
         intervalSeconds: config.disclosureIntervalSeconds,
       });
+      const election = store.getElection(req.params.id);
+      const voterId = resolveVoterForOutcomeSubscribe(store, {
+        identityCommitment: req.body?.identityCommitment,
+        userId: req.user?.id,
+        electionId: election?.id || req.params.id,
+      });
+      if (voterId && election) {
+        await subscribeVoterToOutcome(store, {
+          userId: voterId,
+          electionId: election.id,
+          source: 'vote-default',
+        });
+      }
       res.status(201).json({
         ok: true,
         accepted: true,
@@ -814,6 +832,7 @@ export function electionsRouter(deps) {
         }
       }
       const fresh = store.requireElection(tallied.id);
+      await dispatchOfficialOutcomeReports(deps, { electionId: fresh.id });
       res.json({
         ok: true,
         election: presentElection(fresh, deps),

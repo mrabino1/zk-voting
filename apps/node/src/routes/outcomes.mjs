@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { publishDue } from '../electionState.mjs';
 import { presentOutcomeDetail, presentOutcomesIndex } from '../outcomes.mjs';
+import { dispatchOfficialOutcomeReports } from '../outcomeReports.mjs';
 
 export function outcomesRouter(deps) {
   const router = Router();
@@ -15,6 +16,7 @@ export function outcomesRouter(deps) {
     '/outcomes',
     asyncHandler(async (_req, res) => {
       const { now } = await publishDue(deps);
+      await dispatchOfficialOutcomeReports(deps, { now }).catch(() => null);
       res.json(presentOutcomesIndex(deps, { now }));
     }),
   );

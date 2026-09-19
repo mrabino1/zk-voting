@@ -104,6 +104,7 @@ describe('cms helpers', () => {
     assert.equal(normalizeSlug('proof'), '');
     assert.equal(normalizeSlug('outcomes'), '');
     assert.equal(normalizeSlug('monitor'), '');
+    assert.equal(normalizeSlug('o'), '');
     assert.equal(sanitizeAddress('0x1111111111111111111111111111111111111111'), '0x1111111111111111111111111111111111111111');
     assert.equal(sanitizeAddress('not-an-address'), null);
     assert.equal(sanitizeAddress(''), '');

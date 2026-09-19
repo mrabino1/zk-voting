@@ -119,7 +119,12 @@ confirm a count before the hour closes; looking up public hashes still waits
 for disclosure. Double voting remains impossible. A separate public `/outcomes`
 portal monitors every election before, during, and after voting from chain
 status, running the same auditor pack plus freeze-root and L1 checks. During
-the open window it still does not invent unofficial option counts. This is
+the open window it still does not invent unofficial option counts. After
+`cutoffTime` has passed and a tally is posted, the Node issues a locked
+**official outcome PDF** (option counts, start, end) with a required QR and
+SHA-256 / HMAC authenticity page; `/outcomes/verify` checks the file was not
+changed. Voters are subscribed to that PDF by default when they vote and may
+unsubscribe on `/me`. This is
 **not** MACI and
 **not** last-vote-counts: a coercer who can force the first (and only) submit
 still wins that ballot.
@@ -686,6 +691,15 @@ GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
 GET  /api/outcomes                  (public monitor: every election before/during/after)
 GET  /api/outcomes/:id              (verification + certified outcome after tally)
+GET  /api/outcomes/reports          (issued official outcome PDFs)
+GET  /api/outcomes/reports/:id
+GET  /api/outcomes/reports/:id/pdf  (locked official PDF; X-Pdf-Protected)
+POST /api/outcomes/verify           (drop PDF or report id; pdfUnmodified)
+GET  /api/me/outcome-subscriptions  (default-on after vote; unsubscribe by exception)
+PUT  /api/me/outcome-subscriptions/:electionId
+GET  /api/admin/outcome-report-template
+PATCH /api/admin/outcome-report-template  (letterhead/intro; QR+hash always on)
+POST /api/admin/outcome-report-template/preview
 POST /api/jurisdictions/:id/roles   (platform_admin; per-jurisdiction officer grants)
 DELETE /api/jurisdictions/:id/roles
 GET  /api/me
