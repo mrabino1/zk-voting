@@ -19,6 +19,7 @@ import {
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 import { renderTerms } from "./terms.js";
 import { renderReceiptPortal } from "./receipt.js";
+import { renderOutcomesIndex, renderOutcomesDetail } from "./outcomes.js";
 import {
   loadPublicCms,
   renderCmsPage,
@@ -663,6 +664,7 @@ function renderDesk(main, route, bundle) {
             { class: "cta-row" },
             h("a", { class: "btn", href: "/register", "data-nav": "", text: "Register for more elections" }),
             h("a", { class: "btn btn-secondary", href: "/receipt", "data-nav": "", text: "Check a receipt" }),
+            h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "Outcomes monitor" }),
             h("a", { class: "btn btn-secondary", href: "/elections", "data-nav": "", text: "All results" }),
             audienceOf(me) === "officer"
               ? h("a", { class: "btn btn-secondary", href: "/office", "data-nav": "", text: "Admin hub" })
@@ -834,6 +836,11 @@ async function renderRoute(route) {
       await renderTerms(main, context);
     } else if (route.name === "receipt") {
       await renderReceiptPortal(main, context);
+    } else if (route.name === "outcomes") {
+      await renderOutcomesIndex(main, context);
+    } else if (route.name === "outcome") {
+      setTitle("Election outcome");
+      await renderOutcomesDetail(main, { ...context, electionId: route.params.id });
     } else if (route.name === "cmsPage") {
       let page = (cms.pages || []).find((p) => p.slug === route.params.slug) || null;
       if (!page) {

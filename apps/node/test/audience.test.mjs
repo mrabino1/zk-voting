@@ -99,6 +99,8 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/faq')).name, 'faq');
     assert.equal(parseRoute(loc('/terms')).name, 'terms');
     assert.equal(parseRoute(loc('/receipt')).name, 'receipt');
+    assert.equal(parseRoute(loc('/outcomes')).name, 'outcomes');
+    assert.equal(parseRoute(loc('/monitor')).name, 'outcomes');
     assert.equal(parseRoute(loc('/signin')).name, 'signin');
     assert.equal(parseRoute(loc('/me')).name, 'desk');
     assert.equal(parseRoute(loc('/app')).name, 'desk');
@@ -113,6 +115,8 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/v/nbrdge2k3m')).name, 'vote');
     assert.equal(parseRoute(loc(`/elections/${uuid}/results`)).name, 'results');
     assert.equal(parseRoute(loc(`/elections/${uuid}/info`)).name, 'election-info');
+    assert.equal(parseRoute(loc(`/outcomes/${uuid}`)).name, 'outcome');
+    assert.equal(parseRoute(loc(`/outcomes/${uuid}`)).params.id, uuid);
   });
 
   test('logged-out vs logged-in home destination', () => {
@@ -146,9 +150,9 @@ describe('audience helpers and FAQ', () => {
 
   test('nav items differ by audience', () => {
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Terms', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Sign in', 'Register']);
     const voter = mainNav('registered').map((i) => i.label);
-    assert.deepEqual(voter, ['My desk', 'Register', 'Results', 'Receipt', 'Terms']);
+    assert.deepEqual(voter, ['My desk', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms']);
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
@@ -188,7 +192,7 @@ describe('audience HTTP routes and admin gates', () => {
   });
 
   test('public SPA routes render HTML', async () => {
-    for (const url of ['/', '/public', '/about', '/faq', '/terms', '/receipt', '/signin', '/me', '/app', '/register']) {
+    for (const url of ['/', '/public', '/about', '/faq', '/terms', '/receipt', '/outcomes', '/signin', '/me', '/app', '/register']) {
       const page = await api('GET', url);
       assert.equal(page.status, 200, url);
       assert.match(page.res.headers.get('content-type') || '', /html/, url);

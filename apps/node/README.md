@@ -40,7 +40,10 @@ contained the vote has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0`
 in tests). The explorer snapshot lists last closed hour, ballots disclosed so far,
 and a countdown to the next hour close — never a pending-per-election count.
 Independent auditors use `GET /api/elections/:id/artifacts` or `tools/auditor`
-(see `/docs/AUDITOR.md`) — never `apps/node/data/`.
+(see `/docs/AUDITOR.md`) — never `apps/node/data/`. A public `/outcomes` portal
+runs those same checks for every election, grouped before / during / after voting
+from chain status. During the open window it still does not invent unofficial
+option counts.
 
 ---
 
@@ -85,7 +88,7 @@ New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
 `onChainElectionId` on the Node record.
 
-Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/receipt`, `/p/:slug`, `/register`, `/vote/:id`,
+Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/receipt`, `/outcomes`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
 Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.
@@ -221,6 +224,8 @@ GET  /api/receipts/metrics          (disclosed turnout hours; never by candidate
 POST /api/receipts/verify           (paste proof and/or drop PDF; pdfUnmodified)
 POST /api/receipts/email            (holder token; SES body + locked PDF)
 POST /api/receipts/pdf              (holder token; encrypted PDF, X-Pdf-Protected: true)
+GET  /api/outcomes                  (public monitor: every election before/during/after)
+GET  /api/outcomes/:id              (auditor + chain verification; certified counts only after tally)
 ```
 
 Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `republic.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).

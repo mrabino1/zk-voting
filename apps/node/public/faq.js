@@ -93,6 +93,16 @@ export const FAQ_ENTRIES = [
     a: [
       "Open /elections for the list, or /elections/:id/results for one contest (UUID or short code). Results pages are public. Plurality winners are labeled per question. Ranked-choice contests show the IRV winner and round transcript when posted.",
       "Until a tally operator posts counts after cutoff, the page reports status (open, closed, not yet tallied). Choice plaintext never appears there.",
+      "A separate public monitor at /outcomes (alias /monitor) lists every election in before / during / after columns from chain and election state, and runs the auditor pack plus freeze-root and L1 checks. It is not the /receipt portal. During voting it still does not invent unofficial option counts.",
+    ],
+  },
+  {
+    id: "outcomes-monitor",
+    topic: "outcomes",
+    q: "What is the /outcomes portal?",
+    a: [
+      "It is a public monitor of every election on this Node, separate from certified results at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
+      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. Certified counts appear only after a tally is posted.",
     ],
   },
   {
@@ -313,6 +323,7 @@ export const FAQ_REQUIRED_TOPICS = [
   "hourly-disclosure",
   "ranked-choice",
   "results",
+  "outcomes",
   "receipts",
   "receipt-check",
   "not-for-profit",

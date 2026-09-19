@@ -63,6 +63,8 @@ Receipts list hashes only (ballot hash, nullifier, related identifiers). They ca
 
 Choice is never printed on a receipt, email, PDF, explorer row, or officer live feed.
 
+A separate public monitor at `/outcomes` lists every election before, during, and after voting according to chain and election state, and runs the public auditor checks. It does not show how any person voted. Certified option counts appear there only after a tally is posted.
+
 ## 8. Privacy, cookies, and data the Node stores
 
 The Node JSON store (`republic.json`) may hold handles, hashed authenticators, session ids, election records, and terms-acceptance fingerprints. It must not hold legal names, dates of birth, or street addresses on chain. License and passport numbers are hashed, not stored.
