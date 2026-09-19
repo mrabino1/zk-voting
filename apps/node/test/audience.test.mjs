@@ -97,6 +97,7 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/public')).name, 'publicHome');
     assert.equal(parseRoute(loc('/about')).name, 'about');
     assert.equal(parseRoute(loc('/faq')).name, 'faq');
+    assert.equal(parseRoute(loc('/terms')).name, 'terms');
     assert.equal(parseRoute(loc('/signin')).name, 'signin');
     assert.equal(parseRoute(loc('/me')).name, 'desk');
     assert.equal(parseRoute(loc('/app')).name, 'desk');
@@ -144,9 +145,9 @@ describe('audience helpers and FAQ', () => {
 
   test('nav items differ by audience', () => {
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Terms', 'Sign in', 'Register']);
     const voter = mainNav('registered').map((i) => i.label);
-    assert.deepEqual(voter, ['My desk', 'Register', 'Results']);
+    assert.deepEqual(voter, ['My desk', 'Register', 'Results', 'Terms']);
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
@@ -186,7 +187,7 @@ describe('audience HTTP routes and admin gates', () => {
   });
 
   test('public SPA routes render HTML', async () => {
-    for (const url of ['/', '/public', '/about', '/faq', '/signin', '/me', '/app', '/register']) {
+    for (const url of ['/', '/public', '/about', '/faq', '/terms', '/signin', '/me', '/app', '/register']) {
       const page = await api('GET', url);
       assert.equal(page.status, 200, url);
       assert.match(page.res.headers.get('content-type') || '', /html/, url);

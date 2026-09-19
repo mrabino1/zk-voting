@@ -108,6 +108,7 @@ export function mainNav(audience, extraNav = []) {
     return [
       { href: "/about", label: "About" },
       { href: "/faq", label: "FAQ" },
+      { href: "/terms", label: "Terms" },
       ...extra,
       { href: "/signin", label: "Sign in" },
       { href: "/register", label: "Register" },
@@ -117,6 +118,7 @@ export function mainNav(audience, extraNav = []) {
     { href: "/me", label: "My desk" },
     { href: "/register", label: "Register" },
     { href: "/elections", label: "Results" },
+    { href: "/terms", label: "Terms" },
   ];
   if (audience === "officer") {
     items.push({ href: "/office", label: "Admin" });
@@ -136,6 +138,7 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   if (href === "/office" && String(routeName || "").startsWith("office")) return true;
   if (href === "/about" && routeName === "about") return true;
   if (href === "/faq" && routeName === "faq") return true;
+  if (href === "/terms" && routeName === "terms") return true;
   if (href.startsWith("/p/") && path === href) return true;
   if (href === "/signin" && routeName === "signin") return true;
   if (href === "/register" && routeName === "register") return true;

@@ -23,6 +23,7 @@ import {
   resolveBoundPerson,
   verifyWeb3Bind,
 } from '../identity.mjs';
+import { requireAcceptedTerms } from '../terms.mjs';
 
 export function identityRouter(deps) {
   const { store, config, mfa } = deps;
@@ -79,6 +80,7 @@ export function identityRouter(deps) {
       if (owner) {
         throw new HttpError(409, 'email already bound to another person', { code: 'METHOD_OWNED' });
       }
+      requireAcceptedTerms(req.body || {});
       const payload = await mfa.startMfa(res, {
         user: null,
         factor: 'email',
@@ -86,6 +88,7 @@ export function identityRouter(deps) {
         handle,
         purpose: 'register',
         bindEmail: true,
+        acceptedTerms: true,
       });
       res.json(payload);
     }),
@@ -147,6 +150,7 @@ export function identityRouter(deps) {
         addressOwner: null,
       });
       if (!user) {
+        requireAcceptedTerms(req.body || {});
         const handle =
           String(req.body?.handle || '').trim() || `eth-${address.slice(2).toLowerCase()}`;
         if (store.getUserByHandle(handle)) throw new HttpError(409, 'handle taken');
@@ -163,6 +167,7 @@ export function identityRouter(deps) {
         user: store.getUser(user.id),
         factor: 'web3',
         email: req.body?.email,
+        acceptedTerms: req.body?.acceptedTerms,
       });
       res.json(payload);
     }),
@@ -212,6 +217,7 @@ export function identityRouter(deps) {
         addressOwner: null,
       });
       if (!user) {
+        requireAcceptedTerms(req.body || {});
         const handle =
           String(req.body?.handle || '').trim() || `card-${fingerprint.slice(2, 18)}`;
         if (store.getUserByHandle(handle)) throw new HttpError(409, 'handle taken');
@@ -229,6 +235,7 @@ export function identityRouter(deps) {
         user: store.getUser(user.id),
         factor: 'smart_card',
         email: req.body?.email,
+        acceptedTerms: req.body?.acceptedTerms,
       });
       res.json(payload);
     }),
@@ -261,6 +268,7 @@ export function identityRouter(deps) {
         addressOwner: null,
       });
       if (!user) {
+        requireAcceptedTerms(req.body || {});
         const handle =
           String(req.body?.handle || '').trim() ||
           `id-${kind === 'passport' ? 'pp' : 'dl'}-${hash.slice(2, 12)}`;
@@ -280,6 +288,7 @@ export function identityRouter(deps) {
         user: store.getUser(user.id),
         factor: 'civic_id',
         email: req.body?.email,
+        acceptedTerms: req.body?.acceptedTerms,
       });
       res.json(payload);
     }),

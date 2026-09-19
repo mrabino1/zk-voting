@@ -18,6 +18,7 @@ import {
   verifyWeb3Bind,
 } from '../identity.mjs';
 import { isRole } from '../roles.mjs';
+import { requireAcceptedTerms } from '../terms.mjs';
 
 export function authRouter(deps) {
   const { store, config, passkeys, mfa } = deps;
@@ -35,9 +36,14 @@ export function authRouter(deps) {
     '/passkey/register/begin',
     asyncHandler(async (req, res) => {
       const handle = req.body?.handle || req.body?.displayName || req.user?.handle;
+      if (!req.user) {
+        const existing = handle ? store.getUserByHandle(handle) : null;
+        if (!existing) requireAcceptedTerms(req.body || {});
+      }
       const options = await passkeys.beginRegister({
         user: req.user || (handle ? store.getUserByHandle(handle) : null),
         handle,
+        acceptedTerms: req.body?.acceptedTerms,
       });
       res.json({ ...options, publicKey: options, rpName: config.rpName, nfp: true });
     }),
@@ -56,6 +62,7 @@ export function authRouter(deps) {
         factor: 'passkey',
         email: req.body?.email,
         bindEmail: Boolean(req.body?.email),
+        acceptedTerms: result.acceptedTerms || req.body?.acceptedTerms,
       });
       res.json(payload);
     }),

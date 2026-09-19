@@ -82,7 +82,7 @@ New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
 `onChainElectionId` on the Node record.
 
-Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/p/:slug`, `/register`, `/vote/:id`,
+Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
 Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.
@@ -128,7 +128,7 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
 | `ALLOW_SMART_CARD_MOCK` | off (`1` in tests) | Self-service smart-card `{ mock: true }` (kiosk demo). Production uses registrar attest |
 | `ALLOW_CIVIC_ID_MOCK` | off (`1` in tests) | Self-service driver’s license / passport bind `{ mock: true }` |
-| `SES_FROM_ADDRESS` | _empty_ | AWS SES From address. With `AWS_REGION`, turns on email MFA for every non-dev login |
+| `SES_FROM_ADDRESS` | _empty_ | AWS SES From address. With `AWS_REGION`, turns on email MFA for every non-dev login **and** emails the Terms PDF on accept |
 | `AWS_REGION` | _empty_ | SES region (also `SES_REGION`) |
 | `SES_CONFIGURATION_SET` | _empty_ | Optional SESv2 configuration set |
 | `REQUIRE_EMAIL_MFA` | off in tests; on when SES is configured | Force or disable email OTP MFA |
@@ -147,6 +147,8 @@ Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **s
 
 ```
 GET  /health
+GET  /terms                         (SPA Terms of Use; hashes from GET /api/terms)
+GET  /terms.pdf                     (deterministic PDF; X-Pdf-SHA256 header)
 GET  /v/:shortCode                  (302 → /vote/<uuid>)
 GET  /e/:shortCode                  (302 → /vote/<uuid>)
 GET  /api/elections
@@ -205,7 +207,13 @@ GET  /api/explorer/txs/:hash
 GET  /api/explorer/disclosure         (last closed hour, disclosed ballots, countdown)
 POST /api/explorer/ingest
 GET  /api/config
+GET  /api/terms                     (public: pdfSha256, markdownSha256, hashOf=pdf-bytes)
+GET  /api/terms.pdf
+POST /api/terms/view                (signed-in: one view record per session+hash)
+POST /api/terms/accept              (signed-in; `{ acceptedTerms: true }`; emails PDF via SES)
 ```
+
+Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `republic.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).
 
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools.
@@ -252,8 +260,9 @@ one it finds.
 ## Data
 
 ```
-apps/node/data/republic.json    users, elections, votes, envelopes (gitignored)
+apps/node/data/republic.json    users, elections, votes, envelopes, termsAcceptances (gitignored)
 apps/node/data/l2-chain.json    append-only blocks/txs for /explorer
+apps/node/legal/terms.md        canonical Terms of Use (PDF + hashes derived at boot)
 ```
 
 Do not put legal names, DOB, or street addresses on chain. Do not emit a selected

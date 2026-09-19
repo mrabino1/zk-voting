@@ -29,6 +29,7 @@ export const RESERVED_SLUGS = new Set([
   'register',
   'signin',
   'site',
+  'terms',
   'v',
   'vote',
 ]);

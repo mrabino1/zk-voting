@@ -76,7 +76,7 @@ export function createPasskeyService(config, store, hooks = {}) {
     }));
   }
 
-  async function beginRegister({ user, handle }) {
+  async function beginRegister({ user, handle, acceptedTerms }) {
     if (!user && !handle) throw new HttpError(400, 'handle required');
     const userName = user?.handle || String(handle).trim();
     if (!userName) throw new HttpError(400, 'handle required');
@@ -102,6 +102,7 @@ export function createPasskeyService(config, store, hooks = {}) {
       key: `reg:${userName.toLowerCase()}`,
       userId: user?.id || null,
       handle: userName,
+      acceptedTerms: Boolean(acceptedTerms),
     });
     return options;
   }
@@ -149,7 +150,7 @@ export function createPasskeyService(config, store, hooks = {}) {
       createdAt: new Date().toISOString(),
     });
     await store.persist();
-    return { verified: true, user: account };
+    return { verified: true, user: account, acceptedTerms: Boolean(pending.acceptedTerms) };
   }
 
   async function beginLogin({ user, handle } = {}) {

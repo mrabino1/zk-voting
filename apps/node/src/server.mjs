@@ -18,6 +18,7 @@ import { createPasskeyService } from './passkey.mjs';
 import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
 import { createMfaService } from './mfa.mjs';
+import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { authRouter } from './routes/auth.mjs';
@@ -27,6 +28,7 @@ import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
+import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -143,8 +145,9 @@ export async function createApp(overrides = {}) {
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
   const mailer = configOverrides.mailer || createMailer(config);
-  const mfa = createMfaService({ config, store, mailer });
-  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa };
+  const terms = configOverrides.terms || createTermsService({ store, mailer, config });
+  const mfa = createMfaService({ config, store, mailer, terms });
+  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -178,6 +181,7 @@ export async function createApp(overrides = {}) {
   }
 
   app.use(healthRouter(deps));
+  app.use(termsPdfRouter(deps));
   app.use('/api/auth', authRouter(deps));
   app.use('/api/elections', electionsRouter(deps));
   app.use('/api/explorer', explorerRouter(deps));
@@ -185,6 +189,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', meRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
+  app.use('/api', termsApiRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
@@ -206,7 +211,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms };
 }
 
 export async function startServer(overrides = {}) {

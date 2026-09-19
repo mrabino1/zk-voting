@@ -121,6 +121,13 @@ export function configRouter(deps) {
           sesConfigured: Boolean(deps.config.sesFromAddress && deps.config.awsRegion),
           allowSmartCardMock: Boolean(deps.config.allowSmartCardMock),
           allowCivicIdMock: Boolean(deps.config.allowCivicIdMock),
+          terms: {
+            path: '/terms',
+            pdfPath: '/terms.pdf',
+            hashAlgo: 'sha256',
+            hashOf: 'pdf-bytes',
+            note: 'Acceptance records SHA-256 of the exact Terms PDF bytes (the SES attachment). Markdown SHA-256 is published too.',
+          },
           note: 'Sign in with email, a bound Ethereum wallet (signature), a smart-card reader, or a hashed driver’s license/passport. Every path completes with an email one-time code via AWS SES when MFA is on. Dev login is a local/test fallback only.',
         },
       });

@@ -28,7 +28,7 @@ export async function loginWeb3Wallet(api, { email } = {}) {
   });
 }
 
-export async function bindWeb3Wallet(api, { handle, email } = {}) {
+export async function bindWeb3Wallet(api, { handle, email, acceptedTerms } = {}) {
   if (!window.ethereum) {
     throw new Error("No Web3 wallet in this browser. Install a wallet or use email / smart card / license.");
   }
@@ -45,11 +45,11 @@ export async function bindWeb3Wallet(api, { handle, email } = {}) {
   });
   return api("/api/identity/web3/verify", {
     method: "POST",
-    body: { address, signature, handle, email },
+    body: { address, signature, handle, email, acceptedTerms },
   });
 }
 
-export async function bindSmartCard(api, { fingerprint, certificate, subject, issuer, handle, email, mock } = {}) {
+export async function bindSmartCard(api, { fingerprint, certificate, subject, issuer, handle, email, mock, acceptedTerms } = {}) {
   const challenge = await api("/api/identity/smart-card/challenge", {
     method: "POST",
     body: { fingerprint, certificate },
@@ -65,6 +65,7 @@ export async function bindSmartCard(api, { fingerprint, certificate, subject, is
       handle,
       email,
       mock: mock !== false,
+      acceptedTerms,
     },
   });
 }
@@ -104,11 +105,11 @@ export async function startEmailLogin(api, email) {
   return api("/api/auth/email/start", { method: "POST", body: { email } });
 }
 
-export async function startEmailRegister(api, { email, handle } = {}) {
-  return api("/api/identity/email/start", { method: "POST", body: { email, handle } });
+export async function startEmailRegister(api, { email, handle, acceptedTerms } = {}) {
+  return api("/api/identity/email/start", { method: "POST", body: { email, handle, acceptedTerms } });
 }
 
-export async function bindCivicId(api, { kind, issuer, documentNumber, handle, email, mock } = {}) {
+export async function bindCivicId(api, { kind, issuer, documentNumber, handle, email, mock, acceptedTerms } = {}) {
   return api("/api/identity/civic-id/verify", {
     method: "POST",
     body: {
@@ -118,6 +119,7 @@ export async function bindCivicId(api, { kind, issuer, documentNumber, handle, e
       handle,
       email,
       mock: mock !== false,
+      acceptedTerms,
     },
   });
 }

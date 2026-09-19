@@ -227,6 +227,37 @@ Unknown passkeys, emails, cards, licenses, and wallets return `404` `UNKNOWN_CRE
 
 RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`docs/IDENTITY.md`](./IDENTITY.md).
 
+### Terms of Use (`/terms`)
+
+Public page `/terms` (nav on public, registered, and officer chrome). Canonical source is `apps/node/legal/terms.md`. The Node builds a **deterministic PDF 1.4** from that markdown (fixed CreationDate, Helvetica — no host timestamps).
+
+| Fingerprint | What is hashed | Where it lives |
+| --- | --- | --- |
+| **PDF SHA-256** (canonical, 64 hex) | Exact PDF bytes (the SES attachment) | `user.termsHash`, `termsAcceptances[].pdfSha256`, `X-Pdf-SHA256` on `GET /terms.pdf` |
+| Markdown SHA-256 | UTF-8 markdown body after YAML front matter | Published on `/terms` and stored as `markdownSha256` next to the PDF hash |
+
+Acceptance (checkbox on `/register`, or “I agree” while signed in on `/terms`) writes **who, when, version, both hashes, and whether the PDF was emailed**. New-person identity APIs require `{ acceptedTerms: true }` (`TERMS_REQUIRED` otherwise). Viewing `/terms` while signed in records one `view` per session + current PDF hash. Public `GET /api/terms` does not include PII.
+
+The PDF is emailed with **AWS SES** on first accept of a hash, using the same env as MFA:
+
+| Variable | Role |
+| --- | --- |
+| `SES_FROM_ADDRESS` | From address (required to send) |
+| `AWS_REGION` (alias `SES_REGION`) | SES region |
+| `SES_CONFIGURATION_SET` | Optional SESv2 configuration set |
+
+SESv2 Simple content cannot attach files. The Node sends **raw MIME** (`multipart/mixed`) with `republic-terms.pdf`. A second accept of the same PDF hash does not resend (`already_sent_this_hash`). If SES is unset, the Node still records the accept and **captures** the message in-process (tests use `mailer.lastTermsPdf()`, same pattern as MFA OTP capture).
+
+Store (private `apps/node/data/republic.json`, gitignored):
+
+```
+termsAcceptances: [{ id, action: "accept"|"view", userId, handle, email, sessionId,
+  termsVersion, pdfSha256, markdownSha256, hashOf: "pdf-bytes", emailed, emailedAt, createdAt }]
+users[].termsHash / termsVersion / termsAcceptedAt / termsEmailSentAt / termsEmailHash
+```
+
+Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted.
+
 ---
 
 ## Secrets and production

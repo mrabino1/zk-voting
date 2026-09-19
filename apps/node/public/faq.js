@@ -282,6 +282,15 @@ export const FAQ_ENTRIES = [
       "This is not Jumio, not NFC ePassport chip reading, and not a claim that a court must accept the binding. Clerks attest in production; the mock path is for demos when ALLOW_CIVIC_ID_MOCK=1.",
     ],
   },
+  {
+    id: "terms-hash",
+    topic: "terms",
+    q: "What is SHA-256 tracking on /terms?",
+    a: [
+      "The public Terms of Use live at /terms. The canonical source is markdown in the Node package. The Node generates a deterministic PDF from that source and emails that PDF when you accept (AWS SES, same From address as MFA). The fingerprint stored on your person is SHA-256 of the exact PDF bytes — 64 hex characters, like DealPunchList’s terms_hash. Markdown SHA-256 is published next to it so you can see both.",
+      "Accepting at register, or the accept control while signed in, writes who, when, which version, both hashes, and whether the PDF was emailed (termsAcceptances in republic.json). Viewing /terms while signed in records a view of the current hash for that session. Changing the markdown changes both hashes.",
+    ],
+  },
 ];
 
 export const FAQ_REQUIRED_TOPICS = [
@@ -303,6 +312,7 @@ export const FAQ_REQUIRED_TOPICS = [
   "security-limits",
   "email-mfa",
   "civic-id",
+  "terms",
 ];
 
 export function faqAnswerText(entry) {

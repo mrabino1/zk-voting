@@ -155,7 +155,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     assert.equal(unknown.json.code, 'UNKNOWN_CREDENTIAL');
 
     const start = await api('POST', '/api/identity/email/start', {
-      body: { email: 'alice@example.com', handle: 'mail-alice' },
+      body: { email: 'alice@example.com', handle: 'mail-alice', acceptedTerms: true },
       jar,
     });
     assert.equal(start.status, 200, start.json?.error);
@@ -209,7 +209,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     });
     const signature = await account0.signMessage({ message: challenge.json.message });
     const bound = await api('POST', '/api/identity/web3/verify', {
-      body: { address: account0.address, signature, handle: 'wallet-mfa' },
+      body: { address: account0.address, signature, handle: 'wallet-mfa', acceptedTerms: true },
       jar: walletJar,
     });
     assert.equal(bound.status, 200, bound.json?.error);
@@ -265,6 +265,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
         mock: true,
         handle: 'card-mfa',
         email: 'card@example.com',
+        acceptedTerms: true,
       },
       jar: cardJar,
     });
@@ -306,6 +307,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
         mock: true,
         handle: 'license-mfa',
         email: 'license@example.com',
+        acceptedTerms: true,
       },
       jar: civicJar,
     });

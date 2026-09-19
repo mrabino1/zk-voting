@@ -81,7 +81,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 3,
+      version: 4,
       nextElectionId: 1,
     },
     users: [],
@@ -97,6 +97,7 @@ function emptyData() {
     tallyGuardians: [],
     pages: [],
     site: defaultSite(),
+    termsAcceptances: [],
   };
 }
 
@@ -139,6 +140,7 @@ export class Store {
       const raw = await fs.readFile(filePath, 'utf8');
       data = { ...emptyData(), ...JSON.parse(raw) };
       data.pages = Array.isArray(data.pages) ? data.pages : [];
+      data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
@@ -160,6 +162,9 @@ export class Store {
     await store.seed(config);
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
+    if (!Array.isArray(store.data.termsAcceptances)) store.data.termsAcceptances = [];
+    store.data.meta = store.data.meta || {};
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 4);
     await store.persist();
     return store;
   }
@@ -181,18 +186,20 @@ export class Store {
       if (existing) {
         existing.role = 'platform_admin';
       } else {
-        this.data.users.push({
-          id: randomUUID(),
-          handle,
-          role: 'platform_admin',
-          createdAt: new Date().toISOString(),
-          credentials: [],
-          authMethods: [],
-          ethAccounts: [],
-          activeEthAddress: null,
-          personKeyHash: null,
-          email: null,
-        });
+        this.data.users.push(
+          ensurePersonFields({
+            id: randomUUID(),
+            handle,
+            role: 'platform_admin',
+            createdAt: new Date().toISOString(),
+            credentials: [],
+            authMethods: [],
+            ethAccounts: [],
+            activeEthAddress: null,
+            personKeyHash: null,
+            email: null,
+          }),
+        );
       }
     }
     if (this.data.jurisdictions.length === 0) {
@@ -1293,6 +1300,25 @@ export class Store {
     n.read = true;
     await this.persist();
     return n;
+  }
+
+  async addTermsRecord(row) {
+    if (!Array.isArray(this.data.termsAcceptances)) this.data.termsAcceptances = [];
+    this.data.termsAcceptances.push(row);
+    await this.persist();
+    return row;
+  }
+
+  listTermsRecords({ userId = null, action = null } = {}) {
+    if (!Array.isArray(this.data.termsAcceptances)) this.data.termsAcceptances = [];
+    let rows = this.data.termsAcceptances.slice();
+    if (userId) rows = rows.filter((r) => r.userId === userId);
+    if (action) rows = rows.filter((r) => r.action === action);
+    return rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  }
+
+  latestTermsAcceptance(userId) {
+    return this.listTermsRecords({ userId, action: 'accept' })[0] || null;
   }
 
   getSite() {

@@ -55,5 +55,9 @@ export function publicUser(user) {
     authMethodCount: Array.isArray(user.authMethods) ? user.authMethods.length : 0,
     activeEthAddress: user.activeEthAddress || null,
     personKeyBound: Boolean(user.personKeyHash),
+    termsHash: user.termsHash || null,
+    termsVersion: user.termsVersion || null,
+    termsAcceptedAt: user.termsAcceptedAt || null,
+    termsEmailSentAt: user.termsEmailSentAt || null,
   };
 }
