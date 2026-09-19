@@ -4,7 +4,7 @@
 # repo is hosted: one compose file, images built from this tree, data on
 # volumes, secrets via .env (never baked into the image).
 #
-#   cp .env.example .env    # optional for a local demo
+#   cp .env.example .env    # optional for a local demo; pin shared factory on a fork
 #   docker compose up -d --build
 #   curl -fsS http://127.0.0.1:3000/health
 #
@@ -35,6 +35,7 @@ services:
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
       BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
       ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
+      VERIFIER_ADDRESS: ${VERIFIER_ADDRESS:-}
       RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY:-}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}

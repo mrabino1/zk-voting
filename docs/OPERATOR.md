@@ -64,7 +64,7 @@ Root [`.dockerignore`](../.dockerignore) applies to every image built from this 
 Root [`docker-compose.yml`](../docker-compose.yml) is the host path `system_actions.sh` already looks for. One command builds the Node (API + SPA) and Republic L2 (sequencer + prover), the same shape as a typical frontend Compose file: images from this tree, published ports, health checks, named volumes, `restart: unless-stopped`.
 
 ```bash
-cp .env.example .env          # optional; defaults are enough for a local demo
+cp .env.example .env          # optional for a local demo; required to pin a shared factory
 docker compose up -d --build  # or: npm run compose:up
 curl -fsS http://127.0.0.1:3000/health
 curl -fsS http://127.0.0.1:8546/health
@@ -87,6 +87,10 @@ The Node binds `HOST=0.0.0.0` so the published port is reachable. The sequencer 
 The Node image installs the npm **workspaces** from the repository root (`@zk-voting/chain-client` is private and is not fetched from the public registry). L1 tally-hash env vars on the `node` service are optional; leaving them empty is a documented no-op.
 
 Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY`, or paymaster keys into the image.
+
+### Forked jurisdiction Nodes
+
+Forking this Node is **intentional**. Copy [`.env.example`](../.env.example), set this host’s `RP_ID` / origins / SES, and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
 
 ---
 

@@ -13,7 +13,7 @@ The same **Solidity** is meant to run **on Ethereum mainnet (L1)** and on any EV
 
 Republic L2 **as implemented** is an application-specific civic sequencer (JSON transactions: register / vote / disqualify / tally / userop). It is **not** a general-purpose EVM and it does **not** proxy to Anvil. Portable EVM bytecode still deploys to Anvil, Ethereum L1, Lighter’s EVM surface, and other EVM L2s. Executing that bytecode *on* 27427 is **Future**.
 
-**Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, civic L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only.
+**Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, civic L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only. **Forking is intentional:** a jurisdiction runs its own Node and pins one shared `ElectionFactory` — see [Intentional forking](#intentional-forking).
 
 How to read this README:
 
@@ -45,6 +45,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Current status](#current-status)
 - [Monorepo layout](#monorepo-layout)
 - [How to run](#how-to-run)
+- [Intentional forking](#intentional-forking)
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
 - [Circuits](#circuits)
@@ -89,7 +90,7 @@ The Node app is how humans do that work. The contracts are how Ethereum (L1 and 
 | --- | --- |
 | **Voters** | Register, see whether they are eligible or disqualified, cast a ballot, keep a receipt that does not reveal their choice. |
 | **Election officials / clerks** | Stand up an election, define the roll and the questions, apply and reverse disqualifications, publish results. |
-| **Jurisdictions** | A government, a county, a nation, a union, a board — any body that needs a roll, a ballot, and a binding result. |
+| **Jurisdictions** | A government, a county, a nation, a union, a board — any body that needs a roll, a ballot, and a binding result. **Fork this Node** for the clerk desk and public pages; pin the one shared factory. |
 | **Candidates and observers** | Watch the public state: how many registered, how many disqualified (and on what coded grounds), hourly published ballot counts, the proven tally. |
 | **Auditors and courts** | Reconstruct the election from chain data, proofs, and the Node’s published artifacts without trusting a vendor’s black box. |
 
@@ -140,6 +141,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
 | Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
+| Intentional Node forks | Documented. Copy [`.env.example`](./.env.example), pin the shared factory / inbox / verifier, do not `DeployLocal` per city. |
 
 ---
 
@@ -158,7 +160,7 @@ zk-voting/
   docker-compose.yml           Node + L2 host path
   docs/
     ARCHITECTURE.md            implemented map + Solidity/circuit interfaces
-    OPERATOR.md
+    OPERATOR.md                host + forked Node env
     BLOCK_EXPLORER.md
     PASSKEYS.md
     IDENTITY.md
@@ -241,14 +243,17 @@ npm test -w apps/node
 
 Details: [`apps/node/README.md`](./apps/node/README.md). Local store: JSON under `apps/node/data/` (gitignored). **Not SQLite.** The UI is vanilla JS in `apps/node/public/` (no Vite, no React).
 
-Docker Compose (Node + L2 sequencer + prover), from the repo root:
+Docker Compose (Node + L2 sequencer + prover), from the repo root. Copy the env template first (forked hosts pin the shared factory here — see [Intentional forking](#intentional-forking)):
 
 ```bash
+cp .env.example .env
+# fill ELECTION_FACTORY_ADDRESS / BALLOT_INBOX_ADDRESS / VERIFIER_ADDRESS
+# from the shared deploy. Do not run DeployLocal again for a new city.
 docker compose up -d --build
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-See [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+See [`.env.example`](./.env.example) and [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ### Republic L2 (sequencer + prover)
 
@@ -304,6 +309,88 @@ node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
 
 ---
 
+## Intentional forking
+
+Forking this repository is **the intended way** a jurisdiction runs Republic. A city, county, union, cooperative, or other body copies the **Node** (voter pages, clerk desk, CMS, host) and pins the **one shared** `ElectionFactory`, `BallotInbox`, and verifier. That is how there is no vendor lock-in: you host your clerk desk; you do not pay a SaaS; you do not get a private factory.
+
+This is a GitHub / host fork of **this** Node. It is not a fork of MACI, Semaphore, or Lighter (see [Related work](#related-work)).
+
+**NOT FOR PROFIT** still applies to every fork. License is AGPL-3.0-or-later: if you run a modified Node as a network service, you must offer the corresponding source. Do not sell the software, wrap it in a token, or reuse chainId **27427** for a commercial L2 ([`docs/L2.md`](./docs/L2.md)).
+
+### What you fork vs what you pin
+
+| Yours (this fork / this host) | Shared (pin — do not redeploy) |
+| --- | --- |
+| Node process, vanilla JS in `apps/node/public/`, `/office` CMS | `ElectionFactory` (`ELECTION_FACTORY_ADDRESS` or `FACTORY`) |
+| JSON store (`apps/node/data/republic.json`), officer grants | `BallotInbox` (`BALLOT_INBOX_ADDRESS`) |
+| WebAuthn `RP_ID` / `WEBAUTHN_ORIGINS`, SES MFA | Vote verifier (`VERIFIER_ADDRESS` or `VERIFIER`) |
+| Relayer key and paymaster funds for **this** host | Optional L1 `L1TallyMirror` / `RollupSettlement` when you settle with the same contracts |
+
+Do **not** run `forge script script/DeployLocal.s.sol` again for a new city. Env wins over the clerk CMS at `/office/site`. Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`).
+
+### Instructions
+
+1. Fork [github.com/mrabino1/zk-voting](https://github.com/mrabino1/zk-voting) (or clone). Work on **`test/unstable`** until a jurisdiction is ready to pin **`master`**.
+2. Copy the committed env template. `.env` is gitignored — do not commit secrets.
+
+```bash
+cp .env.example .env
+```
+
+3. Fill **this host’s** RP id, origins, SES, and relayer key. Paste the **existing** shared factory / inbox / verifier addresses. Leave those addresses empty only for a JSON-only demo (`CHAIN_RPC` unset) or to pin them later as `platform_admin` on `/office/site`.
+4. Start the Node (Compose is the host path `system_actions.sh` already looks for):
+
+```bash
+npm install
+docker compose up -d --build   # or: npm run dev
+curl -fsS http://127.0.0.1:3000/health
+```
+
+5. Register at `/register` with the seeded `ADMIN_HANDLE` (`admin` unless you changed it) so that person is `platform_admin`. Create the jurisdiction (a `demo` jurisdiction is seeded on empty store). Grant clerk / registrar / disqualification / tally roles. Clerks edit About, FAQ, and extra pages at `/office/pages`. Only `platform_admin` may change contract addresses on `/office/site` when env did not already lock them.
+6. When `CHAIN_RPC` is set, clerk **Create election** calls the shared factory. A factory revert is **502/503**; nothing is written to `republic.json`.
+
+Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Site pin: `/office/site`. Pages: `/office/pages`.
+
+### Environment example
+
+Committed template: [`.env.example`](./.env.example). Compose interpolates that file. A forked jurisdiction Node looks like this (placeholders only — never commit real keys):
+
+```bash
+# NOT FOR PROFIT — civic public good, not a commercial product.
+# cp .env.example .env
+
+# --- this host ---
+ZK_VOTING_PORT=3000
+CHAIN_ID=27427
+CHAIN_RPC=http://l2:8546          # empty = JSON-only demo (no factory call)
+RP_ID=votes.example.gov           # WebAuthn rpID for this public site
+WEBAUTHN_ORIGINS=https://votes.example.gov
+ADMIN_HANDLE=admin
+DISCLOSURE_INTERVAL_SECONDS=3600  # 0 = publish immediately (local demo)
+ALLOW_DEV_LOGIN=                  # must stay unset on master
+SES_FROM_ADDRESS=elections@example.gov
+AWS_REGION=us-east-1
+
+# --- pin the ONE shared deploy (do not DeployLocal again) ---
+# Env wins over /office/site. Aliases: FACTORY, VERIFIER.
+ELECTION_FACTORY_ADDRESS=0x…  # shared DeployLocal FACTORY= (or FACTORY alias)
+BALLOT_INBOX_ADDRESS=0x…      # shared inbox
+VERIFIER_ADDRESS=0x…          # shared verifier (VERIFIER alias)
+RELAYER_PRIVATE_KEY=              # this host’s relayer; not a mainnet key in git
+
+# --- optional L1 tally-hash / prover settlement ---
+L1_RPC=
+L1_TALLY_MIRROR_ADDRESS=
+L1_PUBLISHER_PRIVATE_KEY=
+L1_SETTLEMENT_ADDRESS=
+SETTLEMENT_ADDRESS=
+PRIVATE_KEY=                      # L2 prover key, not L1_PUBLISHER_PRIVATE_KEY
+```
+
+`GET /api/config` reports `sharedDeployment: true` and which pin source won (`env` or `site`). `GET /health` includes `electionFactoryAddress`.
+
+---
+
 ## Node application
 
 The Node side is the human product. It should feel operationally familiar to anyone who has run `dealpunchlist-node`: a long-lived Node process, a web frontend, authenticated users, organizations (here: **jurisdictions**), admin tools, notifications, and a host script (`system_actions.sh`) that can pull a branch, build, and restart.
@@ -343,7 +430,7 @@ The Node side is the human product. It should feel operationally familiar to any
 | `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
 | `/elections/:id/info/:questionId/:optionId` | One option + external links |
 | `/about`, `/faq`, `/p/:slug` | Public CMS pages. Clerks publish from `/office/pages`. |
-| `/office/pages`, `/office/site` | WordPress-style page editor and shared factory pin |
+| `/office/pages`, `/office/site` | WordPress-style page editor; pin the one shared factory (env wins) |
 | `/admin` | Platform admin (file `admin.html`, URL has no `.html`) |
 | `/back-office` | Clerks / registrars / officers (file `back-office.html`) |
 | `/explorer` | Civic L2 explorer (file `explorer.html`) |
@@ -791,6 +878,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 | --- | --- |
 | **Republic** | Product name. Civic ZK voting / tally stack in this monorepo. |
 | **Jurisdiction** | The body that owns a roll and elections (government or other). |
+| **Fork (this Node)** | An intentional copy of the Node UI/host for a jurisdiction. Pins the shared `ElectionFactory` / inbox / verifier. Not a new factory deploy and not a commercial L2. |
 | **Roll / registry** | The set of registered identity commitments. |
 | **Eligible set** | Registered minus disqualified, for a given election/question. |
 | **Disqualification** | An on-chain record that blocks voting despite registration. |
@@ -807,7 +895,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 
 ## Related work
 
-This project is **not** a fork of any of the following. They are the prior art the design will learn from:
+Jurisdictions **are meant to fork this repository** (the Node). That is documented in [Intentional forking](#intentional-forking). This project is **not** a fork of the following; they are prior art the design learns from:
 
 - [MACI](https://maci.pse.dev/) — on-chain polls, signup policies, collusion-resistant messaging, proven tallies.
 - [Semaphore](https://semaphore.pse.dev/) — anonymous group membership proofs (a likely building block for “I am still in the eligible set”).
@@ -822,4 +910,4 @@ This repository describes software for running elections and for **denying a reg
 
 The authors’ intent is that **eligibility and disqualification are visible as process**, while **individual political choice is not**. If a deployment inverts that (public ballots, secret purges), it is misusing this design.
 
-**NOT FOR PROFIT.** See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
+Forks keep the same charter: **NOT FOR PROFIT**, AGPL-3.0-or-later, visible labels on every document. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
