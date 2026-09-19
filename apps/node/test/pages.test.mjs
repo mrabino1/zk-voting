@@ -100,6 +100,8 @@ describe('cms helpers', () => {
     assert.equal(normalizeSlug('admin'), '');
     assert.equal(normalizeSlug('about'), '');
     assert.equal(normalizeSlug('terms'), '');
+    assert.equal(normalizeSlug('receipt'), '');
+    assert.equal(normalizeSlug('proof'), '');
     assert.equal(sanitizeAddress('0x1111111111111111111111111111111111111111'), '0x1111111111111111111111111111111111111111');
     assert.equal(sanitizeAddress('not-an-address'), null);
     assert.equal(sanitizeAddress(''), '');
@@ -164,9 +166,9 @@ describe('cms helpers', () => {
     assert.equal(parseRoute(loc('/p/hours')).params.slug, 'hours');
     assert.equal(parseRoute(loc('/admin.html')).name, 'notfound');
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Terms', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Terms', 'Sign in', 'Register']);
     const withExtra = mainNav('public', [{ href: '/p/hours', label: 'Hours' }]).map((i) => i.label);
-    assert.deepEqual(withExtra, ['About', 'FAQ', 'Terms', 'Hours', 'Sign in', 'Register']);
+    assert.deepEqual(withExtra, ['About', 'FAQ', 'Receipt', 'Terms', 'Hours', 'Sign in', 'Register']);
   });
 
   test('canManagePages: platform_admin all; clerk scoped; registrar no', () => {

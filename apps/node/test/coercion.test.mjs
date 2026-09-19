@@ -142,6 +142,11 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     assert.equal(first.json.superseded, undefined);
     assert.equal(first.json.vote.choice, undefined);
     assert.equal(first.json.vote.generation, undefined);
+    assert.equal(first.json.receipt.choice, undefined);
+    assert.equal(first.json.receipt.receiptsProveChoice, false);
+    assert.ok(first.json.receipt.token);
+    assert.match(first.json.receipt.proofText, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.doesNotMatch(first.json.receipt.proofText, /I voted for/i);
 
     const replay = await api('POST', `/api/elections/${id}/vote`, {
       body: {

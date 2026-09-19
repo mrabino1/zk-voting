@@ -5,7 +5,7 @@
  * Routes: `/`, `/public`, `/about`, `/faq`, `/p/:slug`, `/signin`, `/me`, `/app`,
  * `/office`, `/office/pages`, `/office/site`,
  * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
- * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`
+ * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/receipt`
  */
 
 import { isStandaloneHtmlPath } from "./audience.js";
@@ -62,6 +62,7 @@ export function parseRoute(loc = window.location) {
       query,
     };
   }
+  if (path === "/receipt" || path === "/proof") return { name: "receipt", path, params: {}, query };
   if (path === "/register") return { name: "register", path, params: {}, query };
   if (path === "/elections") return { name: "resultsIndex", path, params: {}, query };
   const results = path.match(/^\/elections\/([^/]+)\/results$/);

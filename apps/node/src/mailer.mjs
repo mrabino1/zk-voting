@@ -221,6 +221,12 @@ export function createMailer(config = {}) {
       }
       return null;
     },
+    lastVoteReceipt() {
+      for (let i = sent.length - 1; i >= 0; i -= 1) {
+        if (sent[i]?.meta?.purpose === 'vote-receipt') return sent[i];
+      }
+      return null;
+    },
     sesReady,
     vendor: 'ses',
   };

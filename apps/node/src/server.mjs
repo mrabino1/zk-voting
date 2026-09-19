@@ -28,6 +28,7 @@ import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
+import { receiptsRouter } from './routes/receipts.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
@@ -190,6 +191,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));
+  app.use('/api', receiptsRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });

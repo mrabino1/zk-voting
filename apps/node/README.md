@@ -30,8 +30,10 @@ Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "nod
 One ballot per nullifier: a later ciphertext for the same nullifier is rejected
 (`NULLIFIER_USED`). Double voting is impossible. The Node never writes a
 passkey user id onto the same record as an encrypted ballot or a choice. The UI
-must not print “I voted for X” (receipts are hashes only). Voters may change
-their mind on the ballot form before submit; after accept they cannot recast.
+must not print “I voted for X” (receipts are hashes only). After accept, voters
+may email a PDF of that receipt and paste the proof at `/receipt` to confirm it
+counted. Turnout there is hourly (when and how many), never by candidate. Voters
+may change their mind on the ballot form before submit; after accept they cannot recast.
 Public dashboards and the explorer show vote proofs only after the hour that
 contained the vote has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0`
 in tests). The explorer snapshot lists last closed hour, ballots disclosed so far,
@@ -82,7 +84,7 @@ New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
 `onChainElectionId` on the Node record.
 
-Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/p/:slug`, `/register`, `/vote/:id`,
+Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/receipt`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
 Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.

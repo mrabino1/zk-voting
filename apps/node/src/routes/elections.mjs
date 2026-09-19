@@ -466,9 +466,10 @@ export function electionsRouter(deps) {
         published: result.published,
         nextPublishAt: result.nextPublishAt,
         vote: result.vote,
+        receipt: result.receipt,
         message: result.published
-          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.'
-          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected.',
+          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Email or paste the receipt at /receipt — it cannot prove how you voted.'
+          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Email or paste the receipt at /receipt — it cannot prove how you voted.',
         nfp: true,
       });
     }),

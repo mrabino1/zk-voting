@@ -75,6 +75,14 @@ export function configRouter(deps) {
           policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,
         },
+        receipts: {
+          schema: 'republic.receipt.v1',
+          proveChoice: false,
+          email: true,
+          emailVendor: 'ses',
+          verifyPath: '/receipt',
+          note: 'After a ballot is accepted, the voter may email a hash-only receipt (body + PDF). Paste that proof at /receipt to confirm it counted. The receipt and the portal never list a candidate or option. Public turnout is an hourly snapshot.',
+        },
         l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
         l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
         disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds, {

@@ -20,7 +20,7 @@ export const FAQ_ENTRIES = [
     q: "How can a ballot stay private if the election is publicly verifiable?",
     a: [
       "Privacy is for the choice. Transparency is for the process. Registration events, disqualification actions (reason codes, not personal evidence), poll parameters, and the published tally are meant to be checkable. The option you marked is not an on-chain plaintext field.",
-      "Receipts list hashes only (ballot hash, nullifier, related transaction identifiers). They cannot prove “I voted for X.” Dashboards delay vote proofs by one closed hour so walking out of a polling place cannot be matched to a live tick.",
+      "Receipts list hashes only (ballot hash, nullifier, related transaction identifiers). They cannot prove “I voted for X.” After you vote you may email that receipt: the message body and a PDF attachment are the same evidence, still without your choices. Dashboards delay vote proofs by one closed hour so walking out of a polling place cannot be matched to a live tick.",
     ],
   },
   {
@@ -181,8 +181,18 @@ export const FAQ_ENTRIES = [
     topic: "receipts",
     q: "Will my receipt show which option I marked?",
     a: [
-      "No. A Republic receipt is hashes only. It records that a ballot was accepted, not which option you selected. If a screen prints “I voted for X,” that is a bug.",
-      "Keep the receipt if you need to show that you participated. It cannot satisfy a coercer who demands proof of choice — that is intentional.",
+      "No. A Republic receipt is hashes only. It records that a ballot was accepted, not which option you selected. If a screen, email, or PDF prints “I voted for X,” that is a bug.",
+      "After you vote you may email the receipt to yourself. The email body and the attached PDF are the same text: election title, ballot hash, nullifier, and a copy-paste proof. They do not include marked options or a ciphertext opening.",
+      "Keep the receipt if you need to show that you participated. Paste it at /receipt to confirm it counted. That portal also shows how many ballots have been disclosed and when each hour closed. It cannot satisfy a coercer who demands proof of choice — that is intentional.",
+    ],
+  },
+  {
+    id: "receipt-check",
+    topic: "receipt-check",
+    q: "How do I prove my vote counted without showing who I voted for?",
+    a: [
+      "Open /receipt and paste the proof from the ballot screen or the emailed PDF. The Node answers whether that ballot was accepted and whether the hour that contained it has been disclosed. You will not be shown a candidate or an option.",
+      "Salient public metrics on that page are when hours closed and how many ballots were disclosed — not live pending turnout, and not a count by candidate. A holder token on the receipt can confirm a count before the hour closes; public hash lookup waits for disclosure so walking out of a polling place cannot be matched to a live tick.",
     ],
   },
   {
@@ -303,6 +313,8 @@ export const FAQ_REQUIRED_TOPICS = [
   "hourly-disclosure",
   "ranked-choice",
   "results",
+  "receipts",
+  "receipt-check",
   "not-for-profit",
   "will-not",
   "how-to-register",
