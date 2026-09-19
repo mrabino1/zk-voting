@@ -44,6 +44,19 @@ async function copyText(text, announce) {
   }
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = String(reader.result || "");
+      const comma = raw.indexOf(",");
+      resolve(comma >= 0 ? raw.slice(comma + 1) : raw);
+    };
+    reader.onerror = () => reject(new Error("Could not read that PDF."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function renderReceiptPortal(main, ctx) {
   const { h, api, fill, announce, setTitle, formatTime } = ctx;
   setTitle("Check a vote receipt");
@@ -52,6 +65,7 @@ export async function renderReceiptPortal(main, ctx) {
     error: "",
     info: "",
     proof: storedProof() || proofFromQuery(ctx.route?.query) || "",
+    pdfFile: null,
     result: null,
     metrics: null,
     electionId: "",
@@ -86,13 +100,32 @@ export async function renderReceiptPortal(main, ctx) {
     const proof = String(event.target.proof?.value || state.proof || "").trim();
     state.proof = proof;
     rememberProof(proof);
+    if (!proof && !state.pdfFile) {
+      state.busy = false;
+      state.error = "Paste a receipt or drop the emailed PDF.";
+      paint();
+      return;
+    }
+    const body = { proof };
+    if (state.pdfFile) {
+      try {
+        body.pdf = await fileToBase64(state.pdfFile);
+      } catch (err) {
+        state.busy = false;
+        state.error = err.message || "Could not read that PDF.";
+        paint();
+        return;
+      }
+    }
     try {
-      const result = await api("/api/receipts/verify", { method: "POST", body: { proof } });
+      const result = await api("/api/receipts/verify", { method: "POST", body });
       state.result = result;
       state.electionId = result.electionId || state.electionId;
       await loadMetrics(state.electionId);
       state.info = result.counted
-        ? result.published
+        ? result.pdfUnmodified === false
+          ? "This ballot counted, but that PDF does not match the locked file the Node issued."
+          : result.published
           ? "This ballot is in the public record. The receipt still cannot prove how you voted."
           : "This ballot counted. Public explorer rows wait until this hour closes."
         : "This proof did not match an accepted ballot.";
@@ -206,6 +239,17 @@ export async function renderReceiptPortal(main, ctx) {
           : null,
         r.disclosureHourClosedAtIso
           ? h("li", {}, h("span", { class: "lbl", text: "Disclosure hour closed" }), h("span", { text: r.disclosureHourClosedAtIso }))
+          : null,
+        r.pdfProtected
+          ? h("li", {}, h("span", { class: "lbl", text: "PDF" }), h("span", { text: "Locked against modification" }))
+          : null,
+        r.pdfUnmodified === true
+          ? h("li", {}, h("span", { class: "lbl", text: "PDF bytes" }), h("span", { text: "Unmodified — matches the Node fingerprint" }))
+          : r.pdfUnmodified === false
+            ? h("li", {}, h("span", { class: "lbl", text: "PDF bytes" }), h("span", { text: "Changed — does not match the issued file" }))
+            : null,
+        r.pdfSha256
+          ? h("li", {}, h("span", { class: "lbl", text: "PDF SHA-256" }), h("span", { class: "hex", text: r.pdfSha256 }))
           : null
       ),
       r.explorerUrl
@@ -224,7 +268,7 @@ export async function renderReceiptPortal(main, ctx) {
         h("h1", { text: "Check a vote receipt" }),
         h("p", {
           class: "lede",
-          text: "Paste the proof from your emailed receipt or the ballot screen. Republic will tell you whether that ballot was accepted. This page never shows a candidate or an option.",
+          text: "Paste the proof from your emailed receipt or the ballot screen, or drop the locked PDF. Republic will tell you whether that ballot was accepted and whether the PDF still matches the issued bytes. This page never shows a candidate or an option.",
         })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
@@ -238,7 +282,7 @@ export async function renderReceiptPortal(main, ctx) {
           "Receipt proof",
           h("span", {
             class: "field-hint",
-            text: "Copy the block that starts with BEGIN REPUBLIC VOTE RECEIPT, or the JSON from your receipt. Do not paste a screenshot of your marked ballot.",
+            text: "Copy the block that starts with BEGIN REPUBLIC VOTE RECEIPT, or drop the emailed PDF. Do not paste a screenshot of your marked ballot.",
           })
         ),
         h("textarea", {
@@ -248,12 +292,30 @@ export async function renderReceiptPortal(main, ctx) {
           rows: 12,
           spellcheck: "false",
           autocomplete: "off",
-          required: true,
           value: state.proof,
           onInput: (event) => {
             state.proof = event.target.value;
           },
         }),
+        h(
+          "label",
+          { class: "field", for: "receipt-pdf-file" },
+          "Locked PDF (optional)",
+          h("span", {
+            class: "field-hint",
+            text: "Drop the emailed republic-vote-receipt.pdf. The Node hashes the exact bytes. A modified file will not match.",
+          }),
+          h("input", {
+            id: "receipt-pdf-file",
+            name: "pdf",
+            type: "file",
+            class: "receipt-pdf-file",
+            accept: "application/pdf,.pdf",
+            onChange: (event) => {
+              state.pdfFile = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+            },
+          })
+        ),
         h(
           "div",
           { class: "cluster" },

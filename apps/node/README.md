@@ -32,7 +32,8 @@ One ballot per nullifier: a later ciphertext for the same nullifier is rejected
 passkey user id onto the same record as an encrypted ballot or a choice. The UI
 must not print “I voted for X” (receipts are hashes only). After accept, voters
 may email a PDF of that receipt and paste the proof at `/receipt` to confirm it
-counted. Turnout there is hourly (when and how many), never by candidate. Voters
+counted. The PDF is encrypted and locked against modification; drop it on that
+portal to confirm the bytes still match. Turnout there is hourly (when and how many), never by candidate. Voters
 may change their mind on the ballot form before submit; after accept they cannot recast.
 Public dashboards and the explorer show vote proofs only after the hour that
 contained the vote has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0`
@@ -136,6 +137,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `AWS_REGION` | _empty_ | SES region (also `SES_REGION`) |
 | `SES_CONFIGURATION_SET` | _empty_ | Optional SESv2 configuration set |
 | `REQUIRE_EMAIL_MFA` | off in tests; on when SES is configured | Force or disable email OTP MFA |
+| `RECEIPT_PDF_SECRET` | `$DATA_DIR/receipt-pdf.secret` | HMAC + PDF owner password for locked vote-receipt PDFs. Unset → Node mints a file |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 | `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
@@ -215,6 +217,10 @@ GET  /api/terms                     (public: pdfSha256, markdownSha256, hashOf=p
 GET  /api/terms.pdf
 POST /api/terms/view                (signed-in: one view record per session+hash)
 POST /api/terms/accept              (signed-in; `{ acceptedTerms: true }`; emails PDF via SES)
+GET  /api/receipts/metrics          (disclosed turnout hours; never by candidate)
+POST /api/receipts/verify           (paste proof and/or drop PDF; pdfUnmodified)
+POST /api/receipts/email            (holder token; SES body + locked PDF)
+POST /api/receipts/pdf              (holder token; encrypted PDF, X-Pdf-Protected: true)
 ```
 
 Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `republic.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).

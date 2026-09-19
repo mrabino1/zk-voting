@@ -1009,6 +1009,11 @@ th {
   margin-top: 1rem;
 }
 
+.receipt-pdf-file {
+  display: block;
+  margin-top: 0.4rem;
+}
+
 .receipt-hours {
   width: 100%;
   border-collapse: collapse;

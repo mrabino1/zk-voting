@@ -4,13 +4,20 @@
 // still wait for hourly disclosure; the holder token can confirm a count
 // before that hour closes without listing pending turnout.
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 import { isDisclosed, nextPublishAt, hourBucket, disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
 import { HttpError } from './http.mjs';
 import { emailHint, normalizeEmail, userEmail } from './identity.mjs';
 import { toBytes32 } from './merkle.mjs';
-import { buildDeterministicPdf } from './pdf.mjs';
+import {
+  buildDeterministicPdf,
+  pdfAllowsModify,
+  PDF_RECEIPT_PERMISSIONS,
+  readPdfEncryption,
+} from './pdf.mjs';
 import { publicVoteRecord } from './store.mjs';
 import { sha256Hex } from './terms.mjs';
 
@@ -43,6 +50,63 @@ export function hashReceiptToken(token) {
 
 export function mintReceiptToken() {
   return randomBytes(32).toString('base64url');
+}
+
+export async function loadReceiptPdfSecret(config) {
+  const fromConfig = String(config?.receiptPdfSecret || '').trim();
+  if (fromConfig) return fromConfig;
+  const fromEnv = String(process.env.RECEIPT_PDF_SECRET || '').trim();
+  if (fromEnv) return fromEnv;
+  const dir = config?.dataDir;
+  if (!dir) throw new Error('receipt PDF secret: dataDir or RECEIPT_PDF_SECRET required');
+  const file = path.join(dir, 'receipt-pdf.secret');
+  try {
+    const existing = (await fs.readFile(file, 'utf8')).trim();
+    if (existing) return existing;
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const secret = randomBytes(32).toString('base64url');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(file, `${secret}\n`, { encoding: 'utf8', mode: 0o600 });
+  return secret;
+}
+
+export function receiptPdfOwnerPassword(secret, tokenHash) {
+  return createHmac('sha256', String(secret || ''))
+    .update(`receipt-pdf-owner:${tokenHash || ''}`)
+    .digest('base64url');
+}
+
+export function receiptPdfIntegrity(secret, fields) {
+  const canonical = [
+    RECEIPT_SCHEMA,
+    fields.electionId || '',
+    fields.nullifier || '',
+    fields.ballotHash || '',
+    fields.userOpHash || '',
+    fields.acceptedAt == null ? '' : String(fields.acceptedAt),
+    fields.tokenHash || '',
+  ].join('\n');
+  return createHmac('sha256', String(secret || '')).update(canonical).digest('hex');
+}
+
+export function fingerprintFromPdfBody(body = {}) {
+  const listed = body.pdfSha256 || body.pdf_sha256 || body.sha256;
+  if (listed && /^[0-9a-fA-F]{64}$/.test(String(listed).trim())) {
+    return String(listed).trim().toLowerCase();
+  }
+  const raw = body.pdf || body.pdfBase64 || body.file;
+  if (!raw) return null;
+  if (typeof raw !== 'string') {
+    throw new HttpError(400, 'pdf must be base64', { code: 'RECEIPT_PDF' });
+  }
+  const s = raw.includes(',') ? raw.slice(raw.indexOf(',') + 1) : raw;
+  const buf = Buffer.from(s, 'base64');
+  if (buf.length < 8 || buf.subarray(0, 5).toString('latin1') !== '%PDF-') {
+    throw new HttpError(400, 'file is not a PDF', { code: 'RECEIPT_PDF' });
+  }
+  return sha256Hex(buf);
 }
 
 export function tryBytes32(value) {
@@ -112,6 +176,8 @@ export function formatReceiptProof(fields) {
     fields.userOpHash ? `userOpHash: ${fields.userOpHash}` : null,
     fields.token ? `token: ${fields.token}` : null,
     fields.acceptedAt != null ? `acceptedAt: ${isoUtc(fields.acceptedAt) || fields.acceptedAt}` : null,
+    fields.pdfSha256 ? `pdfSha256: ${fields.pdfSha256}` : null,
+    fields.integrity ? `integrity: hmac-sha256:${fields.integrity}` : null,
     RECEIPT_END,
   ];
   return lines.filter((line) => line != null && line !== '').join('\n');
@@ -133,6 +199,10 @@ function normalizeProofFields(obj) {
     userOpHash: optionalUserOpHash(obj.userOpHash || obj.user_op_hash),
     token: token ? String(token).trim() : null,
     acceptedAt: obj.acceptedAt ?? null,
+    pdfSha256: obj.pdfSha256 || obj.pdf_sha256 || null,
+    integrity: String(obj.integrity || '')
+      .replace(/^hmac-sha256:/i, '')
+      .trim() || null,
   };
 }
 
@@ -170,9 +240,11 @@ export function parseReceiptProof(raw, extras = {}) {
     userOpHash: parsed.userOpHash || fromExtras.userOpHash,
     token: parsed.token || fromExtras.token,
     acceptedAt: parsed.acceptedAt || fromExtras.acceptedAt,
+    pdfSha256: parsed.pdfSha256 || fromExtras.pdfSha256 || null,
+    integrity: parsed.integrity || fromExtras.integrity || null,
   };
-  if (!merged.token && !merged.nullifier && !merged.ballotHash) {
-    throw new HttpError(400, 'paste a receipt (token, nullifier, or ballot hash)', { code: 'RECEIPT_PROOF' });
+  if (!merged.token && !merged.nullifier && !merged.ballotHash && !merged.pdfSha256) {
+    throw new HttpError(400, 'paste a receipt (token, nullifier, ballot hash, or PDF)', { code: 'RECEIPT_PROOF' });
   }
   return merged;
 }
@@ -187,7 +259,7 @@ function electionPublicBits(election) {
   };
 }
 
-export function receiptLines({ election, vote, receipt, token, published, nextPublishAt: nextAt, includeToken = true }) {
+export function receiptLines({ election, vote, receipt, token, includeToken = true, integrity = null }) {
   const bits = electionPublicBits(election);
   const acceptedAt = vote?.acceptedAt ?? receipt?.acceptedAt;
   const userOp = receipt?.userOpHash || vote?.userOpHash || null;
@@ -195,6 +267,9 @@ export function receiptLines({ election, vote, receipt, token, published, nextPu
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
     'This is evidence that a ballot was accepted. It does not list which option or candidate was marked. If a copy of this receipt names a choice, it is invalid.',
+    '',
+    'This PDF is encrypted and locked against modification. Printing and copying the proof text are allowed. Editing, assembling pages, and filling forms are not. If a copy can be edited, it is not authentic. Drop the file at /receipt; a modified PDF will not match the SHA-256 the Node recorded.',
+    integrity ? `Integrity (HMAC-SHA256): ${integrity}` : null,
     '',
     `Election: ${bits.electionTitle || '—'}`,
     `Election id: ${bits.electionId || vote?.electionId || '—'}`,
@@ -207,12 +282,6 @@ export function receiptLines({ election, vote, receipt, token, published, nextPu
     `Relayer: ${vote?.relayer || 'node'}`,
     includeToken && token ? `Receipt token: ${token}` : null,
     '',
-    published
-      ? 'Public explorer rows for this ballot are disclosed.'
-      : `Public explorer rows wait until the hour that contained this ballot closes${
-          nextAt ? ` (next disclosure ${isoUtc(nextAt)}).` : '.'
-        }`,
-    '',
     'Paste this proof at /receipt to confirm the ballot was counted. Turnout metrics on that page are hourly snapshots and never include a candidate or option.',
     '',
     formatReceiptProof({
@@ -222,27 +291,87 @@ export function receiptLines({ election, vote, receipt, token, published, nextPu
       userOpHash: userOp,
       token: includeToken ? token : null,
       acceptedAt,
+      integrity,
     }),
   ];
   return lines.filter((line) => line != null);
 }
 
 export function buildReceiptPdf(input) {
-  const lines = receiptLines(input);
+  const secret = input.hmacSecret;
+  if (!secret) {
+    throw new HttpError(500, 'receipt PDF HMAC secret is not configured', { code: 'RECEIPT_PDF_SECRET' });
+  }
+  const token = input.token || null;
+  const tokenHash = token ? hashReceiptToken(token) : input.tokenHash || input.receipt?.tokenHash || '';
+  const acceptedAt = input.vote?.acceptedAt ?? input.receipt?.acceptedAt;
+  const integrity =
+    input.integrity ||
+    receiptPdfIntegrity(secret, {
+      electionId: input.election?.id || input.vote?.electionId || input.receipt?.electionId,
+      nullifier: input.vote?.nullifier || input.receipt?.nullifier,
+      ballotHash: input.vote?.ballotHash || input.receipt?.ballotHash,
+      userOpHash: input.receipt?.userOpHash || input.vote?.userOpHash,
+      acceptedAt,
+      tokenHash,
+    });
+  const lines = receiptLines({ ...input, integrity });
+  const ownerPassword = input.ownerPassword || receiptPdfOwnerPassword(secret, tokenHash);
   const pdf = buildDeterministicPdf({
     title: 'Republic vote receipt',
     lines,
-    created: pdfCreatedDay(input.vote?.acceptedAt ?? input.receipt?.acceptedAt),
+    created: pdfCreatedDay(acceptedAt),
+    protect: {
+      ownerPassword,
+      userPassword: '',
+      permissions: PDF_RECEIPT_PERMISSIONS,
+    },
   });
+  const enc = readPdfEncryption(pdf);
+  if (!enc || pdfAllowsModify(enc.permissions)) {
+    throw new HttpError(500, 'receipt PDF was not locked against modification', { code: 'RECEIPT_PDF_LOCK' });
+  }
   return {
     filename: RECEIPT_PDF_FILENAME,
     pdf,
     pdfSha256: sha256Hex(pdf),
+    pdfProtected: true,
+    pdfModify: false,
+    integrity,
     lines,
+    permissions: enc.permissions,
   };
 }
 
-export function receiptEmailBodies({ election, vote, receipt, token, published, nextPublishAt: nextAt, pdfSha256 }) {
+export async function issueAndStoreReceiptPdf(deps, { election, vote, receiptRow, token }) {
+  const secret = deps.config.receiptPdfSecret;
+  const artifact = buildReceiptPdf({
+    election,
+    vote: { ...vote, userOpHash: receiptRow?.userOpHash || vote?.userOpHash },
+    receipt: receiptRow,
+    token,
+    hmacSecret: secret,
+  });
+  if (receiptRow?.id && typeof deps.store.markReceiptPdfIssued === 'function') {
+    await deps.store.markReceiptPdfIssued(receiptRow.id, {
+      pdfSha256: artifact.pdfSha256,
+      pdfProtected: true,
+      pdfIntegrity: artifact.integrity,
+    });
+  }
+  return artifact;
+}
+
+export function receiptEmailBodies({
+  election,
+  vote,
+  receipt,
+  token,
+  published,
+  nextPublishAt: nextAt,
+  pdfSha256,
+  integrity = null,
+}) {
   const bits = electionPublicBits(election);
   const proof = formatReceiptProof({
     electionId: bits.electionId || vote?.electionId,
@@ -251,12 +380,16 @@ export function receiptEmailBodies({ election, vote, receipt, token, published, 
     userOpHash: receipt?.userOpHash || vote?.userOpHash,
     token,
     acceptedAt: vote?.acceptedAt ?? receipt?.acceptedAt,
+    pdfSha256,
+    integrity,
   });
   const subject = 'Republic vote receipt (not your choices)';
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
     'A ballot was accepted. This message is evidence of voting, not of how you voted. It does not list a candidate or an option. If a copy of this receipt names a choice, it is invalid.',
+    '',
+    'The attached PDF is encrypted and locked against modification. Printing and copying are allowed; editing is not. If a copy can be edited, it is not authentic. Drop that file at /receipt to confirm it still matches the SHA-256 below.',
     '',
     `Election: ${bits.electionTitle || '—'}`,
     `Election id: ${bits.electionId || vote?.electionId || '—'}`,
@@ -265,6 +398,7 @@ export function receiptEmailBodies({ election, vote, receipt, token, published, 
     `Nullifier: ${vote?.nullifier || receipt?.nullifier || '—'}`,
     `UserOp hash: ${receipt?.userOpHash || vote?.userOpHash || '—'}`,
     pdfSha256 ? `PDF SHA-256: ${pdfSha256}` : null,
+    integrity ? `Integrity (HMAC-SHA256): ${integrity}` : null,
     '',
     published
       ? 'Public explorer rows for this ballot are disclosed.'
@@ -276,7 +410,7 @@ export function receiptEmailBodies({ election, vote, receipt, token, published, 
     '',
     proof,
     '',
-    'A PDF of the same text is attached. Keep this message if you need to show that you participated.',
+    'Keep this message if you need to show that you participated. A modified PDF will not match.',
   ]
     .filter((line) => line != null)
     .join('\n');
@@ -290,9 +424,10 @@ Accepted (UTC): ${htmlEscape(isoUtc(vote?.acceptedAt ?? receipt?.acceptedAt) || 
 Ballot hash: <code style="word-break:break-all">${htmlEscape(vote?.ballotHash || receipt?.ballotHash || '—')}</code><br/>
 Nullifier: <code style="word-break:break-all">${htmlEscape(vote?.nullifier || receipt?.nullifier || '—')}</code></p>
 ${pdfSha256 ? `<p>PDF SHA-256: <code style="word-break:break-all">${htmlEscape(pdfSha256)}</code></p>` : ''}
-<p>Paste this proof at <code>/receipt</code> to confirm the ballot was counted. Turnout on that page is an hourly snapshot and never includes a candidate or option.</p>
+${integrity ? `<p>Integrity (HMAC-SHA256): <code style="word-break:break-all">${htmlEscape(integrity)}</code></p>` : ''}
+<p>The attached PDF is encrypted and locked against modification. Drop it at <code>/receipt</code> to confirm it was not changed. Turnout on that page is an hourly snapshot and never includes a candidate or option.</p>
 <pre style="font-family:ui-monospace,monospace;font-size:0.85rem;white-space:pre-wrap;word-break:break-all;background:#f6f4ef;padding:0.85rem;border:1px solid #ccc">${htmlEscape(proof)}</pre>
-<p style="color:#444">A PDF of the same text is attached. Civic public good. Not a commercial product.</p>
+<p style="color:#444">Civic public good. Not a commercial product.</p>
 </body></html>`;
   return { subject, text, html };
 }
@@ -304,6 +439,8 @@ export function presentHolderReceipt({
   published,
   nextPublishAt: nextAt,
   pdfSha256 = null,
+  integrity = null,
+  pdfProtected = true,
 }) {
   const bits = electionPublicBits(election);
   const proofText = formatReceiptProof({
@@ -313,6 +450,8 @@ export function presentHolderReceipt({
     userOpHash: vote?.userOpHash,
     token,
     acceptedAt: vote?.acceptedAt,
+    pdfSha256,
+    integrity,
   });
   return stripReceiptChoice({
     schema: RECEIPT_SCHEMA,
@@ -332,6 +471,9 @@ export function presentHolderReceipt({
     published: Boolean(published),
     nextPublishAt: nextAt ?? null,
     pdfSha256,
+    pdfProtected: Boolean(pdfProtected),
+    pdfModify: false,
+    integrity,
     verifyPath: '/receipt',
     filename: RECEIPT_PDF_FILENAME,
     nfp: true,
@@ -395,18 +537,36 @@ function matchingPublishedVotes(store, proof, now, interval) {
 }
 
 export function lookupReceipt(deps, rawProof, extras = {}) {
-  const proof = parseReceiptProof(rawProof, extras);
+  const submittedPdfHash = fingerprintFromPdfBody(extras);
+  const mergedExtras = submittedPdfHash ? { ...extras, pdfSha256: submittedPdfHash } : extras;
+  const text = String(rawProof || '').trim();
+  const hasProofText = Boolean(
+    text || mergedExtras.token || mergedExtras.nullifier || mergedExtras.ballotHash || mergedExtras.pdfSha256,
+  );
+  if (!hasProofText) {
+    throw new HttpError(400, 'paste a receipt (token, nullifier, ballot hash, or PDF)', { code: 'RECEIPT_PROOF' });
+  }
+  const proof = parseReceiptProof(rawProof, mergedExtras);
   const now = deps.config.nowFn();
   const interval = deps.config.disclosureIntervalSeconds;
   let receiptRow = null;
   let vote = null;
   let holder = false;
+  let fromIssuedPdf = false;
   if (proof.token) {
     receiptRow = deps.store.findReceiptByTokenHash(hashReceiptToken(proof.token));
     if (!receiptRow) {
       throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
     }
     vote = deps.store.findVote(receiptRow.electionId, receiptRow.nullifier);
+    holder = true;
+  } else if (submittedPdfHash && !proof.nullifier && !proof.ballotHash) {
+    receiptRow = deps.store.findReceiptByPdfSha256?.(submittedPdfHash) || null;
+    if (!receiptRow) {
+      throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false, pdfUnmodified: false });
+    }
+    vote = deps.store.findVote(receiptRow.electionId, receiptRow.nullifier);
+    fromIssuedPdf = true;
     holder = true;
   } else {
     const published = matchingPublishedVotes(deps.store, proof, now, interval);
@@ -425,6 +585,14 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
   const metrics = publicReceiptMetrics(election, deps, { now, interval });
   const publicVote = publicVoteRecord(vote);
   const hourClosed = published ? disclosureHourClosedAt(vote.acceptedAt, interval) : null;
+  const storedPdfSha256 = receiptRow?.pdfSha256 || null;
+  let pdfUnmodified = null;
+  if (submittedPdfHash) {
+    pdfUnmodified = Boolean(storedPdfSha256 && storedPdfSha256 === submittedPdfHash);
+  } else if (proof.pdfSha256 && storedPdfSha256) {
+    pdfUnmodified = storedPdfSha256 === String(proof.pdfSha256).toLowerCase();
+  }
+  const showPdfSeal = holder || fromIssuedPdf || pdfUnmodified === true;
   return stripReceiptChoice({
     ok: true,
     nfp: true,
@@ -447,6 +615,11 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     nextPublishAt: nextAt,
     nextPublishAtIso: isoUtc(nextAt),
     metrics,
+    pdfProtected: showPdfSeal ? true : null,
+    pdfModify: showPdfSeal ? false : null,
+    pdfSha256: showPdfSeal ? storedPdfSha256 : null,
+    pdfUnmodified,
+    integrity: showPdfSeal ? receiptRow?.pdfIntegrity || null : null,
     explorerUrl: `/explorer#/nullifier/${encodeURIComponent(publicVote.nullifier)}`,
     note: published
       ? 'This ballot is in the public record. The receipt still cannot prove which option was marked.'
@@ -477,14 +650,11 @@ export async function emailReceipt(deps, req, body = {}) {
   const interval = deps.config.disclosureIntervalSeconds;
   const published = isDisclosed(vote.acceptedAt, now, interval);
   const nextAt = published ? null : nextPublishAt(now, interval);
-  const artifact = buildReceiptPdf({
+  const artifact = await issueAndStoreReceiptPdf(deps, {
     election,
-    vote: { ...vote, userOpHash: row.userOpHash },
-    receipt: row,
+    vote,
+    receiptRow: row,
     token: proof.token,
-    published,
-    nextPublishAt: nextAt,
-    includeToken: true,
   });
   const bodies = receiptEmailBodies({
     election,
@@ -494,6 +664,7 @@ export async function emailReceipt(deps, req, body = {}) {
     published,
     nextPublishAt: nextAt,
     pdfSha256: artifact.pdfSha256,
+    integrity: artifact.integrity,
   });
   await deps.mailer.send({
     to,
@@ -520,12 +691,15 @@ export async function emailReceipt(deps, req, body = {}) {
     emailed: true,
     toHint: emailHint(to),
     pdfSha256: artifact.pdfSha256,
+    pdfProtected: true,
+    pdfModify: false,
+    integrity: artifact.integrity,
     filename: artifact.filename,
     receiptsProveChoice: false,
   };
 }
 
-export function receiptPdfForToken(deps, rawProof, extras = {}) {
+export async function receiptPdfForToken(deps, rawProof, extras = {}) {
   const proof = parseReceiptProof(rawProof, extras);
   if (!proof.token) {
     throw new HttpError(401, 'a receipt token is required to download the PDF', { code: 'RECEIPT_TOKEN_REQUIRED' });
@@ -535,17 +709,11 @@ export function receiptPdfForToken(deps, rawProof, extras = {}) {
   const vote = deps.store.findVote(row.electionId, row.nullifier);
   if (!vote) throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND' });
   const election = deps.store.requireElection(vote.electionId);
-  const now = deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
-  const published = isDisclosed(vote.acceptedAt, now, interval);
-  return buildReceiptPdf({
+  return issueAndStoreReceiptPdf(deps, {
     election,
-    vote: { ...vote, userOpHash: row.userOpHash },
-    receipt: row,
+    vote,
+    receiptRow: row,
     token: proof.token,
-    published,
-    nextPublishAt: published ? null : nextPublishAt(now, interval),
-    includeToken: true,
   });
 }
 

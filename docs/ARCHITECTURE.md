@@ -109,14 +109,16 @@ A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
 The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
 ciphertext. After accept, the voter may email that receipt: the message body
-and a PDF attachment are the same text. A public `/receipt` portal accepts a
-copy-paste of that proof and answers whether the ballot counted, plus hourly
-turnout (when hours closed, how many ballots were disclosed) — never a
-candidate or option. A holder token on the receipt can confirm a count before
-the hour closes; looking up public hashes still waits for disclosure. Double
-voting remains impossible. This is **not** MACI and **not**
-last-vote-counts: a coercer who can force the first (and only) submit still
-wins that ballot.
+and a PDF attachment are the same evidence. That PDF uses PDF Standard Security
+so it cannot be edited (print and copy remain allowed). The Node records
+SHA-256 of the exact bytes; `/receipt` accepts the proof or the file and
+rejects a modified PDF. A public `/receipt` portal answers whether the ballot
+counted, plus hourly turnout (when hours closed, how many ballots were
+disclosed) — never a candidate or option. A holder token on the receipt can
+confirm a count before the hour closes; looking up public hashes still waits
+for disclosure. Double voting remains impossible. This is **not** MACI and
+**not** last-vote-counts: a coercer who can force the first (and only) submit
+still wins that ballot.
 
 ### Hourly public disclosure (polling-place unlinkability)
 

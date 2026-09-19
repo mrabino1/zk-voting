@@ -15,6 +15,11 @@ import {
   receiptLines,
   buildReceiptPdf,
 } from '../src/receipts.mjs';
+import {
+  decryptPdfStreams,
+  pdfAllowsModify,
+  readPdfEncryption,
+} from '../src/pdf.mjs';
 import { sha256Hex } from '../src/terms.mjs';
 
 const HOUR = 3600;
@@ -135,9 +140,10 @@ describe('receipt proof helpers', () => {
     const blob = lines.join('\n');
     assert.match(blob, /Ballot hash/);
     assert.match(blob, /does not list which option/);
+    assert.match(blob, /locked against modification/);
     assert.doesNotMatch(blob, new RegExp(ZEBRA));
     assert.doesNotMatch(blob, /I voted for/i);
-    const { pdf, pdfSha256 } = buildReceiptPdf({
+    const { pdf, pdfSha256, pdfProtected, integrity } = buildReceiptPdf({
       election: { id: 'el-1', title: 'Town poll', jurisdictionId: 'demo' },
       vote: {
         electionId: 'el-1',
@@ -146,11 +152,23 @@ describe('receipt proof helpers', () => {
         acceptedAt: HOUR_START + 90,
       },
       token: 'holder-token',
-      published: true,
+      hmacSecret: 'unit-receipt-pdf-secret',
     });
     assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-');
     assert.equal(sha256Hex(pdf), pdfSha256);
+    assert.equal(pdfProtected, true);
+    assert.ok(integrity);
+    const enc = readPdfEncryption(pdf);
+    assert.ok(enc);
+    assert.equal(pdfAllowsModify(enc.permissions), false);
     assert.doesNotMatch(pdf.toString('latin1'), new RegExp(ZEBRA));
+    assert.doesNotMatch(pdf.toString('latin1'), /holder-token/);
+    const opened = decryptPdfStreams(pdf, '')
+      .map((s) => s.text)
+      .join('\n');
+    assert.match(opened, /holder-token/);
+    assert.match(opened, /locked against modification/);
+    assert.doesNotMatch(opened, new RegExp(ZEBRA));
   });
 });
 
@@ -226,6 +244,8 @@ describe('email receipt, PDF, and verify portal', () => {
     const cfg = await api('GET', '/api/config');
     assert.equal(cfg.json.receipts.proveChoice, false);
     assert.equal(cfg.json.receipts.verifyPath, '/receipt');
+    assert.equal(cfg.json.receipts.pdfProtected, true);
+    assert.equal(cfg.json.receipts.pdfModify, false);
     assert.equal(cfg.json.coercion.receiptsProveChoice, false);
   });
 
@@ -247,6 +267,9 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.equal(receipt.schema, RECEIPT_SCHEMA);
     assert.equal(receipt.receiptsProveChoice, false);
     assert.ok(receipt.token);
+    assert.match(receipt.pdfSha256, /^[0-9a-f]{64}$/);
+    assert.equal(receipt.pdfProtected, true);
+    assert.equal(receipt.pdfModify, false);
     assert.match(receipt.proofText, /BEGIN REPUBLIC VOTE RECEIPT/);
     assert.equal(leakChoice(receipt).join(','), '');
     assert.equal(voted.json.vote.choice, undefined);
@@ -274,16 +297,49 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.equal(captured.attachments[0].sha256, emailed.json.pdfSha256);
     const pdfLatin = captured.attachments[0].content.toString('latin1');
     assert.match(pdfLatin, /%PDF-/);
+    assert.match(pdfLatin, /\/Filter \/Standard/);
     assert.doesNotMatch(captured.text, new RegExp(ZEBRA));
     assert.doesNotMatch(captured.html, new RegExp(ZEBRA));
     assert.doesNotMatch(pdfLatin, new RegExp(ZEBRA));
+    assert.doesNotMatch(pdfLatin, new RegExp(String(receipt.token).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.doesNotMatch(captured.text, /I voted for/i);
+    assert.match(captured.text, /locked against modification/i);
+    assert.equal(emailed.json.pdfProtected, true);
 
     const pdf = await api('POST', '/api/receipts/pdf', { body: { token: receipt.token } });
     assert.equal(pdf.status, 200);
     assert.match(pdf.res.headers.get('content-type') || '', /pdf/);
     assert.equal(pdf.res.headers.get('x-pdf-sha256'), emailed.json.pdfSha256);
+    assert.equal(pdf.res.headers.get('x-pdf-protected'), 'true');
+    assert.equal(pdf.res.headers.get('x-pdf-modify'), 'false');
     assert.equal(pdf.res.headers.get('x-receipts-prove-choice'), 'false');
+    const pdfBuf = Buffer.from(captured.attachments[0].content);
+    assert.equal(sha256Hex(pdfBuf), emailed.json.pdfSha256);
+    const enc = readPdfEncryption(pdfBuf);
+    assert.ok(enc);
+    assert.equal(pdfAllowsModify(enc.permissions), false);
+
+    const byPdf = await api('POST', '/api/receipts/verify', {
+      body: { pdf: pdfBuf.toString('base64') },
+    });
+    assert.equal(byPdf.status, 200, byPdf.json?.error);
+    assert.equal(byPdf.json.counted, true);
+    assert.equal(byPdf.json.pdfUnmodified, true);
+    assert.equal(byPdf.json.pdfProtected, true);
+
+    const tampered = Buffer.from(pdfBuf);
+    tampered[tampered.length - 30] ^= 0xff;
+    const badPdf = await api('POST', '/api/receipts/verify', {
+      body: { token: receipt.token, pdf: tampered.toString('base64') },
+    });
+    assert.equal(badPdf.status, 200, badPdf.json?.error);
+    assert.equal(badPdf.json.counted, true);
+    assert.equal(badPdf.json.pdfUnmodified, false);
+
+    const onlyBad = await api('POST', '/api/receipts/verify', {
+      body: { pdf: tampered.toString('base64') },
+    });
+    assert.equal(onlyBad.status, 404);
 
     const pendingHash = await api('POST', '/api/receipts/verify', {
       body: { nullifier: receipt.nullifier, ballotHash: receipt.ballotHash, electionId: id },

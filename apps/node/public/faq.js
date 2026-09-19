@@ -182,8 +182,8 @@ export const FAQ_ENTRIES = [
     q: "Will my receipt show which option I marked?",
     a: [
       "No. A Republic receipt is hashes only. It records that a ballot was accepted, not which option you selected. If a screen, email, or PDF prints “I voted for X,” that is a bug.",
-      "After you vote you may email the receipt to yourself. The email body and the attached PDF are the same text: election title, ballot hash, nullifier, and a copy-paste proof. They do not include marked options or a ciphertext opening.",
-      "Keep the receipt if you need to show that you participated. Paste it at /receipt to confirm it counted. That portal also shows how many ballots have been disclosed and when each hour closed. It cannot satisfy a coercer who demands proof of choice — that is intentional.",
+      "After you vote you may email the receipt to yourself. The email body and the attached PDF are the same evidence: election title, ballot hash, nullifier, and a copy-paste proof. The PDF is encrypted and locked against modification (print and copy are allowed; editing is not). They do not include marked options or a ciphertext opening. A changed file will not match the SHA-256 the Node recorded.",
+      "Keep the receipt if you need to show that you participated. Paste it at /receipt, or drop the PDF, to confirm it counted and that the file is unmodified. That portal also shows how many ballots have been disclosed and when each hour closed. It cannot satisfy a coercer who demands proof of choice — that is intentional.",
     ],
   },
   {
@@ -191,7 +191,7 @@ export const FAQ_ENTRIES = [
     topic: "receipt-check",
     q: "How do I prove my vote counted without showing who I voted for?",
     a: [
-      "Open /receipt and paste the proof from the ballot screen or the emailed PDF. The Node answers whether that ballot was accepted and whether the hour that contained it has been disclosed. You will not be shown a candidate or an option.",
+      "Open /receipt and paste the proof from the ballot screen or the emailed PDF, or drop that PDF file. The Node answers whether that ballot was accepted, whether the hour that contained it has been disclosed, and whether the PDF bytes still match the locked file it issued. You will not be shown a candidate or an option.",
       "Salient public metrics on that page are when hours closed and how many ballots were disclosed — not live pending turnout, and not a count by candidate. A holder token on the receipt can confirm a count before the hour closes; public hash lookup waits for disclosure so walking out of a polling place cannot be matched to a live tick.",
     ],
   },

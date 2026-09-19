@@ -1187,6 +1187,29 @@ export class Store {
     return rec;
   }
 
+  findReceiptByPdfSha256(pdfSha256) {
+    const key = String(pdfSha256 || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(key)) return null;
+    return (this.data.receipts || []).find((r) => String(r.pdfSha256 || '').toLowerCase() === key) || null;
+  }
+
+  async markReceiptPdfIssued(id, { pdfSha256, pdfProtected = true, pdfIntegrity = null } = {}) {
+    const rec = (this.data.receipts || []).find((r) => r.id === id);
+    if (!rec) return null;
+    const hash = String(pdfSha256 || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) {
+      throw new HttpError(500, 'receipt PDF fingerprint missing', { code: 'RECEIPT_PDF_DRIFT' });
+    }
+    if (rec.pdfSha256 && String(rec.pdfSha256).toLowerCase() !== hash) {
+      throw new HttpError(500, 'receipt PDF fingerprint changed', { code: 'RECEIPT_PDF_DRIFT' });
+    }
+    rec.pdfSha256 = hash;
+    rec.pdfProtected = Boolean(pdfProtected);
+    if (pdfIntegrity) rec.pdfIntegrity = String(pdfIntegrity);
+    await this.persist();
+    return rec;
+  }
+
   /**
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
@@ -1224,6 +1247,9 @@ export class Store {
         acceptedAt,
         emailedAt: null,
         emailHint: null,
+        pdfSha256: null,
+        pdfProtected: true,
+        pdfIntegrity: null,
       });
     }
     if (envelope) {

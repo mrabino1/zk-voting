@@ -20,6 +20,7 @@ import { createMailer } from './mailer.mjs';
 import { createMfaService } from './mfa.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
+import { loadReceiptPdfSecret } from './receipts.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { authRouter } from './routes/auth.mjs';
 import { electionsRouter } from './routes/elections.mjs';
@@ -140,6 +141,7 @@ export async function createApp(overrides = {}) {
   const { chain: chainOverride, passkeyHooks, l1: l1Override, l1Hooks, ...configOverrides } = overrides;
   const config = getConfig(configOverrides);
   const store = await Store.open(config);
+  config.receiptPdfSecret = await loadReceiptPdfSecret(config);
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   const chain = chainOverride || createChain(config);

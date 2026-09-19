@@ -455,6 +455,7 @@ export function electionsRouter(deps) {
         store,
         explorer,
         chain,
+        config,
         electionId: req.params.id,
         body: req.body,
         now: config.nowFn(),

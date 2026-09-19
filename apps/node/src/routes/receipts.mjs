@@ -49,11 +49,14 @@ export function receiptsRouter(deps) {
     '/receipts/pdf',
     asyncHandler(async (req, res) => {
       const body = req.body || {};
-      const artifact = receiptPdfForToken(deps, body.proof || body.receipt || body.text, body);
+      const artifact = await receiptPdfForToken(deps, body.proof || body.receipt || body.text, body);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${artifact.filename}"`);
       res.setHeader('X-Pdf-SHA256', artifact.pdfSha256);
+      res.setHeader('X-Pdf-Protected', 'true');
+      res.setHeader('X-Pdf-Modify', 'false');
       res.setHeader('X-Receipts-Prove-Choice', 'false');
+      if (artifact.integrity) res.setHeader('X-Pdf-Integrity', artifact.integrity);
       res.send(artifact.pdf);
     }),
   );

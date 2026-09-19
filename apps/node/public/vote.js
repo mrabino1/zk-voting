@@ -650,6 +650,9 @@ export async function renderVote(main, ctx) {
         published: serverReceipt.published,
         nextPublishAt: serverReceipt.nextPublishAt,
         pdfSha256: serverReceipt.pdfSha256 || null,
+        pdfProtected: serverReceipt.pdfProtected !== false,
+        pdfModify: false,
+        integrity: serverReceipt.integrity || null,
         accepted,
         message,
         receiptsProveChoice: false,
@@ -708,8 +711,8 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
         body: { token: receipt.token, proof, email: state.emailTo || undefined },
       });
       state.info = res?.toHint
-        ? `Receipt emailed to ${res.toHint}. The message and PDF do not list your choices.`
-        : "Receipt emailed. The message and PDF do not list your choices.";
+        ? `Receipt emailed to ${res.toHint}. The message and locked PDF do not list your choices.`
+        : "Receipt emailed. The message and locked PDF do not list your choices.";
       announce(state.info);
     } catch (err) {
       state.error = err.message || "Could not email this receipt.";
@@ -754,7 +757,9 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       a.download = "republic-vote-receipt.pdf";
       a.click();
       URL.revokeObjectURL(url);
-      announce("PDF downloaded. It does not list your choices.");
+      const sha = res.headers.get("x-pdf-sha256");
+      if (sha) receipt.pdfSha256 = sha;
+      announce("Locked PDF downloaded. It cannot be edited and does not list your choices.");
     } catch (err) {
       state.error = err.message || "Could not download the PDF.";
       announce(state.error);
@@ -778,6 +783,10 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
         text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
       }
     ),
+    h("p", {
+      class: "field-hint",
+      text: "The PDF is encrypted and locked against modification. Printing and copying are allowed; editing is not. A changed file will not match the SHA-256 the Node recorded.",
+    }),
     receipt.message ? h("p", { text: receipt.message }) : null,
     h(
       "ul",
@@ -786,6 +795,10 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       h("li", {}, h("span", { class: "lbl", text: "Ballot hash" }), h("span", { class: "hex", text: receipt.ballotHash || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Nullifier" }), h("span", { class: "hex", text: receipt.nullifier || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "UserOp hash" }), h("span", { class: "hex", text: receipt.userOpHash || "—" })),
+      h("li", {}, h("span", { class: "lbl", text: "PDF" }), h("span", { text: "Locked against modification" })),
+      receipt.pdfSha256
+        ? h("li", {}, h("span", { class: "lbl", text: "PDF SHA-256" }), h("span", { class: "hex", text: receipt.pdfSha256 }))
+        : null,
       receipt.published === false
         ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))
         : receipt.published
@@ -816,7 +829,7 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
         class: "btn btn-secondary",
         type: "button",
         disabled: state.downloadBusy || !receipt.token,
-        text: state.downloadBusy ? "Preparing PDF…" : "Download PDF",
+        text: state.downloadBusy ? "Preparing locked PDF…" : "Download locked PDF",
         onClick: onDownload,
       }),
       h("a", {
@@ -833,7 +846,7 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       h("h3", { text: "Email this receipt" }),
       h("p", {
         class: "field-hint",
-        text: "The email body and the attached PDF are the same evidence: hashes only. They do not list a candidate or an option. If you are signed in with email, you can leave the address blank.",
+        text: "The email body and the attached PDF are the same evidence: hashes only. The PDF is encrypted so it cannot be edited. They do not list a candidate or an option. If you are signed in with email, you can leave the address blank.",
       }),
       h(
         "label",
