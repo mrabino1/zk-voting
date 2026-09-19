@@ -344,47 +344,8 @@ function renderForm(state, opts, statusEl) {
     ),
     tab === "email"
       ? el(
-          "form",
-          {
-            class: "form-grid",
-            onSubmit: (event) => {
-              event.preventDefault();
-              const email = event.target.email?.value?.trim();
-              runAction(state, statusEl, "email", () => signInWithEmail(email, state));
-            },
-          },
-          el(
-            "div",
-            { class: "field" },
-            el("label", { class: "field-label", for: "signin-email", text: "Email (any bound address)" }),
-            el("input", {
-              id: "signin-email",
-              name: "email",
-              type: "email",
-              autocomplete: "username email",
-              required: true,
-            })
-          ),
-          el(
-            "div",
-            { class: "actions" },
-            el("button", {
-              class: "btn",
-              type: "submit",
-              "data-signin": "email",
-              disabled: busy,
-              text: state.busy === "email" ? "Sending code…" : "Email me a sign-in code",
-            })
-          )
-        ),
-        el(
-          "details",
-          { class: "sign-in-handle" },
-          el("summary", { text: "Forgot vote PIN" }),
-          el("p", {
-            class: "field-hint",
-            text: "Same process as a password reset: we email a one-time code, then you set a new PIN on a phone keypad. Keyboard typing of the PIN is disabled.",
-          }),
+          "div",
+          {},
           el(
             "form",
             {
@@ -392,20 +353,18 @@ function renderForm(state, opts, statusEl) {
               onSubmit: (event) => {
                 event.preventDefault();
                 const email = event.target.email?.value?.trim();
-                runAction(state, statusEl, "pin-forgot", () =>
-                  forgotVotePin(fetchJson, { email }).then((result) => finishOrMfa(state, result, "pin-reset"))
-                );
+                runAction(state, statusEl, "email", () => signInWithEmail(email, state));
               },
             },
             el(
               "div",
               { class: "field" },
-              el("label", { class: "field-label", for: "signin-forgot-pin-email", text: "Email" }),
+              el("label", { class: "field-label", for: "signin-email", text: "Email (any bound address)" }),
               el("input", {
-                id: "signin-forgot-pin-email",
+                id: "signin-email",
                 name: "email",
                 type: "email",
-                autocomplete: "email",
+                autocomplete: "username email",
                 required: true,
               })
             ),
@@ -413,11 +372,56 @@ function renderForm(state, opts, statusEl) {
               "div",
               { class: "actions" },
               el("button", {
-                class: "btn btn-secondary",
+                class: "btn",
                 type: "submit",
+                "data-signin": "email",
                 disabled: busy,
-                text: state.busy === "pin-forgot" ? "Sending code…" : "Email me a PIN reset code",
+                text: state.busy === "email" ? "Sending code…" : "Email me a sign-in code",
               })
+            )
+          ),
+          el(
+            "details",
+            { class: "sign-in-handle" },
+            el("summary", { text: "Forgot vote PIN" }),
+            el("p", {
+              class: "field-hint",
+              text: "Same process as a password reset: we email a one-time code, then you set a new PIN on the phone keypad. Keyboard typing of the PIN is disabled.",
+            }),
+            el(
+              "form",
+              {
+                class: "form-grid",
+                onSubmit: (event) => {
+                  event.preventDefault();
+                  const email = event.target.email?.value?.trim();
+                  runAction(state, statusEl, "pin-forgot", () =>
+                    forgotVotePin(fetchJson, { email }).then((result) => finishOrMfa(state, result, "pin-reset"))
+                  );
+                },
+              },
+              el(
+                "div",
+                { class: "field" },
+                el("label", { class: "field-label", for: "signin-forgot-pin-email", text: "Email" }),
+                el("input", {
+                  id: "signin-forgot-pin-email",
+                  name: "email",
+                  type: "email",
+                  autocomplete: "email",
+                  required: true,
+                })
+              ),
+              el(
+                "div",
+                { class: "actions" },
+                el("button", {
+                  class: "btn btn-secondary",
+                  type: "submit",
+                  disabled: busy,
+                  text: state.busy === "pin-forgot" ? "Sending code…" : "Email me a PIN reset code",
+                })
+              )
             )
           )
         )
