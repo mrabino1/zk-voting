@@ -6,11 +6,17 @@
 export default {
   lang: {
     group: "Wika",
+    choose: "Pumili ng wika",
     english: "Ingles",
     spanish: "Espanyol",
     chinese: "Tsino",
     tagalog: "Tagalog",
     vietnamese: "Vietnamese",
+    arabic: "Arabe",
+    french: "Pranses",
+    korean: "Koreano",
+    portuguese: "Portuges",
+    hindi: "Hindi",
   },
   chrome: {
     skip: "Laktawan papunta sa pangunahing nilalaman",

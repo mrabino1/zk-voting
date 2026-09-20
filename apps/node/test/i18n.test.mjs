@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Website locale: English default; Spanish, Chinese, Tagalog, Vietnamese optional.
+// Website locale: English default; ACS US home-language ranks 2–10 optional.
 // Docs/contracts stay English.
 
 import assert from 'node:assert/strict';
@@ -8,6 +8,7 @@ import { beforeEach, describe, test } from 'node:test';
 import {
   DEFAULT_LOCALE,
   HTML_LANG,
+  RTL_LOCALES,
   STORAGE_KEY,
   SUPPORTED_LOCALES,
   catalogs,
@@ -26,7 +27,19 @@ describe('website i18n', () => {
 
   test('defaults to English and lists ACS top US home languages', () => {
     assert.equal(DEFAULT_LOCALE, 'en');
-    assert.deepEqual(SUPPORTED_LOCALES, ['en', 'es', 'zh', 'fil', 'vi']);
+    assert.deepEqual(SUPPORTED_LOCALES, [
+      'en',
+      'es',
+      'zh',
+      'fil',
+      'vi',
+      'ar',
+      'fr',
+      'ko',
+      'pt',
+      'hi',
+    ]);
+    assert.deepEqual(RTL_LOCALES, ['ar']);
     assert.equal(STORAGE_KEY, 'republic_lang');
     assert.equal(getLocale(), 'en');
     assert.equal(localeTag(), 'en');
@@ -35,9 +48,15 @@ describe('website i18n', () => {
     assert.equal(t('lang.chinese'), 'Chinese');
     assert.equal(t('lang.tagalog'), 'Tagalog');
     assert.equal(t('lang.vietnamese'), 'Vietnamese');
+    assert.equal(t('lang.arabic'), 'Arabic');
+    assert.equal(t('lang.french'), 'French');
+    assert.equal(t('lang.korean'), 'Korean');
+    assert.equal(t('lang.portuguese'), 'Portuguese');
+    assert.equal(t('lang.hindi'), 'Hindi');
+    assert.equal(t('lang.choose'), 'Choose language');
   });
 
-  test('looks up Spanish, Chinese, Tagalog, and Vietnamese and falls back to English', () => {
+  test('looks up each optional locale and falls back to English', () => {
     resetLocaleForTests('es');
     assert.equal(getLocale(), 'es');
     assert.equal(localeTag(), 'es');
@@ -61,6 +80,36 @@ describe('website i18n', () => {
     assert.equal(localeTag(), 'vi');
     assert.equal(t('chrome.navElections'), 'Bầu cử');
     assert.equal(t('home.markBallot'), 'Đánh phiếu');
+
+    resetLocaleForTests('ar');
+    assert.equal(getLocale(), 'ar');
+    assert.equal(localeTag(), 'ar');
+    assert.equal(t('chrome.navElections'), 'الانتخابات');
+    assert.equal(t('home.markBallot'), 'تعبئة ورقة الاقتراع');
+
+    resetLocaleForTests('fr');
+    assert.equal(getLocale(), 'fr');
+    assert.equal(localeTag(), 'fr');
+    assert.equal(t('chrome.navElections'), 'Élections');
+    assert.equal(t('home.markBallot'), 'Remplir le bulletin');
+
+    resetLocaleForTests('ko');
+    assert.equal(getLocale(), 'ko');
+    assert.equal(localeTag(), 'ko');
+    assert.equal(t('chrome.navElections'), '선거');
+    assert.equal(t('home.markBallot'), '투표용지 작성');
+
+    resetLocaleForTests('pt');
+    assert.equal(getLocale(), 'pt');
+    assert.equal(localeTag(), 'pt-BR');
+    assert.equal(t('chrome.navElections'), 'Eleições');
+    assert.equal(t('home.markBallot'), 'Marcar cédula');
+
+    resetLocaleForTests('hi');
+    assert.equal(getLocale(), 'hi');
+    assert.equal(localeTag(), 'hi');
+    assert.equal(t('chrome.navElections'), 'चुनाव');
+    assert.equal(t('home.markBallot'), 'मतपत्र भरें');
 
     assert.equal(t('this.key.does.not.exist'), 'this.key.does.not.exist');
   });
@@ -94,10 +143,25 @@ describe('website i18n', () => {
     resetLocaleForTests('vi');
     assert.equal(t('vote.officialBallot', { count: 1 }), 'Phiếu chính thức · 1 câu');
     assert.equal(t('vote.officialBallot', { count: 2 }), 'Phiếu chính thức · 2 câu');
+    resetLocaleForTests('ar');
+    assert.equal(t('vote.officialBallot', { count: 1 }), 'ورقة اقتراع رسمية · 1 سؤال');
+    assert.equal(t('vote.officialBallot', { count: 2 }), 'ورقة اقتراع رسمية · 2 أسئلة');
+    resetLocaleForTests('fr');
+    assert.equal(t('vote.officialBallot', { count: 1 }), 'Bulletin officiel · 1 question');
+    assert.equal(t('vote.officialBallot', { count: 2 }), 'Bulletin officiel · 2 questions');
+    resetLocaleForTests('ko');
+    assert.equal(t('vote.officialBallot', { count: 1 }), '공식 투표용지 · 1문항');
+    assert.equal(t('vote.officialBallot', { count: 2 }), '공식 투표용지 · 2문항');
+    resetLocaleForTests('pt');
+    assert.equal(t('vote.officialBallot', { count: 1 }), 'Cédula oficial · 1 pergunta');
+    assert.equal(t('vote.officialBallot', { count: 2 }), 'Cédula oficial · 2 perguntas');
+    resetLocaleForTests('hi');
+    assert.equal(t('vote.officialBallot', { count: 1 }), 'आधिकारिक मतपत्र · 1 प्रश्न');
+    assert.equal(t('vote.officialBallot', { count: 2 }), 'आधिकारिक मतपत्र · 2 प्रश्न');
   });
 
   test('unsupported locale stays English', () => {
-    assert.equal(setLocale('fr'), 'en');
+    assert.equal(setLocale('ja'), 'en');
     assert.equal(getLocale(), 'en');
     assert.equal(t('chrome.navRegister'), 'Register');
   });
@@ -109,6 +173,11 @@ describe('website i18n', () => {
       zh: 'zh-Hans',
       fil: 'fil',
       vi: 'vi',
+      ar: 'ar',
+      fr: 'fr',
+      ko: 'ko',
+      pt: 'pt-BR',
+      hi: 'hi',
     });
   });
 });

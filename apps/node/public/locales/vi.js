@@ -6,11 +6,17 @@
 export default {
   lang: {
     group: "Ngôn ngữ",
+    choose: "Chọn ngôn ngữ",
     english: "Tiếng Anh",
     spanish: "Tiếng Tây Ban Nha",
     chinese: "Tiếng Trung",
     tagalog: "Tiếng Tagalog",
     vietnamese: "Tiếng Việt",
+    arabic: "Tiếng Ả Rập",
+    french: "Tiếng Pháp",
+    korean: "Tiếng Hàn",
+    portuguese: "Tiếng Bồ Đào Nha",
+    hindi: "Tiếng Hindi",
   },
   chrome: {
     skip: "Chuyển đến nội dung chính",

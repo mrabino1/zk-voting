@@ -6,11 +6,17 @@
 export default {
   lang: {
     group: "语言",
+    choose: "选择语言",
     english: "英语",
     spanish: "西班牙语",
     chinese: "中文",
     tagalog: "他加禄语",
     vietnamese: "越南语",
+    arabic: "阿拉伯语",
+    french: "法语",
+    korean: "韩语",
+    portuguese: "葡萄牙语",
+    hindi: "印地语",
   },
   chrome: {
     skip: "跳到主要内容",
