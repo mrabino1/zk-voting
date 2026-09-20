@@ -154,7 +154,7 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID v4 or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
 
 ### Creating elections (chain vs demo)
 
@@ -167,7 +167,7 @@ Clerk **Create election** in `/back-office` is `POST /api/elections`.
 
 Required when the chain is configured: `CHAIN_RPC`, `ELECTION_FACTORY_ADDRESS` (or `FACTORY`), `RELAYER_PRIVATE_KEY`, `VERIFIER_ADDRESS` (or `VERIFIER` from `DeployLocal`). Officer roles (clerk / registrar / disqualification / tally) default to the relayer address, matching `CreateElection.s.sol` using `msg.sender`, unless the POST body or `CLERK_ADDRESS` / `REGISTRAR_ADDRESS` / … is set.
 
-The Node public election id is a UUID v4; the on-chain `electionId` is a uint256 stored as `onChainElectionId` (plus `onChainElectionAddress` / `createTxHash` when the factory ran). They can differ: `DeployLocal` already creates on-chain election `#1`. Demo mode still mints a local uint256 so Groth16 public inputs stay numeric.
+The Node public election id is a UUID v5 bound to factory + on-chain id + jurisdiction (legacy v4 still resolves). The on-chain `electionId` is a uint256 stored as `onChainElectionId` (plus `onChainElectionAddress` / `createTxHash` when the factory ran). They can differ: `DeployLocal` already creates on-chain election `#1`. Demo mode still mints a local uint256 so Groth16 public inputs stay numeric. A copied UUID from another jurisdiction does not share the L1 slot.
 
 Operators can still create with Foundry instead of the clerk UI:
 
@@ -339,7 +339,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 
 ## L1 certification (tally hash on Ethereum)
 
-After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postResult`. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`.
+After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postCertifiedResult`. The L1 slot is `(factory, onChainElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
 
 `RollupSettlement` is the batch-root contract. When `L1_SETTLEMENT_ADDRESS` is set, the Node/script reads `stateRoot()` and attaches it as `l2StateRoot`. That is optional court context, not a substitute for the tally hash.
 
@@ -361,21 +361,29 @@ Deploy the mirror (Anvil or Sepolia):
 
 ```bash
 cd smart-contracts
-forge script script/DeployL1.s.sol --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
-# stdout includes TALLY_MIRROR=0x… and SETTLEMENT=0x…
+L2_FACTORY="$ELECTION_FACTORY_ADDRESS" forge script script/DeployL1.s.sol \
+  --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
+# stdout includes TALLY_MIRROR=0x… SETTLEMENT=0x… L2_FACTORY=0x…
+# DeployL1 reverts MissingL2Factory if the shared factory is not set.
 ```
 
-Grant a dedicated publisher if the broadcaster is not the mirror admin:
+Grant a **per-jurisdiction** publisher. After `setL2Factory`, a global
+`setPublisher` key cannot certify an arbitrary body (admin remains
+break-glass only). The factory pin cannot be unset or swapped; a wrong
+pin means a new mirror deploy:
 
 ```solidity
-L1TallyMirror.setPublisher(publisher, true);
+// Prefer per-jurisdiction publishers so one body cannot certify another:
+L1TallyMirror.setJurisdictionPublisher(jurisdictionId, publisher, true);
+L1TallyMirror.setL2Factory(sharedElectionFactory);
+// setPublisher is legacy and is ignored once the factory is pinned.
 ```
 
 ### After Node tally
 
 1. Close the poll (cutoff passed). Tally operator posts counts. Sum must equal accepted ballots.
-2. If the three required L1 vars are set, `POST /api/elections/:id/tally` also calls `postResult`. The JSON includes `l1Certification` (`posted` / `skipped` / `failed` / `already_posted`). A failed L1 tx **does not** roll back the Node tally.
-3. Retry without re-tallying. `AlreadyPosted` is success (`already_posted`); the Node keeps the original L1 tx hash.
+2. If the three required L1 vars are set, `POST /api/elections/:id/tally` also calls `postCertifiedResult` (factory + jurisdiction + public UUID hash). The JSON includes `l1Certification` (`posted` / `skipped` / `failed` / `already_posted`). A failed L1 tx **does not** roll back the Node tally.
+3. Retry without re-tallying. `AlreadyPosted` with the **same** hash is success (`already_posted`); the Node keeps the original L1 tx hash. If L1 already holds a **different** hash, status is `already_posted_mismatch` — do not treat that as a certified match.
 
 ```bash
 # HTTP (tally_operator session)

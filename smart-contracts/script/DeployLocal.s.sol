@@ -22,6 +22,7 @@ import {RepublicPaymaster} from "../src/account/RepublicPaymaster.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
+import {JurisdictionRegistry} from "../src/JurisdictionRegistry.sol";
 
 /// @notice Shared deploy result for the Republic election + AA stack.
 struct RepublicStack {
@@ -30,6 +31,7 @@ struct RepublicStack {
     bool mockVerifier;
     string hashScheme;
     ElectionFactory factory;
+    JurisdictionRegistry jurisdictions;
     VoterRegistry voterRegistry;
     DisqualificationRegistry disqualificationRegistry;
     BallotInbox inbox;
@@ -88,6 +90,7 @@ abstract contract RepublicStackScript is Script {
         _logStr("PROVING_PATH", s.mockVerifier ? "0" : "1");
         _logStr("VERIFIER_KIND", s.mockVerifier ? "MockVerifier" : "VoteVerifier");
         _log("FACTORY", address(s.factory));
+        _log("JURISDICTION_REGISTRY", address(s.jurisdictions));
         _log("IMPLEMENTATION", s.factory.implementation());
         _log("VOTER_REGISTRY", address(s.voterRegistry));
         _log("DISQUALIFICATION_REGISTRY", address(s.disqualificationRegistry));
@@ -127,6 +130,8 @@ abstract contract RepublicStackScript is Script {
 
         // address(0) implementation: factory deploys Election internally.
         s.factory = new ElectionFactory(admin, address(0));
+        s.jurisdictions = new JurisdictionRegistry(admin);
+        s.factory.setJurisdictionRegistry(address(s.jurisdictions));
         s.voterRegistry = new VoterRegistry(address(s.factory), address(s.hasher));
         s.disqualificationRegistry = new DisqualificationRegistry(address(s.hasher), address(s.factory));
         s.inbox = new BallotInbox(address(s.factory));
@@ -177,6 +182,9 @@ contract DeployLocal is RepublicStackScript {
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, true);
         RepublicMailbox mailbox = new RepublicMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
+        mirror.setL2Factory(address(s.factory));
+
+        s.jurisdictions.createJurisdiction(keccak256("CIVIC"), admin, "Civic");
 
         s.paymaster.deposit{value: 10 ether}();
 
@@ -189,6 +197,7 @@ contract DeployLocal is RepublicStackScript {
         _log("SETTLEMENT", address(settlement));
         _log("TALLY_MIRROR", address(mirror));
         _log("MAILBOX", address(mailbox));
+        _log("JURISDICTION_REGISTRY", address(s.jurisdictions));
         _log("ELECTION", election);
         console2.log(string.concat("ELECTION_ID=", vm.toString(electionId)));
     }

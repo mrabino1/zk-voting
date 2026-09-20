@@ -1,10 +1,27 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import { createHash, timingSafeEqual } from 'node:crypto';
+
 import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
 import { presentElection, publishDue } from '../electionState.mjs';
 import { refsOf } from '../electionIds.mjs';
+
+function ingestSecretsEqual(expected, provided) {
+  if (!expected || !provided) return false;
+  const a = createHash('sha256').update(String(expected)).digest();
+  const b = createHash('sha256').update(String(provided)).digest();
+  return timingSafeEqual(a, b);
+}
+
+function ingestSecretFromRequest(req) {
+  const header = req.get('x-republic-ingest-secret');
+  if (header) return String(header).trim();
+  const auth = String(req.get('authorization') || '');
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1].trim() : '';
+}
 
 export function explorerRouter(deps) {
   const { explorer, config, store } = deps;
@@ -13,6 +30,16 @@ export function explorerRouter(deps) {
   router.post(
     '/ingest',
     asyncHandler(async (req, res) => {
+      const secret = String(config.explorerIngestSecret || '').trim();
+      const isTest = process.env.NODE_ENV === 'test';
+      if (!secret && !isTest) {
+        throw new HttpError(503, 'EXPLORER_INGEST_SECRET is required', {
+          code: 'INGEST_SECRET_REQUIRED',
+        });
+      }
+      if (secret && !ingestSecretsEqual(secret, ingestSecretFromRequest(req))) {
+        throw new HttpError(401, 'ingest unauthorized', { code: 'INGEST_UNAUTHORIZED' });
+      }
       const { now, interval } = await publishDue(deps);
       const result = await explorer.ingest(req.body || {}, now, interval);
       res.json({ ok: true, nfp: true, imported: result.imported });

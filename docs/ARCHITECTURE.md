@@ -174,6 +174,7 @@ zk-voting/
   docker-compose.yml                 (Node + L2 host path)
   docs/ARCHITECTURE.md               (this file)
   docs/IDENTITY.md
+  docs/THREAT_MODEL.md               (election identity / L1 adversary map)
   docs/L2.md
   docs/OPERATOR.md
   docs/BLOCK_EXPLORER.md
@@ -266,9 +267,12 @@ function electionCount() external view returns (uint256);
 function implementation() external view returns (address);
 ```
 
-Factory uses EIP-1167 clones of `Election`. Anyone with `CLERK_ROLE` on
-`JurisdictionRegistry` for that `jurisdictionId` may create. Platform admin
-may also create (bootstrap).
+Factory uses EIP-1167 clones of `Election`. Only `JurisdictionRegistry`
+**clerks** (not registrars / tally officers) for that `jurisdictionId`
+may create. Platform admin may also create (bootstrap). A clerk of A
+cannot mint an election that claims B’s `jurisdictionId` by putting
+themselves in `params.clerk`. Production deploys **must** call
+`ElectionFactory.setJurisdictionRegistry`.
 
 Events: `ElectionCreated(uint256 indexed electionId, address indexed election, bytes32 indexed jurisdictionId, uint64 startTime, uint64 cutoffTime)`.
 
@@ -279,17 +283,31 @@ input or `BallotInbox.submitVote`.
 
 | Field | Where | Shape |
 | --- | --- | --- |
-| `id` | Node API, SPA `/vote/:id`, clerk links | UUID v4 (canonical public id) |
+| `id` | Node API, SPA `/vote/:id`, clerk links | UUID v5 bound to factory + on-chain id + jurisdiction (legacy records may be v4) |
 | `shortCode` | `/v/:shortCode`, `/e/:shortCode`, optional API `:id` | 10 url-safe chars, unique per Node |
 | `onChainElectionId` | `ElectionFactory`, registries, BallotInbox, Groth16 `electionId` | `uint256`, factory `++electionCount` |
+| `certificationId` | L1 `L1TallyMirror` slot | `keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId))` |
+
+A public UUID is an alias, not the proof of identity. Two jurisdictions
+(or a honest Node and a nefarious fork) can *advertise* the same UUID.
+L1 does **not** key by that UUID. It keys by the shared `ElectionFactory`
+address, the factory uint256, and the `jurisdictionId` baked into
+`Election.params`. A copied UUID therefore lands in a different L1 slot —
+or, if the attacker also claims the honest factory + id + jurisdiction,
+they must be a publisher for that body and `AlreadyPosted` keeps the first
+certified tally. Outcome verification recomputes UUID v5 from those fields;
+a copied id fails `publicIdMatchesScope`.
 
 `GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
 on-chain id (and any leftover non-UUID fixture ids). Short HTTP routes
-302 to `/vote/<uuid>`. New elections mint both UUID and short code; the
-Node stores `onChainElectionId` as the mapping. Local demos allocate a
-sequential integer so proofs still have a uint256 when the factory is not
-invoked. When a clerk already created on chain, `POST /api/elections` may
-send `onChainElectionId` to record that mapping.
+302 to `/vote/<uuid>`. New elections mint a scoped UUID v5 plus a short
+code; the Node stores `onChainElectionId` as the mapping. Client-supplied
+`id` / `uuid` / `factoryAddress` / `onChainElectionId` bodies are ignored.
+Local demos allocate a sequential integer so proofs still have a uint256
+when the factory is not invoked, and bind the UUID to `nodeId` + jurisdiction
+so two demo forks do not collide. On-chain ids come only from
+`ElectionFactory.createElection` (or the local allocator), never from the
+client — a copied uint256 would be an L1 slot claim.
 
 The factory is **not** changed: it still returns `(uint256 electionId, address)`.
 
@@ -501,22 +519,39 @@ Only the Republic prover/sequencer addresses. Batches are public; anyone
 can re-derive `dataHash` from posted calldata.
 
 `src/l2/L1TallyMirror.sol` — copies a tallied election result hash from L2
-to L1 for court-grade records:
+to L1 for court-grade records. The canonical slot is **not** the public
+UUID and **not** a bare `uint256`:
 
 ```solidity
-function postResult(
-    uint256 electionId,
-    bytes32 resultHash,      // keccak256(abi.encodePacked(counts)) == Tally countsHash
-    uint256 totalBallots,
-    bytes32 l2StateRoot      // RollupSettlement.stateRoot() when known; else 0
-) external;
-function resultHashOf(uint256 electionId) external view returns (bytes32);
+function postCertifiedResult(Certification calldata cert) external;
+// cert.factory, electionId, jurisdictionId, publicIdHash, ballotSpecHash, resultHash, …
+function certificationIdOf(address factory, uint256 electionId, bytes32 jurisdictionId)
+    external pure returns (bytes32);
 ```
 
-Only `admin` or `publishers[msg.sender]`. A second post for the same election
-reverts `AlreadyPosted`. The Node (`POST /api/elections/:id/tally` and
-`POST /api/elections/:id/certify-l1`) and `script/CertifyL1.s.sol` call this
-when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
+`certificationId = keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId))`.
+`publicIdHash` (`keccak256` of the advertised UUID string) is stored as an
+attribute so a copied UUID can be detected (`publicIdCollision`) without
+letting the copier occupy the honest slot.
+
+Legacy `postResult(uint256 electionId, bytes32 resultHash, uint256 totalBallots, bytes32 l2StateRoot)`
+remains for unpinned mirrors and old scripts. After `setL2Factory`, that
+uint256 path reverts `UseIdentityPost` — two factories must not share
+`resultHashOf[1]`. Pin `setL2Factory` to the shared ElectionFactory so a
+rogue factory cannot certify on the official mirror. Grant
+`setJurisdictionPublisher` per body rather than a global publisher when a
+jurisdiction operator posts. After pin, `_canPost` ignores global
+`publishers[]` (admin is break-glass). `setL2Factory` cannot be zeroed or
+replaced once set. When the factory is on the same chain, the mirror
+checks `Election.params().jurisdictionId`.
+
+Only `admin`, a per-jurisdiction publisher, or (when the factory is
+readable on that chain) the election’s `tallyOperator`. Unpinned mirrors
+still honor `publishers[]` for legacy tests. A second post for the same
+identity reverts `AlreadyPosted`. The Node
+(`POST /api/elections/:id/tally` and `POST /api/elections/:id/certify-l1`)
+and `script/CertifyL1.s.sol` call this when L1 env is set; they no-op
+when it is not. CI must not supply mainnet keys.
 
 `src/l2/RepublicMailbox.sol` — L1/L2 message mailbox for the rollup.
 
@@ -539,6 +574,7 @@ when L1 env is set; they no-op when it is not. CI must not supply mainnet keys.
 - `Paymaster.t.sol` — gasless path.
 - `RollupSettlement.t.sol` — batch progression.
 - `L1TallyMirror.t.sol` — `postResult`, publisher ACL, AlreadyPosted, packed counts hash.
+- `ElectionIdentity.t.sol` — jurisdiction-bound factory creates; L1 slots separate copied UUIDs and two factories with the same uint256.
 - `fuzz/FactoryFuzz.t.sol` — random params, start < cutoff, etc.
 - `fuzz/VoteFuzz.t.sol` — random nullifiers, windows, caps.
 - `fuzz/RegistryFuzz.t.sol`
@@ -665,7 +701,7 @@ POST /api/office/pages
 PATCH /api/office/pages/:id
 DELETE /api/office/pages/:id
 GET  /api/office/site
-PATCH /api/office/site              (title/tagline: clerk; contract pin: platform_admin)
+PATCH /api/office/site              (title/tagline/contracts: platform_admin)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
@@ -745,7 +781,7 @@ GET  /api/explorer/disclosure       (last closed hour, disclosed turnout, countd
 GET  /api/explorer/nullifiers/:value
 GET  /api/explorer/search
 GET  /api/explorer/elections/:id
-POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
+POST /api/explorer/ingest          (L2 sequencer; `EXPLORER_INGEST_SECRET` required outside tests)
 GET  /api/reason-codes
 GET  /api/roles
 GET  /api/jurisdictions

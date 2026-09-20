@@ -189,7 +189,7 @@ describe('cms helpers', () => {
     const clerk = { role: 'voter', handle: 'north-clerk' };
     const registrar = { role: 'voter', handle: 'north-registrar' };
     assert.equal(canManagePages(store, admin, { jurisdictionId: 'south' }), true);
-    assert.equal(canManagePages(store, clerk, { jurisdictionId: null }), true);
+    assert.equal(canManagePages(store, clerk, { jurisdictionId: null }), false);
     assert.equal(canManagePages(store, clerk, { jurisdictionId: 'north' }), true);
     assert.equal(canManagePages(store, clerk, { jurisdictionId: 'south' }), false);
     assert.equal(canManagePages(store, registrar, { jurisdictionId: null }), false);
@@ -296,7 +296,14 @@ describe('pages HTTP CMS and clean URLs', () => {
   test('clerk publishes a custom page; draft is hidden; HTML is stripped; reserved slug fails', async () => {
     const reserved = await api('POST', '/api/office/pages', {
       jar: northClerkJar,
-      body: { kind: 'custom', slug: 'admin', title: 'Admin', status: 'published', blocks: [{ type: 'paragraph', text: 'x' }] },
+      body: {
+        kind: 'custom',
+        slug: 'admin',
+        title: 'Admin',
+        status: 'published',
+        jurisdictionId: 'north',
+        blocks: [{ type: 'paragraph', text: 'x' }],
+      },
     });
     assert.equal(reserved.status, 400);
 
@@ -345,7 +352,7 @@ describe('pages HTTP CMS and clean URLs', () => {
     assert.match(spa.text, /NOT FOR PROFIT/);
   });
 
-  test('south clerk cannot edit north-tagged page; can edit site-wide', async () => {
+  test('south clerk cannot edit north-tagged or unscoped pages', async () => {
     const northPage = await api('POST', '/api/office/pages', {
       jar: northClerkJar,
       body: {
@@ -378,9 +385,20 @@ describe('pages HTTP CMS and clean URLs', () => {
         blocks: [{ type: 'paragraph', text: 'From South clerk on this Node.' }],
       },
     });
-    assert.equal(siteWide.status, 201, siteWide.json?.error);
-    const about = await api('GET', '/api/pages');
-    assert.equal(about.json.overlays.about.title, 'About overlay');
+    assert.equal(siteWide.status, 403);
+
+    const southPage = await api('POST', '/api/office/pages', {
+      jar: southClerkJar,
+      body: {
+        kind: 'custom',
+        slug: 'south-hours',
+        title: 'South hours',
+        status: 'published',
+        jurisdictionId: 'south',
+        blocks: [{ type: 'paragraph', text: 'South copy' }],
+      },
+    });
+    assert.equal(southPage.status, 201, southPage.json?.error);
   });
 
   test('platform_admin pins shared factory; clerk cannot; invalid address 400', async () => {
@@ -389,6 +407,12 @@ describe('pages HTTP CMS and clean URLs', () => {
       body: { contracts: { factory: '0x3333333333333333333333333333333333333333' } },
     });
     assert.equal(clerkPin.status, 403);
+
+    const clerkTitle = await api('PATCH', '/api/office/site', {
+      jar: northClerkJar,
+      body: { title: 'Captured desk' },
+    });
+    assert.equal(clerkTitle.status, 403);
 
     const bad = await api('PATCH', '/api/office/site', {
       jar: adminJar,

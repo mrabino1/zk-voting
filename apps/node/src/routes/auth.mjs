@@ -253,7 +253,7 @@ export function authRouter(deps) {
   router.post(
     '/dev-login',
     asyncHandler(async (req, res) => {
-      if (!config.allowDevLogin) {
+      if (!config.allowDevLogin || process.env.NODE_ENV === 'production') {
         throw new HttpError(404, 'not found');
       }
       const handle = String(req.body?.handle || '').trim();

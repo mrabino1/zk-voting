@@ -5,7 +5,7 @@
 // option counts.
 
 import { presentAspects } from './ballot.mjs';
-import { publicIdFields } from './electionIds.mjs';
+import { publicIdFields, publicIdMatchesScope, l1IdentityOf } from './electionIds.mjs';
 import {
   STATE_NAMES,
   electionChainMode,
@@ -174,6 +174,49 @@ export function verifyChainStatus(election, deps, now, state, phase) {
     checks.l1HashMatchesTally = true;
   }
 
+  const identity = l1IdentityOf(election, deps.config || {});
+  const pinned = String(deps.config?.electionFactoryAddress || '').trim();
+  const scope = {
+    factoryAddress: election.factoryAddress || pinned || null,
+    onChainElectionId: election.onChainElectionId,
+    jurisdictionId: election.jurisdictionId,
+    chainId: election.chainId ?? deps.config?.chainId,
+    nodeId: deps.store?.data?.meta?.nodeId || '',
+  };
+  check(
+    'publicIdMatchesScope',
+    publicIdMatchesScope(election.id, scope),
+    'public UUID must be bound to factory, on-chain id, and jurisdiction (a copied UUID fails)',
+  );
+
+  if (l1IsPosted(l1)) {
+    check(
+      'l1CertificationIdMatches',
+      !l1.certificationId || hexEq(l1.certificationId, identity.certificationId),
+      'L1 certificationId must be keccak(factory, electionId, jurisdictionId), not the public UUID',
+    );
+    check(
+      'l1PublicIdHashMatches',
+      !l1.publicIdHash || hexEq(l1.publicIdHash, identity.publicIdHash),
+      'L1 publicIdHash must match this contest’s UUID',
+    );
+    const postedFactory = l1.factory || identity.factory;
+    if (pinned) {
+      check(
+        'l1FactoryMatchesPinned',
+        Boolean(postedFactory) &&
+          String(postedFactory).toLowerCase() === String(pinned).toLowerCase(),
+        'on-chain factory must be the pinned shared ElectionFactory',
+      );
+    } else {
+      checks.l1FactoryMatchesPinned = true;
+    }
+  } else {
+    checks.l1CertificationIdMatches = true;
+    checks.l1PublicIdHashMatches = true;
+    checks.l1FactoryMatchesPinned = true;
+  }
+
   return { ok: errors.length === 0, errors, checks };
 }
 
@@ -194,6 +237,10 @@ function chainStatusView(election, deps) {
     l1Posted: l1IsPosted(l1),
     l1TxHash: l1?.txHash || null,
     l1ResultHash: l1?.resultHash || null,
+    certificationId: l1?.certificationId || null,
+    publicIdHash: l1?.publicIdHash || null,
+    l1Factory: l1?.factory || election.factoryAddress || deps.config.electionFactoryAddress || null,
+    l1JurisdictionId: l1?.jurisdictionId || null,
   };
 }
 

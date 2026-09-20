@@ -94,7 +94,11 @@ export function getConfig(overrides = {}) {
     l1ChainId: isTest ? 0 : Number(process.env.L1_CHAIN_ID || 0),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
-    allowDevLogin: process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_LOGIN === '1',
+    allowDevLogin: (() => {
+      if (process.env.NODE_ENV === 'production') return false;
+      if (overrides.allowDevLogin !== undefined) return Boolean(overrides.allowDevLogin);
+      return process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_LOGIN === '1';
+    })(),
     allowSmartCardMock:
       process.env.NODE_ENV === 'test' || process.env.ALLOW_SMART_CARD_MOCK === '1',
     allowCivicIdMock:
@@ -114,6 +118,9 @@ export function getConfig(overrides = {}) {
     credentialProviderId: String(
       overrides.credentialProviderId ?? process.env.CREDENTIAL_PROVIDER_ID ?? 'manual',
     ).trim() || 'manual',
+    explorerIngestSecret: String(
+      overrides.explorerIngestSecret ?? process.env.EXPLORER_INGEST_SECRET ?? '',
+    ).trim(),
     requireEmailMfa: (() => {
       if (overrides.requireEmailMfa !== undefined) return Boolean(overrides.requireEmailMfa);
       if (process.env.REQUIRE_EMAIL_MFA !== undefined && process.env.REQUIRE_EMAIL_MFA !== '') {

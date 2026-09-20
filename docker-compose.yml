@@ -55,6 +55,7 @@ services:
       CREDENTIAL_PROVIDER_ID: ${CREDENTIAL_PROVIDER_ID:-manual}
       RECEIPT_PDF_SECRET: ${RECEIPT_PDF_SECRET:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
       # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
       # mainnet publisher keys in committed Compose files. Not the L2 prover key.
       L1_RPC: ${L1_RPC:-}
@@ -101,6 +102,7 @@ services:
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
     volumes:
       - l2-data:/data
     healthcheck:

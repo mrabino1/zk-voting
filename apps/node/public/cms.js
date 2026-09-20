@@ -216,7 +216,7 @@ export async function renderOfficePages(main, ctx, bundle) {
       h(
         "p",
         { class: "lede" },
-        "Fork this Node for your jurisdiction. Keep the one shared ElectionFactory. Clerks edit About, FAQ, home copy, and extra pages here — publish when ready."
+        "Fork this Node for your jurisdiction. Keep the one shared ElectionFactory. The host edits About, FAQ, and home copy. Clerks publish pages tagged to their own jurisdiction — publish when ready."
       )
     ),
     cmsSubnav(h, "pages"),
@@ -274,7 +274,7 @@ export async function renderOfficePages(main, ctx, bundle) {
             )
           )
         )
-      : h("div", { class: "notice" }, h("p", { text: "No pages yet. Create Home, About, FAQ, or a custom page." })),
+      : h("div", { class: "notice" }, h("p", { text: "No pages yet. The host publishes Home, About, and FAQ. Clerks publish custom pages tagged to their jurisdiction." })),
     h("p", { class: "field-hint", text: SHARED_DEPLOYMENT_NOTE })
   );
   announce(`${rows.length} page${rows.length === 1 ? "" : "s"}`);
@@ -454,12 +454,15 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
     return;
   }
 
-  let meta = { jurisdictions: [] };
+  let meta = { jurisdictions: [], canPinContracts: false };
   try {
     meta = await api("/api/office/pages");
   } catch {
-    meta = { jurisdictions: [] };
+    meta = { jurisdictions: [], canPinContracts: false };
   }
+
+  const canPin = Boolean(meta.canPinContracts);
+  const clerkJids = meta.jurisdictions || [];
 
   let page = {
     kind: "custom",
@@ -469,7 +472,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
     navLabel: "",
     showInNav: false,
     replaceBuiltin: false,
-    jurisdictionId: "",
+    jurisdictionId: !canPin && clerkJids[0] ? clerkJids[0].id : "",
     blocks: [{ type: "paragraph", text: "" }],
   };
 
@@ -502,9 +505,13 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
     "select",
     { id: "cms-kind" },
     h("option", { value: "custom", selected: page.kind === "custom", text: "Custom page (/p/…)" }),
-    h("option", { value: "home", selected: page.kind === "home", text: "Home overlay" }),
-    h("option", { value: "about", selected: page.kind === "about", text: "About overlay" }),
-    h("option", { value: "faq", selected: page.kind === "faq", text: "FAQ overlay" })
+    ...(canPin
+      ? [
+          h("option", { value: "home", selected: page.kind === "home", text: "Home overlay" }),
+          h("option", { value: "about", selected: page.kind === "about", text: "About overlay" }),
+          h("option", { value: "faq", selected: page.kind === "faq", text: "FAQ overlay" }),
+        ]
+      : []),
   );
   const statusSelect = h(
     "select",
@@ -515,8 +522,10 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
   const jidSelect = h(
     "select",
     { id: "cms-jid" },
-    h("option", { value: "", selected: !page.jurisdictionId, text: "This Node (all visitors)" }),
-    ...(meta.jurisdictions || []).map((j) =>
+    ...(canPin
+      ? [h("option", { value: "", selected: !page.jurisdictionId, text: "This Node (host only)" })]
+      : []),
+    ...clerkJids.map((j) =>
       h("option", {
         value: j.id,
         selected: page.jurisdictionId === j.id,
@@ -627,11 +636,15 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
         "div",
         { class: "cms-meta panel" },
         field(h, "Title", titleInput),
-        field(h, "Kind", kindSelect, "Home / About / FAQ overlay the built-in pages. Custom pages live at /p/slug."),
+        field(h, "Kind", kindSelect, canPin
+          ? "Home / About / FAQ overlay the built-in pages. Custom pages live at /p/slug."
+          : "Clerks publish custom pages tagged to their jurisdiction. The host publishes Home / About / FAQ."),
         field(h, "Slug", slugInput, "Custom pages only. Home, About, and FAQ use fixed paths."),
         field(h, "Nav label", navInput),
         field(h, "Status", statusSelect),
-        field(h, "Jurisdiction", jidSelect, "Leave as This Node for site-wide copy. Tag a page so only that clerk desk can edit it."),
+        field(h, "Jurisdiction", jidSelect, canPin
+          ? "Host-only unscoped copy is This Node. Tag a page so only that clerk desk can edit it."
+          : "Tag every clerk page to your jurisdiction. Unscoped About / FAQ / home are host-only."),
         h("label", { class: "choice" }, navCheck, " Show custom page in the public nav"),
         h("label", { class: "choice" }, replaceCheck, " Replace the built-in Home / About / FAQ copy (keep the elections calendar on home)")
       ),
@@ -697,8 +710,8 @@ export async function renderOfficeSite(main, ctx, bundle) {
   const canPin = Boolean(payload.canPinContracts);
   const statusEl = h("p", { class: "field-hint", text: site.updatedAt ? `Last saved ${site.updatedAt}.` : "Not saved yet." });
 
-  const titleInput = h("input", { type: "text", value: site.title || "Republic", id: "site-title" });
-  const taglineInput = h("textarea", { id: "site-tagline", rows: "3" });
+  const titleInput = h("input", { type: "text", value: site.title || "Republic", id: "site-title", disabled: !canPin });
+  const taglineInput = h("textarea", { id: "site-tagline", rows: "3", disabled: !canPin });
   taglineInput.value = site.tagline || "";
   const factoryInput = h("input", {
     type: "text",
@@ -724,14 +737,17 @@ export async function renderOfficeSite(main, ctx, bundle) {
 
   async function save(event) {
     event.preventDefault();
-    const body = { title: titleInput.value, tagline: taglineInput.value };
-    if (canPin) {
-      body.contracts = {
-        factory: factoryInput.value.trim(),
-        ballotInbox: inboxInput.value.trim(),
-        verifier: verifierInput.value.trim(),
-      };
+    if (!canPin) {
+      statusEl.textContent = "Only the Node host (platform_admin) can change site identity and contract pins.";
+      announce(statusEl.textContent);
+      return;
     }
+    const body = { title: titleInput.value, tagline: taglineInput.value };
+    body.contracts = {
+      factory: factoryInput.value.trim(),
+      ballotInbox: inboxInput.value.trim(),
+      verifier: verifierInput.value.trim(),
+    };
     try {
       const updated = await api("/api/office/site", { method: "PATCH", body });
       statusEl.textContent = "Saved. Forked Nodes should pin this same factory — do not deploy a new one.";
@@ -775,7 +791,7 @@ export async function renderOfficeSite(main, ctx, bundle) {
         {
           text: canPin
             ? "You are the Node host. Paste the existing factory. Do not run DeployLocal again for a new city."
-            : "Only the Node host (platform_admin) can change contract addresses. Clerks still update pages.",
+            : "Only the Node host (platform_admin) can change site title, tagline, and contract addresses.",
         }
       ),
       h(

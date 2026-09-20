@@ -2,9 +2,10 @@
 // Optional ElectionFactory create + BallotInbox submit via viem when CHAIN_RPC
 // is configured. JSON-only demo remains when CHAIN_RPC is unset.
 
-import { createPublicClient, createWalletClient, decodeEventLog, defineChain, getAddress, http, isAddress, keccak256, stringToHex, zeroAddress } from 'viem';
+import { createPublicClient, createWalletClient, decodeEventLog, defineChain, getAddress, http, isAddress, zeroAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
+import { jurisdictionBytes32 } from './electionIds.mjs';
 import { HttpError } from './http.mjs';
 
 export const ballotInboxAbi = [
@@ -201,9 +202,7 @@ export function pickAddress(...candidates) {
 
 /** bytes32 jurisdiction id, or keccak256 of the Node's string id (e.g. "demo"). */
 export function toJurisdictionBytes32(id) {
-  const s = String(id || '').trim();
-  if (/^0x[0-9a-fA-F]{64}$/.test(s)) return s.toLowerCase();
-  return keccak256(stringToHex(s));
+  return jurisdictionBytes32(id);
 }
 
 export function chainElectionIdOf(election) {

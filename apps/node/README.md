@@ -86,15 +86,17 @@ not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” sh
 `GET /v/:shortCode` and `GET /e/:shortCode` 302 to `/vote/<uuid>` when the code
 resolves.
 
-New elections mint a UUID v4 canonical `id` plus a 10-character `shortCode`.
+New elections mint a UUID v5 canonical `id` (bound to factory, on-chain id, and
+jurisdiction) plus a 10-character `shortCode`.
 `GET /api/elections/:id` accepts UUID, short code, or `onChainElectionId`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
-`onChainElectionId` on the Node record.
+`onChainElectionId` on the Node record. L1 proof slots use
+`(factory, onChainElectionId, jurisdictionId)`, not the public UUID.
 
 Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/receipt`, `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
-Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.
+Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). The host edits About / FAQ / home at `/office/pages`. Clerks publish jurisdiction-tagged pages.
 
 ### Ballot option information
 
@@ -126,7 +128,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
 | `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for vote relay |
 | `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for factory create and on-chain submit |
-| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postResult`. Unset → tally still works (no-op certify) |
+| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postCertifiedResult`. Unset → tally still works (no-op certify) |
 | `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
 | `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
 | `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
@@ -185,7 +187,7 @@ POST /api/elections/:id/vote        (relays proof; signed-in ballots need a vote
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
 GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
-POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 postResult; no-op if env unset)
+POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 identity post; no-op if env unset)
 GET  /api/elections/:id/l1
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)
 POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/tally on that jurisdiction)

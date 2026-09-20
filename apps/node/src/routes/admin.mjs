@@ -7,6 +7,32 @@ import { requireAuth, requireRole, publicUser } from '../auth.mjs';
 import { REASON_CODES } from '../reasonCodes.mjs';
 import { OFFICER_ROLES, ROLES } from '../roles.mjs';
 
+function publicJurisdiction(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    metadataURI: row.metadataURI || '',
+  };
+}
+
+function canSeeOfficers(store, user) {
+  if (!user) return false;
+  if (user.role === 'platform_admin') return true;
+  return store.userHasAnyJurisdictionRole(user, OFFICER_ROLES);
+}
+
+function presentJurisdiction(store, user, row) {
+  const pub = publicJurisdiction(row);
+  if (!pub) return null;
+  if (!canSeeOfficers(store, user)) return pub;
+  return {
+    ...pub,
+    officers: row.officers || [],
+    createdAt: row.createdAt || null,
+  };
+}
+
 function officerPayload(req) {
   return {
     address: req.body?.address || req.query?.address,
@@ -30,8 +56,11 @@ export function adminRouter(deps) {
 
   router.get(
     '/jurisdictions',
-    asyncHandler(async (_req, res) => {
-      res.json({ nfp: true, jurisdictions: store.listJurisdictions() });
+    asyncHandler(async (req, res) => {
+      res.json({
+        nfp: true,
+        jurisdictions: store.listJurisdictions().map((row) => presentJurisdiction(store, req.user, row)),
+      });
     }),
   );
 
@@ -59,15 +88,19 @@ export function adminRouter(deps) {
     asyncHandler(async (req, res) => {
       const jurisdiction = store.getJurisdiction(req.params.id);
       if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
-      res.json({ nfp: true, jurisdiction });
+      res.json({ nfp: true, jurisdiction: presentJurisdiction(store, req.user, jurisdiction) });
     }),
   );
 
   router.get(
     '/jurisdictions/:id/roles',
+    requireAuth,
     asyncHandler(async (req, res) => {
       const jurisdiction = store.getJurisdiction(req.params.id);
       if (!jurisdiction) throw new HttpError(404, 'jurisdiction not found');
+      if (!canSeeOfficers(store, req.user)) {
+        throw new HttpError(403, 'forbidden', { role: req.user.role });
+      }
       res.json({
         nfp: true,
         jurisdictionId: jurisdiction.id,

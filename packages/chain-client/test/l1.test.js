@@ -20,6 +20,12 @@ const {
   encodePostResult,
   asBytes32,
   ZERO_HASH,
+  certificationId,
+  publicIdHash,
+  jurisdictionBytes32,
+  identityDomain,
+  IDENTITY_DOMAIN_STRING,
+  hasCertifiedIdentity,
 } = require("../l1");
 
 describe("computeTallyHash", () => {
@@ -106,6 +112,7 @@ describe("postTallyHash", () => {
         return "0x" + "ab".repeat(32);
       },
     };
+    const factory = "0x" + "11".repeat(20);
     const result = await postTallyHash({
       env: {},
       mirrorAddress: "0x" + "22".repeat(20),
@@ -114,15 +121,31 @@ describe("postTallyHash", () => {
       counts: [2, 0],
       totalBallots: 2,
       l2StateRoot: ZERO_HASH,
+      factory,
+      jurisdictionId: "north",
     });
     assert.equal(result.posted, true);
     assert.equal(result.status, "posted");
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].functionName, "postResult");
-    assert.equal(calls[0].args[0], 7n);
-    assert.equal(calls[0].args[1], computeTallyHash([2, 0]));
-    assert.equal(calls[0].args[2], 2n);
-    assert.equal(asBytes32(calls[0].args[3]), ZERO_HASH);
+    assert.equal(calls[0].functionName, "postCertifiedResult");
+    assert.equal(calls[0].args[0].electionId, 7n);
+    assert.equal(calls[0].args[0].resultHash, computeTallyHash([2, 0]));
+    assert.equal(calls[0].args[0].totalBallots, 2n);
+    assert.equal(asBytes32(calls[0].args[0].l2StateRoot), ZERO_HASH);
+  });
+
+  test("refuses legacy uint256 postResult when factory is missing", async () => {
+    await assert.rejects(
+      () =>
+        postTallyHash({
+          env: {},
+          mirrorAddress: "0x" + "22".repeat(20),
+          walletClient: { writeContract: async () => "0x" + "ab".repeat(32) },
+          electionId: 7,
+          counts: [2, 0],
+        }),
+      /factory and jurisdictionId required/,
+    );
   });
 
   test("AlreadyPosted is not thrown", async () => {
@@ -139,6 +162,8 @@ describe("postTallyHash", () => {
       walletClient,
       electionId: 7,
       counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
     });
     assert.equal(result.status, "already_posted");
     assert.equal(result.alreadyPosted, true);
@@ -163,9 +188,38 @@ describe("postTallyHash", () => {
       walletClient,
       electionId: 7,
       counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
     });
     assert.equal(result.status, "already_posted");
     assert.equal(result.alreadyPosted, true);
+  });
+
+  test("AlreadyPosted re-reads the on-chain identity hash", async () => {
+    const requested = computeTallyHash([1, 1]);
+    const onChain = computeTallyHash([9, 9]);
+    const walletClient = {
+      writeContract: async () => {
+        const err = new Error("execution reverted: AlreadyPosted");
+        err.shortMessage = "AlreadyPosted";
+        throw err;
+      },
+    };
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: "0x" + "22".repeat(20),
+      walletClient,
+      publicClient: { readContract: async () => onChain },
+      electionId: 7,
+      counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
+    });
+    assert.equal(result.status, "already_posted_mismatch");
+    assert.equal(result.hashMismatch, true);
+    assert.equal(result.resultHash, onChain);
+    assert.equal(result.requestedHash, requested);
+    assert.notEqual(result.resultHash, requested);
   });
 
   test("short-circuits when resultHashOf is already set (no write)", async () => {
@@ -185,9 +239,40 @@ describe("postTallyHash", () => {
       },
       electionId: 7,
       counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
     });
     assert.equal(result.status, "already_posted");
     assert.equal(result.resultHash, existing);
+    assert.equal(result.hashMismatch, false);
+    assert.equal(writes.length, 0);
+  });
+
+  test("short-circuit AlreadyPosted with a different hash is a mismatch", async () => {
+    const writes = [];
+    const existing = computeTallyHash([9, 9]);
+    const requested = computeTallyHash([1, 1]);
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: "0x" + "22".repeat(20),
+      walletClient: {
+        writeContract: async (req) => {
+          writes.push(req);
+          return "0x" + "cd".repeat(32);
+        },
+      },
+      publicClient: {
+        readContract: async () => existing,
+      },
+      electionId: 7,
+      counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
+    });
+    assert.equal(result.status, "already_posted_mismatch");
+    assert.equal(result.hashMismatch, true);
+    assert.equal(result.resultHash, existing);
+    assert.equal(result.requestedHash, requested);
     assert.equal(writes.length, 0);
   });
 });
@@ -225,5 +310,81 @@ describe("encodePostResult", () => {
     });
     assert.match(data, /^0x[0-9a-f]+$/);
     assert.equal(data.slice(0, 10), functionSelector("postResult(uint256,bytes32,uint256,bytes32)"));
+  });
+});
+
+describe("election identity (L1 slot)", () => {
+  test("certificationId differs for the same uint256 on two factories", () => {
+    const j = jurisdictionBytes32("demo");
+    const a = certificationId(`0x${"11".repeat(20)}`, 1, j);
+    const b = certificationId(`0x${"22".repeat(20)}`, 1, j);
+    assert.match(a, /^0x[0-9a-f]{64}$/);
+    assert.notEqual(a, b);
+  });
+
+  test("certificationId matches Solidity abi.encode(DOMAIN, factory, electionId, jurisdictionId)", () => {
+    let viem;
+    try {
+      viem = require("viem");
+    } catch {
+      return;
+    }
+    if (!viem?.encodeAbiParameters || !viem?.keccak256) return;
+    const factory = `0x${"11".repeat(20)}`;
+    const electionId = 7n;
+    const jurisdictionId = jurisdictionBytes32("demo");
+    const domain = identityDomain();
+    const encoded = viem.encodeAbiParameters(
+      [
+        { type: "bytes32" },
+        { type: "address" },
+        { type: "uint256" },
+        { type: "bytes32" },
+      ],
+      [domain, factory, electionId, jurisdictionId],
+    );
+    assert.equal(certificationId(factory, 7, jurisdictionId), viem.keccak256(encoded));
+    assert.equal(hasCertifiedIdentity({ factory, jurisdictionId }), true);
+    assert.equal(hasCertifiedIdentity({ factory: `0x${"00".repeat(20)}`, jurisdictionId }), false);
+  });
+
+  test("publicIdHash is keccak of the lowercase UUID string, not the L1 key", () => {
+    const uuid = "3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01";
+    const hash = publicIdHash(uuid);
+    assert.equal(hash, publicIdHash(uuid.toUpperCase()));
+    const slot = certificationId(`0x${"11".repeat(20)}`, 1, jurisdictionBytes32("demo"));
+    assert.notEqual(hash, slot);
+    assert.equal(identityDomain(), require("@zk-voting/proof-helpers").keccak256(IDENTITY_DOMAIN_STRING));
+  });
+
+  test("postTallyHash with factory+jurisdiction uses postCertifiedResult", async () => {
+    const calls = [];
+    const walletClient = {
+      writeContract: async (req) => {
+        calls.push(req);
+        return `0x${"ab".repeat(32)}`;
+      },
+    };
+    const factory = `0x${"11".repeat(20)}`;
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: `0x${"22".repeat(20)}`,
+      walletClient,
+      electionId: 7,
+      counts: [2, 0],
+      totalBallots: 2,
+      factory,
+      jurisdictionId: "north",
+      publicId: "3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01",
+    });
+    assert.equal(result.posted, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].functionName, "postCertifiedResult");
+    const cert = calls[0].args[0];
+    assert.equal(cert.factory.toLowerCase(), factory);
+    assert.equal(cert.electionId, 7n);
+    assert.equal(cert.jurisdictionId, jurisdictionBytes32("north"));
+    assert.equal(cert.publicIdHash, publicIdHash("3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01"));
+    assert.equal(result.certificationId, certificationId(factory, 7, jurisdictionBytes32("north")));
   });
 });

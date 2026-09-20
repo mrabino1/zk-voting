@@ -3,6 +3,8 @@
 
 import { createRequire } from 'node:module';
 
+import { chainElectionId, l1IdentityOf } from './electionIds.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   computeTallyHash,
@@ -12,10 +14,19 @@ const {
   publicCertification,
   readResultHash,
   alreadyPostedError,
+  hasCertifiedIdentity,
   ZERO_HASH,
 } = require('@zk-voting/chain-client');
 
-export { computeTallyHash, l1SkipReason, l1Configured, publicCertification, ZERO_HASH };
+export {
+  computeTallyHash,
+  l1SkipReason,
+  l1Configured,
+  publicCertification,
+  ZERO_HASH,
+  l1IdentityOf,
+  chainElectionId,
+};
 
 function l1OptionsFromConfig(config) {
   return {
@@ -25,6 +36,21 @@ function l1OptionsFromConfig(config) {
     settlementAddress: config.l1SettlementAddress,
     chainId: config.l1ChainId,
     env: {},
+  };
+}
+
+export function certifyArgsForElection(election, extra = {}, config = {}) {
+  const identity = l1IdentityOf(election, config);
+  return {
+    electionId: identity.electionId,
+    identity,
+    factory: identity.factory,
+    jurisdictionId: identity.jurisdictionId,
+    publicId: identity.publicId,
+    publicIdHash: identity.publicIdHash,
+    electionAddress: identity.electionAddress,
+    ballotSpecHash: identity.ballotSpecHash,
+    ...extra,
   };
 }
 
@@ -47,10 +73,32 @@ export function createL1Certifier(config, hooks = {}) {
     /**
      * Copy a tallied count vector to L1. Never throws for unset env.
      * On-chain failures are returned as `{ status: 'failed' }` so the Node tally still stands.
+     * `electionId` must be the on-chain uint256, never the public UUID.
      */
-    async certifyTally({ electionId, counts, totalBallots, l2StateRoot, resultHash }) {
+    async certifyTally({
+      electionId,
+      counts,
+      totalBallots,
+      l2StateRoot,
+      resultHash,
+      factory,
+      jurisdictionId,
+      publicId,
+      publicIdHash,
+      electionAddress,
+      ballotSpecHash,
+      identity,
+    }) {
       const hash = resultHash || computeTallyHash(counts);
       const skip = this.skipReason();
+      const ident = identity || {
+        factory: factory || null,
+        jurisdictionId: jurisdictionId || null,
+        publicId: publicId || null,
+        publicIdHash: publicIdHash || null,
+        electionAddress: electionAddress || null,
+        ballotSpecHash: ballotSpecHash || null,
+      };
       if (skip) {
         return publicCertification({
           posted: false,
@@ -61,11 +109,52 @@ export function createL1Certifier(config, hooks = {}) {
           totalBallots,
           l2StateRoot: l2StateRoot || ZERO_HASH,
           electionId: String(electionId),
+          ...ident,
+        });
+      }
+      if (!hooks.postFn && !hasCertifiedIdentity(ident)) {
+        return publicCertification({
+          posted: false,
+          skipped: false,
+          status: 'failed',
+          error: 'shared ElectionFactory not pinned; refusing uint256 L1 postResult',
+          resultHash: hash,
+          totalBallots,
+          l2StateRoot: l2StateRoot || ZERO_HASH,
+          electionId: String(electionId),
+          ...ident,
+        });
+      }
+      const pinned = String(ident.pinnedFactory || '').trim();
+      const fac = String(ident.factory || '').trim();
+      if (
+        !hooks.postFn &&
+        pinned &&
+        fac &&
+        pinned.toLowerCase() !== fac.toLowerCase()
+      ) {
+        return publicCertification({
+          posted: false,
+          skipped: false,
+          status: 'failed',
+          error: 'election factory is not the pinned shared ElectionFactory',
+          resultHash: hash,
+          totalBallots,
+          l2StateRoot: l2StateRoot || ZERO_HASH,
+          electionId: String(electionId),
+          ...ident,
         });
       }
       try {
         const raw = hooks.postFn
-          ? await hooks.postFn({ electionId, counts, totalBallots, l2StateRoot, resultHash: hash })
+          ? await hooks.postFn({
+              electionId,
+              counts,
+              totalBallots,
+              l2StateRoot,
+              resultHash: hash,
+              ...ident,
+            })
           : await postTallyHash({
               ...options,
               electionId,
@@ -73,12 +162,23 @@ export function createL1Certifier(config, hooks = {}) {
               resultHash: hash,
               totalBallots,
               l2StateRoot,
+              factory: ident.factory,
+              jurisdictionId: ident.jurisdictionId,
+              publicId: ident.publicId,
+              publicIdHash: ident.publicIdHash,
+              electionAddress: ident.electionAddress,
+              ballotSpecHash: ident.ballotSpecHash,
             });
         return publicCertification({
+          ...ident,
           ...raw,
           resultHash: raw.resultHash || hash,
           totalBallots: raw.totalBallots ?? totalBallots,
-          electionId: String(electionId),
+          electionId: String(raw.electionId ?? electionId),
+          factory: raw.factory || ident.factory,
+          jurisdictionId: raw.jurisdictionId || ident.jurisdictionId,
+          publicIdHash: raw.publicIdHash || ident.publicIdHash,
+          certificationId: raw.certificationId || ident.certificationId,
         });
       } catch (err) {
         if (alreadyPostedError(err)) {
@@ -93,6 +193,7 @@ export function createL1Certifier(config, hooks = {}) {
             l2StateRoot: l2StateRoot || ZERO_HASH,
             electionId: String(electionId),
             mirror: options.mirrorAddress || null,
+            ...ident,
           });
         }
         return publicCertification({
@@ -105,6 +206,7 @@ export function createL1Certifier(config, hooks = {}) {
           l2StateRoot: l2StateRoot || ZERO_HASH,
           electionId: String(electionId),
           mirror: options.mirrorAddress || null,
+          ...ident,
         });
       }
     },

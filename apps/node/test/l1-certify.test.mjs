@@ -236,6 +236,11 @@ describe('L1 certification HTTP', () => {
       assert.equal(json.l1Certification.posted, true);
       assert.equal(json.election.tally.l1.chainId, 11155111);
       assert.equal(posts.length, 1);
+      const stored = fx.created.store.requireElection(fx.electionId);
+      assert.equal(String(posts[0].electionId), String(stored.onChainElectionId));
+      assert.notEqual(String(posts[0].electionId), String(fx.electionId));
+      assert.equal(posts[0].publicId, stored.id);
+      assert.ok(posts[0].certificationId || posts[0].jurisdictionId);
 
       const retry = await api(fx.base, 'POST', `/api/elections/${fx.electionId}/certify-l1`, {
         jar: fx.jar,

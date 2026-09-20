@@ -10,8 +10,8 @@ import path from 'node:path';
 import { isDisclosed } from './disclosure.mjs';
 import {
   electionMatchesRef,
+  mintScopedPublicId,
   mintShortCode,
-  mintUuid,
   parseOnChainElectionId,
 } from './electionIds.mjs';
 import { HttpError } from './http.mjs';
@@ -97,8 +97,9 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 6,
+      version: 7,
       nextElectionId: 1,
+      nodeId: randomUUID(),
     },
     users: [],
     sessions: [],
@@ -135,13 +136,26 @@ export function mergeTallyL1(prev, next) {
   if (prevOnChain && next.status === 'failed') {
     return { ...prev, lastError: next.error || null };
   }
-  if (next.alreadyPosted || next.status === 'already_posted') {
+  if (
+    next.alreadyPosted ||
+    next.status === 'already_posted' ||
+    next.status === 'already_posted_mismatch'
+  ) {
     return {
       ...next,
       txHash: next.txHash || prev.txHash || null,
       chainId: next.chainId || prev.chainId || null,
       mirror: next.mirror || prev.mirror || null,
       settlement: next.settlement || prev.settlement || null,
+      certificationId: next.certificationId || prev.certificationId || null,
+      factory: next.factory || prev.factory || null,
+      jurisdictionId: next.jurisdictionId || prev.jurisdictionId || null,
+      publicIdHash: next.publicIdHash || prev.publicIdHash || null,
+      publicId: next.publicId || prev.publicId || null,
+      electionAddress: next.electionAddress || prev.electionAddress || null,
+      ballotSpecHash: next.ballotSpecHash || prev.ballotSpecHash || null,
+      hashMismatch: Boolean(next.hashMismatch),
+      requestedHash: next.requestedHash || prev.requestedHash || null,
     };
   }
   return next;
@@ -197,7 +211,8 @@ export class Store {
     if (!Array.isArray(store.data.outcomeReports)) store.data.outcomeReports = [];
     if (!Array.isArray(store.data.outcomeReportDeliveries)) store.data.outcomeReportDeliveries = [];
     store.data.meta = store.data.meta || {};
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 6);
+    if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
     await store.persist();
     return store;
   }
@@ -250,6 +265,18 @@ export class Store {
     return clone(this.data);
   }
 
+  nodeId() {
+    this.data.meta = this.data.meta || {};
+    if (!this.data.meta.nodeId) this.data.meta.nodeId = randomUUID();
+    return String(this.data.meta.nodeId);
+  }
+
+  findElectionsByRef(id) {
+    const want = String(id ?? '').trim();
+    if (!want) return [];
+    return this.data.elections.filter((e) => electionMatchesRef(e, want) || electionIdMatches(e, want));
+  }
+
   requireElection(id) {
     const election = this.getElection(id);
     if (!election) throw new HttpError(404, 'election not found');
@@ -257,12 +284,15 @@ export class Store {
   }
 
   getElection(id) {
+    const matches = this.findElectionsByRef(id);
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
     const want = String(id ?? '').trim();
-    if (!want) return null;
-    return (
-      this.data.elections.find((e) => electionMatchesRef(e, want) || electionIdMatches(e, want)) ||
-      null
-    );
+    const exactId = matches.find((e) => String(e.id) === want);
+    if (exactId) return exactId;
+    const shorts = matches.filter((e) => e.shortCode === want);
+    if (shorts.length === 1) return shorts[0];
+    throw new HttpError(409, 'ambiguous election id', { code: 'ELECTION_ID_COLLISION' });
   }
 
   _shortCodeTaken(code, exceptId = null) {
@@ -951,10 +981,31 @@ export class Store {
   }
 
   async createElection(params) {
-    const id = mintUuid();
-    if (this.getElection(id)) throw new HttpError(409, 'election id collision');
-    const shortCode = this._uniqueShortCode();
+    // Never honor a client-supplied public id (copied UUID / squatting).
     const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
+    const scope = {
+      factoryAddress: params.factoryAddress || null,
+      onChainElectionId,
+      jurisdictionId: params.jurisdictionId,
+      chainId: params.chainId,
+      nodeId: this.nodeId(),
+    };
+    const id = mintScopedPublicId(scope);
+    const existing = this.getElection(id);
+    if (existing) {
+      const sameIdentity =
+        String(existing.onChainElectionId) === String(onChainElectionId) &&
+        String(existing.jurisdictionId) === String(params.jurisdictionId) &&
+        String(existing.factoryAddress || '') === String(params.factoryAddress || '');
+      throw new HttpError(
+        409,
+        sameIdentity
+          ? 'election already exists for this factory, jurisdiction, and on-chain id'
+          : 'election public id collision',
+        { code: 'ELECTION_ID_COLLISION' },
+      );
+    }
+    const shortCode = this._uniqueShortCode();
     const tree = emptyTree(params.treeDepth);
     const dq = emptyTree(params.treeDepth);
     let tallyScheme;
@@ -992,6 +1043,7 @@ export class Store {
       id,
       shortCode,
       onChainElectionId,
+      publicIdScheme: 'uuid-v5-jurisdiction',
       aliases: [],
       title: params.title,
       metadataURI: params.metadataURI || '',
