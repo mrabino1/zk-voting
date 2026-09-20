@@ -60,6 +60,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Roles](#roles-and-permissions)
 - [End-to-end flows](#end-to-end-flows)
 - [Privacy, coercion resistance, and public verifiability](#privacy-coercion-resistance-and-public-verifiability)
+- [How voters’ privacy is protected](./how_voters_privacy_is_protected.md)
 - [Security and threat model](#security-and-threat-model)
 - [What this system will not do](#what-this-system-will-not-do)
 - [Development](#development)
@@ -156,6 +157,7 @@ Current layout (names can still move slightly; the invariants will not).
 zk-voting/
   README.md                    ← you are here (spec + how to run)
   voting_cost_estimate.md      host / L2 / L1 / SES cost ranges (at cost)
+  how_voters_privacy_is_protected.md  commander privacy brief (design vs demo)
   NOT_FOR_PROFIT.md
   LICENSE                      AGPL-3.0-or-later
   CONTRIBUTING.md
@@ -861,7 +863,7 @@ These three fight each other. The design chooses explicitly:
 
 If a jurisdiction needs a fully public roll (some do), that is a configuration: commitments can be replaced or accompanied by identified records. ZK voting still hides the **ballot**.
 
-Unlinkability: the active Ethereum address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Dashboards delay vote proofs by one hour. Details: [`docs/IDENTITY.md`](./docs/IDENTITY.md), [`docs/PASSKEYS.md`](./docs/PASSKEYS.md), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+Unlinkability: the active Ethereum address is not the Merkle leaf; the vote tx origin is the bundler; the nullifier does not name the account. Dashboards delay vote proofs by one hour. Details: [`docs/IDENTITY.md`](./docs/IDENTITY.md), [`docs/PASSKEYS.md`](./docs/PASSKEYS.md), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md). Commander brief (public record vs Node-host gaps): [`how_voters_privacy_is_protected.md`](./how_voters_privacy_is_protected.md).
 
 ---
 

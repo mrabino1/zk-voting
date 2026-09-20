@@ -158,7 +158,7 @@ election’s jurisdiction **approves** before the commitment is on the roll.
 Authenticators and addresses cannot belong to two people. Officers may
 revoke an expired card or license. Each person sets a vote PIN (hashed;
 scrambled phone keypad at ballot submit). The vote leaf stays `identityCommitment`.
-Details: [`IDENTITY.md`](./IDENTITY.md).
+Details: [`IDENTITY.md`](./IDENTITY.md). Commander brief (design vs demo): [`../how_voters_privacy_is_protected.md`](../how_voters_privacy_is_protected.md).
 
 ---
 
@@ -167,6 +167,7 @@ Details: [`IDENTITY.md`](./IDENTITY.md).
 ```
 zk-voting/
   README.md                          (product intent + how to run)
+  how_voters_privacy_is_protected.md (commander privacy brief)
   NOT_FOR_PROFIT.md
   LICENSE                            (AGPL-3.0-or-later)
   system_actions.sh
