@@ -45,6 +45,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Current status](#current-status)
 - [Monorepo layout](#monorepo-layout)
 - [How to run](#how-to-run)
+- [Operating costs](#operating-costs)
 - [Copy-paste credentials](#copy-paste-credentials)
 - [Intentional forking](#intentional-forking)
 - [Node application](#node-application)
@@ -153,6 +154,7 @@ Current layout (names can still move slightly; the invariants will not).
 ```text
 zk-voting/
   README.md                    ← you are here (spec + how to run)
+  voting_cost_estimate.md      host / L1 / SES / capacity (at cost)
   NOT_FOR_PROFIT.md
   LICENSE                      AGPL-3.0-or-later
   CONTRIBUTING.md
@@ -305,6 +307,12 @@ node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
 ./system_actions.sh deploy-dev   # pull test/unstable, install, build, restart
 ./system_actions.sh deploy-prod  # pull master (confirms first)
 ```
+
+---
+
+## Operating costs
+
+Jurisdictions run Republic **at cost** (hosts, optional L1 gas, SES). Commander brief: [`voting_cost_estimate.md`](./voting_cost_estimate.md).
 
 ---
 
