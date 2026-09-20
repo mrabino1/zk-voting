@@ -46,6 +46,9 @@ export function ensurePersonFields(user) {
   if (!Object.prototype.hasOwnProperty.call(user, 'personKeyHash')) {
     user.personKeyHash = null;
   }
+  if (!Object.prototype.hasOwnProperty.call(user, 'contactEmail')) {
+    user.contactEmail = '';
+  }
   return user;
 }
 

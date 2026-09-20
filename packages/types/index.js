@@ -13,6 +13,40 @@
 
 const AUTH_METHOD_TYPES = Object.freeze(["passkey", "web3", "smart_card"]);
 
+const ROLES = Object.freeze([
+  "voter",
+  "clerk",
+  "registrar",
+  "disqualification_officer",
+  "tally_operator",
+  "election_staff",
+  "platform_admin",
+  "platform_super_admin",
+  "observer",
+]);
+
+const APPROVAL_CHAIN = Object.freeze({
+  platform_super_admin: "Approves platform admins. Wires the host and factory.",
+  platform_admin: "Approves election staff. Creates jurisdictions and grants officers.",
+  election_staff: "Registers unbounded external eligibility parties for an election.",
+});
+
+const PartyMode = Object.freeze({
+  VETO: "veto",
+  MUST_ATTEST: "must_attest",
+});
+
+const CIVIC_TX_TYPES = Object.freeze([
+  "register",
+  "vote",
+  "disqualify",
+  "tally",
+  "userop",
+  "party_add",
+  "party_reject",
+  "party_attest",
+]);
+
 /** Republic L2 chain id (see docs/L2.md). */
 const REPUBLIC_CHAIN_ID = 27427;
 
@@ -238,9 +272,10 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} nullifier Unique per (voter, election). Spent at most once;
  *   a second ballot for the same nullifier is rejected. Double voting is impossible.
  * @property {string} ballotHash Hash / commitment of `encryptedBallot`.
- * @property {string} [identityCommitment] Optional; MUST NOT be required to
- *   submit a vote. Present only in clerk-side debug tooling, never in the
- *   public explorer vote row.
+ * @property {string} [identityCommitment] Checked against live external
+ *   parties (felony, death, age, …) then discarded. Never stored on the
+ *   ballot and never shown on a public vote row. Required when the election
+ *   has active external gates.
  * @property {string} encryptedBallot Hex bytes of the tally-pubkey ECIES envelope
  *   (`RTv1` + P-256 eph pub + AES-GCM) when `tallyScheme == opens_ballots`, or
  *   the legacy seed-keyed AES-GCM stand-in. Does not reveal the option in the clear
@@ -290,7 +325,10 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * @typedef {Object} BlockOutcome
- * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"l1_certify"|"batch"|"freeze"} type
+ * @property {"register"|"vote"|"disqualify"|"revoke"|"tally"|"l1_certify"|"batch"|"freeze"|"party_add"|"party_reject"|"party_attest"} type
+ * @property {string} [partyId]
+ * @property {string} [partyName]
+ * @property {"veto"|"must_attest"} [mode]
  * @property {string|bigint} [electionId]
  * @property {string} [identityCommitment] Registration leaf only; never a name.
  * @property {string} [nullifier]
@@ -327,7 +365,23 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} [registrar]
  * @property {string} [disqualificationOfficer]
  * @property {string} [tallyOperator]
+ * @property {string} [electionStaff]
  * @property {string} [relayer]
+ */
+
+/**
+ * One unbounded external eligibility party cloned with the election.
+ * Election staff register these (death records, felony systems, age
+ * verification). Any active party may veto a registered person at cast time.
+ *
+ * @typedef {Object} ExternalParty
+ * @property {string} id
+ * @property {string} electionId
+ * @property {string} name Public label (not a person's legal name).
+ * @property {"veto"|"must_attest"} mode
+ * @property {"active"|"paused"} status
+ * @property {string} [operatorHandle]
+ * @property {string} [endpointUrl] Optional HTTP oracle. Fail-closed on timeout.
  */
 
 /**
@@ -356,6 +410,10 @@ module.exports = {
   ReasonCode,
   REASON_CODE_LABELS,
   AUTH_METHOD_TYPES,
+  ROLES,
+  APPROVAL_CHAIN,
+  PartyMode,
+  CIVIC_TX_TYPES,
   BallotMethod,
   QuestionType,
   reasonCodeLabel,

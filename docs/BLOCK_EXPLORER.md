@@ -34,6 +34,7 @@ These are **meant** to be public. The explorer should render them in plain langu
 | Registration | `identityCommitment` (field element / bytes32) inserted into the election tree. Leaf **index** if the contract emits it. Never a legal name. |
 | Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour that contained the vote has closed**. Timestamp is the hour boundary, not the minute they voted. Each nullifier appears once; a second ballot is not accepted. |
 | Disqualification | `identityCommitment`, `electionId`, **reason code** (and label, e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revoke events. |
+| External party | `party_add` / `party_reject` / `party_attest` — public immediately (not hour-sealed). Commitment + reason code, never a legal name. Unifies felony / death / age systems that do not talk to each other today. |
 | Roll freeze | Eligible root, disqualification root, clerk, time. |
 | Tally | Per-option **counts** (after a valid tally proof), `countsHash`, operator. |
 | Rollup batch (L1) | `batchIndex`, `prevStateRoot`, `newStateRoot`, `dataHash`, prover. Anyone can re-hash posted calldata. |

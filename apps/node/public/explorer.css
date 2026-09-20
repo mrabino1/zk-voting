@@ -84,6 +84,18 @@
   color: #1a1404;
 }
 
+.tx-type.party {
+  background: #2f5d50;
+}
+
+.tx-type.party_reject {
+  background: var(--danger);
+}
+
+.tx-type.party_attest {
+  background: #3d5a80;
+}
+
 .tx-type.batch {
   background: #3d4454;
 }

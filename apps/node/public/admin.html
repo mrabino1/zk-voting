@@ -58,10 +58,14 @@
         <p class="kicker" data-i18n="admin.kicker">Platform administration</p>
         <h1 data-i18n="admin.title">Host this Node</h1>
         <p class="lede" data-i18n-html="admin.lede">
-          Jurisdictions are the organizations of this public-good stack. Grant clerks,
-          registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
-          and no console that takes fees. Dashboards do not show live vote ticks; public
-          proof of ballots is published once an hour.
+          Three approvals: a <strong>platform super admin</strong> approves
+          <strong>platform admins</strong>; admins approve <strong>election staff</strong>;
+          staff register unbounded external eligibility parties for each election
+          (felony, death, age, and any other system that should still be able to
+          reject a ballot after registration). Jurisdictions remain the organizations
+          of this public-good stack. There is no token, no paid tier, and no console
+          that takes fees. Dashboards do not show live vote ticks; public proof of
+          ballots is published once an hour.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note" data-i18n="disclosure.noteAdmin">
@@ -99,8 +103,8 @@
         data-lede-key="signin.adminLede"
         data-heading="Sign in"
         data-dev-handle="admin"
-        data-dev-role="platform_admin"
-        data-lede="Platform admin uses the same passkey or Ethereum session as every other person. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
+        data-dev-role="platform_super_admin"
+        data-lede="Platform super admin uses the same passkey or Ethereum session as every other person. Super admin approves admins. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
       ></div>
 
       <div class="grid-2">
@@ -135,8 +139,9 @@
             <h2 id="grant-heading" data-i18n="admin.grantOfficers">Grant officers</h2>
           </header>
           <p class="field-hint" data-i18n-html="admin.grantHint">
-            Clerk, registrar, disqualification officer, and tally operator are scoped to one
-            jurisdiction. <code>platform_admin</code> remains a global override and is not granted here.
+            Clerk, registrar, disqualification officer, tally operator, and election
+            staff are scoped to one jurisdiction. <code>platform_admin</code> and
+            <code>platform_super_admin</code> remain global and are not granted here.
           </p>
           <form id="form-grant" class="form-grid">
             <div class="field">
@@ -158,7 +163,13 @@
                 <option value="registrar" data-i18n="admin.roleRegistrar">registrar — insert identity commitments</option>
                 <option value="disqualification_officer" data-i18n="admin.roleDq">disqualification_officer — reason codes</option>
                 <option value="tally_operator" data-i18n="admin.roleTally">tally_operator — post counts</option>
+                <option value="election_staff" data-i18n="admin.roleStaff">election_staff — register external vote parties</option>
               </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-email" data-i18n="admin.contactEmail">Contact email</label>
+              <input id="g-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" data-i18n-placeholder="admin.contactEmailPlaceholder" placeholder="optional@jurisdiction.gov" />
+              <span class="field-hint" data-i18n="admin.contactEmailHint">Used only for the promotion notice. Never written to civic L2.</span>
             </div>
             <div class="actions">
               <button class="btn" type="submit" data-i18n="admin.grantSubmit">Grant role</button>
@@ -167,6 +178,51 @@
           </form>
         </section>
       </div>
+
+      <section class="panel" aria-labelledby="admins-heading">
+        <header>
+          <h2 id="admins-heading" data-i18n="admin.adminsHeading">Platform admins</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-admins" data-i18n="common.refresh">Refresh</button>
+        </header>
+        <p class="field-hint" data-i18n-html="admin.adminsHint">
+          Only a <code>platform_super_admin</code> may approve or revoke a
+          <code>platform_admin</code>. Admins then approve election staff on each election.
+        </p>
+        <form id="form-admin" class="form-grid">
+            <div class="field">
+              <label class="field-label" for="a-user"><span data-i18n="admin.user">User</span> <span class="req">*</span></label>
+              <select id="a-user" name="userId" required>
+                <option value="" data-i18n="common.loading">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-email" data-i18n="admin.contactEmail">Contact email</label>
+              <input id="a-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" data-i18n-placeholder="admin.contactEmailPlaceholder" placeholder="optional@jurisdiction.gov" />
+            </div>
+          <div class="actions">
+            <button class="btn" type="submit" data-i18n="admin.approveAdmin">Approve as platform admin</button>
+          </div>
+          <div class="flash" id="flash-admin" role="status"></div>
+        </form>
+        <div class="table-wrap">
+          <table class="data-table" id="table-admins">
+            <caption class="visually-hidden" data-i18n="admin.adminsCaption">Platform super admins and admins</caption>
+            <thead>
+              <tr>
+                <th data-i18n="admin.colHandle">Handle</th>
+                <th data-i18n="admin.colRole">Role</th>
+                <th data-i18n="admin.colId">Id</th>
+                <th data-i18n="admin.colAction">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" class="empty" data-i18n="common.loading">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="panel" aria-labelledby="list-j-heading">
         <header>
@@ -238,6 +294,7 @@
                 <th data-i18n="admin.colHandle">Handle</th>
                 <th data-i18n="admin.colGlobalRole">Global role</th>
                 <th data-i18n="admin.colOffices">Jurisdiction offices</th>
+                <th data-i18n="admin.colContactMail">Contact mail</th>
                 <th data-i18n="admin.colMethods">Methods</th>
                 <th data-i18n="admin.colActiveEth">Active ETH</th>
                 <th data-i18n="admin.colPersonKey">Person key</th>
@@ -246,7 +303,64 @@
             </thead>
             <tbody>
               <tr>
-                <td colspan="7" class="empty" data-i18n="common.loading">Loading…</td>
+                <td colspan="8" class="empty" data-i18n="common.loading">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="mail-heading">
+        <header>
+          <h2 id="mail-heading" data-i18n="admin.mailHeading">Role-promotion emails</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-mail" data-i18n="admin.refreshOutbox">Refresh outbox</button>
+        </header>
+        <p class="field-hint" data-i18n-html="admin.mailHint">
+          When someone is promoted, the Node queues a civic notice (HTML + text) and an in-app
+          notification. Delivery uses <code>MAIL_WEBHOOK_URL</code> when set. These messages are
+          never written to civic L2 transactions.
+        </p>
+        <form id="form-contact-email" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="me-email" data-i18n="admin.yourContactEmail">Your contact email</label>
+            <input id="me-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" data-i18n-placeholder="admin.yourEmailPlaceholder" placeholder="you@jurisdiction.gov" />
+            <span class="field-hint" data-i18n="admin.yourEmailHint">Saved on this person record only. Used when you yourself are granted a new office.</span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="submit" data-i18n="admin.saveContactEmail">Save contact email</button>
+          </div>
+          <div class="flash" id="flash-contact-email" role="status"></div>
+        </form>
+        <form id="form-mail-preview" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="mail-template" data-i18n="admin.mailTemplate">Template</label>
+            <select id="mail-template" name="templateId">
+              <option value="" data-i18n="common.loading">Loading…</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit" data-i18n="admin.previewTemplate">Preview template</button>
+          </div>
+          <div class="flash" id="flash-mail" role="status"></div>
+        </form>
+        <p id="mail-subject" class="field-hint"></p>
+        <pre id="mail-text" class="mail-text" hidden></pre>
+        <iframe id="mail-html" class="mail-preview" data-i18n-title="admin.mailPreviewTitle" title="Role-promotion email preview" sandbox="" hidden></iframe>
+        <div class="table-wrap">
+          <table class="data-table" id="table-outbox">
+            <caption class="visually-hidden" data-i18n="admin.outboxCaption">Promotion mail outbox</caption>
+            <thead>
+              <tr>
+                <th data-i18n="admin.colWhen">When</th>
+                <th data-i18n="admin.colRole">Role</th>
+                <th data-i18n="admin.colTo">To</th>
+                <th data-i18n="admin.colStatus">Status</th>
+                <th data-i18n="admin.colSubject">Subject</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty" data-i18n="common.loading">Loading…</td>
               </tr>
             </tbody>
           </table>

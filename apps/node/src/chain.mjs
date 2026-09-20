@@ -39,6 +39,22 @@ export const ballotInboxAbi = [
     inputs: [{ name: 'electionId', type: 'uint256' }],
     outputs: [{ type: 'uint256' }],
   },
+  {
+    type: 'function',
+    name: 'submitVoteWithClearance',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'electionId', type: 'uint256' },
+      { name: 'a', type: 'uint256[2]' },
+      { name: 'b', type: 'uint256[2][2]' },
+      { name: 'c', type: 'uint256[2]' },
+      { name: 'publicInputs', type: 'uint256[]' },
+      { name: 'encryptedBallot', type: 'bytes' },
+      { name: 'identityCommitment', type: 'uint256' },
+      { name: 'mustAttestIds', type: 'uint256[]' },
+    ],
+    outputs: [],
+  },
 ];
 
 /** Same shape as `@zk-voting/chain-client` FACTORY_ABI (create + ElectionCreated). */
@@ -87,6 +103,13 @@ export const electionFactoryAbi = [
       { name: 'startTime', type: 'uint64', indexed: false },
       { name: 'cutoffTime', type: 'uint64', indexed: false },
     ],
+  },
+  {
+    type: 'function',
+    name: 'getPartyRegistry',
+    stateMutability: 'view',
+    inputs: [{ name: 'electionId', type: 'uint256' }],
+    outputs: [{ type: 'address' }],
   },
 ];
 
@@ -371,7 +394,14 @@ export function createChain(config) {
         });
       }
     },
-    async submitVote({ electionId, proof, publicInputs, encryptedBallot }) {
+    async submitVote({
+      electionId,
+      proof,
+      publicInputs,
+      encryptedBallot,
+      identityCommitment,
+      mustAttestIds,
+    }) {
       if (!configured) return null;
       if (!voteReady) {
         throw new HttpError(
@@ -382,12 +412,24 @@ export function createChain(config) {
       }
       const { a, b, c } = groth16Points(proof);
       const inputs = publicInputs.map((x) => asBigInt(x));
+      const hasClearance = identityCommitment != null && identityCommitment !== '';
       try {
         const hash = await wallet.writeContract({
           address: inbox,
           abi: ballotInboxAbi,
-          functionName: 'submitVote',
-          args: [asBigInt(electionId), a, b, c, inputs, encryptedBallot],
+          functionName: hasClearance ? 'submitVoteWithClearance' : 'submitVote',
+          args: hasClearance
+            ? [
+                asBigInt(electionId),
+                a,
+                b,
+                c,
+                inputs,
+                encryptedBallot,
+                asBigInt(identityCommitment),
+                (mustAttestIds || []).map((id) => asBigInt(id)),
+              ]
+            : [asBigInt(electionId), a, b, c, inputs, encryptedBallot],
         });
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         return { hash, receipt };

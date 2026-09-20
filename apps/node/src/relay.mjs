@@ -15,6 +15,7 @@ import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import { publicVoteRecord } from './store.mjs';
+import { assertExternalClearance } from './voteGate.mjs';
 import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from './ballot.mjs';
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
@@ -211,6 +212,15 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   const hasCommitment = parsed.identityCommitment != null && parsed.identityCommitment !== '';
   if (!chainConfigured || hasCommitment) {
     store.assertCanVote(election.id, parsed.identityCommitment);
+    if (hasCommitment) {
+      await assertExternalClearance(store, election.id, parsed.identityCommitment, {
+        now: ts,
+      });
+    } else if (store.listActiveExternalParties(election.id).length) {
+      throw new HttpError(400, 'identityCommitment required for external party checks', {
+        code: 'IDENTITY_COMMITMENT_REQUIRED',
+      });
+    }
   }
 
   const bound = assertBoundRoots(election, parsed, store);
@@ -228,6 +238,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       proof: parsed.proof,
       publicInputs,
       encryptedBallot: parsed.encryptedBallot,
+      identityCommitment: parsed.identityCommitment,
     });
   }
 

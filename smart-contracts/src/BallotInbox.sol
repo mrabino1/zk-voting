@@ -7,6 +7,7 @@ import {ElectionParams} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
+import {IExternalPartyRegistry} from "./interfaces/IExternalPartyRegistry.sol";
 import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 
@@ -35,6 +36,7 @@ contract BallotInbox is IBallotInbox {
     error NullifierUsed();
     error InvalidProof();
     error AlreadyTallied();
+    error ClearanceRequired();
 
     IElectionFactory public immutable factory;
 
@@ -65,6 +67,35 @@ contract BallotInbox is IBallotInbox {
         if (publicInputs.length < 5) revert InvalidPublicInputs();
 
         IElection election = _getElection(electionId);
+        _requireNoActiveGates(electionId);
+        address verifier = _requireOpen(election);
+        _requireNotTallied(electionId);
+        _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
+
+        if (!IGroth16Verifier(verifier).verifyProof(a, b, c, publicInputs)) revert InvalidProof();
+
+        uint256 nullifier = publicInputs[2];
+        bytes32 ballotHash = bytes32(publicInputs[3]);
+        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        _recordAcceptance(electionId, nullifier, ballotHash);
+    }
+
+    /// @inheritdoc IBallotInbox
+    function submitVoteWithClearance(
+        uint256 electionId,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot,
+        uint256 identityCommitment,
+        uint256[] calldata mustAttestIds
+    ) external {
+        if (encryptedBallot.length == 0) revert EmptyBallot();
+        if (publicInputs.length < 5) revert InvalidPublicInputs();
+
+        IElection election = _getElection(electionId);
+        _requireExternalClearance(electionId, identityCommitment, mustAttestIds);
         address verifier = _requireOpen(election);
         _requireNotTallied(electionId);
         _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
@@ -116,6 +147,27 @@ contract BallotInbox is IBallotInbox {
         address electionAddr = factory.getElection(electionId);
         if (electionAddr == address(0)) revert UnknownElection();
         election = IElection(electionAddr);
+    }
+
+    function _partyRegistry(uint256 electionId) internal view returns (address) {
+        return factory.getPartyRegistry(electionId);
+    }
+
+    /// @dev Plain `submitVote` is allowed only while no external parties are active.
+    function _requireNoActiveGates(uint256 electionId) internal view {
+        address registry = _partyRegistry(electionId);
+        if (registry == address(0)) return;
+        if (IExternalPartyRegistry(registry).hasActiveGates()) revert ClearanceRequired();
+    }
+
+    function _requireExternalClearance(
+        uint256 electionId,
+        uint256 identityCommitment,
+        uint256[] calldata mustAttestIds
+    ) internal view {
+        address registry = _partyRegistry(electionId);
+        if (registry == address(0)) return;
+        IExternalPartyRegistry(registry).assertCastAllowed(identityCommitment, mustAttestIds);
     }
 
     /// @dev OPEN ≡ roll frozen AND now ∈ [startTime, cutoffTime).

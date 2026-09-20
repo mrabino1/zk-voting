@@ -2,24 +2,41 @@
 
 import { Router } from 'express';
 
-import { asyncHandler } from '../http.mjs';
+import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
+import { isPlatformOperator, isSuperAdmin } from '../roles.mjs';
+import { parseContactEmail } from '../mailer.mjs';
 
 function expandedRoles(store, user) {
   if (!user) return [];
-  if (user.role === 'platform_admin') {
+  if (isSuperAdmin(user)) {
+    return [
+      'platform_super_admin',
+      'platform_admin',
+      'CLERK',
+      'REGISTRAR',
+      'DISQUALIFICATION_OFFICER',
+      'TALLY_OPERATOR',
+      'ELECTION_STAFF',
+    ];
+  }
+  if (isPlatformOperator(user)) {
     return [
       'platform_admin',
       'CLERK',
       'REGISTRAR',
       'DISQUALIFICATION_OFFICER',
       'TALLY_OPERATOR',
+      'ELECTION_STAFF',
     ];
   }
   const set = new Set();
   if (user.role) set.add(String(user.role).toUpperCase());
   for (const grant of store.listJurisdictionRolesForUser(user)) {
+    set.add(String(grant.role).toUpperCase());
+  }
+  for (const grant of store.listElectionRolesForUser(user)) {
     set.add(String(grant.role).toUpperCase());
   }
   return [...set];
@@ -47,14 +64,17 @@ export function meRouter(deps) {
     const notifications = req.user ? store.listNotifications(req.user.id) : [];
     const user = req.publicUser;
     const jurisdictionRoles = req.user ? store.listJurisdictionRolesForUser(req.user) : [];
+    const electionRoles = req.user ? store.listElectionRolesForUser(req.user) : [];
     const roles = user ? expandedRoles(store, req.user) : [];
     const elections = electionsMap(store, req.user);
     const me = user
       ? {
           ...user,
+          contactEmail: req.user?.contactEmail || '',
           name: user.handle,
           roles,
           jurisdictionRoles,
+          electionRoles,
           elections,
           identity: publicIdentity(req.user),
         }
@@ -65,6 +85,7 @@ export function meRouter(deps) {
       me,
       roles,
       jurisdictionRoles,
+      electionRoles,
       elections,
       identity: req.user ? publicIdentity(req.user) : null,
       unreadCount: notifications.filter((n) => !n.read).length,
@@ -99,6 +120,22 @@ export function meRouter(deps) {
     asyncHandler(async (req, res) => {
       const n = await store.markNotificationRead(req.user.id, req.params.id);
       res.json({ ok: true, notification: n, nfp: true });
+    }),
+  );
+
+  router.patch(
+    '/me/contact-email',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const parsed = parseContactEmail(req.body?.contactEmail);
+      if (parsed === undefined) throw new HttpError(400, 'contactEmail required');
+      const user = await store.setContactEmail(req.user.id, parsed);
+      res.json({
+        ok: true,
+        nfp: true,
+        contactEmail: user.contactEmail || '',
+        hasContactEmail: Boolean(user.contactEmail),
+      });
     }),
   );
 

@@ -193,6 +193,9 @@ import { t, LOCALE_EVENT } from "./i18n.js";
         $("session-line").textContent = t("admin.sessionAnon");
         return me;
       }
+      if ($("me-email") && me.me && me.me.contactEmail && !$("me-email").value) {
+        $("me-email").value = me.me.contactEmail;
+      }
       const grants = me.jurisdictionRoles || [];
       const offices = grants
         .map((g) => (g.role || "") + "@" + (g.jurisdictionId || ""))
@@ -321,14 +324,14 @@ import { t, LOCALE_EVENT } from "./i18n.js";
     const tbody = $("table-users").querySelector("tbody");
     const select = $("g-user");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">' + t("admin.noUsers") + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">' + t("admin.noUsers") + '</td></tr>';
       select.innerHTML = '<option value="">' + t("common.noneLoaded") + '</option>';
       return;
     }
     tbody.innerHTML = rows
       .map(
         (row) =>
-          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || t("common.dash"))}</td><td>${row.personKeyBound ? t("common.bound") : t("common.dash")}</td><td class="hash">${esc(row.id)}</td></tr>`
+          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${row.hasContactEmail ? t("common.yes") : t("common.dash")}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || t("common.dash"))}</td><td>${row.personKeyBound ? t("common.bound") : t("common.dash")}</td><td class="hash">${esc(row.id)}</td></tr>`
       )
       .join("");
     select.innerHTML =
@@ -342,14 +345,77 @@ import { t, LOCALE_EVENT } from "./i18n.js";
     try {
       const data = await getFirst(["/api/users", "/api/admin/users"]);
       renderUsers(asList(data, ["users", "items"]));
+      renderAdminPicker(asList(data, ["users", "items"]));
     } catch (err) {
       const msg =
         err.status === 401 || err.status === 403
           ? t("admin.signInToList")
           : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
-        `<tr><td colspan="7" class="empty">${esc(msg)}</td></tr>`;
+        `<tr><td colspan="8" class="empty">${esc(msg)}</td></tr>`;
       $("g-user").innerHTML = `<option value="">${esc(msg)}</option>`;
+      if ($("a-user")) $("a-user").innerHTML = `<option value="">${esc(msg)}</option>`;
+    }
+  }
+
+  function renderAdminPicker(rows) {
+    const select = $("a-user");
+    if (!select) return;
+    const eligible = rows.filter(
+      (row) => row.role !== "platform_admin" && row.role !== "platform_super_admin"
+    );
+    if (!eligible.length) {
+      select.innerHTML = '<option value="">' + t("admin.noVotersToElevate") + '</option>';
+      return;
+    }
+    select.innerHTML =
+      '<option value="">' + t("common.select") + '</option>' +
+      eligible
+        .map(
+          (row) =>
+            `<option value="${esc(row.id)}" data-handle="${esc(row.handle)}">${esc(row.handle)} · ${esc(row.role)}</option>`
+        )
+        .join("");
+  }
+
+  function renderAdmins(rows) {
+    const table = $("table-admins");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">' + t("admin.noAdmins") + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows
+      .map((row) => {
+        const canRevoke = row.role === "platform_admin";
+        return `<tr>
+          <td>${esc(row.handle)}</td>
+          <td>${esc(row.role)}</td>
+          <td class="hash">${esc(row.id)}</td>
+          <td>${
+            canRevoke
+              ? `<button type="button" class="btn btn-secondary btn-inline" data-revoke-admin="1" data-userid="${esc(row.id)}" data-handle="${esc(row.handle)}">${t("admin.revoke")}</button>`
+              : t("common.dash")
+          }</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  async function loadAdmins() {
+    const table = $("table-admins");
+    if (!table) return;
+    try {
+      const data = await getFirst(["/api/admin/admins"]);
+      renderAdmins(asList(data, ["admins", "users"]));
+    } catch (err) {
+      const msg =
+        err.status === 401 || err.status === 403
+          ? t("admin.signInToListAdmins")
+          : errText(err);
+      table.querySelector("tbody").innerHTML =
+        `<tr><td colspan="4" class="empty">${esc(msg)}</td></tr>`;
     }
   }
 
@@ -388,6 +454,8 @@ import { t, LOCALE_EVENT } from "./i18n.js";
     const selected = $("g-user").selectedOptions[0];
     const handle = (selected && selected.getAttribute("data-handle")) || "";
     const body = { userId, handle, role, jurisdictionId };
+    const email = $("g-email") && $("g-email").value.trim();
+    if (email) body.contactEmail = email;
     try {
       let granted = null;
       try {
@@ -405,18 +473,77 @@ import { t, LOCALE_EVENT } from "./i18n.js";
         }
       }
       const who = pick(granted, ["grant.handle", "user.handle"]) || handle || userId;
-      flash($("flash-grant"), "ok", t("admin.granted", { role, jurisdiction: jurisdictionId, who }));
-      await Promise.all([loadUsers(), loadJurisdictions()]);
+      const mailStatus = pick(granted, ["mail.mail.status", "mail.status"]);
+      const mailNote = mailStatus
+        ? t("admin.mailStatus", { status: mailStatus })
+        : pick(granted, ["mail.reason"])
+          ? t("admin.mailStatus", { status: pick(granted, ["mail.reason"]) })
+          : "";
+      flash($("flash-grant"), "ok", t("admin.granted", { role, jurisdiction: jurisdictionId, who }) + mailNote);
+      await Promise.all([loadUsers(), loadJurisdictions(), loadOutbox()]);
     } catch (err) {
       flash($("flash-grant"), "err", errText(err));
     }
   });
 
   window.addEventListener("republic:session", () => {
-    Promise.all([loadMe(), loadUsers(), loadJurisdictions()]);
+    Promise.all([loadMe(), loadUsers(), loadJurisdictions(), loadAdmins(), loadMailTemplates(), loadOutbox()]);
   });
 
+  const formAdmin = $("form-admin");
+  if (formAdmin) {
+    formAdmin.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const userId = $("a-user").value.trim();
+      if (!userId) {
+        flash($("flash-admin"), "err", t("admin.chooseUser"));
+        return;
+      }
+      const selected = $("a-user").selectedOptions[0];
+      const handle = (selected && selected.getAttribute("data-handle")) || "";
+      try {
+        const approved = await request("/api/admin/admins", {
+          method: "POST",
+          body: {
+            userId,
+            handle,
+            ...( $("a-email") && $("a-email").value.trim()
+              ? { contactEmail: $("a-email").value.trim() }
+              : {}),
+          },
+        });
+        const who = pick(approved, ["user.handle"]) || handle || userId;
+        const mailStatus = pick(approved, ["mail.mail.status", "mail.status"]);
+        flash(
+          $("flash-admin"),
+          "ok",
+          t("admin.approvedAdmin", { who }) + (mailStatus ? t("admin.mailStatus", { status: mailStatus }) : "")
+        );
+        await Promise.all([loadUsers(), loadAdmins(), loadOutbox()]);
+      } catch (err) {
+        flash($("flash-admin"), "err", errText(err));
+      }
+    });
+  }
+
   document.addEventListener("click", async (event) => {
+    const revokeAdmin = event.target.closest("[data-revoke-admin]");
+    if (revokeAdmin) {
+      try {
+        await request("/api/admin/admins", {
+          method: "DELETE",
+          body: {
+            userId: revokeAdmin.getAttribute("data-userid") || "",
+            handle: revokeAdmin.getAttribute("data-handle") || "",
+          },
+        });
+        flash($("flash-admin"), "ok", t("admin.revokedAdmin"));
+        await Promise.all([loadUsers(), loadAdmins()]);
+      } catch (err) {
+        flash($("flash-admin"), "err", errText(err));
+      }
+      return;
+    }
     const revokeBtn = event.target.closest("[data-revoke]");
     if (revokeBtn) {
       const jurisdictionId = revokeBtn.getAttribute("data-jurisdiction") || "";
@@ -450,20 +577,134 @@ import { t, LOCALE_EVENT } from "./i18n.js";
     }
   });
 
+  function renderOutbox(rows) {
+    const table = $("table-outbox");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">' + t("admin.noMail") + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows
+      .map(
+        (row) => `<tr>
+          <td>${esc(row.createdAt || t("common.dash"))}</td>
+          <td>${esc(row.role || t("common.dash"))}</td>
+          <td>${esc(row.to || t("common.dash"))}</td>
+          <td>${esc(row.status || t("common.dash"))}</td>
+          <td>${esc(row.subject || t("common.dash"))}</td>
+        </tr>`
+      )
+      .join("");
+  }
+
+  async function loadOutbox() {
+    const table = $("table-outbox");
+    if (!table) return;
+    try {
+      const data = await request("/api/mail/outbox");
+      renderOutbox(asList(data, ["outbox", "items"]));
+    } catch (err) {
+      const msg =
+        err.status === 401 || err.status === 403
+          ? t("admin.signInToReadOutbox")
+          : errText(err);
+      table.querySelector("tbody").innerHTML =
+        `<tr><td colspan="5" class="empty">${esc(msg)}</td></tr>`;
+    }
+  }
+
+  async function loadMailTemplates() {
+    const select = $("mail-template");
+    if (!select) return;
+    try {
+      const data = await request("/api/mail/templates");
+      const rows = asList(data, ["templates", "items"]);
+      if (!rows.length) {
+        select.innerHTML = '<option value="">' + t("admin.noTemplates") + '</option>';
+        return;
+      }
+      select.innerHTML = rows
+        .map(
+          (row) =>
+            `<option value="${esc(row.id)}">${esc(row.label || row.role)} — ${esc(row.headline || row.subject || row.id)}</option>`
+        )
+        .join("");
+    } catch (err) {
+      select.innerHTML = `<option value="">${esc(errText(err))}</option>`;
+    }
+  }
+
+  const formMail = $("form-mail-preview");
+  if (formMail) {
+    formMail.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = $("mail-template").value;
+      if (!id) {
+        flash($("flash-mail"), "err", t("admin.chooseTemplate"));
+        return;
+      }
+      try {
+        const data = await request("/api/mail/templates/" + encodeURIComponent(id));
+        const tpl = data.template || data;
+        $("mail-subject").textContent = tpl.subject || "";
+        const textEl = $("mail-text");
+        textEl.hidden = false;
+        textEl.textContent = tpl.text || "";
+        const frame = $("mail-html");
+        frame.hidden = false;
+        frame.srcdoc = tpl.html || "";
+        flash($("flash-mail"), "ok", t("admin.previewLoaded"));
+      } catch (err) {
+        flash($("flash-mail"), "err", errText(err));
+      }
+    });
+  }
+
+  const formContact = $("form-contact-email");
+  if (formContact) {
+    formContact.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const saved = await request("/api/me/contact-email", {
+          method: "PATCH",
+          body: { contactEmail: $("me-email").value.trim() },
+        });
+        flash(
+          $("flash-contact-email"),
+          "ok",
+          saved.contactEmail ? t("admin.savedEmail", { email: saved.contactEmail }) : t("admin.clearedEmail")
+        );
+      } catch (err) {
+        flash($("flash-contact-email"), "err", errText(err));
+      }
+    });
+  }
+
   $("btn-refresh-j").addEventListener("click", () => loadJurisdictions());
   $("btn-refresh-u").addEventListener("click", () => loadUsers());
   const refreshOfficers = $("btn-refresh-o");
   if (refreshOfficers) refreshOfficers.addEventListener("click", () => loadJurisdictions());
+  const refreshAdmins = $("btn-refresh-admins");
+  if (refreshAdmins) refreshAdmins.addEventListener("click", () => loadAdmins());
+  const refreshMail = $("btn-refresh-mail");
+  if (refreshMail) refreshMail.addEventListener("click", () => loadOutbox());
 
   window.addEventListener(LOCALE_EVENT, () => {
     loadHealth();
     loadMe();
     loadJurisdictions();
     loadUsers();
+    loadAdmins();
+    loadMailTemplates();
+    loadOutbox();
   });
 
   loadHealth();
   loadMe();
   loadJurisdictions();
   loadUsers();
+  loadAdmins();
+  loadMailTemplates();
+  loadOutbox();
 })();

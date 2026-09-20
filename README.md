@@ -11,7 +11,7 @@ This repository holds two tightly coupled pieces of software (and the circuits, 
 
 The same **Solidity** is meant to run **on Ethereum mainnet (L1)** and on any EVM venue a jurisdiction chooses (Lighter, other L2s, Foundry Anvil). Cheap, high-volume civic activity in *this* repo lands on **Republic L2** (this repo’s civic JSON sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): prove the operations, settle proofs and state to Ethereum. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there.
 
-Republic L2 **as implemented** is an application-specific civic sequencer (JSON transactions: register / vote / disqualify / tally / userop). It is **not** a general-purpose EVM and it does **not** proxy to Anvil. Portable EVM bytecode still deploys to Anvil, Ethereum L1, Lighter’s EVM surface, and other EVM L2s. Executing that bytecode *on* 27427 is **Future**.
+Republic L2 **as implemented** is an application-specific civic sequencer (JSON transactions: register / vote / disqualify / tally / userop / party_add / party_reject / party_attest). It is **not** a general-purpose EVM and it does **not** proxy to Anvil. Portable EVM bytecode still deploys to Anvil, Ethereum L1, Lighter’s EVM surface, and other EVM L2s. Executing that bytecode *on* 27427 is **Future**.
 
 **Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, civic L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only.
 
@@ -366,8 +366,9 @@ The contract set covers:
 | `PersonRegistry` | One person (`bytes32` id, never a name): many internally verified ETH addresses, exactly one active. Not the vote leaf. |
 | `DisqualificationRegistry` | Registered persons who **must not** be able to vote in a given election (or on a given question), with reason codes, effective times, and issuer. |
 | `Election` / `Poll` | Parameters: questions (“aspects”), options, open/close, eligible-set root, disqualification-set root, voting rules. |
-| `ElectionFactory` | Unbounded elections via EIP-1167 clones. `maxParticipants = 0` means unlimited voters. |
-| `BallotInbox` | Accepts vote messages + ZK proofs. Rejects proofs that fail eligibility, disqualification, uniqueness, or time window. |
+| `ElectionFactory` | Unbounded elections via EIP-1167 clones. `maxParticipants = 0` means unlimited voters. Each create also clones an `ExternalPartyRegistry`. |
+| `ExternalPartyRegistry` | Per-election unbounded external eligibility parties (felony, death, age, …). Live veto at cast time. |
+| `BallotInbox` | Accepts vote messages + ZK proofs. Rejects proofs that fail eligibility, disqualification, uniqueness, time window, or live external-party clearance. |
 | `Tally` (`ITallyVerifier`) | Verifies the coordinator/prover’s batch proofs that the published totals match the inbox. File: `src/Tally.sol`. |
 | `L1TallyMirror` | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
 | `RollupSettlement` | L1 contract: `submitBatch` for Republic L2 state roots. |
@@ -562,6 +563,8 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
 6. **Who may disqualify.** Only roles the jurisdiction bound in `JurisdictionRegistry` (registrar, clerk of court, statutory officer). The Node UI is how they do it; the contract is what makes it real.
 
+7. **Live external parties (unifying layer).** Clerk disqualification is frozen with the roll. Systems that do not talk to each other today — felony records, death records, age verification, sanctions — are registered by **election staff** as unbounded external parties on the per-election party factory. Any active party may still **reject a registered person at cast time**. The identity commitment is checked, then discarded; it is never stored on the ballot. HTTP oracles are fail-closed. Republic L2 posts `party_add` / `party_reject` / `party_attest` immediately (not hour-sealed) so observers can see the gate without seeing the choice.
+
 ### Failure mode we are designing against
 
 A clerk who can quietly drop a person from a private database at 7:59 p.m. That is not allowed to be the only control. If they are dropped, it is a **disqualification (or registry removal) with a reason**, or it did not happen.
@@ -613,9 +616,11 @@ A **jurisdiction** is the administrative owner: it defines the roll, the reason 
 | **Registrar** | Approve registrations | Insert/remove registry commitments |
 | **Disqualification officer** | Apply/revoke reason codes | Write `DisqualificationRegistry` |
 | **Election clerk** | Create election, freeze roll, open/close | Configure `Election`, freeze roots |
+| **Election staff** | Register unbounded external eligibility parties | `ExternalPartyRegistry.addParty` (cloned per election) |
 | **Tally operator** | Run the prover / batch; on `opens_ballots` elections, open demo envelopes | Submit tally proofs. On SUM_ONLY they can still invent a partition of the sum. On OPENS_BALLOTS, invented partitions that only match the sum are rejected. |
 | **Observer** | Read-only | Read state and verify |
-| **Platform admin** | Host the Node, keys, uptime | Not an election officer unless also granted |
+| **Platform admin** | Approved by super admin. Approves election staff. Hosts jurisdictions. | `approveElectionStaff` |
+| **Platform super admin** | Approves platform admins. Wires the host and factory. Seed bootstrap role. | `approveAdmin` / factory modules |
 
 A **corrupt tally operator** on the legacy **SUM_ONLY** path can still post any `counts[]` that sum to `acceptedBallots` — the operator cannot add or drop ballots, but they can rearrange which option received them. That hole is why **OPENS_BALLOTS** exists: the Node decrypts ECIES envelopes under a **threshold-1 demo key** (the operator host holds it; **NON-PRODUCTION**, not a guardian ceremony) and the contract requires `histogram(openings) == counts`. They **can** stall (never submit a tally). They **cannot** make a disqualified voter’s proof succeed. Production remains homomorphic / mixnet decryption proofs plus a real Groth16 verifier. MACI-style coercion resistance is a separate gap.
 

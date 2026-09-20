@@ -16,7 +16,7 @@ We do **not** rent a commercial sequencer. We do **not** issue a gas token.
 
 | Piece | Job |
 | --- | --- |
-| **Our sequencer** (`sequencer/`) | Accepts civic transactions (register, vote, disqualify, tally, userop), produces blocks about every **2 seconds**, chain id **27427**. Vote txs stay sealed until the hour closes. |
+| **Our sequencer** (`sequencer/`) | Accepts civic transactions (register, vote, disqualify, tally, userop, party_add, party_reject, party_attest), produces blocks about every **2 seconds**, chain id **27427**. Vote txs stay sealed until the hour closes. External-party vetoes are public immediately. |
 | **Our prover** (`prover/`) | Watches new blocks, batches them (`batchSize`, default 4), hashes public batch data, produces a Groth16-shaped proof, and calls L1 `RollupSettlement.submitBatch`. |
 | **Ethereum L1** | Court-grade settlement. `RollupSettlement` stores `prevStateRoot`, `newStateRoot`, and `dataHash`. Anyone can re-derive `dataHash` from public batch data. |
 
@@ -69,7 +69,12 @@ Civic `eth_sendRawTransaction` payload is UTF-8 JSON hex, for example:
 {"type":"vote","electionId":"1","nullifier":"0x…","ballotHash":"0x…","eligibleRoot":"0x…","disqualificationRoot":"0x…"}
 ```
 
-Types: `register`, `vote`, `disqualify`, `tally`, `userop`.
+Types: `register`, `vote`, `disqualify`, `tally`, `userop`, `party_add`, `party_reject`, `party_attest`.
+
+`party_reject` / `party_attest` / `party_add` are **not** hour-sealed. They are
+the unifying public layer for systems that should still be able to stop a
+registered person from casting (felony, death, age, …). Use `partyName`, not
+`name` — `name` is stripped as PII.
 
 `stateRoot` of a block is `keccak256` of the concatenation of that block’s
 transaction hashes (empty block → keccak of the empty byte string). Node’s

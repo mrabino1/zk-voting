@@ -93,6 +93,11 @@ export function configRouter(deps) {
           hashScheme: deps.config.hashScheme || 'republic.hash.keccak-dev-v1',
           poseidonWired: false,
         },
+        mail: {
+          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
+          from: deps.config.mailFrom || '',
+          note: 'Role-promotion mail is queued on the Node outbox. Set MAIL_WEBHOOK_URL to deliver. These messages are never written to civic L2.',
+        },
         ballot: {
           methods: ['plurality', 'ranked_choice'],
           defaultMethod: 'plurality',

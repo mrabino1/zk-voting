@@ -232,8 +232,11 @@ contract Deployer is Test {
         for (uint256 i; i < targets.length; ++i) {
             _grant(targets[i], bytes32(0), admin);
             _grant(targets[i], bytes32(0), address(this));
+            _grant(targets[i], Roles.PLATFORM_SUPER_ADMIN_ROLE, admin);
             _grant(targets[i], Roles.PLATFORM_ADMIN_ROLE, admin);
             _grant(targets[i], Roles.PLATFORM_ADMIN_ROLE, address(this));
+            _grant(targets[i], Roles.ADMIN_ROLE, admin);
+            _grant(targets[i], Roles.ELECTION_STAFF_ROLE, clerk);
             _grant(targets[i], Roles.CLERK_ROLE, admin);
             _grant(targets[i], Roles.CLERK_ROLE, clerk);
             _grant(targets[i], Roles.REGISTRAR_ROLE, registrar);

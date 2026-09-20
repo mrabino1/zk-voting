@@ -7,7 +7,7 @@ import { t, LOCALE_EVENT } from "./i18n.js";
   const $ = (id) => document.getElementById(id);
   const FORBIDDEN_KEYS =
     /^(choice|option|optionid|options?selected|vote|plaintext|selected|ballotplaintext|candidate|selection|voteplaintext)$/i;
-  const TX_TYPES = ["REGISTER", "VOTE", "DISQUALIFY", "TALLY", "BATCH"];
+  const TX_TYPES = ["REGISTER", "VOTE", "DISQUALIFY", "TALLY", "PARTY", "PARTY_REJECT", "PARTY_ATTEST", "BATCH"];
   const LIMIT = 25;
 
   async function request(path) {
@@ -119,6 +119,11 @@ import { t, LOCALE_EVENT } from "./i18n.js";
 
   function canonicalType(raw) {
     const kind = String(raw || "").toLowerCase();
+    if (kind === "party_add" || kind.includes("party_add") || kind === "partyadded") return "PARTY";
+    if (kind === "party_reject" || kind.includes("party_reject") || kind.includes("rejectedbyparty")) {
+      return "PARTY_REJECT";
+    }
+    if (kind === "party_attest" || kind.includes("party_attest")) return "PARTY_ATTEST";
     if (kind.includes("register")) return "REGISTER";
     if (kind === "vote" || kind.includes("vote")) return "VOTE";
     if (kind.includes("disqual") || kind === "revoke") return "DISQUALIFY";
@@ -159,6 +164,13 @@ import { t, LOCALE_EVENT } from "./i18n.js";
       out.identityCommitment = pick(tx, ["identityCommitment", "payload.identityCommitment"]);
       out.reasonCode = pick(tx, ["reasonCode", "reason_code", "reason", "payload.reasonCode"]);
       out.evidenceHash = pick(tx, ["evidenceHash", "evidence_hash", "payload.evidenceHash"]);
+    } else if (type === "PARTY" || type === "PARTY_REJECT" || type === "PARTY_ATTEST") {
+      out.partyId = pick(tx, ["partyId", "payload.partyId"]);
+      out.partyName = pick(tx, ["partyName", "payload.partyName", "name", "payload.name"]);
+      out.mode = pick(tx, ["mode", "payload.mode"]);
+      out.identityCommitment = pick(tx, ["identityCommitment", "payload.identityCommitment"]);
+      out.reasonCode = pick(tx, ["reasonCode", "payload.reasonCode"]);
+      out.evidenceHash = pick(tx, ["evidenceHash", "payload.evidenceHash"]);
     } else if (type === "TALLY") {
       out.counts = pick(tx, ["counts", "tally", "payload.counts"]);
       out.countsHash = pick(tx, ["countsHash", "payload.countsHash"]);
@@ -249,6 +261,15 @@ import { t, LOCALE_EVENT } from "./i18n.js";
     if (tx.type === "TALLY") {
       const counts = Array.isArray(tx.counts) ? tx.counts.join(", ") : t("explorer.posted");
       return t("explorer.tallySummary", { counts });
+    }
+    if (tx.type === "PARTY") {
+      return (tx.partyName || "external party") + " · " + (tx.mode || "veto") + " · " + shortHex(tx.partyId);
+    }
+    if (tx.type === "PARTY_REJECT") {
+      return "party " + shortHex(tx.partyId) + " rejected " + shortHex(tx.identityCommitment) + " · reason " + (tx.reasonCode ?? "—");
+    }
+    if (tx.type === "PARTY_ATTEST") {
+      return "party " + shortHex(tx.partyId) + " attested " + shortHex(tx.identityCommitment);
     }
     if (tx.title) return String(tx.title);
     return t("explorer.civicBatch");

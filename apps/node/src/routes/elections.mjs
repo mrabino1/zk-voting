@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 
-import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody } from '../auth.mjs';
+import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody, requirePlatformOperator } from '../auth.mjs';
 import {
   electionHasRanked,
   normalizeBallotMethod,
@@ -30,6 +30,9 @@ import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.
 import { DEMO_KEY_WARNING, publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash } from '../l1Certify.mjs';
+import { partiesRouter } from './parties.mjs';
+import { publicUser } from '../roles.mjs';
+import { parseContactEmail, publicMailResult } from '../mailer.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -67,7 +70,7 @@ async function revokeHandler(req, store, explorer) {
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain, config, l1 } = deps;
+  const { store, explorer, chain, config, l1, mailer } = deps;
   const router = Router();
 
   router.get(
@@ -208,6 +211,83 @@ export function electionsRouter(deps) {
         links: dto.links,
         nfp: true,
       });
+    }),
+  );
+
+  router.use('/:id/parties', partiesRouter(deps));
+
+  router.get(
+    '/:id/staff',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      if (!store.userIsElectionStaff(req.user, election)) {
+        throw new HttpError(403, 'forbidden', {
+          role: req.user.role,
+          jurisdictionId: election.jurisdictionId,
+        });
+      }
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        staff: store.listElectionStaff(election),
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/staff',
+    requireAuth,
+    requirePlatformOperator,
+    asyncHandler(async (req, res) => {
+      const contactEmail = parseContactEmail(req.body?.contactEmail);
+      const result = await store.approveElectionStaff(req.params.id, req.body || {});
+      let mail = null;
+      if (mailer?.notifyRolePromotion) {
+        try {
+          mail = publicMailResult(
+            await mailer.notifyRolePromotion({
+              user: result.user,
+              role: 'election_staff',
+              created: result.created,
+              grantedBy: req.user,
+              election: result.election,
+              jurisdiction: store.getJurisdiction(result.election?.jurisdictionId),
+              contactEmail,
+            }),
+          );
+        } catch (err) {
+          mail = {
+            skipped: true,
+            reason: 'mailer_error',
+            mail: null,
+            notificationId: null,
+            error: err?.message || String(err),
+          };
+        }
+      }
+      res.status(201).json({
+        ok: true,
+        nfp: true,
+        staff: result.staff,
+        user: publicUser(result.user),
+        mail,
+      });
+    }),
+  );
+
+  router.delete(
+    '/:id/staff',
+    requireAuth,
+    requirePlatformOperator,
+    asyncHandler(async (req, res) => {
+      const result = await store.revokeElectionStaff(req.params.id, {
+        ...(req.body || {}),
+        handle: req.body?.handle || req.query?.handle,
+        userId: req.body?.userId || req.query?.userId,
+        address: req.body?.address || req.query?.address,
+      });
+      res.json({ ok: true, nfp: true, user: publicUser(result.user) });
     }),
   );
 

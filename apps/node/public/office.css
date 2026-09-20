@@ -85,6 +85,8 @@
 
 input[type="datetime-local"],
 input[type="number"],
+input[type="email"],
+input[type="text"],
 input:not([type]),
 select,
 textarea {
@@ -479,4 +481,26 @@ textarea.builder-body {
   .link-row {
     grid-template-columns: 1fr;
   }
+}
+
+.mail-text {
+  display: block;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 0.85rem 1rem;
+  overflow: auto;
+  max-height: 14rem;
+}
+
+.mail-preview {
+  display: block;
+  width: 100%;
+  min-height: 18rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  margin: 0.75rem 0 1rem;
 }

@@ -22,7 +22,9 @@ import { electionsRouter } from './routes/elections.mjs';
 import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
+import { mailRouter } from './routes/mail.mjs';
 import { meRouter } from './routes/me.mjs';
+import { createMailer } from './mailer.mjs';
 
 const LOADING_SHELL = `<!DOCTYPE html>
 <html lang="en">
@@ -95,14 +97,23 @@ function spaFallback(config) {
 }
 
 export async function createApp(overrides = {}) {
-  const { chain: chainOverride, passkeyHooks, l1: l1Override, l1Hooks, ...configOverrides } = overrides;
+  const {
+    chain: chainOverride,
+    passkeyHooks,
+    l1: l1Override,
+    l1Hooks,
+    mailer: mailerOverride,
+    mailSendFn,
+    ...configOverrides
+  } = overrides;
   const config = getConfig(configOverrides);
   const store = await Store.open(config);
   const explorer = await Explorer.open(config);
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
-  const deps = { config, store, explorer, chain, l1, passkeys };
+  const mailer = mailerOverride || createMailer({ config, store, sendFn: mailSendFn });
+  const deps = { config, store, explorer, chain, l1, passkeys, mailer };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -141,6 +152,7 @@ export async function createApp(overrides = {}) {
   app.use('/api/explorer', explorerRouter(deps));
   app.use('/api', identityRouter(deps));
   app.use('/api', meRouter(deps));
+  app.use('/api', mailRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', (_req, res) => {
