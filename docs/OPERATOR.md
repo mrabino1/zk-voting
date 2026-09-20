@@ -175,6 +175,12 @@ FACTORY=0x… START=… CUTOFF=… TITLE='County general' \
 
 Prefer the back office when you want the Node record and the factory clone created in one step.
 
+`createElection` also clones an `ExternalPartyRegistry` for that contest.
+Election staff add unbounded external parties there (felony, death, age, …)
+so systems that do not talk to each other today can still veto a registered
+person at cast time. Super admin approves platform admins; admins approve
+election staff.
+
 ### Republic L2
 
 ```bash

@@ -57,7 +57,9 @@
         <h1>Back office</h1>
         <p class="lede">
           Clerks stand up elections. Registrars insert identity commitments (never names).
-          Disqualification officers apply the public reason catalog. Tally operators post counts.
+          Disqualification officers apply the public reason catalog. Election staff
+          register unbounded external parties (felony, death, age, and other systems
+          that do not talk to each other today). Tally operators post counts.
           Choice plaintext never appears here. Turnout and vote proofs on every dashboard wait
           until the hour that contained the ballot has closed — a person leaving a voting office
           cannot be matched to a live increase.
@@ -81,6 +83,8 @@
         <a href="#registrar">Registrar</a>
         <a href="#person">Person identity</a>
         <a href="#disqualify">Disqualification</a>
+        <a href="#staff">Election staff</a>
+        <a href="#parties">External parties</a>
         <a href="#tally">Tally</a>
         <a href="#notices">Notifications</a>
       </nav>
@@ -363,6 +367,147 @@
             <button class="btn btn-secondary" type="button" id="btn-revoke">Revoke instead</button>
           </div>
           <div class="flash" id="flash-dq" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" id="staff" aria-labelledby="staff-heading">
+        <header>
+          <h2 id="staff-heading">Election staff</h2>
+          <span class="pill" id="role-staff">election_staff</span>
+        </header>
+        <p class="field-hint">
+          Platform admins (approved by the super admin) grant election staff on a
+          specific election. Staff then register unbounded external eligibility parties.
+          Clerks of the jurisdiction are already treated as staff.
+        </p>
+        <form id="form-staff" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="s-election">Election <span class="req">*</span></label>
+            <select id="s-election" name="electionId" required></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="s-handle">Handle <span class="req">*</span></label>
+            <input id="s-handle" name="handle" required maxlength="80" placeholder="poll-staff" />
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Approve election staff</button>
+            <button class="btn btn-secondary" type="button" id="btn-revoke-staff">Revoke</button>
+          </div>
+          <div class="flash" id="flash-staff" role="status"></div>
+        </form>
+        <div class="table-wrap">
+          <table class="data-table" id="table-staff">
+            <caption class="visually-hidden">Staff granted on this election</caption>
+            <thead>
+              <tr>
+                <th>Handle</th>
+                <th>Role</th>
+                <th>Source</th>
+                <th>Granted</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" class="empty">Choose an election.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="parties" aria-labelledby="parties-heading">
+        <header>
+          <h2 id="parties-heading">External eligibility parties</h2>
+          <span class="pill" id="role-parties">unbounded</span>
+        </header>
+        <p class="field-hint">
+          Each election clones its own party registry. Staff may add any number of
+          external systems (felony records, vital statistics, age verification, …).
+          Those systems can still reject a person <strong>after registration was approved</strong>.
+          The identity commitment is checked, then discarded — it is never stored on the ballot.
+          HTTP oracles are fail-closed: timeout or a non-<code>allow: true</code> response rejects the vote.
+        </p>
+        <form id="form-party" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="p-election">Election <span class="req">*</span></label>
+            <select id="p-election" name="electionId" required></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="p-name">Party name <span class="req">*</span></label>
+            <input id="p-name" name="name" required maxlength="120" placeholder="State vital records" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="p-mode">Mode</label>
+              <select id="p-mode" name="mode">
+                <option value="veto" selected>veto — reject listed identities</option>
+                <option value="must_attest">must_attest — fresh clearance required to cast</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="p-operator">Operator handle <span class="req">*</span></label>
+              <input id="p-operator" name="operatorHandle" required maxlength="80" placeholder="felony-oracle" />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="p-endpoint">HTTP oracle URL</label>
+            <input id="p-endpoint" name="endpointUrl" inputmode="url" placeholder="https://… (optional; timeout rejects)" />
+            <span class="field-hint">If set, every vote POSTs <code>{ electionId, identityCommitment }</code>. Must return <code>{ allow: true }</code>.</span>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Add external party</button>
+            <button class="btn btn-secondary" type="button" id="btn-refresh-parties">Refresh</button>
+          </div>
+          <div class="flash" id="flash-party" role="status"></div>
+        </form>
+        <div class="table-wrap">
+          <table class="data-table" id="table-parties">
+            <caption class="visually-hidden">External parties on this election</caption>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Mode</th>
+                <th>Status</th>
+                <th>Operator</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Choose an election.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <hr class="hr-office" />
+        <h3>Live veto / attest</h3>
+        <p class="field-hint">Operator of the party (or election staff) posts a rejection or a must-attest clearance. Reason codes match the public catalog.</p>
+        <form id="form-party-gate" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="pg-party">Party id <span class="req">*</span></label>
+            <input id="pg-party" name="partyId" required spellcheck="false" placeholder="uuid from the table" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pg-commit">Identity commitment <span class="req">*</span></label>
+            <input id="pg-commit" name="identityCommitment" required spellcheck="false" placeholder="0x…" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="pg-reason">Reason code (reject)</label>
+            <select id="pg-reason" name="reasonCode">
+              <option value="1">1 — NOT_OF_AGE</option>
+              <option value="5" selected>5 — DECEASED</option>
+              <option value="10">10 — INELIGIBLE_STATUS</option>
+              <option value="14">14 — OTHER</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Reject this identity</button>
+            <button class="btn btn-secondary" type="button" id="btn-party-clear">Clear rejection</button>
+            <button class="btn btn-secondary" type="button" id="btn-party-attest">Attest (must_attest)</button>
+            <button class="btn btn-secondary" type="button" id="btn-party-check">Check clearance</button>
+          </div>
+          <div class="flash" id="flash-party-gate" role="status"></div>
         </form>
       </section>
 

@@ -56,10 +56,14 @@
         <p class="kicker">Platform administration</p>
         <h1>Host this Node</h1>
         <p class="lede">
-          Jurisdictions are the organizations of this public-good stack. Grant clerks,
-          registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
-          and no console that takes fees. Dashboards do not show live vote ticks; public
-          proof of ballots is published once an hour.
+          Three approvals: a <strong>platform super admin</strong> approves
+          <strong>platform admins</strong>; admins approve <strong>election staff</strong>;
+          staff register unbounded external eligibility parties for each election
+          (felony, death, age, and any other system that should still be able to
+          reject a ballot after registration). Jurisdictions remain the organizations
+          of this public-good stack. There is no token, no paid tier, and no console
+          that takes fees. Dashboards do not show live vote ticks; public proof of
+          ballots is published once an hour.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
@@ -95,8 +99,8 @@
         id="sign-in-root"
         data-heading="Sign in"
         data-dev-handle="admin"
-        data-dev-role="platform_admin"
-        data-lede="Platform admin uses the same passkey or Ethereum session as every other person. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
+        data-dev-role="platform_super_admin"
+        data-lede="Platform super admin uses the same passkey or Ethereum session as every other person. Super admin approves admins. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
       ></div>
 
       <div class="grid-2">
@@ -131,8 +135,9 @@
             <h2 id="grant-heading">Grant officers</h2>
           </header>
           <p class="field-hint">
-            Clerk, registrar, disqualification officer, and tally operator are scoped to one
-            jurisdiction. <code>platform_admin</code> remains a global override and is not granted here.
+            Clerk, registrar, disqualification officer, tally operator, and election
+            staff are scoped to one jurisdiction. <code>platform_admin</code> and
+            <code>platform_super_admin</code> remain global and are not granted here.
           </p>
           <form id="form-grant" class="form-grid">
             <div class="field">
@@ -154,6 +159,7 @@
                 <option value="registrar">registrar — insert identity commitments</option>
                 <option value="disqualification_officer">disqualification_officer — reason codes</option>
                 <option value="tally_operator">tally_operator — post counts</option>
+                <option value="election_staff">election_staff — register external vote parties</option>
               </select>
             </div>
             <div class="actions">
@@ -163,6 +169,47 @@
           </form>
         </section>
       </div>
+
+      <section class="panel" aria-labelledby="admins-heading">
+        <header>
+          <h2 id="admins-heading">Platform admins</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-admins">Refresh</button>
+        </header>
+        <p class="field-hint">
+          Only a <code>platform_super_admin</code> may approve or revoke a
+          <code>platform_admin</code>. Admins then approve election staff on each election.
+        </p>
+        <form id="form-admin" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="a-user">User <span class="req">*</span></label>
+            <select id="a-user" name="userId" required>
+              <option value="">Loading…</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Approve as platform admin</button>
+          </div>
+          <div class="flash" id="flash-admin" role="status"></div>
+        </form>
+        <div class="table-wrap">
+          <table class="data-table" id="table-admins">
+            <caption class="visually-hidden">Platform super admins and admins</caption>
+            <thead>
+              <tr>
+                <th>Handle</th>
+                <th>Role</th>
+                <th>Id</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="panel" aria-labelledby="list-j-heading">
         <header>
@@ -220,6 +267,8 @@
         </div>
         <div class="flash" id="flash-officers" role="status"></div>
       </section>
+
+      <section class="panel" aria-labelledby="users-heading">
         <header>
           <h2 id="users-heading">Users</h2>
           <button class="btn btn-secondary" type="button" id="btn-refresh-u">Refresh</button>

@@ -188,7 +188,7 @@
       const me = await request("/api/me");
       const user = me.user;
       if (!user) {
-        $("session-line").textContent = "Not signed in. Create a jurisdiction and grant roles as platform_admin.";
+        $("session-line").textContent = "Not signed in. Super admin approves admins; admins approve election staff.";
         return me;
       }
       const grants = me.jurisdictionRoles || [];
@@ -340,14 +340,77 @@
     try {
       const data = await getFirst(["/api/users", "/api/admin/users"]);
       renderUsers(asList(data, ["users", "items"]));
+      renderAdminPicker(asList(data, ["users", "items"]));
     } catch (err) {
       const msg =
         err.status === 401 || err.status === 403
-          ? "Sign in as platform_admin to list users and grant officers."
+          ? "Sign in as platform_super_admin or platform_admin to list users and grant officers."
           : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
         `<tr><td colspan="7" class="empty">${esc(msg)}</td></tr>`;
       $("g-user").innerHTML = `<option value="">${esc(msg)}</option>`;
+      if ($("a-user")) $("a-user").innerHTML = `<option value="">${esc(msg)}</option>`;
+    }
+  }
+
+  function renderAdminPicker(rows) {
+    const select = $("a-user");
+    if (!select) return;
+    const eligible = rows.filter(
+      (row) => row.role !== "platform_admin" && row.role !== "platform_super_admin"
+    );
+    if (!eligible.length) {
+      select.innerHTML = '<option value="">No voters to elevate</option>';
+      return;
+    }
+    select.innerHTML =
+      '<option value="">Select…</option>' +
+      eligible
+        .map(
+          (row) =>
+            `<option value="${esc(row.id)}" data-handle="${esc(row.handle)}">${esc(row.handle)} · ${esc(row.role)}</option>`
+        )
+        .join("");
+  }
+
+  function renderAdmins(rows) {
+    const table = $("table-admins");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">No platform admins yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows
+      .map((row) => {
+        const canRevoke = row.role === "platform_admin";
+        return `<tr>
+          <td>${esc(row.handle)}</td>
+          <td>${esc(row.role)}</td>
+          <td class="hash">${esc(row.id)}</td>
+          <td>${
+            canRevoke
+              ? `<button type="button" class="btn btn-secondary btn-inline" data-revoke-admin="1" data-userid="${esc(row.id)}" data-handle="${esc(row.handle)}">Revoke</button>`
+              : "—"
+          }</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  async function loadAdmins() {
+    const table = $("table-admins");
+    if (!table) return;
+    try {
+      const data = await getFirst(["/api/admin/admins"]);
+      renderAdmins(asList(data, ["admins", "users"]));
+    } catch (err) {
+      const msg =
+        err.status === 401 || err.status === 403
+          ? "Sign in as a platform operator to list admins."
+          : errText(err);
+      table.querySelector("tbody").innerHTML =
+        `<tr><td colspan="4" class="empty">${esc(msg)}</td></tr>`;
     }
   }
 
@@ -411,10 +474,52 @@
   });
 
   window.addEventListener("republic:session", () => {
-    Promise.all([loadMe(), loadUsers(), loadJurisdictions()]);
+    Promise.all([loadMe(), loadUsers(), loadJurisdictions(), loadAdmins()]);
   });
 
+  const formAdmin = $("form-admin");
+  if (formAdmin) {
+    formAdmin.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const userId = $("a-user").value.trim();
+      if (!userId) {
+        flash($("flash-admin"), "err", "Choose a user.");
+        return;
+      }
+      const selected = $("a-user").selectedOptions[0];
+      const handle = (selected && selected.getAttribute("data-handle")) || "";
+      try {
+        const approved = await request("/api/admin/admins", {
+          method: "POST",
+          body: { userId, handle },
+        });
+        const who = pick(approved, ["user.handle"]) || handle || userId;
+        flash($("flash-admin"), "ok", "Approved " + who + " as platform_admin");
+        await Promise.all([loadUsers(), loadAdmins()]);
+      } catch (err) {
+        flash($("flash-admin"), "err", errText(err));
+      }
+    });
+  }
+
   document.addEventListener("click", async (event) => {
+    const revokeAdmin = event.target.closest("[data-revoke-admin]");
+    if (revokeAdmin) {
+      try {
+        await request("/api/admin/admins", {
+          method: "DELETE",
+          body: {
+            userId: revokeAdmin.getAttribute("data-userid") || "",
+            handle: revokeAdmin.getAttribute("data-handle") || "",
+          },
+        });
+        flash($("flash-admin"), "ok", "Revoked platform_admin");
+        await Promise.all([loadUsers(), loadAdmins()]);
+      } catch (err) {
+        flash($("flash-admin"), "err", errText(err));
+      }
+      return;
+    }
     const revokeBtn = event.target.closest("[data-revoke]");
     if (revokeBtn) {
       const jurisdictionId = revokeBtn.getAttribute("data-jurisdiction") || "";
@@ -452,9 +557,12 @@
   $("btn-refresh-u").addEventListener("click", () => loadUsers());
   const refreshOfficers = $("btn-refresh-o");
   if (refreshOfficers) refreshOfficers.addEventListener("click", () => loadJurisdictions());
+  const refreshAdmins = $("btn-refresh-admins");
+  if (refreshAdmins) refreshAdmins.addEventListener("click", () => loadAdmins());
 
   loadHealth();
   loadMe();
   loadJurisdictions();
   loadUsers();
+  loadAdmins();
 })();

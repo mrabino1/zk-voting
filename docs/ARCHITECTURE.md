@@ -52,7 +52,7 @@ on 27427 is **Future**.
 | Node UI | Vanilla JS + HTML/CSS in `apps/node/public/`. Express serves `public/` (and `dist/` if present). **No Vite. No React.** |
 | Node API | Express 4, Node 22, `apps/node/src/*.mjs`. |
 | Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
-| Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
+| Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`, `party_add`, `party_reject`, `party_attest`. **Does not proxy to Anvil.** |
 | Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |
 | Circuits | Circom 2: `vote.circom`, `tally.circom`, `identity.circom`. Hasher is a labeled Poseidon **stand-in**. |
 | Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
@@ -200,7 +200,10 @@ First comment after SPDX: `// NOT FOR PROFIT — civic public good, not a commer
 From `src/Roles.sol`:
 
 ```
+PLATFORM_SUPER_ADMIN_ROLE
 PLATFORM_ADMIN_ROLE
+ADMIN_ROLE
+ELECTION_STAFF_ROLE
 REGISTRAR_ROLE
 CLERK_ROLE
 DISQUALIFICATION_OFFICER_ROLE
@@ -240,15 +243,21 @@ struct ElectionParams {
 function createElection(ElectionParams calldata params)
     external returns (uint256 electionId, address election);
 function getElection(uint256 electionId) external view returns (address);
+function getPartyRegistry(uint256 electionId) external view returns (address);
 function electionCount() external view returns (uint256);
 function implementation() external view returns (address);
+function approveAdmin(address account) external;
+function approveElectionStaff(uint256 electionId, address account) external;
 ```
 
-Factory uses EIP-1167 clones of `Election`. Anyone with `CLERK_ROLE` on
+Factory uses EIP-1167 clones of `Election` **and** `ExternalPartyRegistry`.
+Each `createElection` therefore also stands up an unbounded external-party
+factory for that contest. Anyone with `CLERK_ROLE` on
 `JurisdictionRegistry` for that `jurisdictionId` may create. Platform admin
-may also create (bootstrap).
+may also create (bootstrap). Super admin approves admins; admins approve
+election staff; staff add parties.
 
-Events: `ElectionCreated(uint256 indexed electionId, address indexed election, bytes32 indexed jurisdictionId, uint64 startTime, uint64 cutoffTime)`.
+Events: `ElectionCreated(...)`, `PartyRegistryCreated(uint256 indexed electionId, address indexed registry)`.
 
 ### Election identifiers (off-chain vs on-chain)
 
@@ -357,6 +366,19 @@ function acceptedBallots(uint256 electionId) external view returns (uint256);
 function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32);
 function ballotRoot(uint256 electionId) external view returns (bytes32);
 function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
+
+/// Live external-party gate. identityCommitment is checked then discarded;
+/// it is not stored and is not in VoteAccepted. Required once hasActiveGates().
+function submitVoteWithClearance(
+    uint256 electionId,
+    uint256[2] calldata a,
+    uint256[2][2] calldata b,
+    uint256[2] calldata c,
+    uint256[] calldata publicInputs,
+    bytes calldata encryptedBallot,
+    uint256 identityCommitment,
+    uint256[] calldata mustAttestIds
+) external;
 ```
 
 Public inputs **must** be length ≥ 5, same order as `@zk-voting/proof-helpers`
@@ -372,6 +394,27 @@ eligible / disqualification root in the proof does not match;
 A nullifier is accepted **once**. `acceptedBallots` counts unique nullifiers.
 Double voting is impossible. Event: `VoteAccepted`. Relayer/bundler is
 `msg.sender`. That is intentional.
+
+Once any external party is active, plain `submitVote` reverts `ClearanceRequired`.
+Use `submitVoteWithClearance`. Veto is O(1) via a rejection counter.
+`MUST_ATTEST` parties are checked against caller-supplied ids (the relayer
+pays for that set; the contract never loops the full party list at vote time).
+
+### `IExternalPartyRegistry`
+
+Cloneable per-election factory of unlimited external eligibility parties
+(death records, felony systems, age verification, …). Election staff add
+parties. A party may veto a registered person at cast time independently of
+the frozen clerk disqualification set.
+
+```solidity
+function addParty(address operator, string calldata name, string calldata metadataURI, uint8 mode)
+    external returns (uint256 partyIndex); // 0=VETO 1=MUST_ATTEST
+function reject(uint256 partyIndex, uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash) external;
+function attest(uint256 partyIndex, uint256 identityCommitment, uint64 expiresAt, bytes32 evidenceHash) external;
+function hasActiveGates() external view returns (bool);
+function assertCastAllowed(uint256 identityCommitment, uint256[] calldata mustAttestIds) external view;
+```
 
 ### `IGroth16Verifier`
 
@@ -601,6 +644,12 @@ Civic `eth_sendRawTransaction` payload is UTF-8 JSON hex, for example:
 {"type":"vote","electionId":"1","nullifier":"0x…","ballotHash":"0x…","eligibleRoot":"0x…","disqualificationRoot":"0x…"}
 ```
 
+Party factory txs (public immediately, not hour-sealed):
+
+```json
+{"type":"party_reject","electionId":"1","partyId":"felony","identityCommitment":"0x…","reasonCode":10}
+```
+
 **Future:** proxying EVM execution to Anvil so Foundry-deployed contracts
 run unchanged on 27427. That is not in this tree.
 
@@ -613,9 +662,11 @@ sequencer / paymaster report a fake sponsored balance for tooling.
 ## Node app (`apps/node`) — DealPunchList shape
 
 Long-lived Node 22 process, web UI + HTTP API, `system_actions.sh` restarts it.
-Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`)
-are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
-`platform_admin` is a global override and may act in every jurisdiction.
+Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`,
+`election_staff`) are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
+`platform_super_admin` approves `platform_admin`. Admins approve per-election
+staff via `POST /api/elections/:id/staff`. `platform_admin` / super admin are
+global overrides and may act in every jurisdiction.
 
 **Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
 addons such as `better-sqlite3` are **not** used. Jurisdictions are the
@@ -646,10 +697,20 @@ GET  /api/elections/:id/envelopes   (tally_operator of that jurisdiction; after 
 GET  /api/elections/:id/registrations
 POST /api/elections/:id/register    (after passkey; registrar of that jurisdiction may register another person)
 POST /api/elections/:id/freeze      (clerk of that jurisdiction)
-POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC)
+POST /api/elections/:id/vote        (relays proof; JSON store and/or CHAIN_RPC; live external-party gate)
 POST /api/elections/:id/disqualify   (officer of that jurisdiction)
 POST /api/elections/:id/disqualify/revoke
 POST /api/elections/:id/revoke
+GET  /api/elections/:id/staff
+POST /api/elections/:id/staff        (platform operator; approve election staff)
+DELETE /api/elections/:id/staff
+GET  /api/elections/:id/parties
+POST /api/elections/:id/parties      (election staff; unbounded)
+PATCH /api/elections/:id/parties/:partyId
+POST /api/elections/:id/parties/check
+POST /api/elections/:id/parties/:partyId/reject
+POST /api/elections/:id/parties/:partyId/clear
+POST /api/elections/:id/parties/:partyId/attest
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; L1 postResult if env set)
 GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
@@ -692,6 +753,9 @@ GET  /api/explorer/elections/:id
 POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
 GET  /api/reason-codes
 GET  /api/roles
+GET  /api/admin/admins
+POST /api/admin/admins               (platform_super_admin)
+DELETE /api/admin/admins
 GET  /api/jurisdictions
 POST /api/jurisdictions
 POST /api/jurisdictions/:id/roles
@@ -701,10 +765,12 @@ GET  /api/users                     (platform_admin)
 PATCH /api/users/:id
 ```
 
-Without `CHAIN_RPC`, votes that pass the election window, nullifier check, and
-Node eligibility (`identityCommitment` registered and not currently disqualified)
-are accepted in the local JSON store so the explorer and UI can run a demo.
-Those accepts still wait for hourly public disclosure unless the interval is `0`.
+Without `CHAIN_RPC`, votes that pass the election window, nullifier check,
+Node eligibility (`identityCommitment` registered and not currently disqualified),
+**and** live external-party clearance are accepted in the local JSON store so
+the explorer and UI can run a demo. Those accepts still wait for hourly public
+disclosure unless the interval is `0`. External-party vetoes themselves are
+public immediately.
 
 A person identifies with a **passkey, Web3 wallet, or smart-card digital ID**.
 Many ETH addresses may be verified internally; only one is active. The

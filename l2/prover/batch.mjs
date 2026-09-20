@@ -58,6 +58,9 @@ export function extractPublicBatchData(blocks) {
         disqualificationRoot: pub.disqualificationRoot,
         reasonCode: pub.reasonCode,
         evidenceHash: pub.evidenceHash,
+        partyId: pub.partyId,
+        partyName: pub.partyName,
+        mode: pub.mode,
         countsHash: pub.countsHash,
       });
       if (pub.nullifier) nullifiers.push(pub.nullifier);

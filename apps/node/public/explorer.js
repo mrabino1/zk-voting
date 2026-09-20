@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const FORBIDDEN_KEYS =
     /^(choice|option|optionid|options?selected|vote|plaintext|selected|ballotplaintext|candidate|selection|voteplaintext)$/i;
-  const TX_TYPES = ["REGISTER", "VOTE", "DISQUALIFY", "TALLY", "BATCH"];
+  const TX_TYPES = ["REGISTER", "VOTE", "DISQUALIFY", "TALLY", "PARTY", "PARTY_REJECT", "PARTY_ATTEST", "BATCH"];
   const LIMIT = 25;
 
   async function request(path) {
@@ -117,6 +117,11 @@
 
   function canonicalType(raw) {
     const t = String(raw || "").toLowerCase();
+    if (t === "party_add" || t.includes("party_add") || t === "partyadded") return "PARTY";
+    if (t === "party_reject" || t.includes("party_reject") || t.includes("rejectedbyparty")) {
+      return "PARTY_REJECT";
+    }
+    if (t === "party_attest" || t.includes("party_attest")) return "PARTY_ATTEST";
     if (t.includes("register")) return "REGISTER";
     if (t === "vote" || t.includes("vote")) return "VOTE";
     if (t.includes("disqual") || t === "revoke") return "DISQUALIFY";
@@ -157,6 +162,13 @@
       out.identityCommitment = pick(tx, ["identityCommitment", "payload.identityCommitment"]);
       out.reasonCode = pick(tx, ["reasonCode", "reason_code", "reason", "payload.reasonCode"]);
       out.evidenceHash = pick(tx, ["evidenceHash", "evidence_hash", "payload.evidenceHash"]);
+    } else if (type === "PARTY" || type === "PARTY_REJECT" || type === "PARTY_ATTEST") {
+      out.partyId = pick(tx, ["partyId", "payload.partyId"]);
+      out.partyName = pick(tx, ["partyName", "payload.partyName", "name", "payload.name"]);
+      out.mode = pick(tx, ["mode", "payload.mode"]);
+      out.identityCommitment = pick(tx, ["identityCommitment", "payload.identityCommitment"]);
+      out.reasonCode = pick(tx, ["reasonCode", "payload.reasonCode"]);
+      out.evidenceHash = pick(tx, ["evidenceHash", "payload.evidenceHash"]);
     } else if (type === "TALLY") {
       out.counts = pick(tx, ["counts", "tally", "payload.counts"]);
       out.countsHash = pick(tx, ["countsHash", "payload.countsHash"]);
@@ -247,6 +259,15 @@
     if (tx.type === "TALLY") {
       const counts = Array.isArray(tx.counts) ? tx.counts.join(", ") : "posted";
       return "counts [" + counts + "]";
+    }
+    if (tx.type === "PARTY") {
+      return (tx.partyName || "external party") + " · " + (tx.mode || "veto") + " · " + shortHex(tx.partyId);
+    }
+    if (tx.type === "PARTY_REJECT") {
+      return "party " + shortHex(tx.partyId) + " rejected " + shortHex(tx.identityCommitment) + " · reason " + (tx.reasonCode ?? "—");
+    }
+    if (tx.type === "PARTY_ATTEST") {
+      return "party " + shortHex(tx.partyId) + " attested " + shortHex(tx.identityCommitment);
     }
     if (tx.title) return String(tx.title);
     return "civic batch / userop";

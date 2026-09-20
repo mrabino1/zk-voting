@@ -910,16 +910,18 @@
   function hasOfficerRole(me, name) {
     const user = me && me.user;
     if (!user) return false;
-    if (user.role === "platform_admin") return true;
+    if (user.role === "platform_admin" || user.role === "platform_super_admin") return true;
     const grants = me.jurisdictionRoles || (me.me && me.me.jurisdictionRoles) || [];
     if (grants.some((g) => g.role === name)) return true;
+    const electionGrants = me.electionRoles || (me.me && me.me.electionRoles) || [];
+    if (electionGrants.some((g) => g.role === name)) return true;
     const roles = me.roles || [];
     return roles.some((r) => String(r).toLowerCase() === name);
   }
 
   function clerkJurisdictionIds(me) {
     if (!me || !me.user) return null;
-    if (me.user.role === "platform_admin") return null;
+    if (me.user.role === "platform_admin" || me.user.role === "platform_super_admin") return null;
     return new Set(
       (me.jurisdictionRoles || []).filter((g) => g.role === "clerk").map((g) => String(g.jurisdictionId))
     );
@@ -965,6 +967,7 @@
       markRole($("role-registrar"), hasOfficerRole(me, "registrar"));
       markRole($("role-dq"), hasOfficerRole(me, "disqualification_officer"));
       markRole($("role-tally"), hasOfficerRole(me, "tally_operator"));
+      if ($("role-staff")) markRole($("role-staff"), hasOfficerRole(me, "election_staff"));
       try {
         const cfg = await request("/api/config");
         const banner = $("disclosure-banner");
@@ -1033,8 +1036,10 @@
     try {
       const data = await request("/api/elections");
       const rows = asList(data, ["elections", "items"]);
-      const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election")];
-      for (const sel of selects) fillSelect(sel, rows, electionIdOf, electionLabel);
+      const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election"), $("s-election"), $("p-election")];
+      for (const sel of selects) {
+        if (sel) fillSelect(sel, rows, electionIdOf, electionLabel);
+      }
       const loader = $("e-load");
       if (loader) {
         const current = loader.value;
@@ -1047,8 +1052,8 @@
       }
       if (rows[0]) wireExplorerLinks(electionIdOf(rows[0]));
     } catch (err) {
-      for (const id of ["f-election", "r-election", "d-election", "t-election"]) {
-        $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
+      for (const id of ["f-election", "r-election", "d-election", "t-election", "s-election", "p-election"]) {
+        if ($(id)) $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
       }
     }
   }
@@ -1493,6 +1498,233 @@
     loadTallyElection(id);
   });
 
+  async function loadStaff() {
+    const electionId = $("s-election") && $("s-election").value;
+    const tbody = $("table-staff") && $("table-staff").querySelector("tbody");
+    if (!tbody) return;
+    if (!electionId) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Choose an election.</td></tr>';
+      return;
+    }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(electionId) + "/staff");
+      const rows = asList(data, ["staff", "items"]);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">No election staff grants yet. Clerks still count as staff.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows
+        .map(
+          (row) => `<tr>
+            <td>${esc(row.handle || row.userId || "—")}</td>
+            <td>${esc(row.role || "election_staff")}</td>
+            <td>${esc(row.source || "election")}</td>
+            <td>${esc(row.grantedAt || "—")}</td>
+          </tr>`
+        )
+        .join("");
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty">${esc(errText(err))}</td></tr>`;
+    }
+  }
+
+  async function loadParties() {
+    const electionId = $("p-election") && $("p-election").value;
+    const tbody = $("table-parties") && $("table-parties").querySelector("tbody");
+    if (!tbody) return;
+    if (!electionId) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Choose an election.</td></tr>';
+      return;
+    }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(electionId) + "/parties");
+      const rows = asList(data, ["parties", "items"]);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No external parties. Votes are only gated by registration and clerk disqualification.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows
+        .map(
+          (row) => `<tr>
+            <td>${esc(row.name)} <span class="hash">${esc(row.id)}</span></td>
+            <td>${esc(row.mode)}</td>
+            <td>${esc(row.status)}</td>
+            <td>${esc(row.operatorHandle || "—")}</td>
+            <td>
+              <button type="button" class="btn btn-secondary btn-inline" data-party-status="${row.status === "active" ? "paused" : "active"}" data-party="${esc(row.id)}">${
+                row.status === "active" ? "Pause" : "Activate"
+              }</button>
+              <button type="button" class="btn btn-secondary btn-inline" data-use-party="${esc(row.id)}">Use</button>
+            </td>
+          </tr>`
+        )
+        .join("");
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(errText(err))}</td></tr>`;
+    }
+  }
+
+  if ($("s-election")) $("s-election").addEventListener("change", () => loadStaff());
+  if ($("p-election")) $("p-election").addEventListener("change", () => loadParties());
+
+  if ($("form-staff")) {
+    $("form-staff").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const electionId = $("s-election").value;
+      const handle = $("s-handle").value.trim();
+      if (!electionId || !handle) {
+        flash($("flash-staff"), "err", "Election and handle required.");
+        return;
+      }
+      try {
+        await request("/api/elections/" + encodeURIComponent(electionId) + "/staff", {
+          method: "POST",
+          body: { handle },
+        });
+        flash($("flash-staff"), "ok", "Approved " + handle + " as election staff");
+        await loadStaff();
+      } catch (err) {
+        flash($("flash-staff"), "err", errText(err));
+      }
+    });
+  }
+
+  if ($("btn-revoke-staff")) {
+    $("btn-revoke-staff").addEventListener("click", async () => {
+      const electionId = $("s-election").value;
+      const handle = $("s-handle").value.trim();
+      try {
+        await request("/api/elections/" + encodeURIComponent(electionId) + "/staff", {
+          method: "DELETE",
+          body: { handle },
+        });
+        flash($("flash-staff"), "ok", "Revoked " + handle);
+        await loadStaff();
+      } catch (err) {
+        flash($("flash-staff"), "err", errText(err));
+      }
+    });
+  }
+
+  if ($("form-party")) {
+    $("form-party").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const electionId = $("p-election").value;
+      const body = {
+        name: $("p-name").value.trim(),
+        mode: $("p-mode").value,
+        handle: $("p-operator").value.trim(),
+        endpointUrl: $("p-endpoint").value.trim() || undefined,
+      };
+      try {
+        const created = await request("/api/elections/" + encodeURIComponent(electionId) + "/parties", {
+          method: "POST",
+          body,
+        });
+        const id = pick(created, ["party.id"]) || "";
+        flash($("flash-party"), "ok", "Added " + body.name + (id ? " · " + id : ""));
+        if (id && $("pg-party")) $("pg-party").value = id;
+        event.target.reset();
+        if (electionId) $("p-election").value = electionId;
+        await loadParties();
+      } catch (err) {
+        flash($("flash-party"), "err", errText(err));
+      }
+    });
+  }
+
+  if ($("btn-refresh-parties")) $("btn-refresh-parties").addEventListener("click", () => loadParties());
+
+  function partyGatePath() {
+    const electionId = $("p-election").value;
+    const partyId = $("pg-party").value.trim();
+    if (!electionId || !partyId) throw new Error("Election and party id required");
+    return "/api/elections/" + encodeURIComponent(electionId) + "/parties/" + encodeURIComponent(partyId);
+  }
+
+  if ($("form-party-gate")) {
+    $("form-party-gate").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const commitment = $("pg-commit").value.trim();
+        const reasonCode = Number($("pg-reason").value);
+        await request(partyGatePath() + "/reject", {
+          method: "POST",
+          body: { identityCommitment: commitment, reasonCode },
+        });
+        flash($("flash-party-gate"), "ok", "Rejected " + commitment + " (reason " + reasonCode + ")");
+      } catch (err) {
+        flash($("flash-party-gate"), "err", errText(err));
+      }
+    });
+  }
+
+  if ($("btn-party-clear")) {
+    $("btn-party-clear").addEventListener("click", async () => {
+      try {
+        await request(partyGatePath() + "/clear", {
+          method: "POST",
+          body: { identityCommitment: $("pg-commit").value.trim() },
+        });
+        flash($("flash-party-gate"), "ok", "Cleared rejection");
+      } catch (err) {
+        flash($("flash-party-gate"), "err", errText(err));
+      }
+    });
+  }
+
+  if ($("btn-party-attest")) {
+    $("btn-party-attest").addEventListener("click", async () => {
+      try {
+        await request(partyGatePath() + "/attest", {
+          method: "POST",
+          body: { identityCommitment: $("pg-commit").value.trim() },
+        });
+        flash($("flash-party-gate"), "ok", "Attested identity for must_attest party");
+      } catch (err) {
+        flash($("flash-party-gate"), "err", errText(err));
+      }
+    });
+  }
+
+  if ($("btn-party-check")) {
+    $("btn-party-check").addEventListener("click", async () => {
+      const electionId = $("p-election").value;
+      try {
+        const result = await request("/api/elections/" + encodeURIComponent(electionId) + "/parties/check", {
+          method: "POST",
+          body: { identityCommitment: $("pg-commit").value.trim() },
+        });
+        flash($("flash-party-gate"), "ok", "Clearance ok · " + (result.checks ? result.checks.length : 0) + " parties");
+      } catch (err) {
+        flash($("flash-party-gate"), "err", errText(err));
+      }
+    });
+  }
+
+  document.addEventListener("click", async (event) => {
+    const useBtn = event.target.closest("[data-use-party]");
+    if (useBtn && $("pg-party")) {
+      $("pg-party").value = useBtn.getAttribute("data-use-party") || "";
+      return;
+    }
+    const statusBtn = event.target.closest("[data-party-status]");
+    if (!statusBtn) return;
+    const electionId = $("p-election").value;
+    const partyId = statusBtn.getAttribute("data-party");
+    const status = statusBtn.getAttribute("data-party-status");
+    try {
+      await request(
+        "/api/elections/" + encodeURIComponent(electionId) + "/parties/" + encodeURIComponent(partyId),
+        { method: "PATCH", body: { status } }
+      );
+      flash($("flash-party"), "ok", "Party " + status);
+      await loadParties();
+    } catch (err) {
+      flash($("flash-party"), "err", errText(err));
+    }
+  });
+
   $("btn-refresh-notices").addEventListener("click", async () => {
     await loadMe();
     await loadNotifications();
@@ -1511,10 +1743,12 @@
   window.addEventListener("republic:session", async () => {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications()]);
+    await Promise.all([loadStaff(), loadParties()]);
   });
   (async function init() {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
     if ($("t-election").value) await loadTallyElection($("t-election").value);
+    await Promise.all([loadStaff(), loadParties()]);
   })();
 })();

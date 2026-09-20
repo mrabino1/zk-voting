@@ -87,5 +87,8 @@ contract ElectionFactoryTest is Deployer {
         assertEq(got.maxParticipants, p.maxParticipants);
         assertEq(got.clerk, clerk);
         assertEq(got.registrar, registrar);
+        address parties = factory.getPartyRegistry(id);
+        assertTrue(parties != address(0), "party registry");
+        assertEq(IElection(el).electionId(), id);
     }
 }

@@ -93,6 +93,13 @@ const FACTORY_ABI = [
     inputs: [],
     outputs: [{ type: "address" }],
   },
+  {
+    type: "function",
+    name: "getPartyRegistry",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
 ];
 
 const INBOX_ABI = [
@@ -136,6 +143,46 @@ const INBOX_ABI = [
       { name: "nullifier", type: "uint256" },
     ],
     outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "submitVoteWithClearance",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2]" },
+      { name: "b", type: "uint256[2][2]" },
+      { name: "c", type: "uint256[2]" },
+      { name: "publicInputs", type: "uint256[]" },
+      { name: "encryptedBallot", type: "bytes" },
+      { name: "identityCommitment", type: "uint256" },
+      { name: "mustAttestIds", type: "uint256[]" },
+    ],
+    outputs: [],
+  },
+];
+
+const PARTY_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "hasActiveGates",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "partyCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "isRejected",
+    stateMutability: "view",
+    inputs: [{ name: "identityCommitment", type: "uint256" }],
+    outputs: [{ type: "bool" }],
   },
 ];
 
@@ -312,6 +359,13 @@ function getFactory(factoryAddressOrOpts, opts) {
       });
       return decodeAddressWord(raw);
     }
+    if (functionName === "getPartyRegistry") {
+      const raw = await ethCall(rpcUrl, {
+        to: address,
+        data: calldataUint256("getPartyRegistry(uint256)", args[0]),
+      });
+      return decodeAddressWord(raw);
+    }
     throw new Error(`getFactory.read: ${functionName} needs viem publicClient or a known view selector`);
   }
 
@@ -324,6 +378,7 @@ function getFactory(factoryAddressOrOpts, opts) {
     electionCount: () => read("electionCount"),
     implementation: () => read("implementation"),
     getElection: (electionId) => read("getElection", [electionId]),
+    getPartyRegistry: (electionId) => read("getPartyRegistry", [electionId]),
     options,
   };
 }
@@ -577,13 +632,30 @@ async function submitVote(inboxAddressOrOpts, envelope, opts) {
   const publicInputs = envelopePublicInputs(envelope);
   const pts = groth16ToArgs(envelope.proof);
   const encryptedBallot = envelope.encryptedBallot || "0x";
-  const args = [electionId, pts.a, pts.b, pts.c, publicInputs, encryptedBallot];
+  const identityCommitment = envelope.identityCommitment;
+  const mustAttestIds = Array.isArray(envelope.mustAttestIds)
+    ? envelope.mustAttestIds.map(toBigInt)
+    : [];
+  const useClearance = identityCommitment != null && identityCommitment !== "";
+  const args = useClearance
+    ? [
+        electionId,
+        pts.a,
+        pts.b,
+        pts.c,
+        publicInputs,
+        encryptedBallot,
+        toBigInt(identityCommitment),
+        mustAttestIds,
+      ]
+    : [electionId, pts.a, pts.b, pts.c, publicInputs, encryptedBallot];
+  const functionName = useClearance ? "submitVoteWithClearance" : "submitVote";
 
   if (viem && options.walletClient) {
     const hash = await options.walletClient.writeContract({
       address: inbox,
       abi: INBOX_ABI,
-      functionName: "submitVote",
+      functionName,
       args,
       account: options.walletClient.account || options.account,
       chain: options.walletClient.chain,
@@ -594,7 +666,7 @@ async function submitVote(inboxAddressOrOpts, envelope, opts) {
   if (viem && typeof viem.encodeFunctionData === "function") {
     const data = viem.encodeFunctionData({
       abi: INBOX_ABI,
-      functionName: "submitVote",
+      functionName,
       args,
     });
     if (!options.account) {
@@ -616,6 +688,11 @@ async function submitVote(inboxAddressOrOpts, envelope, opts) {
 async function getElectionAddress(factoryAddressOrOpts, electionId, opts) {
   const factory = getFactory(factoryAddressOrOpts, opts);
   return factory.getElection(electionId);
+}
+
+async function getPartyRegistry(factoryAddressOrOpts, electionId, opts) {
+  const factory = getFactory(factoryAddressOrOpts, opts);
+  return factory.getPartyRegistry(electionId);
 }
 
 async function acceptedBallots(inboxAddress, electionId, opts = {}) {
@@ -653,6 +730,7 @@ module.exports = {
   REPUBLIC_CHAIN_ID,
   FACTORY_ABI,
   INBOX_ABI,
+  PARTY_REGISTRY_ABI,
   ELECTION_ABI,
   rpc,
   ethCall,
@@ -662,6 +740,7 @@ module.exports = {
   decodeElectionCreated,
   submitVote,
   getElectionAddress,
+  getPartyRegistry,
   acceptedBallots,
   nullifierUsed,
   serializePublicInputs,
