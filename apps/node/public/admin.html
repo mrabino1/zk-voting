@@ -162,6 +162,11 @@
                 <option value="election_staff">election_staff — register external vote parties</option>
               </select>
             </div>
+            <div class="field">
+              <label class="field-label" for="g-email">Contact email</label>
+              <input id="g-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" placeholder="optional@jurisdiction.gov" />
+              <span class="field-hint">Used only for the promotion notice. Never written to civic L2.</span>
+            </div>
             <div class="actions">
               <button class="btn" type="submit">Grant role</button>
             </div>
@@ -180,12 +185,16 @@
           <code>platform_admin</code>. Admins then approve election staff on each election.
         </p>
         <form id="form-admin" class="form-grid">
-          <div class="field">
-            <label class="field-label" for="a-user">User <span class="req">*</span></label>
-            <select id="a-user" name="userId" required>
-              <option value="">Loading…</option>
-            </select>
-          </div>
+            <div class="field">
+              <label class="field-label" for="a-user">User <span class="req">*</span></label>
+              <select id="a-user" name="userId" required>
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="a-email">Contact email</label>
+              <input id="a-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" placeholder="optional@jurisdiction.gov" />
+            </div>
           <div class="actions">
             <button class="btn" type="submit">Approve as platform admin</button>
           </div>
@@ -281,6 +290,7 @@
                 <th>Handle</th>
                 <th>Global role</th>
                 <th>Jurisdiction offices</th>
+                <th>Contact mail</th>
                 <th>Methods</th>
                 <th>Active ETH</th>
                 <th>Person key</th>
@@ -289,7 +299,64 @@
             </thead>
             <tbody>
               <tr>
-                <td colspan="7" class="empty">Loading…</td>
+                <td colspan="8" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="mail-heading">
+        <header>
+          <h2 id="mail-heading">Role-promotion emails</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-mail">Refresh outbox</button>
+        </header>
+        <p class="field-hint">
+          When someone is promoted, the Node queues a civic notice (HTML + text) and an in-app
+          notification. Delivery uses <code>MAIL_WEBHOOK_URL</code> when set. These messages are
+          never written to civic L2 transactions.
+        </p>
+        <form id="form-contact-email" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="me-email">Your contact email</label>
+            <input id="me-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" placeholder="you@jurisdiction.gov" />
+            <span class="field-hint">Saved on this person record only. Used when you yourself are granted a new office.</span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="submit">Save contact email</button>
+          </div>
+          <div class="flash" id="flash-contact-email" role="status"></div>
+        </form>
+        <form id="form-mail-preview" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="mail-template">Template</label>
+            <select id="mail-template" name="templateId">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Preview template</button>
+          </div>
+          <div class="flash" id="flash-mail" role="status"></div>
+        </form>
+        <p id="mail-subject" class="field-hint"></p>
+        <pre id="mail-text" class="mail-text" hidden></pre>
+        <iframe id="mail-html" class="mail-preview" title="Role-promotion email preview" sandbox="" hidden></iframe>
+        <div class="table-wrap">
+          <table class="data-table" id="table-outbox">
+            <caption class="visually-hidden">Promotion mail outbox</caption>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Role</th>
+                <th>To</th>
+                <th>Status</th>
+                <th>Subject</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Loading…</td>
               </tr>
             </tbody>
           </table>

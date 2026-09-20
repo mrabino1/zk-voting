@@ -32,6 +32,7 @@ import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash } from '../l1Certify.mjs';
 import { partiesRouter } from './parties.mjs';
 import { publicUser } from '../roles.mjs';
+import { parseContactEmail, publicMailResult } from '../mailer.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -69,7 +70,7 @@ async function revokeHandler(req, store, explorer) {
 }
 
 export function electionsRouter(deps) {
-  const { store, explorer, chain, config, l1 } = deps;
+  const { store, explorer, chain, config, l1, mailer } = deps;
   const router = Router();
 
   router.get(
@@ -239,12 +240,38 @@ export function electionsRouter(deps) {
     requireAuth,
     requirePlatformOperator,
     asyncHandler(async (req, res) => {
+      const contactEmail = parseContactEmail(req.body?.contactEmail);
       const result = await store.approveElectionStaff(req.params.id, req.body || {});
+      let mail = null;
+      if (mailer?.notifyRolePromotion) {
+        try {
+          mail = publicMailResult(
+            await mailer.notifyRolePromotion({
+              user: result.user,
+              role: 'election_staff',
+              created: result.created,
+              grantedBy: req.user,
+              election: result.election,
+              jurisdiction: store.getJurisdiction(result.election?.jurisdictionId),
+              contactEmail,
+            }),
+          );
+        } catch (err) {
+          mail = {
+            skipped: true,
+            reason: 'mailer_error',
+            mail: null,
+            notificationId: null,
+            error: err?.message || String(err),
+          };
+        }
+      }
       res.status(201).json({
         ok: true,
         nfp: true,
         staff: result.staff,
         user: publicUser(result.user),
+        mail,
       });
     }),
   );

@@ -721,6 +721,11 @@ DELETE /api/jurisdictions/:id/roles
 GET  /api/me
 GET  /api/session
 GET  /api/me/identity
+PATCH /api/me/contact-email         (session person; promotion notices)
+GET  /api/mail/templates            (platform operator)
+GET  /api/mail/templates/:id
+GET  /api/mail/outbox
+GET  /api/mail/outbox/:id
 GET  /api/notifications
 POST /api/notifications/:id/read
 POST /api/auth/passkey/register/begin

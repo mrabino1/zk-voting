@@ -237,6 +237,26 @@ RP id, origins: [`docs/PASSKEYS.md`](./PASSKEYS.md). Person binding rules: [`doc
 - After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
 - `opens_ballots` elections store a **threshold-1** P-256 private JWK in the Node data file (`tallyGuardians`). That key decrypts every ballot. It is a demo, labeled NON-PRODUCTION. Do not use it for a binding election. Production guardians / mixnet are not this host’s JSON file.
 
+## Role-promotion email
+
+When a person is **newly** granted `platform_super_admin`, `platform_admin`, `election_staff`, `clerk`, `registrar`, `disqualification_officer`, or `tally_operator`, the Node:
+
+1. Queues HTML + text in the operator outbox (`republic.json` `mailOutbox`).
+2. Writes an in-app notification (`type: role_promoted`).
+3. POSTs the message to `MAIL_WEBHOOK_URL` when that env is set (JSON: `to`, `from`, `subject`, `text`, `html`, `templateId`).
+
+Idempotent re-grants do not send again. Seed bootstrap of `ADMIN_HANDLE` does not send. Unknown handles (grant before the person exists) skip mail. These notices are **never** written to civic L2 transactions (`email` is already a forbidden sequencer key).
+
+Preview: `/admin` → Role-promotion emails, or `GET /api/mail/templates`. Persons save a delivery address with `PATCH /api/me/contact-email` or the optional field on the grant form. Without an address the outbox status is `unsent_no_address`. Without a webhook, status stays `queued`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MAIL_FROM` | `Republic civic elections <noreply@localhost>` | From header |
+| `MAIL_WEBHOOK_URL` | unset | Optional delivery hook. No SMTP daemon is bundled |
+| `PUBLIC_BASE_URL` | first WebAuthn origin | Links to `/admin` or `/back-office` |
+
+This is not a vote receipt. Choice is never included.
+
 ## L1 certification (tally hash on Ethereum)
 
 After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postResult`. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`.

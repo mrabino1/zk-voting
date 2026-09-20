@@ -84,6 +84,7 @@ function emptyData() {
     votes: [],
     envelopes: [],
     notifications: [],
+    mailOutbox: [],
     tallyGuardians: [],
     externalParties: [],
     partyRejections: [],
@@ -132,6 +133,7 @@ export class Store {
       data.externalParties = data.externalParties || [];
       data.partyRejections = data.partyRejections || [];
       data.partyAttestations = data.partyAttestations || [];
+      data.mailOutbox = data.mailOutbox || [];
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
       data = emptyData();
@@ -685,7 +687,7 @@ export class Store {
       if (user && !existing.userId) existing.userId = user.id;
       if (user && !existing.handle) existing.handle = user.handle;
       await this.persist();
-      return { jurisdiction, grant: existing, user };
+      return { jurisdiction, grant: existing, user, created: false };
     }
     const grant = {
       userId: user?.id || trimmedUserId || '',
@@ -696,7 +698,7 @@ export class Store {
     };
     jurisdiction.officers.push(grant);
     await this.persist();
-    return { jurisdiction, grant, user };
+    return { jurisdiction, grant, user, created: true };
   }
 
   async revokeJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
@@ -1142,7 +1144,7 @@ export class Store {
           String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()),
     );
     if (exists) {
-      return { election, staff: election.staff, user };
+      return { election, staff: election.staff, user, created: false };
     }
     election.staff.push({
       userId: user?.id || trimmedUserId || '',
@@ -1152,7 +1154,7 @@ export class Store {
       grantedAt: new Date().toISOString(),
     });
     await this.persist();
-    return { election, staff: election.staff, user };
+    return { election, staff: election.staff, user, created: true };
   }
 
   async revokeElectionStaff(electionId, { address, handle, userId } = {}) {
@@ -1614,6 +1616,31 @@ export class Store {
     }
     await this.persist();
     return election;
+  }
+
+  async setContactEmail(userId, contactEmail) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.contactEmail = String(contactEmail || '').trim().toLowerCase();
+    await this.persist();
+    return user;
+  }
+
+  async enqueueMail(record) {
+    this.data.mailOutbox = this.data.mailOutbox || [];
+    this.data.mailOutbox.push(record);
+    await this.persist();
+    return record;
+  }
+
+  listMailOutbox() {
+    return (this.data.mailOutbox || [])
+      .slice()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  getMail(id) {
+    return (this.data.mailOutbox || []).find((row) => row.id === id) || null;
   }
 
   async addNotification({ userId, type, title, body, electionId }) {

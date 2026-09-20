@@ -105,6 +105,19 @@ export function getConfig(overrides = {}) {
     provingPath,
     useMockVerifier,
     hashScheme,
+    mailFrom:
+      overrides.mailFrom ??
+      process.env.MAIL_FROM ??
+      'Republic civic elections <noreply@localhost>',
+    mailWebhookUrl: isTest
+      ? String(overrides.mailWebhookUrl ?? '')
+      : String(overrides.mailWebhookUrl ?? process.env.MAIL_WEBHOOK_URL ?? ''),
+    publicBaseUrl: String(
+      overrides.publicBaseUrl ??
+        process.env.PUBLIC_BASE_URL ??
+        origins[0] ??
+        `http://localhost:${port}`,
+    ).replace(/\/+$/, ''),
     ...overrides,
   };
 }

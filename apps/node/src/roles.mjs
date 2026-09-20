@@ -12,6 +12,18 @@ export const ROLES = [
   'observer',
 ];
 
+export const ROLE_LABELS = Object.freeze({
+  voter: 'Voter',
+  clerk: 'Election clerk',
+  registrar: 'Registrar',
+  disqualification_officer: 'Disqualification officer',
+  tally_operator: 'Tally operator',
+  election_staff: 'Election staff',
+  platform_admin: 'Platform admin',
+  platform_super_admin: 'Platform super admin',
+  observer: 'Observer',
+});
+
 /** Officer roles granted per jurisdiction (or, for election_staff, per election). */
 export const OFFICER_ROLES = [
   'clerk',
@@ -45,9 +57,9 @@ export function isPlatformOperator(user) {
   return Boolean(user && (user.role === 'platform_super_admin' || user.role === 'platform_admin'));
 }
 
-export function publicUser(user) {
+export function publicUser(user, { includeContactEmail = false } = {}) {
   if (!user) return null;
-  return {
+  const out = {
     id: user.id,
     handle: user.handle,
     role: user.role,
@@ -56,5 +68,8 @@ export function publicUser(user) {
     authMethodCount: Array.isArray(user.authMethods) ? user.authMethods.length : 0,
     activeEthAddress: user.activeEthAddress || null,
     personKeyBound: Boolean(user.personKeyHash),
+    hasContactEmail: Boolean(user.contactEmail),
   };
+  if (includeContactEmail) out.contactEmail = user.contactEmail || '';
+  return out;
 }

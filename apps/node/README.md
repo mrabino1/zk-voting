@@ -18,7 +18,7 @@ See `/NOT_FOR_PROFIT.md` at the repo root.
 | --- | --- |
 | Organizations | Jurisdictions |
 | Rooms / processes | Elections (start + cutoff, roll, inbox) |
-| Users + roles | `voter` / `observer` / `platform_admin` / `platform_super_admin` are global. Super admin approves admins; admins approve election staff. `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, and `election_staff` are granted **per jurisdiction** (staff may also be granted per election). |
+| Users + roles | `voter` / `observer` / `platform_admin` / `platform_super_admin` are global. Super admin approves admins; admins approve election staff. `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, and `election_staff` are granted **per jurisdiction** (staff may also be granted per election). New grants queue a role-promotion email on the Node (never on civic L2). |
 | Host menu | repo-root `system_actions.sh` |
 
 Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
@@ -128,6 +128,9 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 | `ALLOW_SMART_CARD_MOCK` | off (`1` in tests) | Self-service smart-card `{ mock: true }` (kiosk demo). Production uses registrar attest |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
+| `MAIL_FROM` | `Republic civic elections <noreply@localhost>` | From-header on role-promotion notices |
+| `MAIL_WEBHOOK_URL` | _empty_ | Optional HTTP POST of queued promotion mail (JSON). Unset → outbox only |
+| `PUBLIC_BASE_URL` | first WebAuthn origin | Links inside promotion mail (`/admin`, `/back-office`) |
 | `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
 | `REPUBLIC_HASH_SCHEME` | `keccak-dev-v1` | HashLeftRight version advertised in config; see `/circuits/HASH_SCHEME.md` |
 
@@ -174,6 +177,11 @@ POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/ta
 DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
 GET  /api/me
 GET  /api/me/identity
+PATCH /api/me/contact-email         (session person; used for role-promotion notices)
+GET  /api/mail/templates            (platform operator; role-promotion HTML+text)
+GET  /api/mail/templates/:id
+GET  /api/mail/outbox
+GET  /api/mail/outbox/:id
 GET  /api/identity/methods
 POST /api/identity/web3/challenge
 POST /api/identity/web3/verify

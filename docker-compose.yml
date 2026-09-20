@@ -39,6 +39,9 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
       ALLOW_SMART_CARD_MOCK: ${ALLOW_SMART_CARD_MOCK:-}
+      MAIL_FROM: ${MAIL_FROM:-Republic civic elections <noreply@localhost>}
+      MAIL_WEBHOOK_URL: ${MAIL_WEBHOOK_URL:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       # Tally-hash certification (L1TallyMirror). Unset → no-op. Do not put
       # mainnet publisher keys in committed Compose files. Not the L2 prover key.
       L1_RPC: ${L1_RPC:-}

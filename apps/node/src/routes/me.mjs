@@ -2,10 +2,11 @@
 
 import { Router } from 'express';
 
-import { asyncHandler } from '../http.mjs';
+import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
 import { isPlatformOperator, isSuperAdmin } from '../roles.mjs';
+import { parseContactEmail } from '../mailer.mjs';
 
 function expandedRoles(store, user) {
   if (!user) return [];
@@ -69,6 +70,7 @@ export function meRouter(deps) {
     const me = user
       ? {
           ...user,
+          contactEmail: req.user?.contactEmail || '',
           name: user.handle,
           roles,
           jurisdictionRoles,
@@ -118,6 +120,22 @@ export function meRouter(deps) {
     asyncHandler(async (req, res) => {
       const n = await store.markNotificationRead(req.user.id, req.params.id);
       res.json({ ok: true, notification: n, nfp: true });
+    }),
+  );
+
+  router.patch(
+    '/me/contact-email',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const parsed = parseContactEmail(req.body?.contactEmail);
+      if (parsed === undefined) throw new HttpError(400, 'contactEmail required');
+      const user = await store.setContactEmail(req.user.id, parsed);
+      res.json({
+        ok: true,
+        nfp: true,
+        contactEmail: user.contactEmail || '',
+        hasContactEmail: Boolean(user.contactEmail),
+      });
     }),
   );
 

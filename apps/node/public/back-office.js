@@ -1577,11 +1577,19 @@
         return;
       }
       try {
-        await request("/api/elections/" + encodeURIComponent(electionId) + "/staff", {
+        const body = { handle };
+        const email = $("s-email") && $("s-email").value.trim();
+        if (email) body.contactEmail = email;
+        const granted = await request("/api/elections/" + encodeURIComponent(electionId) + "/staff", {
           method: "POST",
-          body: { handle },
+          body,
         });
-        flash($("flash-staff"), "ok", "Approved " + handle + " as election staff");
+        const mailStatus = granted && granted.mail && (granted.mail.mail && granted.mail.mail.status || granted.mail.status);
+        flash(
+          $("flash-staff"),
+          "ok",
+          "Approved " + handle + " as election staff" + (mailStatus ? " · mail " + mailStatus : "")
+        );
         await loadStaff();
       } catch (err) {
         flash($("flash-staff"), "err", errText(err));

@@ -389,6 +389,11 @@
             <label class="field-label" for="s-handle">Handle <span class="req">*</span></label>
             <input id="s-handle" name="handle" required maxlength="80" placeholder="poll-staff" />
           </div>
+          <div class="field">
+            <label class="field-label" for="s-email">Contact email</label>
+            <input id="s-email" name="contactEmail" type="email" maxlength="254" autocomplete="email" placeholder="optional@jurisdiction.gov" />
+            <span class="field-hint">Promotion notice only. Never written to civic L2.</span>
+          </div>
           <div class="actions">
             <button class="btn" type="submit">Approve election staff</button>
             <button class="btn btn-secondary" type="button" id="btn-revoke-staff">Revoke</button>

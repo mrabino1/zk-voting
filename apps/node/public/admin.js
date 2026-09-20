@@ -191,6 +191,9 @@
         $("session-line").textContent = "Not signed in. Super admin approves admins; admins approve election staff.";
         return me;
       }
+      if ($("me-email") && me.me && me.me.contactEmail && !$("me-email").value) {
+        $("me-email").value = me.me.contactEmail;
+      }
       const grants = me.jurisdictionRoles || [];
       const offices = grants
         .map((g) => (g.role || "") + "@" + (g.jurisdictionId || ""))
@@ -319,14 +322,14 @@
     const tbody = $("table-users").querySelector("tbody");
     const select = $("g-user");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No users (or not authorized).</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No users (or not authorized).</td></tr>';
       select.innerHTML = '<option value="">None loaded</option>';
       return;
     }
     tbody.innerHTML = rows
       .map(
         (row) =>
-          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || "—")}</td><td>${row.personKeyBound ? "bound" : "—"}</td><td class="hash">${esc(row.id)}</td></tr>`
+          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${row.hasContactEmail ? "yes" : "—"}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || "—")}</td><td>${row.personKeyBound ? "bound" : "—"}</td><td class="hash">${esc(row.id)}</td></tr>`
       )
       .join("");
     select.innerHTML =
@@ -347,7 +350,7 @@
           ? "Sign in as platform_super_admin or platform_admin to list users and grant officers."
           : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
-        `<tr><td colspan="7" class="empty">${esc(msg)}</td></tr>`;
+        `<tr><td colspan="8" class="empty">${esc(msg)}</td></tr>`;
       $("g-user").innerHTML = `<option value="">${esc(msg)}</option>`;
       if ($("a-user")) $("a-user").innerHTML = `<option value="">${esc(msg)}</option>`;
     }
@@ -449,6 +452,8 @@
     const selected = $("g-user").selectedOptions[0];
     const handle = (selected && selected.getAttribute("data-handle")) || "";
     const body = { userId, handle, role, jurisdictionId };
+    const email = $("g-email") && $("g-email").value.trim();
+    if (email) body.contactEmail = email;
     try {
       let granted = null;
       try {
@@ -466,15 +471,21 @@
         }
       }
       const who = pick(granted, ["grant.handle", "user.handle"]) || handle || userId;
-      flash($("flash-grant"), "ok", "Granted " + role + " on " + jurisdictionId + " to " + who);
-      await Promise.all([loadUsers(), loadJurisdictions()]);
+      const mailStatus = pick(granted, ["mail.mail.status", "mail.status"]);
+      const mailNote = mailStatus
+        ? " · mail " + mailStatus
+        : pick(granted, ["mail.reason"])
+          ? " · mail " + pick(granted, ["mail.reason"])
+          : "";
+      flash($("flash-grant"), "ok", "Granted " + role + " on " + jurisdictionId + " to " + who + mailNote);
+      await Promise.all([loadUsers(), loadJurisdictions(), loadOutbox()]);
     } catch (err) {
       flash($("flash-grant"), "err", errText(err));
     }
   });
 
   window.addEventListener("republic:session", () => {
-    Promise.all([loadMe(), loadUsers(), loadJurisdictions(), loadAdmins()]);
+    Promise.all([loadMe(), loadUsers(), loadJurisdictions(), loadAdmins(), loadMailTemplates(), loadOutbox()]);
   });
 
   const formAdmin = $("form-admin");
@@ -491,11 +502,22 @@
       try {
         const approved = await request("/api/admin/admins", {
           method: "POST",
-          body: { userId, handle },
+          body: {
+            userId,
+            handle,
+            ...( $("a-email") && $("a-email").value.trim()
+              ? { contactEmail: $("a-email").value.trim() }
+              : {}),
+          },
         });
         const who = pick(approved, ["user.handle"]) || handle || userId;
-        flash($("flash-admin"), "ok", "Approved " + who + " as platform_admin");
-        await Promise.all([loadUsers(), loadAdmins()]);
+        const mailStatus = pick(approved, ["mail.mail.status", "mail.status"]);
+        flash(
+          $("flash-admin"),
+          "ok",
+          "Approved " + who + " as platform_admin" + (mailStatus ? " · mail " + mailStatus : "")
+        );
+        await Promise.all([loadUsers(), loadAdmins(), loadOutbox()]);
       } catch (err) {
         flash($("flash-admin"), "err", errText(err));
       }
@@ -553,16 +575,124 @@
     }
   });
 
+  function renderOutbox(rows) {
+    const table = $("table-outbox");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No promotion mail yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows
+      .map(
+        (row) => `<tr>
+          <td>${esc(row.createdAt || "—")}</td>
+          <td>${esc(row.role || "—")}</td>
+          <td>${esc(row.to || "—")}</td>
+          <td>${esc(row.status || "—")}</td>
+          <td>${esc(row.subject || "—")}</td>
+        </tr>`
+      )
+      .join("");
+  }
+
+  async function loadOutbox() {
+    const table = $("table-outbox");
+    if (!table) return;
+    try {
+      const data = await request("/api/mail/outbox");
+      renderOutbox(asList(data, ["outbox", "items"]));
+    } catch (err) {
+      const msg =
+        err.status === 401 || err.status === 403
+          ? "Sign in as a platform operator to read the mail outbox."
+          : errText(err);
+      table.querySelector("tbody").innerHTML =
+        `<tr><td colspan="5" class="empty">${esc(msg)}</td></tr>`;
+    }
+  }
+
+  async function loadMailTemplates() {
+    const select = $("mail-template");
+    if (!select) return;
+    try {
+      const data = await request("/api/mail/templates");
+      const rows = asList(data, ["templates", "items"]);
+      if (!rows.length) {
+        select.innerHTML = '<option value="">No templates</option>';
+        return;
+      }
+      select.innerHTML = rows
+        .map(
+          (row) =>
+            `<option value="${esc(row.id)}">${esc(row.label || row.role)} — ${esc(row.headline || row.subject || row.id)}</option>`
+        )
+        .join("");
+    } catch (err) {
+      select.innerHTML = `<option value="">${esc(errText(err))}</option>`;
+    }
+  }
+
+  const formMail = $("form-mail-preview");
+  if (formMail) {
+    formMail.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = $("mail-template").value;
+      if (!id) {
+        flash($("flash-mail"), "err", "Choose a template.");
+        return;
+      }
+      try {
+        const data = await request("/api/mail/templates/" + encodeURIComponent(id));
+        const tpl = data.template || data;
+        $("mail-subject").textContent = tpl.subject || "";
+        const textEl = $("mail-text");
+        textEl.hidden = false;
+        textEl.textContent = tpl.text || "";
+        const frame = $("mail-html");
+        frame.hidden = false;
+        frame.srcdoc = tpl.html || "";
+        flash($("flash-mail"), "ok", "Preview loaded. This is a sample; live mail uses the granted person's handle.");
+      } catch (err) {
+        flash($("flash-mail"), "err", errText(err));
+      }
+    });
+  }
+
+  const formContact = $("form-contact-email");
+  if (formContact) {
+    formContact.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const saved = await request("/api/me/contact-email", {
+          method: "PATCH",
+          body: { contactEmail: $("me-email").value.trim() },
+        });
+        flash(
+          $("flash-contact-email"),
+          "ok",
+          saved.contactEmail ? "Saved " + saved.contactEmail : "Cleared contact email"
+        );
+      } catch (err) {
+        flash($("flash-contact-email"), "err", errText(err));
+      }
+    });
+  }
+
   $("btn-refresh-j").addEventListener("click", () => loadJurisdictions());
   $("btn-refresh-u").addEventListener("click", () => loadUsers());
   const refreshOfficers = $("btn-refresh-o");
   if (refreshOfficers) refreshOfficers.addEventListener("click", () => loadJurisdictions());
   const refreshAdmins = $("btn-refresh-admins");
   if (refreshAdmins) refreshAdmins.addEventListener("click", () => loadAdmins());
+  const refreshMail = $("btn-refresh-mail");
+  if (refreshMail) refreshMail.addEventListener("click", () => loadOutbox());
 
   loadHealth();
   loadMe();
   loadJurisdictions();
   loadUsers();
   loadAdmins();
+  loadMailTemplates();
+  loadOutbox();
 })();
