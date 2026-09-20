@@ -213,4 +213,4 @@ Passkey begin/finish stay under `/api/auth/passkey/*`. Wallet **login** is `/api
 
 ## Privacy
 
-Public ballot rows remain `{ nullifier, ballotHash, electionId, relayer }`. No `userId`, no choice, no identity commitment, no active ETH address on the vote. Hourly disclosure is unchanged ([`ARCHITECTURE.md`](./ARCHITECTURE.md)). Civic document numbers never appear in `republic.json`.
+Public ballot rows remain `{ nullifier, ballotHash, electionId, relayer }`. No `userId`, no choice, no identity commitment, no active ETH address on the vote. Hourly disclosure is unchanged ([`ARCHITECTURE.md`](./ARCHITECTURE.md)). Civic document numbers never appear in `republic.json`. Commander brief: [`how_voters_privacy_is_protected.md`](../how_voters_privacy_is_protected.md).
