@@ -1072,6 +1072,46 @@ th {
   border-color: var(--navy);
 }
 
+.lang-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 0.28rem 0.4rem;
+  background: rgba(11, 28, 51, 0.35);
+}
+
+.lang-flag {
+  width: 2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 2px;
+  opacity: 0.55;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.lang-flag:hover,
+.lang-flag:focus-visible {
+  opacity: 1;
+}
+
+.lang-flag[aria-pressed="true"] {
+  opacity: 1;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
+.lang-flag-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .session-chrome {
   display: flex;
   flex-wrap: wrap;

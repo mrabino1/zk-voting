@@ -3,13 +3,15 @@
  * Client helpers: bind Web3 wallet or smart-card digital ID, set the one active ETH address.
  */
 
+import { t } from "./i18n.js";
+
 export async function loginWeb3Wallet(api) {
   if (!window.ethereum) {
-    throw new Error("No Ethereum wallet in this browser. Use a passkey, or install a wallet that supports personal_sign.");
+    throw new Error(t("wallet.noEthWallet"));
   }
   const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
   const address = accounts && accounts[0];
-  if (!address) throw new Error("Wallet did not return an address.");
+  if (!address) throw new Error(t("wallet.noAddress"));
   const challenge = await api("/api/auth/web3/challenge", {
     method: "POST",
     body: { address },
@@ -26,11 +28,11 @@ export async function loginWeb3Wallet(api) {
 
 export async function bindWeb3Wallet(api, { handle } = {}) {
   if (!window.ethereum) {
-    throw new Error("No Web3 wallet in this browser. Install a wallet or use a passkey / smart card.");
+    throw new Error(t("wallet.noWeb3Wallet"));
   }
   const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
   const address = accounts && accounts[0];
-  if (!address) throw new Error("Wallet did not return an address.");
+  if (!address) throw new Error(t("wallet.noAddress"));
   const challenge = await api("/api/identity/web3/challenge", {
     method: "POST",
     body: { address },

@@ -1,4 +1,6 @@
 /* Back office — clerk, registrar, disqualification officer, tally, notifications. */
+import { t, LOCALE_EVENT } from "./i18n.js";
+
 (function () {
   "use strict";
 
@@ -37,7 +39,7 @@
       data = { raw: text };
     }
     if (!res.ok) {
-      const err = new Error((data && (data.error || data.message)) || res.statusText || "Request failed");
+      const err = new Error((data && (data.error || data.message)) || res.statusText || t("common.requestFailed"));
       err.status = res.status;
       err.data = data;
       err.path = path;
@@ -104,7 +106,7 @@
     const code = err.data && err.data.code;
     return (
       (err.status ? err.status + " · " : "") +
-      (err.message || "Request failed") +
+      (err.message || t("common.requestFailed")) +
       (code ? " [" + code + "]" : "") +
       (err.path ? " (" + err.path + ")" : "")
     );
@@ -112,7 +114,7 @@
 
   function toUnix(datetimeLocal) {
     const ms = new Date(datetimeLocal).getTime();
-    if (Number.isNaN(ms)) throw new Error("Invalid datetime");
+    if (Number.isNaN(ms)) throw new Error(t("office.invalidDatetime"));
     return Math.floor(ms / 1000);
   }
 
@@ -137,40 +139,44 @@
     $("e-cutoff").value = iso(cutoff);
   }
 
-  const ASPECT_TYPES = [
-    ["YES_NO", "Yes / No"],
-    ["SINGLE_CHOICE", "Single choice"],
-    ["MULTI_CHOICE", "Multi choice"],
-    ["MEASURE", "Measure"],
-    ["ARTICLE", "Article"],
-    ["RANKED", "Ranked choice (IRV)"],
-  ];
+  function aspectTypes() {
+    return [
+      ["YES_NO", t("ballot.yesNo")],
+      ["SINGLE_CHOICE", t("ballot.single")],
+      ["MULTI_CHOICE", t("ballot.multi")],
+      ["MEASURE", t("ballot.measure")],
+      ["ARTICLE", t("ballot.article")],
+      ["RANKED", t("ballot.rankedIrv")],
+    ];
+  }
 
-  const DEFAULT_ASPECTS = [
-    {
-      id: "q-measure",
-      type: "YES_NO",
-      prompt: "Shall the measure be adopted?",
-      description: "",
-      maxSelections: 1,
-      options: [
-        { id: "yes", label: "Yes" },
-        { id: "no", label: "No" },
-      ],
-    },
-    {
-      id: "q-office",
-      type: "SINGLE_CHOICE",
-      prompt: "City Council, at-large — choose one.",
-      description: "",
-      maxSelections: 1,
-      options: [
-        { id: "cand-a", label: "Alex Rivera" },
-        { id: "cand-b", label: "Morgan Chen" },
-        { id: "cand-c", label: "Sam Okonkwo" },
-      ],
-    },
-  ];
+  function defaultAspects() {
+    return [
+      {
+        id: "q-measure",
+        type: "YES_NO",
+        prompt: t("office.shallMeasure"),
+        description: "",
+        maxSelections: 1,
+        options: [
+          { id: "yes", label: t("ballot.yes") },
+          { id: "no", label: t("ballot.no") },
+        ],
+      },
+      {
+        id: "q-office",
+        type: "SINGLE_CHOICE",
+        prompt: t("office.councilOne"),
+        description: "",
+        maxSelections: 1,
+        options: [
+          { id: "cand-a", label: "Alex Rivera" },
+          { id: "cand-b", label: "Morgan Chen" },
+          { id: "cand-c", label: "Sam Okonkwo" },
+        ],
+      },
+    ];
+  }
 
   let aspectsSyncing = false;
 
@@ -191,7 +197,7 @@
       const description = card.querySelector(".aspect-desc").value.trim();
       const maxSelections = Number(card.querySelector(".aspect-maxsel").value || 1);
       const options = [...card.querySelectorAll(".aspect-option")].map((row, j) => {
-        const label = row.querySelector(".opt-label").value.trim() || "Option " + (j + 1);
+        const label = row.querySelector(".opt-label").value.trim() || t("office.optionN", { n: j + 1 });
         const id = slugOpt(row.querySelector(".opt-id").value, slugOpt(label, "o" + (j + 1)));
         return { id, label };
       });
@@ -216,68 +222,68 @@
     const id = opt && opt.id != null ? opt.id : "o" + (index + 1);
     const label = opt && opt.label != null ? opt.label : typeof opt === "string" ? opt : "";
     return `<li class="aspect-option">
-      <input class="opt-id" spellcheck="false" placeholder="id" value="${esc(id)}" aria-label="Option id" />
-      <input class="opt-label" placeholder="Label" value="${esc(label)}" aria-label="Option label" />
-      <button type="button" class="btn btn-secondary btn-remove-opt">Remove</button>
+      <input class="opt-id" spellcheck="false" placeholder="id" value="${esc(id)}" aria-label="${t("office.optionId")}" />
+      <input class="opt-label" placeholder="${t("office.label")}" value="${esc(label)}" aria-label="${t("office.optionLabel")}" />
+      <button type="button" class="btn btn-secondary btn-remove-opt">${t("office.remove")}</button>
     </li>`;
   }
 
   function aspectCardHtml(q, index) {
     const type = q.type || "YES_NO";
     const options = Array.isArray(q.options) ? q.options : [];
-    const typeOpts = ASPECT_TYPES.map(
+    const typeOpts = aspectTypes().map(
       ([value, label]) => `<option value="${esc(value)}"${value === type ? " selected" : ""}>${esc(label)}</option>`
     ).join("");
     const maxHidden = type === "MULTI_CHOICE" ? "" : " hidden";
     return `<article class="aspect-card" data-index="${index}">
       <header>
-        <h3>Question ${index + 1}</h3>
-        <button type="button" class="btn btn-secondary btn-remove-aspect">Remove</button>
+        <h3>${t("office.questionN", { n: index + 1 })}</h3>
+        <button type="button" class="btn btn-secondary btn-remove-aspect">${t("office.remove")}</button>
       </header>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Type</label>
+          <label class="field-label">${t("office.type")}</label>
           <select class="aspect-type">${typeOpts}</select>
         </div>
         <div class="field">
-          <label class="field-label">Id</label>
+          <label class="field-label">${t("admin.colId")}</label>
           <input class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
         </div>
       </div>
       <div class="field aspect-max"${maxHidden}>
-        <label class="field-label">Max selections</label>
+        <label class="field-label">${t("office.maxSelections")}</label>
         <input class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
       </div>
       <div class="field">
-        <label class="field-label">Prompt <span class="req">*</span></label>
+        <label class="field-label">${t("office.prompt")} <span class="req">${t("common.required")}</span></label>
         <input class="aspect-prompt" required maxlength="400" value="${esc(q.prompt || "")}" />
       </div>
       <div class="field">
-        <label class="field-label">Description</label>
+        <label class="field-label">${t("office.description")}</label>
         <input class="aspect-desc" maxlength="500" value="${esc(q.description || "")}" />
       </div>
       <div class="field">
-        <span class="field-label">Options</span>
+        <span class="field-label">${t("office.options")}</span>
         <ul class="aspect-options">${options.map((o, j) => optionRowHtml(o, j)).join("")}</ul>
-        <button type="button" class="btn btn-secondary btn-add-opt">Add option</button>
+        <button type="button" class="btn btn-secondary btn-add-opt">${t("office.addOption")}</button>
       </div>
       ${
         type === "RANKED"
-          ? '<p class="field-hint">Voters rank these options. The Node computes IRV after cutoff from accepted ranking envelopes.</p>'
+          ? '<p class="field-hint">' + t("office.rankedHint") + '</p>'
           : ""
       }
     </article>`;
   }
 
   function renderAspectEditor(questions) {
-    const list = Array.isArray(questions) && questions.length ? questions : DEFAULT_ASPECTS;
+    const list = Array.isArray(questions) && questions.length ? questions : defaultAspects();
     $("questions-editor").innerHTML = list.map((q, i) => aspectCardHtml(q, i)).join("");
     writeAspectsJson(list);
   }
 
   function parseAspectsJson() {
     const parsed = JSON.parse($("e-questions").value);
-    if (!Array.isArray(parsed)) throw new Error("Questions must be a JSON array.");
+    if (!Array.isArray(parsed)) throw new Error(t("office.questionsArray"));
     return parsed.map((q, i) => {
       const options = Array.isArray(q.options)
         ? q.options.map((o, j) =>
@@ -286,8 +292,8 @@
               : { id: String(o.id || "o" + (j + 1)), label: String(o.label || o.name || o.id || "Option") }
           )
         : [
-            { id: "yes", label: "Yes" },
-            { id: "no", label: "No" },
+            { id: "yes", label: t("ballot.yes") },
+            { id: "no", label: t("ballot.no") },
           ];
       return {
         id: q.id || "q" + (i + 1),
@@ -305,7 +311,7 @@
     writeAspectsJson(readAspectsFromEditor());
     document.querySelectorAll("#questions-editor .aspect-card").forEach((card, i) => {
       const heading = card.querySelector("h3");
-      if (heading) heading.textContent = "Question " + (i + 1);
+      if (heading) heading.textContent = t("office.questionN", { n: i + 1 });
       const type = card.querySelector(".aspect-type").value;
       const maxWrap = card.querySelector(".aspect-max");
       if (maxWrap) maxWrap.hidden = type !== "MULTI_CHOICE";
@@ -362,7 +368,7 @@
       try {
         renderAspectEditor(parseAspectsJson());
       } catch (err) {
-        flash($("flash-election"), "err", err.message || "Questions JSON is invalid.");
+        flash($("flash-election"), "err", err.message || t("office.questionsInvalid"));
       }
     });
   }
@@ -370,11 +376,11 @@
   function fillSelect(select, rows, getValue, getLabel) {
     const current = select.value;
     if (!rows.length) {
-      select.innerHTML = '<option value="">None loaded</option>';
+      select.innerHTML = '<option value="">' + t("common.noneLoaded") + '</option>';
       return;
     }
     select.innerHTML =
-      '<option value="">Select…</option>' +
+      '<option value="">' + t("common.select") + '</option>' +
       rows
         .map((row) => {
           const value = getValue(row);
@@ -385,56 +391,60 @@
     if (current && [...select.options].some((o) => o.value === current)) select.value = current;
   }
 
-  const QUESTION_TYPES = [
-    ["YES_NO", "Yes / No"],
-    ["SINGLE_CHOICE", "Single choice"],
-    ["MULTI_CHOICE", "Multi choice"],
-    ["MEASURE", "Measure"],
-    ["ARTICLE", "Article"],
-    ["RANKED", "Ranked choice (IRV)"],
-  ];
+  function questionTypes() {
+    return [
+      ["YES_NO", t("ballot.yesNo")],
+      ["SINGLE_CHOICE", t("ballot.single")],
+      ["MULTI_CHOICE", t("ballot.multi")],
+      ["MEASURE", t("ballot.measure")],
+      ["ARTICLE", t("ballot.article")],
+      ["RANKED", t("ballot.rankedIrv")],
+    ];
+  }
 
-  const DEFAULT_QUESTIONS = [
-    {
-      id: "q1",
-      type: "SINGLE_CHOICE",
-      prompt: "City Council, at-large",
-      options: [
-        {
-          id: "jane",
-          label: "Jane Doe",
-          summary: "Incumbent. Housing and transit.",
-          body: "Jane Doe has served one term. Supporting information here is hashed into the ballot spec.",
-          imageUrl: "",
-          links: [{ label: "Campaign site", url: "https://example.org/jane" }],
-        },
-        {
-          id: "alex",
-          label: "Alex Rivera",
-          summary: "Community organizer.",
-          body: "",
-          imageUrl: "",
-          links: [],
-        },
-      ],
-    },
-    {
-      id: "q2",
-      type: "YES_NO",
-      prompt: "Shall Ordinance 2026-14 be adopted?",
-      options: [
-        { id: "no", label: "No", summary: "Reject the ordinance.", body: "", imageUrl: "", links: [] },
-        {
-          id: "yes",
-          label: "Yes",
-          summary: "Adopt the ordinance.",
-          body: "Full text lives on the jurisdiction site.",
-          imageUrl: "",
-          links: [{ label: "Ordinance text", url: "https://example.org/ordinance" }],
-        },
-      ],
-    },
-  ];
+  function defaultQuestions() {
+    return [
+      {
+        id: "q1",
+        type: "SINGLE_CHOICE",
+        prompt: t("office.councilAtLarge"),
+        options: [
+          {
+            id: "jane",
+            label: t("office.namePlaceholder"),
+            summary: t("office.incumbentHousing"),
+            body: t("office.janeBody"),
+            imageUrl: "",
+            links: [{ label: t("sample.campaignSite"), url: "https://example.org/jane" }],
+          },
+          {
+            id: "alex",
+            label: "Alex Rivera",
+            summary: t("office.communityOrganizer"),
+            body: "",
+            imageUrl: "",
+            links: [],
+          },
+        ],
+      },
+      {
+        id: "q2",
+        type: "YES_NO",
+        prompt: t("office.ordinanceShort"),
+        options: [
+          { id: "no", label: t("ballot.no"), summary: t("sample.noSummary"), body: "", imageUrl: "", links: [] },
+          {
+            id: "yes",
+            label: t("ballot.yes"),
+            summary: t("sample.yesSummary"),
+            body: t("office.ordinanceBody"),
+            imageUrl: "",
+            links: [{ label: t("office.ordinanceText"), url: "https://example.org/ordinance" }],
+          },
+        ],
+      },
+    ];
+  }
 
   function blankOption(index) {
     return { id: "o" + (index + 1), label: "", summary: "", body: "", imageUrl: "", links: [] };
@@ -458,7 +468,7 @@
     const links = Array.isArray(raw?.links)
       ? raw.links.map((link, i) =>
           typeof link === "string"
-            ? { label: "Link " + (i + 1), url: link }
+            ? { label: t("office.linkN", { n: i + 1 }), url: link }
             : { label: String(link.label || link.title || ""), url: String(link.url || link.href || "") }
         )
       : [];
@@ -473,7 +483,7 @@
   }
 
   function hydrateQuestions(raw) {
-    if (!Array.isArray(raw) || !raw.length) return DEFAULT_QUESTIONS.map((q) => JSON.parse(JSON.stringify(q)));
+    if (!Array.isArray(raw) || !raw.length) return defaultQuestions().map((q) => JSON.parse(JSON.stringify(q)));
     return raw.map((q, i) => {
       const type = String(q.type || "YES_NO").toUpperCase();
       let options = Array.isArray(q.options) ? q.options.map((o, j) => hydrateOption(o, j)) : [];
@@ -534,7 +544,7 @@
     });
   }
 
-  let ballotQuestions = hydrateQuestions(DEFAULT_QUESTIONS);
+  let ballotQuestions = hydrateQuestions(defaultQuestions());
   let editingElectionId = "";
   let ballotLocked = false;
   let syncingJson = false;
@@ -586,7 +596,7 @@
   }
 
   function typeOptions(selected) {
-    return QUESTION_TYPES.map(
+    return questionTypes().map(
       ([value, label]) =>
         `<option value="${esc(value)}"${value === selected ? " selected" : ""}>${esc(label)}</option>`
     ).join("");
@@ -594,9 +604,9 @@
 
   function renderLinkRow(qi, oi, li, link) {
     return `<div class="link-row" data-link="${li}">
-      <input class="builder-mini" data-f="link-label" ${ballotLocked ? "disabled" : ""} placeholder="Label" value="${esc(link.label || "")}" aria-label="Link label" />
-      <input class="builder-mini" data-f="link-url" ${ballotLocked ? "disabled" : ""} placeholder="https://…" value="${esc(link.url || "")}" aria-label="Link URL" />
-      <button class="btn btn-secondary" type="button" data-act="rm-link" data-q="${qi}" data-opt="${oi}" data-link="${li}" ${ballotLocked ? "disabled" : ""}>Remove</button>
+      <input class="builder-mini" data-f="link-label" ${ballotLocked ? "disabled" : ""} placeholder="${t("office.linkLabel")}" value="${esc(link.label || "")}" aria-label="${t("office.linkLabel")}" />
+      <input class="builder-mini" data-f="link-url" ${ballotLocked ? "disabled" : ""} placeholder="https://…" value="${esc(link.url || "")}" aria-label="${t("office.linkUrl")}" />
+      <button class="btn btn-secondary" type="button" data-act="rm-link" data-q="${qi}" data-opt="${oi}" data-link="${li}" ${ballotLocked ? "disabled" : ""}>${t("office.remove")}</button>
     </div>`;
   }
 
@@ -604,36 +614,36 @@
     const links = opt.links && opt.links.length ? opt.links : [];
     return `<article class="opt-card" data-opt="${oi}">
       <div class="opt-card-head">
-        <h4>Option ${oi + 1}</h4>
-        <button class="btn btn-secondary" type="button" data-act="rm-opt" data-q="${qi}" data-opt="${oi}" ${ballotLocked ? "disabled" : ""}>Remove option</button>
+        <h4>${t("office.optionN", { n: oi + 1 })}</h4>
+        <button class="btn btn-secondary" type="button" data-act="rm-opt" data-q="${qi}" data-opt="${oi}" ${ballotLocked ? "disabled" : ""}>${t("office.removeOption")}</button>
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Name / title</label>
-          <input class="builder-mini" data-f="opt-label" ${ballotLocked ? "disabled" : ""} required value="${esc(opt.label || "")}" placeholder="Jane Doe" />
+          <label class="field-label">${t("office.nameTitle")}</label>
+          <input class="builder-mini" data-f="opt-label" ${ballotLocked ? "disabled" : ""} required value="${esc(opt.label || "")}" placeholder="${t("office.namePlaceholder")}" />
         </div>
         <div class="field">
-          <label class="field-label">Option id</label>
+          <label class="field-label">${t("office.optionId")}</label>
           <input class="builder-mini" data-f="opt-id" ${ballotLocked ? "disabled" : ""} value="${esc(opt.id || "")}" placeholder="o1" />
         </div>
       </div>
       <div class="field">
-        <label class="field-label">Short blurb</label>
-        <input class="builder-mini" data-f="opt-summary" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(opt.summary || "")}" placeholder="One-line summary on the voter list" />
+        <label class="field-label">${t("office.shortBlurb")}</label>
+        <input class="builder-mini" data-f="opt-summary" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(opt.summary || "")}" placeholder="${t("office.blurbPlaceholder")}" />
       </div>
       <div class="field">
-        <label class="field-label">Supporting information</label>
-        <textarea class="builder-body" data-f="opt-body" ${ballotLocked ? "disabled" : ""} placeholder="Plain text or light markdown for the mini info page">${esc(opt.body || "")}</textarea>
+        <label class="field-label">${t("office.supporting")}</label>
+        <textarea class="builder-body" data-f="opt-body" ${ballotLocked ? "disabled" : ""} placeholder="${t("office.bodyPlaceholder")}">${esc(opt.body || "")}</textarea>
       </div>
       <div class="field">
-        <label class="field-label">Image URL (optional)</label>
+        <label class="field-label">${t("office.imageUrl")}</label>
         <input class="builder-mini" data-f="opt-image" ${ballotLocked ? "disabled" : ""} value="${esc(opt.imageUrl || "")}" placeholder="https://…" />
       </div>
       <div class="field">
-        <span class="field-label">External links</span>
+        <span class="field-label">${t("office.externalLinks")}</span>
         <div class="link-rows">${links.map((link, li) => renderLinkRow(qi, oi, li, link)).join("")}</div>
         <div class="actions" style="margin-top:0.4rem">
-          <button class="btn btn-secondary" type="button" data-act="add-link" data-q="${qi}" data-opt="${oi}" ${ballotLocked ? "disabled" : ""}>Add link</button>
+          <button class="btn btn-secondary" type="button" data-act="add-link" data-q="${qi}" data-opt="${oi}" ${ballotLocked ? "disabled" : ""}>${t("office.addLink")}</button>
         </div>
       </div>
     </article>`;
@@ -644,41 +654,41 @@
     const maxHidden = type === "MULTI_CHOICE" ? "" : " hidden";
     return `<section class="q-card" data-q="${qi}">
       <div class="q-card-head">
-        <h3>Question ${qi + 1}</h3>
-        <button class="btn btn-secondary" type="button" data-act="rm-q" data-q="${qi}" ${ballotLocked ? "disabled" : ""}>Remove question</button>
+        <h3>${t("office.questionN", { n: qi + 1 })}</h3>
+        <button class="btn btn-secondary" type="button" data-act="rm-q" data-q="${qi}" ${ballotLocked ? "disabled" : ""}>${t("office.removeQuestion")}</button>
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Prompt</label>
-          <input class="builder-mini" data-f="q-prompt" ${ballotLocked ? "disabled" : ""} required value="${esc(q.prompt || "")}" placeholder="Office or measure text" />
+          <label class="field-label">${t("office.prompt")}</label>
+          <input class="builder-mini" data-f="q-prompt" ${ballotLocked ? "disabled" : ""} required value="${esc(q.prompt || "")}" placeholder="${t("office.promptPlaceholder")}" />
         </div>
         <div class="field">
-          <label class="field-label">Type</label>
+          <label class="field-label">${t("office.type")}</label>
           <select class="builder-mini" data-f="q-type" ${ballotLocked ? "disabled" : ""}>${typeOptions(type)}</select>
         </div>
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Question id</label>
+          <label class="field-label">${t("office.questionId")}</label>
           <input class="builder-mini" data-f="q-id" ${ballotLocked ? "disabled" : ""} value="${esc(q.id || "")}" placeholder="q1" />
         </div>
         <div class="field aspect-max"${maxHidden}>
-          <label class="field-label">Max selections</label>
+          <label class="field-label">${t("office.maxSelections")}</label>
           <input class="builder-mini" data-f="q-max" type="number" min="1" step="1" ${ballotLocked ? "disabled" : ""} value="${esc(q.maxSelections || 2)}" />
         </div>
       </div>
       <div class="field">
-        <label class="field-label">Description</label>
-        <input class="builder-mini" data-f="q-desc" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(q.description || "")}" placeholder="Voter-facing help text" />
+        <label class="field-label">${t("office.description")}</label>
+        <input class="builder-mini" data-f="q-desc" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(q.description || "")}" placeholder="${t("office.helpPlaceholder")}" />
       </div>
       ${
         type === "RANKED"
-          ? '<p class="field-hint">Voters rank these options. The Node computes IRV after cutoff from accepted ranking envelopes.</p>'
+          ? '<p class="field-hint">' + t("office.rankedHint") + '</p>'
           : ""
       }
       <div class="opt-list">${(q.options || []).map((opt, oi) => renderOptionCard(qi, oi, opt)).join("")}</div>
       <div class="actions" style="margin-top:0.75rem">
-        <button class="btn btn-secondary" type="button" data-act="add-opt" data-q="${qi}" ${ballotLocked ? "disabled" : ""}>Add option</button>
+        <button class="btn btn-secondary" type="button" data-act="add-opt" data-q="${qi}" ${ballotLocked ? "disabled" : ""}>${t("office.addOption")}</button>
       </div>
     </section>`;
   }
@@ -705,7 +715,7 @@
     if (addQ) addQ.disabled = ballotLocked;
     if (hint && ballotLocked) {
       hint.textContent =
-        "This ballot is frozen. Supporting information is locked in ballotSpecHash; voters can still read it on the public info pages.";
+        t("office.frozenBallot");
     }
   }
 
@@ -719,7 +729,7 @@
         readBuilderFromDom();
         setJsonFromBuilder();
       } catch (err) {
-        flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+        flash($("flash-election"), "err", err.message || t("office.builderReadFail"));
       }
     });
     root.addEventListener("change", (event) => {
@@ -732,7 +742,7 @@
           setJsonFromBuilder();
         }
       } catch (err) {
-        flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+        flash($("flash-election"), "err", err.message || t("office.builderReadFail"));
       }
     });
     root.addEventListener("click", (event) => {
@@ -742,7 +752,7 @@
       try {
         readBuilderFromDom();
       } catch (err) {
-        flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+        flash($("flash-election"), "err", err.message || t("office.builderReadFail"));
         return;
       }
       const act = btn.getAttribute("data-act");
@@ -771,7 +781,7 @@
 
   function parseQuestionsJson() {
     const parsed = JSON.parse($("e-questions").value);
-    if (!Array.isArray(parsed)) throw new Error("Questions must be a JSON array.");
+    if (!Array.isArray(parsed)) throw new Error(t("office.questionsArray"));
     return parsed;
   }
 
@@ -790,7 +800,7 @@
     try {
       readBuilderFromDom();
     } catch (err) {
-      flash($("flash-election"), "err", err.message || "Could not read the ballot builder.");
+      flash($("flash-election"), "err", err.message || t("office.builderReadFail"));
       return;
     }
     ballotQuestions.push(blankQuestion(ballotQuestions.length));
@@ -820,9 +830,9 @@
     ballotQuestions = hydrateQuestions(election.questions || []);
     setEditingElection(election.id, election.rollFrozen || Number(election.state) >= 1);
     if (election.rollFrozen) {
-      flash($("flash-election"), "warn", "Loaded frozen election " + election.id + ". Ballot metadata is read-only.");
+      flash($("flash-election"), "warn", t("office.loadedFrozen", { id: election.id }));
     } else {
-      flash($("flash-election"), "ok", "Loaded election " + election.id + ". Save ballot changes before freezing the roll.");
+      flash($("flash-election"), "ok", t("office.loadedElection", { id: election.id }));
     }
   }
 
@@ -848,9 +858,9 @@
   $("btn-load-ballot").addEventListener("click", async () => {
     const id = $("e-load").value;
     if (!id) {
-      ballotQuestions = hydrateQuestions(DEFAULT_QUESTIONS);
+      ballotQuestions = hydrateQuestions(defaultQuestions());
       setEditingElection("", false);
-      flash($("flash-election"), "ok", "Cleared to a new ballot. Create election to store it.");
+      flash($("flash-election"), "ok", t("office.clearedBallot"));
       return;
     }
     try {
@@ -863,7 +873,7 @@
   $("btn-save-ballot").addEventListener("click", async () => {
     if (!editingElectionId) return;
     if (ballotLocked) {
-      flash($("flash-election"), "err", "This ballot is frozen.");
+      flash($("flash-election"), "err", t("office.frozenErr"));
       return;
     }
     try {
@@ -878,7 +888,7 @@
           ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
         },
       });
-      flash($("flash-election"), "ok", "Saved ballot " + editingElectionId + ". Option info is in ballotSpecHash.");
+      flash($("flash-election"), "ok", t("office.savedBallot", { id: editingElectionId }));
       await loadElections();
     } catch (err) {
       flash($("flash-election"), "err", errText(err));
@@ -890,7 +900,7 @@
   }
 
   function electionLabel(row) {
-    const title = pick(row, ["title", "name", "stateName"]) || "Election";
+    const title = pick(row, ["title", "name", "stateName"]) || t("office.electionWord");
     const state = pick(row, ["stateName"]) || "";
     const chain = pick(row, ["onChainElectionId"]);
     const short = pick(row, ["shortCode"]);
@@ -904,7 +914,7 @@
 
   function markRole(el, ok) {
     el.className = "pill " + (ok ? "pill-ok" : "pill-warn");
-    el.title = ok ? "Granted on this session" : "Not listed on /api/me — the Node still enforces roles";
+    el.title = ok ? t("office.grantedTitle") : t("office.notListed");
   }
 
   function hasOfficerRole(me, name) {
@@ -947,7 +957,7 @@
       const user = me.user;
       const role = user && user.role ? String(user.role) : "";
       if (!user) {
-        $("me-line").textContent = "Not signed in — the Node will still enforce roles on each action.";
+        $("me-line").textContent = t("office.sessionAnon");
       } else {
         const grants = me.jurisdictionRoles || [];
         const offices = grants
@@ -959,7 +969,7 @@
           " · " +
           role +
           (offices ? " · " + offices : "") +
-          (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
+          (me.unreadCount ? " · " + t("admin.unread", { count: me.unreadCount }) : "");
       }
       markRole($("role-clerk"), hasOfficerRole(me, "clerk"));
       markRole($("role-registrar"), hasOfficerRole(me, "registrar"));
@@ -977,7 +987,7 @@
             next != null
               ? new Date(Number(next) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC")
               : "";
-          banner.textContent = cfg.disclosure.note + (when ? " Next publish: " + when + "." : "");
+          banner.textContent = cfg.disclosure.note + (when ? " " + t("disclosure.nextPublish", { time: when }) : "");
         }
         const chainNote = $("chain-election-note");
         if (chainNote && cfg.chain && cfg.chain.note) {
@@ -1068,7 +1078,7 @@
       const data = await request("/api/notifications");
       const rows = asList(data, ["notifications", "items"]);
       if (!rows.length) {
-        list.innerHTML = '<li class="empty">No notifications.</li>';
+        list.innerHTML = '<li class="empty">' + t("office.noNotifications") + '</li>';
         return;
       }
       list.innerHTML = rows
@@ -1083,7 +1093,7 @@
         .join("");
     } catch (err) {
       if (err.status === 401) {
-        list.innerHTML = '<li class="empty">Sign in to see notifications.</li>';
+        list.innerHTML = '<li class="empty">' + t("office.signInNotices") + '</li>';
         return;
       }
       list.innerHTML = `<li class="empty">${esc(errText(err))}</li>`;
@@ -1096,10 +1106,10 @@
     try {
       readBuilderFromDom();
       questions = compactQuestions(ballotQuestions);
-      if (!questions.length) throw new Error("Add at least one question.");
+      if (!questions.length) throw new Error(t("office.needQuestion"));
       $("e-questions").value = JSON.stringify(questions, null, 2);
     } catch (err) {
-      flash($("flash-election"), "err", err.message || "Questions are invalid.");
+      flash($("flash-election"), "err", err.message || t("office.questionsInvalidGeneric"));
       return;
     }
     let startTime;
@@ -1112,7 +1122,7 @@
       return;
     }
     if (!(startTime < cutoffTime)) {
-      flash($("flash-election"), "err", "Start must be before cutoff.");
+      flash($("flash-election"), "err", t("office.startBeforeCutoff"));
       return;
     }
     const body = {
@@ -1135,7 +1145,7 @@
       const addr = pick(created, ["onChainElectionAddress", "election.onChainElectionAddress"]);
       const tx = pick(created, ["createTxHash", "election.createTxHash"]);
       const short = pick(created, ["election.shortCode", "shortCode"]) || "";
-      const bits = ["Created election " + id];
+      const bits = [t("office.createdElection", { id })];
       if (short) bits.push("short /v/" + short);
       if (chainMode === "onchain") {
         bits.push("factory #" + onChainId);
@@ -1161,12 +1171,12 @@
     event.preventDefault();
     const id = $("f-election").value;
     if (!id) {
-      flash($("flash-freeze"), "err", "Choose an election.");
+      flash($("flash-freeze"), "err", t("office.chooseElection"));
       return;
     }
     try {
       await request("/api/elections/" + encodeURIComponent(id) + "/freeze", { method: "POST", body: {} });
-      flash($("flash-freeze"), "ok", "Roll frozen for election " + id);
+      flash($("flash-freeze"), "ok", t("office.rollFrozenFor", { id }));
       await loadElections();
     } catch (err) {
       flash($("flash-freeze"), "err", errText(err));
@@ -1178,7 +1188,7 @@
     const id = $("r-election").value;
     let identityCommitment;
     try {
-      identityCommitment = hexUint($("r-commit").value, "Identity commitment");
+      identityCommitment = hexUint($("r-commit").value, t("office.identityCommitment"));
     } catch (err) {
       flash($("flash-register"), "err", err.message);
       return;
@@ -1188,7 +1198,7 @@
         method: "POST",
         body: { identityCommitment },
       });
-      flash($("flash-register"), "ok", "Commitment inserted. The leaf is not a name or wallet.");
+      flash($("flash-register"), "ok", t("office.commitmentInserted"));
       $("r-commit").value = "";
     } catch (err) {
       flash($("flash-register"), "err", errText(err));
@@ -1200,13 +1210,13 @@
     const id = $("p-user").value.trim();
     const raw = $("p-key").value.trim();
     if (!id || !raw) {
-      flash($("flash-person-key"), "err", "Person id and key are required.");
+      flash($("flash-person-key"), "err", t("office.personRequired"));
       return;
     }
     const body = raw.startsWith("0x") && raw.length === 66 ? { personKeyHash: raw } : { personKey: raw };
     try {
       await request("/api/persons/" + encodeURIComponent(id) + "/person-key", { method: "POST", body });
-      flash($("flash-person-key"), "ok", "Person key bound. The Node stored a hash, not a legal name.");
+      flash($("flash-person-key"), "ok", t("office.personKeyBound"));
     } catch (err) {
       flash($("flash-person-key"), "err", errText(err));
     }
@@ -1229,7 +1239,7 @@
     }
     try {
       await request("/api/persons/" + encodeURIComponent(id) + "/methods", { method: "POST", body });
-      flash($("flash-person-method"), "ok", "Authenticator attested to this person. It cannot be bound to a second person.");
+      flash($("flash-person-method"), "ok", t("office.authenticatorAttested"));
     } catch (err) {
       flash($("flash-person-method"), "err", errText(err));
     }
@@ -1244,7 +1254,7 @@
         method: "POST",
         body: { address, source: "registrar" },
       });
-      flash($("flash-person-eth"), "ok", "Address verified internally. First verified address becomes active automatically.");
+      flash($("flash-person-eth"), "ok", t("office.addressVerified"));
     } catch (err) {
       flash($("flash-person-eth"), "err", errText(err));
     }
@@ -1258,7 +1268,7 @@
         method: "POST",
         body: { address },
       });
-      flash($("flash-person-eth"), "ok", "Active Ethereum address is now " + (data.activeEthAddress || address) + ".");
+      flash($("flash-person-eth"), "ok", t("office.activeEthNow", { address: data.activeEthAddress || address }));
     } catch (err) {
       flash($("flash-person-eth"), "err", errText(err));
     }
@@ -1269,8 +1279,8 @@
     let identityCommitment;
     let evidenceHash;
     try {
-      identityCommitment = hexUint($("d-commit").value, "Identity commitment");
-      evidenceHash = evidenceHex($("d-evidence").value, "Evidence hash");
+      identityCommitment = hexUint($("d-commit").value, t("office.identityCommitment"));
+      evidenceHash = evidenceHex($("d-evidence").value, t("office.evidenceHash"));
     } catch (err) {
       flash($("flash-dq"), "err", err.message);
       return;
@@ -1283,10 +1293,10 @@
           method: "POST",
           body,
         });
-        flash($("flash-dq"), "ok", "Disqualification revoked (auditable event, not a silent delete).");
+        flash($("flash-dq"), "ok", t("office.dqRevoked"));
       } else {
         await request("/api/elections/" + encodeURIComponent(id) + "/disqualify", { method: "POST", body });
-        flash($("flash-dq"), "ok", "Recorded " + REASON_LABELS[reasonCode] + ". The person remains registered.");
+        flash($("flash-dq"), "ok", t("office.dqRecorded", { reason: REASON_LABELS[reasonCode] }));
       }
     } catch (err) {
       flash($("flash-dq"), "err", errText(err));
@@ -1314,12 +1324,12 @@
         if (raw) {
           counts = JSON.parse(raw);
           if (!Array.isArray(counts) || counts.some((n) => typeof n !== "number" || !Number.isInteger(n) || n < 0)) {
-            throw new Error("Counts must be a JSON array of non-negative integers.");
+            throw new Error(t("office.countsMustBeArray"));
           }
         }
       }
     } catch (err) {
-      flash($("flash-tally"), "err", err.message || "Counts JSON is invalid.");
+      flash($("flash-tally"), "err", err.message || t("office.countsInvalid"));
       return;
     }
     const body = counts && counts.length ? { counts } : {};
@@ -1328,7 +1338,7 @@
       try {
         body.proof = JSON.parse(proofRaw);
       } catch {
-        flash($("flash-tally"), "err", "Proof JSON is invalid.");
+        flash($("flash-tally"), "err", t("office.proofInvalid"));
         return;
       }
     }
@@ -1336,26 +1346,23 @@
       const data = await request("/api/elections/" + encodeURIComponent(id) + "/tally", { method: "POST", body });
       const cert = data && data.l1Certification;
       const source = pick(data, ["tally.source", "election.tally.source"]);
-      let msg = "Tally posted. Each plurality question is counted on its own options.";
+      let msg = t("office.tallyPosted");
       if (source === "opens_ballots") {
-        msg = "Tally posted from opened envelopes (demo key, NON-PRODUCTION).";
+        msg = t("office.tallyPostedOpened");
       }
       const winner = pick(data, ["election.tally.questions.0.winnerLabel"]) || pick(data, ["election.tally.questions.0.winner"]);
       const method = pick(data, ["election.tally.ballotMethod"]);
       if (method === "ranked_choice" || method === "mixed") {
-        msg =
-          "Tally posted. IRV winner: " +
-          (winner || "none") +
-          ". Round transcript is on the results page.";
+        msg = t("office.tallyPostedIrvRounds", { winner: winner || t("office.none") });
       }
       if (cert && cert.status === "skipped") {
-        msg += " L1 certification skipped (" + (cert.reason || "L1 env unset") + ").";
+        msg += t("office.l1Skipped", { reason: cert.reason || "L1 env unset" });
       } else if (cert && cert.status === "posted") {
-        msg += " Certified on L1. tx=" + (cert.txHash || "");
+        msg += t("office.l1Posted", { tx: cert.txHash || "" });
       } else if (cert && cert.status === "already_posted") {
-        msg += " L1 already has this election's hash.";
+        msg += t("office.l1Status", { status: cert.status });
       } else if (cert && cert.status === "failed") {
-        msg += " L1 certification failed: " + (cert.error || "unknown");
+        msg += t("office.l1Failed", { error: cert.error || t("explorer.unknown") });
       }
       flash($("flash-tally"), cert && cert.status === "failed" ? "err" : "ok", msg);
       wireExplorerLinks(id);
@@ -1365,8 +1372,8 @@
   });
 
   function isRankedType(type) {
-    const t = String(type || "").toUpperCase();
-    return t === "RANKED" || t === "RANKED_CHOICE" || t === "IRV";
+    const kind = String(type || "").toUpperCase();
+    return kind === "RANKED" || kind === "RANKED_CHOICE" || kind === "IRV";
   }
 
   function renderTallyAspects(election) {
@@ -1377,7 +1384,7 @@
       host.innerHTML = "";
       if (hint) {
         hint.textContent =
-          "Concatenated plurality options in ballot order, or pick an election to fill per-question fields.";
+          t("office.tallyFieldsHint");
       }
       return;
     }
@@ -1394,15 +1401,15 @@
         ". Each question is counted separately (undervotes allowed). Ranked-choice is computed as IRV from envelopes.";
     }
     if (!questions.length) {
-      host.innerHTML = '<p class="field-hint">This election has no published questions.</p>';
+      host.innerHTML = '<p class="field-hint">' + t("office.noPublishedQuestions") + '</p>';
       return;
     }
     host.innerHTML = questions
       .map((q, i) => {
         if (isRankedType(q.type)) {
           return `<article class="aspect-card">
-            <h3>Question ${i + 1}: ${esc(q.prompt || q.id)}</h3>
-            <p class="field-hint">Ranked-choice / IRV is computed from accepted ranking envelopes when you post the tally (leave counts blank on an all-ranked ballot).</p>
+            <h3>${t("office.questionN", { n: i + 1 })}: ${esc(q.prompt || q.id)}</h3>
+            <p class="field-hint">${t("office.rankedTallyHint")}</p>
           </article>`;
         }
         const opts = (q.options || [])
@@ -1414,8 +1421,8 @@
           )
           .join("");
         return `<article class="aspect-card">
-          <h3>Question ${i + 1}: ${esc(q.prompt || q.id)}</h3>
-          <p class="field-hint">${esc(q.type || "SINGLE_CHOICE")} · plurality</p>
+          <h3>${t("office.questionN", { n: i + 1 })}: ${esc(q.prompt || q.id)}</h3>
+          <p class="field-hint">${t("office.pluralityTag", { type: q.type || "SINGLE_CHOICE" })}</p>
           <div class="tally-opts">${opts}</div>
         </article>`;
       })
@@ -1445,7 +1452,7 @@
   $("btn-irv").addEventListener("click", async () => {
     const id = $("t-election").value;
     if (!id) {
-      flash($("flash-tally"), "err", "Choose an election first.");
+      flash($("flash-tally"), "err", t("office.chooseElectionFirst"));
       return;
     }
     try {
@@ -1466,7 +1473,7 @@
   $("btn-certify-l1").addEventListener("click", async () => {
     const id = $("t-election").value;
     if (!id) {
-      flash($("flash-tally"), "err", "Choose an election first.");
+      flash($("flash-tally"), "err", t("office.chooseElectionFirst"));
       return;
     }
     try {
@@ -1476,11 +1483,11 @@
       });
       const cert = data && data.l1Certification;
       if (cert && cert.status === "skipped") {
-        flash($("flash-tally"), "ok", "L1 no-op: " + (cert.reason || "L1 env unset"));
+        flash($("flash-tally"), "ok", t("office.l1Skipped", { reason: cert.reason || "L1 env unset" }).trim());
       } else if (cert && (cert.status === "posted" || cert.status === "already_posted")) {
-        flash($("flash-tally"), "ok", "L1 certification " + cert.status + (cert.txHash ? " tx=" + cert.txHash : ""));
+        flash($("flash-tally"), "ok", t("office.l1Status", { status: cert.status }) + (cert.txHash ? " tx=" + cert.txHash : ""));
       } else {
-        flash($("flash-tally"), "err", (cert && (cert.error || cert.reason)) || "L1 certification did not post");
+        flash($("flash-tally"), "err", (cert && (cert.error || cert.reason)) || t("office.l1DidNotPost"));
       }
     } catch (err) {
       flash($("flash-tally"), "err", errText(err));
@@ -1512,6 +1519,13 @@
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications()]);
   });
+  window.addEventListener(LOCALE_EVENT, async () => {
+    renderBuilder();
+    const me = await loadMe();
+    await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
+    if ($("t-election").value) await loadTallyElection($("t-election").value);
+  });
+
   (async function init() {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);

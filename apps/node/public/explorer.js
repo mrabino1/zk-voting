@@ -1,4 +1,6 @@
 /* Republic L2 explorer — blocks, txs, search. Vote txs: nullifier + ballotHash only. */
+import { t, LOCALE_EVENT } from "./i18n.js";
+
 (function () {
   "use strict";
 
@@ -18,7 +20,7 @@
       data = { raw: text };
     }
     if (!res.ok) {
-      const err = new Error((data && (data.error || data.message)) || res.statusText || "Request failed");
+      const err = new Error((data && (data.error || data.message)) || res.statusText || t("common.requestFailed"));
       err.status = res.status;
       err.data = data;
       err.path = path;
@@ -41,7 +43,7 @@
         if (!retryable(err)) throw err;
       }
     }
-    throw last || new Error("Not found");
+    throw last || new Error(t("common.notFound"));
   }
 
   function pick(obj, names) {
@@ -79,7 +81,7 @@
   function errText(err) {
     return (
       (err.status ? err.status + " · " : "") +
-      (err.message || "Request failed") +
+      (err.message || t("common.requestFailed")) +
       (err.path ? " (" + err.path + ")" : "")
     );
   }
@@ -116,12 +118,12 @@
   }
 
   function canonicalType(raw) {
-    const t = String(raw || "").toLowerCase();
-    if (t.includes("register")) return "REGISTER";
-    if (t === "vote" || t.includes("vote")) return "VOTE";
-    if (t.includes("disqual") || t === "revoke") return "DISQUALIFY";
-    if (t.includes("certif") || t === "l1_certify") return "L1";
-    if (t.includes("tally")) return "TALLY";
+    const kind = String(raw || "").toLowerCase();
+    if (kind.includes("register")) return "REGISTER";
+    if (kind === "vote" || kind.includes("vote")) return "VOTE";
+    if (kind.includes("disqual") || kind === "revoke") return "DISQUALIFY";
+    if (kind.includes("certif") || kind === "l1_certify") return "L1";
+    if (kind.includes("tally")) return "TALLY";
     return "BATCH";
   }
 
@@ -194,7 +196,7 @@
   }
 
   function fmtTime(ts) {
-    if (ts == null || ts === "") return "—";
+    if (ts == null || ts === "") return t("common.dash");
     const n = Number(ts);
     const d = Number.isFinite(n) ? new Date(n > 1e12 ? n : n * 1000) : new Date(ts);
     if (Number.isNaN(d.getTime())) return String(ts);
@@ -210,7 +212,7 @@
   }
 
   function shortHex(value, left, right) {
-    if (value == null || value === "") return "—";
+    if (value == null || value === "") return t("common.dash");
     const s = String(value);
     const l = left || 10;
     const r = right || 8;
@@ -220,11 +222,11 @@
 
   function copyBtn(value) {
     if (!value) return "";
-    return ` <button type="button" class="copy" data-copy="${esc(value)}">Copy</button>`;
+    return ` <button type="button" class="copy" data-copy="${esc(value)}">${t("common.copy")}</button>`;
   }
 
   function hashLink(href, value) {
-    if (!value) return "—";
+    if (!value) return t("common.dash");
     return `<a href="${esc(href)}" title="${esc(value)}">${esc(shortHex(value))}</a>${copyBtn(value)}`;
   }
 
@@ -236,20 +238,20 @@
 
   function txSummary(tx) {
     if (tx.type === "VOTE") {
-      return `nullifier ${shortHex(tx.nullifier)} · ballotHash ${shortHex(tx.ballotHash)}`;
+      return t("explorer.voteSummary", { nullifier: shortHex(tx.nullifier), ballotHash: shortHex(tx.ballotHash) });
     }
     if (tx.type === "REGISTER") {
-      return "commitment " + shortHex(tx.identityCommitment);
+      return t("explorer.registerSummary", { commitment: shortHex(tx.identityCommitment) });
     }
     if (tx.type === "DISQUALIFY") {
-      return "reason " + (tx.reasonCode ?? "—") + " · evidence " + shortHex(tx.evidenceHash);
+      return t("explorer.dqSummary", { reason: tx.reasonCode ?? t("common.dash"), evidence: shortHex(tx.evidenceHash) });
     }
     if (tx.type === "TALLY") {
-      const counts = Array.isArray(tx.counts) ? tx.counts.join(", ") : "posted";
-      return "counts [" + counts + "]";
+      const counts = Array.isArray(tx.counts) ? tx.counts.join(", ") : t("explorer.posted");
+      return t("explorer.tallySummary", { counts });
     }
     if (tx.title) return String(tx.title);
-    return "civic batch / userop";
+    return t("explorer.civicBatch");
   }
 
   function parseRoute() {
@@ -289,10 +291,7 @@
   }
 
   function votePrivacyNote() {
-    return `<p class="privacy-callout"><strong>Ballot privacy</strong>
-      This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
-      Choice plaintext is not a field on Republic L2 and is never rendered here.
-      Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
+    return `<p class="privacy-callout"><strong>${t("explorer.privacyTitle")}</strong> ${t("explorer.privacyBody")}</p>`;
   }
 
   let disclosurePayload = null;
@@ -342,14 +341,14 @@
   }
 
   function txTable(txs) {
-    if (!txs.length) return '<p class="empty">No transactions in this view.</p>';
+    if (!txs.length) return '<p class="empty">' + t("explorer.noTx") + '</p>';
     return `<div class="table-wrap"><table class="data-table">
       <thead>
         <tr>
-          <th>Type</th>
-          <th>Txn hash</th>
-          <th>Election</th>
-          <th>What this did</th>
+          <th>${t("explorer.type")}</th>
+          <th>${t("explorer.txnHash")}</th>
+          <th>${t("explorer.election")}</th>
+          <th>${t("explorer.what")}</th>
         </tr>
       </thead>
       <tbody>
@@ -358,11 +357,11 @@
             const href = tx.hash ? "#/tx/" + encodeURIComponent(tx.hash) : "#";
             return `<tr>
               <td>${typeBadge(tx.type)}</td>
-              <td class="hash-cell">${tx.hash ? hashLink(href, tx.hash) : "—"}</td>
+              <td class="hash-cell">${tx.hash ? hashLink(href, tx.hash) : t("common.dash")}</td>
               <td>${
                 tx.electionId != null
                   ? `<a href="#/election/${esc(tx.electionId)}">${esc(tx.electionId)}</a>`
-                  : "—"
+                  : t("common.dash")
               }</td>
               <td>${esc(txSummary(tx))}</td>
             </tr>`;
@@ -374,35 +373,35 @@
 
   function txDetailRows(tx) {
     const rows = [
-      ["Type", typeBadge(tx.type)],
-      ["Txn hash", esc(tx.hash || "—") + copyBtn(tx.hash)],
+      [t("explorer.type"), typeBadge(tx.type)],
+      [t("explorer.txnHash"), esc(tx.hash || t("common.dash")) + copyBtn(tx.hash)],
       [
-        "Block",
-        tx.blockNumber != null ? `<a href="#/block/${esc(tx.blockNumber)}">${esc(tx.blockNumber)}</a>` : "—",
+        t("explorer.block"),
+        tx.blockNumber != null ? `<a href="#/block/${esc(tx.blockNumber)}">${esc(tx.blockNumber)}</a>` : t("common.dash"),
       ],
-      ["Timestamp", esc(fmtTime(tx.timestamp))],
+      [t("explorer.timestamp"), esc(fmtTime(tx.timestamp))],
       [
-        "Election",
+        t("explorer.election"),
         tx.electionId != null
           ? `<a href="#/election/${esc(tx.electionId)}">${esc(tx.electionId)}</a>`
-          : "—",
+          : t("common.dash"),
       ],
     ];
     if (tx.type === "VOTE") {
-      rows.push(["Nullifier", esc(tx.nullifier || "—") + copyBtn(tx.nullifier)]);
-      rows.push(["Ballot hash", esc(tx.ballotHash || "—") + copyBtn(tx.ballotHash)]);
+      rows.push([t("explorer.nullifier"), esc(tx.nullifier || t("common.dash")) + copyBtn(tx.nullifier)]);
+      rows.push([t("explorer.ballotHash"), esc(tx.ballotHash || t("common.dash")) + copyBtn(tx.ballotHash)]);
     } else if (tx.type === "REGISTER") {
-      rows.push(["Identity commitment", esc(tx.identityCommitment || "—") + copyBtn(tx.identityCommitment)]);
+      rows.push([t("explorer.identityCommitment"), esc(tx.identityCommitment || t("common.dash")) + copyBtn(tx.identityCommitment)]);
     } else if (tx.type === "DISQUALIFY") {
-      rows.push(["Identity commitment", esc(tx.identityCommitment || "—") + copyBtn(tx.identityCommitment)]);
-      rows.push(["Reason code", esc(tx.reasonCode ?? "—")]);
-      rows.push(["Evidence hash", esc(tx.evidenceHash || "—") + copyBtn(tx.evidenceHash)]);
+      rows.push([t("explorer.identityCommitment"), esc(tx.identityCommitment || t("common.dash")) + copyBtn(tx.identityCommitment)]);
+      rows.push([t("explorer.reasonCode"), esc(tx.reasonCode ?? t("common.dash"))]);
+      rows.push([t("explorer.evidenceHash"), esc(tx.evidenceHash || t("common.dash")) + copyBtn(tx.evidenceHash)]);
     } else if (tx.type === "TALLY") {
-      rows.push(["Counts", esc(Array.isArray(tx.counts) ? JSON.stringify(tx.counts) : "—")]);
+      rows.push([t("explorer.counts"), esc(Array.isArray(tx.counts) ? JSON.stringify(tx.counts) : t("common.dash"))]);
     } else {
-      if (tx.title) rows.push(["Title", esc(tx.title)]);
-      if (tx.stateRoot) rows.push(["State / eligible root", esc(tx.stateRoot) + copyBtn(tx.stateRoot)]);
-      if (tx.dataHash) rows.push(["Data hash", esc(tx.dataHash) + copyBtn(tx.dataHash)]);
+      if (tx.title) rows.push([t("explorer.titleCol"), esc(tx.title)]);
+      if (tx.stateRoot) rows.push([t("explorer.stateRoot"), esc(tx.stateRoot) + copyBtn(tx.stateRoot)]);
+      if (tx.dataHash) rows.push([t("explorer.dataHash"), esc(tx.dataHash) + copyBtn(tx.dataHash)]);
     }
     return rows.map(([dt, dd]) => `<dt>${esc(dt)}</dt><dd>${dd}</dd>`).join("");
   }
@@ -416,7 +415,7 @@
   }
 
   async function loadBlockList() {
-    crumbs([{ label: "Latest blocks" }]);
+    crumbs([{ label: t("explorer.latestBlocks") }]);
     const qs = new URLSearchParams(location.search);
     const before = qty(qs.get("before"));
     let pack;
@@ -431,21 +430,21 @@
     const page = rows.slice(0, LIMIT);
     if (!page.length) {
       $("view").innerHTML =
-        '<section class="panel"><p class="empty">No blocks yet. The sequencer has not produced a public batch.</p></section>';
+        '<section class="panel"><p class="empty">' + t("explorer.noBlocks") + '</p></section>';
       return;
     }
     const oldest = page[page.length - 1]?.number;
     const newerHref = before != null ? "/explorer" : "";
     const olderHref = rows.length > LIMIT ? "/explorer?before=" + encodeURIComponent(String(oldest)) : "";
     $("view").innerHTML = `<section class="panel">
-      <header><h2>Blocks</h2><span class="field-hint">Hourly vote disclosure · number · timestamp · tx count · state root</span></header>
+      <header><h2>${t("explorer.blocks")}</h2><span class="field-hint">${t("explorer.blocksHint")}</span></header>
       <div class="table-wrap"><table class="data-table">
         <thead>
           <tr>
-            <th>Block</th>
-            <th>Timestamp</th>
-            <th>Txns</th>
-            <th>State root</th>
+            <th>${t("explorer.block")}</th>
+            <th>${t("explorer.timestamp")}</th>
+            <th>${t("explorer.txns")}</th>
+            <th>${t("explorer.stateRootShort")}</th>
           </tr>
         </thead>
         <tbody>
@@ -464,11 +463,11 @@
       </table></div>
       <div class="pager">
         <div>
-          ${newerHref ? `<a class="btn btn-secondary" href="${esc(newerHref)}">Newest</a>` : ""}
-          ${olderHref ? `<a class="btn btn-secondary" href="${esc(olderHref)}">Older</a>` : ""}
+          ${newerHref ? `<a class="btn btn-secondary" href="${esc(newerHref)}">${t("explorer.newest")}</a>` : ""}
+          ${olderHref ? `<a class="btn btn-secondary" href="${esc(olderHref)}">${t("explorer.older")}</a>` : ""}
         </div>
-        <span class="field-hint">${pack.head != null ? "Head #" + pack.head : ""} ${
-      pack.chainId != null ? "· chain " + pack.chainId : ""
+        <span class="field-hint">${pack.head != null ? t("explorer.head", { head: pack.head }) : ""} ${
+      pack.chainId != null ? "· " + t("explorer.chain", { id: pack.chainId }) : ""
     }</span>
       </div>
     </section>`;
@@ -476,8 +475,8 @@
 
   async function loadBlock(id) {
     crumbs([
-      { href: "/explorer", label: "Blocks" },
-      { label: "Block #" + id },
+      { href: "/explorer", label: t("explorer.blocks") },
+      { label: t("explorer.blockN", { id }) },
     ]);
     let data;
     try {
@@ -490,30 +489,30 @@
     paintDisclosure(data);
     const n = Number(block.number ?? id);
     $("view").innerHTML = `<section class="panel">
-      <header><h2>Block #${esc(block.number ?? id)}</h2></header>
+      <header><h2>${t("explorer.blockN", { id: esc(block.number ?? id) })}</h2></header>
       <dl class="detail-grid">
-        <dt>Number</dt><dd class="block-num">${esc(block.number ?? id)}</dd>
-        <dt>Timestamp</dt><dd>${esc(fmtTime(block.timestamp))}</dd>
-        <dt>Transactions</dt><dd>${esc(block.txCount ?? block.txs.length)}</dd>
-        <dt>State root</dt><dd>${esc(block.stateRoot || "—")}${copyBtn(block.stateRoot)}</dd>
-        <dt>Block hash</dt><dd>${esc(block.hash || "—")}${copyBtn(block.hash)}</dd>
-        <dt>Parent</dt><dd>${esc(block.parentHash || "—")}${copyBtn(block.parentHash)}</dd>
+        <dt>${t("explorer.number")}</dt><dd class="block-num">${esc(block.number ?? id)}</dd>
+        <dt>${t("explorer.timestamp")}</dt><dd>${esc(fmtTime(block.timestamp))}</dd>
+        <dt>${t("explorer.transactions")}</dt><dd>${esc(block.txCount ?? block.txs.length)}</dd>
+        <dt>${t("explorer.stateRootShort")}</dt><dd>${esc(block.stateRoot || t("common.dash"))}${copyBtn(block.stateRoot)}</dd>
+        <dt>${t("explorer.blockHash")}</dt><dd>${esc(block.hash || t("common.dash"))}${copyBtn(block.hash)}</dd>
+        <dt>${t("explorer.parent")}</dt><dd>${esc(block.parentHash || t("common.dash"))}${copyBtn(block.parentHash)}</dd>
       </dl>
       <div class="pager">
-        ${Number.isFinite(n) && n > 1 ? `<a class="btn btn-secondary" href="#/block/${n - 1}">Previous</a>` : ""}
-        ${Number.isFinite(n) ? `<a class="btn btn-secondary" href="#/block/${n + 1}">Next</a>` : ""}
+        ${Number.isFinite(n) && n > 1 ? `<a class="btn btn-secondary" href="#/block/${n - 1}">${t("explorer.previous")}</a>` : ""}
+        ${Number.isFinite(n) ? `<a class="btn btn-secondary" href="#/block/${n + 1}">${t("explorer.next")}</a>` : ""}
       </div>
     </section>
     <section class="panel">
-      <header><h2>What this block did</h2></header>
+      <header><h2>${t("explorer.whatBlockDid")}</h2></header>
       ${txTable(block.txs)}
     </section>`;
   }
 
   async function loadTx(hash) {
     crumbs([
-      { href: "/explorer", label: "Blocks" },
-      { label: "Transaction" },
+      { href: "/explorer", label: t("explorer.blocks") },
+      { label: t("explorer.transaction") },
     ]);
     let data;
     try {
@@ -525,7 +524,7 @@
     const tx = normalizeTx(data.tx || data.transaction || data);
     await refreshDisclosure();
     $("view").innerHTML = `<section class="panel">
-      <header><h2>Transaction</h2></header>
+      <header><h2>${t("explorer.transaction")}</h2></header>
       <dl class="detail-grid">${txDetailRows(tx)}</dl>
       ${tx.type === "VOTE" ? votePrivacyNote() : ""}
     </section>`;
@@ -554,8 +553,8 @@
 
   async function loadNullifier(value) {
     crumbs([
-      { href: "/explorer", label: "Blocks" },
-      { label: "Nullifier" },
+      { href: "/explorer", label: t("explorer.blocks") },
+      { label: t("explorer.nullifier") },
     ]);
     let tx = null;
     try {
@@ -578,11 +577,11 @@
       }
     }
     if (!tx) {
-      $("view").innerHTML = `<section class="panel"><p class="empty">No vote used nullifier ${esc(value)}.</p>${votePrivacyNote()}</section>`;
+      $("view").innerHTML = `<section class="panel"><p class="empty">${t("explorer.noNullifier", { value: esc(value) })}</p>${votePrivacyNote()}</section>`;
       return;
     }
     $("view").innerHTML = `<section class="panel">
-      <header><h2>Nullifier</h2></header>
+      <header><h2>${t("explorer.nullifier")}</h2></header>
       <p class="hash">${esc(value)}${copyBtn(value)}</p>
       ${votePrivacyNote()}
       <dl class="detail-grid">${txDetailRows(tx)}</dl>
@@ -591,8 +590,8 @@
 
   async function loadElection(id) {
     crumbs([
-      { href: "/explorer", label: "Blocks" },
-      { label: "Election " + id },
+      { href: "/explorer", label: t("explorer.blocks") },
+      { label: t("explorer.electionN", { id }) },
     ]);
     let election = null;
     let ballots = [];
@@ -627,7 +626,7 @@
       if (!byHash.has(key)) byHash.set(key, tx);
     }
     const txs = [...byHash.values()];
-    const title = pick(election, ["title", "name"]) || (summary && summary.title) || "Election " + id;
+    const title = pick(election, ["title", "name"]) || (summary && summary.title) || t("explorer.electionN", { id });
     const tally = pick(election, ["tally"]);
     const aspects = asList(election, ["aspects", "questions"]);
     const tallied = Boolean(tally);
@@ -635,16 +634,18 @@
       ? tally.questions
           .map((q) => {
             if (q.tallied === false) {
-              return `<li><strong>${esc(q.prompt || q.id)}</strong> — not tallied (${esc(q.note || "IRV")})</li>`;
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — ${t("explorer.notTallied", { note: esc(q.note || t("explorer.irvShort")) })}</li>`;
             }
             if (q.tallyMethod === "irv" || q.ballotMethod === "ranked_choice") {
               const win = q.winnerLabel || q.winner;
-              return `<li><strong>${esc(q.prompt || q.id)}</strong> — IRV${win ? ` winner ${esc(win)}` : ""}</li>`;
+              return `<li><strong>${esc(q.prompt || q.id)}</strong> — ${
+                win ? t("explorer.irvWinnerLine", { winner: esc(win) }) : t("explorer.irvShort")
+              }</li>`;
             }
             const opts = (q.options || [])
               .map((o) => `${esc(o.label || o.id)}: ${esc(o.count)}`)
               .join("; ");
-            const under = q.undervotes != null ? ` · undervotes ${esc(q.undervotes)}` : "";
+            const under = q.undervotes != null ? " · " + t("explorer.undervotes", { count: esc(q.undervotes) }) : "";
             return `<li><strong>${esc(q.prompt || q.id)}</strong> — ${opts}${under}</li>`;
           })
           .join("")
@@ -655,9 +656,9 @@
           .join("")}</ol>`
       : "";
     const l1 = pick(election, ["tally.l1"]);
-    let l1Label = "not posted";
+    let l1Label = t("explorer.notPosted");
     if (l1) {
-      l1Label = l1.status || "unknown";
+      l1Label = l1.status || t("explorer.unknown");
       if (l1.txHash) l1Label += " · " + l1.txHash;
       else if (l1.reason) l1Label += " · " + l1.reason;
     }
@@ -672,51 +673,51 @@
       (tallied ? "/elections/" + encodeURIComponent(id) + "/results" : null);
     paintDisclosure({ disclosure: disclosure || {} }, disclosure);
     const nextLine = !disclosure
-      ? "—"
+      ? t("common.dash")
       : Number(disclosure.intervalSeconds) > 0
         ? (disclosure.secondsUntilNext != null ? fmtCountdown(disclosure.secondsUntilNext) + " · " : "") +
           fmtTime(disclosure.nextPublishAt)
-        : "Publishes immediately";
+        : t("explorer.publishesNow");
     const stateLabel =
-      pick(election, ["stateName", "state", "status"]) || (summary && summary.stateName) || "—";
+      pick(election, ["stateName", "state", "status"]) || (summary && summary.stateName) || t("common.dash");
     $("view").innerHTML = `<section class="panel">
       <header>
         <h2>${esc(title)}</h2>
         ${
           resultsUrl
-            ? `<a class="btn btn-secondary" href="${esc(resultsUrl)}">Certified results</a>`
-            : `<span class="field-hint">Tally not posted yet</span>`
+            ? `<a class="btn btn-secondary" href="${esc(resultsUrl)}">${t("explorer.certifiedResults")}</a>`
+            : `<span class="field-hint">${t("explorer.tallyPending")}</span>`
         }
       </header>
       <dl class="detail-grid">
-        <dt>Election id</dt><dd>${esc(id)}</dd>
-        <dt>State</dt><dd>${esc(stateLabel)}</dd>
-        <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
-        <dt>Questions</dt><dd>${esc(pick(election, ["questionCount"]) ?? aspects.length ?? "—")}</dd>
-        <dt>Last closed hour</dt><dd>${esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt)))}</dd>
-        <dt>Ballots disclosed</dt><dd>${esc(accepted != null ? accepted : "—")}</dd>
-        <dt>Next disclosure</dt><dd>${esc(nextLine)}</dd>
-        <dt>Public tally</dt><dd>${
+        <dt>${t("explorer.electionId")}</dt><dd>${esc(id)}</dd>
+        <dt>${t("explorer.state")}</dt><dd>${esc(stateLabel)}</dd>
+        <dt>${t("explorer.eligibleRoot")}</dt><dd>${esc(pick(election, ["eligibleRoot"]) || t("common.dash"))}</dd>
+        <dt>${t("explorer.questions")}</dt><dd>${esc(pick(election, ["questionCount"]) ?? aspects.length ?? t("common.dash"))}</dd>
+        <dt>${t("explorer.lastClosed")}</dt><dd>${esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt)))}</dd>
+        <dt>${t("explorer.ballots")}</dt><dd>${esc(accepted != null ? accepted : t("common.dash"))}</dd>
+        <dt>${t("explorer.next")}</dt><dd>${esc(nextLine)}</dd>
+        <dt>${t("explorer.publicTally")}</dt><dd>${
           tallyRows
             ? `<ul class="tally-bars">${tallyRows}</ul>`
-            : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted")
+            : esc(tally && tally.counts ? JSON.stringify(tally.counts) : t("explorer.notPosted"))
         }</dd>
-        <dt>Tally hash</dt><dd class="hash">${esc(pick(election, ["tally.countsHash"]) || "—")}</dd>
-        <dt>L1 certification</dt><dd>${esc(l1Label)}</dd>
-        <dt>Certified results</dt><dd>${
+        <dt>${t("explorer.tallyHash")}</dt><dd class="hash">${esc(pick(election, ["tally.countsHash"]) || t("common.dash"))}</dd>
+        <dt>${t("explorer.l1")}</dt><dd>${esc(l1Label)}</dd>
+        <dt>${t("explorer.certifiedDd")}</dt><dd>${
           resultsUrl
-            ? `<a href="${esc(resultsUrl)}">Tally posted — view results</a>`
-            : "not posted (winner page is linked after a certified tally)"
+            ? `<a href="${esc(resultsUrl)}">${t("explorer.viewResults")}</a>`
+            : t("explorer.notPostedWinner")
         }</dd>
         ${pick(election, ["tally.questions.0.winnerLabel"])
-          ? `<dt>IRV winner</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
+          ? `<dt>${t("explorer.irvWinner")}</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
           : ""}
       </dl>
       ${aspectList}
-      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. Plurality totals are labeled per question.</p>
+      <p class="field-hint">${t("explorer.hourlyOnly")}</p>
     </section>
     <section class="panel">
-      <header><h2>On-chain activity</h2></header>
+      <header><h2>${t("explorer.onChain")}</h2></header>
       ${txTable(txs)}
     </section>`;
   }
@@ -805,12 +806,12 @@
     if (!btn) return;
     try {
       await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
-      btn.textContent = "Copied";
+      btn.textContent = t("common.copied");
       setTimeout(() => {
-        btn.textContent = "Copy";
+        btn.textContent = t("common.copy");
       }, 1200);
     } catch {
-      btn.textContent = "Failed";
+      btn.textContent = t("common.failed");
     }
   });
 
@@ -830,6 +831,10 @@
   if (route.kind === "search" && route.q) $("q").value = route.q;
   if (route.kind === "block") $("q").value = route.id;
   if (route.kind === "tx" || route.kind === "nullifier") $("q").value = route.id;
+
+  window.addEventListener(LOCALE_EVENT, () => {
+    render();
+  });
 
   render();
 })();

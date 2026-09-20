@@ -6,19 +6,20 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#13294b" />
     <meta name="robots" content="noindex" />
-    <title>Platform admin · Republic</title>
+    <title data-i18n="chrome.titleAdmin">Platform admin · Republic</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/office.css" />
+    <script src="/lang-init.js"></script>
   </head>
   <body>
     <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
-    <a class="skip-link" href="#main">Skip to main content</a>
-    <div class="nfp-banner" role="note">
+    <a class="skip-link" href="#main" data-i18n="chrome.skip">Skip to main content</a>
+    <div class="nfp-banner" role="note" data-i18n="chrome.nfpBanner">
       NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
     </div>
     <header class="site-header">
       <div class="header-inner">
-        <a class="brand" href="/" aria-label="Republic home">
+        <a class="brand" href="/" data-i18n-aria-label="chrome.brandHome" aria-label="Republic home">
           <span class="brand-mark" aria-hidden="true">
             <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
               <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
@@ -34,58 +35,59 @@
           </span>
           <span class="brand-text">
             <span class="brand-name">Republic</span>
-            <span class="brand-sub">Office of civic elections</span>
+            <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
           </span>
         </a>
-        <nav class="nav-main" aria-label="Primary">
+        <nav class="nav-main" data-i18n-aria-label="chrome.navPrimary" aria-label="Primary">
           <ul>
-            <li><a href="/">Elections</a></li>
-            <li><a href="/register">Register</a></li>
-            <li><a href="/back-office">Back office</a></li>
-            <li><a href="/explorer">Explorer</a></li>
-            <li><a href="/admin" aria-current="page">Admin</a></li>
+            <li><a href="/" data-i18n="chrome.navElections">Elections</a></li>
+            <li><a href="/register" data-i18n="chrome.navRegister">Register</a></li>
+            <li><a href="/back-office" data-i18n="chrome.navBackOffice">Back office</a></li>
+            <li><a href="/explorer" data-i18n="chrome.navExplorer">Explorer</a></li>
+            <li><a href="/admin" aria-current="page" data-i18n="chrome.navAdmin">Admin</a></li>
           </ul>
         </nav>
-        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
-        <span class="office-badge">Not for profit</span>
+        <div id="lang-switcher" class="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" data-i18n-aria-label="chrome.session" aria-label="Session"></div>
+        <span class="office-badge" data-i18n="chrome.officeBadge">Not for profit</span>
       </div>
     </header>
 
     <main id="main" class="site-main" tabindex="-1">
       <header class="page-head">
-        <p class="kicker">Platform administration</p>
-        <h1>Host this Node</h1>
-        <p class="lede">
+        <p class="kicker" data-i18n="admin.kicker">Platform administration</p>
+        <h1 data-i18n="admin.title">Host this Node</h1>
+        <p class="lede" data-i18n-html="admin.lede">
           Jurisdictions are the organizations of this public-good stack. Grant clerks,
           registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
           and no console that takes fees. Dashboards do not show live vote ticks; public
           proof of ballots is published once an hour.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
-          <p class="disclosure-note">
+          <p class="disclosure-note" data-i18n="disclosure.noteAdmin">
             Public vote proofs publish at the top of each hour. This console does not show a live jurisdiction increase.
           </p>
         </aside>
-        <p class="session-line" id="session-line">Checking session…</p>
+        <p class="session-line" id="session-line" data-i18n="admin.checkingSession">Checking session…</p>
       </header>
 
       <section aria-labelledby="host-heading">
-        <h2 id="host-heading" class="visually-hidden">Host status</h2>
+        <h2 id="host-heading" class="visually-hidden" data-i18n="admin.hostHeading">Host status</h2>
         <div class="stat-grid" id="host-stats">
           <div class="stat">
-            <dt>Health</dt>
-            <dd class="plain" id="stat-health"><span class="status-dot"></span>Checking…</dd>
+            <dt data-i18n="admin.health">Health</dt>
+            <dd class="plain" id="stat-health"><span class="status-dot"></span><span data-i18n="common.checking">Checking…</span></dd>
           </div>
           <div class="stat">
-            <dt>Chain ID</dt>
+            <dt data-i18n="admin.chainId">Chain ID</dt>
             <dd id="stat-chain">—</dd>
           </div>
           <div class="stat">
-            <dt>Election factory</dt>
+            <dt data-i18n="admin.factory">Election factory</dt>
             <dd id="stat-factory">—</dd>
           </div>
           <div class="stat">
-            <dt>NOT FOR PROFIT</dt>
+            <dt data-i18n="admin.nfp">NOT FOR PROFIT</dt>
             <dd class="plain" id="stat-nfp">—</dd>
           </div>
         </div>
@@ -93,6 +95,8 @@
 
       <div
         id="sign-in-root"
+        data-heading-key="signin.heading"
+        data-lede-key="signin.adminLede"
         data-heading="Sign in"
         data-dev-handle="admin"
         data-dev-role="platform_admin"
@@ -102,25 +106,25 @@
       <div class="grid-2">
         <section class="panel" aria-labelledby="create-j-heading">
           <header>
-            <h2 id="create-j-heading">Create jurisdiction</h2>
+            <h2 id="create-j-heading" data-i18n="admin.createJurisdiction">Create jurisdiction</h2>
           </header>
-          <p class="field-hint">A jurisdiction owns a roll and elections (nation, state, county, city, or other body).</p>
+          <p class="field-hint" data-i18n="admin.createHint">A jurisdiction owns a roll and elections (nation, state, county, city, or other body).</p>
           <form id="form-jurisdiction" class="form-grid">
             <div class="field">
-              <label class="field-label" for="j-name">Name <span class="req">*</span></label>
-              <input id="j-name" name="name" required maxlength="120" autocomplete="organization" placeholder="County of Example" />
+              <label class="field-label" for="j-name"><span data-i18n="admin.name">Name</span> <span class="req">*</span></label>
+              <input id="j-name" name="name" required maxlength="120" autocomplete="organization" data-i18n-placeholder="admin.namePlaceholder" placeholder="County of Example" />
             </div>
             <div class="field">
-              <label class="field-label" for="j-code">Public id</label>
-              <input id="j-code" name="id" maxlength="64" placeholder="demo" />
-              <span class="field-hint">Optional slug. Legal names stay off-chain.</span>
+              <label class="field-label" for="j-code" data-i18n="admin.publicId">Public id</label>
+              <input id="j-code" name="id" maxlength="64" data-i18n-placeholder="admin.idPlaceholder" placeholder="demo" />
+              <span class="field-hint" data-i18n="admin.publicIdHint">Optional slug. Legal names stay off-chain.</span>
             </div>
             <div class="field">
-              <label class="field-label" for="j-uri">Metadata URI</label>
-              <input id="j-uri" name="metadataURI" inputmode="url" placeholder="ipfs://… or https://…" />
+              <label class="field-label" for="j-uri" data-i18n="admin.metadataUri">Metadata URI</label>
+              <input id="j-uri" name="metadataURI" inputmode="url" data-i18n-placeholder="admin.uriPlaceholder" placeholder="ipfs://… or https://…" />
             </div>
             <div class="actions">
-              <button class="btn" type="submit">Create jurisdiction</button>
+              <button class="btn" type="submit" data-i18n="admin.createSubmit">Create jurisdiction</button>
             </div>
             <div class="flash" id="flash-jurisdiction" role="status"></div>
           </form>
@@ -128,36 +132,36 @@
 
         <section class="panel" aria-labelledby="grant-heading">
           <header>
-            <h2 id="grant-heading">Grant officers</h2>
+            <h2 id="grant-heading" data-i18n="admin.grantOfficers">Grant officers</h2>
           </header>
-          <p class="field-hint">
+          <p class="field-hint" data-i18n-html="admin.grantHint">
             Clerk, registrar, disqualification officer, and tally operator are scoped to one
             jurisdiction. <code>platform_admin</code> remains a global override and is not granted here.
           </p>
           <form id="form-grant" class="form-grid">
             <div class="field">
-              <label class="field-label" for="g-user">User <span class="req">*</span></label>
+              <label class="field-label" for="g-user"><span data-i18n="admin.user">User</span> <span class="req">*</span></label>
               <select id="g-user" name="userId" required>
-                <option value="">Loading…</option>
+                <option value="" data-i18n="common.loading">Loading…</option>
               </select>
             </div>
             <div class="field">
-              <label class="field-label" for="g-jurisdiction">Jurisdiction <span class="req">*</span></label>
+              <label class="field-label" for="g-jurisdiction"><span data-i18n="admin.jurisdiction">Jurisdiction</span> <span class="req">*</span></label>
               <select id="g-jurisdiction" name="jurisdictionId" required>
-                <option value="">Loading…</option>
+                <option value="" data-i18n="common.loading">Loading…</option>
               </select>
             </div>
             <div class="field">
-              <label class="field-label" for="g-role">Role <span class="req">*</span></label>
+              <label class="field-label" for="g-role"><span data-i18n="admin.role">Role</span> <span class="req">*</span></label>
               <select id="g-role" name="role" required>
-                <option value="clerk">clerk — create elections, freeze roll</option>
-                <option value="registrar">registrar — insert identity commitments</option>
-                <option value="disqualification_officer">disqualification_officer — reason codes</option>
-                <option value="tally_operator">tally_operator — post counts</option>
+                <option value="clerk" data-i18n="admin.roleClerk">clerk — create elections, freeze roll</option>
+                <option value="registrar" data-i18n="admin.roleRegistrar">registrar — insert identity commitments</option>
+                <option value="disqualification_officer" data-i18n="admin.roleDq">disqualification_officer — reason codes</option>
+                <option value="tally_operator" data-i18n="admin.roleTally">tally_operator — post counts</option>
               </select>
             </div>
             <div class="actions">
-              <button class="btn" type="submit">Grant role</button>
+              <button class="btn" type="submit" data-i18n="admin.grantSubmit">Grant role</button>
             </div>
             <div class="flash" id="flash-grant" role="status"></div>
           </form>
@@ -166,24 +170,24 @@
 
       <section class="panel" aria-labelledby="list-j-heading">
         <header>
-          <h2 id="list-j-heading">Jurisdictions</h2>
-          <button class="btn btn-secondary" type="button" id="btn-refresh-j">Refresh</button>
+          <h2 id="list-j-heading" data-i18n="admin.jurisdictions">Jurisdictions</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-j" data-i18n="common.refresh">Refresh</button>
         </header>
         <div class="table-wrap">
           <table class="data-table" id="table-jurisdictions">
-            <caption class="visually-hidden">Known jurisdictions</caption>
+            <caption class="visually-hidden" data-i18n="admin.knownJurisdictions">Known jurisdictions</caption>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Id</th>
-                <th>Officers</th>
-                <th>Metadata</th>
-                <th>Created</th>
+                <th data-i18n="admin.colName">Name</th>
+                <th data-i18n="admin.colId">Id</th>
+                <th data-i18n="admin.colOfficers">Officers</th>
+                <th data-i18n="admin.colMetadata">Metadata</th>
+                <th data-i18n="admin.colCreated">Created</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="empty">Loading…</td>
+                <td colspan="5" class="empty" data-i18n="common.loading">Loading…</td>
               </tr>
             </tbody>
           </table>
@@ -192,55 +196,57 @@
 
       <section class="panel" aria-labelledby="officers-heading">
         <header>
-          <h2 id="officers-heading">Jurisdiction officers</h2>
-          <button class="btn btn-secondary" type="button" id="btn-refresh-o">Refresh</button>
+          <h2 id="officers-heading" data-i18n="admin.officers">Jurisdiction officers</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-o" data-i18n="common.refresh">Refresh</button>
         </header>
-        <p class="field-hint">
+        <p class="field-hint" data-i18n="admin.officersHint">
           Grants live on the jurisdiction, not as a single global user role. Revoke removes that
           office for that jurisdiction only.
         </p>
         <div class="table-wrap">
           <table class="data-table" id="table-officers">
-            <caption class="visually-hidden">Officers granted per jurisdiction</caption>
+            <caption class="visually-hidden" data-i18n="admin.officersCaption">Officers granted per jurisdiction</caption>
             <thead>
               <tr>
-                <th>Jurisdiction</th>
-                <th>Handle</th>
-                <th>Role</th>
-                <th>Granted</th>
-                <th>Action</th>
+                <th data-i18n="admin.colJurisdiction">Jurisdiction</th>
+                <th data-i18n="admin.colHandle">Handle</th>
+                <th data-i18n="admin.colRole">Role</th>
+                <th data-i18n="admin.colGranted">Granted</th>
+                <th data-i18n="admin.colAction">Action</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="empty">Loading…</td>
+                <td colspan="5" class="empty" data-i18n="common.loading">Loading…</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="flash" id="flash-officers" role="status"></div>
       </section>
+
+      <section class="panel" aria-labelledby="users-heading">
         <header>
-          <h2 id="users-heading">Users</h2>
-          <button class="btn btn-secondary" type="button" id="btn-refresh-u">Refresh</button>
+          <h2 id="users-heading" data-i18n="admin.users">Users</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-u" data-i18n="common.refresh">Refresh</button>
         </header>
         <div class="table-wrap">
           <table class="data-table" id="table-users">
-            <caption class="visually-hidden">Node users and roles</caption>
+            <caption class="visually-hidden" data-i18n="admin.usersCaption">Node users and roles</caption>
             <thead>
               <tr>
-                <th>Handle</th>
-                <th>Global role</th>
-                <th>Jurisdiction offices</th>
-                <th>Methods</th>
-                <th>Active ETH</th>
-                <th>Person key</th>
-                <th>Id</th>
+                <th data-i18n="admin.colHandle">Handle</th>
+                <th data-i18n="admin.colGlobalRole">Global role</th>
+                <th data-i18n="admin.colOffices">Jurisdiction offices</th>
+                <th data-i18n="admin.colMethods">Methods</th>
+                <th data-i18n="admin.colActiveEth">Active ETH</th>
+                <th data-i18n="admin.colPersonKey">Person key</th>
+                <th data-i18n="admin.colId">Id</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="7" class="empty">Loading…</td>
+                <td colspan="7" class="empty" data-i18n="common.loading">Loading…</td>
               </tr>
             </tbody>
           </table>
@@ -249,20 +255,20 @@
 
       <section class="panel" aria-labelledby="addrs-heading">
         <header>
-          <h2 id="addrs-heading">Public host facts</h2>
+          <h2 id="addrs-heading" data-i18n="admin.hostFacts">Public host facts</h2>
         </header>
-        <p class="field-hint">These are not secrets. Private keys never belong in this console.</p>
+        <p class="field-hint" data-i18n="admin.hostFactsHint">These are not secrets. Private keys never belong in this console.</p>
         <div class="table-wrap">
           <table class="data-table" id="table-addresses">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Value</th>
+                <th data-i18n="admin.colName">Name</th>
+                <th data-i18n="admin.colValue">Value</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="2" class="empty">Waiting for host status…</td>
+                <td colspan="2" class="empty" data-i18n="admin.waitingHost">Waiting for host status…</td>
               </tr>
             </tbody>
           </table>
@@ -270,25 +276,26 @@
       </section>
 
       <section class="panel danger-none" aria-labelledby="danger-heading">
-        <h2 id="danger-heading">Danger zone</h2>
-        <p>
+        <h2 id="danger-heading" data-i18n="admin.danger">Danger zone</h2>
+        <p data-i18n="admin.dangerBody">
           There is none that takes fees. This software will not mint a token, charge a voter,
           skim ETH, or open a paid tier. Gas sponsorship is paid by the jurisdiction at cost.
         </p>
-        <p class="field-hint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
+        <p class="field-hint" data-i18n="admin.dangerHint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p class="footer-nfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+      <p class="footer-nfp" data-i18n="chrome.footerNfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
       <p class="footer-meta">
-        Product name Republic. No token. No ads.
-        <a href="/explorer">L2 explorer</a>
+        <span data-i18n="chrome.footerAdminMeta">Product name Republic. No token. No ads.</span>
+        <a href="/explorer" data-i18n="chrome.footerL2">L2 explorer</a>
         · AGPL-3.0-or-later
       </p>
     </footer>
-    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/i18n.js"></script>
+    <script type="module" src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
-    <script src="/admin.js" defer></script>
+    <script type="module" src="/admin.js"></script>
   </body>
 </html>

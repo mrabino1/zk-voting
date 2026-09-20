@@ -6,6 +6,7 @@
 
 import { loginPasskey, hasWebAuthn, webAuthnUnavailableMessage } from "./passkey-wallet.js";
 import { loginWeb3Wallet } from "./identity-methods.js";
+import { t, LOCALE_EVENT } from "./i18n.js";
 
 export const SESSION_EVENT = "republic:session";
 
@@ -34,7 +35,7 @@ export async function fetchJson(path, options = {}) {
     }
   }
   if (!res.ok) {
-    const err = new Error(data?.error || data?.message || res.statusText || "Request failed");
+    const err = new Error(data?.error || data?.message || res.statusText || t("common.requestFailed"));
     err.status = res.status;
     err.data = data;
     throw err;
@@ -79,11 +80,11 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function panelOptions(root) {
+  const headingKey = root.getAttribute("data-heading-key");
+  const ledeKey = root.getAttribute("data-lede-key");
   return {
-    heading: root.getAttribute("data-heading") || "Sign in",
-    lede:
-      root.getAttribute("data-lede") ||
-      "Returning users sign in with a passkey on this device or an Ethereum wallet already bound to their person.",
+    heading: headingKey ? t(headingKey) : root.getAttribute("data-heading") || t("signin.heading"),
+    lede: ledeKey ? t(ledeKey) : root.getAttribute("data-lede") || t("signin.ledeDefault"),
     devHandle: root.getAttribute("data-dev-handle") || "",
     devRole: root.getAttribute("data-dev-role") || "",
     compact: root.getAttribute("data-compact") === "true",
@@ -141,7 +142,7 @@ function renderSignedIn(state) {
       el("button", {
         class: "btn btn-secondary",
         type: "button",
-        text: "Sign out",
+        text: t("signin.signOut"),
         onClick: async (event) => {
           const btn = event.currentTarget;
           btn.disabled = true;
@@ -177,7 +178,7 @@ function renderForm(state, opts, statusEl) {
         "data-signin": "passkey",
         disabled: busy || !webauthn,
         "aria-busy": busy && state.busy === "passkey" ? "true" : "false",
-        text: state.busy === "passkey" ? "Waiting for passkey…" : "Sign in with passkey",
+        text: state.busy === "passkey" ? t("signin.waitingPasskey") : t("signin.passkey"),
         onClick: () => runAction(state, statusEl, "passkey", () => signInWithPasskey(state.handle)),
       }),
       el("button", {
@@ -186,19 +187,19 @@ function renderForm(state, opts, statusEl) {
         "data-signin": "wallet",
         disabled: busy,
         "aria-busy": busy && state.busy === "wallet" ? "true" : "false",
-        text: state.busy === "wallet" ? "Waiting for wallet…" : "Sign in with Ethereum",
+        text: state.busy === "wallet" ? t("signin.waitingWallet") : t("signin.ethereum"),
         onClick: () => runAction(state, statusEl, "wallet", () => signInWithEthereum()),
       })
     ),
     el(
       "details",
       { class: "sign-in-handle" },
-      el("summary", { text: "Use a handle (optional)" }),
+      el("summary", { text: t("signin.handleOptional") }),
       el("p", {
         class: "field-hint",
-        text: "Username-less passkey login is the default (resident / discoverable credential). Enter a handle only if your authenticator cannot discover the passkey on its own.",
+        text: t("signin.handleHelp"),
       }),
-      el("label", { class: "field-label", for: "signin-handle", text: "Handle" }),
+      el("label", { class: "field-label", for: "signin-handle", text: t("signin.handle") }),
       el("input", {
         id: "signin-handle",
         name: "handle",
@@ -214,10 +215,10 @@ function renderForm(state, opts, statusEl) {
       ? el(
           "details",
           { class: "sign-in-dev" },
-          el("summary", { text: "Dev sign-in (local / tests only)" }),
+          el("summary", { text: t("signin.devSummary") }),
           el("p", {
             class: "field-hint",
-            text: "ALLOW_DEV_LOGIN is on for this host. Do not use this as the primary path on a live desk.",
+            text: t("signin.devHelp"),
           }),
           el(
             "form",
@@ -234,7 +235,7 @@ function renderForm(state, opts, statusEl) {
             el(
               "div",
               { class: "field" },
-              el("label", { class: "field-label", for: "signin-dev-handle", text: "Handle" }),
+              el("label", { class: "field-label", for: "signin-dev-handle", text: t("signin.handle") }),
               el("input", {
                 id: "signin-dev-handle",
                 name: "handle",
@@ -245,7 +246,7 @@ function renderForm(state, opts, statusEl) {
             el(
               "div",
               { class: "actions" },
-              el("button", { class: "btn btn-secondary", type: "submit", text: "Dev sign-in" })
+              el("button", { class: "btn btn-secondary", type: "submit", text: t("signin.devSubmit") })
             )
           )
         )
@@ -260,14 +261,14 @@ async function runAction(state, statusEl, kind, fn) {
   state.repaint();
   try {
     const result = await fn();
-    const who = result?.user?.handle || "signed in";
-    setStatus(statusEl, "ok", `Signed in as ${who}.`);
+    const who = result?.user?.handle || t("signin.signIn");
+    setStatus(statusEl, "ok", t("signin.signedInAs", { handle: who }));
   } catch (err) {
     const cancelled = /cancel|not allowed|abort/i.test(err.message || "");
     setStatus(
       statusEl,
       "err",
-      cancelled ? "Sign-in was cancelled." : err.message || "Sign-in failed."
+      cancelled ? t("signin.cancelled") : err.message || t("signin.failed")
     );
   } finally {
     state.busy = false;
@@ -280,7 +281,7 @@ let currentPanel = null;
 export function mountSignInPanel(root, extra = {}) {
   if (!root) return null;
   if (currentPanel?.destroy) currentPanel.destroy();
-  const opts = { ...panelOptions(root), ...extra };
+  const optsState = { ...panelOptions(root), ...extra };
   const state = {
     user: extra.user || null,
     identity: extra.identity || null,
@@ -294,17 +295,20 @@ export function mountSignInPanel(root, extra = {}) {
   const headingId = root.id ? `${root.id}-heading` : "signin-heading";
   const statusEl = el("div", { class: "flash", role: "status" });
   const body = el("div", { class: "sign-in-body" });
+  const headingEl = el("h2", { id: headingId, text: optsState.heading });
   const section = el(
     "section",
     { class: "panel sign-in-panel", "aria-labelledby": headingId },
-    el("header", {}, el("h2", { id: headingId, text: opts.heading })),
+    el("header", {}, headingEl),
     body,
     statusEl
   );
   root.replaceChildren(section);
 
   function paint() {
-    body.replaceChildren(state.user ? renderSignedIn(state) : renderForm(state, opts, statusEl));
+    Object.assign(optsState, panelOptions(root), extra);
+    headingEl.textContent = optsState.heading;
+    body.replaceChildren(state.user ? renderSignedIn(state) : renderForm(state, optsState, statusEl));
   }
   state.repaint = paint;
 
@@ -321,10 +325,21 @@ export function mountSignInPanel(root, extra = {}) {
   const onSession = () => {
     state.reload();
   };
+  const onLocale = () => {
+    paint();
+  };
   window.addEventListener(SESSION_EVENT, onSession);
+  window.addEventListener(LOCALE_EVENT, onLocale);
 
   state.reload();
-  currentPanel = { state, reload: state.reload, destroy: () => window.removeEventListener(SESSION_EVENT, onSession) };
+  currentPanel = {
+    state,
+    reload: state.reload,
+    destroy: () => {
+      window.removeEventListener(SESSION_EVENT, onSession);
+      window.removeEventListener(LOCALE_EVENT, onLocale);
+    },
+  };
   return currentPanel;
 }
 
@@ -340,7 +355,7 @@ export function mountSessionChrome(root) {
         el("button", {
           class: "btn btn-secondary session-chrome-btn",
           type: "button",
-          text: "Sign out",
+          text: t("signin.signOut"),
           onClick: async (event) => {
             event.currentTarget.disabled = true;
             try {
@@ -359,7 +374,7 @@ export function mountSessionChrome(root) {
       el("a", {
         class: "btn btn-secondary session-chrome-btn",
         href,
-        text: "Sign in",
+        text: t("signin.signIn"),
       })
     );
   }
@@ -372,6 +387,9 @@ export function mountSessionChrome(root) {
   }
 
   window.addEventListener(SESSION_EVENT, reload);
+  window.addEventListener(LOCALE_EVENT, () => {
+    paint();
+  });
   reload();
   return { reload };
 }

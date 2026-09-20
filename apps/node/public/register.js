@@ -5,6 +5,7 @@
 
 import { bindSmartCard, bindWeb3Wallet, registerEthAccount, setActiveEthAddress } from "./identity-methods.js";
 import { mountSignInPanel } from "./signin.js";
+import { t } from "./i18n.js";
 
 export async function renderRegister(main, ctx) {
   const {
@@ -45,8 +46,8 @@ export async function renderRegister(main, ctx) {
   const signInHost = h("div", {
     id: "sign-in-root",
     dataset: {
-      heading: "Already registered? Sign in",
-      lede: "Use the passkey on this device or a bound Ethereum wallet. Creating a passkey below is for first-time registration.",
+      headingKey: "register.heading",
+      ledeKey: "register.ledePanel",
     },
   });
   const root = h("div", { class: "register-page" });
@@ -59,20 +60,20 @@ export async function renderRegister(main, ctx) {
       h(
         "div",
         { class: "page-head" },
-        h("p", { class: "kicker", text: "Intake" }),
-        h("h1", { text: "Identify yourself" }),
+        h("p", { class: "kicker", text: t("register.kicker") }),
+        h("h1", { text: t("register.title") }),
         h(
           "p",
           { class: "lede" },
-          "A person is unique. You may verify a passkey, a Web3 wallet, and a smart-card digital ID. Several Ethereum addresses can be internally verified; only one is active. The public roll still stores an identity commitment, never your name and never the active address as the Merkle leaf."
+          t("register.lede")
         )
       ),
       h(
         "ol",
         { class: "steps" },
-        h("li", {}, h("strong", { text: "Prove who you are" }), " with a passkey, Web3 wallet, or smart-card digital ID."),
-        h("li", {}, h("strong", { text: "Keep one active Ethereum address" }), " — more can be verified internally."),
-        h("li", {}, h("strong", { text: "Submit a commitment" }), " to an election roll — never a name, never the wallet as the leaf.")
+        h("li", {}, h("strong", { text: t("register.stepProve") }), t("register.stepProveRest")),
+        h("li", {}, h("strong", { text: t("register.stepActive") }), t("register.stepActiveRest")),
+        h("li", {}, h("strong", { text: t("register.stepCommit") }), t("register.stepCommitRest"))
       ),
       !wallet.hasWebAuthn()
         ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: wallet.webAuthnUnavailableMessage() }))
@@ -81,7 +82,7 @@ export async function renderRegister(main, ctx) {
       state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,
       h(
         "div",
-        { class: "method-tabs", role: "tablist", "aria-label": "How you identify" },
+        { class: "method-tabs", role: "tablist", "aria-label": t("register.identifyHow") },
         ...["passkey", "web3", "smart_card"].map((tab) =>
           h(
             "button",
@@ -89,7 +90,7 @@ export async function renderRegister(main, ctx) {
               type: "button",
               role: "tab",
               "aria-selected": state.methodTab === tab ? "true" : "false",
-              text: tab === "passkey" ? "Passkey" : tab === "web3" ? "Web3 wallet" : "Smart card ID",
+              text: tab === "passkey" ? t("home.passkey") : tab === "web3" ? t("register.web3Title") : t("register.tabCard"),
               onClick: () => {
                 state.methodTab = tab;
                 paint();
@@ -102,11 +103,11 @@ export async function renderRegister(main, ctx) {
         ? h(
             "section",
             { class: "panel", "aria-labelledby": "web3-heading" },
-            h("h2", { id: "web3-heading", text: "Web3 wallet" }),
+            h("h2", { id: "web3-heading", text: t("register.web3Title") }),
             h(
               "p",
               {
-                text: "Sign a Republic binding message. The address is uniquely yours. It can be verified internally even if another address is the active one.",
+                text: t("register.web3Body"),
               }
             ),
             h(
@@ -121,7 +122,7 @@ export async function renderRegister(main, ctx) {
                     class: "btn",
                     type: "submit",
                     disabled: Boolean(state.busy),
-                    text: state.busy ? "Waiting for wallet…" : "Connect and sign",
+                    text: state.busy ? t("signin.waitingWallet") : t("register.connectSign"),
                   }
                 )
               )
@@ -132,11 +133,11 @@ export async function renderRegister(main, ctx) {
         ? h(
             "section",
             { class: "panel", "aria-labelledby": "card-heading" },
-            h("h2", { id: "card-heading", text: "Smart card digital ID" }),
+            h("h2", { id: "card-heading", text: t("register.cardTitle") }),
             h(
               "p",
               {
-                text: "PIV, CAC, or national eID. A clerk can also attest a card at the desk. This Node demo accepts a certificate fingerprint (kiosk / mock path).",
+                text: t("register.cardBody"),
               }
             ),
             h(
@@ -145,13 +146,13 @@ export async function renderRegister(main, ctx) {
               h(
                 "label",
                 { class: "field", for: "card-fp" },
-                "Certificate fingerprint or PEM",
+                t("register.fingerprint"),
                 h("input", {
                   id: "card-fp",
                   name: "fingerprint",
                   type: "text",
                   spellcheck: "false",
-                  placeholder: "0x… or paste PEM",
+                  placeholder: t("register.fingerprintPlaceholder"),
                   required: true,
                 })
               ),
@@ -164,7 +165,7 @@ export async function renderRegister(main, ctx) {
                     class: "btn",
                     type: "submit",
                     disabled: Boolean(state.busy),
-                    text: "Bind smart card",
+                    text: t("register.bindCard"),
                   }
                 )
               )
@@ -175,15 +176,15 @@ export async function renderRegister(main, ctx) {
         ? h(
             "section",
             { class: "panel", "aria-labelledby": "passkey-heading" },
-            h("h2", { id: "passkey-heading", text: "1. Device passkey" }),
+            h("h2", { id: "passkey-heading", text: t("register.passkeyTitle") }),
             h(
               "p",
               {
                 text: rec
                   ? rec.staleWrap
-                    ? "This browser still has a v1 passkey wrap. v1 derived the vote identity from the account seed (weaker than the spec). Reset it, then create a new passkey so account and identity use separate PRF domains."
-                    : "A passkey wallet is already stored on this browser profile. Creating another one replaces the wrapped seed on this device."
-                  : "Use the platform authenticator (Touch ID, Windows Hello, a hardware key). You will be asked to verify it is you. The account key and the vote identity are derived under separate PRF domains.",
+                    ? t("register.passkeyStale")
+                    : t("register.passkeyExisting")
+                  : t("register.passkeyHelp"),
               }
             ),
             h(
@@ -195,10 +196,10 @@ export async function renderRegister(main, ctx) {
               h(
                 "label",
                 { class: "field", for: "display-name" },
-                "Name for this authenticator (not placed on chain)",
+                t("register.authenticatorName"),
                 h("span", {
                   class: "field-hint",
-                  text: "Shown only to your device. The roll stores a commitment, not this label.",
+                  text: t("register.authenticatorHint"),
                 }),
                 h("input", {
                   id: "display-name",
@@ -206,7 +207,7 @@ export async function renderRegister(main, ctx) {
                   type: "text",
                   maxlength: "64",
                   autocomplete: "username webauthn",
-                  value: rec?.displayName || "voter",
+                  value: rec?.displayName || t("register.displayNameDefault"),
                 })
               ),
               h(
@@ -219,7 +220,7 @@ export async function renderRegister(main, ctx) {
                     type: "submit",
                     disabled: Boolean(state.busy || !wallet.hasWebAuthn()),
                     "aria-busy": state.busy ? "true" : "false",
-                    text: state.busy ? "Waiting for authenticator…" : rec ? "Replace passkey on this device" : "Create passkey",
+                    text: state.busy ? t("register.waitingAuth") : rec ? t("register.replacePasskey") : t("register.createPasskey"),
                   }
                 )
               )
@@ -229,16 +230,16 @@ export async function renderRegister(main, ctx) {
       h(
         "section",
         { class: "panel", "aria-labelledby": "commitment-heading" },
-        h("h2", { id: "commitment-heading", text: "2. Identity commitment" }),
+        h("h2", { id: "commitment-heading", text: t("register.commitmentTitle") }),
         rec
           ? [
               h(
                 "p",
                 {
-                  text: "This hex is what a registrar inserts into the election Merkle tree. It is not your wallet address and it is not a ballot.",
+                  text: t("register.commitmentHelp"),
                 }
               ),
-              h("p", { class: "field-label", text: "Identity commitment" }),
+              h("p", { class: "field-label", text: t("register.identityCommitment") }),
               h("div", { class: "commitment", id: "commitment-hex", text: rec.identityCommitment }),
               h(
                 "div",
@@ -248,12 +249,12 @@ export async function renderRegister(main, ctx) {
                   {
                     class: "btn btn-secondary",
                     type: "button",
-                    onClick: () => copyText(rec.identityCommitment, "Identity commitment copied."),
-                    text: "Copy commitment",
+                    onClick: () => copyText(rec.identityCommitment, t("register.copiedCommitment")),
+                    text: t("register.copyCommitment"),
                   }
                 )
               ),
-              h("p", { class: "field-label", text: "Republic local address" }),
+              h("p", { class: "field-label", text: t("register.localAddress") }),
               h("div", { class: "hex", text: `${rec.address}  ·  ${rec.addressScheme}` }),
               h("p", { class: "field-hint", text: rec.productionAddressNote }),
               rec.staleWrap
@@ -261,31 +262,34 @@ export async function renderRegister(main, ctx) {
                     "p",
                     {
                       class: "notice notice-warn",
-                      text: rec.migrationNote || "This wrap is from an older demo. Reset the device wallet and create a new passkey.",
+                      text: rec.migrationNote || t("register.staleDemoWrap"),
                     }
                   )
                 : rec.prfSupported
-                ? h("p", { text: "PRF wrap: account material uses salt republic:account:v1; the ZK trapdoor uses salt republic:identity:v1. They are not the same bytes." })
+                ? h("p", { text: t("register.prfWrap") })
                 : h(
                     "p",
                     {
                       class: "notice notice-warn",
-                      text: rec.fallbackNote || "PRF was not available. Fallback wrap is weaker than production PRF. The trapdoor still uses a separate HKDF domain from the account seed.",
+                      text: rec.fallbackNote || t("register.prfFallback"),
                     }
                   ),
             ]
-          : h("p", { text: "Create a passkey to derive the commitment. The trapdoor never appears on this screen." })
+          : h("p", { text: t("register.createFirst") })
       ),
       h(
         "section",
         { class: "panel", "aria-labelledby": "active-eth-heading" },
-        h("h2", { id: "active-eth-heading", text: "Active Ethereum address" }),
+        h("h2", { id: "active-eth-heading", text: t("register.activeEthTitle") }),
         h(
           "p",
           {
             text: state.identity?.activeEthAddress
-              ? `Active: ${state.identity.activeEthAddress}. ${state.identity.verifiedEthAddressCount || 0} address(es) verified internally.`
-              : "No active Ethereum address yet. Bind a wallet or register the passkey-derived address. Only one can be active.",
+              ? t("register.activeSummary", {
+                  address: state.identity.activeEthAddress,
+                  count: state.identity.verifiedEthAddressCount || 0,
+                })
+              : t("register.noActive"),
           }
         ),
         state.identity?.ethAccounts?.length
@@ -296,7 +300,7 @@ export async function renderRegister(main, ctx) {
                 h(
                   "li",
                   {},
-                  h("span", { class: "lbl", text: a.active ? "Active" : "Verified" }),
+                  h("span", { class: "lbl", text: a.active ? t("register.activeLabel") : t("register.verifiedLabel") }),
                   h("span", { class: "hex", text: `${a.address} · ${a.source}` }),
                   a.active
                     ? null
@@ -306,7 +310,7 @@ export async function renderRegister(main, ctx) {
                           class: "btn btn-secondary",
                           type: "button",
                           onClick: () => onSetActive(a.address),
-                          text: "Make active",
+                          text: t("register.makeActive"),
                         }
                       )
                 )
@@ -317,11 +321,11 @@ export async function renderRegister(main, ctx) {
           ? h(
               "form",
               { class: "stack", onSubmit: onRegisterLocalAddress },
-              h("p", { class: "field-hint", text: `Passkey local address on this device: ${rec.address}` }),
+              h("p", { class: "field-hint", text: t("register.passkeyLocal", { address: rec.address }) }),
               h(
                 "div",
                 { class: "toolbar" },
-                h("button", { class: "btn btn-secondary", type: "submit", text: "Verify this device address" })
+                h("button", { class: "btn btn-secondary", type: "submit", text: t("register.verifyDevice") })
               )
             )
           : null,
@@ -330,7 +334,7 @@ export async function renderRegister(main, ctx) {
               "p",
               {
                 class: "field-hint",
-                text: `Verified methods: ${state.identity.authMethods.map((m) => m.type).join(", ")}.`,
+                text: t("register.verifiedMethods", { methods: state.identity.authMethods.map((m) => m.type).join(", ") }),
               }
             )
           : null
@@ -338,15 +342,15 @@ export async function renderRegister(main, ctx) {
       h(
         "section",
         { class: "panel", "aria-labelledby": "roll-heading" },
-        h("h2", { id: "roll-heading", text: "3. Submit to an election roll" }),
+        h("h2", { id: "roll-heading", text: t("register.rollTitle") }),
         h(
           "p",
           {
-            text: "POST /api/elections/:id/register after the passkey exists. The Node (or a clerk) posts the commitment, not your name.",
+            text: t("register.rollHelp"),
           }
         ),
         source === "sample"
-          ? h("p", { class: "field-hint", text: "Election list is the sample calendar until the Node API responds." })
+          ? h("p", { class: "field-hint", text: t("register.sampleList") })
           : null,
         h(
           "form",
@@ -354,7 +358,7 @@ export async function renderRegister(main, ctx) {
           h(
             "label",
             { class: "field", for: "election-select" },
-            "Election",
+            t("register.election"),
             h(
               "select",
               {
@@ -369,7 +373,7 @@ export async function renderRegister(main, ctx) {
                 const st = electionStateInfo(election.state);
                 const opt = h("option", {
                   value: election.id,
-                  text: `${election.title} — ${st.label} — cutoff ${formatTime(election.cutoffTime)}`,
+                  text: t("register.electionOption", { title: election.title, state: st.label, cutoff: formatTime(election.cutoffTime) }),
                 });
                 if (election.id === state.selected) opt.selected = true;
                 if (election.state > 2) opt.disabled = true;
@@ -384,7 +388,7 @@ export async function renderRegister(main, ctx) {
             h(
               "span",
               {
-                text: "I am registering for this election, I understand the clerk may still require documents, and I know this screen will never show a seed phrase or my trapdoor.",
+                text: t("register.swear"),
               }
             )
           ),
@@ -397,7 +401,7 @@ export async function renderRegister(main, ctx) {
                 class: "btn",
                 type: "submit",
                 disabled: Boolean(state.busy || !rec),
-                text: "Submit registration (passkey + relay)",
+                text: t("register.submit"),
               }
             )
           )
@@ -407,19 +411,19 @@ export async function renderRegister(main, ctx) {
         ? h(
             "section",
             {},
-            h("h2", { text: "Node account" }),
-            h("p", { text: me.status ? `Status from /api/me: ${me.status}` : `Signed in as ${me.user.handle || me.user.role || "voter"}.` })
+            h("h2", { text: t("register.nodeAccount") }),
+            h("p", { text: me.status ? t("register.statusFromMe", { status: me.status }) : t("signin.signedInAs", { handle: me.user.handle || me.user.role || t("register.displayNameDefault") }) })
           )
         : null,
       rec
         ? h(
             "section",
             {},
-            h("h2", { text: "This device" }),
+            h("h2", { text: t("register.thisDevice") }),
             h(
               "p",
               {
-                text: "Resetting removes the wrapped seed from IndexedDB (wallet record v2). It cannot print the seed because the seed is never kept in plaintext. A new passkey is required afterwards. v1 wraps cannot be migrated; reset is the demo upgrade path.",
+                text: t("register.resetHelp"),
               }
             ),
             h(
@@ -428,7 +432,7 @@ export async function renderRegister(main, ctx) {
                 class: "btn btn-danger",
                 type: "button",
                 onClick: onReset,
-                text: "Reset this device’s passkey wallet",
+                text: t("register.resetWallet"),
               }
             )
           )
@@ -444,7 +448,7 @@ export async function renderRegister(main, ctx) {
       state.error = "";
       paint();
     } catch {
-      state.error = "Could not copy. Select the hex and copy it manually.";
+      state.error = t("register.copyFail");
       paint();
     }
   }
@@ -473,10 +477,10 @@ export async function renderRegister(main, ctx) {
     try {
       const result = await bindWeb3Wallet(api);
       state.identity = result.identity;
-      state.info = "Web3 wallet bound to this person. It is verified internally. If it is your first address it is now active.";
-      announce("Web3 wallet bound.");
+      state.info = t("register.web3Bound");
+      announce(t("register.web3BoundAnnounce"));
     } catch (err) {
-      state.error = err.message || "Web3 bind failed.";
+      state.error = err.message || t("register.web3BindFail");
       announce(state.error);
     } finally {
       state.busy = false;
@@ -497,10 +501,10 @@ export async function renderRegister(main, ctx) {
     try {
       const result = await bindSmartCard(api, looksPem ? { certificate: raw } : { fingerprint: raw });
       state.identity = result.identity;
-      state.info = "Smart-card digital ID bound to this person.";
-      announce("Smart card bound.");
+      state.info = t("register.cardBound");
+      announce(t("register.cardBoundAnnounce"));
     } catch (err) {
-      state.error = err.message || "Smart-card bind failed.";
+      state.error = err.message || t("register.cardFail");
       announce(state.error);
     } finally {
       state.busy = false;
@@ -516,9 +520,9 @@ export async function renderRegister(main, ctx) {
     try {
       const result = await registerEthAccount(api, { address: state.record.address, source: "passkey" });
       state.identity = result.identity;
-      state.info = "Device address verified internally.";
+      state.info = t("register.deviceVerified");
     } catch (err) {
-      state.error = err.message || "Could not verify device address. Sign in first.";
+      state.error = err.message || t("register.deviceVerifyFail");
     } finally {
       state.busy = false;
       paint();
@@ -531,9 +535,9 @@ export async function renderRegister(main, ctx) {
     try {
       const result = await setActiveEthAddress(api, address);
       state.identity = result.identity;
-      state.info = `Active Ethereum address is now ${result.activeEthAddress}.`;
+      state.info = t("register.activeNow", { address: result.activeEthAddress });
     } catch (err) {
-      state.error = err.message || "Could not set active address.";
+      state.error = err.message || t("register.activeFail");
     } finally {
       state.busy = false;
       paint();
@@ -543,12 +547,12 @@ export async function renderRegister(main, ctx) {
   async function onCreatePasskey(event) {
     event.preventDefault();
     if (state.busy) return;
-    const displayName = event.target.displayName?.value?.trim() || "voter";
+    const displayName = event.target.displayName?.value?.trim() || t("register.displayNameDefault");
     state.busy = true;
     state.error = "";
     state.info = "";
     paint();
-    announce("Waiting for the authenticator.");
+    announce(t("register.waitingAuthenticator"));
     try {
       const election = elections.find((e) => e.id === state.selected);
       const record = await wallet.registerPasskey({
@@ -559,13 +563,13 @@ export async function renderRegister(main, ctx) {
       state.record = record;
       await refreshIdentity();
       if (record.finishError) {
-        state.info = "Passkey created on this device. The Node did not finish the session: " + record.finishError;
+        state.info = t("register.passkeyCreatedSession", { error: record.finishError });
       } else {
-        state.info = "Passkey created. Identity commitment is ready. The trapdoor is not displayed.";
+        state.info = t("register.passkeyCreated");
       }
-      announce("Passkey created. Commitment ready.");
+      announce(t("register.passkeyCreatedShort"));
     } catch (err) {
-      state.error = err.message || "Passkey creation failed.";
+      state.error = err.message || t("register.passkeyFail");
       announce(state.error);
     } finally {
       state.busy = false;
@@ -577,13 +581,13 @@ export async function renderRegister(main, ctx) {
     event.preventDefault();
     if (state.busy) return;
     if (!state.record) {
-      state.error = "Create a passkey before submitting to the roll.";
+      state.error = t("register.needPasskey");
       paint();
       return;
     }
     const electionId = event.target.electionId?.value || state.selected;
     if (!electionId) {
-      state.error = "Select an election.";
+      state.error = t("register.selectElection");
       paint();
       return;
     }
@@ -591,7 +595,7 @@ export async function renderRegister(main, ctx) {
     state.error = "";
     state.info = "";
     paint();
-    announce("Confirm the passkey to authorize registration.");
+    announce(t("register.confirmRegister"));
     try {
       const auth = await wallet.authorizeBallot({ electionId, ballotBytes: null });
       const body = {
@@ -617,25 +621,25 @@ export async function renderRegister(main, ctx) {
         status = res?.status || res?.state || "registered";
         state.info =
           res?.message ||
-          `Registration accepted by the Node for election ${electionId}. Commitment ${auth.identityCommitment.slice(0, 12)}… was relayed.`;
+          t("register.accepted", { id: electionId, commitment: auth.identityCommitment.slice(0, 12) });
       } catch (err) {
         if (source === "sample" && err.status) {
           status = "pending";
-          state.info = `Passkey authorized. The Node has no live roll for this sample election (${err.message}). A local receipt was stored; the trapdoor is not shown.`;
+          state.info = t("register.sampleAuthorized", { error: err.message });
         } else if (err.status) {
           throw err;
         } else {
           status = "pending";
-          state.info = `Passkey authorized locally. The Node at /api/elections/${electionId}/register did not respond, so this device stored a local receipt only.`;
+          state.info = t("register.offlineAuthorized", { id: electionId });
         }
       }
       recordRegistration(electionId, { identityCommitment: auth.identityCommitment, status });
-      announce("Registration submitted.");
+      announce(t("register.submitted"));
     } catch (err) {
       state.error =
         err.status === 401
-          ? "The Node needs a session cookie. Create the passkey again so /api/auth/passkey/register/finish can run, then submit to the roll."
-          : err.message || "Registration failed.";
+          ? t("register.needSession")
+          : err.message || t("register.failed");
       announce(state.error);
     } finally {
       state.busy = false;
@@ -644,13 +648,13 @@ export async function renderRegister(main, ctx) {
   }
 
   async function onReset() {
-    if (!window.confirm("Remove the wrapped passkey wallet from this browser? This cannot show a seed phrase because none exists.")) {
+    if (!window.confirm(t("register.resetConfirm"))) {
       return;
     }
     await wallet.resetWallet();
     state.record = null;
-    state.info = "Device wallet cleared.";
-    announce("Device wallet cleared.");
+    state.info = t("register.walletCleared");
+    announce(t("register.walletCleared"));
     paint();
   }
 

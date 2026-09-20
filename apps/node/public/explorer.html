@@ -5,20 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#13294b" />
-    <title>Republic L2 explorer</title>
+    <title data-i18n="chrome.titleExplorer">Republic L2 explorer</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/office.css" />
     <link rel="stylesheet" href="/explorer.css" />
+    <script src="/lang-init.js"></script>
   </head>
   <body class="explorer">
     <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
-    <a class="skip-link" href="#main">Skip to main content</a>
-    <div class="nfp-banner" role="note">
+    <a class="skip-link" href="#main" data-i18n="chrome.skip">Skip to main content</a>
+    <div class="nfp-banner" role="note" data-i18n="chrome.nfpBannerExplorer">
       NOT FOR PROFIT — civic public good. Not a commercial product. No token. No ads.
     </div>
     <header class="site-header">
       <div class="header-inner">
-        <a class="brand" href="/" aria-label="Republic home">
+        <a class="brand" href="/" data-i18n-aria-label="chrome.brandHome" aria-label="Republic home">
           <span class="brand-mark" aria-hidden="true">
             <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
               <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
@@ -34,46 +35,47 @@
           </span>
           <span class="brand-text">
             <span class="brand-name">Republic</span>
-            <span class="brand-sub">L2 block explorer</span>
+            <span class="brand-sub" data-i18n="chrome.brandSubExplorer">L2 block explorer</span>
           </span>
         </a>
-        <nav class="nav-main" aria-label="Primary">
+        <nav class="nav-main" data-i18n-aria-label="chrome.navPrimary" aria-label="Primary">
           <ul>
-            <li><a href="/">Elections</a></li>
-            <li><a href="/register">Register</a></li>
-            <li><a href="/back-office">Back office</a></li>
-            <li><a href="/explorer" aria-current="page">Explorer</a></li>
-            <li><a href="/admin">Admin</a></li>
+            <li><a href="/" data-i18n="chrome.navElections">Elections</a></li>
+            <li><a href="/register" data-i18n="chrome.navRegister">Register</a></li>
+            <li><a href="/back-office" data-i18n="chrome.navBackOffice">Back office</a></li>
+            <li><a href="/explorer" aria-current="page" data-i18n="chrome.navExplorer">Explorer</a></li>
+            <li><a href="/admin" data-i18n="chrome.navAdmin">Admin</a></li>
           </ul>
         </nav>
-        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
-        <span class="office-badge">Not for profit</span>
+        <div id="lang-switcher" class="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" data-i18n-aria-label="chrome.session" aria-label="Session"></div>
+        <span class="office-badge" data-i18n="chrome.officeBadge">Not for profit</span>
       </div>
     </header>
 
     <main id="main" class="site-main" tabindex="-1">
       <header class="page-head">
-        <p class="kicker">Republic L2 · chain 27427</p>
-        <h1>Block explorer</h1>
-        <p class="lede">
+        <p class="kicker" data-i18n="explorer.kicker">Republic L2 · chain 27427</p>
+        <h1 data-i18n="explorer.title">Block explorer</h1>
+        <p class="lede" data-i18n="explorer.lede">
           Public record of every block: registrations (commitments only), accepted ballots
           (nullifier + ballot hash — never the choice), disqualifications, tallies, and
-          rollup batches.         Vote proofs appear only after the hour that contained them closes,
+          rollup batches. Vote proofs appear only after the hour that contained them closes,
           so a person leaving a voting office cannot be matched to a live jurisdiction tick.
           The snapshot below is the last closed UTC hour: disclosed ballot count, when that
           hour ended, and the countdown to the next update. Choice is never shown here.
           No ads. No tokens.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
-          <p class="disclosure-note">
+          <p class="disclosure-note" data-i18n="disclosure.noteExplorer">
             Vote proofs and turnout counts are published once an hour, after that hour closes.
           </p>
         </aside>
       </header>
 
-      <section class="explorer-search" aria-label="Search the ledger">
+      <section class="explorer-search" data-i18n-aria-label="explorer.searchLabel" aria-label="Search the ledger">
         <form id="form-search">
-          <label class="field-label" for="q">Search by block number, transaction hash, or nullifier</label>
+          <label class="field-label" for="q" data-i18n="explorer.searchField">Search by block number, transaction hash, or nullifier</label>
           <div class="search-row">
             <input
               id="q"
@@ -81,31 +83,33 @@
               type="search"
               enterkeyhint="search"
               spellcheck="false"
+              data-i18n-placeholder="explorer.searchPlaceholder"
               placeholder="12 · 0xabc… · nullifier"
               autocomplete="off"
             />
-            <button class="btn" type="submit">Search</button>
-            <button class="btn btn-secondary" type="button" id="btn-latest">Latest blocks</button>
+            <button class="btn" type="submit" data-i18n="common.search">Search</button>
+            <button class="btn btn-secondary" type="button" id="btn-latest" data-i18n="explorer.latest">Latest blocks</button>
           </div>
         </form>
-        <p class="field-hint">Press <kbd>/</kbd> to focus search. Vote transactions never include choice plaintext.</p>
+        <p class="field-hint" data-i18n-html="explorer.searchHint">Press <kbd>/</kbd> to focus search. Vote transactions never include choice plaintext.</p>
         <div class="flash" id="flash-search" role="status"></div>
       </section>
 
-      <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+      <nav class="crumbs" id="crumbs" data-i18n-aria-label="explorer.breadcrumb" aria-label="Breadcrumb"></nav>
       <div id="view" aria-live="polite"></div>
     </main>
 
     <footer class="site-footer">
-      <p class="footer-nfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+      <p class="footer-nfp" data-i18n="chrome.footerNfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
       <p class="footer-meta">
-        Republic L2 explorer. Ballot plaintext is not a field on this chain.
-        <a href="/elections">Election results</a>
+        <span data-i18n="chrome.footerExplorerMeta">Republic L2 explorer. Ballot plaintext is not a field on this chain.</span>
+        <a href="/elections" data-i18n="chrome.footerResults">Election results</a>
         · AGPL-3.0-or-later
       </p>
     </footer>
-    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/i18n.js"></script>
+    <script type="module" src="/disclosure-ui.js"></script>
     <script type="module" src="/signin.js"></script>
-    <script src="/explorer.js" defer></script>
+    <script type="module" src="/explorer.js"></script>
   </body>
 </html>
