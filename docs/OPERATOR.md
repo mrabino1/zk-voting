@@ -4,7 +4,7 @@
 
 How to host Republic / zk-voting: the Node process, Foundry contracts, Republic L2 (chainId **27427**), and the split between **`test/unstable`** and **`master`**.
 
-This software may be run **at cost** by a government, county clerk, union, cooperative, or volunteer. It must not be sold as SaaS, wrapped in a token, or used to skim voter or jurisdiction funds. The paymaster sponsors L2 gas; voters are not a revenue line.
+This software may be run **at cost** by a government, county clerk, union, cooperative, or volunteer. It must not be sold as SaaS, wrapped in a token, or used to skim voter or jurisdiction funds. The paymaster sponsors L2 gas; voters are not a revenue line. Dollar and GB ranges: [`/voting_cost_estimate.md`](../voting_cost_estimate.md).
 
 ---
 
