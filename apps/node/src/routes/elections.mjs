@@ -29,7 +29,7 @@ import { publicVoteRecord } from '../store.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
 import { DEMO_KEY_WARNING, publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
-import { computeTallyHash } from '../l1Certify.mjs';
+import { computeTallyHash, certifyArgsForElection } from '../l1Certify.mjs';
 import {
   dispatchOfficialOutcomeReports,
   resolveVoterForOutcomeSubscribe,
@@ -161,6 +161,18 @@ export function electionsRouter(deps) {
           throw new HttpError(err.status || 400, err.message);
         }
       }
+      const pinnedFactory = String(config?.electionFactoryAddress || '').trim();
+      const chainFactory = chainResult?.factoryAddress || null;
+      if (
+        chainFactory &&
+        pinnedFactory &&
+        chainFactory.toLowerCase() !== pinnedFactory.toLowerCase()
+      ) {
+        throw new HttpError(409, 'ElectionFactory is not the pinned shared factory', {
+          code: 'FACTORY_MISMATCH',
+        });
+      }
+      const factoryAddress = chainFactory || pinnedFactory || null;
       const election = await store.createElection({
         title,
         metadataURI: String(body.metadataURI || ''),
@@ -184,9 +196,9 @@ export function electionsRouter(deps) {
         createdBy: req.user.id,
         onChainElectionId: requestedOnChainId,
         onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
-        factoryAddress: chainResult?.factoryAddress ?? null,
+        factoryAddress,
         createTxHash: chainResult?.createTxHash ?? null,
-        chainId: chainResult?.chainId ?? null,
+        chainId: chainResult?.chainId ?? (factoryAddress ? config.chainId : null),
       });
       await explorer.append('election_created', {
         electionId: String(election.id),
@@ -813,7 +825,7 @@ export function electionsRouter(deps) {
       };
       if (l1 && typeof l1.certifyTally === 'function') {
         l1Certification = await l1.certifyTally({
-          electionId: tallied.id,
+          ...certifyArgsForElection(tallied, {}, config),
           counts: nums,
           totalBallots: tallied.acceptedBallots,
           resultHash: countsHash,
@@ -824,6 +836,11 @@ export function electionsRouter(deps) {
         if (l1Certification.posted || l1Certification.alreadyPosted) {
           await explorer.append('l1_certify', {
             electionId: String(tallied.id),
+            onChainElectionId: String(tallied.onChainElectionId),
+            certificationId: l1Certification.certificationId,
+            factory: l1Certification.factory,
+            jurisdictionId: l1Certification.jurisdictionId,
+            publicIdHash: l1Certification.publicIdHash,
             resultHash: l1Certification.resultHash,
             txHash: l1Certification.txHash,
             chainId: l1Certification.chainId,
@@ -856,6 +873,8 @@ export function electionsRouter(deps) {
       res.json({
         nfp: true,
         electionId: String(election.id),
+        onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
+        identity: certifyArgsForElection(election, {}, config).identity,
         tallied: Boolean(election.tally),
         countsHash: election.tally?.countsHash || null,
         l1Certification: election.tally?.l1 || null,
@@ -885,7 +904,7 @@ export function electionsRouter(deps) {
       }
       const counts = election.tally.counts;
       let l1Certification = await l1.certifyTally({
-        electionId: election.id,
+        ...certifyArgsForElection(election, {}, config),
         counts,
         totalBallots: election.acceptedBallots,
         resultHash: election.tally.countsHash || computeTallyHash(counts),
@@ -896,6 +915,11 @@ export function electionsRouter(deps) {
       if (l1Certification.posted || l1Certification.alreadyPosted) {
         await explorer.append('l1_certify', {
           electionId: String(election.id),
+          onChainElectionId: String(election.onChainElectionId),
+          certificationId: l1Certification.certificationId,
+          factory: l1Certification.factory,
+          jurisdictionId: l1Certification.jurisdictionId,
+          publicIdHash: l1Certification.publicIdHash,
           resultHash: l1Certification.resultHash,
           txHash: l1Certification.txHash,
           chainId: l1Certification.chainId,

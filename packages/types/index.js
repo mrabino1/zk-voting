@@ -157,12 +157,18 @@ const REASON_CODE_LABELS = Object.freeze({
  * `BallotInbox` use `onChainElectionId` (`uint256`).
  *
  * @typedef {Object} ElectionRecord
- * @property {string} id Canonical public id (UUID v4) used in `/vote/:id`
- *   and `GET /api/elections/:id`.
+ * @property {string} id Canonical public id (UUID v5 bound to factory +
+ *   on-chain id + jurisdiction; legacy records may be UUID v4) used in
+ *   `/vote/:id` and `GET /api/elections/:id`.
  * @property {string} shortCode Opaque url-safe alias (10 chars). `/v/:shortCode`
  *   and `/e/:shortCode` resolve to the same election.
  * @property {string} onChainElectionId Decimal string of the Solidity
  *   `uint256 electionId` assigned by `ElectionFactory` (`++electionCount`).
+ * @property {string|null} [factoryAddress] Shared ElectionFactory. L1
+ *   certification keys by this address plus `onChainElectionId` plus
+ *   `jurisdictionId`, never by the public UUID.
+ * @property {string|null} [certificationId] `keccak256(abi.encode(DOMAIN,
+ *   factory, electionId, jurisdictionId))`.
  * @property {string[]} [aliases] Legacy ids that still resolve (fixtures).
  */
 

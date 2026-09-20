@@ -228,8 +228,8 @@ export const FAQ_ENTRIES = [
     topic: "short-links",
     q: "Why do elections have UUIDs and short links?",
     a: [
-      "New elections mint a UUID v4 public id used in /vote/:id, plus a short code such as /v/nbrdge2k3m (and /e/… as an alias). The factory uint256 stays as onChainElectionId for the circuit. Results and info pages accept the same identifiers.",
-      "Bookmark the UUID or the short link. Both should keep working as deep links even when the marketing home and the registered desk are different pages.",
+      "New elections mint a UUID v5 public id bound to the shared ElectionFactory, the factory uint256, and the jurisdiction (plus a short code such as /v/nbrdge2k3m). A second body that copies that UUID does not share the L1 proof: L1TallyMirror keys by factory + on-chain id + jurisdiction, not by the UUID. Results and info pages accept UUID, short code, or on-chain id.",
+      "Bookmark the UUID or the short link. Both should keep working as deep links even when the marketing home and the registered desk are different pages. Outcome verification recomputes the scoped UUID; a copied id fails.",
     ],
   },
   {

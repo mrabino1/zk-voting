@@ -10,6 +10,7 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../src/server.mjs';
 import { outcomePhase, hexEq, verifyChainStatus } from '../src/outcomes.mjs';
 import { electionState } from '../src/electionState.mjs';
+import { mintScopedPublicId } from '../src/electionIds.mjs';
 
 const ZEBRA = 'ZEBRA-CANDIDATE-ALPHA';
 const NOW = 1_700_000_000;
@@ -144,6 +145,74 @@ describe('outcome phase helpers', () => {
     assert.equal(result.ok, false);
     assert.equal(result.checks.frozenEligibleRoot, false);
     assert.equal(result.checks.frozenDisqualificationRoot, true);
+  });
+
+  test('copied UUID from another jurisdiction fails publicIdMatchesScope', () => {
+    const honest = mintScopedPublicId({
+      factoryAddress: '0x1111111111111111111111111111111111111111',
+      chainId: 27427,
+      onChainElectionId: '1',
+      jurisdictionId: 'north',
+    });
+    const election = {
+      id: honest,
+      startTime: NOW - 100,
+      cutoffTime: NOW + 100,
+      rollFrozen: true,
+      lateUpdateAllowed: false,
+      frozenEligibleRoot: '0x01',
+      eligibleRoot: '0x01',
+      frozenDisqualificationRoot: '0xaa',
+      disqualificationRoot: '0xaa',
+      onChainElectionId: '1',
+      jurisdictionId: 'south',
+      factoryAddress: '0x1111111111111111111111111111111111111111',
+      chainId: 27427,
+    };
+    const state = electionState(election, NOW);
+    const result = verifyChainStatus(election, { config: { chainId: 27427 } }, NOW, state, 'during');
+    assert.equal(result.checks.publicIdMatchesScope, false);
+    assert.equal(result.ok, false);
+  });
+
+  test('posted L1 factory that is not the pin fails l1FactoryMatchesPinned', () => {
+    const pin = '0x1111111111111111111111111111111111111111';
+    const rogue = '0x2222222222222222222222222222222222222222';
+    const hash = `0x${'ab'.repeat(32)}`;
+    const election = {
+      id: mintScopedPublicId({
+        factoryAddress: rogue,
+        chainId: 27427,
+        onChainElectionId: '1',
+        jurisdictionId: 'north',
+      }),
+      startTime: NOW - 100,
+      cutoffTime: NOW + 100,
+      rollFrozen: true,
+      lateUpdateAllowed: false,
+      frozenEligibleRoot: '0x01',
+      eligibleRoot: '0x01',
+      frozenDisqualificationRoot: '0xaa',
+      disqualificationRoot: '0xaa',
+      onChainElectionId: '1',
+      jurisdictionId: 'north',
+      factoryAddress: rogue,
+      chainId: 27427,
+      tally: {
+        countsHash: hash,
+        l1: { posted: true, status: 'posted', resultHash: hash, factory: rogue },
+      },
+    };
+    const state = electionState(election, NOW);
+    const result = verifyChainStatus(
+      election,
+      { config: { chainId: 27427, electionFactoryAddress: pin } },
+      NOW,
+      state,
+      'during',
+    );
+    assert.equal(result.checks.l1FactoryMatchesPinned, false);
+    assert.equal(result.ok, false);
   });
 });
 

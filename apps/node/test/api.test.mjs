@@ -207,7 +207,7 @@ describe('Republic Node API', () => {
     });
     assert.equal(status, 201, json?.error);
     electionId = json.election.id;
-    assert.match(String(electionId), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.match(String(electionId), /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     assert.equal(json.id, electionId);
     assert.equal(json.shortCode, json.election.shortCode);
     assert.equal(typeof json.shortCode, 'string');

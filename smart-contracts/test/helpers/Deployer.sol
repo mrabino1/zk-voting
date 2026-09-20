@@ -13,6 +13,7 @@ import {KeccakHasher} from "../../src/hasher/KeccakHasher.sol";
 import {MockVerifier} from "../../src/zk/MockVerifier.sol";
 import {Election} from "../../src/Election.sol";
 import {ElectionFactory} from "../../src/ElectionFactory.sol";
+import {JurisdictionRegistry} from "../../src/JurisdictionRegistry.sol";
 import {VoterRegistry} from "../../src/VoterRegistry.sol";
 import {DisqualificationRegistry} from "../../src/DisqualificationRegistry.sol";
 import {BallotInbox} from "../../src/BallotInbox.sol";
@@ -46,6 +47,7 @@ contract Deployer is Test {
     MockVerifier internal verifier;
     Election internal electionImpl;
     ElectionFactory internal factory;
+    JurisdictionRegistry internal jurisdictions;
     VoterRegistry internal voterRegistry;
     DisqualificationRegistry internal disqualification;
     BallotInbox internal inbox;
@@ -100,6 +102,9 @@ contract Deployer is Test {
             factory = ElectionFactory(addr);
         }
 
+        vm.prank(admin);
+        jurisdictions = new JurisdictionRegistry(admin);
+
         _tryAdmin(address(factory), abi.encodeWithSignature("setImplementation(address)", address(electionImpl)));
         _tryAdmin(address(factory), abi.encodeWithSignature("initialize(address)", admin));
 
@@ -141,6 +146,7 @@ contract Deployer is Test {
         paymaster.deposit{value: 10 ether}();
 
         _wireModules();
+        _bindJurisdictions();
         _grantEverywhere();
         _label();
 
@@ -204,6 +210,7 @@ contract Deployer is Test {
         _tryAdmin(address(factory), abi.encodeWithSignature("setBallotInbox(address)", address(inbox)));
         _tryAdmin(address(factory), abi.encodeWithSignature("setTally(address)", address(tally)));
         _tryAdmin(address(factory), abi.encodeWithSignature("setTallyVerifier(address)", address(tally)));
+        _tryAdmin(address(factory), abi.encodeWithSignature("setJurisdictionRegistry(address)", address(jurisdictions)));
 
         address[5] memory mods =
             [address(voterRegistry), address(disqualification), address(inbox), address(tally), address(settlement)];
@@ -214,10 +221,19 @@ contract Deployer is Test {
             _tryAdmin(mods[i], abi.encodeWithSignature("setVerifier(address)", address(verifier)));
             _tryAdmin(mods[i], abi.encodeWithSignature("setInbox(address)", address(inbox)));
         }
-        _tryAdmin(address(inbox), abi.encodeWithSignature("setVoterRegistry(address)", address(voterRegistry)));
         _tryAdmin(
-            address(inbox), abi.encodeWithSignature("setDisqualificationRegistry(address)", address(disqualification))
+            address(factory), abi.encodeWithSignature("setJurisdictionRegistry(address)", address(jurisdictions))
         );
+        _tryAdmin(address(inbox), abi.encodeWithSignature("setVoterRegistry(address)", address(voterRegistry)));
+        _tryAdmin(address(inbox), abi.encodeWithSignature("setDisqualificationRegistry(address)", address(disqualification)));
+    }
+
+    function _bindJurisdictions() internal {
+        if (address(jurisdictions) == address(0)) return;
+        _tryAdmin(address(factory), abi.encodeWithSignature("setJurisdictionRegistry(address)", address(jurisdictions)));
+        vm.prank(admin);
+        jurisdictions.createJurisdiction(Fixtures.DEFAULT_JURISDICTION, clerk, "Test jurisdiction");
+        vm.label(address(jurisdictions), "JurisdictionRegistry");
     }
 
     function _grantEverywhere() internal {

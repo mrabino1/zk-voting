@@ -4,7 +4,10 @@
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
  * After the Node (or L2 Tally contract) posts per-option counts, an operator
- * may copy `keccak256(abi.encodePacked(counts))` to L1 `L1TallyMirror.postResult`.
+ * may copy `keccak256(abi.encodePacked(counts))` to L1
+ * `L1TallyMirror.postCertifiedResult`. The L1 slot is
+ * `(factory, electionId, jurisdictionId)` — not a public UUID and not a bare
+ * uint256 — so a copied id cannot occupy the honest certification.
  * That hash is the same `countsHash` emitted by `Tally.TallyPosted`.
  *
  * When L1 RPC / mirror address / publisher key are unset, every write is a
@@ -14,6 +17,9 @@
 "use strict";
 
 const { toBigInt, toHex32, encodePacked, keccak256, functionSelector } = require("@zk-voting/proof-helpers");
+
+/** keccak256("republic.election.identity.v1") — matches `ElectionIdentity.DOMAIN`. */
+const IDENTITY_DOMAIN_STRING = "republic.election.identity.v1";
 
 function padAddress(addr) {
   const hex = String(addr).replace(/^0x/i, "").toLowerCase().padStart(40, "0");
@@ -53,6 +59,18 @@ async function ethSendTransaction(rpcUrl, tx) {
 
 const ZERO_HASH = `0x${"00".repeat(32)}`;
 
+const CERTIFICATION_COMPONENTS = [
+  { name: "factory", type: "address" },
+  { name: "electionId", type: "uint256" },
+  { name: "jurisdictionId", type: "bytes32" },
+  { name: "election", type: "address" },
+  { name: "publicIdHash", type: "bytes32" },
+  { name: "ballotSpecHash", type: "bytes32" },
+  { name: "resultHash", type: "bytes32" },
+  { name: "totalBallots", type: "uint256" },
+  { name: "l2StateRoot", type: "bytes32" },
+];
+
 const L1_TALLY_MIRROR_ABI = [
   {
     type: "function",
@@ -68,10 +86,49 @@ const L1_TALLY_MIRROR_ABI = [
   },
   {
     type: "function",
+    name: "postCertifiedResult",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "cert", type: "tuple", components: CERTIFICATION_COMPONENTS }],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "resultHashOf",
     stateMutability: "view",
     inputs: [{ name: "electionId", type: "uint256" }],
     outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "resultHashOfIdentity",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "bytes32" }],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "certificationIdOf",
+    stateMutability: "view",
+    inputs: [
+      { name: "factory", type: "address" },
+      { name: "electionId", type: "uint256" },
+      { name: "jurisdictionId", type: "bytes32" },
+    ],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "certificationsOfPublicId",
+    stateMutability: "view",
+    inputs: [{ name: "publicIdHash_", type: "bytes32" }],
+    outputs: [{ type: "bytes32[]" }],
+  },
+  {
+    type: "function",
+    name: "publicIdCollision",
+    stateMutability: "view",
+    inputs: [{ name: "publicIdHash_", type: "bytes32" }],
+    outputs: [{ type: "bool" }],
   },
   {
     type: "function",
@@ -98,6 +155,24 @@ const L1_TALLY_MIRROR_ABI = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "setJurisdictionPublisher",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jurisdictionId", type: "bytes32" },
+      { name: "account", type: "address" },
+      { name: "allowed", type: "bool" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setL2Factory",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "factory_", type: "address" }],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "ElectionCertified",
     inputs: [
@@ -107,9 +182,34 @@ const L1_TALLY_MIRROR_ABI = [
       { name: "l2StateRoot", indexed: false, type: "bytes32" },
     ],
   },
+  {
+    type: "event",
+    name: "ElectionIdentityCertified",
+    inputs: [
+      { name: "certificationId", indexed: true, type: "bytes32" },
+      { name: "electionId", indexed: true, type: "uint256" },
+      { name: "jurisdictionId", indexed: true, type: "bytes32" },
+      { name: "factory", indexed: false, type: "address" },
+      { name: "election", indexed: false, type: "address" },
+      { name: "publicIdHash", indexed: false, type: "bytes32" },
+      { name: "ballotSpecHash", indexed: false, type: "bytes32" },
+      { name: "resultHash", indexed: false, type: "bytes32" },
+      { name: "totalBallots", indexed: false, type: "uint256" },
+      { name: "l2StateRoot", indexed: false, type: "bytes32" },
+    ],
+  },
   { type: "error", name: "AlreadyPosted", inputs: [] },
   { type: "error", name: "NotAuthorized", inputs: [] },
   { type: "error", name: "ZeroAddress", inputs: [] },
+  { type: "error", name: "ZeroResultHash", inputs: [] },
+  { type: "error", name: "ZeroJurisdiction", inputs: [] },
+  { type: "error", name: "ZeroFactory", inputs: [] },
+  { type: "error", name: "WrongFactory", inputs: [] },
+  { type: "error", name: "UnknownElection", inputs: [] },
+  { type: "error", name: "ElectionMismatch", inputs: [] },
+  { type: "error", name: "JurisdictionMismatch", inputs: [] },
+  { type: "error", name: "BallotSpecMismatch", inputs: [] },
+  { type: "error", name: "UseIdentityPost", inputs: [] },
 ];
 
 /** `keccak256("AlreadyPosted()")` — viem emits this when the ABI used to send the tx omitted the error. */
@@ -155,6 +255,59 @@ function isZeroHash(value) {
   if (value == null || value === "") return true;
   const hex = String(value).replace(/^0x/i, "").toLowerCase();
   return hex.length === 0 || /^0+$/.test(hex);
+}
+
+function identityDomain() {
+  return keccak256(IDENTITY_DOMAIN_STRING);
+}
+
+function zeroAddress() {
+  return `0x${"00".repeat(20)}`;
+}
+
+/**
+ * Node / chain jurisdiction id → bytes32. Matches `toJurisdictionBytes32`
+ * (`keccak256(utf8(id))` unless already a 32-byte hex).
+ * @param {string} id
+ * @returns {`0x${string}`}
+ */
+function jurisdictionBytes32(id) {
+  const s = String(id || "").trim();
+  if (!s) return ZERO_HASH;
+  if (/^0x[0-9a-fA-F]{64}$/.test(s)) return s.toLowerCase();
+  return keccak256(s);
+}
+
+/**
+ * Canonical L1 slot. UUID is not this key.
+ * `keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId))`.
+ */
+function certificationId(factory, electionId, jurisdictionId) {
+  const fac = factory && String(factory).trim() ? padAddress(factory) : zeroAddress();
+  const encoded = `${identityDomain()}${toHex32(fac).slice(2)}${toHex32(
+    electionId == null || electionId === "" ? 0 : electionId,
+  ).slice(2)}${asBytes32(jurisdictionId).slice(2)}`;
+  return keccak256(encoded);
+}
+
+/** keccak256 of the lowercase advertised UUID string. Attribute, not the L1 key. */
+function publicIdHash(uuid) {
+  if (uuid == null || String(uuid).trim() === "") return ZERO_HASH;
+  return keccak256(String(uuid).trim().toLowerCase());
+}
+
+function isZeroAddress(value) {
+  if (value == null || String(value).trim() === "") return true;
+  const hex = String(value).replace(/^0x/i, "").toLowerCase();
+  return hex.length === 0 || /^0+$/.test(hex);
+}
+
+function hasCertifiedIdentity(opts = {}) {
+  const fac = String(opts.factory || "").trim();
+  const j = String(opts.jurisdictionId || "").trim();
+  if (!fac || isZeroAddress(fac)) return false;
+  if (!j || isZeroHash(j)) return false;
+  return true;
 }
 
 /**
@@ -263,6 +416,14 @@ function publicCertification(record) {
     chainId: record.chainId || null,
     mirror: record.mirror || null,
     settlement: record.settlement || null,
+    electionId: record.electionId != null ? String(record.electionId) : null,
+    publicId: record.publicId || null,
+    publicIdHash: record.publicIdHash || null,
+    factory: record.factory || null,
+    electionAddress: record.electionAddress || record.election || null,
+    jurisdictionId: record.jurisdictionId || null,
+    ballotSpecHash: record.ballotSpecHash || null,
+    certificationId: record.certificationId || null,
   };
 }
 
@@ -279,6 +440,51 @@ async function encodePostResult(args) {
       asBytes32(args.resultHash),
       toBigInt(args.totalBallots),
       asBytes32(args.l2StateRoot),
+    ],
+  });
+}
+
+function certifiedArgs(args) {
+  const factory = padAddress(args.factory);
+  const electionId = toBigInt(args.electionId);
+  const jurisdictionId = asBytes32(args.jurisdictionId);
+  const election = args.election || args.electionAddress || zeroAddress();
+  const pubHash = args.publicIdHash || (args.publicId ? publicIdHash(args.publicId) : ZERO_HASH);
+  return {
+    factory,
+    electionId,
+    jurisdictionId,
+    election: padAddress(election),
+    publicIdHash: asBytes32(pubHash),
+    ballotSpecHash: asBytes32(args.ballotSpecHash),
+    resultHash: asBytes32(args.resultHash),
+    totalBallots: toBigInt(args.totalBallots),
+    l2StateRoot: asBytes32(args.l2StateRoot),
+    certificationId: certificationId(factory, electionId, jurisdictionId),
+  };
+}
+
+async function encodePostCertifiedResult(args) {
+  const viem = tryViem();
+  if (!viem || typeof viem.encodeFunctionData !== "function") {
+    throw new Error("encodePostCertifiedResult: optional `viem` peer is required");
+  }
+  const c = certifiedArgs(args);
+  return viem.encodeFunctionData({
+    abi: L1_TALLY_MIRROR_ABI,
+    functionName: "postCertifiedResult",
+    args: [
+      {
+        factory: c.factory,
+        electionId: c.electionId,
+        jurisdictionId: c.jurisdictionId,
+        election: c.election,
+        publicIdHash: c.publicIdHash,
+        ballotSpecHash: c.ballotSpecHash,
+        resultHash: c.resultHash,
+        totalBallots: c.totalBallots,
+        l2StateRoot: c.l2StateRoot,
+      },
     ],
   });
 }
@@ -353,13 +559,18 @@ function alreadyPostedError(err) {
 
 /**
  * Post a tally hash to L1TallyMirror. No-ops when L1 env is unset.
+ * When `factory` and `jurisdictionId` are set, posts `postCertifiedResult`
+ * so two bodies that share a UUID or a uint256 do not share an L1 slot.
  *
  * @param {object} opts
- * @param {string|number|bigint} opts.electionId
+ * @param {string|number|bigint} opts.electionId On-chain uint256, never the public UUID.
  * @param {Array<string|number|bigint>} [opts.counts] Used to compute resultHash when resultHash omitted.
  * @param {string} [opts.resultHash]
  * @param {string|number|bigint} [opts.totalBallots]
  * @param {string} [opts.l2StateRoot]
+ * @param {string} [opts.factory]
+ * @param {string} [opts.jurisdictionId] bytes32 hex or Node string id
+ * @param {string} [opts.publicId] advertised UUID
  * @returns {Promise<object>}
  */
 async function postTallyHash(opts = {}) {
@@ -394,9 +605,39 @@ async function postTallyHash(opts = {}) {
   }
   l2StateRoot = asBytes32(l2StateRoot);
 
+  if (!hasCertifiedIdentity(opts)) {
+    throw new Error(
+      "postTallyHash: factory and jurisdictionId required (legacy postResult collides on uint256)",
+    );
+  }
+  const jRaw = String(opts.jurisdictionId || "").trim();
+  const jid = /^0x[0-9a-fA-F]{64}$/.test(jRaw) ? jRaw.toLowerCase() : jurisdictionBytes32(jRaw);
+  const cert = certifiedArgs({
+    factory: opts.factory,
+    electionId,
+    jurisdictionId: jid,
+    election: opts.election || opts.electionAddress,
+    publicId: opts.publicId,
+    publicIdHash: opts.publicIdHash,
+    ballotSpecHash: opts.ballotSpecHash,
+    resultHash,
+    totalBallots,
+    l2StateRoot,
+  });
+
+  const identityView = () => ({
+    factory: cert.factory,
+    jurisdictionId: cert.jurisdictionId,
+    publicId: opts.publicId || null,
+    publicIdHash: cert.publicIdHash,
+    electionAddress: cert.election,
+    ballotSpecHash: cert.ballotSpecHash,
+    certificationId: cert.certificationId,
+  });
+
   if (n.rpcUrl || n.publicClient) {
     try {
-      const existing = await readResultHash(n.mirrorAddress, electionId, n);
+      const existing = await readResultHashOfIdentity(n.mirrorAddress, cert.certificationId, n);
       if (!isZeroHash(existing)) {
         return {
           posted: false,
@@ -412,10 +653,11 @@ async function postTallyHash(opts = {}) {
           mirror: padAddress(n.mirrorAddress),
           settlement: n.settlementAddress ? padAddress(n.settlementAddress) : null,
           chainId: n.chainId || null,
+          ...identityView(),
         };
       }
     } catch {
-      // Mirror may be unreachable; attempt postResult and classify the revert.
+      // Mirror may be unreachable; attempt post and classify the revert.
     }
   }
 
@@ -433,13 +675,25 @@ async function postTallyHash(opts = {}) {
       hash = await n.walletClient.writeContract({
         address: padAddress(n.mirrorAddress),
         abi: L1_TALLY_MIRROR_ABI,
-        functionName: "postResult",
-        args: [args.electionId, args.resultHash, args.totalBallots, args.l2StateRoot],
+        functionName: "postCertifiedResult",
+        args: [
+          {
+            factory: cert.factory,
+            electionId: cert.electionId,
+            jurisdictionId: cert.jurisdictionId,
+            election: cert.election,
+            publicIdHash: cert.publicIdHash,
+            ballotSpecHash: cert.ballotSpecHash,
+            resultHash: cert.resultHash,
+            totalBallots: cert.totalBallots,
+            l2StateRoot: cert.l2StateRoot,
+          },
+        ],
         account: n.walletClient.account || n.account,
         chain: n.walletClient.chain,
       });
     } else if (viem && typeof viem.encodeFunctionData === "function") {
-      const data = await encodePostResult(args);
+      const data = await encodePostCertifiedResult({ ...opts, ...args, factory: opts.factory });
       if (n.privateKey && viem.createWalletClient) {
         const accounts = require("viem/accounts");
         const pk = n.privateKey.startsWith("0x") ? n.privateKey : `0x${n.privateKey}`;
@@ -459,8 +713,20 @@ async function postTallyHash(opts = {}) {
         hash = await wallet.writeContract({
           address: padAddress(n.mirrorAddress),
           abi: L1_TALLY_MIRROR_ABI,
-          functionName: "postResult",
-          args: [args.electionId, args.resultHash, args.totalBallots, args.l2StateRoot],
+          functionName: "postCertifiedResult",
+          args: [
+            {
+              factory: cert.factory,
+              electionId: cert.electionId,
+              jurisdictionId: cert.jurisdictionId,
+              election: cert.election,
+              publicIdHash: cert.publicIdHash,
+              ballotSpecHash: cert.ballotSpecHash,
+              resultHash: cert.resultHash,
+              totalBallots: cert.totalBallots,
+              l2StateRoot: cert.l2StateRoot,
+            },
+          ],
         });
         n.chainId = chainId;
       } else if (n.account) {
@@ -480,6 +746,7 @@ async function postTallyHash(opts = {}) {
           totalBallots: totalBallots.toString(),
           l2StateRoot,
           electionId: electionId.toString(),
+          ...identityView(),
         };
       }
     } else {
@@ -505,6 +772,7 @@ async function postTallyHash(opts = {}) {
       mirror: padAddress(n.mirrorAddress),
       settlement: n.settlementAddress ? padAddress(n.settlementAddress) : null,
       chainId: n.chainId || null,
+      ...identityView(),
     };
   } catch (err) {
     if (alreadyPostedError(err)) {
@@ -519,26 +787,57 @@ async function postTallyHash(opts = {}) {
         l2StateRoot,
         electionId: electionId.toString(),
         mirror: padAddress(n.mirrorAddress),
+        ...identityView(),
       };
     }
     throw err;
   }
 }
 
+async function readResultHashOfIdentity(mirrorAddress, id, opts = {}) {
+  const n = normalizeL1Options(opts);
+  const mirror = padAddress(mirrorAddress || n.mirrorAddress);
+  const viem = tryViem();
+  if (viem && n.publicClient) {
+    return n.publicClient.readContract({
+      address: mirror,
+      abi: L1_TALLY_MIRROR_ABI,
+      functionName: "resultHashOfIdentity",
+      args: [asBytes32(id)],
+    });
+  }
+  if (!n.rpcUrl) {
+    throw new Error("readResultHashOfIdentity: L1_RPC unset");
+  }
+  const raw = await ethCall(n.rpcUrl, {
+    to: mirror,
+    data: `${functionSelector("resultHashOfIdentity(bytes32)")}${asBytes32(id).slice(2)}`,
+  });
+  return asBytes32(raw);
+}
+
 module.exports = {
   ZERO_HASH,
+  IDENTITY_DOMAIN_STRING,
   L1_TALLY_MIRROR_ABI,
   ROLLUP_SETTLEMENT_VIEW_ABI,
   computeTallyHash,
   sumCounts,
   asBytes32,
   isZeroHash,
+  identityDomain,
+  jurisdictionBytes32,
+  certificationId,
+  publicIdHash,
+  hasCertifiedIdentity,
   readL1Env,
   l1SkipReason,
   l1Configured,
   publicCertification,
   encodePostResult,
+  encodePostCertifiedResult,
   readResultHash,
+  readResultHashOfIdentity,
   readSettlementStateRoot,
   postTallyHash,
   alreadyPostedError,

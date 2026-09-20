@@ -16,6 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
+import { electionMatchesRef, l1IdentityOf } from '../src/electionIds.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   computeTallyHash,
@@ -52,7 +54,9 @@ async function loadFromStore(electionId) {
   const dataDir = process.env.DATA_DIR || path.join(pkgRoot, 'data');
   const file = path.join(dataDir, 'republic.json');
   const raw = JSON.parse(await fs.readFile(file, 'utf8'));
-  const election = (raw.elections || []).find((e) => String(e.id) === String(electionId));
+  const election = (raw.elections || []).find(
+    (e) => String(e.id) === String(electionId) || electionMatchesRef(e, electionId),
+  );
   if (!election) throw new Error(`election ${electionId} not in ${file}`);
   if (!election.tally?.counts) throw new Error(`election ${electionId} has no Node tally yet`);
   return election;
@@ -80,15 +84,16 @@ Optional: L1_SETTLEMENT_ADDRESS  L1_CHAIN_ID  TOTAL_BALLOTS  L2_STATE_ROOT  DATA
   let resultHash = argValue('--result-hash') || process.env.RESULT_HASH || null;
   const l2StateRoot = argValue('--l2-state-root') || process.env.L2_STATE_ROOT || null;
 
+  let storedElection = null;
   if (hasFlag('--from-store') || hasFlag('--from-node-store')) {
     if (!electionId) {
       console.error('certify-l1: --election-id required with --from-store');
       process.exit(1);
     }
-    const election = await loadFromStore(electionId);
-    counts = counts || election.tally.counts;
-    totalBallots = totalBallots ?? election.acceptedBallots;
-    resultHash = resultHash || election.tally.countsHash || computeTallyHash(counts);
+    storedElection = await loadFromStore(electionId);
+    counts = counts || storedElection.tally.counts;
+    totalBallots = totalBallots ?? storedElection.acceptedBallots;
+    resultHash = resultHash || storedElection.tally.countsHash || computeTallyHash(counts);
   }
 
   if (skip) {
@@ -121,8 +126,13 @@ Optional: L1_SETTLEMENT_ADDRESS  L1_CHAIN_ID  TOTAL_BALLOTS  L2_STATE_ROOT  DATA
   }
 
   const env = readL1Env();
+  const identity = storedElection
+    ? l1IdentityOf(storedElection, {
+        electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || process.env.FACTORY,
+      })
+    : {};
   const result = await postTallyHash({
-    electionId,
+    electionId: identity.electionId || electionId,
     counts,
     resultHash,
     totalBallots: totalBallots ?? (counts ? counts.reduce((a, b) => a + Number(b), 0) : 0),
@@ -132,6 +142,12 @@ Optional: L1_SETTLEMENT_ADDRESS  L1_CHAIN_ID  TOTAL_BALLOTS  L2_STATE_ROOT  DATA
     privateKey: env.privateKey,
     settlementAddress: env.settlementAddress,
     chainId: env.chainId,
+    factory: identity.factory || process.env.ELECTION_FACTORY_ADDRESS || process.env.FACTORY,
+    jurisdictionId: identity.jurisdictionId || process.env.JURISDICTION_ID,
+    publicId: identity.publicId,
+    publicIdHash: identity.publicIdHash,
+    electionAddress: identity.electionAddress,
+    ballotSpecHash: identity.ballotSpecHash,
   });
   console.log(JSON.stringify({ nfp: true, ...publicCertification(result), result }, null, 2));
   if (result.status === 'failed') process.exit(1);

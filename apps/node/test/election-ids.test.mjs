@@ -10,14 +10,19 @@ import {
   SHORT_CODE_ALPHABET,
   SHORT_CODE_LENGTH,
   UUID_V4_RE,
+  UUID_V5_RE,
   chainElectionId,
   electionMatchesRef,
   isShortCodeShape,
   isUuid,
+  mintScopedPublicId,
   mintShortCode,
   mintUuid,
   parseOnChainElectionId,
+  publicIdMatchesScope,
   refsOf,
+  uuidVersion,
+  l1IdentityOf,
 } from '../src/electionIds.mjs';
 import { emptyTree } from '../src/merkle.mjs';
 import { parseRoute } from '../public/router.js';
@@ -125,6 +130,80 @@ describe('election UUID + short code', () => {
     assert.equal(isUuid('not-a-uuid'), false);
   });
 
+  test('scoped public ids bind UUID v5 to factory + jurisdiction; a copy fails', () => {
+    const factory = `0x${'11'.repeat(20)}`;
+    const north = mintScopedPublicId({
+      factoryAddress: factory,
+      chainId: 27427,
+      onChainElectionId: '1',
+      jurisdictionId: 'north',
+    });
+    const south = mintScopedPublicId({
+      factoryAddress: factory,
+      chainId: 27427,
+      onChainElectionId: '1',
+      jurisdictionId: 'south',
+    });
+    assert.match(north, UUID_V5_RE);
+    assert.match(south, UUID_V5_RE);
+    assert.notEqual(north, south);
+    assert.equal(uuidVersion(north), 5);
+    assert.equal(
+      publicIdMatchesScope(north, {
+        factoryAddress: factory,
+        chainId: 27427,
+        onChainElectionId: '1',
+        jurisdictionId: 'north',
+      }),
+      true,
+    );
+    assert.equal(
+      publicIdMatchesScope(north, {
+        factoryAddress: factory,
+        chainId: 27427,
+        onChainElectionId: '1',
+        jurisdictionId: 'south',
+      }),
+      false,
+    );
+    const demoA = mintScopedPublicId({
+      nodeId: 'node-a',
+      jurisdictionId: 'demo',
+      onChainElectionId: '1',
+    });
+    const demoB = mintScopedPublicId({
+      nodeId: 'node-b',
+      jurisdictionId: 'demo',
+      onChainElectionId: '1',
+    });
+    assert.notEqual(demoA, demoB);
+  });
+
+  test('l1IdentityOf uses the pinned factory and separates jurisdictions', () => {
+    const pin = `0x${'11'.repeat(20)}`;
+    const north = l1IdentityOf(
+      { id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01', onChainElectionId: '1', jurisdictionId: 'north' },
+      { electionFactoryAddress: pin },
+    );
+    const south = l1IdentityOf(
+      { id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01', onChainElectionId: '1', jurisdictionId: 'south' },
+      { electionFactoryAddress: pin },
+    );
+    assert.equal(north.factory.toLowerCase(), pin);
+    assert.equal(south.factory.toLowerCase(), pin);
+    assert.notEqual(north.certificationId, south.certificationId);
+    const otherFactory = l1IdentityOf(
+      {
+        id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01',
+        onChainElectionId: '1',
+        jurisdictionId: 'north',
+        factoryAddress: `0x${'22'.repeat(20)}`,
+      },
+      { electionFactoryAddress: pin },
+    );
+    assert.notEqual(north.certificationId, otherFactory.certificationId);
+  });
+
   test('refs resolve UUID, short code, on-chain id, and legacy aliases', () => {
     const election = {
       id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01',
@@ -176,6 +255,8 @@ describe('election UUID + short code', () => {
     assert.equal(json.election.onChainElectionId, json.onChainElectionId);
     assert.equal(json.election.links.vote, `/vote/${json.election.id}`);
     assert.equal(json.election.links.short, `/v/${json.shortCode}`);
+    assert.match(json.election.id, UUID_V5_RE);
+    assert.equal(json.election.publicIdScheme, 'uuid-v5-jurisdiction');
 
     const byUuid = await api('GET', `/api/elections/${json.election.id}`);
     const byShort = await api('GET', `/api/elections/${json.shortCode}`);
@@ -249,6 +330,53 @@ describe('election UUID + short code', () => {
       },
     });
     assert.equal(voteOnChain.status, 201, voteOnChain.json?.error);
+  });
+
+  test('client-supplied UUID is ignored; two jurisdictions do not share a public id', async () => {
+    const stolen = '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01';
+    const now = nowSec();
+    await api('POST', '/api/jurisdictions', {
+      jar: adminJar,
+      body: { id: 'north', name: 'North' },
+    });
+    await api('POST', '/api/jurisdictions', {
+      jar: adminJar,
+      body: { id: 'south', name: 'South' },
+    });
+    const a = await api('POST', '/api/elections', {
+      jar: adminJar,
+      body: {
+        id: stolen,
+        uuid: stolen,
+        factoryAddress: `0x${'99'.repeat(20)}`,
+        title: 'North poll',
+        startTime: now - 30,
+        cutoffTime: now + 3600,
+        treeDepth: 16,
+        jurisdictionId: 'north',
+        questions: [{ type: 'YES_NO', prompt: 'N?' }],
+      },
+    });
+    const b = await api('POST', '/api/elections', {
+      jar: adminJar,
+      body: {
+        id: stolen,
+        title: 'South poll',
+        startTime: now - 30,
+        cutoffTime: now + 3600,
+        treeDepth: 16,
+        jurisdictionId: 'south',
+        questions: [{ type: 'YES_NO', prompt: 'S?' }],
+      },
+    });
+    assert.equal(a.status, 201, a.json?.error);
+    assert.equal(b.status, 201, b.json?.error);
+    assert.notEqual(a.json.election.id, stolen);
+    assert.notEqual(b.json.election.id, stolen);
+    assert.notEqual(a.json.election.id, b.json.election.id);
+    assert.notEqual(a.json.onChainElectionId, b.json.onChainElectionId);
+    assert.notEqual(a.json.election.certificationId, b.json.election.certificationId);
+    assert.notEqual(String(a.json.election.factoryAddress || '').toLowerCase(), `0x${'99'.repeat(20)}`);
   });
 
   test('legacy non-UUID election ids still resolve after short-code backfill', () => {

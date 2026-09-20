@@ -22,6 +22,7 @@ import {RepublicPaymaster} from "../src/account/RepublicPaymaster.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
+import {JurisdictionRegistry} from "../src/JurisdictionRegistry.sol";
 
 /// @notice Shared deploy result for the Republic election + AA stack.
 struct RepublicStack {
@@ -177,6 +178,11 @@ contract DeployLocal is RepublicStackScript {
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, true);
         RepublicMailbox mailbox = new RepublicMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
+        mirror.setL2Factory(address(s.factory));
+
+        JurisdictionRegistry jurisdictions = new JurisdictionRegistry(admin);
+        s.factory.setJurisdictionRegistry(address(jurisdictions));
+        jurisdictions.createJurisdiction(keccak256("CIVIC"), admin, "Civic");
 
         s.paymaster.deposit{value: 10 ether}();
 
@@ -189,6 +195,7 @@ contract DeployLocal is RepublicStackScript {
         _log("SETTLEMENT", address(settlement));
         _log("TALLY_MIRROR", address(mirror));
         _log("MAILBOX", address(mailbox));
+        _log("JURISDICTION_REGISTRY", address(jurisdictions));
         _log("ELECTION", election);
         console2.log(string.concat("ELECTION_ID=", vm.toString(electionId)));
     }

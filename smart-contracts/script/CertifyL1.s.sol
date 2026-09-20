@@ -4,10 +4,11 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {Script, console2} from "forge-std/Script.sol";
+import {ElectionIdentity} from "../src/ElectionIdentity.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 
-/// @notice Post `keccak256(abi.encodePacked(counts))` to L1TallyMirror.
+/// @notice Post a tally hash to L1TallyMirror.
 ///
 /// Env (testnet-friendly; never commit keys):
 ///   TALLY_MIRROR or L1_TALLY_MIRROR_ADDRESS
@@ -17,11 +18,18 @@ import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 ///   TOTAL_BALLOTS       optional; defaults to sum(COUNTS)
 ///   L2_STATE_ROOT       optional bytes32
 ///   SETTLEMENT          optional RollupSettlement; used when L2_STATE_ROOT unset
+///   FACTORY / L2_FACTORY  shared ElectionFactory (required for identity post)
+///   JURISDICTION_ID       bytes32; default keccak256("CIVIC")
+///   PUBLIC_ID             advertised UUID string (hashed; not the L1 key)
+///   ELECTION              clone address if known
+///   BALLOT_SPEC_HASH      optional
 ///
 /// Broadcast with `--rpc-url $L1_RPC --private-key $L1_PUBLISHER_PRIVATE_KEY`.
-/// The publisher must be `admin` or `setPublisher`'d on the mirror.
+/// The publisher must be `admin`, a global publisher, the election's tally
+/// operator (when the factory is on this chain), or a per-jurisdiction publisher.
 contract CertifyL1 is Script {
     error MissingMirror();
+    error MissingFactory();
     error MissingResult();
     error HashMismatch();
 
@@ -32,6 +40,7 @@ contract CertifyL1 is Script {
         uint256 electionId = vm.envUint("ELECTION_ID");
         (bytes32 resultHash, uint256 totalBallots) = _result();
         bytes32 l2StateRoot = _stateRoot();
+        address factory = _factory();
 
         console2.log(string.concat("TALLY_MIRROR=", vm.toString(mirrorAddr)));
         console2.log(string.concat("ELECTION_ID=", vm.toString(electionId)));
@@ -39,8 +48,26 @@ contract CertifyL1 is Script {
         console2.log(string.concat("TOTAL_BALLOTS=", vm.toString(totalBallots)));
         console2.log(string.concat("L2_STATE_ROOT=", vm.toString(l2StateRoot)));
 
+        if (factory == address(0)) revert MissingFactory();
+
+        L1TallyMirror.Certification memory cert;
+        cert.factory = factory;
+        cert.electionId = electionId;
+        cert.jurisdictionId = vm.envOr("JURISDICTION_ID", keccak256("CIVIC"));
+        cert.election = vm.envOr("ELECTION", address(0));
+        string memory publicId = vm.envOr("PUBLIC_ID", string(""));
+        cert.publicIdHash = bytes(publicId).length == 0 ? bytes32(0) : ElectionIdentity.publicIdHash(publicId);
+        cert.ballotSpecHash = vm.envOr("BALLOT_SPEC_HASH", bytes32(0));
+        cert.resultHash = resultHash;
+        cert.totalBallots = totalBallots;
+        cert.l2StateRoot = l2StateRoot;
+        console2.log(string.concat("FACTORY=", vm.toString(factory)));
+        console2.log(string.concat("CERTIFICATION_ID=", vm.toString(
+            ElectionIdentity.certificationId(factory, electionId, cert.jurisdictionId)
+        )));
+
         vm.startBroadcast();
-        L1TallyMirror(mirrorAddr).postResult(electionId, resultHash, totalBallots, l2StateRoot);
+        L1TallyMirror(mirrorAddr).postCertifiedResult(cert);
         vm.stopBroadcast();
     }
 
@@ -50,6 +77,19 @@ contract CertifyL1 is Script {
         } catch {}
         try vm.envAddress("L1_TALLY_MIRROR_ADDRESS") returns (address b) {
             return b;
+        } catch {}
+        return address(0);
+    }
+
+    function _factory() internal view returns (address) {
+        try vm.envAddress("FACTORY") returns (address a) {
+            if (a != address(0)) return a;
+        } catch {}
+        try vm.envAddress("L2_FACTORY") returns (address b) {
+            if (b != address(0)) return b;
+        } catch {}
+        try vm.envAddress("ELECTION_FACTORY_ADDRESS") returns (address c) {
+            return c;
         } catch {}
         return address(0);
     }

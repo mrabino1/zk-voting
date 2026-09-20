@@ -22,6 +22,10 @@ contract DeployL1 is Script {
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, false);
         RepublicMailbox mailbox = new RepublicMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
+        address l2Factory = vm.envOr("L2_FACTORY", address(0));
+        if (l2Factory != address(0)) {
+            mirror.setL2Factory(l2Factory);
+        }
         vm.stopBroadcast();
 
         _log("SETTLEMENT", address(settlement));
