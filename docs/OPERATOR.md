@@ -47,6 +47,7 @@ From the repository root:
 ./system_actions.sh restart
 ./system_actions.sh logs
 ./system_actions.sh health       # GET $ZK_VOTING_HEALTH_URL (default :3000/health)
+./system_actions.sh archive      # L2 hourly attic (no-op unless ARCHIVE_ENABLED=1)
 ```
 
 Environment overrides: `ZK_VOTING_DEV_BRANCH`, `ZK_VOTING_PROD_BRANCH`, `ZK_VOTING_APP_NAME`, `ZK_VOTING_PM2_NAME`, `ZK_VOTING_SYSTEMD_UNIT`, `ZK_VOTING_HEALTH_URL`, `ZK_VOTING_PORT`, `ZK_VOTING_LOG_LINES`.
@@ -79,6 +80,7 @@ docker compose down           # or: npm run compose:down
 | `node` | `Dockerfile` | `${ZK_VOTING_PORT:-3000}` | Republic Node — voter / admin SPA + JSON API |
 | `l2` | `l2/Dockerfile` | `${L2_RPC_PORT:-8546}` | Sequencer JSON-RPC (`GET /health`, `eth_chainId`) |
 | `prover` | same as `l2` | none | Batch prover; writes proofs on the `l2-data` volume |
+| `archive` | same as `l2` | none | Hourly L2 attic to S3/R2. Default `ARCHIVE_ENABLED=0` is a no-op |
 
 Voter JSON lives on the `node-data` volume (`DATA_DIR=/data`). L2 blocks and proofs live on `l2-data`. Secrets stay in `.env` (gitignored). Host-specific live-reload mounts belong in `docker-compose.override.yml` (also gitignored); start from [`docker-compose.override.example.yml`](../docker-compose.override.example.yml).
 
@@ -190,6 +192,39 @@ npm run l2:prover
 `l2/genesis.json` uses **chainId 27427**, 2s period, one sequencer. This process does **not** proxy EVM to Anvil. Voters do not hold a gas token. On an EVM, `RepublicPaymaster` sponsors UserOps that hit `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`. Fund the paymaster from the **jurisdiction budget at cost**, not from voters.
 
 Details: [`docs/L2.md`](./L2.md).
+
+### Hourly L2 attic (S3 / Cloudflare R2)
+
+The sequencer keeps writing ~2s blocks to local `L2_DATA_DIR`. Object storage is the **attic**, not the live L2 filesystem. A sidecar / cron job (`node l2/archive/cli.mjs archive`, Compose `archive` service, `./system_actions.sh archive`, or `npm run l2:archive`) uploads **sealed hours** older than `ARCHIVE_HOT_WINDOW_HOURS` (default **2**, aligned with the disclosure hour boundary) to a path-style S3 API:
+
+`s3://$ARCHIVE_S3_BUCKET/l2/{chainId}/YYYY/MM/DD/HH/…`
+
+Each hour has a `manifest.json` (keys + sha256). Local copies are deleted **only after** GET+checksum verify. Failed uploads leave the VPS files in place. Default **`ARCHIVE_ENABLED=0`**: the job exits 0 and does not touch the sequencer.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ARCHIVE_ENABLED` | `0` | `1` turns the job on |
+| `ARCHIVE_S3_BUCKET` | empty | Required when enabled |
+| `ARCHIVE_S3_ENDPOINT` | empty | Empty = AWS. R2: `https://<accountid>.r2.cloudflarestorage.com`. Tests: `file:///path` |
+| `ARCHIVE_S3_REGION` | `auto` | R2 uses `auto`; AWS e.g. `us-east-1` |
+| `ARCHIVE_S3_ACCESS_KEY_ID` / `ARCHIVE_S3_SECRET_ACCESS_KEY` | empty | R2 API token or IAM user. Distinct from SES when you want |
+| `ARCHIVE_HOT_WINDOW_HOURS` | `2` | Keep this many hours of block JSON on the VPS |
+| `ARCHIVE_EXPLORER_SNAPSHOT` | `0` | If `1`, copy Node `l2-chain.json` into the hour prefix (does **not** prune Node `DATA_DIR`) |
+
+Restore (read-only download into a directory, never the live sequencer tree):
+
+```bash
+npm run l2:archive:restore -- --hour 2026/09/20/14 --out /tmp/l2-hour
+./system_actions.sh archive-restore --hour 2026/09/20/14 --out /tmp/l2-hour
+```
+
+Cron (host already exporting archive env, or a root `.env` the CLI will read):
+
+```bash
+0 * * * * cd /opt/zk-voting && ./system_actions.sh archive
+```
+
+Node `DATA_DIR` (`republic.json`, working explorer) stays local. See [`voting_cost_estimate.md`](../voting_cost_estimate.md).
 
 ### Block explorer
 

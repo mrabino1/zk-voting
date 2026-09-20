@@ -8,6 +8,8 @@
 #   docker compose up -d --build
 #   curl -fsS http://127.0.0.1:3000/health
 #
+# Optional Compose `archive` sidecar is off until ARCHIVE_ENABLED=1.
+#
 # system_actions.sh restart/logs/status pick this file up automatically.
 
 name: zk-voting
@@ -143,6 +145,48 @@ services:
       l2:
         condition: service_healthy
     # Worker: do not inherit the sequencer image HEALTHCHECK on :8546.
+    healthcheck:
+      disable: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - republic
+
+  # Hourly L2 attic. Default ARCHIVE_ENABLED=0 is a no-op (does not touch
+  # sequencer writes). When enabled, sealed hours older than the hot window
+  # go to S3 / R2; the VPS keeps only recent blocks + head/mempool/sealed.
+  archive:
+    build:
+      context: .
+      dockerfile: l2/Dockerfile
+    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
+    container_name: zk-voting-archive
+    restart: unless-stopped
+    init: true
+    command: ["node", "archive/cli.mjs", "daemon"]
+    environment:
+      L2_DATA_DIR: /data
+      L2_CHAIN_ID: ${CHAIN_ID:-27427}
+      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
+      ARCHIVE_ENABLED: ${ARCHIVE_ENABLED:-0}
+      ARCHIVE_S3_BUCKET: ${ARCHIVE_S3_BUCKET:-}
+      ARCHIVE_S3_ENDPOINT: ${ARCHIVE_S3_ENDPOINT:-}
+      ARCHIVE_S3_REGION: ${ARCHIVE_S3_REGION:-auto}
+      ARCHIVE_S3_ACCESS_KEY_ID: ${ARCHIVE_S3_ACCESS_KEY_ID:-}
+      ARCHIVE_S3_SECRET_ACCESS_KEY: ${ARCHIVE_S3_SECRET_ACCESS_KEY:-}
+      ARCHIVE_HOT_WINDOW_HOURS: ${ARCHIVE_HOT_WINDOW_HOURS:-2}
+      ARCHIVE_EXPLORER_SNAPSHOT: ${ARCHIVE_EXPLORER_SNAPSHOT:-0}
+      ARCHIVE_NODE_DATA_DIR: /node-data
+      ARCHIVE_INTERVAL_SECONDS: ${ARCHIVE_INTERVAL_SECONDS:-3600}
+    volumes:
+      - l2-data:/data
+      - node-data:/node-data:ro
+    depends_on:
+      l2:
+        condition: service_healthy
     healthcheck:
       disable: true
     logging:

@@ -18,6 +18,8 @@
 #   ./system_actions.sh restart
 #   ./system_actions.sh logs
 #   ./system_actions.sh health
+#   ./system_actions.sh archive
+#   ./system_actions.sh archive-restore --hour YYYY/MM/DD/HH
 #   ./system_actions.sh checkout-dev
 #   ./system_actions.sh checkout-prod
 
@@ -283,6 +285,17 @@ cmd_health() {
   fi
 }
 
+cmd_archive() {
+  need node
+  info "L2 hourly archive (attic). Sequencer hot path stays local."
+  node "$ROOT/l2/archive/cli.mjs" archive
+}
+
+cmd_archive_restore() {
+  need node
+  node "$ROOT/l2/archive/cli.mjs" restore "$@"
+}
+
 cmd_deploy_dev() {
   info "deploying DEVELOPMENT from $DEV_BRANCH"
   deploy "$DEV_BRANCH" "development"
@@ -316,6 +329,8 @@ Commands
   restart         reload pm2 / systemd / compose
   logs            last ${LOG_LINES} log lines
   health          GET ${HEALTH_URL}
+  archive         hourly L2 attic offload (no-op unless ARCHIVE_ENABLED=1)
+  archive-restore restore one sealed hour from S3/R2 (read-only)
 
 Environment overrides
   ZK_VOTING_DEV_BRANCH   ZK_VOTING_PROD_BRANCH
@@ -338,7 +353,8 @@ menu() {
     echo "  6) restart services"
     echo "  7) logs"
     echo "  8) health"
-    echo "  9) help"
+    echo "  9) L2 archive offload (hourly attic)"
+    echo "  h) help"
     echo "  0) exit"
     printf 'select> '
     local choice
@@ -352,7 +368,8 @@ menu() {
       6) restart_services ;;
       7) show_logs ;;
       8) cmd_health || true ;;
-      9) cmd_help ;;
+      9) cmd_archive || true ;;
+      h) cmd_help ;;
       0) exit 0 ;;
       *) warn "unknown selection: $choice" ;;
     esac
@@ -373,6 +390,8 @@ main() {
     restart) restart_services ;;
     logs) show_logs ;;
     health) cmd_health ;;
+    archive) cmd_archive ;;
+    archive-restore) cmd_archive_restore "$@" ;;
     *)
       err "unknown command: $cmd"
       cmd_help

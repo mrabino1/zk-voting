@@ -28,7 +28,7 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 | L1 proof posting (`RollupSettlement`) | **$0** if `L1_RPC` unset (**repo default**) | **$0** on testnet / unset | **Do not** post default 2s / `batchSize=4` to mainnet | **Repo fact** + **estimate** below. |
 | L1 tally hash (`L1TallyMirror`) | $0 if unset | **cents–tens of USD** per election | same (one tx / election) | **Estimate**, market-variable ETH/gwei. |
 | AWS SES (MFA + Terms PDF + optional receipt / outcome PDFs) | **~$0–2** | **~$1–5** (~2k people) | **~$25–50** (~50k people) | **Estimate** from AWS list prices. |
-| Optional S3 backups | **not in this repo** | **~$0–2** for tens of GB | **~$2–10** for ~100–400 GB | **Estimate**, us-east-1 Standard. |
+| Optional S3 / R2 attic | **off by default** (`ARCHIVE_ENABLED=0`) | **~$0–2** for tens of GB | **~$2–10** for ~100–400 GB | **Estimate**, us-east-1 Standard or R2. VPS keeps the hot window. |
 | Extra “live results” cluster | **none required** | none | none | Hourly disclosure, same Node. |
 
 **Do this / don’t do this**
@@ -104,7 +104,7 @@ Coolify itself is not billed by this repo. You pay the VPS (or whatever Coolify 
 | Volume / path | Env | Contents |
 | --- | --- | --- |
 | Node `DATA_DIR` default `apps/node/data`; **Compose `/data`** | `DATA_DIR=/data` | `republic.json` (users, elections, votes, envelopes, terms, CMS), `l2-chain.json` (explorer), `receipt-pdf.secret` | [`apps/node/src/config.mjs`](./apps/node/src/config.mjs), [`Dockerfile`](./Dockerfile), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
-| L2 `L2_DATA_DIR` default `l2/data`; **Compose `/data`** | `L2_DATA_DIR=/data` | `blocks/N.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json` | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
+| L2 `L2_DATA_DIR` default `l2/data`; **Compose `/data`** | `L2_DATA_DIR=/data` | Hot window: `blocks/N.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json`, `archive/index.json`. Sealed hours older than `ARCHIVE_HOT_WINDOW_HOURS` (default 2) offload to S3/R2 when `ARCHIVE_ENABLED=1`. | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/archive/job.mjs`](./l2/archive/job.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
 | Compose volumes | `node-data:/data`, `l2-data:/data` | **Two** named volumes. Both appear as `/data` **inside** their containers. | [`docker-compose.yml`](./docker-compose.yml) |
 | Image build | `.dockerignore` excludes `apps/node/data`, `l2/data`, `.ptau`, `.zkey` | Mount data and proving keys; do not `COPY` them | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 | Store type | JSON files. **No SQLite.** Pretty-printed rewrite of the **whole** file on persist | [`apps/node/src/store.mjs`](./apps/node/src/store.mjs), [`apps/node/src/explorer.mjs`](./apps/node/src/explorer.mjs) |
@@ -135,7 +135,19 @@ Empty sequencer block JSON was measured at **~1.4 KB** compact (includes a 256-b
 | Coolify Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | **50–200 GB** gives headroom |
 | Coolify / Compose L2 `/data` | blocks + proofs | **20–80 GB** | **plan 50–200 GB** if always-on for months | election-window: **20–80 GB** is usually enough |
 
-**Practical disk takeaway:** always-on L2 disk is dominated by **empty 2s blocks**, not by voters. Node `/data` is dominated by **people and ballots**. Size them separately.
+**Practical disk takeaway:** always-on L2 disk is dominated by **empty 2s blocks**, not by voters. Node `/data` is dominated by **people and ballots**. Size them separately. Turn on hourly attic offload (`ARCHIVE_ENABLED=1`) so the VPS keeps only the last 1–2 hours of L2 JSON; S3/R2 holds the rest.
+
+### Hourly L2 attic (**repo fact**)
+
+Object storage is the attic, not the live sequencer disk. ~2s writes and Node `DATA_DIR` stay local. [`l2/archive/job.mjs`](./l2/archive/job.mjs), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+
+| Item | Fact |
+| --- | --- |
+| Default | `ARCHIVE_ENABLED=0` — sequencer unchanged |
+| Hot window | `ARCHIVE_HOT_WINDOW_HOURS=2` (disclosure hour buckets) |
+| Prefix | `l2/{chainId}/YYYY/MM/DD/HH/` plus `manifest.json` (keys + sha256) |
+| Prune | Only after PUT + GET checksum verify. Failed hours stay on the VPS |
+| API | Path-style S3 (`ARCHIVE_S3_ENDPOINT` empty = AWS; set for Cloudflare R2) |
 
 Merkle **depth 20** (~1M leaves) is **not** “reserve 1M × 32-byte hashes only.” The Node also stores persons, sessions, envelopes, terms rows, and pretty-printed JSON. See §4.
 
@@ -267,17 +279,17 @@ Assume à la carte **$0.10 / 1,000** plus **$0.16 / 1,000** as an Essentials col
 
 Dedicated IPs, Virtual Deliverability Manager, and Mail Manager are **optional AWS add-ons** this app does not require. Skip them unless deliverability staff asks. Dedicated IP list: **$24.95 / IP / month** (à la carte page).
 
-### S3 backups (**not in this repo**)
+### S3 / R2 hourly attic (**in this repo**)
 
-No S3 client, bucket env, or backup cron ships here. If a jurisdiction copies `/data` volumes to S3:
+Hourly job (`npm run l2:archive`, Compose `archive`, `./system_actions.sh archive`). Default **off**. When `ARCHIVE_ENABLED=1`, sealed L2 hours older than the hot window upload to AWS S3 or Cloudflare R2 (same path-style client). The VPS keeps ~2 hours of block JSON plus `head.json` / mempool / sealed votes / Node `DATA_DIR`.
 
-| Item | **Estimate** (S3 Standard, us-east-1 first 50 TB, list ~**$0.023 / GB-month**) |
+| Item | **Estimate** (S3 Standard, us-east-1 first 50 TB, list ~**$0.023 / GB-month**; R2 is often similar or cheaper, no egress to Workers) |
 | --- | --- |
-| Small — 20–50 GB snapshots | **~$0.50–1.50 / month** storage + cheap PUTs |
+| Small — 20–50 GB attic | **~$0.50–1.50 / month** storage + cheap PUTs |
 | Medium — 100–400 GB | **~$2–10 / month** storage |
 | Egress if you download off-AWS | **~$0.09 / GB** after the usual free slice — often larger than storage |
 
-Glacier / IA can be cheaper for cold election archives; retrieval fees apply. Recheck [S3 pricing](https://aws.amazon.com/s3/pricing/).
+Glacier / IA / R2 lifecycle can be cheaper for cold election archives; retrieval fees apply. Recheck [S3 pricing](https://aws.amazon.com/s3/pricing/) or [R2 pricing](https://developers.cloudflare.com/r2/pricing/).
 
 ---
 
@@ -321,6 +333,7 @@ Bandwidth **estimate:** public JSON snapshots are KB–low MB per view. A county
 | Disclosure | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`apps/node/src/disclosure.mjs`](./apps/node/src/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 | treeDepth / maxParticipants | [`apps/node/src/routes/elections.mjs`](./apps/node/src/routes/elections.mjs), [`apps/node/public/back-office.html`](./apps/node/public/back-office.html), [`circuits/vote.circom`](./circuits/vote.circom), [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
 | SES | [`apps/node/src/mailer.mjs`](./apps/node/src/mailer.mjs), [`.env.example`](./.env.example), [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
+| L2 attic (S3/R2) | [`l2/archive/job.mjs`](./l2/archive/job.mjs), [`.env.example`](./.env.example), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 | JSON store | [`apps/node/src/store.mjs`](./apps/node/src/store.mjs), [`apps/node/src/merkle.mjs`](./apps/node/src/merkle.mjs) |
 
 **External list prices (market-variable, not repo facts):** [Amazon SES pricing](https://aws.amazon.com/ses/pricing/), [Amazon S3 pricing](https://aws.amazon.com/s3/pricing/). Groth16 verify gas order of magnitude: public BN254 pairing / Groth16 writeups (~207k + ~7k per public signal), not a measurement of this `RollupSettlement`.

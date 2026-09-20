@@ -80,7 +80,9 @@ Blocks are written under `l2/data/`. If `REPUBLIC_NODE_URL` is set, each
 block is also `POST`ed to `{REPUBLIC_NODE_URL}/api/explorer/ingest` with
 `x-republic-ingest-secret: $EXPLORER_INGEST_SECRET`. The Node refuses ingest
 in production when that secret is unset. Ingest failures are logged and
-**do not** halt the chain.
+**do not** halt the chain. Optional hourly attic (`ARCHIVE_ENABLED=1`) copies
+**sealed** hours to S3 or R2 and prunes local JSON outside the hot window;
+it does not replace the ~2s write path.
 
 ## Prover and L1 settlement
 
@@ -117,6 +119,7 @@ From the repo root:
 ```bash
 npm run l2:sequencer
 npm run l2:prover
+npm run l2:archive          # no-op unless ARCHIVE_ENABLED=1
 ```
 
 ### Environment
@@ -130,6 +133,9 @@ npm run l2:prover
 | `REPUBLIC_PROVING_PATH` | `false` | Vote-circuit proving path (distinct from rollup `DEV_MOCK_PROOF`). See `/circuits/HASH_SCHEME.md`. |
 | `REPUBLIC_NODE_URL` | unset | Node app base URL for explorer ingest |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). |
+| `ARCHIVE_ENABLED` | `0` | `1` runs hourly attic offload of sealed L2 hours to S3/R2. Sequencer writes stay local. |
+| `ARCHIVE_S3_BUCKET` / `ARCHIVE_S3_ENDPOINT` | empty | Empty endpoint = AWS; set endpoint for Cloudflare R2 (path-style). `file:///path` for a local sink. |
+| `ARCHIVE_HOT_WINDOW_HOURS` | `2` | Keep this many hours of block JSON on the VPS after a successful upload+checksum. |
 | `L1_RPC` | unset | Ethereum RPC for settlement |
 | `SETTLEMENT_ADDRESS` | unset | `RollupSettlement` on L1 |
 | `PRIVATE_KEY` | unset | prover key authorized to call `submitBatch` |
@@ -147,6 +153,7 @@ l2/
   sequencer/index.mjs    process entry
   sequencer/state.mjs    mempool, sealed votes, blocks, keccak, persistence
   disclosure.mjs         hourly polling-place unlinkability
+  archive/               hourly S3/R2 attic (off by default; not the live L2 disk)
   rpc/server.mjs         JSON-RPC subset
   prover/index.mjs       batch watcher + settlement
   prover/batch.mjs       public batch data + mock proof
