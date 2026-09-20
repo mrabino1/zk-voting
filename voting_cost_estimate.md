@@ -1,304 +1,326 @@
-# Republic operating-cost brief
+# Expected cost to operate Republic
 
-**NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
+**NOT FOR PROFIT** — civic public good. Not a commercial product. Jurisdictions run this **at cost** (hosts, L1 gas, paper notice). There is no token, no paid tier, and no voter fee. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
 
-This is a **commander / clerk** brief: what it costs a jurisdiction to run Republic **at cost**. There is no token, no SaaS fee, and no voter gas. Hosts, L1 gas (if you settle), and AWS SES are the bill.
+Commander-facing ranges for **this tree on `test/unstable`**. Pull facts from the cited files. Dollar figures are **order-of-magnitude estimates** (assumptions stated). They are not invoices, quotes, or a SaaS price list.
 
-Two kinds of numbers:
-
-| Kind | Meaning |
-| --- | --- |
-| **Repo fact** | Taken from this tree (`test/unstable`). Cited. |
-| **Estimate** | Order-of-magnitude money or GB. Assumptions stated. **Not** a bid and **not** a gas oracle. |
-
-**Assumptions for every dollar figure (label: market-variable, snapshot ~2026-09-20):**
-
-- Region: **US East** (SES example in README is `us-east-1`). EU/Hetzner VPS is often cheaper.
-- ETH: **~$2,500 / ETH** (spot this week was roughly $2.1k–$2.6k — treat as a round placeholder).
-- Gas: tables use **1 / 10 / 30 / 100 gwei**. Mainnet base can sit **well below 1 gwei**; spikes still happen. Do not budget only the quiet day.
-- Host: one Coolify (or Compose) box running the in-tree `docker-compose.yml` (Node + sequencer + prover).
+**As of:** 20 September 2026. **Branch facts:** `test/unstable`.
 
 ---
 
-## 1. Running the L2 (sequencer + prover)
+## How to read this file
 
-Republic L2 is **this repo’s civic JSON sequencer + prover**, chainId **27427**, not a rented commercial sequencer and not Anvil.
+| Label | Meaning |
+| --- | --- |
+| **Repo fact** | Measured or stated in this repository. Cited. |
+| **Estimate** | Order of magnitude. Assumptions in the row or footnote. Not fake precision. |
+| **Market-variable** | ETH, gas (gwei), AWS list prices, and VPS rates move. Recheck the vendor page before budgeting. |
+
+Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement, and optional AWS mail. [`docs/L2.md`](./docs/L2.md) (“Gas and money”), [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
+
+---
+
+## Commander snapshot
+
+| Line item | Quiet month / demo | Election month (small) | Election month (medium) | Notes |
+| --- | --- | --- | --- | --- |
+| Hosts (Node + sequencer + prover) | **~$15–60** always-on small VPS | same, or **~$5–20** if you only run the box for the window | **~$40–150** 4 vCPU / 8–16 GB | **Estimate.** Coolify on one VM is typical. |
+| L1 proof posting (`RollupSettlement`) | **$0** if `L1_RPC` unset (**repo default**) | **$0** on testnet / unset | **Do not** post default 2s / `batchSize=4` to mainnet | **Repo fact** + **estimate** below. |
+| L1 tally hash (`L1TallyMirror`) | $0 if unset | **cents–tens of USD** per election | same (one tx / election) | **Estimate**, market-variable ETH/gwei. |
+| AWS SES (MFA + Terms PDF + optional receipt / outcome PDFs) | **~$0–2** | **~$1–5** (~2k people) | **~$25–50** (~50k people) | **Estimate** from AWS list prices. |
+| Optional S3 backups | **not in this repo** | **~$0–2** for tens of GB | **~$2–10** for ~100–400 GB | **Estimate**, us-east-1 Standard. |
+| Extra “live results” cluster | **none required** | none | none | Hourly disclosure, same Node. |
+
+**Do this / don’t do this**
+
+- **Do** leave L1 env empty on `test/unstable` until a jurisdiction pins `master` addresses. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+- **Do** persist Coolify / Compose volumes at `/data` (Node) and a **separate** L2 volume at `/data` (`L2_DATA_DIR`).
+- **Don’t** point `L1_RPC` + `SETTLEMENT_ADDRESS` + prover `PRIVATE_KEY` at Ethereum mainnet while the sequencer mints a block every **2 seconds** with `L2_BATCH_SIZE=4`. That is tens of thousands of L1 txs per day. **Estimate:** hundreds of thousands of USD per month at 10 gwei — see §3.
+- **Don’t** treat Merkle depth 20 (~1M leaves) as “this Node can serve 1M voters today.” The JSON store is the practical cap. See §4.
+
+---
+
+## 1. Running the L2 (sequencer + prover, chainId 27427)
 
 ### Repo facts
 
-| Fact | Where |
-| --- | --- |
-| chainId **27427**, **2s** period, **one** sequencer | [`l2/genesis.json`](./l2/genesis.json), [`docs/L2.md`](./docs/L2.md) |
-| JSON-RPC default **:8546**; Compose publishes `${L2_RPC_PORT:-8546}` | [`l2/config.json`](./l2/config.json), [`docker-compose.yml`](./docker-compose.yml), [`l2/Dockerfile`](./l2/Dockerfile) (`EXPOSE 8546`) |
-| Node image: Node **22**, `PORT=3000`, `DATA_DIR=/data` | [`Dockerfile`](./Dockerfile) |
-| L2 image: Node **22**, `L2_DATA_DIR=/data`, `DEV_MOCK_PROOF=true` | [`l2/Dockerfile`](./l2/Dockerfile) |
-| Three Compose services, `restart: unless-stopped` | `node`, `l2` (sequencer), `prover` in [`docker-compose.yml`](./docker-compose.yml) |
-| Sequencer **always produces a block** on the period, including empty ones | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `startProducer` / `produceBlock` |
-| `batchSize` default **4** (blocks per proof) | [`l2/config.json`](./l2/config.json), env `L2_BATCH_SIZE` |
-| `maxTxsPerBlock` **4096** | [`l2/config.json`](./l2/config.json) |
-| Voters pay **zero**. Jurisdiction funds the host and (on a real EVM) the paymaster **at cost** | [`docs/L2.md`](./docs/L2.md) “Gas and money”, [`smart-contracts/src/account/RepublicPaymaster.sol`](./smart-contracts/src/account/RepublicPaymaster.sol) |
-| Civic sequencer is **not** an EVM. Foundry Anvil (`:8545`) is a separate local EVM | [`docs/L2.md`](./docs/L2.md), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
-| On an EVM, `RepublicPaymaster` sponsors UserOps to `BallotInbox`, `VoterRegistry.register`, `PasskeyAccountFactory`. `DeployL2` default deposit **10 ETH** (`PAYMASTER_DEPOSIT_WEI`) — Anvil monopoly money, not a mainnet invoice | [`docs/OPERATOR.md`](./docs/OPERATOR.md), [`smart-contracts/script/DeployL2.s.sol`](./smart-contracts/script/DeployL2.s.sol) |
-| `test/unstable` default: **mock** rollup proofs. **`master` must not** ship mock proofs | [`docs/L2.md`](./docs/L2.md), `.env.example` `DEV_MOCK_PROOF=true` |
-| Prover CPU for **mock** proofs is trivial (`a=[1,0]`, …). Real Groth16 for **vote** circuits is a different flag (`REPUBLIC_PROVING_PATH`) and is **in progress** (untrusted local ptau) | [`l2/prover/batch.mjs`](./l2/prover/batch.mjs), [`circuits/README.md`](./circuits/README.md) |
-
-Always-on arithmetic (from the 2s period):
-
-| Clock | Empty blocks | Proof batches (`batchSize=4`) |
-| --- | ---: | ---: |
-| 1 hour | 1,800 | 450 |
-| 12-hour poll | 21,600 | 5,400 |
-| 30-day always-on | ~1.3 million | ~324,000 |
-
-### CPU / RAM class (estimate)
-
-Nothing in-tree pins an instance size. The **RAM driver** is the sequencer: it **loads every block file into memory** on start (`ChainState.load`). The Node holds `republic.json` + `l2-chain.json` in process (`apps/node/src/store.mjs`, `explorer.mjs`).
-
-| Role | Class (estimate) | Why |
+| Item | Value | Source |
 | --- | --- | --- |
-| Local demo / town meeting | **2 vCPU / 4 GB** | Three Node 22 processes + JSON store. Mock prover. |
-| County / medium poll (hours–days) | **4 vCPU / 8 GB** | Sequencer RSS grows with chain length; JSON rewrite under load. |
-| Always-on L2 for weeks | **8 GB+** or **stop the sequencer between elections** | ~1.3M empty blocks/month in RAM is a practical limit long before Merkle depth 20. |
-| Real Groth16 (future, not this default) | Extra CPU during prove; **not** the Compose default | `DEV_MOCK_PROOF=true`; production keys are not in git. |
+| chainId | **27427** | [`l2/genesis.json`](./l2/genesis.json), [`packages/types`](./packages/types/index.js) `REPUBLIC_CHAIN_ID` |
+| Block period | **2 seconds**, 1 sequencer | `genesis.json` `blockTime` / `period`; [`docs/L2.md`](./docs/L2.md) |
+| Processes | Node 22 sequencer (`l2/sequencer/index.mjs`) + prover (`l2/prover/index.mjs`) | [`l2/Dockerfile`](./l2/Dockerfile), [`docker-compose.yml`](./docker-compose.yml) |
+| RPC | JSON-RPC subset **:8546** | [`docs/L2.md`](./docs/L2.md) |
+| What it is | Civic **JSON** txs (`register` / `vote` / `disqualify` / `tally` / `userop`). **Not** an EVM, **not** Anvil, **not** a hosted Lighter sequencer | [`docs/L2.md`](./docs/L2.md), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| Compose | `restart: unless-stopped` for `node`, `l2`, `prover` | [`docker-compose.yml`](./docker-compose.yml) |
+| Images | `node:22-bookworm-slim` (Node app and L2) | [`Dockerfile`](./Dockerfile), [`l2/Dockerfile`](./l2/Dockerfile) |
+| Mock proofs | `DEV_MOCK_PROOF` default **true**; prover writes `a=[1,0], b=[[1,0],[1,0]], c=[1,0]` | [`l2/README.md`](./l2/README.md), [`l2/prover/batch.mjs`](./l2/prover/batch.mjs) |
+| L1 submit | Only if `L1_RPC` + `SETTLEMENT_ADDRESS` + `PRIVATE_KEY` are **all** set; else JSON under the L2 volume | [`l2/README.md`](./l2/README.md), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
+| Batch size | `L2_BATCH_SIZE` default **4** blocks / proof | [`l2/config.json`](./l2/config.json), `.env.example` |
+| Empty blocks | Producer loop **always** calls `produceBlock()` on the period, including empty blocks | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `startProducer` |
+| Startup RAM | Sequencer **loads every** `blocks/N.json` into memory | `ChainState.load()` |
+| Voters | No L2 gas token. `eth_getBalance` is `0` for ordinary addresses | [`docs/L2.md`](./docs/L2.md) |
+| Who pays | Jurisdiction funds host + (on an EVM) paymaster **at cost** | [`docs/L2.md`](./docs/L2.md), [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
+| Node down | Allowed. Chain records must still suffice for an independent verifier | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 
-### Always-on vs election-window (estimate)
+There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resources`). Host sizing is operator policy.
 
-Compose is **always-on** (`restart: unless-stopped`). That is a host choice, not a product fee.
+### Always-on vs election-window
 
-| Mode | Monthly host $ (estimate, Coolify/VPS US/EU) | Notes |
+| Mode | What the tree does | When to use |
 | --- | --- | --- |
-| **Election-window** — Node up for registration; sequencer+prover for the poll + a few hours either side | **$10–40** | Same 2–4 GB box; idle most of the month. Disk stays small (see §2). |
-| **Always-on L2** — 2s empty blocks 24/7 | **$20–80** | Host is still cheap; **disk and RAM** grow every idle second. Do **not** attach mainnet `submitBatch` in this mode (see §3). |
-| **Always-on + public results** | **$25–120** | Add bandwidth (see §6). Still one box in this tree — no extra “results cluster.” |
+| **Always-on** | Compose `unless-stopped`: empty 2s blocks, prover batches of 4, logs | Staging, or a public Node that must accept registration any day. **Estimate:** light CPU, **growing RAM/disk** from the block log (§2). |
+| **Election-window** | Run sequencer + prover while the poll (and registration, if on this L2) is live; stop them after tally. Keep the Node up if you still need `/explorer`, `/results`, `/outcomes` | Binding elections. Matches “Node may be down; chain records remain.” |
+| **L1 posting** | Independent of the host being up. Default env **does not** post to Ethereum | Keep unset until you have a batching policy that is not “every 8 seconds.” |
 
-Voters remain gasless in both modes.
+### CPU / RAM assumptions (**estimate**)
+
+| Workload | CPU | RAM | Why |
+| --- | --- | --- | --- |
+| Local demo / town clerk, mock proofs | 2 vCPU | 4 GB | Three Node 22 processes; JSON store in RAM; mock prover is keccak/JSON, not a GPU SNARK. |
+| County election-window, tens of thousands of voters | 4 vCPU | 8–16 GB | Same processes; `republic.json` + explorer + hourly vote flush; Merkle trees keep **all leaves** in the JSON store. |
+| Always-on L2 for **months** at 2s | 2–4 vCPU | **grows with block count** | Sequencer holds the full chain in RAM. Not a coded prune. Prefer election-window or accept tens of GB after months (§2). |
+| Real Groth16 **vote** proofs in Node (`REPUBLIC_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Stand-in `Vote(20)` is **126 constraints** ([`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md)) — cheap. Production Poseidon `Vote(20)` will be heavier; **this repo has no prove-time benchmark.** |
+
+`master` must not ship mock rollup proofs ([`docs/L2.md`](./docs/L2.md)). Budget a real prover when that lands; today’s default is mock.
+
+### Monthly host $ (**estimate**, market-variable)
+
+Assumes one VM running Docker Compose (or Coolify wrapping the same images). Not AWS list for a three-AZ production mesh — this repo does not define that.
+
+| Shape | Always-on $/month | Election-window only |
+| --- | --- | --- |
+| Small VPS (2 vCPU / 4 GB, 40–80 GB disk) | **$15–60** | A few days ≈ **$2–15** plus any idle Node |
+| Medium (4 vCPU / 8–16 GB) | **$40–150** | A 1–2 week window ≈ **$10–50** |
+| Cloud VM in the same class (e.g. AWS `t3.medium` / `t3.large` + gp3) | Often **the high end** of those bands + disk | Same |
+
+Coolify itself is not billed by this repo. You pay the VPS (or whatever Coolify is installed on).
 
 ---
 
 ## 2. Disk needed
 
-### Repo facts — what to volume-mount
+### Where data lives (**repo fact**)
 
 | Volume / path | Env | Contents |
 | --- | --- | --- |
-| Compose `node-data` → container **`/data`** | `DATA_DIR=/data` | `republic.json`, `l2-chain.json`, `receipt-pdf.secret` | [`Dockerfile`](./Dockerfile), [`docker-compose.yml`](./docker-compose.yml), [`apps/node/README.md`](./apps/node/README.md) |
-| Compose `l2-data` → container **`/data`** | `L2_DATA_DIR=/data` | `blocks/{n}.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json` | [`l2/Dockerfile`](./l2/Dockerfile), [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
-| **Do not** `COPY` voter data or `.ptau`/`.zkey` into the image | [`.dockerignore`](./.dockerignore), [`docs/OPERATOR.md`](./docs/OPERATOR.md) | Mount proving keys as a volume when you have them |
+| Node `DATA_DIR` default `apps/node/data`; **Compose `/data`** | `DATA_DIR=/data` | `republic.json` (users, elections, votes, envelopes, terms, CMS), `l2-chain.json` (explorer), `receipt-pdf.secret` | [`apps/node/src/config.mjs`](./apps/node/src/config.mjs), [`Dockerfile`](./Dockerfile), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| L2 `L2_DATA_DIR` default `l2/data`; **Compose `/data`** | `L2_DATA_DIR=/data` | `blocks/N.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json` | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
+| Compose volumes | `node-data:/data`, `l2-data:/data` | **Two** named volumes. Both appear as `/data` **inside** their containers. | [`docker-compose.yml`](./docker-compose.yml) |
+| Image build | `.dockerignore` excludes `apps/node/data`, `l2/data`, `.ptau`, `.zkey` | Mount data and proving keys; do not `COPY` them | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| Store type | JSON files. **No SQLite.** Pretty-printed rewrite of the **whole** file on persist | [`apps/node/src/store.mjs`](./apps/node/src/store.mjs), [`apps/node/src/explorer.mjs`](./apps/node/src/explorer.mjs) |
+| Logs | Compose `json-file` `max-size: 10m`, `max-file: 3` per service | ~30 MB cap per service | [`docker-compose.yml`](./docker-compose.yml) |
 
-**Coolify (operator assumption, not an in-tree file):** Coolify speaks Compose. Give the stack **persistent volumes** on those `/data` mounts (Coolify “Persistent Storage” / destination volume). If Coolify’s backup job can snapshot volumes to **S3**, that is optional host backup — this repo does not configure S3.
+### Coolify `/data` volume
 
-Local without Docker: `apps/node/data/` and `l2/data/` (both gitignored).
+**Repo fact:** this repository never names Coolify. The Node image **does** set `DATA_DIR=/data` and `mkdir /data` ([`Dockerfile`](./Dockerfile)) — the same DealPunchList-shaped persistent mount operators use on Coolify.
 
-### Growth (repo facts + measured bytes)
+| If you deploy… | Mount |
+| --- | --- |
+| **Node image only** (typical Coolify Dockerfile) | Persistent volume → container **`/data`**. That is `republic.json` + `l2-chain.json`. Redeploys without this mount **wipe the roll.** |
+| **Compose** (`node` + `l2` + `prover`) | **Two** volumes. Node `/data` ≠ L2 `/data`. Do not point both services at one empty dir and expect isolation — Compose already uses two named volumes. |
+| Proving keys / ptau | Separate mount. Not in the image. |
 
-Empty L2 block JSON on this tree: **1423 bytes** compact (`blocks/{n}.json`, includes 256-byte `logsBloom`). Idle mock batch JSON: **~1.1 KB** pretty (`proofs/batch-N.json`). Measured from `formatBlock` / `buildBatch` on this checkout.
+Size the Coolify volume for **Node JSON + explorer**, and a second volume (or the Compose `l2-data` volume) for **L2 blocks + proofs**. They scale differently (below).
 
-| Store | Growth vs voters / elections | GB picture |
-| --- | --- | --- |
-| **L2 chain data** (`l2-data` `/data/blocks`) | **Time**, not turnout. One file **per 2s block**, empty or not. | Always-on: **~60 MB/day**, **~1.8 GB/30 days** empty blocks. Election-window 12h: **~30 MB**. |
-| **Proof artifacts** (`l2-data` `/data/proofs`) | One JSON per `batchSize` blocks (default 4). Mock proofs stay small. | Always-on: **~12 MB/day**, **~0.4 GB/30 days**. Real Groth16 artifacts (future keys) are **not** sized in-tree — reserve extra GB when a ceremony exists. |
-| **Node JSON** (`DATA_DIR/republic.json`) | Pretty-printed **whole file rewrite** on persist. Users, elections, votes, envelopes, terms rows. **No SQLite.** | Order-of-magnitude: **~2–10 KB/person** in the store (identity methods + one vote + receipt metadata). 1k voters → tens of MB; 50k → **hundreds of MB**; **1M in one JSON file is not a realistic demo**. |
-| **Explorer log** (`DATA_DIR/l2-chain.json`) | Pretty-printed chain of **civic outcomes**. Empty sequencer blocks are **not** ingested (ingest only has txs). | Grows with registrations / disclosed votes / tallies, not with idle 2s ticks. Same order as the public slice of `republic.json`. |
-| Compose logs | `max-size: 10m`, `max-file: 3` per service | **≤ ~90 MB** across three services |
+### GB estimates (**estimate**, from measured empty-block size)
 
-**Volume-mount (Coolify `/data`):** persist **both** Compose volumes. Losing `node-data` loses the clerk JSON and explorer log. Losing `l2-data` loses the civic chain and proof JSON. Images are replaceable; `/data` is not.
+Empty sequencer block JSON was measured at **~1.4 KB** compact (includes a 256-byte `logsBloom` hex string). Period **2s** ⇒ **43,200 blocks/day** if the producer is left up.
+
+| Store | Driver | Quiet / demo | Always-on 30 days (mostly empty blocks) | ~50k voters, one election |
+| --- | --- | --- | --- | --- |
+| L2 `blocks/` | One file per block, including empty | tens of MB | **~1.5–2.5 GB/month** (~60 MB/day × 30) | same **plus** vote txs (usually smaller than the empty-block flood) |
+| L2 `proofs/` | One pretty JSON per 4-block batch | tens of MB | **~0.3–0.8 GB/month** | same |
+| `republic.json` | Full pretty rewrite; eligible tree **stores every leaf** (~70 B/leaf compact; vote row ~0.2 KB) | **< 50 MB** | grows with people, not with empty L2 | **~0.2–1 GB** order of magnitude if identity + envelope + CMS sit on the person |
+| `l2-chain.json` | Explorer. Empty L2 blocks **are not** appended (ingest only civic rows) | **< 50 MB** | modest unless you ingest every vote | **~0.1–0.5 GB** for tens of thousands of disclosed votes |
+| Coolify Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | **50–200 GB** gives headroom |
+| Coolify / Compose L2 `/data` | blocks + proofs | **20–80 GB** | **plan 50–200 GB** if always-on for months | election-window: **20–80 GB** is usually enough |
+
+**Practical disk takeaway:** always-on L2 disk is dominated by **empty 2s blocks**, not by voters. Node `/data` is dominated by **people and ballots**. Size them separately.
+
+Merkle **depth 20** (~1M leaves) is **not** “reserve 1M × 32-byte hashes only.” The Node also stores persons, sessions, envelopes, terms rows, and pretty-printed JSON. See §4.
 
 ---
 
 ## 3. Cost to post proofs (L1 settlement / tally mirror)
 
-Voters never pay. L1 money is **optional** and only moves when env + keys are set.
+### What actually hits Ethereum (**repo fact**)
 
-### Repo facts
-
-| Path | When it posts | Call | If unset |
-| --- | --- | --- | --- |
-| **Rollup batch** | Prover has **all three** of `L1_RPC`, `SETTLEMENT_ADDRESS`, `PRIVATE_KEY` | `RollupSettlement.submitBatch(batchIndex, prevStateRoot, newStateRoot, dataHash, a, b, c)` | Writes `l2/data/proofs/batch-N.json` only | [`.env.example`](./.env.example), [`l2/prover/index.mjs`](./l2/prover/index.mjs), [`docs/L2.md`](./docs/L2.md), [`smart-contracts/src/l2/RollupSettlement.sol`](./smart-contracts/src/l2/RollupSettlement.sol) |
-| **Tally hash (court mirror)** | Node has `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY` | `L1TallyMirror.postResult(electionId, resultHash, totalBallots, l2StateRoot)` — **hash of counts, not ballots** | Tally still works; certify status `skipped` (`L1 env unset`) | [`docs/OPERATOR.md`](./docs/OPERATOR.md) “L1 certification”, [`smart-contracts/src/l2/L1TallyMirror.sol`](./smart-contracts/src/l2/L1TallyMirror.sol), Foundry [`smart-contracts/script/CertifyL1.s.sol`](./smart-contracts/script/CertifyL1.s.sol) / `npm run certify:l1` |
-| **EVM factory / inbox** (Anvil or other EVM, **not** civic `:8546`) | Node `CHAIN_RPC` + factory / inbox / relayer key | `ElectionFactory.createElection`, `BallotInbox.submitVote` via viem | JSON-only demo | [`docs/OPERATOR.md`](./docs/OPERATOR.md), [`apps/node/README.md`](./apps/node/README.md) |
-
-**mockMode vs real proofs**
-
-| Mode | Repo fact |
-| --- | --- |
-| `DEV_MOCK_PROOF=true` (Compose / `test/unstable` default) | Placeholder Groth16-shaped points. Prover **will still `submitBatch`** if L1 env is set. `RollupSettlement.mockMode` on **DeployL1 is `false`** — L1 deploy is meant for a real verifier; local mock is a **dev** path. |
-| `DEV_MOCK_PROOF=false` | Prover **refuses** L1 submit until production Groth16 keys exist (`production groth16 keys are not present`). |
-| `RollupSettlement.submitBatch` | If `!mockMode && batchVerifier != 0`, calls `IGroth16Verifier.verifyProof` (BN254 pairing). |
-| Vote circuit proving | **Separate** from rollup mock: `REPUBLIC_PROVING_PATH`. Local ptau is **untrusted**. Foundry tests use `MockVerifier`. |
-
-Do **not** point `CHAIN_RPC` at civic `:8546` and expect Solidity `createElection` to execute. `@zk-voting/chain-client` still defaults Anvil `:8545` for EVM calls ([README](./README.md) L2 section).
-
-### Per-batch and per-election (estimate — not `forge` snapshots)
-
-Calldata for `submitBatch` is a handful of `bytes32` + Groth16 `(a,b,c)` (~0.4 KB ABI). **No batch body on L1** in this contract (`dataLength` stored as 0). Pairing (when not mock) is the expensive part: `VoteVerifier` uses precompile `0x08` with a 4-pairing input (`0x300` bytes) — **~0.2–0.4M gas** is the usual Groth16 ballpark, **not measured here**.
-
-| Tx | Gas used (order of magnitude, **unmeasured**) | What you pay it for |
+| Call | When | What is posted |
 | --- | --- | --- |
-| `submitBatch` **mock** / no verifier | ~**0.08–0.15M** | Storage + event |
-| `submitBatch` **real Groth16** | ~**0.25–0.45M** | Pairing + storage |
-| `postResult` (one per election) | ~**0.05–0.08M** | Three mappings + event |
-| `createElection` EIP-1167 clone (EVM only) | ~**0.15–0.3M** | Once per election, not per voter |
+| `RollupSettlement.submitBatch(batchIndex, prevStateRoot, newStateRoot, dataHash, a, b, c)` | Prover, every `L2_BATCH_SIZE` (default **4**) L2 blocks, **only if** L1 env is fully set | Roots + Groth16-shaped proof. **`dataLength` is 0** — the contract does **not** store batch calldata. Anyone is supposed to re-derive `dataHash` from public batch data ([`docs/L2.md`](./docs/L2.md)); the Solidity `computeDataHash` is `keccak256(abi.encode(batchIndex, prev, next))`. |
+| Mock vs real | `mockMode` on the contract skips `verifyProof`. Dev prover: `DEV_MOCK_PROOF=true` (default). If `DEV_MOCK_PROOF=false`, current prover **refuses** L1 submit (“production groth16 keys are not present”) | [`RollupSettlement.sol`](./smart-contracts/src/l2/RollupSettlement.sol), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
+| `L1TallyMirror.postResult(electionId, resultHash, totalBallots, l2StateRoot)` | After Node tally, **one tx per election**, if `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY` are set. Unset → tally still works (`skipped`) | Hash of counts, not ballots. [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| Voters | **Never** pay L1 or L2 gas on the civic path | [`docs/L2.md`](./docs/L2.md) |
+| EVM paymaster | Separate: `RepublicPaymaster` sponsors UserOps that hit inbox / registry / factory **on an EVM**. Civic sequencer is not that EVM. | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 
-USD ≈ `gas × gwei × 1e-9 × $2,500/ETH` (**market-variable**). Example: 120k gas × 10 gwei × 1e-9 × 2500 ≈ **$3**. Quiet mainnet base can sit **≪ 1 gwei** (then divide the 1 gwei column); do not budget only that day.
+This repo **does not** ship a Foundry gas snapshot for `submitBatch`. Do not treat the next table as measured.
 
-| Scenario | 1 gwei | 10 gwei | 30 gwei | 100 gwei |
-| --- | ---: | ---: | ---: | ---: |
-| One mock `submitBatch` (~0.12M gas) | ~$0.30 | ~$3 | ~$9 | ~$30 |
-| One Groth16 `submitBatch` (~0.35M gas) | ~$0.90 | ~$9 | ~$26 | ~$90 |
-| One `postResult` (~0.06M gas) | ~$0.15 | ~$1.50 | ~$4.50 | ~$15 |
-| **Danger:** always-on `submitBatch` every 8s for 30 days (~324k txs, mock) | ~**$100k** | ~**$1M** | ~**$3M** | ~**$10M** |
-| Same, Groth16 | ~**$300k** | ~**$3M** | ~**$8M** | ~**$30M** |
-| **Intended court path:** one tally hash / election | **~$0.15** | **~$1.50** | **~$4.50** | **~$15** |
+### Gas per tx (**estimate**)
 
-**Commander takeaway:** leave prover L1 env **empty** until you mean it. Certify **one tally hash per election** for courts. Do not stream empty 2s batches onto Ethereum mainnet.
+| Path | Gas order of magnitude | Why |
+| --- | --- | --- |
+| `submitBatch` **mockMode** | **~5e4–1.5e5** | SSTORE of `Batch` + event + calldata; **no** pairing precompile. |
+| `submitBatch` **real Groth16** | **~2.3e5–3.5e5** | Industry BN254 Groth16 verify is about **207k + ~7k × public inputs**. This contract passes **4** inputs, then writes storage. Not measured here. |
+| `postResult` tally mirror | **~4e4–1e5** | Two mappings + event. One per election. |
+| Full ballot calldata on L1 | **not implemented** | Current `dataLength = 0`. A future “post the batch body” design would add **16 gas/nonzero calldata byte** and would **not** be these numbers. |
 
-Paymaster ETH on a **real EVM** is extra (jurisdiction budget). Civic JSON L2 reports `gasUsed = 0` and a **fake** sponsored balance — **$0** L2 gas.
+### ETH / gwei scenarios (**market-variable**)
+
+USD ≈ `gas × gwei × 1e-9 × ETH_USD`. Recheck spot ETH and the gas oracle; these are **scenarios**, not a forecast.
+
+**Per L1 tx** (pick a gas column, then a price row):
+
+| ETH USD \ gwei | 1 gwei | 10 gwei | 30 gwei | 50 gwei |
+| --- | --- | --- | --- | --- |
+| **$2,000** | mock ~$0.10–0.30 · real ~$0.50–0.70 | mock ~$1–3 · real ~$5–7 | mock ~$3–9 · real ~$14–21 | mock ~$5–15 · real ~$23–35 |
+| **$4,000** | mock ~$0.20–0.60 · real ~$1.00–1.40 | mock ~$2–6 · real ~$10–14 | mock ~$6–18 · real ~$28–42 | mock ~$10–30 · real ~$46–70 |
+| **$6,000** | mock ~$0.30–0.90 · real ~$1.50–2.10 | mock ~$3–9 · real ~$15–21 | mock ~$9–27 · real ~$42–63 | mock ~$15–45 · real ~$69–105 |
+
+Using **~250k gas** as a round “real verify + store” stand-in: at **10 gwei** and **$4,000/ETH** that is **~$10 per `submitBatch`**.
+
+### Per-batch vs per-election (**repo math** × **estimate $**)
+
+Default: 2s blocks × batch of 4 ⇒ **one L1 submit every 8 seconds** if L1 env is set, **including empty batches**.
+
+| Cadence | Batches | At ~$10 / real batch (10 gwei, $4k ETH) |
+| --- | --- | --- |
+| 1 hour | 450 | **~$4,500** |
+| 12-hour election day | 5,400 | **~$54,000** |
+| 30 days always-on | **324,000** | **~$3 million** |
+| Same, mock ~$3 / batch | 324,000 | **~$1 million** |
+| **L1 env unset** (Compose / `.env.example` default) | 0 | **$0** |
+| **Sepolia / Anvil** | testnet ETH | **$0** (plus any RPC vendor fee) |
+| **1 `postResult` / election** | 1 | **cents to tens of USD** |
+
+**Commander rule:** with the code as written, **mainnet `submitBatch` at default batch size is not a civic budget item — it is a misconfiguration.** Options that *are* in policy/docs today:
+
+1. Leave L1 unset; write `proofs/batch-N.json` only (**default**).
+2. Use a testnet for staging.
+3. If mainnet settlement is required later: raise `L2_BATCH_SIZE` a lot, run L2 only in the election window, and/or change the prover to skip empty batches (**not implemented**). Example **estimate:** `L2_BATCH_SIZE=1800` (~1 hour / proof) → ~$10/hour at the 10 gwei / $4k scenario — still a policy choice, not current default.
+
+Tally mirror is cheap even on mainnet because it is **once per election**.
 
 ---
 
 ## 4. How many people can vote each time
 
-### Repo facts (caps)
+### Tree and contract caps (**repo fact**)
 
-| Cap | Default / rule | Where |
+| Knob | Default / range | Meaning |
 | --- | --- | --- |
-| `treeDepth` | Allowed **16..32**. Node API default **20**. Foundry `CreateElection` / `DeployLocal` **20**. Back-office select **20** selected | [`apps/node/src/routes/elections.mjs`](./apps/node/src/routes/elections.mjs), [`smart-contracts/script/CreateElection.s.sol`](./smart-contracts/script/CreateElection.s.sol) `TREE_DEPTH` default 20, [`smart-contracts/script/DeployLocal.s.sol`](./smart-contracts/script/DeployLocal.s.sol), [`apps/node/public/back-office.html`](./apps/node/public/back-office.html), [`circuits/vote.circom`](./circuits/vote.circom) `Vote(20)` |
-| Leaves | **2^depth**. Depth 20 ⇒ **1,048,576**. Depth 16 ⇒ 65,536. Depth 32 ⇒ **~4e9** (ARCHITECTURE / back-office label) | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) `ElectionParams`, [`apps/node/src/merkle.mjs`](./apps/node/src/merkle.mjs) `2 ** treeDepth` |
-| `maxParticipants` | **0 = unlimited** (registry still stops at tree capacity). UI default 0 (“unbounded roll”) | [`packages/types/index.js`](./packages/types/index.js), [`smart-contracts/src/interfaces/ElectionParams.sol`](./smart-contracts/src/interfaces/ElectionParams.sol), [`smart-contracts/src/VoterRegistry.sol`](./smart-contracts/src/VoterRegistry.sol) |
-| Circuit | `Vote(levels)` must match `treeDepth`. Recompile 16/24/32 to match | [`circuits/README.md`](./circuits/README.md), [`circuits/vote.circom`](./circuits/vote.circom) |
-| Block | `maxTxsPerBlock` **4096** | [`l2/config.json`](./l2/config.json) |
-| Disclosure | Default **3600 s**. Votes accepted immediately (nullifier unique); **public** only after the UTC hour closes. `0` = instant (local demo / tests) | [`DISCLOSURE_INTERVAL_SECONDS`](./.env.example), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`l2/README.md`](./l2/README.md) |
-| Identity room | Up to **5** emails, **5** passkeys, **5** live cards / licenses per person | [`docs/IDENTITY.md`](./docs/IDENTITY.md), [`apps/node/src/identity.mjs`](./apps/node/src/identity.mjs) |
-| Registration | Civil `POST .../register` is **pending** until a registrar/clerk approves (unless officer insert). No DMV connector unless `CREDENTIAL_PROVIDER_SECRET` | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| `treeDepth` | Clerk UI **20** selected; API `body.treeDepth \|\| 20`; allowed **16..32** | [`apps/node/public/back-office.html`](./apps/node/public/back-office.html), [`apps/node/src/routes/elections.mjs`](./apps/node/src/routes/elections.mjs) |
+| Circuit | `Vote(20)` compiled by default (~1M leaves). Recompile to match the election | [`circuits/vote.circom`](./circuits/vote.circom), [`circuits/README.md`](./circuits/README.md) |
+| Leaves at depth *d* | **2^d** | 16 → 65,536; **20 → 1,048,576**; 32 → ~4e9 ([`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)) |
+| `maxParticipants` | UI **0**; `0` = unlimited (registry does not cap). Non-zero → insert reverts at cap | back-office hint “0 = unbounded roll”; [`packages/types`](./packages/types/index.js) |
+| Merkle full | `insertLeaf` throws `merkle tree full` at `2 ** depth` | [`apps/node/src/merkle.mjs`](./apps/node/src/merkle.mjs) |
+| L2 block | `maxTxsPerBlock` **4096** | [`l2/config.json`](./l2/config.json) |
+| Hourly flush | Sealed votes publish when the hour closes, lumped, ordered by hash/nullifier | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 
-Merkle **depth 20 ⇒ ~1M leaves** is a **circuit / tree** ceiling, not a load test.
+`maxParticipants = 0` does **not** mean infinite RAM. It means the **contract** will not apply a numeric cap; the **tree depth** still caps leaves at 2^d.
 
-### Practical bottlenecks (this demo stack)
+### Practical bottlenecks (**repo fact** + **estimate**)
 
-These bite **far below** 1M:
+| Layer | What breaks first | Practical size (**estimate**) |
+| --- | --- | --- |
+| Node JSON store | Whole `republic.json` pretty-printed on **every** persist; eligible tree keeps **all leaves** in that file | **Thousands–low tens of thousands** of people is the comfortable band on one Node 22 process. **~100k** is already a large pretty JSON rewrite per vote. **~1M** is the Merkle depth-20 *theory*, not a tested Node path. |
+| Sequencer RAM | Loads **all** historical blocks | Election-window: fine. Always-on months: RAM tracks ~1.4 KB × block count (JS objects larger). |
+| Hourly disclosure | Up to 4096 txs / 2s block after the hour closes | **50k votes in one hour** ≈ 13 blocks ≈ **~30 s** to unseal. **1M in one hour** ≈ 244 blocks ≈ **~8 min**. Throughput is OK; the JSON store is not. |
+| Explorer | `l2-chain.json` full rewrite; public APIs on the **same** Node | Same order as voter count, not empty L2. |
+| Vote SNARK | Stand-in `Vote(20)` is tiny (126 constraints). Poseidon + ceremony **Future** | Do not budget “1M Groth16 proves / hour on one laptop” until Poseidon is wired and measured. |
+| Single sequencer | Liveness / censorship assumption (v1: one sequencer) | [`docs/L2.md`](./docs/L2.md). A stall stops voting; it must not silently change a tally. |
 
-| Bottleneck | Why |
-| --- | --- |
-| **One JSON file** | `republic.json` is parsed and rewritten as a whole. Fine for hundreds–low thousands; painful at tens of thousands; not a national roll. |
-| **Sequencer RAM** | All `blocks/*.json` loaded into memory. Weeks of always-on empty blocks dominate long before 1M votes. |
-| **Hourly disclosure dump** | After an hour closes, sealed votes are mined hashed-order. 4096 tx/block × 2s can drain a large hour, but the **Node persist** of each accept is the choke, not Merkle hashing. |
-| **Manual registrar queue** | Unlimited tree does not mean unlimited **human** approvals. |
-| **Tally circuit** | In-tree `Tally(8, 4)` is a **demo** size. Production Node tally for `opens_ballots` is off-circuit (threshold-1 key, **NON-PRODUCTION**). |
-| **MockVerifier / stand-in hasher** | Binding elections need Poseidon + a real ceremony — not a capacity number, a **trust** gate ([`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md)). |
+**How many people can vote each time — answer for a commander**
 
-**Working planning numbers (estimate, not a guarantee):**
-
-| Election size | Fits this tree as a demo? |
-| --- | --- |
-| Board / union (**≤ ~200**) | Yes. 2 vCPU / 4 GB. |
-| Town / small city (**~1k–10k**) | Yes if you watch JSON size and do not always-on the sequencer for months. |
-| County (**~50k**) | Possible with **8 GB**, election-window L2, and accepting slow JSON persists. Not “live precinct tick.” |
-| **~1M (depth 20)** | Tree **allows** it. **Node + civic JSON L2 as written do not.** Needs a different store (not in this repo). |
+- **Circuit / roll (depth 20, `maxParticipants=0`):** up to **~1,048,576** registered leaves, if you recompile nothing and never hit `merkle tree full`.
+- **This Node, today:** plan **municipal / county** rolls in the **thousands to tens of thousands** unless you replace the JSON store (not in tree). Depth 20 is headroom for the tree, not a load test.
+- **Hourly public count:** everyone who voted in closed hours; not a live precinct tick (§6).
 
 ---
 
-## 5. AWS (SES now; S3 only if the host backups)
+## 5. AWS — SES and optional S3
 
-### Repo facts — SES
+### SES — what the Node sends (**repo fact**)
 
-Transactional mail is **AWS SES (SESv2)** when **`SES_FROM_ADDRESS` and `AWS_REGION`** are set. Empty = local capture, no outbound mail.
+When `SES_FROM_ADDRESS` and `AWS_REGION` are set ([`.env.example`](./.env.example), [`docs/OPERATOR.md`](./docs/OPERATOR.md)):
 
-| Env | Role |
+| Mail | Who | Attachment |
+| --- | --- | --- |
+| 6-digit MFA OTP | Every non-dev sign-in (primary email) | no |
+| Vote PIN reset OTP | Forgot-PIN | no |
+| Terms of Use PDF | First accept of a given PDF hash (`already_sent_this_hash` otherwise) | yes — raw MIME; SESv2 Simple **cannot** attach ([`apps/node/src/mailer.mjs`](./apps/node/src/mailer.mjs)) |
+| Optional hash-only vote receipt PDF | After accept, if the voter emails it | yes, locked PDF |
+| Official outcome PDF | After cutoff + certified tally; voters subscribed by default | yes, locked PDF |
+
+Unset SES → Node still records accepts and **captures** mail in-process (tests). No AWS bill.
+
+There is **no** SES price in this repo. Figures below are **AWS list** as of the [SES pricing page](https://aws.amazon.com/ses/pricing/) fetched 20 September 2026. **Market-variable.** New accounts may land on **Essentials** ($0.16 / 1,000 under 10M) rather than à la carte ($0.10 / 1,000). Attachments: **$0.12 / GB**.
+
+### SES monthly $ (**estimate**)
+
+Assume à la carte **$0.10 / 1,000** plus **$0.16 / 1,000** as an Essentials column. Count ~**3–6 emails per person** in an election month (register MFA, later login MFA, one Terms PDF, optional receipt, one outcome PDF). PDF attachments are tens of KB, not MB — attachment line is **pennies** at these volumes.
+
+| Volume | Emails / month (order of mag.) | À la carte | Essentials | Attachments |
+| --- | --- | --- | --- | --- |
+| **Small** — ~2,000 people, one poll | ~8k–12k | **~$1** | **~$1.50–2** | **≪ $1** |
+| **Medium** — ~50,000 people | ~150k–300k | **~$15–30** | **~$25–50** | **~$0.50–2** |
+| Quiet month, officers only | hundreds | **≪ $1** | **≪ $1** | ~0 |
+
+Dedicated IPs, Virtual Deliverability Manager, and Mail Manager are **optional AWS add-ons** this app does not require. Skip them unless deliverability staff asks. Dedicated IP list: **$24.95 / IP / month** (à la carte page).
+
+### S3 backups (**not in this repo**)
+
+No S3 client, bucket env, or backup cron ships here. If a jurisdiction copies `/data` volumes to S3:
+
+| Item | **Estimate** (S3 Standard, us-east-1 first 50 TB, list ~**$0.023 / GB-month**) |
 | --- | --- |
-| `SES_FROM_ADDRESS` | From (required to send) |
-| `AWS_REGION` (alias `SES_REGION`) | SES region. README fork example: `us-east-1` |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Optional. **Empty → host IAM / instance role** |
-| `SES_CONFIGURATION_SET` | Optional SESv2 configuration set |
-| `SES_ENDPOINT` | Optional (local stack) |
-| `SES_DRY_RUN` | Skip send |
-| `REQUIRE_EMAIL_MFA` | Force OTP in tests; production follows SES configured |
+| Small — 20–50 GB snapshots | **~$0.50–1.50 / month** storage + cheap PUTs |
+| Medium — 100–400 GB | **~$2–10 / month** storage |
+| Egress if you download off-AWS | **~$0.09 / GB** after the usual free slice — often larger than storage |
 
-Cited: [`.env.example`](./.env.example), [`docs/OPERATOR.md`](./docs/OPERATOR.md) Terms / MFA, [`apps/node/src/mailer.mjs`](./apps/node/src/mailer.mjs), [`apps/node/src/config.mjs`](./apps/node/src/config.mjs).
-
-What SES sends:
-
-- **6-digit MFA** on every non-dev login (primary inbox).
-- **Terms PDF** on first accept of a hash (raw MIME attachment; SESv2 Simple cannot attach).
-- Optional **vote-receipt PDF** (locked).
-- **Official outcome PDF** to subscribers (voters subscribed by default when they vote).
-
-No S3 client, bucket env, or Coolify backup config lives in this repository.
-
-### Monthly $ (estimate, market-variable)
-
-AWS SES list (2026): **à-la-carte ~$0.10 / 1,000** emails; **new accounts default Essentials ~$0.16 / 1,000** (first 10M). Attachments: à-la-carte **~$0.12 / GB**. Confirm [aws.amazon.com/ses/pricing](https://aws.amazon.com/ses/pricing/). Civic OTP is tiny; PDFs dominate attachment GB.
-
-Planning volumes (not code constants — **~4–8 messages / person** if they register, MFA a few times, accept terms, optionally email a receipt, and get the outcome PDF):
-
-| Scale | Emails / month (order) | SES send $ | Attachment $ | **SES total** |
-| --- | ---: | ---: | ---: | ---: |
-| Small (500 voters, one poll) | ~3k–5k | **< $1** | **< $0.05** | **~$0–2** |
-| Medium (50k voters) | ~0.2–0.4M | **~$20–65** | **~$0.50–2** | **~$20–70** |
-| Quiet month (officers only) | hundreds | **cents** | none | **~$0–1** |
-
-Dedicated IPs / Pro–Enterprise SES plans (**$105+ / mo**) are **not required** for this product. Stay on Essentials or à-la-carte unless deliverability policy says otherwise.
-
-### Optional S3 backups (Coolify / host — estimate)
-
-If Coolify (or the VPS) snapshots `/data` volumes to S3: **not in-tree**. S3 Standard is still **cents/GB-month** at the sizes in §2 (idle L2 ~2 GB/month; election-window << 1 GB). Budget **$1–5 / mo** for backups at small/medium, not hundreds.
+Glacier / IA can be cheaper for cold election archives; retrieval fees apply. Recheck [S3 pricing](https://aws.amazon.com/s3/pricing/).
 
 ---
 
-## 6. Showing results “live”
+## 6. Showing results live
 
-### What “live” means here (repo fact)
+### What “live” means here (**repo fact**)
 
-**Hourly disclosure, not a live precinct tick.**
+Republic **does not** show a live precinct tick. Vote proofs and public turnout publish **once an hour** after that hour closes (`DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests). A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
-- Votes are **accepted immediately** (nullifier spent once).
-- Public explorer / turnout / receipts show the ballot **only after the hour that contained it has closed** (`DISCLOSURE_INTERVAL_SECONDS`, default **3600**).
-- A 14:05 vote appears at **15:00**, lumped with that hour, ordered by hash/nullifier, timestamp = hour boundary — not the minute they left the office.
-- During voting, `/outcomes` shows **disclosed turnout only**, never unofficial option counts. Certified counts appear **after tally**.
-- `DISCLOSURE_INTERVAL_SECONDS=0` is **local demo / tests**, not a public jurisdiction.
+| Surface | During the poll | After certified tally |
+| --- | --- | --- |
+| `/explorer` | Registrations, reason codes, **hourly** disclosed ballots, countdown to next hour | History + batches |
+| `/elections/:id/results` | No unofficial option counts | Plurality / IRV counts |
+| `/outcomes` | Disclosed turnout only | Auditor pack, L1 hash checks, official PDF |
 
-Cited: [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), README public UI, [`docs/OPERATOR.md`](./docs/OPERATOR.md) explorer / outcomes.
+Safe live numbers: registered, disqualified-by-code, **last closed hour** turnout. Not “accepted ballots right now.”
 
-Public pages on the **same Node** (`PORT=3000`): `/explorer`, `/elections/:id/results`, `/elections/:id/summary`, `/outcomes`, `/receipt`. Backend: `l2-chain.json` + `GET /api/explorer/*`. Independent auditors use `GET /api/elections/:id/artifacts` — Node may be down; chain records remain.
+### Bandwidth and extra infra (**estimate**)
 
-### Cost of explorer / results (estimate)
-
-No extra results cluster. Same Express process, vanilla JS (no Vite/React CDN product). The bill is **egress + CPU** on the Coolify/VPS box.
-
-| Traffic | Extra $ (estimate) |
-| --- | ---: |
-| Officers + a few observers | **~$0–5 / mo** (often inside the VPS cap) |
-| County + press refreshing `/explorer` and `/outcomes` | **~$5–30 / mo** on a typical 1–5 TB VPS cap; JSON APIs are small compared to video |
-
-Do **not** add a second “results app”, a websocket tick, or a public mempool of sealed votes. That would break the hour-bucket privacy rule.
-
-L1 explorer (Etherscan on `submitBatch` / `postResult`) is **free to the public**; you already paid the gas in §3.
-
----
-
-## Roll-up (jurisdiction at cost)
-
-| Line | Small poll (hundreds, election-window) | Medium poll (tens of thousands) |
-| --- | ---: | ---: |
-| VPS / Coolify host (Node+L2+prover) | **$10–40 / mo** | **$40–120 / mo** |
-| Disk `/data` | **< 5 GB** | **10–50 GB** headroom (JSON + short L2 window) |
-| SES | **~$0–2** | **~$20–70** that month |
-| L1 (tally hash only) | **$0–$15** | **$0–$15** |
-| L1 (always-on batch stream) | **Do not** | **Do not** |
-| **Voters** | **$0** | **$0** |
-
-Nobody is to make money off this repository. If a quote includes a Republic “license,” a token, or a per-voter fee, it is not this software.
-
----
-
-## Citation index
-
-| Topic | Paths |
+| Need | Extra machines? |
 | --- | --- |
-| NFP / at cost | [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md), README “Not for profit”, [`docs/L2.md`](./docs/L2.md) “Gas and money” |
-| Compose / ports / `/data` | [`docker-compose.yml`](./docker-compose.yml), [`Dockerfile`](./Dockerfile), [`l2/Dockerfile`](./l2/Dockerfile), [`.env.example`](./.env.example) |
-| L2 genesis / RPC / mock proofs | [`l2/genesis.json`](./l2/genesis.json), [`l2/config.json`](./l2/config.json), [`l2/README.md`](./l2/README.md), [`docs/L2.md`](./docs/L2.md) |
-| Operator / SES / L1 env | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
-| Factory / tree / paymaster scripts | [`smart-contracts/script/CreateElection.s.sol`](./smart-contracts/script/CreateElection.s.sol), [`DeployLocal.s.sol`](./smart-contracts/script/DeployLocal.s.sol), [`DeployL1.s.sol`](./smart-contracts/script/DeployL1.s.sol), [`DeployL2.s.sol`](./smart-contracts/script/DeployL2.s.sol) |
-| Settlement / mirror | [`smart-contracts/src/l2/RollupSettlement.sol`](./smart-contracts/src/l2/RollupSettlement.sol), [`L1TallyMirror.sol`](./smart-contracts/src/l2/L1TallyMirror.sol) |
-| Hourly disclosure | [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
-| Circuits depth 20 | [`circuits/vote.circom`](./circuits/vote.circom), [`circuits/README.md`](./circuits/README.md) |
+| Explorer + results + outcomes | **No.** Same Node (`:3000`) serves the SPA and `GET /api/explorer/*`, `/api/elections/:id/summary`, `/api/outcomes`. |
+| Hourly refresh | Observers poll JSON. No websocket tick in tree. Traffic **spikes at hour close** when sealed votes flush (up to 4096 txs / block). |
+| CDN | Optional, for `public/` static files only. Not required. |
+| Sequencer during results-only | **Not required** after ingest. Keep Node + `/data`. |
+| “TV station horse race” | **Out of scope** by design. Would break polling-place unlinkability. |
+
+Bandwidth **estimate:** public JSON snapshots are KB–low MB per view. A county night with thousands of observers is ordinary HTTPS on one VM plus optional CDN. It is not an L1 cost and not a second cluster in this repo.
+
+---
+
+## Citations (tree)
+
+| Topic | Files |
+| --- | --- |
+| Not for profit / at cost | [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md), README “Not for profit”, [`docs/L2.md`](./docs/L2.md) “Gas and money” |
+| L2 genesis / period / chainId | [`l2/genesis.json`](./l2/genesis.json), [`docs/L2.md`](./docs/L2.md), [`l2/README.md`](./l2/README.md) |
+| Operator / Compose / `/data` | [`docs/OPERATOR.md`](./docs/OPERATOR.md), [`docker-compose.yml`](./docker-compose.yml), [`Dockerfile`](./Dockerfile), [`l2/Dockerfile`](./l2/Dockerfile) |
+| Prover / mock / L1 submit | [`l2/prover/index.mjs`](./l2/prover/index.mjs), [`l2/prover/batch.mjs`](./l2/prover/batch.mjs), [`smart-contracts/src/l2/RollupSettlement.sol`](./smart-contracts/src/l2/RollupSettlement.sol) |
+| Tally mirror | [`smart-contracts/src/l2/L1TallyMirror.sol`](./smart-contracts/src/l2/L1TallyMirror.sol), OPERATOR “L1 certification” |
+| Disclosure | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`apps/node/src/disclosure.mjs`](./apps/node/src/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
+| treeDepth / maxParticipants | [`apps/node/src/routes/elections.mjs`](./apps/node/src/routes/elections.mjs), [`apps/node/public/back-office.html`](./apps/node/public/back-office.html), [`circuits/vote.circom`](./circuits/vote.circom), [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
+| SES | [`apps/node/src/mailer.mjs`](./apps/node/src/mailer.mjs), [`.env.example`](./.env.example), [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
+| JSON store | [`apps/node/src/store.mjs`](./apps/node/src/store.mjs), [`apps/node/src/merkle.mjs`](./apps/node/src/merkle.mjs) |
+
+**External list prices (market-variable, not repo facts):** [Amazon SES pricing](https://aws.amazon.com/ses/pricing/), [Amazon S3 pricing](https://aws.amazon.com/s3/pricing/). Groth16 verify gas order of magnitude: public BN254 pairing / Groth16 writeups (~207k + ~7k per public signal), not a measurement of this `RollupSettlement`.
