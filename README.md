@@ -45,6 +45,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Current status](#current-status)
 - [Monorepo layout](#monorepo-layout)
 - [How to run](#how-to-run)
+- [Operating cost estimate](#operating-cost-estimate)
 - [Copy-paste credentials](#copy-paste-credentials)
 - [Intentional forking](#intentional-forking)
 - [Node application](#node-application)
@@ -153,6 +154,7 @@ Current layout (names can still move slightly; the invariants will not).
 ```text
 zk-voting/
   README.md                    ← you are here (spec + how to run)
+  voting_cost_estimate.md      host / L2 / L1 / SES cost ranges (at cost)
   NOT_FOR_PROFIT.md
   LICENSE                      AGPL-3.0-or-later
   CONTRIBUTING.md
@@ -192,7 +194,7 @@ Invariants:
 
 ## How to run
 
-Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Branch policy: work on **`test/unstable`**; **`master`** is production.
+Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Branch policy: work on **`test/unstable`**; **`master`** is production. Expected host, disk, L1, SES, and capacity ranges: [`voting_cost_estimate.md`](./voting_cost_estimate.md) (jurisdictions **at cost**; **NOT FOR PROFIT**).
 
 ### Foundry tests (`smart-contracts/`)
 
@@ -307,6 +309,10 @@ node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
 ```
 
 ---
+
+## Operating cost estimate
+
+Commander-facing ranges (L2 hosts, `/data` disk, L1 proof gas, how many people can vote, AWS SES/S3, hourly results): [`voting_cost_estimate.md`](./voting_cost_estimate.md). **NOT FOR PROFIT** — jurisdictions run at cost; voters pay nothing.
 
 ## Copy-paste credentials
 
