@@ -26,6 +26,7 @@
  */
 
 import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
+import { t } from "./i18n.js";
 const DB_NAME = "republic-wallet";
 const DB_VERSION = 2;
 const STORE = "wallet";
@@ -1297,5 +1298,5 @@ export async function resetWallet() {
 }
 
 export function webAuthnUnavailableMessage() {
-  return "Republic requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.";
+  return t("wallet.webAuthnUnavailable");
 }

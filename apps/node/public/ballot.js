@@ -3,6 +3,8 @@
  * Shared ballot / aspect helpers for the voter SPA (authoring lives in back-office).
  */
 
+import { t } from "./i18n.js";
+
 export const QUESTION_TYPE_LABELS = {
   YES_NO: "Yes / No",
   SINGLE_CHOICE: "Single choice",
@@ -10,6 +12,15 @@ export const QUESTION_TYPE_LABELS = {
   MEASURE: "Measure",
   ARTICLE: "Article",
   RANKED: "Ranked choice",
+};
+
+const QUESTION_TYPE_KEYS = {
+  YES_NO: "ballot.yesNo",
+  SINGLE_CHOICE: "ballot.single",
+  MULTI_CHOICE: "ballot.multi",
+  MEASURE: "ballot.measure",
+  ARTICLE: "ballot.article",
+  RANKED: "ballot.ranked",
 };
 
 const TYPE_ALIASES = {
@@ -56,8 +67,8 @@ export function isMultiSelect(question) {
 }
 
 export function typeLabel(type) {
-  const t = canonicalQuestionType(type);
-  return QUESTION_TYPE_LABELS[t] || t;
+  const canon = canonicalQuestionType(type);
+  return t(QUESTION_TYPE_KEYS[canon] || "ballot.single");
 }
 
 export function normalizeQuestion(q, index = 0) {
@@ -75,7 +86,7 @@ export function normalizeQuestion(q, index = 0) {
         }
   );
   if ((type === "YES_NO" || type === "MEASURE" || type === "ARTICLE") && options.length === 0) {
-    options.push({ id: "yes", label: "Yes" }, { id: "no", label: "No" });
+    options.push({ id: "yes", label: t("ballot.yes") }, { id: "no", label: t("ballot.no") });
   }
   let maxSelections = Number(q?.maxSelections ?? q?.max ?? (type === "MULTI_CHOICE" ? 2 : 1)) || 1;
   if (type === "RANKED") maxSelections = options.length || 1;
@@ -83,7 +94,7 @@ export function normalizeQuestion(q, index = 0) {
   return {
     id: String(q?.id ?? q?.questionId ?? q?.aspectId ?? `q${index + 1}`),
     type,
-    prompt: q?.prompt || q?.title || q?.text || `Question ${index + 1}`,
+    prompt: q?.prompt || q?.title || q?.text || t("office.questionN", { n: index + 1 }),
     description: q?.description || q?.help || "",
     maxSelections,
     ballotMethod: q?.ballotMethod || (type === "RANKED" ? "ranked_choice" : "plurality"),
@@ -192,7 +203,7 @@ export function labeledTally(election) {
         prompt: q.prompt,
         tallied: false,
         tallyMethod: "irv",
-        note: stored?.note || "Ranked-choice / IRV was not computed for this question.",
+        note: stored?.note || t("ballot.irvNotComputed"),
         options: q.options.map((o) => ({ ...o, count: null })),
         undervotes: null,
       };

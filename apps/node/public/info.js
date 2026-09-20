@@ -4,6 +4,8 @@
  * per candidate / measure choice (read-only). Choice is never recorded here.
  */
 
+import { t } from "./i18n.js";
+
 function publicOption(raw, index = 0) {
   if (typeof raw === "string" || typeof raw === "number") {
     return { id: `o${index + 1}`, label: String(raw), summary: "", body: "", imageUrl: "", links: [] };
@@ -13,7 +15,7 @@ function publicOption(raw, index = 0) {
     ? obj.links
         .map((link, i) =>
           typeof link === "string"
-            ? { label: `Link ${i + 1}`, url: link }
+            ? { label: t("info.linkN", { n: i + 1 }), url: link }
             : { label: String(link.label || link.title || link.url || ""), url: String(link.url || link.href || "") }
         )
         .filter((link) => /^https?:\/\//i.test(link.url))
@@ -21,7 +23,7 @@ function publicOption(raw, index = 0) {
   const imageUrl = String(obj.imageUrl || obj.image || "");
   return {
     id: String(obj.id ?? obj.value ?? `o${index + 1}`),
-    label: String(obj.label || obj.name || `Option ${index + 1}`),
+    label: String(obj.label || obj.name || t("info.optionFallback", { n: index + 1 })),
     summary: String(obj.summary || obj.blurb || ""),
     body: String(obj.body || obj.description || obj.text || ""),
     imageUrl: /^https?:\/\//i.test(imageUrl) ? imageUrl : "",
@@ -35,12 +37,12 @@ function publicQuestions(election) {
     const type = String(q.type || q.kind || "SINGLE_CHOICE").toUpperCase();
     let options = (q.options || q.choices || []).map((opt, j) => publicOption(opt, j));
     if (type === "YES_NO" && options.length === 0) {
-      options = [publicOption({ id: "yes", label: "Yes" }, 0), publicOption({ id: "no", label: "No" }, 1)];
+      options = [publicOption({ id: "yes", label: t("ballot.yes") }, 0), publicOption({ id: "no", label: t("ballot.no") }, 1)];
     }
     return {
       id: String(q.id ?? q.questionId ?? `q${i + 1}`),
       type,
-      prompt: q.prompt || q.title || q.text || `Question ${i + 1}`,
+      prompt: q.prompt || q.title || q.text || t("info.questionFallback", { n: i + 1 }),
       options,
     };
   });
@@ -80,10 +82,10 @@ async function loadInfo(api, electionId) {
 function crumb(h, election, extra) {
   return h(
     "nav",
-    { class: "crumbs", "aria-label": "Breadcrumb" },
-    h("a", { href: "/", "data-nav": "", text: "Elections" }),
+    { class: "crumbs", "aria-label": t("info.breadcrumb") },
+    h("a", { href: "/", "data-nav": "", text: t("info.elections") }),
     h("span", { "aria-hidden": "true", text: " / " }),
-    h("a", { href: `/elections/${encodeURIComponent(election.id)}/info`, "data-nav": "", text: election.title || "Ballot information" }),
+    h("a", { href: `/elections/${encodeURIComponent(election.id)}/info`, "data-nav": "", text: election.title || t("chrome.titleInfo") }),
     extra
       ? [
           h("span", { "aria-hidden": "true", text: " / " }),
@@ -98,43 +100,43 @@ function header(h, election, formatTime, electionStateInfo, source, lede) {
   return h(
     "div",
     { class: "page-head" },
-    h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || "Jurisdiction" }),
-    h("h1", { text: election.title || "Ballot information" }),
+    h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || t("sample.jurisdictionFallback") }),
+    h("h1", { text: election.title || t("chrome.titleInfo") }),
     h(
       "p",
       { class: "cluster" },
       h("span", { class: `status-pill ${st.className}`, text: st.label }),
-      source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
+      source === "sample" ? h("span", { class: "status-pill status-created", text: t("info.sample") }) : null
     ),
     h("p", { class: "lede", text: lede }),
     h(
       "ul",
       { class: "meta-list" },
-      h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { text: String(election.id) })),
+      h("li", {}, h("span", { class: "lbl", text: t("info.electionId") }), h("span", { text: String(election.id) })),
       election.startTime
-        ? h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) }))
+        ? h("li", {}, h("span", { class: "lbl", text: t("info.opens") }), h("span", { text: formatTime(election.startTime) }))
         : null,
       election.cutoffTime
-        ? h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) }))
+        ? h("li", {}, h("span", { class: "lbl", text: t("info.cutoff") }), h("span", { text: formatTime(election.cutoffTime) }))
         : null
     )
   );
 }
 
 export async function renderElectionInfo(main, ctx) {
-  const { h, api, loadElection, formatTime, electionStateInfo, electionId, SAMPLE_QUESTIONS } = ctx;
+  const { h, api, loadElection, formatTime, electionStateInfo, electionId, sampleQuestions } = ctx;
   const [{ election, source }, infoBundle] = await Promise.all([loadElection(electionId), loadInfo(api, electionId)]);
   if (!election) {
     main.replaceChildren(
-      h("div", { class: "page-head" }, h("h1", { text: "Election not found" })),
-      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Back to elections" }))
+      h("div", { class: "page-head" }, h("h1", { text: t("common.electionNotFound") })),
+      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.backToElections") }))
     );
     return;
   }
   const info = infoBundle.info;
   const questionsRaw = info?.questions?.length ? info : election;
   const questions = publicQuestions(questionsRaw);
-  const qs = questions.length ? questions : publicQuestions({ questions: SAMPLE_QUESTIONS || [] });
+  const qs = questions.length ? questions : publicQuestions({ questions: sampleQuestions ? sampleQuestions() : [] });
 
   main.replaceChildren(
     crumb(h, election),
@@ -144,10 +146,10 @@ export async function renderElectionInfo(main, ctx) {
       formatTime,
       electionStateInfo,
       source,
-      "Read-only supporting information for each option. This is not a ballot and does not record a choice."
+      t("info.lede")
     ),
     qs.length === 0
-      ? h("div", { class: "notice notice-warn" }, h("p", { text: "This election has no published questions yet." }))
+      ? h("div", { class: "notice notice-warn" }, h("p", { text: t("info.noQuestions") }))
       : h(
           "ol",
           { class: "punch-list" },
@@ -169,8 +171,8 @@ export async function renderElectionInfo(main, ctx) {
                       { class: "punch-item-body" },
                       h("h3", { text: opt.label }),
                       optionHasInfo(opt)
-                        ? h("span", { class: "status-pill status-open", text: "Details published" })
-                        : h("span", { class: "status-pill status-created", text: "Name only" }),
+                        ? h("span", { class: "status-pill status-open", text: t("info.detailsPublished") })
+                        : h("span", { class: "status-pill status-created", text: t("info.nameOnly") }),
                       opt.summary ? h("p", { text: opt.summary }) : null,
                       h(
                         "div",
@@ -179,7 +181,7 @@ export async function renderElectionInfo(main, ctx) {
                           class: "btn",
                           href: `/elections/${encodeURIComponent(election.id)}/info/${encodeURIComponent(question.id)}/${encodeURIComponent(opt.id)}`,
                           "data-nav": "",
-                          text: "Open info page",
+                          text: t("info.openInfo"),
                         }),
                         ...(opt.links || []).slice(0, 2).map((link) =>
                           h("a", {
@@ -187,7 +189,7 @@ export async function renderElectionInfo(main, ctx) {
                             href: link.url,
                             target: "_blank",
                             rel: "noopener noreferrer",
-                            text: link.label || "External page",
+                            text: link.label || t("info.externalPage"),
                           })
                         )
                       )
@@ -201,8 +203,8 @@ export async function renderElectionInfo(main, ctx) {
     h(
       "div",
       { class: "toolbar" },
-      h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to ballot" }),
-      h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "All elections" })
+      h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: t("info.goBallot") }),
+      h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: t("common.allElections") })
     )
   );
 }
@@ -212,8 +214,8 @@ export async function renderOptionInfo(main, ctx) {
   const [{ election, source }, infoBundle] = await Promise.all([loadElection(electionId), loadInfo(api, electionId)]);
   if (!election) {
     main.replaceChildren(
-      h("div", { class: "page-head" }, h("h1", { text: "Election not found" })),
-      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Back to elections" }))
+      h("div", { class: "page-head" }, h("h1", { text: t("common.electionNotFound") })),
+      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.backToElections") }))
     );
     return;
   }
@@ -240,8 +242,8 @@ export async function renderOptionInfo(main, ctx) {
   if (!question || !option) {
     main.replaceChildren(
       crumb(h, election),
-      h("div", { class: "page-head" }, h("h1", { text: "Option not found" }), h("p", { text: "That candidate or measure choice is not on this ballot." })),
-      h("p", {}, h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/info`, "data-nav": "", text: "Back to option list" }))
+      h("div", { class: "page-head" }, h("h1", { text: t("info.optionMissing") }), h("p", { text: t("info.optionMissingBody") })),
+      h("p", {}, h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/info`, "data-nav": "", text: t("info.backList") }))
     );
     return;
   }
@@ -269,17 +271,17 @@ export async function renderOptionInfo(main, ctx) {
             },
           })
         : null,
-      h("p", { class: "kicker", text: "Supporting information" }),
+      h("p", { class: "kicker", text: t("info.supporting") }),
       h("h2", { text: option.label }),
       option.summary ? h("p", { class: "lede", text: option.summary }) : null,
       option.body
         ? h("div", { class: "option-body" }, ...paragraphs(option.body, h))
-        : h("p", { class: "field-hint", text: "The clerk has not published a longer statement for this option." }),
+        : h("p", { class: "field-hint", text: t("info.noStatement") }),
       option.links?.length
         ? h(
             "section",
             { "aria-labelledby": "ext-links" },
-            h("h3", { id: "ext-links", text: "External pages" }),
+            h("h3", { id: "ext-links", text: t("info.external") }),
             h(
               "ul",
               { class: "ext-links" },
@@ -302,8 +304,8 @@ export async function renderOptionInfo(main, ctx) {
     h(
       "div",
       { class: "toolbar" },
-      h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/info`, "data-nav": "", text: "All options" }),
-      h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to ballot" })
+      h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/info`, "data-nav": "", text: t("info.allOptions") }),
+      h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: t("info.goBallot") })
     )
   );
 }

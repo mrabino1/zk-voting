@@ -6,20 +6,21 @@
 import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
-import { renderVote, SAMPLE_QUESTIONS } from "./vote.js";
+import { renderVote, sampleQuestions } from "./vote.js";
 import { questionsOf, typeLabel } from "./ballot.js";
 import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, mountSignInPanel } from "./signin.js";
+import { t, localeTag, LOCALE_EVENT } from "./i18n.js";
 
 const VOTER_STORE_KEY = "republic.voter.v1";
 
-const STATE_LABELS = {
-  0: "Created",
-  1: "Roll frozen",
-  2: "Open",
-  3: "Closed",
-  4: "Tallied",
+const STATE_KEYS = {
+  0: "created",
+  1: "rollFrozen",
+  2: "open",
+  3: "closed",
+  4: "tallied",
 };
 
 const STATE_CLASS = {
@@ -101,7 +102,7 @@ export async function api(path, options = {}) {
   }
   if (!res.ok) {
     const err = new Error(
-      data?.error || data?.message || data?.detail || res.statusText || "Request failed"
+      data?.error || data?.message || data?.detail || res.statusText || t("common.requestFailed")
     );
     err.status = res.status;
     err.data = data;
@@ -120,15 +121,16 @@ function asList(data) {
 
 export function electionStateInfo(state) {
   const n = Number(state);
+  const key = STATE_KEYS[n];
   return {
     code: Number.isFinite(n) ? n : 0,
-    label: STATE_LABELS[n] || `State ${state}`,
+    label: key ? t(`status.election.${key}`) : t("status.election.state", { state }),
     className: STATE_CLASS[n] || "status-created",
   };
 }
 
 export function formatTime(value) {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return t("common.dash");
   let ms = Number(value);
   if (!Number.isFinite(ms)) {
     const parsed = Date.parse(value);
@@ -138,7 +140,7 @@ export function formatTime(value) {
     ms *= 1000;
   }
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(localeTag(), {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(ms));
@@ -215,12 +217,12 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
           : null,
     aliases: Array.isArray(raw.aliases) ? raw.aliases.map((a) => String(a)) : [],
     links: raw.links || null,
-    title: raw.title || params.title || `Election ${id}`,
+    title: raw.title || params.title || t("sample.electionFallback", { id }),
     jurisdiction:
       raw.jurisdiction ||
       raw.jurisdictionName ||
       raw.jurisdictionLabel ||
-      (raw.jurisdictionId ? String(raw.jurisdictionId) : "Jurisdiction"),
+      (raw.jurisdictionId ? String(raw.jurisdictionId) : t("sample.jurisdictionFallback")),
     jurisdictionId: raw.jurisdictionId || params.jurisdictionId || null,
     state,
     startTime,
@@ -245,8 +247,8 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       shortCode: "nbrdge2k3m",
       onChainElectionId: "1",
       aliases: ["1"],
-      title: "City of Northbridge General Municipal Election",
-      jurisdiction: "City of Northbridge",
+      title: t("sample.cityTitle"),
+      jurisdiction: t("sample.cityJurisdiction"),
       jurisdictionId: "northbridge",
       state: 2,
       startTime: now - 86400,
@@ -256,16 +258,16 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       questionCount: 2,
       rollFrozen: true,
       ballotSpecHash: "0x" + "ab".repeat(32),
-      description: "Mayor is not on this ballot. Council at-large and one ordinance.",
-      questions: SAMPLE_QUESTIONS,
+      description: t("sample.cityDesc"),
+      questions: sampleQuestions(),
     },
     {
       id: "7a8b9c0d-1e2f-4a3b-9c4d-5e6f70819202",
       shortCode: "ctymeas4n8",
       onChainElectionId: "2",
       aliases: ["2"],
-      title: "County Measure A — Public Library Bond",
-      jurisdiction: "Northbridge County",
+      title: t("sample.measureTitle"),
+      jurisdiction: t("sample.measureJurisdiction"),
       jurisdictionId: "northbridge-county",
       state: 1,
       startTime: now + 86400 * 3,
@@ -274,16 +276,16 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-      description: "Roll is certified. Voting opens at the published start time.",
-      questions: [SAMPLE_QUESTIONS[0]],
+      description: t("sample.measureDesc"),
+      questions: [sampleQuestions()[0]],
     },
     {
       id: "4b5c6d7e-8f90-41a2-a3b4-c5d6e7f80903",
       shortCode: "schbrd5p2q",
       onChainElectionId: "3",
       aliases: ["3"],
-      title: "School Board, District 4",
-      jurisdiction: "Northbridge Unified School District",
+      title: t("sample.schoolTitle"),
+      jurisdiction: t("sample.schoolJurisdiction"),
       jurisdictionId: "nusd",
       state: 3,
       startTime: now - 86400 * 20,
@@ -292,16 +294,16 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-      description: "Polls are closed. Tally has not been posted.",
-      questions: [SAMPLE_QUESTIONS[1]],
+      description: t("sample.schoolDesc"),
+      questions: [sampleQuestions()[1]],
     },
     {
       id: "90ab12cd-34ef-4a56-8b78-90abcdef0404",
       shortCode: "stref6q3r4",
       onChainElectionId: "4",
       aliases: ["4"],
-      title: "Statewide special referendum — transit authority",
-      jurisdiction: "State of example",
+      title: t("sample.stateTitle"),
+      jurisdiction: t("sample.stateJurisdiction"),
       jurisdictionId: "state-ex",
       state: 4,
       startTime: now - 86400 * 40,
@@ -310,16 +312,16 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 1,
       rollFrozen: true,
-              description: "Tally posted. Receipts list hashes only and cannot prove which option you marked.",
-      questions: [SAMPLE_QUESTIONS[0]],
+              description: t("sample.stateDesc"),
+      questions: [sampleQuestions()[0]],
     },
     {
       id: "11223344-5566-4777-8899-aabbccdde505",
       shortCode: "wrkcbd7s4t",
       onChainElectionId: "5",
       aliases: ["5"],
-      title: "Workers’ cooperative board (annual)",
-      jurisdiction: "Northbridge Food Cooperative",
+      title: t("sample.coopTitle"),
+      jurisdiction: t("sample.coopJurisdiction"),
       jurisdictionId: "nfc",
       state: 0,
       startTime: now + 86400 * 14,
@@ -328,8 +330,8 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
       maxParticipants: 0,
       questionCount: 2,
       rollFrozen: false,
-      description: "Registration is open. The clerk has not frozen the roll.",
-      questions: SAMPLE_QUESTIONS,
+      description: t("sample.coopDesc"),
+      questions: sampleQuestions(),
     },
   ].map((e) => normalizeElection(e, now));
 }
@@ -380,7 +382,7 @@ export function announce(message) {
 }
 
 export function setTitle(page) {
-  document.title = page ? `${page} — Republic` : "Republic — civic elections";
+  document.title = page ? `${page} — Republic` : t("chrome.titleHome");
 }
 
 export function reasonLabel(code) {
@@ -399,29 +401,31 @@ function voterKeys(election) {
 
 function voterStatusForElection(election, me, store) {
   const keys = voterKeys(election);
-  if (keys.some((k) => store.votes[k])) return { key: "recorded", label: "Ballot recorded", className: "status-recorded" };
+  if (keys.some((k) => store.votes[k])) return { key: "recorded", label: t("status.voter.recorded"), className: "status-recorded" };
   const remote = keys.map((k) => me?.elections?.[k] || me?.statuses?.[k]).find(Boolean);
   if (remote) {
     const status = String(remote.status || remote).toLowerCase();
     if (status.includes("disqual")) {
       return {
         key: "disqualified",
-        label: `Disqualified${remote.reasonCode ? " · " + reasonLabel(remote.reasonCode) : ""}`,
+        label: remote.reasonCode
+          ? t("status.voter.disqualifiedReason", { reason: reasonLabel(remote.reasonCode) })
+          : t("status.voter.disqualified"),
         className: "status-disqualified",
       };
     }
-    if (status.includes("pending")) return { key: "pending", label: "Pending review", className: "status-pending" };
-    if (status.includes("eligible")) return { key: "eligible", label: "Eligible", className: "status-eligible" };
-    if (status.includes("register")) return { key: "registered", label: "Registered", className: "status-eligible" };
+    if (status.includes("pending")) return { key: "pending", label: t("status.voter.pending"), className: "status-pending" };
+    if (status.includes("eligible")) return { key: "eligible", label: t("status.voter.eligible"), className: "status-eligible" };
+    if (status.includes("register")) return { key: "registered", label: t("status.voter.registered"), className: "status-eligible" };
   }
   if (me?.disqualified || me?.isDisqualified) {
-    return { key: "disqualified", label: "Disqualified", className: "status-disqualified" };
+    return { key: "disqualified", label: t("status.voter.disqualified"), className: "status-disqualified" };
   }
   if (keys.some((k) => store.registrations[k])) {
-    if (election.state === 2) return { key: "eligible", label: "Eligible on this device", className: "status-eligible" };
-    return { key: "registered", label: "Registered on this device", className: "status-eligible" };
+    if (election.state === 2) return { key: "eligible", label: t("status.voter.eligibleDevice"), className: "status-eligible" };
+    return { key: "registered", label: t("status.voter.registeredDevice"), className: "status-eligible" };
   }
-  return { key: "not_registered", label: "Not registered", className: "status-created" };
+  return { key: "not_registered", label: t("status.voter.notRegistered"), className: "status-created" };
 }
 
 export async function loadElections() {
@@ -505,7 +509,7 @@ function ctx() {
     recordVoteReceipt,
     reasonLabel,
     setTitle,
-    SAMPLE_QUESTIONS,
+    sampleQuestions,
     mountSignInPanel,
   };
 }
@@ -514,14 +518,14 @@ function renderHome(main, route, bundle) {
   const { elections, source, me, walletRecord, store } = bundle;
   const openCount = elections.filter((e) => e.state === 2).length;
   const walletLine = walletRecord?.staleWrap
-    ? "This device has a v1 passkey wrap (identity was derived from the account seed). Reset it on Register, then create a new passkey."
+    ? t("home.walletStale")
     : walletRecord
-      ? `Passkey wallet on this device. Commitment ${walletRecord.identityCommitment.slice(0, 18)}…`
-      : "No passkey on this device yet.";
+      ? t("home.walletPresent", { commitment: walletRecord.identityCommitment.slice(0, 18) })
+      : t("home.walletNone");
 
   const list =
     elections.length === 0
-      ? h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }))
+      ? h("div", { class: "notice notice-warn" }, h("p", { text: t("home.noElections") }))
       : h(
           "div",
           { class: "grid-cards", role: "list" },
@@ -544,34 +548,34 @@ function renderHome(main, route, bundle) {
               h(
                 "ul",
                 { class: "meta-list" },
-                h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+                h("li", {}, h("span", { class: "lbl", text: t("home.opens") }), h("span", { text: formatTime(election.startTime) })),
+                h("li", {}, h("span", { class: "lbl", text: t("home.cutoff") }), h("span", { text: formatTime(election.cutoffTime) })),
                 election.shortCode
                   ? h(
                       "li",
                       {},
-                      h("span", { class: "lbl", text: "Short link" }),
+                      h("span", { class: "lbl", text: t("home.shortLink") }),
                       h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
                     )
                   : null,
                 h(
                   "li",
                   {},
-                  h("span", { class: "lbl", text: "Roll" }),
+                  h("span", { class: "lbl", text: t("home.roll") }),
                   h(
                     "span",
                     {
-                      text: `${election.participantCount} registered${
-                        election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
-                      }`,
+                      text: election.maxParticipants
+                        ? t("home.rollCapped", { count: election.participantCount, cap: election.maxParticipants })
+                        : t("home.rollUnlimited", { count: election.participantCount }),
                     }
                   )
                 ),
                 h(
                   "li",
                   {},
-                  h("span", { class: "lbl", text: "Questions" }),
-                  h("span", { text: String(election.questionCount || election.questions?.length || "—") })
+                  h("span", { class: "lbl", text: t("home.questions") }),
+                  h("span", { text: String(election.questionCount || election.questions?.length || t("common.dash")) })
                 )
               ),
               election.description ? h("p", { text: election.description }) : null,
@@ -580,14 +584,14 @@ function renderHome(main, route, bundle) {
                 "div",
                 { class: "cluster" },
                 canVote
-                  ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
+                  ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: t("home.markBallot") })
                   : vs.key === "recorded"
-                    ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
+                    ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: t("home.viewReceipt") })
                     : election.state === 2
-                      ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Open ballot" })
-                      : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
+                      ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: t("home.openBallot") })
+                      : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: t("home.electionDetail") }),
                 canRegister
-                  ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+                  ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: t("home.register") })
                   : null,
                 h(
                   "a",
@@ -595,14 +599,14 @@ function renderHome(main, route, bundle) {
                     class: election.state >= 4 ? "btn" : "btn btn-secondary",
                     href: `/elections/${encodeURIComponent(election.id)}/results`,
                     "data-nav": "",
-                    text: election.state >= 4 ? "Results" : "Results status",
+                    text: election.state >= 4 ? t("home.results") : t("home.resultsStatus"),
                   }
                 ),
                 h("a", {
                   class: "btn btn-secondary",
                   href: `/elections/${encodeURIComponent(election.id)}/info`,
                   "data-nav": "",
-                  text: "Candidate / measure info",
+                  text: t("home.candidateInfo"),
                 })
               )
             );
@@ -613,32 +617,32 @@ function renderHome(main, route, bundle) {
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "Voter home" }),
-      h("h1", { text: "Elections on this Node" }),
+      h("p", { class: "kicker", text: t("home.kicker") }),
+      h("h1", { text: t("home.title") }),
       h(
         "p",
         { class: "lede" },
-        "This is the voter desk for Republic: register with a device passkey, check whether you are on the roll, and mark a ballot while polls are open. Republic is not a commercial product."
+        t("home.lede")
       ),
         h(
           "div",
           { class: "notice", role: "status" },
-          h("p", { text: `${openCount} election${openCount === 1 ? "" : "s"} currently accepting ballots.` }),
+          h("p", { text: t("home.openCount", { count: openCount }) }),
           h("p", { text: walletLine }),
           me?.user
-            ? h("p", { text: `Signed in as ${me.user.handle} · ${me.user.role}.` })
-            : h("p", { text: "Sign in below if you already have a passkey or a bound Ethereum wallet." }),
+            ? h("p", { text: t("home.signedInAs", { handle: me.user.handle, role: me.user.role }) })
+            : h("p", { text: t("home.signInHint") }),
           h(
             "p",
             {
-              text: "Public turnout and explorer vote proofs publish once an hour, after that hour closes. A person leaving a voting office cannot be matched to a live jurisdiction tick.",
+              text: t("home.hourlyNote"),
             }
           ),
         source === "sample"
           ? h(
               "p",
               {
-                text: "Showing the built-in sample roll because /api/elections is not available. When the Node API is up, this list is the live calendar.",
+                text: t("home.sampleNote"),
               }
             )
           : null
@@ -650,62 +654,62 @@ function renderHome(main, route, bundle) {
     h(
       "section",
       { id: "how-it-works", tabindex: "-1" },
-      h("h2", { text: "How this desk works" }),
+      h("h2", { text: t("home.howTitle") }),
       h(
         "div",
         { class: "how-grid" },
         h(
           "article",
           {},
-          h("h3", { text: "1. One person, several ways to prove it" }),
+          h("h3", { text: t("home.how1Title") }),
           h(
             "p",
             {
-              text: "Identify yourself with a passkey, a Web3 wallet, or a smart-card digital ID. You may verify several Ethereum addresses internally; only one is active. The vote Merkle leaf is still an identity commitment, never that address and never a seed phrase.",
+              text: t("home.how1Body"),
             }
           )
         ),
         h(
           "article",
           {},
-          h("h3", { text: "2. The roll stores a commitment" }),
+          h("h3", { text: t("home.how2Title") }),
           h(
             "p",
             {
-              text: "The public tree holds an identity commitment hex, not your name and not the trapdoor. A coercer who sees that you registered still cannot read your choice.",
+              text: t("home.how2Body"),
             }
           )
         ),
         h(
           "article",
           {},
-          h("h3", { text: "3. Registered is not the same as eligible" }),
+          h("h3", { text: t("home.how3Title") }),
           h(
             "p",
             {
-              text: "A clerk or disqualification officer may bar a registered person for a coded reason (residency, court order, duplicate identity, and others). The code is public; the ballot is not.",
+              text: t("home.how3Body"),
             }
           )
         ),
         h(
           "article",
           {},
-          h("h3", { text: "4. The relay pays gas" }),
+          h("h3", { text: t("home.how4Title") }),
           h(
             "p",
             {
-              text: "You authorize a UserOp with the passkey. The Node relays it; the jurisdiction paymaster sponsors L2 gas. The bundler is the visible sender, not your local address.",
+              text: t("home.how4Body"),
             }
           )
         ),
         h(
           "article",
           {},
-          h("h3", { text: "5. Proofs wait for the hour to close" }),
+          h("h3", { text: t("home.how5Title") }),
           h(
             "p",
             {
-              text: "Your ballot is accepted immediately so the nullifier cannot be reused. Dashboards and the explorer only show that vote after the hour that contained it has closed, so walking out of a voting office cannot be matched to a live increase in any jurisdiction.",
+              text: t("home.how5Body"),
             }
           )
         )
@@ -714,16 +718,14 @@ function renderHome(main, route, bundle) {
     h(
       "section",
       {},
-      h("h2", { text: "Your status on this device" }),
+      h("h2", { text: t("home.deviceTitle") }),
       renderDeviceStatus(walletRecord, me, store)
     )
   );
   const signInRoot = main.querySelector("#sign-in-root");
   if (signInRoot) {
-    signInRoot.setAttribute(
-      "data-lede",
-      "Returning users: sign in with the passkey on this device or an Ethereum wallet already bound to your person. First-time registration is on Identify yourself."
-    );
+    signInRoot.setAttribute("data-lede-key", "home.signInLede");
+    signInRoot.setAttribute("data-lede", t("home.signInLede"));
     mountSignInPanel(signInRoot);
   }
 }
@@ -744,54 +746,54 @@ function renderDeviceStatus(walletRecord, me, store) {
   const nReg = Object.keys(store.registrations).length;
   const nVote = Object.keys(store.votes).length;
   const rows = [
-    h("dt", { text: "Passkey" }),
-    h("dd", { text: walletRecord?.staleWrap ? "v1 wrap — reset required" : walletRecord ? "Present" : "Not created" }),
-    h("dt", { text: "Identity commitment" }),
-    h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || "—" }),
-    h("dt", { text: "Local address" }),
+    h("dt", { text: t("home.passkey") }),
+    h("dd", { text: walletRecord?.staleWrap ? t("home.passkeyStale") : walletRecord ? t("home.passkeyPresent") : t("home.passkeyMissing") }),
+    h("dt", { text: t("home.identityCommitment") }),
+    h("dd", { class: walletRecord ? "hex" : "", text: walletRecord?.identityCommitment || t("common.dash") }),
+    h("dt", { text: t("home.localAddress") }),
     h(
       "dd",
       {},
       walletRecord
         ? [h("code", { text: walletRecord.address }), " ", h("span", { class: "field-hint", text: `(${walletRecord.addressScheme})` })]
-        : "—"
+        : t("common.dash")
     ),
-    h("dt", { text: "Active Ethereum address" }),
-    h("dd", { class: me?.identity?.activeEthAddress ? "hex" : "", text: me?.identity?.activeEthAddress || "—" }),
-    h("dt", { text: "Verified methods" }),
+    h("dt", { text: t("home.activeEth") }),
+    h("dd", { class: me?.identity?.activeEthAddress ? "hex" : "", text: me?.identity?.activeEthAddress || t("common.dash") }),
+    h("dt", { text: t("home.verifiedMethods") }),
     h(
       "dd",
       {
         text: me?.identity?.authMethods?.length
           ? me.identity.authMethods.map((m) => m.type).join(", ")
-          : "—",
+          : t("common.dash"),
       }
     ),
-    h("dt", { text: "Local roll receipts" }),
+    h("dt", { text: t("home.localRoll") }),
     h("dd", { text: String(nReg) }),
-    h("dt", { text: "Local ballot receipts" }),
+    h("dt", { text: t("home.localBallots") }),
     h("dd", { text: String(nVote) }),
   ];
   if (me?.status) {
-    rows.push(h("dt", { text: "Node /api/me" }), h("dd", { text: String(me.status) }));
+    rows.push(h("dt", { text: t("home.nodeMe") }), h("dd", { text: String(me.status) }));
   }
   return h(
     "div",
     { class: "panel" },
     h("dl", { class: "status-dl" }, ...rows),
-    h("p", { class: "field-hint", text: wallet.PRODUCTION_ADDRESS_NOTE }),
+    h("p", { class: "field-hint", text: t("wallet.productionNote") }),
     h(
       "div",
       { class: "toolbar" },
-      h("a", { class: "btn", href: "/register", "data-nav": "", text: walletRecord ? "Review identity" : "Identify yourself" })
+      h("a", { class: "btn", href: "/register", "data-nav": "", text: walletRecord ? t("home.reviewIdentity") : t("home.identifyYourself") })
     )
   );
 }
 
 function renderNotFound(main, route) {
   main.replaceChildren(
-    h("div", { class: "page-head" }, h("h1", { text: "Page not found" }), h("p", { text: `No voter page at ${route.path}.` })),
-    h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }))
+    h("div", { class: "page-head" }, h("h1", { text: t("common.pageNotFound") }), h("p", { text: t("common.noPageAt", { path: route.path }) })),
+    h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.returnElections") }))
   );
 }
 
@@ -799,10 +801,10 @@ async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
   updateNav(route.name);
-  main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
+  main.replaceChildren(h("p", { class: "loading-msg", text: t("common.loading") }));
   try {
     if (route.name === "home") {
-      setTitle("Elections");
+      setTitle(t("chrome.navElections"));
       const [{ elections, source }, me, walletRecord] = await Promise.all([
         loadElections(),
         loadMe(),
@@ -816,22 +818,22 @@ async function renderRoute(route) {
         store: readVoterStore(),
       });
     } else if (route.name === "register") {
-      setTitle("Register");
+      setTitle(t("chrome.navRegister"));
       await renderRegister(main, { ...ctx(), route });
     } else if (route.name === "vote") {
-      setTitle("Ballot");
+      setTitle(t("chrome.titleBallot"));
       await renderVote(main, { ...ctx(), route, electionId: route.params.id });
     } else if (route.name === "results") {
-      setTitle("Results");
+      setTitle(t("chrome.titleResults"));
       await renderResults(main, { ...ctx(), route, electionId: route.params.id });
     } else if (route.name === "resultsIndex") {
-      setTitle("Results");
+      setTitle(t("chrome.titleResults"));
       await renderResultsIndex(main, { ...ctx(), route });
     } else if (route.name === "election-info") {
-      setTitle("Ballot information");
+      setTitle(t("chrome.titleInfo"));
       await renderElectionInfo(main, { ...ctx(), route, electionId: route.params.id });
     } else if (route.name === "option-info") {
-      setTitle("Option information");
+      setTitle(t("chrome.titleOption"));
       await renderOptionInfo(main, {
         ...ctx(),
         route,
@@ -840,7 +842,7 @@ async function renderRoute(route) {
         optionId: route.params.optionId,
       });
     } else {
-      setTitle("Not found");
+      setTitle(t("chrome.titleNotFound"));
       renderNotFound(main, route);
     }
   } catch (err) {
@@ -848,9 +850,9 @@ async function renderRoute(route) {
       h(
         "div",
         { class: "notice notice-error", role: "alert" },
-        h("p", { text: err.message || "Something went wrong loading this page." })
+        h("p", { text: err.message || t("common.loadError") })
       ),
-      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }))
+      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.returnElections") }))
     );
   }
   main.focus({ preventScroll: true });
@@ -859,6 +861,9 @@ async function renderRoute(route) {
 if (typeof document !== "undefined") {
   startRouter(renderRoute);
   window.addEventListener(SESSION_EVENT, () => {
+    renderRoute(currentRoute());
+  });
+  window.addEventListener(LOCALE_EVENT, () => {
     renderRoute(currentRoute());
   });
 }
