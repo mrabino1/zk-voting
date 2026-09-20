@@ -5,9 +5,8 @@
 (function () {
   try {
     var stored = window.localStorage.getItem("republic_lang");
-    if (stored === "es" || stored === "en") {
-      document.documentElement.lang = stored;
-    }
+    var tags = { en: "en", es: "es", zh: "zh-Hans", fil: "fil", vi: "vi" };
+    if (tags[stored]) document.documentElement.lang = tags[stored];
   } catch (_err) {
     /* private mode / blocked storage — stay on html lang="en" */
   }

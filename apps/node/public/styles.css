@@ -1074,8 +1074,11 @@ th {
 
 .lang-switcher {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  gap: 0.28rem;
+  max-width: 12.75rem;
   border: 1px solid var(--gold);
   border-radius: 999px;
   padding: 0.28rem 0.4rem;
@@ -1083,8 +1086,8 @@ th {
 }
 
 .lang-flag {
-  width: 2rem;
-  height: 1.2rem;
+  width: 1.75rem;
+  height: 1.05rem;
   padding: 0;
   border: 1px solid transparent;
   background: transparent;
