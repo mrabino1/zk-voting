@@ -383,6 +383,16 @@ L1_TALLY_MIRROR_ADDRESS=
 L1_PUBLISHER_PRIVATE_KEY=
 L1_SETTLEMENT_ADDRESS=
 L1_CHAIN_ID=
+
+# --- L2 hourly attic (S3 or R2). Leave ENABLED=0 for a local demo. ---
+ARCHIVE_ENABLED=0
+ARCHIVE_S3_BUCKET=
+ARCHIVE_S3_ENDPOINT=
+ARCHIVE_S3_REGION=auto
+ARCHIVE_S3_ACCESS_KEY_ID=
+ARCHIVE_S3_SECRET_ACCESS_KEY=
+ARCHIVE_HOT_WINDOW_HOURS=2
+ARCHIVE_EXPLORER_SNAPSHOT=0
 ```
 
 | Fill this | When |
@@ -395,6 +405,7 @@ L1_CHAIN_ID=
 | `RECEIPT_PDF_SECRET` | Stable HMAC for locked PDFs across restarts. Unset = Node writes `$DATA_DIR/receipt-pdf.secret` |
 | `L1_RPC`, `L1_TALLY_MIRROR_ADDRESS`, `L1_PUBLISHER_PRIVATE_KEY` | Certify tally hashes on Ethereum. Unset = tally still works (`skipped`) |
 | `SETTLEMENT_ADDRESS`, `PRIVATE_KEY` | L2 prover posts `RollupSettlement.submitBatch`. **Not** the Node `L1_PUBLISHER_PRIVATE_KEY` |
+| `ARCHIVE_ENABLED`, `ARCHIVE_S3_*` | Optional hourly L2 attic to S3/R2. Default off. Sequencer disk stays the hot window |
 | `ALLOW_DEV_LOGIN` | Local fallback only. Must stay empty on `master` |
 | `CHAIN_RPC` | Empty = JSON-only demo (no factory call). Compose default `http://l2:8546` is the civic sequencer |
 
