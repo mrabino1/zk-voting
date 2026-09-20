@@ -77,6 +77,8 @@ That last row is why publisher keys are election-critical.
 | `AlreadyPosted` bookkeeping lies | Re-read `resultHashOfIdentity` before and after the write; mismatch → `already_posted_mismatch` |
 | Unauthenticated explorer ingest | `EXPLORER_INGEST_SECRET` required outside tests |
 | Captured clerk rewrites About / FAQ / home | Unscoped CMS pages and site title are `platform_admin` only; clerks publish jurisdiction-tagged pages |
+| `ALLOW_DEV_LOGIN` on a public host | Ignored when `NODE_ENV=production`; route 404s |
+| Public officer roster for phishing | Unauthenticated `/api/jurisdictions` returns names only; `/roles` requires a signed-in officer |
 
 ### Residual (must stay in the operator’s head)
 
@@ -90,6 +92,7 @@ That last row is why publisher keys are election-critical.
 | Hostile **Node operator** editing JSON | Forked hosts are trusted for their own UI | `/outcomes` checks internal consistency; courts use L1 + auditor pack |
 | BallotInbox / Groth16 still `uint256` | Per-factory storage | Proofs are not portable across factories |
 | Compromised **Node `platform_admin`** | Host can rewrite About / FAQ and grant clerks | One Node per jurisdiction when possible; treat host keys as election-critical |
+| Explorer ingest secret leak | Ingest can poison the public L2 log (not L1) | Treat the secret like a publisher key; never run production with `NODE_ENV=test` |
 | MockVerifier / stand-in hasher | Documented non-production | Do not run a binding election on `test/unstable` crypto |
 
 ---
@@ -110,6 +113,8 @@ overwrite. The design treats those as different failures.
 | Front-run L1 with a lie | Freeze `AlreadyPosted` on a false hash | First writer wins **by design**; operators monitor `hashMismatch` / `already_posted_mismatch` |
 | Unauthenticated explorer ingest | Dashboards show fake turnout | Shared secret; unset secret refuses ingest outside tests |
 | Captured clerk on a shared Node | Rewrite About / FAQ as if the host endorsed it | Unscoped pages and site title are host-only |
+| Enable `ALLOW_DEV_LOGIN` on the public host | Instant `platform_admin` | `NODE_ENV=production` ignores it |
+| Scrape `/api/jurisdictions` for clerk handles | Targeted phishing of the official desk | Public list is names only; roster is officer-auth |
 | Ambiguous `/elections/1` | Serve the wrong contest | 409 `ELECTION_ID_COLLISION` rather than the first match |
 | DoS the Node or explorer | Hide the honest UI | Courts read L1 + auditor pack; L2 ingest failure does not halt sequencing |
 | Capture factory admin or mirror admin | Bootstrap elections / break-glass post | Residual. Multisig those keys; they are not “just devops” |

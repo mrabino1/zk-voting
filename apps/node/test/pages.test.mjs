@@ -296,7 +296,14 @@ describe('pages HTTP CMS and clean URLs', () => {
   test('clerk publishes a custom page; draft is hidden; HTML is stripped; reserved slug fails', async () => {
     const reserved = await api('POST', '/api/office/pages', {
       jar: northClerkJar,
-      body: { kind: 'custom', slug: 'admin', title: 'Admin', status: 'published', blocks: [{ type: 'paragraph', text: 'x' }] },
+      body: {
+        kind: 'custom',
+        slug: 'admin',
+        title: 'Admin',
+        status: 'published',
+        jurisdictionId: 'north',
+        blocks: [{ type: 'paragraph', text: 'x' }],
+      },
     });
     assert.equal(reserved.status, 400);
 

@@ -487,6 +487,7 @@ describe('Republic Node API', () => {
   test('jurisdictions list includes seeded demo', async () => {
     const { json } = await api('GET', '/api/jurisdictions');
     assert.ok(json.jurisdictions.some((j) => j.id === 'demo'));
+    assert.ok(json.jurisdictions.every((j) => j.officers === undefined));
   });
 
   test('vote accepts the SPA body (publicInputs nested on proof)', async () => {

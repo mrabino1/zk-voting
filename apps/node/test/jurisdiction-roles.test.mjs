@@ -169,10 +169,27 @@ describe('per-jurisdiction officer roles', () => {
     });
     assert.equal(again.status, 200, again.json?.error);
     assert.equal(again.json.user.role, 'voter');
-    const listed = await api('GET', '/api/jurisdictions/north/roles');
+    const listed = await api('GET', '/api/jurisdictions/north/roles', { jar: adminJar });
     assert.equal(listed.status, 200);
     const clerks = listed.json.officers.filter((o) => o.handle === 'north-clerk' && o.role === 'clerk');
     assert.equal(clerks.length, 1);
+  });
+
+  test('anonymous GET /api/jurisdictions omits the officer roster', async () => {
+    const anon = await api('GET', '/api/jurisdictions');
+    assert.equal(anon.status, 200);
+    const north = anon.json.jurisdictions.find((j) => j.id === 'north');
+    assert.ok(north);
+    assert.equal(north.name, 'North');
+    assert.equal(north.officers, undefined);
+
+    const rolesAnon = await api('GET', '/api/jurisdictions/north/roles');
+    assert.equal(rolesAnon.status, 401);
+
+    const host = await api('GET', '/api/jurisdictions', { jar: adminJar });
+    const northHost = host.json.jurisdictions.find((j) => j.id === 'north');
+    assert.ok(Array.isArray(northHost.officers));
+    assert.ok(northHost.officers.some((o) => o.handle === 'north-clerk' && o.role === 'clerk'));
   });
 
   test('GET /api/me lists jurisdictionRoles for a scoped clerk', async () => {
