@@ -1,19 +1,40 @@
 /**
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Website locale (English default, Spanish optional). Same shape as DealPunchList:
- * supportedLngs en/es, fallback en, persist only in localStorage (no navigator sniff).
- * Smart-contract code and operator documentation stay English.
+ * Website locale (English default). Optional Spanish, Chinese, Tagalog, and
+ * Vietnamese — ACS ranks 2–5 for languages spoken at home in the United States.
+ * Same shape as DealPunchList: fallback en, persist only in localStorage
+ * (no navigator sniff). Smart-contract code and operator documentation stay English.
  */
 
 import en from "./locales/en.js";
 import es from "./locales/es.js";
+import zh from "./locales/zh.js";
+import fil from "./locales/fil.js";
+import vi from "./locales/vi.js";
 
-export const SUPPORTED_LOCALES = ["en", "es"];
 export const DEFAULT_LOCALE = "en";
 export const STORAGE_KEY = "republic_lang";
 export const LOCALE_EVENT = "republic:locale";
 
-const CATALOGS = { en, es };
+/** BCP-47 tags written to html[lang] and Intl.DateTimeFormat. */
+export const HTML_LANG = {
+  en: "en",
+  es: "es",
+  zh: "zh-Hans",
+  fil: "fil",
+  vi: "vi",
+};
+
+export const SUPPORTED_LOCALES = ["en", "es", "zh", "fil", "vi"];
+
+const CATALOGS = { en, es, zh, fil, vi };
+const NAME_KEYS = {
+  en: "lang.english",
+  es: "lang.spanish",
+  zh: "lang.chinese",
+  fil: "lang.tagalog",
+  vi: "lang.vietnamese",
+};
 
 let currentLocale = DEFAULT_LOCALE;
 const listeners = new Set();
@@ -56,8 +77,9 @@ export function getLocale() {
   return isSupportedLocale(currentLocale) ? currentLocale : DEFAULT_LOCALE;
 }
 
-export function localeTag() {
-  return getLocale() === "es" ? "es" : "en";
+export function localeTag(locale = getLocale()) {
+  const code = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
+  return HTML_LANG[code] || HTML_LANG[DEFAULT_LOCALE];
 }
 
 export function t(key, vars) {
@@ -75,7 +97,7 @@ export function t(key, vars) {
 
 export function applyDocumentLang(locale = getLocale()) {
   if (typeof document === "undefined") return;
-  document.documentElement.lang = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
+  document.documentElement.lang = localeTag(locale);
 }
 
 const ATTR_MAP = [
@@ -222,6 +244,62 @@ function flagSpanish() {
   return svg;
 }
 
+function flagChinese() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 30 20");
+  svg.setAttribute("class", "lang-flag-svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.innerHTML = `
+    <rect width="30" height="20" fill="#DE2910"/>
+    <polygon fill="#FFDE00" points="5,1.6 5.88,4.28 8.7,4.28 6.41,5.94 7.29,8.62 5,6.96 2.71,8.62 3.59,5.94 1.3,4.28 4.12,4.28"/>
+    <polygon fill="#FFDE00" points="10.15,1.55 10.48,2.55 11.55,2.55 10.69,3.17 11.02,4.17 10.15,3.55 9.28,4.17 9.61,3.17 8.75,2.55 9.82,2.55"/>
+    <polygon fill="#FFDE00" points="12.35,3.55 12.68,4.55 13.75,4.55 12.89,5.17 13.22,6.17 12.35,5.55 11.48,6.17 11.81,5.17 10.95,4.55 12.02,4.55"/>
+    <polygon fill="#FFDE00" points="12.35,6.55 12.68,7.55 13.75,7.55 12.89,8.17 13.22,9.17 12.35,8.55 11.48,9.17 11.81,8.17 10.95,7.55 12.02,7.55"/>
+    <polygon fill="#FFDE00" points="10.15,8.45 10.48,9.45 11.55,9.45 10.69,10.07 11.02,11.07 10.15,10.45 9.28,11.07 9.61,10.07 8.75,9.45 9.82,9.45"/>
+  `;
+  return svg;
+}
+
+function flagTagalog() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 19 10");
+  svg.setAttribute("class", "lang-flag-svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.innerHTML = `
+    <rect width="19" height="5" fill="#0038A8"/>
+    <rect y="5" width="19" height="5" fill="#CE1126"/>
+    <polygon points="0,0 7.4,5 0,10" fill="#FFFFFF"/>
+    <circle cx="2.55" cy="5" r="1.15" fill="#FCD116"/>
+    <circle cx="1.15" cy="2.4" r="0.42" fill="#FCD116"/>
+    <circle cx="1.15" cy="7.6" r="0.42" fill="#FCD116"/>
+    <circle cx="5.05" cy="5" r="0.42" fill="#FCD116"/>
+  `;
+  return svg;
+}
+
+function flagVietnamese() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 19 10");
+  svg.setAttribute("class", "lang-flag-svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.innerHTML = `
+    <rect width="19" height="10" fill="#DA251D"/>
+    <polygon fill="#FFCD00" points="9.5,1.35 10.58,4.55 13.95,4.55 11.22,6.52 12.3,9.72 9.5,7.75 6.7,9.72 7.78,6.52 5.05,4.55 8.42,4.55"/>
+  `;
+  return svg;
+}
+
+const FLAG_FNS = {
+  en: flagEnglish,
+  es: flagSpanish,
+  zh: flagChinese,
+  fil: flagTagalog,
+  vi: flagVietnamese,
+};
+
 function flagButton(locale, label, flag) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -229,7 +307,7 @@ function flagButton(locale, label, flag) {
   btn.setAttribute("aria-label", label);
   btn.setAttribute("title", label);
   btn.setAttribute("aria-pressed", getLocale() === locale ? "true" : "false");
-  btn.dataset.testid = `language-flag-${label.toLowerCase()}`;
+  btn.dataset.testid = `language-flag-${locale}`;
   btn.dataset.locale = locale;
   btn.append(flag());
   btn.addEventListener("click", () => {
@@ -246,8 +324,7 @@ export function mountLanguageSwitcher(root) {
   host.setAttribute("role", "group");
   host.setAttribute("aria-label", t("lang.group"));
   host.replaceChildren(
-    flagButton("en", t("lang.english"), flagEnglish),
-    flagButton("es", t("lang.spanish"), flagSpanish)
+    ...SUPPORTED_LOCALES.map((code) => flagButton(code, t(NAME_KEYS[code]), FLAG_FNS[code]))
   );
   return host;
 }
@@ -265,6 +342,7 @@ export function resetLocaleForTests(locale = DEFAULT_LOCALE) {
 
 export const RepublicI18n = {
   SUPPORTED_LOCALES,
+  HTML_LANG,
   DEFAULT_LOCALE,
   STORAGE_KEY,
   LOCALE_EVENT,

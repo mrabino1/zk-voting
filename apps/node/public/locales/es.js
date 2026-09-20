@@ -8,6 +8,9 @@ export default {
     group: "Idioma",
     english: "Inglés",
     spanish: "Español",
+    chinese: "Chino",
+    tagalog: "Tagalo",
+    vietnamese: "Vietnamita",
   },
   chrome: {
     skip: "Saltar al contenido principal",
