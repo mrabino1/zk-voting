@@ -15,37 +15,44 @@ import {
   typeLabel,
 } from "./ballot.js";
 
-export const SAMPLE_QUESTIONS = [
-  {
-    id: "q-ordinance",
-    type: "YES_NO",
-    prompt: "Shall Ordinance 2026-14, extending public library hours on Sundays, be adopted?",
-    description: "A Yes vote adopts the ordinance. A No vote rejects it. You may undervote only if you intend to leave this question blank.",
-    options: [
-      { id: "yes", label: "Yes", summary: "Adopt the ordinance." },
-      { id: "no", label: "No", summary: "Reject the ordinance." },
-    ],
-  },
-  {
-    id: "q-council",
-    type: "MULTI_CHOICE",
-    prompt: "City Council, at-large — choose up to two candidates.",
-    description: "Select one or two names. Selecting none is an undervote on this aspect.",
-    maxSelections: 2,
-    options: [
-      {
-        id: "cand-rivera",
-        label: "Alex Rivera",
-        summary: "Neighborhood organizer.",
-        body: "Alex Rivera organizes tenant unions in Northbridge.",
-        links: [{ label: "Campaign site", url: "https://example.org/rivera" }],
-      },
-      { id: "cand-chen", label: "Morgan Chen", summary: "Civil engineer." },
-      { id: "cand-okonkwo", label: "Sam Okonkwo", summary: "School teacher." },
-      { id: "cand-berg", label: "Jordan Berg", summary: "Small-business owner." },
-    ],
-  },
-];
+import { t } from "./i18n.js";
+
+export function sampleQuestions() {
+  return [
+    {
+      id: "q-ordinance",
+      type: "YES_NO",
+      prompt: t("sample.ordinancePrompt"),
+      description: t("sample.ordinanceDesc"),
+      options: [
+        { id: "yes", label: t("ballot.yes"), summary: t("sample.yesSummary") },
+        { id: "no", label: t("ballot.no"), summary: t("sample.noSummary") },
+      ],
+    },
+    {
+      id: "q-council",
+      type: "MULTI_CHOICE",
+      prompt: t("sample.councilPrompt"),
+      description: t("sample.councilDesc"),
+      maxSelections: 2,
+      options: [
+        {
+          id: "cand-rivera",
+          label: "Alex Rivera",
+          summary: t("sample.riveraSummary"),
+          body: t("sample.riveraBody"),
+          links: [{ label: t("sample.campaignSite"), url: "https://example.org/rivera" }],
+        },
+        { id: "cand-chen", label: "Morgan Chen", summary: t("sample.chenSummary") },
+        { id: "cand-okonkwo", label: "Sam Okonkwo", summary: t("sample.okonkwoSummary") },
+        { id: "cand-berg", label: "Jordan Berg", summary: t("sample.bergSummary") },
+      ],
+    },
+  ];
+}
+
+/** @deprecated Prefer sampleQuestions() so copy follows the active locale. */
+export const SAMPLE_QUESTIONS = sampleQuestions();
 
 const ZERO_ROOT = "0x" + "00".repeat(32);
 
@@ -79,7 +86,7 @@ export async function renderVote(main, ctx) {
     electionStateInfo,
     electionId,
     chainElectionId,
-    SAMPLE_QUESTIONS: sampleQs,
+    sampleQuestions: sampleQs,
   } = ctx;
 
   const [{ election, source }, me, publicRecord] = await Promise.all([
@@ -90,14 +97,14 @@ export async function renderVote(main, ctx) {
 
   if (!election) {
     main.replaceChildren(
-      h("div", { class: "page-head" }, h("h1", { text: "Election not found" }), h("p", { text: `No election ${electionId} on this Node.` })),
-      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Back to elections" }))
+      h("div", { class: "page-head" }, h("h1", { text: t("common.electionNotFound") }), h("p", { text: t("common.noElectionOnNode", { id: electionId }) })),
+      h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.backToElections") }))
     );
     return;
   }
 
   const questions =
-    source === "sample" ? questionsOf({ questions: election.questions?.length ? election.questions : sampleQs || SAMPLE_QUESTIONS }) : questionsOf(election);
+    source === "sample" ? questionsOf({ questions: election.questions?.length ? election.questions : sampleQs ? sampleQs() : sampleQuestions() }) : questionsOf(election);
   const rankingState = new Map();
   for (const q of questions) {
     if (isRankedQuestion(q)) rankingState.set(q.id, []);
@@ -127,44 +134,42 @@ export async function renderVote(main, ctx) {
         "p",
         { class: "cluster" },
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
-        source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample ballot" }) : null
+        source === "sample" ? h("span", { class: "status-pill status-created", text: t("vote.sampleBallot") }) : null
       ),
       h(
         "ul",
         { class: "meta-list" },
-        h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: String(election.id) })),
+        h("li", {}, h("span", { class: "lbl", text: t("vote.electionId") }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: String(election.id) })),
         election.shortCode
           ? h(
               "li",
               {},
-              h("span", { class: "lbl", text: "Short link" }),
+              h("span", { class: "lbl", text: t("vote.shortLink") }),
               h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
             )
           : null,
         election.onChainElectionId
-          ? h("li", {}, h("span", { class: "lbl", text: "On-chain id" }), h("span", { text: String(election.onChainElectionId) }))
+          ? h("li", {}, h("span", { class: "lbl", text: t("vote.onChainId") }), h("span", { text: String(election.onChainElectionId) }))
           : null,
-        h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-        h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        h("li", {}, h("span", { class: "lbl", text: t("vote.opens") }), h("span", { text: formatTime(election.startTime) })),
+        h("li", {}, h("span", { class: "lbl", text: t("vote.cutoff") }), h("span", { text: formatTime(election.cutoffTime) })),
         h(
           "li",
           {},
-          h("span", { class: "lbl", text: "Aspects" }),
-          h("span", { text: questions.length ? `${questions.length} question${questions.length === 1 ? "" : "s"} on this ballot` : "None published" })
+          h("span", { class: "lbl", text: t("vote.aspects") }),
+          h("span", { text: questions.length ? t("vote.aspectsCount", { count: questions.length }) : t("vote.nonePublished") })
         ),
         election.ballotSpecHash
-          ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
+          ? h("li", {}, h("span", { class: "lbl", text: t("vote.ballotSpec") }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
           : null,
         election.tallyPubKey
-          ? h("li", {}, h("span", { class: "lbl", text: "Tally encryption" }), h("span", { text: "P-256 ECIES to the election tally pubkey (demo threshold-1 key, NON-PRODUCTION)" }))
+          ? h("li", {}, h("span", { class: "lbl", text: t("vote.tallyEncryptionLabel") }), h("span", { text: t("vote.tallyEncryption") }))
           : null
       ),
       h(
         "p",
         {
-          text: election.tallyPubKey
-            ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
-            : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
+          text: election.tallyPubKey ? t("vote.envelopeHelpTally") : t("vote.envelopeHelp"),
         }
       ),
       h(
@@ -173,10 +178,10 @@ export async function renderVote(main, ctx) {
         h("a", {
           href: `/elections/${encodeURIComponent(election.id)}/info`,
           "data-nav": "",
-          text: "Read candidate and measure information (does not record a vote)",
+          text: t("vote.readInfo"),
         }),
         " · ",
-        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Election results" })
+        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: t("vote.electionResults") })
       )
     );
   }
@@ -239,11 +244,11 @@ export async function renderVote(main, ctx) {
         h(
           "label",
           { class: "rank-number" },
-          h("span", { class: "visually-hidden", text: `Rank for ${opt.label}` }),
+          h("span", { class: "visually-hidden", text: t("vote.rankFor", { label: opt.label }) }),
           h(
             "select",
             {
-              "aria-label": `Rank for ${opt.label}`,
+              "aria-label": t("vote.rankFor", { label: opt.label }),
               value: String(rankIndex + 1),
               onChange: (ev) => applyRankNumber(opt.id, ev.target.value),
             },
@@ -259,7 +264,7 @@ export async function renderVote(main, ctx) {
           h("button", {
             type: "button",
             class: "btn btn-secondary rank-btn",
-            text: "Up",
+            text: t("vote.up"),
             disabled: rankIndex === 0,
             onClick: () => {
               const list = [...(rankingState.get(question.id) || [])];
@@ -271,7 +276,7 @@ export async function renderVote(main, ctx) {
           h("button", {
             type: "button",
             class: "btn btn-secondary rank-btn",
-            text: "Down",
+            text: t("vote.down"),
             disabled: rankIndex === total - 1,
             onClick: () => {
               const list = [...(rankingState.get(question.id) || [])];
@@ -283,7 +288,7 @@ export async function renderVote(main, ctx) {
           h("button", {
             type: "button",
             class: "btn btn-secondary rank-btn",
-            text: "Remove",
+            text: t("vote.remove"),
             onClick: () =>
               setRanking(
                 question,
@@ -300,20 +305,20 @@ export async function renderVote(main, ctx) {
       { class: "rank-list-wrap" },
       h("p", {
         class: "field-hint",
-        text: "Rank in order of preference (1 = first choice). Drag to reorder, use rank numbers, or move names from the unranked list. Leaving a name unranked is an undervote on that candidate. Instant-runoff (IRV) eliminates last place until a majority.",
+        text: t("vote.rankedHelp"),
       }),
       rankedIds.length
         ? h(
             "ol",
-            { class: "rank-list", "aria-label": "Your ranking" },
+            { class: "rank-list", "aria-label": t("vote.yourRanking") },
             ...rankedIds.map((id, i) => rankRow(optionById(question, id) || { id, label: id }, i, rankedIds.length))
           )
-        : h("p", { class: "field-hint", text: "No candidates ranked yet." }),
+        : h("p", { class: "field-hint", text: t("vote.noneRanked") }),
       unranked.length
         ? h(
             "div",
             { class: "unranked-list" },
-            h("p", { class: "field-hint", text: "Not ranked" }),
+            h("p", { class: "field-hint", text: t("vote.notRanked") }),
             ...unranked.map((opt) =>
               h(
                 "div",
@@ -321,14 +326,14 @@ export async function renderVote(main, ctx) {
                 h(
                   "label",
                   { class: "rank-number" },
-                  h("span", { class: "visually-hidden", text: `Assign rank for ${opt.label}` }),
+                  h("span", { class: "visually-hidden", text: t("vote.assignRank", { label: opt.label }) }),
                   h(
                     "select",
                     {
-                      "aria-label": `Rank for ${opt.label}`,
+                      "aria-label": t("vote.rankFor", { label: opt.label }),
                       onChange: (ev) => applyRankNumber(opt.id, ev.target.value),
                     },
-                    h("option", { value: "", text: "—" }),
+                    h("option", { value: "", text: t("common.dash") }),
                     ...Array.from({ length: n }, (_, i) => h("option", { value: String(i + 1), text: String(i + 1) }))
                   )
                 ),
@@ -336,7 +341,7 @@ export async function renderVote(main, ctx) {
                 h("button", {
                   type: "button",
                   class: "btn btn-secondary rank-btn",
-                  text: "Add next",
+                  text: t("vote.addNext"),
                   onClick: () => setRanking(question, [...(rankingState.get(question.id) || []), opt.id], index),
                 })
               )
@@ -356,13 +361,13 @@ export async function renderVote(main, ctx) {
       h(
         "legend",
         {},
-        h("span", { class: "aspect-kicker", text: `Question ${index + 1} of ${questions.length} · ${typeLabel(question.type)}` }),
+        h("span", { class: "aspect-kicker", text: t("vote.questionKicker", { index: index + 1, total: questions.length, type: typeLabel(question.type) }) }),
         h("span", { class: "aspect-prompt", text: question.prompt })
       ),
       question.description ? h("p", { class: "field-hint", text: question.description }) : null,
       ranked
         ? rankedField(question, index)
-        : h("p", { class: "field-hint", text: multi ? `Select up to ${question.maxSelections}.` : "Select one. Leaving this blank is an undervote." }),
+        : h("p", { class: "field-hint", text: multi ? t("vote.selectUpTo", { count: question.maxSelections }) : t("vote.selectOne") }),
       ranked
         ? null
         : h(
@@ -395,7 +400,7 @@ export async function renderVote(main, ctx) {
                       class: "choice-info",
                       href: `/elections/${encodeURIComponent(election.id)}/info/${encodeURIComponent(question.id)}/${encodeURIComponent(opt.id)}`,
                       "data-nav": "",
-                      text: "About",
+                      text: t("vote.about"),
                     })
               )
             )
@@ -410,7 +415,7 @@ export async function renderVote(main, ctx) {
     const checked = boxes.filter((b) => b.checked);
     if (checked.length > question.maxSelections) {
       event.target.checked = false;
-      announce(`You may choose at most ${question.maxSelections} options.`);
+      announce(t("vote.maxOptions", { count: question.maxSelections }));
     }
   }
 
@@ -427,8 +432,8 @@ export async function renderVote(main, ctx) {
         h(
           "p",
           { class: "cluster" },
-          h("a", { class: "btn", href: "/", "data-nav": "", text: "Return to elections" }),
-          h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
+          h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.returnElections") }),
+          h("a", { class: "btn btn-secondary", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: t("vote.results") })
         )
       );
       fill(root, ...children);
@@ -441,11 +446,9 @@ export async function renderVote(main, ctx) {
           "div",
           { class: "notice notice-warn" },
           h("p", {
-            text: publicRecord?.staleWrap
-              ? "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting."
-              : "This device does not have a Republic passkey yet. Register first, then return to the ballot.",
+            text: publicRecord?.staleWrap ? t("vote.staleWrap") : t("vote.noPasskey"),
           }),
-          h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to registration" })
+          h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: t("vote.goRegister") })
         )
       );
     }
@@ -455,8 +458,8 @@ export async function renderVote(main, ctx) {
         h(
           "div",
           { class: "notice notice-warn", role: "status" },
-          h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." }),
-          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Certified results" })
+          h("p", { text: t("vote.pollsClosed") }),
+          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: t("vote.certifiedResults") })
         )
       );
     } else if (notOpen) {
@@ -465,17 +468,14 @@ export async function renderVote(main, ctx) {
           "div",
           { class: "notice notice-warn", role: "status" },
           h("p", {
-            text:
-              election.state === 1
-                ? "The roll is frozen. Voting has not opened. You may review the questions."
-                : "This election is not open. Registration may still be available.",
+            text: election.state === 1 ? t("vote.rollFrozen") : t("vote.notOpen"),
           })
         )
       );
     }
 
     if (me?.elections?.[election.id]?.status) {
-      children.push(h("p", { text: `Node status for you: ${me.elections[election.id].status}.` }));
+      children.push(h("p", { text: t("vote.nodeStatus", { status: me.elections[election.id].status }) }));
     }
 
     if (!questions.length) {
@@ -483,7 +483,7 @@ export async function renderVote(main, ctx) {
         h(
           "div",
           { class: "notice notice-error", role: "alert" },
-          h("p", { text: "This election has no published questions. The clerk must author at least one aspect." })
+          h("p", { text: t("vote.noQuestions") })
         )
       );
       fill(root, ...children);
@@ -494,7 +494,7 @@ export async function renderVote(main, ctx) {
       h(
         "form",
         { class: "ballot", id: "ballot-form", autocomplete: "off", onSubmit: onSubmit },
-        h("h2", { text: `Official ballot · ${questions.length} question${questions.length === 1 ? "" : "s"}` }),
+        h("h2", { text: t("vote.officialBallot", { count: questions.length }) }),
         ...questions.map((q, i) => questionField(q, i)),
         h(
           "label",
@@ -503,7 +503,7 @@ export async function renderVote(main, ctx) {
           h(
             "span",
             {
-              text: "I am eligible to mark this ballot, I am not submitting it under coercion that I wish to report to the clerk, and I understand the receipt will not list my choices.",
+              text: t("vote.swear"),
             }
           )
         ),
@@ -517,10 +517,10 @@ export async function renderVote(main, ctx) {
               type: "submit",
               disabled: Boolean(state.busy || !publicRecord || publicRecord.staleWrap),
               "aria-busy": state.busy ? "true" : "false",
-              text: state.busy ? "Waiting for passkey / relay…" : "Submit ballot with passkey",
+              text: state.busy ? t("vote.waitingRelay") : t("vote.submit"),
             }
           ),
-          h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "Cancel" })
+          h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: t("common.cancel") })
         )
       )
     );
@@ -532,18 +532,16 @@ export async function renderVote(main, ctx) {
     event.preventDefault();
     if (state.busy) return;
     if (!publicRecord || publicRecord.staleWrap) {
-      state.error = publicRecord?.staleWrap
-        ? "Reset the v1 passkey wrap on the register page, then create a new passkey."
-        : "Register a passkey on this device before voting.";
+      state.error = publicRecord?.staleWrap ? t("vote.resetWrap") : t("vote.registerFirst");
       paint();
       return;
     }
     const form = event.target;
     const answers = collectAnswers(form, questions);
     const blank = answers.every((a) => (a.ranking ? a.ranking.length === 0 : (a.optionIds || []).length === 0));
-    if (blank && !window.confirm("Every question is blank. Submit an undervote?")) return;
+    if (blank && !window.confirm(t("vote.undervoteConfirm"))) return;
     if (election.state !== 2) {
-      if (!window.confirm("This election is not open. Try to relay anyway? The Node should reject the vote.")) return;
+      if (!window.confirm(t("vote.notOpenConfirm"))) return;
     }
 
     state.busy = true;
@@ -551,7 +549,7 @@ export async function renderVote(main, ctx) {
     state.info = "";
     state.answersPreview = answers;
     paint();
-    announce("Confirm your passkey. Your choices will not appear on the receipt.");
+    announce(t("vote.confirmPasskey"));
 
     const ballotObject = buildBallotObject({
       electionId: election.id,
@@ -617,17 +615,16 @@ export async function renderVote(main, ctx) {
           body,
         });
         accepted = res?.accepted !== false;
-        message = res?.message || "The Node accepted the ballot for relay.";
+        message = res?.message || t("vote.accepted");
       } catch (err) {
         if (source === "sample" && err.status >= 400) {
           accepted = true;
-          message = `Passkey signature stored locally. The Node has no matching live election (${err.message}). This receipt does not list your choices.`;
+          message = t("vote.sampleAccept", { error: err.message });
         } else if (err.status >= 400) {
           throw err;
         } else {
           accepted = true;
-          message =
-            "Passkey signature stored. The Node /api/elections/:id/vote endpoint did not respond; this device kept a local receipt without listing your choices.";
+          message = t("vote.offlineAccept");
         }
       }
 
@@ -644,9 +641,9 @@ export async function renderVote(main, ctx) {
       state.step = "receipt";
       state.info = "";
       state.answersPreview = null;
-      announce("Ballot submitted. Receipt does not include your choices.");
+      announce(t("vote.submitted"));
     } catch (err) {
-      state.error = err.message || "The relay rejected this ballot.";
+      state.error = err.message || t("vote.rejected");
       announce(state.error);
     } finally {
       state.busy = false;
@@ -661,21 +658,21 @@ function renderReceipt(receipt, h) {
   return h(
     "section",
     { class: "receipt", "aria-labelledby": "receipt-heading" },
-    h("h2", { id: "receipt-heading", text: "Ballot receipt" }),
+    h("h2", { id: "receipt-heading", text: t("vote.receiptTitle") }),
     h(
       "p",
       {
-        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
+        text: t("vote.receiptHelp"),
       }
     ),
     receipt.message ? h("p", { text: receipt.message }) : null,
     h(
       "ul",
       { class: "meta-list" },
-      h("li", {}, h("span", { class: "lbl", text: "Recorded" }), h("span", { text: receipt.at || "—" })),
-      h("li", {}, h("span", { class: "lbl", text: "Ballot hash" }), h("span", { class: "hex", text: receipt.ballotHash || "—" })),
-      h("li", {}, h("span", { class: "lbl", text: "Nullifier" }), h("span", { class: "hex", text: receipt.nullifier || "—" })),
-      h("li", {}, h("span", { class: "lbl", text: "UserOp hash" }), h("span", { class: "hex", text: receipt.userOpHash || "—" }))
+      h("li", {}, h("span", { class: "lbl", text: t("vote.recorded") }), h("span", { text: receipt.at || t("common.dash") })),
+      h("li", {}, h("span", { class: "lbl", text: t("vote.ballotHash") }), h("span", { class: "hex", text: receipt.ballotHash || t("common.dash") })),
+      h("li", {}, h("span", { class: "lbl", text: t("vote.nullifier") }), h("span", { class: "hex", text: receipt.nullifier || t("common.dash") })),
+      h("li", {}, h("span", { class: "lbl", text: t("vote.userOpHash") }), h("span", { class: "hex", text: receipt.userOpHash || t("common.dash") }))
     )
   );
 }

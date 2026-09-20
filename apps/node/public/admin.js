@@ -1,4 +1,6 @@
 /* Platform admin — jurisdictions, officer grants, host status. No fee controls. */
+import { t, LOCALE_EVENT } from "./i18n.js";
+
 (function () {
   "use strict";
 
@@ -21,7 +23,7 @@
       data = { raw: text };
     }
     if (!res.ok) {
-      const err = new Error((data && (data.error || data.message)) || res.statusText || "Request failed");
+      const err = new Error((data && (data.error || data.message)) || res.statusText || t("common.requestFailed"));
       err.status = res.status;
       err.data = data;
       err.path = path;
@@ -44,7 +46,7 @@
         if (!retryable(err)) throw err;
       }
     }
-    throw last || new Error("Not found");
+    throw last || new Error(t("common.notFound"));
   }
 
   function pick(obj, names) {
@@ -87,7 +89,7 @@
   function errText(err) {
     return (
       (err.status ? err.status + " · " : "") +
-      (err.message || "Request failed") +
+      (err.message || t("common.requestFailed")) +
       (err.path ? " (" + err.path + ")" : "")
     );
   }
@@ -117,7 +119,7 @@
     const rows = flattenFacts(host, [], "").filter((r) => !skip.has(r.name));
     const tbody = $("table-addresses").querySelector("tbody");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="2" class="empty">No extra host facts.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="2" class="empty">' + t("admin.noFacts") + '</td></tr>';
       return;
     }
     tbody.innerHTML = rows
@@ -125,7 +127,7 @@
         (row) =>
           `<tr><td>${esc(row.name)}</td><td class="hash">${esc(row.value)} ${
             /^0x[0-9a-fA-F]{40}$/.test(row.value)
-              ? `<button type="button" class="copy" data-copy="${esc(row.value)}">Copy</button>`
+              ? `<button type="button" class="copy" data-copy="${esc(row.value)}">${t("common.copy")}</button>`
               : ""
           }</td></tr>`
       )
@@ -155,13 +157,13 @@
       ]);
       const nfp = pick(merged, ["nfp", "notForProfit"]) !== false;
       healthEl.innerHTML = ok
-        ? '<span class="status-dot on"></span>OK'
-        : '<span class="status-dot off"></span>Unhealthy';
-      $("stat-chain").textContent = chainId != null ? String(chainId) : "—";
+        ? '<span class="status-dot on"></span>' + t("common.ok")
+        : '<span class="status-dot off"></span>' + t("common.unhealthy");
+      $("stat-chain").textContent = chainId != null ? String(chainId) : t("common.dash");
       $("stat-factory").innerHTML = factory
-        ? `<span class="hash">${esc(factory)}</span> <button type="button" class="copy" data-copy="${esc(factory)}">Copy</button>`
-        : "—";
-      $("stat-nfp").textContent = nfp ? "Yes" : "Host did not label itself NOT FOR PROFIT";
+        ? `<span class="hash">${esc(factory)}</span> <button type="button" class="copy" data-copy="${esc(factory)}">${t("common.copy")}</button>`
+        : t("common.dash");
+      $("stat-nfp").textContent = nfp ? t("admin.nfpYes") : t("admin.nfpNo");
       const banner = $("disclosure-banner");
       const helper = globalThis.RepublicDisclosure;
       if (banner && merged.disclosure && helper) {
@@ -172,13 +174,13 @@
           next != null
             ? new Date(Number(next) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC")
             : "";
-        banner.textContent = merged.disclosure.note + (when ? " Next publish: " + when + "." : "");
+        banner.textContent = merged.disclosure.note + (when ? " " + t("disclosure.nextPublish", { time: when }) : "");
       }
       renderFacts(merged);
     } catch (err) {
-      healthEl.innerHTML = '<span class="status-dot off"></span>Unreachable';
-      $("stat-chain").textContent = "—";
-      $("stat-factory").textContent = "—";
+      healthEl.innerHTML = '<span class="status-dot off"></span>' + t("common.unreachable");
+      $("stat-chain").textContent = t("common.dash");
+      $("stat-factory").textContent = t("common.dash");
       $("stat-nfp").textContent = errText(err);
     }
   }
@@ -188,7 +190,7 @@
       const me = await request("/api/me");
       const user = me.user;
       if (!user) {
-        $("session-line").textContent = "Not signed in. Super admin approves admins; admins approve election staff.";
+        $("session-line").textContent = t("admin.sessionAnon");
         return me;
       }
       if ($("me-email") && me.me && me.me.contactEmail && !$("me-email").value) {
@@ -204,7 +206,7 @@
         " · " +
         user.role +
         (offices ? " · " + offices : "") +
-        (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
+        (me.unreadCount ? " · " + t("admin.unread", { count: me.unreadCount }) : "");
       return me;
     } catch (err) {
       $("session-line").textContent = errText(err);
@@ -214,7 +216,7 @@
 
   function formatOfficers(row) {
     const officers = Array.isArray(row.officers) ? row.officers : [];
-    if (!officers.length) return "—";
+    if (!officers.length) return t("common.dash");
     return officers
       .map((o) => (o.handle || o.address || o.userId || "?") + ": " + (o.role || "?"))
       .join("; ");
@@ -222,7 +224,7 @@
 
   function formatUserOffices(row) {
     const grants = Array.isArray(row.jurisdictionRoles) ? row.jurisdictionRoles : [];
-    if (!grants.length) return "—";
+    if (!grants.length) return t("common.dash");
     return grants.map((g) => (g.jurisdictionId || "?") + ": " + (g.role || "?")).join("; ");
   }
 
@@ -230,26 +232,26 @@
     const tbody = $("table-jurisdictions").querySelector("tbody");
     const select = $("g-jurisdiction");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">No jurisdictions yet.</td></tr>';
-      if (select) select.innerHTML = '<option value="">None loaded</option>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">' + t("admin.noJurisdictions") + '</td></tr>';
+      if (select) select.innerHTML = '<option value="">' + t("common.noneLoaded") + '</option>';
       renderOfficers([]);
       return;
     }
     tbody.innerHTML = rows
       .map((row) => {
         return `<tr>
-          <td>${esc(row.name || "Untitled")}</td>
+          <td>${esc(row.name || t("common.untitled"))}</td>
           <td class="hash">${esc(row.id)}</td>
           <td>${esc(formatOfficers(row))}</td>
-          <td class="hash">${esc(row.metadataURI || "—")}</td>
-          <td>${esc(row.createdAt || "—")}</td>
+          <td class="hash">${esc(row.metadataURI || t("common.dash"))}</td>
+          <td>${esc(row.createdAt || t("common.dash"))}</td>
         </tr>`;
       })
       .join("");
     if (select) {
       const current = select.value;
       select.innerHTML =
-        '<option value="">Select…</option>' +
+        '<option value="">' + t("common.select") + '</option>' +
         rows
           .map((row) => `<option value="${esc(row.id)}">${esc(row.name || row.id)} · ${esc(row.id)}</option>`)
           .join("");
@@ -277,16 +279,16 @@
       }
     }
     if (!grants.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">No jurisdiction officers yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">' + t("admin.noOfficers") + '</td></tr>';
       return;
     }
     tbody.innerHTML = grants
       .map(
         (g) => `<tr>
           <td>${esc(g.jurisdictionName)} <span class="hash">${esc(g.jurisdictionId)}</span></td>
-          <td>${esc(g.handle || g.address || g.userId || "—")}</td>
+          <td>${esc(g.handle || g.address || g.userId || t("common.dash"))}</td>
           <td>${esc(g.role)}</td>
-          <td>${esc(g.grantedAt || "—")}</td>
+          <td>${esc(g.grantedAt || t("common.dash"))}</td>
           <td>
             <button
               type="button"
@@ -297,7 +299,7 @@
               data-handle="${esc(g.handle)}"
               data-userid="${esc(g.userId)}"
               data-address="${esc(g.address)}"
-            >Revoke</button>
+            >${t("admin.revoke")}</button>
           </td>
         </tr>`
       )
@@ -322,18 +324,18 @@
     const tbody = $("table-users").querySelector("tbody");
     const select = $("g-user");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty">No users (or not authorized).</td></tr>';
-      select.innerHTML = '<option value="">None loaded</option>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">' + t("admin.noUsers") + '</td></tr>';
+      select.innerHTML = '<option value="">' + t("common.noneLoaded") + '</option>';
       return;
     }
     tbody.innerHTML = rows
       .map(
         (row) =>
-          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${row.hasContactEmail ? "yes" : "—"}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || "—")}</td><td>${row.personKeyBound ? "bound" : "—"}</td><td class="hash">${esc(row.id)}</td></tr>`
+          `<tr><td>${esc(row.handle)}</td><td>${esc(row.role)}</td><td>${esc(formatUserOffices(row))}</td><td>${row.hasContactEmail ? t("common.yes") : t("common.dash")}</td><td>${esc(String(row.authMethodCount ?? 0))}</td><td class="hash">${esc(row.activeEthAddress || t("common.dash"))}</td><td>${row.personKeyBound ? t("common.bound") : t("common.dash")}</td><td class="hash">${esc(row.id)}</td></tr>`
       )
       .join("");
     select.innerHTML =
-      '<option value="">Select…</option>' +
+      '<option value="">' + t("common.select") + '</option>' +
       rows
         .map((row) => `<option value="${esc(row.id)}" data-handle="${esc(row.handle)}">${esc(row.handle)} · ${esc(row.role)}</option>`)
         .join("");
@@ -347,7 +349,7 @@
     } catch (err) {
       const msg =
         err.status === 401 || err.status === 403
-          ? "Sign in as platform_super_admin or platform_admin to list users and grant officers."
+          ? t("admin.signInToList")
           : errText(err);
       $("table-users").querySelector("tbody").innerHTML =
         `<tr><td colspan="8" class="empty">${esc(msg)}</td></tr>`;
@@ -363,11 +365,11 @@
       (row) => row.role !== "platform_admin" && row.role !== "platform_super_admin"
     );
     if (!eligible.length) {
-      select.innerHTML = '<option value="">No voters to elevate</option>';
+      select.innerHTML = '<option value="">' + t("admin.noVotersToElevate") + '</option>';
       return;
     }
     select.innerHTML =
-      '<option value="">Select…</option>' +
+      '<option value="">' + t("common.select") + '</option>' +
       eligible
         .map(
           (row) =>
@@ -381,7 +383,7 @@
     if (!table) return;
     const tbody = table.querySelector("tbody");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty">No platform admins yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">' + t("admin.noAdmins") + '</td></tr>';
       return;
     }
     tbody.innerHTML = rows
@@ -393,8 +395,8 @@
           <td class="hash">${esc(row.id)}</td>
           <td>${
             canRevoke
-              ? `<button type="button" class="btn btn-secondary btn-inline" data-revoke-admin="1" data-userid="${esc(row.id)}" data-handle="${esc(row.handle)}">Revoke</button>`
-              : "—"
+              ? `<button type="button" class="btn btn-secondary btn-inline" data-revoke-admin="1" data-userid="${esc(row.id)}" data-handle="${esc(row.handle)}">${t("admin.revoke")}</button>`
+              : t("common.dash")
           }</td>
         </tr>`;
       })
@@ -410,7 +412,7 @@
     } catch (err) {
       const msg =
         err.status === 401 || err.status === 403
-          ? "Sign in as a platform operator to list admins."
+          ? t("admin.signInToListAdmins")
           : errText(err);
       table.querySelector("tbody").innerHTML =
         `<tr><td colspan="4" class="empty">${esc(msg)}</td></tr>`;
@@ -427,7 +429,7 @@
     try {
       const created = await request("/api/jurisdictions", { method: "POST", body });
       const name = pick(created, ["jurisdiction.name", "name"]) || body.name;
-      flash($("flash-jurisdiction"), "ok", "Created " + name);
+      flash($("flash-jurisdiction"), "ok", t("common.created", { name }));
       event.target.reset();
       await loadJurisdictions();
       await loadUsers();
@@ -442,11 +444,11 @@
     const role = $("g-role").value;
     const jurisdictionId = $("g-jurisdiction").value.trim();
     if (!userId) {
-      flash($("flash-grant"), "err", "Choose a user.");
+      flash($("flash-grant"), "err", t("admin.chooseUser"));
       return;
     }
     if (!jurisdictionId) {
-      flash($("flash-grant"), "err", "Choose a jurisdiction.");
+      flash($("flash-grant"), "err", t("admin.chooseJurisdiction"));
       return;
     }
     const selected = $("g-user").selectedOptions[0];
@@ -473,11 +475,11 @@
       const who = pick(granted, ["grant.handle", "user.handle"]) || handle || userId;
       const mailStatus = pick(granted, ["mail.mail.status", "mail.status"]);
       const mailNote = mailStatus
-        ? " · mail " + mailStatus
+        ? t("admin.mailStatus", { status: mailStatus })
         : pick(granted, ["mail.reason"])
-          ? " · mail " + pick(granted, ["mail.reason"])
+          ? t("admin.mailStatus", { status: pick(granted, ["mail.reason"]) })
           : "";
-      flash($("flash-grant"), "ok", "Granted " + role + " on " + jurisdictionId + " to " + who + mailNote);
+      flash($("flash-grant"), "ok", t("admin.granted", { role, jurisdiction: jurisdictionId, who }) + mailNote);
       await Promise.all([loadUsers(), loadJurisdictions(), loadOutbox()]);
     } catch (err) {
       flash($("flash-grant"), "err", errText(err));
@@ -494,7 +496,7 @@
       event.preventDefault();
       const userId = $("a-user").value.trim();
       if (!userId) {
-        flash($("flash-admin"), "err", "Choose a user.");
+        flash($("flash-admin"), "err", t("admin.chooseUser"));
         return;
       }
       const selected = $("a-user").selectedOptions[0];
@@ -515,7 +517,7 @@
         flash(
           $("flash-admin"),
           "ok",
-          "Approved " + who + " as platform_admin" + (mailStatus ? " · mail " + mailStatus : "")
+          t("admin.approvedAdmin", { who }) + (mailStatus ? t("admin.mailStatus", { status: mailStatus }) : "")
         );
         await Promise.all([loadUsers(), loadAdmins(), loadOutbox()]);
       } catch (err) {
@@ -535,7 +537,7 @@
             handle: revokeAdmin.getAttribute("data-handle") || "",
           },
         });
-        flash($("flash-admin"), "ok", "Revoked platform_admin");
+        flash($("flash-admin"), "ok", t("admin.revokedAdmin"));
         await Promise.all([loadUsers(), loadAdmins()]);
       } catch (err) {
         flash($("flash-admin"), "err", errText(err));
@@ -555,7 +557,7 @@
           method: "DELETE",
           body: { jurisdictionId, role, handle, userId, address },
         });
-        flash(flashEl, "ok", "Revoked " + role + " on " + jurisdictionId);
+        flash(flashEl, "ok", t("admin.revoked", { role, jurisdiction: jurisdictionId }));
         await Promise.all([loadUsers(), loadJurisdictions()]);
       } catch (err) {
         flash(flashEl, "err", errText(err));
@@ -566,12 +568,12 @@
     if (!btn) return;
     try {
       await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
-      btn.textContent = "Copied";
+      btn.textContent = t("common.copied");
       setTimeout(() => {
-        btn.textContent = "Copy";
+        btn.textContent = t("common.copy");
       }, 1200);
     } catch {
-      btn.textContent = "Failed";
+      btn.textContent = t("common.failed");
     }
   });
 
@@ -580,17 +582,17 @@
     if (!table) return;
     const tbody = table.querySelector("tbody");
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">No promotion mail yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">' + t("admin.noMail") + '</td></tr>';
       return;
     }
     tbody.innerHTML = rows
       .map(
         (row) => `<tr>
-          <td>${esc(row.createdAt || "—")}</td>
-          <td>${esc(row.role || "—")}</td>
-          <td>${esc(row.to || "—")}</td>
-          <td>${esc(row.status || "—")}</td>
-          <td>${esc(row.subject || "—")}</td>
+          <td>${esc(row.createdAt || t("common.dash"))}</td>
+          <td>${esc(row.role || t("common.dash"))}</td>
+          <td>${esc(row.to || t("common.dash"))}</td>
+          <td>${esc(row.status || t("common.dash"))}</td>
+          <td>${esc(row.subject || t("common.dash"))}</td>
         </tr>`
       )
       .join("");
@@ -605,7 +607,7 @@
     } catch (err) {
       const msg =
         err.status === 401 || err.status === 403
-          ? "Sign in as a platform operator to read the mail outbox."
+          ? t("admin.signInToReadOutbox")
           : errText(err);
       table.querySelector("tbody").innerHTML =
         `<tr><td colspan="5" class="empty">${esc(msg)}</td></tr>`;
@@ -619,7 +621,7 @@
       const data = await request("/api/mail/templates");
       const rows = asList(data, ["templates", "items"]);
       if (!rows.length) {
-        select.innerHTML = '<option value="">No templates</option>';
+        select.innerHTML = '<option value="">' + t("admin.noTemplates") + '</option>';
         return;
       }
       select.innerHTML = rows
@@ -639,7 +641,7 @@
       event.preventDefault();
       const id = $("mail-template").value;
       if (!id) {
-        flash($("flash-mail"), "err", "Choose a template.");
+        flash($("flash-mail"), "err", t("admin.chooseTemplate"));
         return;
       }
       try {
@@ -652,7 +654,7 @@
         const frame = $("mail-html");
         frame.hidden = false;
         frame.srcdoc = tpl.html || "";
-        flash($("flash-mail"), "ok", "Preview loaded. This is a sample; live mail uses the granted person's handle.");
+        flash($("flash-mail"), "ok", t("admin.previewLoaded"));
       } catch (err) {
         flash($("flash-mail"), "err", errText(err));
       }
@@ -671,7 +673,7 @@
         flash(
           $("flash-contact-email"),
           "ok",
-          saved.contactEmail ? "Saved " + saved.contactEmail : "Cleared contact email"
+          saved.contactEmail ? t("admin.savedEmail", { email: saved.contactEmail }) : t("admin.clearedEmail")
         );
       } catch (err) {
         flash($("flash-contact-email"), "err", errText(err));
@@ -687,6 +689,16 @@
   if (refreshAdmins) refreshAdmins.addEventListener("click", () => loadAdmins());
   const refreshMail = $("btn-refresh-mail");
   if (refreshMail) refreshMail.addEventListener("click", () => loadOutbox());
+
+  window.addEventListener(LOCALE_EVENT, () => {
+    loadHealth();
+    loadMe();
+    loadJurisdictions();
+    loadUsers();
+    loadAdmins();
+    loadMailTemplates();
+    loadOutbox();
+  });
 
   loadHealth();
   loadMe();

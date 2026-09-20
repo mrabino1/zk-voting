@@ -260,3 +260,12 @@ apps/node/data/l2-chain.json    append-only blocks/txs for /explorer
 
 Do not put legal names, DOB, or street addresses on chain. Do not emit a selected
 option in an explorer payload. AGPL-3.0-or-later.
+
+---
+
+## Website languages
+
+The pages in `public/` default to **English**. Spanish is an optional website
+locale, persisted in `localStorage` as `republic_lang` (DealPunchList-style:
+supported `en` / `es`, fallback `en`, no `navigator.language` sniff).
+Smart-contract code, reason codes, API identifiers, and this README stay English.

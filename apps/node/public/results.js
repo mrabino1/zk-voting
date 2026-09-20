@@ -4,33 +4,35 @@
  * winners and ties. No unofficial choice totals while polls are open.
  */
 
+import { t } from "./i18n.js";
+
 function percent(share) {
-  if (share == null || !Number.isFinite(Number(share))) return "—";
+  if (share == null || !Number.isFinite(Number(share))) return t("common.dash");
   return `${Math.round(Number(share) * 1000) / 10}%`;
 }
 
 function emptyCopy(status) {
   if (status === "open") {
     return {
-      title: "Voting is open",
-      body: "Certified option counts appear after a tally is posted. Public turnout is the last hourly snapshot, so a person leaving a voting office cannot be matched to a live jurisdiction tick.",
+      title: t("results.votingOpen"),
+      body: t("results.emptyOpenBody"),
     };
   }
   if (status === "awaiting_tally" || status === "closed") {
     return {
-      title: "Awaiting certified tally",
-      body: "Polls are closed. Option counts and a declared winner are published when the tally operator posts a valid tally.",
+      title: t("results.emptyClosedTitle"),
+      body: t("results.emptyClosedBody"),
     };
   }
   if (status === "roll_frozen") {
     return {
-      title: "Roll frozen",
-      body: "Voting has not opened. Certified results appear after the poll closes and a tally is posted.",
+      title: t("results.rollFrozen"),
+      body: t("results.emptySoonBody"),
     };
   }
   return {
-    title: "Results not posted",
-    body: "This election has no certified tally yet. Option counts are not estimated from live ballots.",
+    title: t("results.notPosted"),
+    body: t("results.emptyGeneric"),
   };
 }
 
@@ -41,14 +43,14 @@ function outcomeBanner(question, h) {
     return h(
       "div",
       { class: "notice notice-warn", role: "status" },
-      h("p", { text: outcome.note || "Ranked-choice winner is not computed on this page." })
+      h("p", { text: outcome.note || t("results.irvNote") })
     );
   }
   if (outcome.status === "tie") {
     return h(
       "div",
       { class: "notice notice-warn results-tie", role: "status" },
-      h("p", { class: "results-kicker", text: "Tie" }),
+      h("p", { class: "results-kicker", text: t("results.tie") }),
       h("p", { text: outcome.note })
     );
   }
@@ -58,10 +60,10 @@ function outcomeBanner(question, h) {
     return h(
       "div",
       { class: "notice notice-ok results-winner", role: "status" },
-      h("p", { class: "results-kicker", text: irv ? "IRV winner" : outcome.winners?.length > 1 ? "Plurality winners" : "Plurality winner" }),
-      h("p", { text: outcome.note || `${names} declared.` }),
+      h("p", { class: "results-kicker", text: irv ? t("explorer.irvWinner") : outcome.winners?.length > 1 ? t("results.pluralityWinners") : t("results.pluralityWinner") }),
+      h("p", { text: outcome.note || t("results.declared", { names }) }),
       outcome.tieBroken
-        ? h("p", { class: "field-hint", text: "First-place tie broken by lexicographic option id." })
+        ? h("p", { class: "field-hint", text: t("results.lexTie") })
         : null
     );
   }
@@ -69,7 +71,7 @@ function outcomeBanner(question, h) {
     return h(
       "div",
       { class: "notice", role: "status" },
-      h("p", { text: outcome.note || "No votes were counted for any option." })
+      h("p", { text: outcome.note || t("results.noVotes") })
     );
   }
   return null;
@@ -89,7 +91,7 @@ function optionRow(opt, question, h) {
     "tr",
     { class: cls },
     h("th", { scope: "row", text: opt.label }),
-    h("td", { class: "num", text: count == null ? "—" : String(count) }),
+    h("td", { class: "num", text: count == null ? t("common.dash") : String(count) }),
     h("td", { class: "num", text: percent(opt.share) }),
     h(
       "td",
@@ -118,11 +120,11 @@ function irvRoundsTable(question, h) {
         h(
           "tr",
           {},
-          h("th", { text: "Round" }),
-          h("th", { text: "Continuing" }),
-          h("th", { text: "Exhausted" }),
-          h("th", { text: "Eliminated" }),
-          h("th", { text: "Counts" })
+          h("th", { text: t("results.round") }),
+          h("th", { text: t("results.continuing") }),
+          h("th", { text: t("results.exhausted") }),
+          h("th", { text: t("results.eliminated") }),
+          h("th", { text: t("results.counts") })
         )
       ),
       h(
@@ -133,10 +135,10 @@ function irvRoundsTable(question, h) {
             "tr",
             {},
             h("td", { text: String(round.round) }),
-            h("td", { text: String(round.continuing ?? "—") }),
-            h("td", { text: String(round.exhausted ?? "—") }),
-            h("td", { text: round.eliminated || "—" }),
-            h("td", { text: round.counts ? JSON.stringify(round.counts) : "—" })
+            h("td", { text: String(round.continuing ?? t("common.dash")) }),
+            h("td", { text: String(round.exhausted ?? t("common.dash")) }),
+            h("td", { text: round.eliminated || t("common.dash") }),
+            h("td", { text: round.counts ? JSON.stringify(round.counts) : t("common.dash") })
           )
         )
       )
@@ -150,18 +152,18 @@ function questionBlock(question, h) {
   return h(
     "section",
     { class: "question results-question", "aria-labelledby": `results-q-${question.id}` },
-    h("h2", { id: `results-q-${question.id}`, text: question.prompt || "Question" }),
+    h("h2", { id: `results-q-${question.id}`, text: question.prompt || t("results.questionFallback") }),
     h(
       "p",
       {
         class: "field-hint",
         text: irv
-          ? "Instant-runoff (ranked choice)."
+          ? t("results.irvMethod")
           : ranked
-            ? "Ranked-choice / IRV is not computed here."
+            ? t("results.irvMissing")
             : question.seats > 1
-              ? `Plurality, ${question.seats} seats.`
-              : "Plurality (most votes).",
+              ? t("results.pluralitySeats", { count: question.seats })
+              : t("results.plurality"),
       }
     ),
     outcomeBanner(question, h),
@@ -175,7 +177,7 @@ function questionBlock(question, h) {
         h(
           "thead",
           {},
-          h("tr", {}, h("th", { text: "Option" }), h("th", { text: "Count" }), h("th", { text: "Share" }), h("th", { class: "visually-hidden", text: "Share bar" }))
+          h("tr", {}, h("th", { text: t("results.option") }), h("th", { text: t("results.count") }), h("th", { text: t("results.share") }), h("th", { class: "visually-hidden", text: t("results.shareBar") }))
         ),
         h("tbody", {}, ...question.options.map((opt) => optionRow(opt, question, h)))
       )
@@ -191,7 +193,7 @@ export async function renderResults(main, ctx) {
     formatTime,
     electionStateInfo,
     electionId,
-    SAMPLE_QUESTIONS,
+    sampleQuestions,
   } = ctx;
 
   let payload = null;
@@ -205,8 +207,8 @@ export async function renderResults(main, ctx) {
     const loaded = await loadElection(electionId);
     if (!loaded.election) {
       main.replaceChildren(
-        h("div", { class: "page-head" }, h("h1", { text: "Election not found" }), h("p", { text: `No election ${electionId} on this Node.` })),
-        h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Back to elections" }))
+        h("div", { class: "page-head" }, h("h1", { text: t("common.electionNotFound") }), h("p", { text: t("common.noElectionOnNode", { id: electionId }) })),
+        h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: t("common.backToElections") }))
       );
       return;
     }
@@ -223,9 +225,9 @@ export async function renderResults(main, ctx) {
         status,
         message:
           source === "sample"
-            ? "This is the built-in sample roll. Certified counts load from the Node at GET /api/elections/:id/results."
+            ? t("results.sampleApi")
             : emptyCopy(status).body,
-        questions: (election.questions || SAMPLE_QUESTIONS).map((q) => ({
+        questions: (election.questions || (sampleQuestions ? sampleQuestions() : [])).map((q) => ({
           id: q.id,
           type: q.type,
           prompt: q.prompt,
@@ -248,34 +250,34 @@ export async function renderResults(main, ctx) {
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || "Election results" }),
-      h("h1", { text: election.title || `Election ${electionId}` }),
+      h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || t("results.title") }),
+      h("h1", { text: election.title || t("sample.electionFallback", { id: electionId }) }),
       h(
         "p",
         { class: "cluster" },
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
         available
-          ? h("span", { class: "status-pill status-tallied", text: "Certified tally" })
-          : h("span", { class: "status-pill status-created", text: "No tally yet" }),
-        source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
+          ? h("span", { class: "status-pill status-tallied", text: t("results.certified") })
+          : h("span", { class: "status-pill status-created", text: t("results.noTally") }),
+        source === "sample" ? h("span", { class: "status-pill status-created", text: t("common.sample") }) : null
       ),
       h(
         "ul",
         { class: "meta-list" },
-        h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { text: String(election.id || election.electionId) })),
-        h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-        h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        h("li", {}, h("span", { class: "lbl", text: t("results.electionId") }), h("span", { text: String(election.id || election.electionId) })),
+        h("li", {}, h("span", { class: "lbl", text: t("results.opens") }), h("span", { text: formatTime(election.startTime) })),
+        h("li", {}, h("span", { class: "lbl", text: t("results.cutoff") }), h("span", { text: formatTime(election.cutoffTime) })),
         h(
           "li",
           {},
-          h("span", { class: "lbl", text: "Published ballots" }),
-          h("span", { text: String(election.acceptedBallots ?? results.publishedAcceptedBallots ?? "—") })
+          h("span", { class: "lbl", text: t("results.publishedBallots") }),
+          h("span", { text: String(election.acceptedBallots ?? results.publishedAcceptedBallots ?? t("common.dash")) })
         ),
         available
           ? h(
               "li",
               {},
-              h("span", { class: "lbl", text: "Tally posted" }),
+              h("span", { class: "lbl", text: t("results.tallyPosted") }),
               h("span", { text: formatTime(results.tallyPostedAt || election.tally?.postedAt) })
             )
           : null
@@ -284,7 +286,7 @@ export async function renderResults(main, ctx) {
         "p",
         {
           class: "field-hint",
-          text: "Choice-level data is never shown here. Explorer vote proofs wait until the hour that contained them closes.",
+          text: t("results.privacy"),
         }
       )
     ),
@@ -315,7 +317,7 @@ export async function renderResults(main, ctx) {
     children.push(...results.questions.map((q) => questionBlock(questionWithDefaults(q), h)));
   } else if (Array.isArray(results.questions) && results.questions.length) {
     children.push(
-      h("h2", { text: "Questions on this ballot" }),
+      h("h2", { text: t("results.questions") }),
       ...results.questions.map((q) =>
         h(
           "section",
@@ -335,10 +337,10 @@ export async function renderResults(main, ctx) {
     h(
       "div",
       { class: "toolbar" },
-      h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: "All elections" }),
+      h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: t("common.allElections") }),
       h(
         "a",
-        { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id || electionId)}`, "data-nav": "", text: "Ballot" }
+        { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id || electionId)}`, "data-nav": "", text: t("results.ballot") }
       ),
       h(
         "a",
@@ -346,10 +348,10 @@ export async function renderResults(main, ctx) {
           class: "btn btn-secondary",
           href: `/elections/${encodeURIComponent(election.id || electionId)}/info`,
           "data-nav": "",
-          text: "Candidate / measure info",
+          text: t("results.candidateInfo"),
         }
       ),
-      h("a", { class: "btn btn-secondary", href: payload.explorerPath || `/explorer#/election/${encodeURIComponent(election.id || electionId)}`, text: "Explorer" })
+      h("a", { class: "btn btn-secondary", href: payload.explorerPath || `/explorer#/election/${encodeURIComponent(election.id || electionId)}`, text: t("results.explorer") })
     )
   );
 
@@ -369,7 +371,7 @@ export async function renderResultsIndex(main, ctx) {
   const { elections, source } = await loadElections();
   const list =
     elections.length === 0
-      ? h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }))
+      ? h("div", { class: "notice notice-warn" }, h("p", { text: t("home.noElections") }))
       : h(
           "div",
           { class: "grid-cards", role: "list" },
@@ -384,7 +386,7 @@ export async function renderResultsIndex(main, ctx) {
               h(
                 "ul",
                 { class: "meta-list" },
-                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) }))
+                h("li", {}, h("span", { class: "lbl", text: t("results.cutoff") }), h("span", { text: formatTime(election.cutoffTime) }))
               ),
               h(
                 "div",
@@ -395,7 +397,7 @@ export async function renderResultsIndex(main, ctx) {
                     class: election.state >= 4 ? "btn" : "btn btn-secondary",
                     href: `/elections/${encodeURIComponent(election.id)}/results`,
                     "data-nav": "",
-                    text: election.state >= 4 ? "Certified results" : "Results status",
+                    text: election.state >= 4 ? t("results.certifiedResults") : t("results.resultsStatus"),
                   }
                 )
               )
@@ -407,17 +409,17 @@ export async function renderResultsIndex(main, ctx) {
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "Observers" }),
-      h("h1", { text: "Election results" }),
+      h("p", { class: "kicker", text: t("results.observers") }),
+      h("h1", { text: t("results.title") }),
       h(
         "p",
         {
           class: "lede",
-          text: "Certified plurality totals after a tally. While a poll is open or awaiting a tally, this page does not show unofficial choice counts.",
+          text: t("results.lede"),
         }
       ),
       source === "sample"
-        ? h("div", { class: "notice notice-warn" }, h("p", { text: "Showing the built-in sample roll because /api/elections is not available." }))
+        ? h("div", { class: "notice notice-warn" }, h("p", { text: t("results.sampleNote") }))
         : null
     ),
     list
