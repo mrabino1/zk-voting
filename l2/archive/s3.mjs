@@ -4,6 +4,8 @@ import { createHash, createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { archiveError, classifyStoreError } from './errors.mjs';
+
 export function sha256Hex(data) {
   return createHash('sha256').update(data).digest('hex');
 }
@@ -187,7 +189,7 @@ export function createS3Store(cfg) {
       method,
       headers,
       body: method === 'GET' || method === 'HEAD' ? undefined : payload,
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(Number(cfg.timeoutMs) > 0 ? Number(cfg.timeoutMs) : 60_000),
     });
     return res;
   }
@@ -247,15 +249,72 @@ export function createObjectStore(cfg) {
   return createS3Store(cfg);
 }
 
-export async function putAndVerify(store, key, body) {
-  const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
-  const expected = sha256Hex(buf);
-  await store.put(key, buf);
-  const got = await store.get(key);
-  if (!got) throw new Error(`upload verify failed: ${key} missing after PUT`);
-  const actual = sha256Hex(got);
-  if (actual !== expected) {
-    throw new Error(`upload verify failed: ${key} sha256 ${actual} != ${expected}`);
+export function hashBytes(data) {
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  return { sha256: sha256Hex(buf), bytes: buf.length, body: buf };
+}
+
+export function hashLocalFile(filePath, io = fs) {
+  const body = io.readFileSync(filePath);
+  const hashed = hashBytes(body);
+  return { ...hashed, filePath };
+}
+
+export function verifyLocalHash(filePath, expectedSha256, io = fs) {
+  if (!io.existsSync(filePath)) return { present: false, filePath };
+  const again = hashLocalFile(filePath, io);
+  if (expectedSha256 && again.sha256 !== expectedSha256) {
+    throw archiveError(
+      'LOCAL_BITROT',
+      `local sha256 mismatch for ${filePath}: ${again.sha256} != ${expectedSha256} (bitrot or truncation during job)`,
+      { key: filePath, sha256: again.sha256, expected: expectedSha256 },
+    );
   }
-  return { key, sha256: expected, bytes: buf.length };
+  return { present: true, sha256: again.sha256, bytes: again.bytes, filePath };
+}
+
+export async function getAndVerify(store, key, expectedSha256, expectedBytes) {
+  let got;
+  try {
+    got = await store.get(key);
+  } catch (err) {
+    throw classifyStoreError(err, 'GET', key);
+  }
+  if (!got) {
+    throw archiveError('GET_VERIFY_FAILED', `upload verify failed: ${key} missing after PUT`, { key });
+  }
+  if (expectedBytes != null && got.length !== expectedBytes) {
+    throw archiveError(
+      'TRUNCATED',
+      `truncated remote ${key}: got ${got.length} bytes, expected ${expectedBytes}`,
+      { key, bytes: got.length, expected: expectedBytes },
+    );
+  }
+  const actual = sha256Hex(got);
+  if (expectedSha256 && actual !== expectedSha256) {
+    throw archiveError(
+      'GET_VERIFY_FAILED',
+      `upload verify failed: ${key} sha256 ${actual} != ${expectedSha256}`,
+      { key, sha256: actual, expected: expectedSha256 },
+    );
+  }
+  return { key, sha256: actual, bytes: got.length, body: got };
+}
+
+export async function putAndVerify(store, key, body, expectedSha256) {
+  const hashed = hashBytes(body);
+  if (expectedSha256 && expectedSha256 !== hashed.sha256) {
+    throw archiveError(
+      'HASH_MISMATCH',
+      `pre-upload sha256 for ${key} does not match body: ${hashed.sha256} != ${expectedSha256}`,
+      { key },
+    );
+  }
+  try {
+    await store.put(key, hashed.body);
+  } catch (err) {
+    throw classifyStoreError(err, 'PUT', key);
+  }
+  const remote = await getAndVerify(store, key, hashed.sha256, hashed.bytes);
+  return { key, sha256: hashed.sha256, bytes: hashed.bytes, remoteSha256: remote.sha256 };
 }

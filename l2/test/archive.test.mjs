@@ -10,8 +10,15 @@ import { after, before, describe, test } from 'node:test';
 
 import { ChainState, loadConfig } from '../sequencer/state.mjs';
 import { loadArchiveConfig } from '../archive/config.mjs';
-import { restoreHour, runArchiveJob, listLocalBlocks, readArchiveIndex } from '../archive/job.mjs';
-import { createFileStore, createMemoryStore } from '../archive/s3.mjs';
+import {
+  defaultArchiveIo,
+  restoreHour,
+  runArchiveJob,
+  listLocalBlocks,
+  readArchiveIndex,
+} from '../archive/job.mjs';
+import { acquireArchiveLock } from '../archive/lock.mjs';
+import { createFileStore, createMemoryStore, sha256Hex } from '../archive/s3.mjs';
 import { hourPath, hourStart, isHourArchivable, objectPrefix } from '../archive/hours.mjs';
 
 const HOUR = 3600;
@@ -134,6 +141,7 @@ describe('L2 hourly S3/R2 archive attic', () => {
   test('upload-then-prune sealed hours outside the hot window', async () => {
     const h0 = seedChain();
     const now = h0 + 3 * HOUR + 30;
+    const expectedBlockHash = sha256Hex(fs.readFileSync(path.join(dataDir, 'blocks', '1.json')));
     const result = await runArchiveJob({
       config: archiveCfg(),
       now,
@@ -154,8 +162,15 @@ describe('L2 hourly S3/R2 archive attic', () => {
     assert.ok(manifestBody, 'hour manifest uploaded');
     const manifest = JSON.parse(manifestBody.toString('utf8'));
     assert.equal(manifest.kind, 'l2-hour-archive');
-    assert.ok(manifest.objects.some((o) => o.key.endsWith('/blocks/1.json')));
-    assert.ok(manifest.objects.every((o) => o.sha256 && o.bytes >= 0));
+    assert.equal(manifest.hashAlgorithm, 'sha256');
+    const blockObj = manifest.objects.find((o) => o.key.endsWith('/blocks/1.json'));
+    assert.ok(blockObj);
+    assert.equal(blockObj.algorithm, 'sha256');
+    assert.equal(blockObj.hashedAt, 'pre-upload');
+    assert.equal(blockObj.sha256, expectedBlockHash);
+    const remote = await store.get(blockObj.key);
+    assert.equal(sha256Hex(remote), expectedBlockHash);
+    assert.equal(remote.length, blockObj.bytes);
 
     const local = listLocalBlocks(dataDir).map((b) => b.number);
     assert.ok(local.includes(0));
@@ -186,6 +201,7 @@ describe('L2 hourly S3/R2 archive attic', () => {
     const failed = result.hours.find((h) => !h.ok);
     assert.ok(failed, 'expected a failed hour');
     assert.match(failed.error, /injected put failure/);
+    assert.equal(failed.code, 'PUT_FAILED');
     assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
     assert.equal(fs.existsSync(path.join(dataDir, 'proofs', 'batch-0.json')), true);
   });
@@ -201,7 +217,9 @@ describe('L2 hourly S3/R2 archive attic', () => {
       async get(key) {
         const got = await inner.get(key);
         if (got && String(key).includes('/blocks/1.json')) {
-          return Buffer.from('tampered');
+          const copy = Buffer.from(got);
+          copy[0] = copy[0] ^ 0xff;
+          return copy;
         }
         return got;
       },
@@ -214,6 +232,8 @@ describe('L2 hourly S3/R2 archive attic', () => {
       now: h0 + 3 * HOUR + 30,
     });
     assert.equal(result.ok, false);
+    const failed = result.hours.find((h) => !h.ok);
+    assert.equal(failed.code, 'GET_VERIFY_FAILED');
     assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
   });
 
@@ -303,5 +323,303 @@ describe('L2 hourly S3/R2 archive attic', () => {
     fs.unlinkSync(path.join(dataDir, 'blocks', '2.json'));
     const config = l2Config();
     assert.throws(() => ChainState.open(config), /missing block file/);
+  });
+
+  test('PUT HTTP 503 does not prune', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    const store = {
+      kind: 'memory',
+      async put(key, body) {
+        if (String(key).includes('/blocks/1.json')) {
+          throw new Error('S3 PUT failed: HTTP 503 SlowDown');
+        }
+        return inner.put(key, body);
+      },
+      get: inner.get.bind(inner),
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok).code, 'PUT_FAILED');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+  });
+
+  test('PUT HTTP 403 auth failure does not prune', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    const store = {
+      kind: 'memory',
+      async put(key, body) {
+        if (String(key).includes('/blocks/1.json')) {
+          throw new Error('S3 PUT failed: HTTP 403 AccessDenied');
+        }
+        return inner.put(key, body);
+      },
+      get: inner.get.bind(inner),
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok).code, 'AUTH');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+  });
+
+  test('PUT timeout does not prune', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    const store = {
+      kind: 'memory',
+      async put(key, body) {
+        if (String(key).includes('/blocks/1.json')) {
+          const err = new Error('The operation was aborted due to timeout');
+          err.name = 'TimeoutError';
+          throw err;
+        }
+        return inner.put(key, body);
+      },
+      get: inner.get.bind(inner),
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok).code, 'TIMEOUT');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+  });
+
+  test('truncated remote GET does not prune', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    const store = {
+      kind: 'memory',
+      put: inner.put.bind(inner),
+      async get(key) {
+        const got = await inner.get(key);
+        if (got && String(key).includes('/blocks/1.json')) {
+          return got.subarray(0, Math.max(1, got.length - 8));
+        }
+        return got;
+      },
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok).code, 'TRUNCATED');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+  });
+
+  test('manifest PUT failure after objects uploaded leaves local intact', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    const store = {
+      kind: 'memory',
+      async put(key, body) {
+        if (String(key).endsWith('/manifest.json') && String(key).includes(hourPath(h0))) {
+          throw new Error('S3 PUT manifest.json failed: HTTP 500 Internal Error');
+        }
+        return inner.put(key, body);
+      },
+      get: inner.get.bind(inner),
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok && h.hour === hourPath(h0)).code, 'MANIFEST_PUT_FAILED');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+    assert.ok(await inner.get(`${objectPrefix(27427, h0)}/blocks/1.json`), 'retry-friendly remote object may exist');
+  });
+
+  test('retry after manifest PUT failure is safe and then prunes', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    let manifestPuts = 0;
+    const store = {
+      kind: 'memory',
+      async put(key, body) {
+        if (String(key).endsWith('/manifest.json') && String(key).includes(hourPath(h0))) {
+          manifestPuts += 1;
+          if (manifestPuts === 1) {
+            throw new Error('S3 PUT manifest.json failed: HTTP 500 Internal Error');
+          }
+        }
+        return inner.put(key, body);
+      },
+      get: inner.get.bind(inner),
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const first = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(first.ok, false);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+    const second = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(second.ok, true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), false);
+  });
+
+  test('local bitrot after hash / during job does not prune', async () => {
+    const h0 = seedChain();
+    const inner = createMemoryStore();
+    const store = {
+      kind: 'memory',
+      async put(key, body) {
+        await inner.put(key, body);
+        if (String(key).includes('/blocks/1.json')) {
+          fs.writeFileSync(path.join(dataDir, 'blocks', '1.json'), 'truncated-during-job');
+        }
+      },
+      get: inner.get.bind(inner),
+      head: inner.head.bind(inner),
+      list: inner.list.bind(inner),
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      store,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok).code, 'LOCAL_BITROT');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+  });
+
+  test('concurrent second run skips while lock is held', async () => {
+    const h0 = seedChain();
+    const lock = acquireArchiveLock(dataDir);
+    assert.equal(lock.acquired, true);
+    try {
+      const result = await runArchiveJob({
+        config: archiveCfg(),
+        now: h0 + 3 * HOUR + 30,
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.locked, true);
+      assert.equal(result.code, 'ARCHIVE_LOCK_HELD');
+      assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+    } finally {
+      lock.release();
+    }
+  });
+
+  test('second run after success is idempotent for pruned hours', async () => {
+    const h0 = seedChain();
+    const first = await runArchiveJob({
+      config: archiveCfg(),
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(first.ok, true);
+    const second = await runArchiveJob({
+      config: archiveCfg(),
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(second.ok, true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), false);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '4.json')), true);
+  });
+
+  test('ENOSPC writing staging manifest aborts hour with no prune', async () => {
+    const h0 = seedChain();
+    const io = {
+      ...defaultArchiveIo(),
+      writeFileSync(file, data, enc) {
+        if (String(file).includes(`${path.sep}staging${path.sep}`) || String(file).includes('/staging/')) {
+          const err = new Error('ENOSPC: no space left on device');
+          err.code = 'ENOSPC';
+          throw err;
+        }
+        return fs.writeFileSync(file, data, enc);
+      },
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      io,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.hours.find((h) => !h.ok).code, 'ENOSPC');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '2.json')), true);
+  });
+
+  test('ENOSPC mid-job aborts remaining hours and does not prune unverified', async () => {
+    const h0 = seedChain();
+    const secondHour = hourPath(h0 + HOUR).replaceAll('/', '-');
+    const io = {
+      ...defaultArchiveIo(),
+      writeFileSync(file, data, enc) {
+        if (String(file).includes(secondHour)) {
+          const err = new Error('ENOSPC: no space left on device');
+          err.code = 'ENOSPC';
+          throw err;
+        }
+        return fs.writeFileSync(file, data, enc);
+      },
+    };
+    const result = await runArchiveJob({
+      config: archiveCfg(),
+      io,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.reason || '', /aborted remaining/);
+    const failed = result.hours.find((h) => !h.ok);
+    assert.equal(failed.code, 'ENOSPC');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), false, 'verified hour may prune');
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '2.json')), true, 'unverified hour stays');
+  });
+
+  test('critically low disk still offloads sealed hours but skips explorer snapshot', async () => {
+    const h0 = seedChain();
+    const nodeDir = path.join(tmp, 'node-data-low');
+    fs.mkdirSync(nodeDir, { recursive: true });
+    const explorerFile = path.join(nodeDir, 'l2-chain.json');
+    fs.writeFileSync(explorerFile, JSON.stringify({ chainId: 27427, blocks: [1, 2, 3] }) + '\n');
+    const result = await runArchiveJob({
+      config: archiveCfg({
+        ARCHIVE_EXPLORER_SNAPSHOT: '1',
+        ARCHIVE_EXPLORER_FILE: explorerFile,
+        ARCHIVE_MIN_FREE_BYTES: '1000000',
+      }),
+      diskFree: 100,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.lowDisk, true);
+    assert.equal(fs.existsSync(explorerFile), true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), false);
+    const store = createFileStore(`file://${sinkRoot}`, 'l2-archive');
+    const snap = await store.get(`${objectPrefix(27427, h0)}/explorer/l2-chain.json`);
+    assert.equal(snap, null);
   });
 });

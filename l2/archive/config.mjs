@@ -39,6 +39,8 @@ export function loadArchiveConfig({ env = process.env, l2Config } = {}) {
     intervalSeconds: Math.max(60, Number(env.ARCHIVE_INTERVAL_SECONDS || 3600) || 3600),
     fileMode,
     memoryMode,
+    minFreeBytes: Math.max(0, Number(env.ARCHIVE_MIN_FREE_BYTES || 8 * 1024 * 1024) || 0),
+    timeoutMs: Math.max(1_000, Number(env.ARCHIVE_S3_TIMEOUT_MS || 60_000) || 60_000),
   };
 }
 

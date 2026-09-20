@@ -136,6 +136,7 @@ npm run l2:archive          # no-op unless ARCHIVE_ENABLED=1
 | `ARCHIVE_ENABLED` | `0` | `1` runs hourly attic offload of sealed L2 hours to S3/R2. Sequencer writes stay local. |
 | `ARCHIVE_S3_BUCKET` / `ARCHIVE_S3_ENDPOINT` | empty | Empty endpoint = AWS; set endpoint for Cloudflare R2 (path-style). `file:///path` for a local sink. |
 | `ARCHIVE_HOT_WINDOW_HOURS` | `2` | Keep this many hours of block JSON on the VPS after a successful upload+checksum. |
+| `ARCHIVE_MIN_FREE_BYTES` | `8MiB` | Below this, skip extra local copies; still offload sealed hours. Failure matrix: [`docs/OPERATOR.md`](../docs/OPERATOR.md). |
 | `L1_RPC` | unset | Ethereum RPC for settlement |
 | `SETTLEMENT_ADDRESS` | unset | `RollupSettlement` on L1 |
 | `PRIVATE_KEY` | unset | prover key authorized to call `submitBatch` |
