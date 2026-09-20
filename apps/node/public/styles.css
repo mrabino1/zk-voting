@@ -23,7 +23,8 @@
   --target: 3rem;
   --radius: 2px;
   --shadow: 0 1px 0 rgba(19, 41, 75, 0.06);
-  --font-sans: "Source Sans 3", "Segoe UI", "Liberation Sans", system-ui, sans-serif;
+  --font-sans: "Source Sans 3", "Segoe UI", "Noto Sans Arabic", "Noto Naskh Arabic",
+    "Noto Sans Devanagari", "Liberation Sans", system-ui, sans-serif;
   --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", "ui-monospace", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
   --measure: 42rem;
@@ -117,7 +118,7 @@ body {
 .skip-link,
 .skip {
   position: absolute;
-  left: 0.75rem;
+  inset-inline-start: 0.75rem;
   top: -4rem;
   z-index: 1000;
   background: var(--paper);
@@ -179,7 +180,7 @@ body {
   gap: 0.65rem 1rem;
   margin: 0.75rem auto 0;
   max-width: 52rem;
-  text-align: left;
+  text-align: start;
 }
 
 .disclosure-stats > div {
@@ -630,16 +631,17 @@ textarea {
 
 .steps > li {
   position: relative;
-  padding: 0.35rem 0 0.85rem 2.6rem;
-  border-left: 2px solid var(--line);
-  margin-left: 0.7rem;
+  padding-block: 0.35rem 0.85rem;
+  padding-inline: 2.6rem 0;
+  border-inline-start: 2px solid var(--line);
+  margin-inline-start: 0.7rem;
 }
 
 .steps > li::before {
   counter-increment: step;
   content: counter(step);
   position: absolute;
-  left: -0.85rem;
+  inset-inline-start: -0.85rem;
   top: 0.15rem;
   width: 1.7rem;
   height: 1.7rem;
@@ -747,7 +749,7 @@ textarea {
 
 .aspect-preview {
   margin: 0 0 0.85rem;
-  padding-left: 1.2rem;
+  padding-inline-start: 1.2rem;
   color: var(--muted);
   font-size: 0.92rem;
 }
@@ -932,7 +934,7 @@ table {
 
 th,
 td {
-  text-align: left;
+  text-align: start;
   padding: 0.65rem 0.7rem;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
@@ -1073,43 +1075,91 @@ th {
 }
 
 .lang-switcher {
-  display: flex;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 0.35rem;
+}
+
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--target);
+  min-height: var(--target);
+  padding: 0.35rem;
   border: 1px solid var(--gold);
   border-radius: 999px;
-  padding: 0.28rem 0.4rem;
   background: rgba(11, 28, 51, 0.35);
+  cursor: pointer;
+  color: var(--cream);
 }
 
-.lang-flag {
-  width: 2rem;
-  height: 1.2rem;
-  padding: 0;
-  border: 1px solid transparent;
-  background: transparent;
+.lang-toggle:hover,
+.lang-toggle:focus-visible,
+.lang-toggle[aria-expanded="true"] {
+  background: var(--navy-deep);
+}
+
+.lang-toggle-flag,
+.lang-option-flag {
+  display: block;
+  width: 1.7rem;
+  height: 1.05rem;
   overflow: hidden;
   border-radius: 2px;
-  opacity: 0.55;
-  cursor: pointer;
   line-height: 0;
-}
-
-.lang-flag:hover,
-.lang-flag:focus-visible {
-  opacity: 1;
-}
-
-.lang-flag[aria-pressed="true"] {
-  opacity: 1;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px var(--gold);
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .lang-flag-svg {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.lang-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  inset-inline-end: 0;
+  z-index: 40;
+  min-width: 13rem;
+  max-height: min(80vh, 34rem);
+  overflow: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--gold);
+  border-radius: 0.7rem;
+  background: var(--navy);
+  box-shadow: 0 0.6rem 1.4rem rgba(0, 0, 0, 0.35);
+}
+
+.lang-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: var(--target);
+  padding: 0.35rem 0.55rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--cream);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.lang-option:hover,
+.lang-option:focus-visible {
+  background: var(--navy-deep);
+}
+
+.lang-option[aria-selected="true"] {
+  outline: 1px solid var(--gold);
+}
+
+.lang-option-name {
+  font-weight: 650;
 }
 
 .session-chrome {

@@ -265,7 +265,10 @@ option in an explorer payload. AGPL-3.0-or-later.
 
 ## Website languages
 
-The pages in `public/` default to **English**. Spanish is an optional website
-locale, persisted in `localStorage` as `republic_lang` (DealPunchList-style:
-supported `en` / `es`, fallback `en`, no `navigator.language` sniff).
-Smart-contract code, reason codes, API identifiers, and this README stay English.
+The pages in `public/` default to **English**. Optional website locales follow
+the next most common home languages in the United States after English (ACS):
+Spanish, Chinese (Simplified), Tagalog (Filipino), Vietnamese, Arabic, French,
+Korean, Portuguese, and Hindi. The choice is persisted in `localStorage` as
+`republic_lang` (DealPunchList-style: fallback `en`, no `navigator.language`
+sniff). Arabic sets `dir="rtl"`. Smart-contract code, reason codes, API
+identifiers, and this README stay English.

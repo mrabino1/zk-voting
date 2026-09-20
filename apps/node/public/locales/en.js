@@ -6,8 +6,17 @@
 export default {
   lang: {
     group: "Language",
+    choose: "Choose language",
     english: "English",
     spanish: "Spanish",
+    chinese: "Chinese",
+    tagalog: "Tagalog",
+    vietnamese: "Vietnamese",
+    arabic: "Arabic",
+    french: "French",
+    korean: "Korean",
+    portuguese: "Portuguese",
+    hindi: "Hindi",
   },
   chrome: {
     skip: "Skip to main content",

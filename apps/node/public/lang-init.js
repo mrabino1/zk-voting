@@ -5,8 +5,21 @@
 (function () {
   try {
     var stored = window.localStorage.getItem("republic_lang");
-    if (stored === "es" || stored === "en") {
-      document.documentElement.lang = stored;
+    var tags = {
+      en: "en",
+      es: "es",
+      zh: "zh-Hans",
+      fil: "fil",
+      vi: "vi",
+      ar: "ar",
+      fr: "fr",
+      ko: "ko",
+      pt: "pt-BR",
+      hi: "hi",
+    };
+    if (tags[stored]) {
+      document.documentElement.lang = tags[stored];
+      document.documentElement.dir = stored === "ar" ? "rtl" : "ltr";
     }
   } catch (_err) {
     /* private mode / blocked storage — stay on html lang="en" */
