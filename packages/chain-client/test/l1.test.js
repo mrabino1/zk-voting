@@ -195,6 +195,33 @@ describe("postTallyHash", () => {
     assert.equal(result.alreadyPosted, true);
   });
 
+  test("AlreadyPosted re-reads the on-chain identity hash", async () => {
+    const requested = computeTallyHash([1, 1]);
+    const onChain = computeTallyHash([9, 9]);
+    const walletClient = {
+      writeContract: async () => {
+        const err = new Error("execution reverted: AlreadyPosted");
+        err.shortMessage = "AlreadyPosted";
+        throw err;
+      },
+    };
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: "0x" + "22".repeat(20),
+      walletClient,
+      publicClient: { readContract: async () => onChain },
+      electionId: 7,
+      counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
+    });
+    assert.equal(result.status, "already_posted_mismatch");
+    assert.equal(result.hashMismatch, true);
+    assert.equal(result.resultHash, onChain);
+    assert.equal(result.requestedHash, requested);
+    assert.notEqual(result.resultHash, requested);
+  });
+
   test("short-circuits when resultHashOf is already set (no write)", async () => {
     const writes = [];
     const existing = computeTallyHash([1, 1]);
@@ -217,6 +244,35 @@ describe("postTallyHash", () => {
     });
     assert.equal(result.status, "already_posted");
     assert.equal(result.resultHash, existing);
+    assert.equal(result.hashMismatch, false);
+    assert.equal(writes.length, 0);
+  });
+
+  test("short-circuit AlreadyPosted with a different hash is a mismatch", async () => {
+    const writes = [];
+    const existing = computeTallyHash([9, 9]);
+    const requested = computeTallyHash([1, 1]);
+    const result = await postTallyHash({
+      env: {},
+      mirrorAddress: "0x" + "22".repeat(20),
+      walletClient: {
+        writeContract: async (req) => {
+          writes.push(req);
+          return "0x" + "cd".repeat(32);
+        },
+      },
+      publicClient: {
+        readContract: async () => existing,
+      },
+      electionId: 7,
+      counts: [1, 1],
+      factory: "0x" + "11".repeat(20),
+      jurisdictionId: "north",
+    });
+    assert.equal(result.status, "already_posted_mismatch");
+    assert.equal(result.hashMismatch, true);
+    assert.equal(result.resultHash, existing);
+    assert.equal(result.requestedHash, requested);
     assert.equal(writes.length, 0);
   });
 });

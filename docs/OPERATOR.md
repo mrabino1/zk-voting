@@ -326,24 +326,29 @@ Deploy the mirror (Anvil or Sepolia):
 
 ```bash
 cd smart-contracts
-forge script script/DeployL1.s.sol --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
-# stdout includes TALLY_MIRROR=0x… and SETTLEMENT=0x…
+L2_FACTORY="$ELECTION_FACTORY_ADDRESS" forge script script/DeployL1.s.sol \
+  --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
+# stdout includes TALLY_MIRROR=0x… SETTLEMENT=0x… L2_FACTORY=0x…
+# DeployL1 reverts MissingL2Factory if the shared factory is not set.
 ```
 
-Grant a dedicated publisher if the broadcaster is not the mirror admin:
+Grant a **per-jurisdiction** publisher. After `setL2Factory`, a global
+`setPublisher` key cannot certify an arbitrary body (admin remains
+break-glass only). The factory pin cannot be unset or swapped; a wrong
+pin means a new mirror deploy:
 
 ```solidity
-L1TallyMirror.setPublisher(publisher, true);
 // Prefer per-jurisdiction publishers so one body cannot certify another:
 L1TallyMirror.setJurisdictionPublisher(jurisdictionId, publisher, true);
 L1TallyMirror.setL2Factory(sharedElectionFactory);
+// setPublisher is legacy and is ignored once the factory is pinned.
 ```
 
 ### After Node tally
 
 1. Close the poll (cutoff passed). Tally operator posts counts. Sum must equal accepted ballots.
 2. If the three required L1 vars are set, `POST /api/elections/:id/tally` also calls `postCertifiedResult` (factory + jurisdiction + public UUID hash). The JSON includes `l1Certification` (`posted` / `skipped` / `failed` / `already_posted`). A failed L1 tx **does not** roll back the Node tally.
-3. Retry without re-tallying. `AlreadyPosted` is success (`already_posted`); the Node keeps the original L1 tx hash.
+3. Retry without re-tallying. `AlreadyPosted` with the **same** hash is success (`already_posted`); the Node keeps the original L1 tx hash. If L1 already holds a **different** hash, status is `already_posted_mismatch` — do not treat that as a certified match.
 
 ```bash
 # HTTP (tally_operator session)

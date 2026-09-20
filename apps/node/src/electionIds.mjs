@@ -104,7 +104,11 @@ export function mintScopedPublicId(scope = {}) {
 
 export function publicIdMatchesScope(uuid, scope = {}) {
   if (!uuid) return false;
-  if (uuidVersion(uuid) !== 5) return true;
+  if (uuidVersion(uuid) !== 5) {
+    const factory = String(scope.factoryAddress || '').trim();
+    if (factory && !isZeroAddress(factory)) return false;
+    return true;
+  }
   return String(uuid).toLowerCase() === mintScopedPublicId(scope);
 }
 

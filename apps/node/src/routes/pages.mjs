@@ -124,10 +124,10 @@ export function pagesRouter(deps) {
     requireAnyJurisdictionRole(store, 'clerk'),
     asyncHandler(async (req, res) => {
       const patch = { ...req.body };
+      if (!canPinContracts(req.user)) {
+        throw new HttpError(403, 'only the Node host (platform_admin) can change site identity and contract pins');
+      }
       if (patch.contracts) {
-        if (!canPinContracts(req.user)) {
-          throw new HttpError(403, 'only the Node host (platform_admin) can pin shared contracts');
-        }
         rejectEnvPinnedContracts(config, patch.contracts);
       }
       const site = await store.updateSite(

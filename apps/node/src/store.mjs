@@ -136,7 +136,11 @@ export function mergeTallyL1(prev, next) {
   if (prevOnChain && next.status === 'failed') {
     return { ...prev, lastError: next.error || null };
   }
-  if (next.alreadyPosted || next.status === 'already_posted') {
+  if (
+    next.alreadyPosted ||
+    next.status === 'already_posted' ||
+    next.status === 'already_posted_mismatch'
+  ) {
     return {
       ...next,
       txHash: next.txHash || prev.txHash || null,
@@ -150,6 +154,8 @@ export function mergeTallyL1(prev, next) {
       publicId: next.publicId || prev.publicId || null,
       electionAddress: next.electionAddress || prev.electionAddress || null,
       ballotSpecHash: next.ballotSpecHash || prev.ballotSpecHash || null,
+      hashMismatch: Boolean(next.hashMismatch),
+      requestedHash: next.requestedHash || prev.requestedHash || null,
     };
   }
   return next;

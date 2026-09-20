@@ -96,7 +96,7 @@ On-chain / circuit `electionId` stays the factory `uint256`, stored as
 Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/receipt`, `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
-Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). Clerks edit pages at `/office/pages`.
+Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). The host edits About / FAQ / home at `/office/pages`. Clerks publish jurisdiction-tagged pages.
 
 ### Ballot option information
 

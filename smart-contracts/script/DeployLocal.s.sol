@@ -31,6 +31,7 @@ struct RepublicStack {
     bool mockVerifier;
     string hashScheme;
     ElectionFactory factory;
+    JurisdictionRegistry jurisdictions;
     VoterRegistry voterRegistry;
     DisqualificationRegistry disqualificationRegistry;
     BallotInbox inbox;
@@ -89,6 +90,7 @@ abstract contract RepublicStackScript is Script {
         _logStr("PROVING_PATH", s.mockVerifier ? "0" : "1");
         _logStr("VERIFIER_KIND", s.mockVerifier ? "MockVerifier" : "VoteVerifier");
         _log("FACTORY", address(s.factory));
+        _log("JURISDICTION_REGISTRY", address(s.jurisdictions));
         _log("IMPLEMENTATION", s.factory.implementation());
         _log("VOTER_REGISTRY", address(s.voterRegistry));
         _log("DISQUALIFICATION_REGISTRY", address(s.disqualificationRegistry));
@@ -128,6 +130,8 @@ abstract contract RepublicStackScript is Script {
 
         // address(0) implementation: factory deploys Election internally.
         s.factory = new ElectionFactory(admin, address(0));
+        s.jurisdictions = new JurisdictionRegistry(admin);
+        s.factory.setJurisdictionRegistry(address(s.jurisdictions));
         s.voterRegistry = new VoterRegistry(address(s.factory), address(s.hasher));
         s.disqualificationRegistry = new DisqualificationRegistry(address(s.hasher), address(s.factory));
         s.inbox = new BallotInbox(address(s.factory));
@@ -180,9 +184,7 @@ contract DeployLocal is RepublicStackScript {
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
         mirror.setL2Factory(address(s.factory));
 
-        JurisdictionRegistry jurisdictions = new JurisdictionRegistry(admin);
-        s.factory.setJurisdictionRegistry(address(jurisdictions));
-        jurisdictions.createJurisdiction(keccak256("CIVIC"), admin, "Civic");
+        s.jurisdictions.createJurisdiction(keccak256("CIVIC"), admin, "Civic");
 
         s.paymaster.deposit{value: 10 ether}();
 
@@ -195,7 +197,7 @@ contract DeployLocal is RepublicStackScript {
         _log("SETTLEMENT", address(settlement));
         _log("TALLY_MIRROR", address(mirror));
         _log("MAILBOX", address(mailbox));
-        _log("JURISDICTION_REGISTRY", address(jurisdictions));
+        _log("JURISDICTION_REGISTRY", address(s.jurisdictions));
         _log("ELECTION", election);
         console2.log(string.concat("ELECTION_ID=", vm.toString(electionId)));
     }

@@ -77,8 +77,10 @@ OpenSSL build may not expose `keccak256`; the sequencer includes the Ethereum
 sponge and self-tests it.
 
 Blocks are written under `l2/data/`. If `REPUBLIC_NODE_URL` is set, each
-block is also `POST`ed to `{REPUBLIC_NODE_URL}/api/explorer/ingest`. Ingest
-failures are logged and **do not** halt the chain.
+block is also `POST`ed to `{REPUBLIC_NODE_URL}/api/explorer/ingest` with
+`x-republic-ingest-secret: $EXPLORER_INGEST_SECRET`. The Node refuses ingest
+in production when that secret is unset. Ingest failures are logged and
+**do not** halt the chain.
 
 ## Prover and L1 settlement
 
@@ -93,8 +95,9 @@ If `L1_RPC`, `SETTLEMENT_ADDRESS`, and `PRIVATE_KEY` are all set, the prover
 submits `submitBatch` with [viem](https://viem.sh). Otherwise it writes
 `l2/data/proofs/batch-N.json`.
 
-Tally **hash** certification is a separate operator step (`L1TallyMirror.postResult`),
-not `submitBatch`. See [`docs/OPERATOR.md`](../docs/OPERATOR.md).
+Tally **hash** certification is a separate operator step
+(`L1TallyMirror.postCertifiedResult`), not `submitBatch`. See
+[`docs/OPERATOR.md`](../docs/OPERATOR.md).
 
 This is **not** a proving-as-a-service company. The jurisdiction that runs an
 election runs the prover.

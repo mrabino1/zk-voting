@@ -379,6 +379,39 @@ describe('election UUID + short code', () => {
     assert.notEqual(String(a.json.election.factoryAddress || '').toLowerCase(), `0x${'99'.repeat(20)}`);
   });
 
+  test('client-supplied onChainElectionId is ignored in demo mode', async () => {
+    const created = await api('POST', '/api/elections', {
+      jar: adminJar,
+      body: {
+        title: 'No claimed chain id',
+        startTime: nowSec() - 30,
+        cutoffTime: nowSec() + 3600,
+        treeDepth: 16,
+        onChainElectionId: '999999',
+        questions: [{ type: 'YES_NO', prompt: '?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    assert.notEqual(String(created.json.onChainElectionId), '999999');
+  });
+
+  test('legacy UUID v4 fails publicIdMatchesScope once a factory is pinned', () => {
+    const v4 = mintUuid();
+    assert.equal(uuidVersion(v4), 4);
+    assert.equal(
+      publicIdMatchesScope(v4, {
+        factoryAddress: `0x${'11'.repeat(20)}`,
+        onChainElectionId: '1',
+        jurisdictionId: 'demo',
+      }),
+      false,
+    );
+    assert.equal(
+      publicIdMatchesScope(v4, { jurisdictionId: 'demo', onChainElectionId: '1' }),
+      true,
+    );
+  });
+
   test('legacy non-UUID election ids still resolve after short-code backfill', () => {
     const tree = emptyTree(16);
     store.data.elections.push({
@@ -417,5 +450,62 @@ describe('election UUID + short code', () => {
     assert.equal(isShortCodeShape(legacy.shortCode), true);
     assert.equal(legacy.onChainElectionId, '7');
     assert.equal(store.getElection(legacy.shortCode).id, 7);
+  });
+});
+
+describe('explorer ingest secret', () => {
+  let ingestTmp;
+  let ingestServer;
+  let ingestBase;
+
+  before(async () => {
+    ingestTmp = await mkdtemp(path.join(os.tmpdir(), 'republic-ingest-'));
+    const created = await createApp({
+      dataDir: ingestTmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 0,
+      explorerIngestSecret: 'test-ingest-secret',
+    });
+    ingestServer = await listen(created.app);
+    ingestBase = `http://127.0.0.1:${ingestServer.address().port}`;
+  });
+
+  after(async () => {
+    await new Promise((resolve, reject) => {
+      ingestServer.close((err) => (err ? reject(err) : resolve()));
+    });
+    await rm(ingestTmp, { recursive: true, force: true });
+  });
+
+  test('rejects ingest without the shared secret', async () => {
+    const res = await fetch(`${ingestBase}/api/explorer/ingest`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: 'republic-l2',
+        outcomes: { tally: [{ electionId: '1', counts: [9, 9] }] },
+      }),
+    });
+    assert.equal(res.status, 401);
+  });
+
+  test('accepts ingest with the shared secret', async () => {
+    const res = await fetch(`${ingestBase}/api/explorer/ingest`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-republic-ingest-secret': 'test-ingest-secret',
+      },
+      body: JSON.stringify({
+        source: 'republic-l2',
+        outcomes: { register: [{ identityCommitment: '0xabc' }] },
+      }),
+    });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.ok, true);
   });
 });

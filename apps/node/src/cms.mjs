@@ -175,7 +175,9 @@ export function canManagePages(store, user, page) {
   if (page?.jurisdictionId) {
     return store.userHasJurisdictionRole(user, ['clerk'], page.jurisdictionId);
   }
-  return store.userHasAnyJurisdictionRole(user, ['clerk']);
+  // Unscoped About / FAQ / home overlays are host copy. A clerk of one
+  // body on a shared Node must not rewrite the public record for every body.
+  return false;
 }
 
 export function envContractsOf(config) {

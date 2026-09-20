@@ -210,6 +210,7 @@ const L1_TALLY_MIRROR_ABI = [
   { type: "error", name: "JurisdictionMismatch", inputs: [] },
   { type: "error", name: "BallotSpecMismatch", inputs: [] },
   { type: "error", name: "UseIdentityPost", inputs: [] },
+  { type: "error", name: "FactoryAlreadyPinned", inputs: [] },
 ];
 
 /** `keccak256("AlreadyPosted()")` — viem emits this when the ABI used to send the tx omitted the error. */
@@ -423,6 +424,8 @@ function publicCertification(record) {
     electionAddress: record.electionAddress || record.election || null,
     jurisdictionId: record.jurisdictionId || null,
     ballotSpecHash: record.ballotSpecHash || null,
+    requestedHash: record.requestedHash || null,
+    hashMismatch: Boolean(record.hashMismatch),
     certificationId: record.certificationId || null,
   };
 }
@@ -639,14 +642,16 @@ async function postTallyHash(opts = {}) {
     try {
       const existing = await readResultHashOfIdentity(n.mirrorAddress, cert.certificationId, n);
       if (!isZeroHash(existing)) {
+        const hashMismatch = existing.toLowerCase() !== resultHash.toLowerCase();
         return {
           posted: false,
           skipped: false,
           alreadyPosted: true,
-          status: "already_posted",
-          reason: "AlreadyPosted",
+          status: hashMismatch ? "already_posted_mismatch" : "already_posted",
+          reason: hashMismatch ? "AlreadyPostedHashMismatch" : "AlreadyPosted",
           resultHash: existing,
           requestedHash: resultHash,
+          hashMismatch,
           totalBallots: totalBallots.toString(),
           l2StateRoot,
           electionId: electionId.toString(),
@@ -776,13 +781,23 @@ async function postTallyHash(opts = {}) {
     };
   } catch (err) {
     if (alreadyPostedError(err)) {
+      let onChain = ZERO_HASH;
+      try {
+        onChain = await readResultHashOfIdentity(n.mirrorAddress, cert.certificationId, n);
+      } catch {
+        onChain = ZERO_HASH;
+      }
+      const stored = isZeroHash(onChain) ? resultHash : onChain;
+      const hashMismatch = !isZeroHash(onChain) && onChain.toLowerCase() !== resultHash.toLowerCase();
       return {
         posted: false,
         skipped: false,
         alreadyPosted: true,
-        status: "already_posted",
-        reason: "AlreadyPosted",
-        resultHash,
+        status: hashMismatch ? "already_posted_mismatch" : "already_posted",
+        reason: hashMismatch ? "AlreadyPostedHashMismatch" : "AlreadyPosted",
+        resultHash: stored,
+        requestedHash: resultHash,
+        hashMismatch,
         totalBallots: totalBallots.toString(),
         l2StateRoot,
         electionId: electionId.toString(),

@@ -184,6 +184,56 @@ contract ElectionIdentitySeparationTest is Deployer {
         mirror.postResult(1, _countsHash(1, 0), 1, bytes32(0));
     }
 
+    function testPinnedFactoryCannotBeUnpinnedOrReplaced() public {
+        vm.prank(admin);
+        mirror.setL2Factory(address(factory));
+        vm.prank(admin);
+        mirror.setL2Factory(address(factory));
+        vm.prank(admin);
+        vm.expectRevert(L1TallyMirror.ZeroAddress.selector);
+        mirror.setL2Factory(address(0));
+        vm.prank(admin);
+        vm.expectRevert(L1TallyMirror.FactoryAlreadyPinned.selector);
+        mirror.setL2Factory(address(0xB0B));
+        assertEq(mirror.l2Factory(), address(factory));
+    }
+
+    function testPinnedFactoryRejectsGlobalPublisher() public {
+        (uint256 idA,) = createElection();
+        vm.prank(admin);
+        mirror.setL2Factory(address(factory));
+        vm.prank(admin);
+        mirror.setPublisher(publisherA, true);
+        vm.prank(publisherA);
+        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        mirror.postCertifiedResult(_cert(address(factory), idA, jurisdictionA, bytes32(0), _countsHash(1, 0)));
+    }
+
+    function testOfficerCannotCreateElection() public {
+        vm.prank(admin);
+        jurisdictions.grantOfficer(jurisdictionA, attacker);
+        ElectionParams memory p = defaultParams();
+        p.clerk = attacker;
+        vm.prank(attacker);
+        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        factory.createElection(p);
+    }
+
+    function testRotatedClerkLosesCreateRights() public {
+        address successor = makeAddr("successor");
+        vm.prank(admin);
+        jurisdictions.setClerk(jurisdictionA, successor);
+        ElectionParams memory p = defaultParams();
+        p.clerk = clerk;
+        vm.prank(clerk);
+        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        factory.createElection(p);
+        p.clerk = successor;
+        vm.prank(successor);
+        (uint256 id,) = factory.createElection(p);
+        assertTrue(id > 0);
+    }
+
     function testJurisdictionPublisherCannotCertifyForeignElection() public {
         vm.prank(admin);
         mirror.setJurisdictionPublisher(jurisdictionA, publisherA, true);
@@ -236,14 +286,14 @@ contract ElectionIdentitySeparationTest is Deployer {
         mirror.postCertifiedResult(_cert(address(factory), idA, jurisdictionA, bytes32(0), _countsHash(0, 2)));
     }
 
-    function testPublicIdHashIsKeccakOfUuidString() public {
+    function testPublicIdHashIsKeccakOfLowercasedUuidString() public pure {
         assertEq(
-            ElectionIdentity.publicIdHash("3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01"),
+            ElectionIdentity.publicIdHash("3F1C0A6E-9B2D-4E11-8C7A-1A2B3C4D5E01"),
             keccak256(bytes("3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01"))
         );
     }
 
-    function testCertificationIdDomainMatchesLiteral() public {
+    function testCertificationIdDomainMatchesLiteral() public pure {
         assertEq(ElectionIdentity.DOMAIN, keccak256("republic.election.identity.v1"));
         address fac = address(0x1111111111111111111111111111111111111111);
         bytes32 got = ElectionIdentity.certificationId(fac, 7, keccak256("demo"));

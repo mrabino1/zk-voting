@@ -21,8 +21,13 @@ library ElectionIdentity {
         return keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId));
     }
 
-    /// @notice Commitment to the advertised public id (lowercase UUID string).
+    /// @notice Commitment to the advertised public id (ASCII-lowercased UUID).
     function publicIdHash(string memory uuid) internal pure returns (bytes32) {
-        return keccak256(bytes(uuid));
+        bytes memory b = bytes(uuid);
+        for (uint256 i; i < b.length; ++i) {
+            uint8 c = uint8(b[i]);
+            if (c >= 0x41 && c <= 0x5A) b[i] = bytes1(c + 32);
+        }
+        return keccak256(b);
     }
 }

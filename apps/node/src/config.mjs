@@ -114,6 +114,9 @@ export function getConfig(overrides = {}) {
     credentialProviderId: String(
       overrides.credentialProviderId ?? process.env.CREDENTIAL_PROVIDER_ID ?? 'manual',
     ).trim() || 'manual',
+    explorerIngestSecret: String(
+      overrides.explorerIngestSecret ?? process.env.EXPLORER_INGEST_SECRET ?? '',
+    ).trim(),
     requireEmailMfa: (() => {
       if (overrides.requireEmailMfa !== undefined) return Boolean(overrides.requireEmailMfa);
       if (process.env.REQUIRE_EMAIL_MFA !== undefined && process.env.REQUIRE_EMAIL_MFA !== '') {

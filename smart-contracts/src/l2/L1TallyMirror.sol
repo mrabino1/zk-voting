@@ -27,6 +27,7 @@ contract L1TallyMirror {
     error JurisdictionMismatch();
     error BallotSpecMismatch();
     error UseIdentityPost();
+    error FactoryAlreadyPinned();
 
     struct Certification {
         address factory;
@@ -98,8 +99,12 @@ contract L1TallyMirror {
         jurisdictionPublisher[jurisdictionId][account] = allowed;
     }
 
+    /// @notice Pin the shared ElectionFactory. First non-zero write wins;
+    ///         unpinning would revive global `publishers[]` against every body.
     function setL2Factory(address factory_) external {
         if (msg.sender != admin) revert NotAuthorized();
+        if (factory_ == address(0)) revert ZeroAddress();
+        if (l2Factory != address(0) && l2Factory != factory_) revert FactoryAlreadyPinned();
         l2Factory = factory_;
     }
 
@@ -214,11 +219,15 @@ contract L1TallyMirror {
         return _certsByPublicId[publicIdHash_].length > 1;
     }
 
+    /// @dev Admin is break-glass. After `setL2Factory`, a global publisher
+    ///      cannot certify an arbitrary jurisdiction — that is how one
+    ///      compromised L1 key would overwrite every body. Unpinned mirrors
+    ///      keep `publishers[]` for legacy tests and scripts.
     function _canPost(bytes32 jurisdictionId, address tallyOperator) internal view returns (bool) {
         if (msg.sender == admin) return true;
-        if (publishers[msg.sender]) return true;
         if (jurisdictionPublisher[jurisdictionId][msg.sender]) return true;
         if (tallyOperator != address(0) && msg.sender == tallyOperator) return true;
+        if (l2Factory == address(0) && publishers[msg.sender]) return true;
         return false;
     }
 

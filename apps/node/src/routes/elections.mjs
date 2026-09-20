@@ -18,7 +18,6 @@ import {
   presentPublicOptionInfo,
   resolveBallotSpecHash,
 } from '../ballotSpec.mjs';
-import { parseOnChainElectionId } from '../electionIds.mjs';
 import { presentElection, electionState, electionChainMode, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
@@ -154,13 +153,6 @@ export function electionsRouter(deps) {
         }
       }
       let requestedOnChainId = chainResult?.onChainElectionId ?? null;
-      if (requestedOnChainId == null) {
-        try {
-          requestedOnChainId = parseOnChainElectionId(body.onChainElectionId);
-        } catch (err) {
-          throw new HttpError(err.status || 400, err.message);
-        }
-      }
       const pinnedFactory = String(config?.electionFactoryAddress || '').trim();
       const chainFactory = chainResult?.factoryAddress || null;
       if (

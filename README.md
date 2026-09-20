@@ -127,6 +127,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | --- | --- |
 | This README | Product intent + honest stack (must match the tree) |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Implemented map + Solidity/circuit interfaces; **Future** labeled |
+| [`docs/THREAT_MODEL.md`](./docs/THREAT_MODEL.md) | Adversary map for election identity and L1 certification |
 | Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/republic.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
 | `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry `via_ir = true`: factory, registries, inbox, `Tally.sol`, account, L2 settlement) |
 | Circuits (`circuits/`) | In-tree (`vote.circom`, `tally.circom`, `identity.circom`; hasher **gated** as `standin-v0`; Poseidon not wired) |
@@ -363,6 +364,9 @@ CREDENTIAL_PROVIDER_ID=manual
 # --- locked receipt / official-outcome PDFs. Empty = Node mints a file on disk. ---
 RECEIPT_PDF_SECRET=
 
+# --- L2 sequencer → Node explorer ingest. Empty in production refuses ingest. ---
+EXPLORER_INGEST_SECRET=
+
 # --- pin the ONE shared deploy (do not DeployLocal again for a new city) ---
 ELECTION_FACTORY_ADDRESS=
 BALLOT_INBOX_ADDRESS=
@@ -393,6 +397,7 @@ L1_CHAIN_ID=
 | `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |
 | `CREDENTIAL_PROVIDER_SECRET` | Optional later DMV / eID webhook. Unset = officers review credentials by hand |
 | `RECEIPT_PDF_SECRET` | Stable HMAC for locked PDFs across restarts. Unset = Node writes `$DATA_DIR/receipt-pdf.secret` |
+| `EXPLORER_INGEST_SECRET` | L2 sequencer ingest of `/api/explorer/ingest`. Unset in production refuses ingest (explorer is not a second tally) |
 | `L1_RPC`, `L1_TALLY_MIRROR_ADDRESS`, `L1_PUBLISHER_PRIVATE_KEY` | Certify tally hashes on Ethereum. Unset = tally still works (`skipped`) |
 | `SETTLEMENT_ADDRESS`, `PRIVATE_KEY` | L2 prover posts `RollupSettlement.submitBatch`. **Not** the Node `L1_PUBLISHER_PRIVATE_KEY` |
 | `ALLOW_DEV_LOGIN` | Local fallback only. Must stay empty on `master` |
@@ -439,7 +444,7 @@ docker compose up -d --build   # or: npm run dev
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-5. Register at `/register` with the seeded `ADMIN_HANDLE` (`admin` unless you changed it) so that person is `platform_admin`. Create the jurisdiction (a `demo` jurisdiction is seeded on empty store). Grant clerk / registrar / disqualification / tally roles. Clerks edit About, FAQ, and extra pages at `/office/pages`. Only `platform_admin` may change contract addresses on `/office/site` when env did not already lock them.
+5. Register at `/register` with the seeded `ADMIN_HANDLE` (`admin` unless you changed it) so that person is `platform_admin`. Create the jurisdiction (a `demo` jurisdiction is seeded on empty store). Grant clerk / registrar / disqualification / tally roles. The host (`platform_admin`) edits About, FAQ, home copy, and site title at `/office/pages` and `/office/site`. Clerks publish **jurisdiction-tagged** pages. Only `platform_admin` may change contract addresses on `/office/site` when env did not already lock them.
 6. When `CHAIN_RPC` is set, clerk **Create election** calls the shared factory. A factory revert is **502/503**; nothing is written to `republic.json`.
 
 Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Site pin: `/office/site`. Pages: `/office/pages`.

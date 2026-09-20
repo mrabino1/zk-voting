@@ -452,7 +452,7 @@ export function renderOffice(main, ctx, bundle) {
     {
       href: "/office/pages",
       title: "Pages (WordPress-style)",
-      body: "Update Home, About, FAQ, and extra pages for this Node. Any clerk can publish. HTML is stripped.",
+      body: "The host updates Home, About, and FAQ. Clerks publish extra pages tagged to their jurisdiction. HTML is stripped.",
       spa: true,
     },
     {

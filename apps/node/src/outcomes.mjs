@@ -5,7 +5,7 @@
 // option counts.
 
 import { presentAspects } from './ballot.mjs';
-import { publicIdFields, publicIdMatchesScope, uuidVersion, l1IdentityOf } from './electionIds.mjs';
+import { publicIdFields, publicIdMatchesScope, l1IdentityOf } from './electionIds.mjs';
 import {
   STATE_NAMES,
   electionChainMode,
@@ -183,15 +183,11 @@ export function verifyChainStatus(election, deps, now, state, phase) {
     chainId: election.chainId ?? deps.config?.chainId,
     nodeId: deps.store?.data?.meta?.nodeId || '',
   };
-  if (uuidVersion(election.id) === 5) {
-    check(
-      'publicIdMatchesScope',
-      publicIdMatchesScope(election.id, scope),
-      'public UUID must be bound to factory, on-chain id, and jurisdiction (a copied UUID fails)',
-    );
-  } else {
-    checks.publicIdMatchesScope = true;
-  }
+  check(
+    'publicIdMatchesScope',
+    publicIdMatchesScope(election.id, scope),
+    'public UUID must be bound to factory, on-chain id, and jurisdiction (a copied UUID fails)',
+  );
 
   if (l1IsPosted(l1)) {
     check(

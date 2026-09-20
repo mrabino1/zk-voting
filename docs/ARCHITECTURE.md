@@ -174,6 +174,7 @@ zk-voting/
   docker-compose.yml                 (Node + L2 host path)
   docs/ARCHITECTURE.md               (this file)
   docs/IDENTITY.md
+  docs/THREAT_MODEL.md               (election identity / L1 adversary map)
   docs/L2.md
   docs/OPERATOR.md
   docs/BLOCK_EXPLORER.md
@@ -266,11 +267,11 @@ function electionCount() external view returns (uint256);
 function implementation() external view returns (address);
 ```
 
-Factory uses EIP-1167 clones of `Election`. Anyone with clerk/officer
-status on `JurisdictionRegistry` for that `jurisdictionId` may create.
-Platform admin may also create (bootstrap). A clerk of A cannot mint an
-election that claims B’s `jurisdictionId` by putting themselves in
-`params.clerk`. Production deploys **must** call
+Factory uses EIP-1167 clones of `Election`. Only `JurisdictionRegistry`
+**clerks** (not registrars / tally officers) for that `jurisdictionId`
+may create. Platform admin may also create (bootstrap). A clerk of A
+cannot mint an election that claims B’s `jurisdictionId` by putting
+themselves in `params.clerk`. Production deploys **must** call
 `ElectionFactory.setJurisdictionRegistry`.
 
 Events: `ElectionCreated(uint256 indexed electionId, address indexed election, bytes32 indexed jurisdictionId, uint64 startTime, uint64 cutoffTime)`.
@@ -301,11 +302,12 @@ a copied id fails `publicIdMatchesScope`.
 on-chain id (and any leftover non-UUID fixture ids). Short HTTP routes
 302 to `/vote/<uuid>`. New elections mint a scoped UUID v5 plus a short
 code; the Node stores `onChainElectionId` as the mapping. Client-supplied
-`id` / `uuid` bodies are ignored. Local demos allocate a sequential
-integer so proofs still have a uint256 when the factory is not invoked,
-and bind the UUID to `nodeId` + jurisdiction so two demo forks do not
-collide. When a clerk already created on chain, `POST /api/elections` may
-send `onChainElectionId` to record that mapping.
+`id` / `uuid` / `factoryAddress` / `onChainElectionId` bodies are ignored.
+Local demos allocate a sequential integer so proofs still have a uint256
+when the factory is not invoked, and bind the UUID to `nodeId` + jurisdiction
+so two demo forks do not collide. On-chain ids come only from
+`ElectionFactory.createElection` (or the local allocator), never from the
+client — a copied uint256 would be an L1 slot claim.
 
 The factory is **not** changed: it still returns `(uint256 electionId, address)`.
 
@@ -538,12 +540,15 @@ uint256 path reverts `UseIdentityPost` — two factories must not share
 `resultHashOf[1]`. Pin `setL2Factory` to the shared ElectionFactory so a
 rogue factory cannot certify on the official mirror. Grant
 `setJurisdictionPublisher` per body rather than a global publisher when a
-jurisdiction operator posts. When the factory is on the same chain, the
-mirror checks `Election.params().jurisdictionId`.
+jurisdiction operator posts. After pin, `_canPost` ignores global
+`publishers[]` (admin is break-glass). `setL2Factory` cannot be zeroed or
+replaced once set. When the factory is on the same chain, the mirror
+checks `Election.params().jurisdictionId`.
 
-Only `admin`, `publishers[msg.sender]`, a per-jurisdiction publisher, or
-(when the factory is readable) the election’s `tallyOperator`. A second
-post for the same identity reverts `AlreadyPosted`. The Node
+Only `admin`, a per-jurisdiction publisher, or (when the factory is
+readable on that chain) the election’s `tallyOperator`. Unpinned mirrors
+still honor `publishers[]` for legacy tests. A second post for the same
+identity reverts `AlreadyPosted`. The Node
 (`POST /api/elections/:id/tally` and `POST /api/elections/:id/certify-l1`)
 and `script/CertifyL1.s.sol` call this when L1 env is set; they no-op
 when it is not. CI must not supply mainnet keys.
@@ -695,7 +700,7 @@ POST /api/office/pages
 PATCH /api/office/pages/:id
 DELETE /api/office/pages/:id
 GET  /api/office/site
-PATCH /api/office/site              (title/tagline: clerk; contract pin: platform_admin)
+PATCH /api/office/site              (title/tagline/contracts: platform_admin)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
@@ -775,7 +780,7 @@ GET  /api/explorer/disclosure       (last closed hour, disclosed turnout, countd
 GET  /api/explorer/nullifiers/:value
 GET  /api/explorer/search
 GET  /api/explorer/elections/:id
-POST /api/explorer/ingest          (L2 sequencer; votes already delayed on L2)
+POST /api/explorer/ingest          (L2 sequencer; `EXPLORER_INGEST_SECRET` required outside tests)
 GET  /api/reason-codes
 GET  /api/roles
 GET  /api/jurisdictions

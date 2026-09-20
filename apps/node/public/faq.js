@@ -29,7 +29,7 @@ export const FAQ_ENTRIES = [
     q: "Do we deploy a new smart contract when we fork this Node?",
     a: [
       "No. Fork the Node UI for your jurisdiction’s clerk desk and public pages. Pin the one shared ElectionFactory, BallotInbox, and verifier on Site & contracts (or with ELECTION_FACTORY_ADDRESS). Do not run a new factory deploy for each city.",
-      "Clerks update About, FAQ, home copy, and extra pages from the admin hub like a WordPress site. The chain addresses stay the shared deployment. This line is still a demo: MockVerifier, unwired Poseidon, no production ceremony.",
+      "The Node host (platform_admin) updates About, FAQ, home copy, and the site title. Clerks publish extra pages tagged to their own jurisdiction. A clerk of one body on a shared Node cannot rewrite the public record for every body. The chain addresses stay the shared deployment. This line is still a demo: MockVerifier, unwired Poseidon, no production ceremony.",
     ],
   },
   {
@@ -146,7 +146,7 @@ export const FAQ_ENTRIES = [
     topic: "admins",
     q: "How do election officials work in Republic?",
     a: [
-      "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll, and (with the registrar) approve voter registration requests. Registrar: approve those requests, insert identity commitments (never names), and revoke expired smart cards or driver’s licenses. Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction, and design the official outcome PDF letterhead (QR and hash seals stay required).",
+      "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll, and (with the registrar) approve voter registration requests; publish pages tagged to that jurisdiction. Registrar: approve those requests, insert identity commitments (never names), and revoke expired smart cards or driver’s licenses. Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction, publish About / FAQ / home, set the site title, pin shared contracts, and design the official outcome PDF letterhead (QR and hash seals stay required).",
       "Clerk / registrar / disqualification officer / tally operator are granted per jurisdiction. platform_admin is a global override, not a token admin. If you are not signed in as an officer, the admin hub sends you to sign-in. The Node still enforces roles on each API action even if a form is visible.",
     ],
   },

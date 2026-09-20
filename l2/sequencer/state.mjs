@@ -328,6 +328,7 @@ export function loadConfig(root = L2_ROOT) {
       /\/$/,
       '',
     ),
+    explorerIngestSecret: String(process.env.EXPLORER_INGEST_SECRET || file.explorerIngestSecret || '').trim(),
     l1Rpc: process.env.L1_RPC || file.l1Rpc || '',
     settlementAddress: process.env.SETTLEMENT_ADDRESS || file.settlementAddress || '',
     privateKey: process.env.PRIVATE_KEY || '',
@@ -895,9 +896,13 @@ export class ChainState {
       block: this.rpcBlock(block, true),
       outcomes,
     };
+    const headers = { 'content-type': 'application/json' };
+    if (this.config.explorerIngestSecret) {
+      headers['x-republic-ingest-secret'] = this.config.explorerIngestSecret;
+    }
     const res = await fetch(`${base}/api/explorer/ingest`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(4000),
     });

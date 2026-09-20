@@ -12,6 +12,7 @@ contract DeployL2 is RepublicStackScript {
         vm.startBroadcast();
         address admin = msg.sender;
         RepublicStack memory s = _deployElectionStack(admin);
+        s.jurisdictions.createJurisdiction(keccak256("CIVIC"), admin, "Civic");
 
         uint256 sponsor = vm.envOr("PAYMASTER_DEPOSIT_WEI", uint256(10 ether));
         if (sponsor > 0) {

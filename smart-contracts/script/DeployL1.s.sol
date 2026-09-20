@@ -10,8 +10,11 @@ import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
 
 /// @notice Ethereum (or Sepolia) settlement: rollup, tally mirror, mailbox.
 ///         `BATCH_VERIFIER` may be unset / zero until a production VK exists.
-///         `mockMode` is false on L1.
+///         `L2_FACTORY` (or `ELECTION_FACTORY_ADDRESS`) is required so the
+///         mirror cannot accept colliding uint256 `postResult` writes.
 contract DeployL1 is Script {
+    error MissingL2Factory();
+
     function run() external {
         vm.startBroadcast();
         address admin = msg.sender;
@@ -22,16 +25,22 @@ contract DeployL1 is Script {
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, false);
         RepublicMailbox mailbox = new RepublicMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
-        address l2Factory = vm.envOr("L2_FACTORY", address(0));
-        if (l2Factory != address(0)) {
-            mirror.setL2Factory(l2Factory);
-        }
+        address l2Factory = _factory();
+        if (l2Factory == address(0)) revert MissingL2Factory();
+        mirror.setL2Factory(l2Factory);
         vm.stopBroadcast();
 
         _log("SETTLEMENT", address(settlement));
         _log("TALLY_MIRROR", address(mirror));
         _log("MAILBOX", address(mailbox));
+        _log("L2_FACTORY", l2Factory);
         _log("BATCH_VERIFIER", batchVerifier);
+    }
+
+    function _factory() internal view returns (address) {
+        address a = vm.envOr("L2_FACTORY", address(0));
+        if (a != address(0)) return a;
+        return vm.envOr("ELECTION_FACTORY_ADDRESS", address(0));
     }
 
     function _log(string memory name, address addr) internal view {
