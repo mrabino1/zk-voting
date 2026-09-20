@@ -391,6 +391,7 @@ export class ChainState {
     this.sealed = [];
     this.sealedHashes = new Set();
     this.txNonce = 0n;
+    this._latestNumber = null;
     this.producing = false;
     this.running = false;
     this.producerTask = null;
@@ -415,10 +416,17 @@ export class ChainState {
   }
 
   get head() {
-    return this.blocks[this.blocks.length - 1];
+    if (this._latestNumber != null && this.blocks[this._latestNumber]) {
+      return this.blocks[this._latestNumber];
+    }
+    for (let i = this.blocks.length - 1; i >= 0; i--) {
+      if (this.blocks[i]) return this.blocks[i];
+    }
+    return undefined;
   }
 
   get latestNumber() {
+    if (this._latestNumber != null) return this._latestNumber;
     return this.head ? this.head.number : 0;
   }
 
@@ -440,14 +448,39 @@ export class ChainState {
     if (!fs.existsSync(headPath)) return;
     const head = JSON.parse(fs.readFileSync(headPath, 'utf8'));
     const max = Number(head.number || 0);
+    this._latestNumber = max;
+    if (head.txNonce != null && head.txNonce !== '') {
+      try {
+        this.txNonce = BigInt(head.txNonce);
+      } catch {
+        this.txNonce = 0n;
+      }
+    }
+    const archiveIndex = readArchiveIndexFile(this.config.dataDir);
+    if (archiveIndex?.txNonce) {
+      try {
+        const indexed = BigInt(archiveIndex.txNonce);
+        if (indexed > this.txNonce) this.txNonce = indexed;
+      } catch {
+        // keep head nonce
+      }
+    }
+    const archivedThrough = Number(archiveIndex?.archivedThrough ?? -1);
     for (let n = 0; n <= max; n++) {
       const file = this.blockPath(n);
-      if (!fs.existsSync(file)) {
+      if (fs.existsSync(file)) {
+        const block = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (block && block.archived) continue;
+        this.ingestLoadedBlock(block);
+        continue;
+      }
+      if (n === 0) {
         throw new Error(`missing block file ${file}`);
       }
-      const block = JSON.parse(fs.readFileSync(file, 'utf8'));
-      this.ingestLoadedBlock(block);
+      if (n <= archivedThrough) continue;
+      throw new Error(`missing block file ${file}`);
     }
+    rememberArchivedTxHashes(this, archiveIndex);
     const memPath = path.join(this.config.dataDir, 'mempool.json');
     if (fs.existsSync(memPath)) {
       const pending = JSON.parse(fs.readFileSync(memPath, 'utf8'));
@@ -476,13 +509,17 @@ export class ChainState {
   }
 
   ingestLoadedBlock(block) {
-    this.blocks.push(block);
+    this.blocks[block.number] = block;
+    if (this._latestNumber == null || block.number > this._latestNumber) {
+      this._latestNumber = block.number;
+    }
     this.blocksByHash.set(block.hash.toLowerCase(), block);
     const txs = Array.isArray(block.transactions) ? block.transactions : [];
     for (const tx of txs) {
       if (typeof tx === 'string') continue;
       this.txsByHash.set(tx.hash.toLowerCase(), tx);
-      this.txNonce = BigInt(tx.nonce || 0) + 1n;
+      const next = BigInt(tx.nonce || 0) + 1n;
+      if (next > this.txNonce) this.txNonce = next;
     }
     if (Array.isArray(block.logs)) {
       for (const log of block.logs) this.logs.push(log);
@@ -494,6 +531,7 @@ export class ChainState {
       number: this.head.number,
       hash: this.head.hash,
       stateRoot: this.head.stateRoot,
+      txNonce: this.txNonce.toString(),
     });
     writeJsonAtomic(path.join(this.config.dataDir, 'mempool.json'), this.mempool);
     this.persistSealed();
@@ -943,7 +981,7 @@ export class ChainState {
   getTransactionByHash(hash) {
     if (!hash) return null;
     const tx = this.txsByHash.get(String(hash).toLowerCase());
-    if (tx) return this.rpcTx(tx);
+    if (tx) return tx.archived ? null : this.rpcTx(tx);
     const pending = this.mempool.find((t) => t.hash.toLowerCase() === String(hash).toLowerCase());
     return pending ? this.rpcTx(pending) : null;
   }
@@ -1015,6 +1053,27 @@ export class ChainState {
     this.running = false;
     if (this.producerTask) {
       await this.producerTask.catch(() => {});
+    }
+  }
+}
+
+function readArchiveIndexFile(dataDir) {
+  const file = path.join(dataDir, 'archive', 'index.json');
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function rememberArchivedTxHashes(state, archiveIndex) {
+  if (!archiveIndex || !archiveIndex.hours) return;
+  for (const hour of Object.values(archiveIndex.hours)) {
+    for (const hash of hour.txHashes || []) {
+      const key = String(hash).toLowerCase();
+      if (!key || state.txsByHash.has(key)) continue;
+      state.txsByHash.set(key, { hash, archived: true });
     }
   }
 }
