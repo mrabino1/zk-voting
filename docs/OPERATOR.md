@@ -210,6 +210,7 @@ Each hour has a `manifest.json` (keys + sha256). Local copies are deleted **only
 | `ARCHIVE_S3_ACCESS_KEY_ID` / `ARCHIVE_S3_SECRET_ACCESS_KEY` | empty | R2 API token or IAM user. Distinct from SES when you want |
 | `ARCHIVE_HOT_WINDOW_HOURS` | `2` | Keep this many hours of block JSON on the VPS |
 | `ARCHIVE_EXPLORER_SNAPSHOT` | `0` | If `1`, copy Node `l2-chain.json` into the hour prefix (does **not** prune Node `DATA_DIR`) |
+| `ARCHIVE_MIN_FREE_BYTES` | `8388608` (8 MiB) | Below this, skip explorer snapshot / extra local copies; still offload sealed hours |
 
 Restore (read-only download into a directory, never the live sequencer tree):
 
@@ -225,6 +226,25 @@ Cron (host already exporting archive env, or a root `.env` the CLI will read):
 ```
 
 Node `DATA_DIR` (`republic.json`, working explorer) stays local. See [`voting_cost_estimate.md`](../voting_cost_estimate.md).
+
+The archive job is a **sidecar**. A failed hour (hash mismatch, PUT/GET error, timeout, `ENOSPC` in the attic job, lock held) **does not stop the sequencer**. If the VPS is so full that the sequencer cannot write `blocks/N.json` or Node cannot write `republic.json`, that is a **separate** hot-path `ENOSPC` alert — free disk, turn archive on, or stop empty-block production. Overlapping crons share `L2_DATA_DIR/archive/archive.lock`; the second run exits non-zero and does not prune.
+
+#### Attic failure matrix
+
+Mismatch or failure at any verify stage: **do not prune**; that hour exits non-zero; local files stay. Next run is retry-friendly (idempotent PUT if remote sha256 already matches).
+
+| Symptom | Local state | Remote state | Action |
+| --- | --- | --- | --- |
+| PUT network / 5xx / timeout | intact | missing or partial object | retry hour; fix network/bucket |
+| PUT 401/403 | intact | none | fix `ARCHIVE_S3_*` keys; no prune |
+| GET missing, truncated, or sha256 ≠ pre-upload / manifest | intact | bad or incomplete object | retry PUT; no prune |
+| Manifest PUT fails after objects uploaded | intact | objects may exist without a good `manifest.json` | retry; do not prune until manifest GET+sha256 verifies |
+| Local file sha256 changes during the job (bitrot/truncation) | still present | may already match the pre-upload hash | **no prune**; restore that object from the attic or stop |
+| `ENOSPC` writing staging manifest / index temp | intact | none for that hour | free disk; retry; never delete unverified |
+| `ENOSPC` after some hours verified | those hours may already be pruned | those hours complete | abort remaining; retry the rest after freeing disk |
+| Disk critically low **before** start | hot path untouched | sealed hours still offloaded | skip explorer snapshot and other large local copies; log `ENOSPC` |
+| Second run while lock held | intact | unchanged | wait for the first job; overlapping cron is a no-op prune-wise |
+| Archive process crash / Compose `archive` restart | sequencer still producing | last complete hour only | restart sidecar; sequencer does not import this job |
 
 ### Block explorer
 

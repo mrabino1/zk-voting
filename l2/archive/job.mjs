@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { loadConfig } from '../sequencer/state.mjs';
 import { assertArchiveReady, loadArchiveConfig } from './config.mjs';
+import { archiveError, classifyStoreError, isEnospc, wrapEnospc } from './errors.mjs';
 import {
   hourStart as hourStartOf,
   isHourArchivable,
@@ -12,38 +13,78 @@ import {
   parseHourPath,
   hourPath,
 } from './hours.mjs';
-import { createObjectStore, putAndVerify, sha256Hex } from './s3.mjs';
+import { acquireArchiveLock, lockBusyResult } from './lock.mjs';
+import {
+  createObjectStore,
+  getAndVerify,
+  hashLocalFile,
+  putAndVerify,
+  sha256Hex,
+  verifyLocalHash,
+} from './s3.mjs';
 
 export const ARCHIVE_INDEX_REL = path.join('archive', 'index.json');
 
-function writeJsonAtomic(file, obj) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
-  fs.renameSync(tmp, file);
+export function defaultArchiveIo() {
+  return {
+    mkdirSync: (...args) => fs.mkdirSync(...args),
+    writeFileSync: (...args) => fs.writeFileSync(...args),
+    readFileSync: (...args) => fs.readFileSync(...args),
+    unlinkSync: (...args) => fs.unlinkSync(...args),
+    existsSync: (...args) => fs.existsSync(...args),
+    renameSync: (...args) => fs.renameSync(...args),
+    statSync: (...args) => fs.statSync(...args),
+    statfsSync: typeof fs.statfsSync === 'function' ? (...args) => fs.statfsSync(...args) : null,
+  };
+}
+
+export function readDiskFree(dir, io = defaultArchiveIo()) {
+  if (!io.statfsSync) return null;
+  try {
+    const s = io.statfsSync(dir);
+    return Number(s.bavail) * Number(s.bsize);
+  } catch {
+    return null;
+  }
+}
+
+function writeJsonAtomic(file, obj, io = defaultArchiveIo()) {
+  try {
+    io.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + '.tmp';
+    io.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+    io.renameSync(tmp, file);
+  } catch (err) {
+    try {
+      io.unlinkSync(file + '.tmp');
+    } catch {
+      // ignore
+    }
+    throw wrapEnospc(err, `write ${file}`);
+  }
 }
 
 export function archiveIndexPath(dataDir) {
   return path.join(dataDir, ARCHIVE_INDEX_REL);
 }
 
-export function readArchiveIndex(dataDir) {
+export function readArchiveIndex(dataDir, io = defaultArchiveIo()) {
   const file = archiveIndexPath(dataDir);
-  if (!fs.existsSync(file)) {
+  if (!io.existsSync(file)) {
     return { version: 1, nfp: true, archivedThrough: -1, txNonce: '0', hours: {} };
   }
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const parsed = JSON.parse(io.readFileSync(file, 'utf8'));
   parsed.hours = parsed.hours && typeof parsed.hours === 'object' ? parsed.hours : {};
   if (parsed.archivedThrough == null) parsed.archivedThrough = -1;
   return parsed;
 }
 
-export function writeArchiveIndex(dataDir, index) {
-  writeJsonAtomic(archiveIndexPath(dataDir), index);
+export function writeArchiveIndex(dataDir, index, io = defaultArchiveIo()) {
+  writeJsonAtomic(archiveIndexPath(dataDir), index, io);
 }
 
-function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+function readJson(file, io) {
+  return JSON.parse(io.readFileSync(file, 'utf8'));
 }
 
 function blockNumberFromName(name) {
@@ -71,9 +112,9 @@ function maxNextNonceFromBlock(block, current) {
   return n;
 }
 
-export function listLocalBlocks(dataDir) {
+export function listLocalBlocks(dataDir, io = defaultArchiveIo()) {
   const dir = path.join(dataDir, 'blocks');
-  if (!fs.existsSync(dir)) return [];
+  if (!io.existsSync(dir)) return [];
   const out = [];
   for (const name of fs.readdirSync(dir)) {
     const number = blockNumberFromName(name);
@@ -81,7 +122,7 @@ export function listLocalBlocks(dataDir) {
     const file = path.join(dir, name);
     let block;
     try {
-      block = readJson(file);
+      block = readJson(file, io);
     } catch {
       continue;
     }
@@ -102,16 +143,16 @@ export function listLocalBlocks(dataDir) {
   return out;
 }
 
-export function listLocalProofs(dataDir) {
+export function listLocalProofs(dataDir, io = defaultArchiveIo()) {
   const dir = path.join(dataDir, 'proofs');
-  if (!fs.existsSync(dir)) return [];
+  if (!io.existsSync(dir)) return [];
   const out = [];
   for (const name of fs.readdirSync(dir)) {
     if (name === 'cursor.json' || !name.endsWith('.json')) continue;
     const file = path.join(dir, name);
     let rec;
     try {
-      rec = readJson(file);
+      rec = readJson(file, io);
     } catch {
       continue;
     }
@@ -126,11 +167,11 @@ export function listLocalProofs(dataDir) {
   return out;
 }
 
-function readProvenThrough(dataDir) {
+function readProvenThrough(dataDir, io) {
   const cursorPath = path.join(dataDir, 'proofs', 'cursor.json');
-  if (!fs.existsSync(cursorPath)) return null;
+  if (!io.existsSync(cursorPath)) return null;
   try {
-    const cursor = readJson(cursorPath);
+    const cursor = readJson(cursorPath, io);
     if (cursor.lastProvenBlock == null) return null;
     return Number(cursor.lastProvenBlock);
   } catch {
@@ -153,13 +194,62 @@ function artifactKey(prefix, kind, name) {
   return `${prefix}/${kind}/${name}`;
 }
 
-async function snapshotExplorer(cfg, store, prefix, objects) {
-  if (!cfg.explorerSnapshot || !cfg.explorerFile) return;
-  if (!fs.existsSync(cfg.explorerFile)) return;
-  const body = fs.readFileSync(cfg.explorerFile);
-  const key = `${prefix}/explorer/l2-chain.json`;
-  const meta = await putAndVerify(store, key, body);
-  objects.push({ ...meta, kind: 'explorer', localPath: cfg.explorerFile });
+function planObject({ key, file, kind, dataDir, io }) {
+  const hashed = hashLocalFile(file, io);
+  return {
+    key,
+    sha256: hashed.sha256,
+    bytes: hashed.bytes,
+    kind,
+    localPath: path.isAbsolute(file) ? path.relative(dataDir, file) : file,
+    algorithm: 'sha256',
+    hashedAt: 'pre-upload',
+    body: hashed.body,
+    file,
+  };
+}
+
+function publicObject(obj) {
+  return {
+    key: obj.key,
+    sha256: obj.sha256,
+    bytes: obj.bytes,
+    kind: obj.kind,
+    localPath: obj.localPath,
+    algorithm: obj.algorithm || 'sha256',
+    hashedAt: obj.hashedAt || 'pre-upload',
+  };
+}
+
+async function putPlanned(store, planned, stage = 'PUT') {
+  try {
+    const existing = await store.get(planned.key);
+    if (
+      existing &&
+      existing.length === planned.bytes &&
+      sha256Hex(existing) === planned.sha256
+    ) {
+      return { ...publicObject(planned), skippedPut: true };
+    }
+  } catch {
+    // treat as missing; PUT next
+  }
+  try {
+    return await putAndVerify(store, planned.key, planned.body, planned.sha256);
+  } catch (err) {
+    throw classifyStoreError(err, stage, planned.key);
+  }
+}
+
+function verifyRemainingLocal(planned, io) {
+  for (const obj of planned) {
+    if (!obj.file) continue;
+    verifyLocalHash(obj.file, obj.sha256, io);
+  }
+}
+
+function stagingManifestPath(dataDir, hour) {
+  return path.join(dataDir, 'archive', 'staging', `${String(hour).replaceAll('/', '-')}.json`);
 }
 
 export async function archiveHour({
@@ -170,93 +260,143 @@ export async function archiveHour({
   proofs,
   now,
   prune = true,
+  io = defaultArchiveIo(),
+  lowDisk = false,
 }) {
   const prefix = objectPrefix(cfg.chainId, hourStart);
   const hour = hourPath(hourStart);
-  const objects = [];
+  const planned = [];
   const txHashes = [];
   let maxNonce = 0n;
   const blockNumbers = [];
 
   for (const item of items) {
-    const body = fs.readFileSync(item.file);
     const name = path.basename(item.file);
     const key = artifactKey(prefix, 'blocks', name);
-    const meta = await putAndVerify(store, key, body);
-    objects.push({ ...meta, kind: 'block', localPath: path.relative(cfg.dataDir, item.file) });
+    planned.push(planObject({ key, file: item.file, kind: 'block', dataDir: cfg.dataDir, io }));
     txHashes.push(...item.txHashes);
     maxNonce = maxNextNonceFromBlock(item.block, maxNonce);
     blockNumbers.push(item.number);
   }
 
   for (const proof of proofs) {
-    const body = fs.readFileSync(proof.file);
     const key = artifactKey(prefix, 'proofs', proof.name);
-    const meta = await putAndVerify(store, key, body);
-    objects.push({ ...meta, kind: 'proof', localPath: path.relative(cfg.dataDir, proof.file) });
+    planned.push(planObject({ key, file: proof.file, kind: 'proof', dataDir: cfg.dataDir, io }));
   }
 
-  await snapshotExplorer(cfg, store, prefix, objects);
+  if (cfg.explorerSnapshot && cfg.explorerFile && io.existsSync(cfg.explorerFile) && !lowDisk) {
+    planned.push(
+      planObject({
+        key: `${prefix}/explorer/l2-chain.json`,
+        file: cfg.explorerFile,
+        kind: 'explorer',
+        dataDir: cfg.dataDir,
+        io,
+      }),
+    );
+  }
 
-  const manifest = {
+  const manifestObjects = planned.map(publicObject);
+  const manifestDraft = {
     nfp: true,
     app: 'zk-voting',
     kind: 'l2-hour-archive',
     chainId: cfg.chainId,
     hour,
     hourStart,
-    hourEnd: hourStart + (Number(cfg.disclosureIntervalSeconds) > 0
-      ? Number(cfg.disclosureIntervalSeconds)
-      : 3600),
+    hourEnd:
+      hourStart +
+      (Number(cfg.disclosureIntervalSeconds) > 0 ? Number(cfg.disclosureIntervalSeconds) : 3600),
     prefix,
+    hashAlgorithm: 'sha256',
     createdAt: new Date((Number(now) || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
-    objects,
+    objects: manifestObjects,
   };
-  const manifestBody = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
-  const manifestKey = `${prefix}/manifest.json`;
-  const manifestMeta = await putAndVerify(store, manifestKey, manifestBody);
-  objects.push({ ...manifestMeta, kind: 'manifest' });
-  manifest.objects = objects.filter((o) => o.kind !== 'manifest');
-  manifest.manifest = manifestMeta;
 
-  const provenThrough = readProvenThrough(cfg.dataDir);
+  try {
+    writeJsonAtomic(stagingManifestPath(cfg.dataDir, hour), manifestDraft, io);
+  } catch (err) {
+    throw wrapEnospc(err, `staging manifest for hour ${hour}`);
+  }
+
+  for (const obj of planned) {
+    await putPlanned(store, obj, 'PUT');
+  }
+
+  const manifestKey = `${prefix}/manifest.json`;
+  const manifestBody = Buffer.from(JSON.stringify(manifestDraft, null, 2) + '\n');
+  const manifestSha256 = sha256Hex(manifestBody);
+  try {
+    await putAndVerify(store, manifestKey, manifestBody, manifestSha256);
+  } catch (err) {
+    if (err.code === 'AUTH' || err.code === 'TIMEOUT' || err.code === 'ENOSPC') throw err;
+    throw archiveError(
+      'MANIFEST_PUT_FAILED',
+      err.message || `manifest PUT failed for ${manifestKey}`,
+      { key: manifestKey, cause: err },
+    );
+  }
+
+  for (const obj of planned) {
+    await getAndVerify(store, obj.key, obj.sha256, obj.bytes);
+  }
+  await getAndVerify(store, manifestKey, manifestSha256, manifestBody.length);
+
+  verifyRemainingLocal(planned, io);
+
+  const provenThrough = readProvenThrough(cfg.dataDir, io);
   const hourMax = blockNumbers.length ? Math.max(...blockNumbers) : -1;
   const hourMin = blockNumbers.length ? Math.min(...blockNumbers) : -1;
   const proven = provenThrough == null || hourMax <= provenThrough;
-  const pruned = [];
-  if (prune && proven) {
-    for (const item of items) {
-      if (item.number === 0) continue;
-      fs.unlinkSync(item.file);
-      pruned.push(path.relative(cfg.dataDir, item.file));
-    }
-    for (const proof of proofs) {
-      if (provenThrough != null && proof.endBlock > provenThrough) continue;
-      fs.unlinkSync(proof.file);
-      pruned.push(path.relative(cfg.dataDir, proof.file));
-    }
-  }
+  const shouldPrune = prune && proven;
+
+  verifyRemainingLocal(planned, io);
 
   return {
     hour,
     prefix,
     hourStart,
-    uploaded: objects.length,
-    pruned: pruned.length,
+    uploaded: planned.length + 1,
+    pruned: 0,
+    shouldPrune,
     pruneSkipped: prune && !proven ? 'unproven' : undefined,
+    pruneItems: shouldPrune ? items.filter((i) => i.number !== 0) : [],
+    pruneProofs: shouldPrune
+      ? proofs.filter((p) => provenThrough == null || p.endBlock <= provenThrough)
+      : [],
     blockFrom: hourMin,
     blockTo: hourMax,
     txHashes,
     txNonce: maxNonce.toString(),
-    manifestSha256: manifestMeta.sha256,
+    manifestSha256,
     manifestKey,
-    prunedPaths: pruned,
+    prunedPaths: [],
+    objects: manifestObjects,
+    lowDiskSkippedExplorer: Boolean(lowDisk && cfg.explorerSnapshot),
+  };
+}
+
+function failHour(start, err) {
+  const wrapped = err?.code
+    ? err
+    : isEnospc(err)
+      ? wrapEnospc(err, `hour ${hourPath(start)}`)
+      : archiveError(err?.code || 'ARCHIVE_FAILED', err?.message || String(err));
+  return {
+    ok: false,
+    hour: hourPath(start),
+    hourStart: start,
+    error: wrapped.message || String(wrapped),
+    code: wrapped.code || 'ARCHIVE_FAILED',
+    failedObject: wrapped.key,
+    pruned: 0,
   };
 }
 
 export async function runArchiveJob(opts = {}) {
   const cfg = opts.config || loadArchiveConfig({ env: opts.env, l2Config: opts.l2Config });
   const now = opts.now != null ? Number(opts.now) : Math.floor(Date.now() / 1000);
+  const io = opts.io || defaultArchiveIo();
   const ready = assertArchiveReady(cfg);
   if (!ready.ok || ready.skipped) {
     return {
@@ -268,76 +408,155 @@ export async function runArchiveJob(opts = {}) {
     };
   }
 
-  const store = opts.store || createObjectStore(cfg);
-  const blocks = listLocalBlocks(cfg.dataDir);
-  const proofs = listLocalProofs(cfg.dataDir);
-  const grouped = groupByHour(blocks, cfg.disclosureIntervalSeconds);
-  const hours = [];
-  const index = readArchiveIndex(cfg.dataDir);
-  let nextNonce = BigInt(index.txNonce || '0');
-
-  const sortedStarts = [...grouped.keys()].sort((a, b) => a - b);
-  for (const start of sortedStarts) {
-    if (!isHourArchivable(start, now, cfg.disclosureIntervalSeconds, cfg.hotWindowHours)) {
-      continue;
-    }
-    const items = grouped.get(start);
-    const hourMax = Math.max(...items.map((i) => i.number));
-    const hourMin = Math.min(...items.map((i) => i.number));
-    const hourProofs = proofs.filter((p) => p.endBlock >= hourMin && p.endBlock <= hourMax);
-    try {
-      const result = await archiveHour({
-        cfg,
-        store,
-        hourStart: start,
-        items,
-        proofs: hourProofs,
-        now,
-        prune: opts.prune !== false,
-      });
-      nextNonce =
-        BigInt(result.txNonce || '0') > nextNonce ? BigInt(result.txNonce || '0') : nextNonce;
-      if (result.blockTo > Number(index.archivedThrough || -1) && result.pruned > 0) {
-        index.archivedThrough = result.blockTo;
-      }
-      index.hours[result.hour] = {
-        hourStart: result.hourStart,
-        prefix: result.prefix,
-        manifestKey: result.manifestKey,
-        manifestSha256: result.manifestSha256,
-        blockFrom: result.blockFrom,
-        blockTo: result.blockTo,
-        pruned: result.pruned > 0,
-        txHashes: result.txHashes,
-      };
-      index.txNonce = nextNonce.toString();
-      writeArchiveIndex(cfg.dataDir, index);
-      hours.push({ ok: true, ...result });
-    } catch (err) {
-      hours.push({
-        ok: false,
-        hour: hourPath(start),
-        hourStart: start,
-        error: err.message || String(err),
-        pruned: 0,
-      });
-    }
+  let lock;
+  try {
+    lock = opts.skipLock
+      ? { acquired: true, release() {} }
+      : acquireArchiveLock(cfg.dataDir, opts.lock || {});
+  } catch (err) {
+    const wrapped = wrapEnospc(err, `archive lock under ${cfg.dataDir}`);
+    return {
+      ok: false,
+      skipped: false,
+      reason: wrapped.message,
+      error: wrapped.message,
+      code: wrapped.code || err.code,
+      hours: [],
+      now,
+    };
   }
+  if (!lock.acquired) return lockBusyResult(lock, now);
 
-  const failed = hours.filter((h) => !h.ok);
-  return {
-    ok: failed.length === 0,
-    skipped: false,
-    reason: failed.length ? `${failed.length} hour(s) failed` : undefined,
-    hours,
-    archivedThrough: index.archivedThrough,
-    now,
-  };
+  try {
+    const minFree = Number(cfg.minFreeBytes) || 0;
+    const free =
+      opts.diskFree != null ? Number(opts.diskFree) : readDiskFree(cfg.dataDir, io);
+    const lowDisk = free != null && minFree > 0 && free < minFree;
+    if (lowDisk) {
+      console.warn(
+        `ENOSPC: only ${free} bytes free under ${cfg.dataDir} (min ${minFree}). ` +
+          'Skipping explorer snapshot and extra local copies; still attempting sealed-hour offload. ' +
+          'Sequencer/Node hot-path ENOSPC is a separate ops alert.',
+      );
+    }
+
+    const store = opts.store || createObjectStore({ ...cfg, timeoutMs: cfg.timeoutMs });
+    const blocks = listLocalBlocks(cfg.dataDir, io);
+    const proofs = listLocalProofs(cfg.dataDir, io);
+    const grouped = groupByHour(blocks, cfg.disclosureIntervalSeconds);
+    const hours = [];
+    const index = readArchiveIndex(cfg.dataDir, io);
+    let nextNonce = BigInt(index.txNonce || '0');
+    let abortRemaining = null;
+
+    const sortedStarts = [...grouped.keys()].sort((a, b) => a - b);
+    for (const start of sortedStarts) {
+      if (abortRemaining) break;
+      if (!isHourArchivable(start, now, cfg.disclosureIntervalSeconds, cfg.hotWindowHours)) {
+        continue;
+      }
+      const hour = hourPath(start);
+      const items = grouped.get(start);
+      const localStillThere = items.some((i) => io.existsSync(i.file));
+      const prior = index.hours[hour];
+      if (prior && prior.pruned && !localStillThere) {
+        hours.push({
+          ok: true,
+          hour,
+          hourStart: start,
+          skipped: true,
+          reason: 'already archived',
+          pruned: 0,
+          uploaded: 0,
+        });
+        continue;
+      }
+      const hourMax = Math.max(...items.map((i) => i.number));
+      const hourMin = Math.min(...items.map((i) => i.number));
+      const hourProofs = proofs.filter((p) => p.endBlock >= hourMin && p.endBlock <= hourMax);
+      try {
+        const result = await archiveHour({
+          cfg,
+          store,
+          hourStart: start,
+          items,
+          proofs: hourProofs,
+          now,
+          prune: opts.prune !== false,
+          io,
+          lowDisk,
+        });
+        nextNonce =
+          BigInt(result.txNonce || '0') > nextNonce ? BigInt(result.txNonce || '0') : nextNonce;
+        index.hours[result.hour] = {
+          hourStart: result.hourStart,
+          prefix: result.prefix,
+          manifestKey: result.manifestKey,
+          manifestSha256: result.manifestSha256,
+          blockFrom: result.blockFrom,
+          blockTo: result.blockTo,
+          pruned: false,
+          txHashes: result.txHashes,
+        };
+        index.txNonce = nextNonce.toString();
+        writeArchiveIndex(cfg.dataDir, index, io);
+
+        const pruned = [];
+        if (result.shouldPrune) {
+          if (result.blockTo > Number(index.archivedThrough || -1)) {
+            index.archivedThrough = result.blockTo;
+          }
+          index.hours[result.hour].pruned = true;
+          writeArchiveIndex(cfg.dataDir, index, io);
+          for (const item of result.pruneItems || []) {
+            io.unlinkSync(item.file);
+            pruned.push(path.relative(cfg.dataDir, item.file));
+          }
+          for (const proof of result.pruneProofs || []) {
+            io.unlinkSync(proof.file);
+            pruned.push(path.relative(cfg.dataDir, proof.file));
+          }
+        }
+
+        hours.push({
+          ok: true,
+          ...result,
+          pruned: pruned.length,
+          prunedPaths: pruned,
+        });
+      } catch (err) {
+        const failed = failHour(start, err);
+        hours.push(failed);
+        if (failed.code === 'ENOSPC') {
+          abortRemaining = failed.code;
+        }
+      }
+    }
+
+    const failed = hours.filter((h) => !h.ok);
+    return {
+      ok: failed.length === 0,
+      skipped: false,
+      reason: abortRemaining
+        ? `aborted remaining hours after ${abortRemaining}`
+        : failed.length
+          ? `${failed.length} hour(s) failed`
+          : undefined,
+      hours,
+      archivedThrough: index.archivedThrough,
+      now,
+      lowDisk,
+      diskFree: free,
+    };
+  } finally {
+    if (typeof lock.release === 'function') lock.release();
+  }
 }
 
 export async function restoreHour(opts = {}) {
   const cfg = opts.config || loadArchiveConfig({ env: opts.env, l2Config: opts.l2Config });
   const store = opts.store || createObjectStore(cfg);
+  const io = opts.io || defaultArchiveIo();
   let hourStart = opts.hourStart;
   if (hourStart == null && opts.hour) {
     const parsed = parseHourPath(opts.hour);
@@ -351,30 +570,38 @@ export async function restoreHour(opts = {}) {
   if (hourStart == null) throw new Error('restore requires --hour YYYY/MM/DD/HH');
   const prefix = opts.prefix || objectPrefix(cfg.chainId, hourStart);
   const dest = path.resolve(opts.out || path.join(cfg.dataDir, 'archive', 'restore', hourPath(hourStart)));
-  fs.mkdirSync(dest, { recursive: true });
+  try {
+    io.mkdirSync(dest, { recursive: true });
+  } catch (err) {
+    throw wrapEnospc(err, `restore mkdir ${dest}`);
+  }
   const manifestKey = `${prefix}/manifest.json`;
   const manifestBody = await store.get(manifestKey);
   if (!manifestBody) throw new Error(`manifest not found: ${manifestKey}`);
   const manifest = JSON.parse(manifestBody.toString('utf8'));
   const verified = [];
   for (const obj of manifest.objects || []) {
-    const body = await store.get(obj.key);
-    if (!body) throw new Error(`missing object ${obj.key}`);
-    const actual = sha256Hex(body);
-    if (obj.sha256 && actual !== obj.sha256) {
-      throw new Error(`checksum mismatch ${obj.key}`);
-    }
+    const remote = await getAndVerify(store, obj.key, obj.sha256, obj.bytes);
     const rel = restoreRelativePath(obj, prefix);
     const file = path.resolve(dest, rel);
     if (file !== path.resolve(dest) && !file.startsWith(path.resolve(dest) + path.sep)) {
       throw new Error(`restore path escapes destination: ${rel}`);
     }
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, body);
-    verified.push({ key: obj.key, sha256: actual, file });
+    try {
+      io.mkdirSync(path.dirname(file), { recursive: true });
+      io.writeFileSync(file, remote.body);
+    } catch (err) {
+      throw wrapEnospc(err, `restore write ${file}`);
+    }
+    verifyLocalHash(file, obj.sha256, io);
+    verified.push({ key: obj.key, sha256: remote.sha256, file });
   }
   const manifestFile = path.join(dest, 'manifest.json');
-  fs.writeFileSync(manifestFile, manifestBody);
+  try {
+    io.writeFileSync(manifestFile, manifestBody);
+  } catch (err) {
+    throw wrapEnospc(err, `restore write ${manifestFile}`);
+  }
   return { ok: true, prefix, dest, restored: verified.length, manifest: manifestKey };
 }
 
