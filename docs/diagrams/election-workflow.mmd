@@ -1,0 +1,64 @@
+%% NOT FOR PROFIT — civic public good, not a commercial product.
+%% Republic / zk-voting — informational election workflow.
+%% Render: npm run docs:workflow
+%% Output: docs/images/election-workflow.png
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#e8f4fc",
+    "primaryTextColor": "#061b31",
+    "primaryBorderColor": "#1d4e89",
+    "lineColor": "#334155",
+    "secondaryColor": "#eef6e8",
+    "tertiaryColor": "#fff7ed",
+    "fontFamily": "ui-sans-serif, system-ui, sans-serif",
+    "fontSize": "16px"
+  },
+  "flowchart": { "htmlLabels": true, "curve": "basis", "padding": 16, "nodeSpacing": 28, "rankSpacing": 36 }
+}}%%
+flowchart TB
+  classDef person fill:#ede9fe,stroke:#6b21a8,color:#061b31
+  classDef ballot fill:#ffedd5,stroke:#c2410c,color:#061b31
+  classDef node fill:#e8f4fc,stroke:#1d4e89,color:#061b31
+  classDef l2 fill:#eef6e8,stroke:#2f6b2f,color:#061b31
+  classDef l1 fill:#f7efe4,stroke:#8a5a12,color:#061b31
+  classDef step fill:#f8fafc,stroke:#475569,color:#061b31
+  classDef join fill:#ffffff,stroke:#94a3b8,color:#334155,stroke-dasharray: 4 3
+
+  subgraph Split["Identity is not the ballot"]
+    direction LR
+    Person["Person / Node login<br/>email, passkey, wallet, card, license hash<br/>legal roll stays in republic.json"]
+    Gap["no public join key"]
+    PublicBallot["Public ballot record<br/>nullifier + ballotHash + relayer<br/>ciphertext choice — no name, no wallet"]
+    Person --> Gap --> PublicBallot
+  end
+
+  subgraph Life["Election lifecycle"]
+    direction LR
+    Register["1 Register<br/>identityCommitment leaf<br/>into the Merkle tree"]
+    Freeze["2 Freeze roll<br/>eligibleRoot + disqRoot"]
+    Vote["3 Vote<br/>ZK proof + nullifier once<br/>relayer / bundler is msg.sender<br/>paymaster pays L2 gas"]
+    Hour["4 Hourly disclosure<br/>proofs and turnout after<br/>the containing hour closes"]
+    Tally["5 Tally<br/>acceptedBallots =<br/>unique nullifiers"]
+    Results["6 Results<br/>Node /outcomes<br/>optional L1 tally hash"]
+    Register --> Freeze --> Vote --> Hour --> Tally --> Results
+  end
+
+  subgraph Layers["Where it runs"]
+    direction LR
+    Node["Republic Node<br/>clerks, voters, receipts, explorer"]
+    L2["Republic L2 chainId 27427<br/>register / vote / disqualify / tally"]
+    L1["Ethereum L1<br/>RollupSettlement + L1TallyMirror"]
+    Node -->|"JSON txs"| L2
+    L2 -->|"batch proof / certify"| L1
+  end
+
+  Split --> Life --> Layers
+
+  class Person person
+  class PublicBallot ballot
+  class Gap join
+  class Register,Freeze,Vote,Hour,Tally,Results step
+  class Node node
+  class L2 l2
+  class L1 l1
