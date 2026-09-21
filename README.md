@@ -59,6 +59,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Election types and jurisdictions](#election-types-and-jurisdictions)
 - [Roles](#roles-and-permissions)
 - [End-to-end flows](#end-to-end-flows)
+- [Election workflow diagram](#election-workflow-diagram)
 - [Privacy, coercion resistance, and public verifiability](#privacy-coercion-resistance-and-public-verifiability)
 - [How voters’ privacy is protected](./how_voters_privacy_is_protected.md)
 - [Security and threat model](#security-and-threat-model)
@@ -146,6 +147,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 | Intentional Node forks | Documented. Copy [`.env.example`](./.env.example), pin the shared factory / inbox / verifier, do not `DeployLocal` per city. |
+| Election workflow diagram | Informational PNG: register → freeze → vote (nullifier / relayer) → hourly disclosure → tally → results. [`docs/images/election-workflow.png`](./docs/images/election-workflow.png); source [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd). |
 
 ---
 
@@ -818,6 +820,14 @@ A **corrupt tally operator** on the legacy **SUM_ONLY** path can still post any 
 
 ## End-to-end flows
 
+### Election workflow diagram
+
+Informational map of the lifecycle. **Identity is not the ballot.** The Node holds the civil roll; Republic L2 records nullifiers and ballot hashes via a relayer; public proofs wait for **hourly disclosure**; Ethereum L1 is optional court-grade settlement.
+
+![Republic election workflow: register, freeze, vote with nullifier and relayer, hourly disclosure, tally, results — Node vs L2 vs L1, identity is not the ballot](./docs/images/election-workflow.png)
+
+Mermaid source: [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd). Regenerate the PNG with `npm run docs:workflow` (`@mermaid-js/mermaid-cli` / `mmdc`; needs Chromium). `npm run test:docs` checks that the source and committed PNG are present — CI does not re-render.
+
 ### A. Register
 
 1. Voter completes the Node intake for jurisdiction J (passkey create / PRF).
@@ -941,7 +951,8 @@ npm run compose:up             # same
 - Solidity: Foundry 1.8+, solc 0.8.24, **via-ir on** (`foundry.toml`).
 - Node: Node 22, npm workspaces. Frontend: vanilla JS in `apps/node/public/` (no bundler).
 - Circuits: Circom 2 (optional on the host until leaving MockVerifier). `npm run circuits:status`.
-- Tests: `forge test --via-ir` with MockVerifier; `npm test -w apps/node` for API tests; `npm run test:l2` for the civic sequencer; `npm run test:proof-helpers` for hash-scheme vectors.
+- Tests: `forge test --via-ir` with MockVerifier; `npm test -w apps/node` for API tests; `npm run test:l2` for the civic sequencer; `npm run test:proof-helpers` for hash-scheme vectors; `npm run test:docs` for the committed election-workflow PNG.
+- Workflow diagram: `npm run docs:workflow` renders [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd) to [`docs/images/election-workflow.png`](./docs/images/election-workflow.png).
 
 ### What is in the tree vs what remains
 

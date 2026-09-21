@@ -46,6 +46,10 @@ A privacy failure here is a **join**: someone can say “this named person (or t
 
 Login proves **who is sitting at the desk**. The ballot proves **an eligible secret voted once**. Those secrets are not the same bytes.
 
+Informational map (register → freeze → vote / nullifier / relayer → hourly disclosure → tally → results; Node vs L2 vs L1):
+
+![Republic election workflow: identity is not the ballot](./docs/images/election-workflow.png)
+
 ```
 Person (Node user)                          Ballot (public / chain)
 email, passkey, wallet, card, civic ID      VoteAccepted / explorer vote row

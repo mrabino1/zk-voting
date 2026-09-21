@@ -79,6 +79,11 @@ npm run test:l2
 
 # Independent auditor (no Node private DB)
 npm run test:auditor
+
+# Informational election-workflow PNG (source + committed artifact)
+npm run test:docs
+# regenerate PNG (needs Chromium + npx @mermaid-js/mermaid-cli):
+# npm run docs:workflow
 ```
 
 Install Foundry (`foundryup`) so `forge` is on `PATH`. Optimizer, solc **0.8.24**, and **`via_ir = true`** are set in `smart-contracts/foundry.toml`.

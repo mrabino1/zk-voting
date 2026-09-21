@@ -12,7 +12,8 @@
 #   npm run test:l2            # skipped in CI if l2/test has no *.test.mjs
 #   npm run test:contracts     # forge test --via-ir
 #   npm run test:auditor       # tools/auditor
-#   npm test                   # node + packages + L2 + contracts + auditor
+#   npm run test:docs          # mermaid source + committed workflow PNG
+#   npm test                   # node + packages + L2 + contracts + auditor + docs
 #
 name: CI
 
@@ -103,6 +104,9 @@ jobs:
       - name: Auditor tests
         run: npm run test:auditor
 
+      - name: Docs artifacts
+        run: npm run test:docs
+
       - name: How to run locally
         if: always()
         run: |
@@ -118,6 +122,7 @@ jobs:
             echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
             echo "npm run test:contracts     # forge test --via-ir"
             echo "npm run test:auditor       # tools/auditor"
+            echo "npm run test:docs          # mermaid source + committed workflow PNG"
             echo "npm test                   # all of the above"
             echo "docker compose up -d --build"
             echo '```'
