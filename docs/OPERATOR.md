@@ -34,11 +34,25 @@ Never point a production jurisdiction’s published contract addresses at a `tes
 
 ## `system_actions.sh`
 
-From the repository root:
+From the repository root. Numbers **1–4** match DealPunchList (`dealpunchlist-node`): feature branches land on `test/unstable`, then promote to `master`.
 
 ```bash
 ./system_actions.sh              # interactive menu
 ./system_actions.sh help
+
+# Git workflow (DealPunchList-shaped)
+./system_actions.sh 1            # fetch + pull, npm install, npm run dev
+./system_actions.sh 2 my-feature # create feature/my-feature from test/unstable
+./system_actions.sh 3            # merge feature/* into test/unstable and push
+./system_actions.sh 4            # merge test/unstable → master (type MERGE)
+
+# Data / chain (no Postgres — JSON store only)
+./system_actions.sh 5            # republic.json counts
+./system_actions.sh 6            # Node / L2 / CHAIN_RPC / L1_RPC reachability
+./system_actions.sh 7            # local Node users (handle + role)
+./system_actions.sh 8            # same user list (DPL sandbox list)
+
+# Host / operator
 ./system_actions.sh status       # branch, SHA, dirty, pm2/systemd/compose
 ./system_actions.sh checkout-dev
 ./system_actions.sh checkout-prod
@@ -50,7 +64,11 @@ From the repository root:
 ./system_actions.sh archive      # L2 hourly attic (no-op unless ARCHIVE_ENABLED=1)
 ```
 
-Environment overrides: `ZK_VOTING_DEV_BRANCH`, `ZK_VOTING_PROD_BRANCH`, `ZK_VOTING_APP_NAME`, `ZK_VOTING_PM2_NAME`, `ZK_VOTING_SYSTEMD_UNIT`, `ZK_VOTING_HEALTH_URL`, `ZK_VOTING_PORT`, `ZK_VOTING_LOG_LINES`.
+`4` only **merges and pushes git**. It does not install, build, or restart. After a release merge, run `deploy-prod` on the host that serves the jurisdiction.
+
+This repo has **no Drizzle / Postgres**. Options 5–8 are the civic analogs (JSON store, HTTP/RPC probes, local handles). There is no `users.sandbox_participant` table.
+
+Environment overrides: `ZK_VOTING_DEV_BRANCH`, `ZK_VOTING_PROD_BRANCH`, `ZK_VOTING_APP_NAME`, `ZK_VOTING_PM2_NAME`, `ZK_VOTING_SYSTEMD_UNIT`, `ZK_VOTING_HEALTH_URL`, `ZK_VOTING_PORT`, `ZK_VOTING_LOG_LINES`, `ZK_VOTING_HOST`, `ZK_VOTING_L2_HEALTH_URL`.
 
 Restart order: **pm2** → **systemd** unit → **docker compose**. If none are configured, `restart` warns and does not fail the machine. Install / build still run on deploy.
 

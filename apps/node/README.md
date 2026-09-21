@@ -293,6 +293,10 @@ Development happens on `test/unstable`. `master` is production only.
 ```bash
 ./system_actions.sh              # interactive menu
 ./system_actions.sh help
+./system_actions.sh 1            # pull + npm run dev
+./system_actions.sh 2 my-feature # feature/* from test/unstable
+./system_actions.sh 3            # merge feature/* into test/unstable
+./system_actions.sh 4            # merge test/unstable → master (type MERGE)
 ./system_actions.sh status
 ./system_actions.sh deploy-dev   # pull test/unstable, install, build, restart
 ./system_actions.sh deploy-prod  # pull master (confirms)

@@ -1,79 +1,33 @@
 #!/usr/bin/env bash
-# system_actions.sh — host/operator menu for zk-voting
-#
-# Adapted from the DealPunchList (dealpunchlist-node) system_actions
-# pattern: one script to inspect, pull, build, and restart the app,
-# with a hard split between the development line and production.
+# NOT FOR PROFIT — civic public good, not a commercial product.
+# system_actions.sh — host/operator + DealPunchList git-flow menu for zk-voting
 #
 # Branch policy
+#   feature/*      short-lived work
 #   test/unstable  default development / staging line
 #   master         production only
 #
 # Usage
 #   ./system_actions.sh              interactive menu
 #   ./system_actions.sh help
+#   ./system_actions.sh 1            launch test system (pull + npm run dev)
+#   ./system_actions.sh 2 my-feature create feature/* from test/unstable
+#   ./system_actions.sh 3            merge feature/* into test/unstable
+#   ./system_actions.sh 4            merge test/unstable into master
 #   ./system_actions.sh status
 #   ./system_actions.sh deploy-dev
 #   ./system_actions.sh deploy-prod
-#   ./system_actions.sh restart
-#   ./system_actions.sh logs
-#   ./system_actions.sh health
-#   ./system_actions.sh archive
-#   ./system_actions.sh archive-restore --hour YYYY/MM/DD/HH
-#   ./system_actions.sh checkout-dev
-#   ./system_actions.sh checkout-prod
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-DEV_BRANCH="${ZK_VOTING_DEV_BRANCH:-test/unstable}"
-PROD_BRANCH="${ZK_VOTING_PROD_BRANCH:-master}"
-APP_NAME="${ZK_VOTING_APP_NAME:-zk-voting}"
-HEALTH_URL="${ZK_VOTING_HEALTH_URL:-http://127.0.0.1:${ZK_VOTING_PORT:-3000}/health}"
-LOG_LINES="${ZK_VOTING_LOG_LINES:-80}"
-PM2_NAME="${ZK_VOTING_PM2_NAME:-$APP_NAME}"
-SYSTEMD_UNIT="${ZK_VOTING_SYSTEMD_UNIT:-$APP_NAME}"
-
-RED=$'\033[31m'
-GRN=$'\033[32m'
-YLW=$'\033[33m'
-CYN=$'\033[36m'
-BLD=$'\033[1m'
-RST=$'\033[0m'
-
-info() { printf '%s%s%s\n' "$CYN" "$*" "$RST"; }
-ok()   { printf '%s%s%s\n' "$GRN" "$*" "$RST"; }
-warn() { printf '%s%s%s\n' "$YLW" "$*" "$RST"; }
-err()  { printf '%s%s%s\n' "$RED" "$*" "$RST" >&2; }
-
-need() {
-  command -v "$1" >/dev/null 2>&1 || {
-    err "missing required command: $1"
-    exit 1
-  }
-}
-
-current_branch() {
-  git rev-parse --abbrev-ref HEAD
-}
-
-current_sha() {
-  git rev-parse --short HEAD 2>/dev/null || echo "none"
-}
-
-working_tree_dirty() {
-  ! git diff --quiet || ! git diff --cached --quiet
-}
-
-confirm() {
-  local prompt="$1"
-  local reply
-  printf '%s%s%s ' "$YLW" "$prompt [y/N]" "$RST"
-  read -r reply
-  [[ "$reply" == "y" || "$reply" == "Y" ]]
-}
+_LIB_DIR="$ROOT/system_actions/lib"
+# shellcheck source=system_actions/lib/env.sh
+source "$_LIB_DIR/env.sh"
+# shellcheck source=system_actions/lib/services.sh
+source "$_LIB_DIR/services.sh"
 
 package_manager() {
   if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
@@ -213,14 +167,16 @@ show_logs() {
 git_sync() {
   local branch="$1"
   need git
-  info "fetching origin"
-  git fetch origin "$branch"
+  local remote
+  remote="$(git_default_remote)"
+  info "fetching $remote"
+  git fetch "$remote" "$branch"
   if [[ "$(current_branch)" != "$branch" ]]; then
     info "checking out $branch"
     git checkout "$branch"
   fi
-  info "fast-forwarding $branch from origin"
-  git pull --ff-only origin "$branch"
+  info "fast-forwarding $branch from $remote"
+  git pull --ff-only "$remote" "$branch"
   ok "now on $(current_branch) @ $(current_sha)"
 }
 
@@ -253,6 +209,7 @@ cmd_status() {
   echo "  dev line  $DEV_BRANCH"
   echo "  prod line $PROD_BRANCH"
   echo "  pkg mgr   $(package_manager)"
+  echo "  store     $STORE_FILE"
   if has_pm2; then
     echo "  runtime   pm2 ($PM2_NAME)"
     pm2 describe "$PM2_NAME" >/dev/null 2>&1 && pm2 describe "$PM2_NAME" | sed -n '1,20p' || warn "  pm2 process not started"
@@ -312,14 +269,38 @@ cmd_deploy_prod() {
   deploy "$PROD_BRANCH" "production"
 }
 
+# shellcheck source=system_actions/lib/git-flow.sh
+source "$_LIB_DIR/git-flow.sh"
+
 cmd_help() {
   cat <<EOF
 ${BLD}zk-voting system_actions.sh${RST}
 
-Development happens on ${CYN}${DEV_BRANCH}${RST}.
+Development happens on ${CYN}${DEV_BRANCH}${RST} (feature/* merges here).
 Production is ${CYN}${PROD_BRANCH}${RST} only.
 
-Commands
+Git workflow (DealPunchList-shaped)
+  1, launch, --launch-test-system
+                  fetch + pull, npm install, npm run dev
+  2, create-feature, --create-feature [name]
+                  create feature/* from $DEV_BRANCH
+  3, merge-feature, --merge-feature
+                  merge feature/* into $DEV_BRANCH and push
+  4, merge-to-master, --merge-to-master
+                  merge $DEV_BRANCH into $PROD_BRANCH (type MERGE)
+
+Data / chain (no Postgres in this repo)
+  5, data, --data-status
+                  republic.json counts (not Drizzle)
+  6, connectivity, --db-status
+                  Node / L2 / CHAIN_RPC / L1_RPC reachability
+  7, users, --list-users, --sandbox-participant
+                  local Node handles + roles (no emails)
+  8, --list-sandbox-participants
+                  same user list (DealPunchList option 8)
+  dev-flags       ALLOW_DEV_LOGIN and mock flags
+
+Host / operator
   help            this text
   status          git + runtime snapshot
   checkout-dev    fetch and check out $DEV_BRANCH
@@ -337,6 +318,7 @@ Environment overrides
   ZK_VOTING_APP_NAME     ZK_VOTING_PM2_NAME
   ZK_VOTING_SYSTEMD_UNIT ZK_VOTING_HEALTH_URL
   ZK_VOTING_PORT          ZK_VOTING_LOG_LINES
+  ZK_VOTING_HOST          ZK_VOTING_L2_HEALTH_URL
 EOF
 }
 
@@ -345,31 +327,55 @@ menu() {
     echo
     printf '%s%s%s\n' "$BLD" "zk-voting system actions" "$RST"
     echo "  now: $(current_branch) @ $(current_sha)"
-    echo "  1) status"
-    echo "  2) checkout $DEV_BRANCH (development)"
-    echo "  3) deploy $DEV_BRANCH (development)"
-    echo "  4) checkout $PROD_BRANCH (production)"
-    echo "  5) deploy $PROD_BRANCH (PRODUCTION)"
-    echo "  6) restart services"
-    echo "  7) logs"
-    echo "  8) health"
-    echo "  9) L2 archive offload (hourly attic)"
-    echo "  h) help"
-    echo "  0) exit"
+    echo
+    echo "  Git workflow"
+    echo "    1) launch test system (pull + npm run dev)"
+    echo "    2) create feature branch from $DEV_BRANCH"
+    echo "    3) merge feature/* into $DEV_BRANCH"
+    echo "    4) merge $DEV_BRANCH → $PROD_BRANCH and push"
+    echo
+    echo "  Data / chain"
+    echo "    5) JSON store status"
+    echo "    6) connectivity (Node / L2 / chain)"
+    echo "    7) list local Node users (handle + role)"
+    echo "    8) list local Node users (DealPunchList sandbox list)"
+    echo "    v) dev-only flags (ALLOW_DEV_LOGIN / mocks)"
+    echo
+    echo "  Host"
+    echo "    s) status"
+    echo "    c) checkout $DEV_BRANCH"
+    echo "    d) deploy $DEV_BRANCH"
+    echo "    m) checkout $PROD_BRANCH"
+    echo "    p) deploy $PROD_BRANCH (PRODUCTION)"
+    echo "    r) restart services"
+    echo "    l) logs"
+    echo "    k) health"
+    echo "    a) L2 archive offload (hourly attic)"
+    echo "    h) help"
+    echo "    0) exit"
     printf 'select> '
     local choice
     read -r choice || exit 0
     case "$choice" in
-      1) cmd_status ;;
-      2) git_sync "$DEV_BRANCH" ;;
-      3) cmd_deploy_dev ;;
-      4) git_sync "$PROD_BRANCH" ;;
-      5) cmd_deploy_prod ;;
-      6) restart_services ;;
-      7) show_logs ;;
-      8) cmd_health || true ;;
-      9) cmd_archive || true ;;
-      h) cmd_help ;;
+      1) launch_test_system ;;
+      2) create_feature_branch ;;
+      3) merge_feature_to_main ;;
+      4) merge_to_release ;;
+      5) cmd_data_status ;;
+      6) cmd_connectivity ;;
+      7) cmd_list_users ;;
+      8) cmd_list_users ;;
+      v|V) cmd_dev_flags ;;
+      s|S) cmd_status ;;
+      c) git_sync "$DEV_BRANCH" ;;
+      d) cmd_deploy_dev ;;
+      m) git_sync "$PROD_BRANCH" ;;
+      p) cmd_deploy_prod ;;
+      r) restart_services ;;
+      l) show_logs ;;
+      k) cmd_health || true ;;
+      a) cmd_archive || true ;;
+      h|H|\?) cmd_help ;;
       0) exit 0 ;;
       *) warn "unknown selection: $choice" ;;
     esac
@@ -382,6 +388,16 @@ main() {
   case "$cmd" in
     "" ) menu ;;
     help|-h|--help) cmd_help ;;
+    1|--launch-test-system|launch|launch-test) launch_test_system ;;
+    2|--create-feature|create-feature) create_feature_branch "${1:-}" ;;
+    3|--merge-feature|merge-feature) merge_feature_to_main ;;
+    4|--merge-to-master|--merge-to-release|merge-to-master|merge-to-release) merge_to_release ;;
+    5|--data-status|--db-push|--push-schema|data) push_schema ;;
+    6|--db-status|connectivity) cmd_connectivity ;;
+    7|--sandbox-participant) add_sandbox_participant "${1:-}" "${2:-}" "${3:-}" ;;
+    --list-users|users) cmd_list_users "${1:-}" ;;
+    8|--list-sandbox-participants) list_sandbox_participants "${1:-}" ;;
+    dev-flags|--dev-flags) cmd_dev_flags ;;
     status) cmd_status ;;
     checkout-dev) git_sync "$DEV_BRANCH" ;;
     checkout-prod) git_sync "$PROD_BRANCH" ;;

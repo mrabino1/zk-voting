@@ -308,6 +308,10 @@ node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
 
 ```bash
 ./system_actions.sh              # interactive menu
+./system_actions.sh 1            # pull + npm run dev (DealPunchList option 1)
+./system_actions.sh 2 my-feature # feature/* from test/unstable
+./system_actions.sh 3            # merge feature/* into test/unstable
+./system_actions.sh 4            # merge test/unstable → master (type MERGE)
 ./system_actions.sh status
 ./system_actions.sh deploy-dev   # pull test/unstable, install, build, restart
 ./system_actions.sh deploy-prod  # pull master (confirms first)
@@ -930,10 +934,13 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ### Host actions
 
-`system_actions.sh` is the operator menu, adapted from the DealPunchList (`dealpunchlist-node`) pattern:
+`system_actions.sh` is the operator menu, adapted from the DealPunchList (`dealpunchlist-node`) pattern. Numbers 1–4 are the same git-flow: launch, create `feature/*`, merge into `test/unstable`, merge to `master`.
 
 ```bash
 ./system_actions.sh              # interactive menu
+./system_actions.sh 2 my-feature
+./system_actions.sh 3
+./system_actions.sh 4            # type MERGE
 ./system_actions.sh status
 ./system_actions.sh deploy-dev   # pull test/unstable, install, build, restart
 ./system_actions.sh deploy-prod  # pull master (confirms first)
