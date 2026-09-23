@@ -795,9 +795,11 @@ PATCH /api/users/:id
 ```
 
 Without `CHAIN_RPC`, votes that pass the election window, nullifier check, and
-Node eligibility (`identityCommitment` registered and not currently disqualified)
-are accepted in the local JSON store so the explorer and UI can run a demo.
-Those accepts still wait for hourly public disclosure unless the interval is `0`.
+bound open-window roots are accepted in the local JSON store so the explorer
+and UI can run a demo. The vote POST does not carry `identityCommitment`.
+Per-leaf exclusion is `store.assertCanVote` (a roll helper), not a field on
+the ballot request. Those accepts still wait for hourly public disclosure
+unless the interval is `0`.
 
 A person identifies with **email, Ethereum (signature), a smart-card reader, a driver’s license or passport, or a passkey**. Every path completes with email MFA via AWS SES when configured.
 Each person also sets a **vote PIN** used on a scrambled keypad at ballot submit.
@@ -812,18 +814,32 @@ order). The Node rebuilds `eligibleRoot` on register, disqualify, and revoke.
 `frozenDisqualificationRoot` — those are the roots for the open window unless
 the election was created with `lateUpdateAllowed` (discouraged).
 
-When `CHAIN_RPC` is unset, `POST /api/elections/:id/vote` requires
-`identityCommitment` and rejects with:
+`POST /api/elections/:id/vote` accepts the relay envelope:
+`encryptedBallot`, `proof`, `publicInputs` (or the same signals flattened),
+`nullifier`, election id, `ballotHash`, plus the non-choice controls
+`pinToken` and `userOpHash`.
+
+`stripBallotPii` / `sanitizeVoteBody` drop banned keys before relay. A client
+that also sends `answers`, `identityCommitment`, `address`, `credentialId`,
+`userId`, or `choice` is still accepted; those keys are ignored and never
+stored. The SPA does not send them.
+
+| `code` | Meaning |
+| --- | --- |
+| `ELIGIBLE_ROOT_MISMATCH` / `DISQUALIFICATION_ROOT_MISMATCH` | Proof roots do not match the open-window set |
+| `NULLIFIER_USED` | This nullifier already voted |
+
+`store.assertCanVote` still throws when a caller that already holds a leaf
+asks the roll helper:
 
 | `code` | Meaning |
 | --- | --- |
 | `DISQUALIFIED` | Commitment is currently disqualified (`reasonCode` / `reasonName` included) |
 | `NOT_REGISTERED` | Commitment is not on the registration roll |
-| `IDENTITY_COMMITMENT_REQUIRED` | Node path cannot enforce eligibility without the leaf |
-| `ELIGIBLE_ROOT_MISMATCH` / `DISQUALIFICATION_ROOT_MISMATCH` | Proof roots do not match the open-window set |
+| `IDENTITY_COMMITMENT_REQUIRED` | The helper was called without a leaf |
 
-`identityCommitment` is checked then discarded. It is never stored on the
-vote or envelope.
+The HTTP vote route does not call that helper. The leaf is never stored on
+the vote or envelope.
 
 ### ZK non-membership gap (not fixed in this layer)
 

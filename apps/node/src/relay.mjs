@@ -1,15 +1,16 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Relays a vote proof to BallotInbox when CHAIN_RPC is set; otherwise accepts
 // into the local store for demo. Never writes passkey user id onto a ballot.
-// When CHAIN_RPC is unset, the Node rejects ballots whose identityCommitment is
-// not in registered ∩ ¬currently-disqualified (the circuit still may not prove
-// non-disqualification; see docs/ARCHITECTURE.md).
+// The vote body is the relay envelope only. Identity, wallet, and plaintext
+// choice keys are stripped before this function reads the body. Per-leaf
+// exclusion is not decided from the POST (that would require the leaf).
+// Open-window roots must still match. See docs/ARCHITECTURE.md.
 
 import { keccak256, toHex } from 'viem';
 
 import proofHelpers from '@zk-voting/proof-helpers';
 
-import { HttpError, stripBallotPii } from './http.mjs';
+import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
@@ -83,6 +84,7 @@ export function parseVoteBody(body, electionOrId, roots = {}) {
   if (!body || typeof body !== 'object') {
     throw new HttpError(400, 'JSON body required');
   }
+  body = sanitizeVoteBody(body);
   const proof = body.proof;
   if (proof == null) throw new HttpError(400, 'proof required');
   const encryptedBallot = body.encryptedBallot;
@@ -149,14 +151,12 @@ export function parseVoteBody(body, electionOrId, roots = {}) {
   if (ballotHash == null || ballotHash === '') {
     ballotHash = hashBallot(encryptedBallot);
   }
-  const identityCommitment = body.identityCommitment ?? body.commitment ?? null;
   return {
     proof: stripBallotPii(proof),
     root,
     disqRoot,
     nullifier,
     ballotHash,
-    identityCommitment,
     encryptedBallot: toEncryptedHex(encryptedBallot),
   };
 }
@@ -197,15 +197,16 @@ function assertBoundRoots(election, parsed, store) {
 /**
  * Relay a ballot. Intentionally ignores req.user / passkey identity so the
  * Node cannot write "this user voted for X" even if the client sends it.
- * identityCommitment is checked then discarded; it is never persisted on the vote.
+ * The leaf, wallet, and plaintext answers are not fields of this request.
  */
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds, config }) {
   const election = store.requireElection(electionId);
-  const parsed = parseVoteBody(body, election);
+  const envelope = sanitizeVoteBody(body);
+  const parsed = parseVoteBody(envelope, election);
   const questions = election.questions || [];
-  const answers = answersFromVoteBody(body, parsed.encryptedBallot);
+  const answers = answersFromVoteBody(envelope, parsed.encryptedBallot);
   if (answers) assertBallotAnswers(questions, answers);
-  const rankingPayload = extractRankingPayload(election, body, parsed.encryptedBallot);
+  const rankingPayload = extractRankingPayload(election, envelope, parsed.encryptedBallot);
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
@@ -214,10 +215,6 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   }
 
   const chainConfigured = Boolean(chain?.isConfigured?.());
-  const hasCommitment = parsed.identityCommitment != null && parsed.identityCommitment !== '';
-  if (!chainConfigured || hasCommitment) {
-    store.assertCanVote(election.id, parsed.identityCommitment);
-  }
 
   const bound = assertBoundRoots(election, parsed, store);
   const publicInputs = asInputList({
@@ -246,7 +243,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       relayer: 'node',
       acceptedAt: ts,
       receiptTokenHash: holder.receiptTokenHash,
-      userOpHash: optionalUserOpHash(body?.userOpHash || body?.userOp?.hash),
+      userOpHash: optionalUserOpHash(envelope?.userOpHash || envelope?.userOp?.hash),
     },
     { encryptedBallot: parsed.encryptedBallot, rankingPayload },
   );
