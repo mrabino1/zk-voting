@@ -4,7 +4,9 @@
 // The vote body is the relay envelope only. Identity, wallet, and plaintext
 // choice keys are stripped before this function reads the body. Per-leaf
 // exclusion is not decided from the POST (that would require the leaf).
-// Open-window roots must still match. See docs/ARCHITECTURE.md.
+// Open-window roots must still match. The chain publishes eligibleRoot as
+// registered ∩ ¬currently-disqualified. The circuit proves membership in that
+// root and only binds disqRoot; see docs/ARCHITECTURE.md.
 
 import { keccak256, toHex } from 'viem';
 

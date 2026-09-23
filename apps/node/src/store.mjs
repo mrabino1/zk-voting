@@ -1276,12 +1276,9 @@ export class Store {
   }
 
   /**
-   * Node-path vote gate. The circuit still may not prove non-disqualification;
-   * this is the product control when CHAIN_RPC is unset.
-   */
-  /**
    * Roll helper: registered ∩ ¬currently-disqualified.
-   * The HTTP vote route does not call this. The vote POST must not carry the leaf.
+   * The published eligible root is that same intersection. The HTTP vote route
+   * does not call this. The vote POST must not carry the leaf.
    */
   assertCanVote(electionId, identityCommitment) {
     if (identityCommitment == null || identityCommitment === '') {

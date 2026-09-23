@@ -259,6 +259,16 @@ describe('reason codes and Node disqualification vote gate', () => {
     assert.equal(ignored.json.vote.userId, undefined);
     assert.equal(ignored.json.code, undefined);
 
+    const registrationOnly = expectedEligibleRoot(16, ['0xc1', '0xc2']);
+    const staleRoot = await vote(id, {
+      identityCommitment: '0xc2',
+      nullifier: '13',
+      root: registrationOnly,
+      disqRoot: freeze.json.election.disqualificationRoot,
+    });
+    assert.equal(staleRoot.status, 400);
+    assert.equal(staleRoot.json.code, 'ELIGIBLE_ROOT_MISMATCH');
+
     const ok = await vote(id, { identityCommitment: '0xc2', nullifier: '12' });
     assert.equal(ok.status, 201, ok.json?.error);
     assert.equal(ok.json.vote.identityCommitment, undefined);
