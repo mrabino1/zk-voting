@@ -65,7 +65,7 @@ export const FAQ_ENTRIES = [
     q: "I am registered. Why might I still be barred?",
     a: [
       "Registered is not the same as eligible. A clerk or disqualification officer may bar a registered person for a coded reason: not of age, not resident, duplicate identity, deceased, moved out, district mismatch, already voted, court order, and others in the public catalog. The code is public so a mass purge cannot hide behind ZK. Personal evidence stays off-chain; only a hash of the evidence is posted.",
-      "A disqualified person is dropped from the eligible set (registered, and not currently disqualified). The vote proof is membership in that set, so they have no path. The Node relay also rejects that commitment when chain RPC is unset. The circuit binds the disqualification root and does not prove non-membership in the disqualification log. An unarmed MockVerifier still accepts a dummy proof that copies the published roots.",
+      "A disqualified person is dropped from the eligible set (registered, and not currently disqualified). The vote proof is membership in that set, so they have no path. The vote POST does not carry the commitment; open-window roots must still match. The circuit binds the disqualification root and does not prove non-membership in the disqualification log. An unarmed MockVerifier still accepts a dummy proof that copies the published roots.",
     ],
   },
   {

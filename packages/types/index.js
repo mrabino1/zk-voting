@@ -241,6 +241,9 @@ const REASON_CODE_LABELS = Object.freeze({
  * `publicInputs` MUST be `[root, disqRoot, nullifier, ballotHash, electionId]`
  * (see `@zk-voting/proof-helpers` `serializePublicInputs`).
  *
+ * The vote POST must not include `answers`, `identityCommitment`, `address`,
+ * or `credentialId`. `stripBallotPii` drops those keys if a client sends them.
+ *
  * @typedef {Object} VoteEnvelope
  * @property {string|bigint} electionId On-chain election id (`uint256`),
  *   not the public UUID. See `ElectionRecord.onChainElectionId`.
@@ -249,9 +252,6 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} nullifier Unique per (voter, election). Spent at most once;
  *   a second ballot for the same nullifier is rejected. Double voting is impossible.
  * @property {string} ballotHash Hash / commitment of `encryptedBallot`.
- * @property {string} [identityCommitment] Optional; MUST NOT be required to
- *   submit a vote. Present only in clerk-side debug tooling, never in the
- *   public explorer vote row.
  * @property {string} encryptedBallot Hex bytes of the tally-pubkey ECIES envelope
  *   (`RTv1` + P-256 eph pub + AES-GCM) when `tallyScheme == opens_ballots`, or
  *   the legacy seed-keyed AES-GCM stand-in. Does not reveal the option in the clear

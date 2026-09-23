@@ -104,9 +104,26 @@ const BANNED_PRIVACY_KEYS = new Set([
   'ranking',
   'ranks',
   'rankingPayload',
+  'identityCommitment',
+  'identity_commitment',
+  'commitment',
+  'address',
+  'addressScheme',
+  'address_scheme',
+  'credentialId',
+  'credential_id',
+  'sender',
+  'from',
+  'wallet',
+  'walletAddress',
+  'wallet_address',
 ]);
 
-/** Strip identity↔choice fields before persisting a ballot envelope. */
+/**
+ * Drop identity, wallet, and plaintext-choice keys from a vote body or proof.
+ * `encryptedBallot` is left intact (ciphertext). Other objects are walked.
+ * Banned keys are ignored, not stored and not used to join a person to a choice.
+ */
 export function stripBallotPii(value) {
   if (Array.isArray(value)) return value.map(stripBallotPii);
   if (!value || typeof value !== 'object') return value;
@@ -116,4 +133,10 @@ export function stripBallotPii(value) {
     out[k] = k === 'encryptedBallot' ? v : stripBallotPii(v);
   }
   return out;
+}
+
+/** Vote POST projection: same strip, used before relay reads the body. */
+export function sanitizeVoteBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  return stripBallotPii(body);
 }

@@ -1276,12 +1276,13 @@ export class Store {
   }
 
   /**
-   * Node-path vote gate when CHAIN_RPC is unset. The published eligible root
-   * is the same intersection; this check rejects the commitment directly.
+   * Roll helper: registered ∩ ¬currently-disqualified.
+   * The published eligible root is that same intersection. The HTTP vote route
+   * does not call this. The vote POST must not carry the leaf.
    */
   assertCanVote(electionId, identityCommitment) {
     if (identityCommitment == null || identityCommitment === '') {
-      throw new HttpError(400, 'identityCommitment required to vote on the Node path', {
+      throw new HttpError(400, 'identityCommitment required for the roll check', {
         code: 'IDENTITY_COMMITMENT_REQUIRED',
       });
     }

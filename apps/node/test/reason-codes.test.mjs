@@ -1,6 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Reason-code catalog plus Node-path enforcement: disqualified commitments
-// cannot vote; revoke restores eligibility while the roll is still mutable.
+// Reason-code catalog plus the roll helper. The vote POST does not carry the
+// leaf: banned identity keys are ignored. `store.assertCanVote` still encodes
+// registered ∩ ¬disqualified for callers that already have a commitment.
 
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -9,6 +10,7 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
 import { MAX_CODE, REASON_CODES, isValidReasonCode, reasonName } from '../src/reasonCodes.mjs';
+import { HttpError } from '../src/http.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from '../src/merkle.mjs';
 import { createApp } from '../src/server.mjs';
 
@@ -213,7 +215,7 @@ describe('reason codes and Node disqualification vote gate', () => {
     assert.equal(election.participantCount, 2);
   });
 
-  test('disqualified person cannot vote; still-eligible peer can', async () => {
+  test('vote POST ignores the leaf; the roll helper still blocks a disqualified commitment', async () => {
     const id = await createOpenElection({ title: 'Block vote' });
     await api('POST', `/api/elections/${id}/register`, {
       jar: adminJar,
@@ -238,11 +240,24 @@ describe('reason codes and Node disqualification vote gate', () => {
       expectedEligibleRoot(16, ['0xc2']),
     );
 
-    const blocked = await vote(id, { identityCommitment: '0xc1', nullifier: '11' });
-    assert.equal(blocked.status, 403);
-    assert.equal(blocked.json.code, 'DISQUALIFIED');
-    assert.equal(blocked.json.reasonCode, 5);
-    assert.equal(blocked.json.reasonName, 'DECEASED');
+    assert.throws(
+      () => store.assertCanVote(id, '0xc1'),
+      (err) => {
+        assert.equal(err instanceof HttpError, true);
+        assert.equal(err.status, 403);
+        assert.equal(err.extra.code, 'DISQUALIFIED');
+        assert.equal(err.extra.reasonCode, 5);
+        assert.equal(err.extra.reasonName, 'DECEASED');
+        return true;
+      },
+    );
+    store.assertCanVote(id, '0xc2');
+
+    const ignored = await vote(id, { identityCommitment: '0xc1', nullifier: '11' });
+    assert.equal(ignored.status, 201, ignored.json?.error);
+    assert.equal(ignored.json.vote.identityCommitment, undefined);
+    assert.equal(ignored.json.vote.userId, undefined);
+    assert.equal(ignored.json.code, undefined);
 
     const registrationOnly = expectedEligibleRoot(16, ['0xc1', '0xc2']);
     const staleRoot = await vote(id, {
@@ -260,7 +275,7 @@ describe('reason codes and Node disqualification vote gate', () => {
     assert.equal(ok.json.vote.userId, undefined);
   });
 
-  test('unregistered commitment cannot vote', async () => {
+  test('unregistered commitment is a roll-helper rejection, not a vote-body field', async () => {
     const id = await createOpenElection({ title: 'Unregistered' });
     await api('POST', `/api/elections/${id}/register`, {
       jar: adminJar,
@@ -268,28 +283,62 @@ describe('reason codes and Node disqualification vote gate', () => {
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.json?.error);
+    assert.throws(
+      () => store.assertCanVote(id, '0xd2'),
+      (err) => err instanceof HttpError && err.extra.code === 'NOT_REGISTERED',
+    );
     const missing = await vote(id, { identityCommitment: '0xd2', nullifier: '21' });
-    assert.equal(missing.status, 403);
-    assert.equal(missing.json.code, 'NOT_REGISTERED');
+    assert.equal(missing.status, 201, missing.json?.error);
+    assert.equal(missing.json.vote.identityCommitment, undefined);
   });
 
-  test('Node path requires identityCommitment', async () => {
-    const id = await createOpenElection({ title: 'Need commitment' });
+  test('vote POST does not require identityCommitment and ignores banned keys', async () => {
+    const id = await createOpenElection({ title: 'Envelope only' });
     await api('POST', `/api/elections/${id}/register`, {
       jar: adminJar,
       body: { identityCommitment: '0xe1' },
     });
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.json?.error);
-    const { status, json } = await api('POST', `/api/elections/${id}/vote`, {
+    const clean = await api('POST', `/api/elections/${id}/vote`, {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '31', electionId: id },
         encryptedBallot: '0xab',
       },
     });
-    assert.equal(status, 400);
-    assert.equal(json.code, 'IDENTITY_COMMITMENT_REQUIRED');
+    assert.equal(clean.status, 201, clean.json?.error);
+    assert.equal(clean.json.vote.identityCommitment, undefined);
+
+    const dirty = await api('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true, userId: 'should-drop', answers: [{ optionIds: ['yes'] }] },
+        publicInputs: { nullifier: '32', electionId: id },
+        encryptedBallot: '0xcd',
+        identityCommitment: '0xe1',
+        address: '0x1111111111111111111111111111111111111111',
+        credentialId: 'cred-1',
+        answers: [{ questionId: 'q', optionIds: ['yes'] }],
+        choice: 1,
+      },
+    });
+    assert.equal(dirty.status, 201, dirty.json?.error);
+    assert.equal(dirty.json.vote.identityCommitment, undefined);
+    assert.equal(dirty.json.vote.answers, undefined);
+    assert.equal(dirty.json.vote.address, undefined);
+    assert.equal(dirty.json.vote.credentialId, undefined);
+    for (const env of store.listEnvelopes(id)) {
+      assert.equal(env.identityCommitment, undefined);
+      assert.equal(env.answers, undefined);
+      assert.equal(env.address, undefined);
+      assert.equal(env.credentialId, undefined);
+      assert.equal(env.userId, undefined);
+      assert.equal(env.choice, undefined);
+    }
+    assert.throws(
+      () => store.assertCanVote(id, ''),
+      (err) => err instanceof HttpError && err.extra.code === 'IDENTITY_COMMITMENT_REQUIRED',
+    );
   });
 
   test('revoke restores the ability to vote if still registered and freeze has not locked the roll', async () => {
@@ -344,9 +393,13 @@ describe('reason codes and Node disqualification vote gate', () => {
     assert.equal(lateRevoke.status, 409);
     assert.equal(lateRevoke.json.code, 'ROLL_FROZEN');
 
-    const stillBlocked = await vote(id, { identityCommitment: '0xf2', nullifier: '51' });
-    assert.equal(stillBlocked.status, 403);
-    assert.equal(stillBlocked.json.code, 'DISQUALIFIED');
+    assert.throws(
+      () => store.assertCanVote(id, '0xf2'),
+      (err) => err instanceof HttpError && err.extra.code === 'DISQUALIFIED',
+    );
+    const stillIgnored = await vote(id, { identityCommitment: '0xf2', nullifier: '51' });
+    assert.equal(stillIgnored.status, 201, stillIgnored.json?.error);
+    assert.equal(stillIgnored.json.vote.identityCommitment, undefined);
     assert.equal(store.requireElection(id).frozenEligibleRoot, snapEligible);
     assert.equal(store.requireElection(id).eligibleRoot, snapEligible);
   });
@@ -369,10 +422,18 @@ describe('reason codes and Node disqualification vote gate', () => {
     assert.notEqual(store.requireElection(id).eligibleRoot, frozenEligible);
     assert.equal(store.requireElection(id).frozenEligibleRoot, frozenEligible);
 
-    const blocked = await vote(id, { identityCommitment: '0xf3', nullifier: '61' });
-    assert.equal(blocked.status, 403);
-    assert.equal(blocked.json.code, 'DISQUALIFIED');
-    assert.equal(blocked.json.reasonCode, 11);
+    assert.throws(
+      () => store.assertCanVote(id, '0xf3'),
+      (err) => {
+        assert.equal(err instanceof HttpError, true);
+        assert.equal(err.extra.code, 'DISQUALIFIED');
+        assert.equal(err.extra.reasonCode, 11);
+        return true;
+      },
+    );
+    const ignored = await vote(id, { identityCommitment: '0xf3', nullifier: '61' });
+    assert.equal(ignored.status, 201, ignored.json?.error);
+    assert.equal(ignored.json.vote.identityCommitment, undefined);
 
     const revoked = await api('POST', `/api/elections/${id}/disqualify/revoke`, {
       jar: officerJar,
