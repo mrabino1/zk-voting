@@ -141,10 +141,17 @@ describe('ranking ballot validation', () => {
     assert.deepEqual(payload[0].ranking, []);
   });
 
-  test('extractRankingPayload requires answers on ranked elections', () => {
-    assert.throws(() => extractRankingPayload(election, { encryptedBallot: '0xc0ffee' }, '0xc0ffee'), HttpError);
+  test('extractRankingPayload reads rankings from ciphertext, not plaintext answers', () => {
+    assert.equal(
+      extractRankingPayload(
+        election,
+        { answers: [{ questionId: 'q-office', ranking: ['a'] }], identityCommitment: '0x1' },
+        '0xc0ffee',
+      ),
+      null,
+    );
     const hex = '0x' + Buffer.from(JSON.stringify({ answers: [{ questionId: 'q-office', ranking: ['a', 'c'] }] }), 'utf8').toString('hex');
-    const payload = extractRankingPayload(election, {}, hex);
+    const payload = extractRankingPayload(election, { answers: [{ questionId: 'q-office', ranking: ['b'] }] }, hex);
     assert.deepEqual(payload[0].ranking, ['a', 'c']);
   });
 

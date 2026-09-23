@@ -7,8 +7,8 @@ import { describe, test } from 'node:test';
 
 import proofHelpers from '@zk-voting/proof-helpers';
 
-import { mockVotePublicInputs } from '../public/vote.js';
-import { HttpError } from '../src/http.mjs';
+import { buildVoteRequestBody, mockVotePublicInputs } from '../public/vote.js';
+import { HttpError, stripBallotPii } from '../src/http.mjs';
 import { ZERO } from '../src/merkle.mjs';
 import { hashBallot, parseVoteBody, VOTE_PUBLIC_INPUT_COUNT } from '../src/relay.mjs';
 
@@ -148,6 +148,60 @@ describe('vote public inputs (5-signal)', () => {
     );
     assert.equal(named.nullifier, 99n);
     assert.equal(named.disqRoot, BigInt(DISQ));
+  });
+
+  test('vote envelope drops plaintext answers, leaf, and wallet identifiers', () => {
+    const body = buildVoteRequestBody({
+      electionId: 7,
+      nullifier: NULLIFIER,
+      ballotHash: BALLOT,
+      encryptedBallot: ENCRYPTED,
+      pinToken: 'pin-1',
+      userOpHash: '0x' + 'ab'.repeat(32),
+      proof: { mock: true, publicInputs: [ROOT, DISQ, NULLIFIER, BALLOT, String(ELECTION_ID)] },
+      answers: [{ optionIds: ['yes'] }],
+      identityCommitment: '0xabc',
+      address: '0x1111111111111111111111111111111111111111',
+      credentialId: 'cred',
+    });
+    assert.deepEqual(Object.keys(body).sort(), [
+      'ballotHash',
+      'electionId',
+      'encryptedBallot',
+      'nullifier',
+      'pinToken',
+      'proof',
+      'userOpHash',
+    ]);
+    assert.equal(body.answers, undefined);
+    assert.equal(body.identityCommitment, undefined);
+    assert.equal(body.address, undefined);
+    assert.equal(body.credentialId, undefined);
+
+    const stripped = stripBallotPii({
+      ...body,
+      answers: [{ optionIds: ['yes'] }],
+      identityCommitment: '0xabc',
+      address: '0x1111111111111111111111111111111111111111',
+      credentialId: 'cred',
+      choice: 1,
+      userId: 'user-1',
+      userOp: { sender: '0x1111111111111111111111111111111111111111', hash: '0x' + 'cd'.repeat(32) },
+      proof: { ...body.proof, answers: ['yes'], userId: 'user-1' },
+    });
+    assert.equal(stripped.answers, undefined);
+    assert.equal(stripped.identityCommitment, undefined);
+    assert.equal(stripped.address, undefined);
+    assert.equal(stripped.credentialId, undefined);
+    assert.equal(stripped.choice, undefined);
+    assert.equal(stripped.userId, undefined);
+    assert.equal(stripped.userOp.sender, undefined);
+    assert.equal(stripped.userOp.hash, '0x' + 'cd'.repeat(32));
+    assert.equal(stripped.proof.answers, undefined);
+    assert.equal(stripped.proof.userId, undefined);
+    assert.equal(stripped.pinToken, 'pin-1');
+    assert.equal(stripped.encryptedBallot, ENCRYPTED);
+    assert.deepEqual(stripped.proof.publicInputs, body.proof.publicInputs);
   });
 
   test('object publicInputs leave omitted disqRoot unset so the relay can bind the election root', () => {
