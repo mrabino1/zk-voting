@@ -4,14 +4,11 @@ pragma circom 2.0.0;
 //
 // HASH_SCHEME: republic.hash.standin-v0
 //
-// Gated HashLeftRight used by identity.circom / vote.circom / tally.circom.
-// Production target is Poseidon(2) (republic.hash.poseidon-bn254-x5-t3-v1).
-// That permutation is NOT vendored here. See circuits/HASH_SCHEME.md and
-// hasher/poseidon.circom (documentation include; not selected).
-//
-// This bilinear mix is NOT collision-resistant. hash(x, 0) == x, so an
-// all-zero Merkle path is degenerate. Do not run a binding election or a
-// trusted setup against this Hasher.
+// LEGACY. Not included by identity.circom. The selected Hasher is
+// hasher/poseidon.circom (republic.hash.poseidon-bn254-x5-t3-v1).
+// This bilinear mix is NOT collision-resistant. hash(x, 0) == x.
+// Kept so old vectors and StandInHasher tests still have a formula.
+// Do not compile a ceremony against this file.
 
 template Hasher() {
     signal input a;

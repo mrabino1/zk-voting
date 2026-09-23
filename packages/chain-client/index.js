@@ -14,6 +14,7 @@
 
 const {
   serializePublicInputs,
+  snarkjsProofToSolidity,
   toBigInt,
   toHex32,
   hexToBytes,
@@ -528,18 +529,8 @@ async function createElection(factoryAddressOrOpts, params, opts) {
 
 function groth16ToArgs(proof) {
   if (!proof) throw new Error("submitVote: proof required");
-  const a = proof.a || proof.pi_a;
-  const b = proof.b || proof.pi_b;
-  const c = proof.c || proof.pi_c;
-  if (!a || !b || !c) throw new Error("submitVote: proof must have a, b, c (or pi_a/pi_b/pi_c)");
-  return {
-    a: [toBigInt(a[0]), toBigInt(a[1])],
-    b: [
-      [toBigInt(b[0][0]), toBigInt(b[0][1])],
-      [toBigInt(b[1][0]), toBigInt(b[1][1])],
-    ],
-    c: [toBigInt(c[0]), toBigInt(c[1])],
-  };
+  // snarkjs JSON (pi_a/pi_b/pi_c) swaps G2 limbs. Solidity-ordered a/b/c does not.
+  return snarkjsProofToSolidity(proof);
 }
 
 function envelopePublicInputs(envelope) {

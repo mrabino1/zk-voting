@@ -2,8 +2,11 @@
   "nfp": true,
   "status": "in-progress",
   "ceremony": "not-done",
-  "hashSchemeSelected": "republic.hash.standin-v0",
-  "hashSchemeProductionTarget": "republic.hash.poseidon-bn254-x5-t3-v1",
+  "hashSchemeSelected": "republic.hash.poseidon-bn254-x5-t3-v1",
+  "hashSchemeUnitTests": "republic.hash.keccak-dev-v1",
+  "hashSchemeLegacy": "republic.hash.standin-v0",
+  "poseidonWired": true,
+  "groth16Fixture": "circuits/fixtures/untrusted (Vote(4), untrusted local setup)",
   "mockVerifierDefault": true,
-  "note": "Local untrusted powers-of-tau / Groth16 only. See circuits/HASH_SCHEME.md and circuits/README.md. Do not treat MockVerifier or standin-v0 as production cryptography."
+  "note": "Poseidon(2) matches the vote circuit, proof-helpers, the browser poseidon.js helper, and Solidity PoseidonHasher. The committed Groth16 fixture is an untrusted local Vote(4) setup, not a ceremony. Foundry unit tests still use MockVerifier and KeccakHasher. Do not use these keys for a binding election."
 }

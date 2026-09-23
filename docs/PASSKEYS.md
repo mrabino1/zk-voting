@@ -79,7 +79,7 @@ At vote time the circuit (`circuits/vote.circom`) proves knowledge of trapdoor +
 nullifier = Hash(nullifierSecret, electionId)
 ```
 
-(Poseidon in production; the circom `Hasher()` stand-in is **not** Poseidon). The nullifier is unlinkable to the passkey account and to the civil file without the trapdoor.
+(Circom `Hasher()` is Poseidon(2). The demo SPA commitment is still keccak — do not mix them.) The nullifier is unlinkable to the passkey account and to the civil file without the trapdoor. Wiring Poseidon is not a ceremony.
 
 Use **domain-separated salts** so account HKDF and identity HKDF cannot be swapped:
 
@@ -116,7 +116,7 @@ v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) **can
 
 #### Intentional demo deviations that remain
 
-- Commitment hasher is still **keccak256(trapdoor || nullifierSecret)** in the SPA; production circuits use Poseidon (`circuits/`).
+- The demo SPA commitment is still **keccak256(trapdoor || nullifierSecret)**. The vote circuit leaf is Poseidon; `apps/node/public/poseidon.js` `poseidonCommitmentHex` matches it. Do not insert a keccak leaf into a Poseidon tree.
 - Account “address” is still `SHA-256(seed)[0:20]` (`republic-local-address`), not secp256k1/keccak.
 - UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
 - When PRF is missing, account wrap and identity still use **two** HKDF domains of the credential id (not the same bytes). That path is weaker than authenticator PRF and is demo-only.

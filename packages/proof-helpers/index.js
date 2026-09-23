@@ -11,8 +11,8 @@
  * (`ballotSpecHash`, packed encodings, function selectors).
  *
  * HashLeftRight schemes (see `hash-scheme.js` / circuits/HASH_SCHEME.md):
- * keccak-dev-v1 (default tests), standin-v0 (Circom proving path),
- * poseidon-bn254-x5-t3-v1 (not wired).
+ * poseidon-bn254-x5-t3-v1 (vote circuit; not a ceremony),
+ * keccak-dev-v1 (default tests), standin-v0 (legacy, not in the circuit).
  *
  * When `viem` is installed, this package uses `viem.keccak256`.
  * `@noble/hashes/sha3` `keccak_256` is a second optional path.
@@ -426,6 +426,7 @@ function keccakHashLeftRight(left, right) {
 }
 
 const hashScheme = require("./hash-scheme");
+const { poseidon, poseidonHashLeftRight } = require("./poseidon");
 const { createMerkleHelpers } = require("./merkle");
 
 const merkle = createMerkleHelpers({
@@ -436,7 +437,7 @@ const merkle = createMerkleHelpers({
 
 /**
  * Scheme-dispatch HashLeftRight. Default is keccak-dev-v1 so existing tests
- * keep their roots. Pass `republic.hash.standin-v0` to match Circom.
+ * keep their roots. The vote circuit uses `republic.hash.poseidon-bn254-x5-t3-v1`.
  *
  * @param {string|bigint} left
  * @param {string|bigint} right
@@ -445,12 +446,41 @@ const merkle = createMerkleHelpers({
  */
 function hashLeftRight(left, right, scheme) {
   const id = hashScheme.normalizeHashScheme(scheme ?? hashScheme.HASH_SCHEMES.KECCAK_DEV_V1);
-  if (id === hashScheme.HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1) {
-    throw new Error(
-      "Poseidon hasher is not wired (republic.hash.poseidon-bn254-x5-t3-v1). See circuits/HASH_SCHEME.md",
-    );
-  }
   return merkle.hashLeftRightHex(left, right, id);
+}
+
+/**
+ * snarkjs proof JSON stores G2 as `pi_b[i] = [X_imag, X_real]` in the
+ * pairing-library order. Solidity `verifyProof` wants `[X_real, X_imag]`.
+ * Pass `{a,b,c}` only when `b` is already in Solidity order.
+ *
+ * @param {object} proof
+ * @returns {{a: bigint[], b: bigint[][], c: bigint[]}}
+ */
+function snarkjsProofToSolidity(proof) {
+  if (!proof || typeof proof !== "object") {
+    throw new TypeError("snarkjsProofToSolidity: proof required");
+  }
+  const snarkjsShaped = proof.pi_a && proof.pi_b && proof.pi_c;
+  const a = snarkjsShaped ? proof.pi_a : proof.a;
+  const b = snarkjsShaped ? proof.pi_b : proof.b;
+  const c = snarkjsShaped ? proof.pi_c : proof.c;
+  if (!a || !b || !c) {
+    throw new Error("snarkjsProofToSolidity: expected pi_a/pi_b/pi_c or a/b/c");
+  }
+  const b0 = [toBigInt(b[0][0]), toBigInt(b[0][1])];
+  const b1 = [toBigInt(b[1][0]), toBigInt(b[1][1])];
+  const solidityB = snarkjsShaped
+    ? [
+        [b0[1], b0[0]],
+        [b1[1], b1[0]],
+      ]
+    : [b0, b1];
+  return {
+    a: [toBigInt(a[0]), toBigInt(a[1])],
+    b: solidityB,
+    c: [toBigInt(c[0]), toBigInt(c[1])],
+  };
 }
 
 function publicInputsToHex(publicInputs) {
@@ -530,6 +560,9 @@ module.exports = {
   normalizeHashScheme: hashScheme.normalizeHashScheme,
   resolveHashScheme: hashScheme.resolveHashScheme,
   standInHashLeftRight: hashScheme.standInHashLeftRight,
+  poseidon,
+  poseidonHashLeftRight,
+  snarkjsProofToSolidity,
   hashLeftRightField: merkle.hashLeftRightField,
   computeZeros: merkle.computeZeros,
   createTree: merkle.createTree,

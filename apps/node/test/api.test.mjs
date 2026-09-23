@@ -114,8 +114,9 @@ describe('Republic Node API', () => {
     assert.equal(json.proving.ceremony, 'not-done');
     assert.equal(json.proving.mockVerifierDefault, true);
     assert.equal(json.proving.provingPath, false);
-    assert.equal(json.proving.poseidonWired, false);
-    assert.match(json.proving.hashScheme, /keccak-dev-v1|standin-v0/);
+    assert.equal(json.proving.poseidonWired, true);
+    assert.equal(json.proving.circuitHashScheme, 'republic.hash.poseidon-bn254-x5-t3-v1');
+    assert.match(json.proving.hashScheme, /keccak-dev-v1/);
   });
 
   test('SPA fallback serves HTML for non-API GET', async () => {

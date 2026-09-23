@@ -3,8 +3,8 @@
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
- * Depth 16..32. Hasher is selected by HASH_SCHEME (keccak-dev-v1 or standin-v0).
- * Poseidon throws until wired.
+ * Depth 16..32 for election trees. Hasher is keccak-dev-v1 (tests),
+ * poseidon-bn254-x5-t3-v1 (vote circuit), or legacy standin-v0.
  */
 
 "use strict";
@@ -14,6 +14,7 @@ const {
   normalizeHashScheme,
   standInHashLeftRight,
 } = require("./hash-scheme");
+const { poseidonHashLeftRight } = require("./poseidon");
 
 function toFieldWord(value, toBigInt) {
   if (typeof value === "bigint") return value;
@@ -30,9 +31,7 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       return toBigInt(keccakHashLeftRight(left, right));
     }
     if (id === HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1) {
-      throw new Error(
-        "Poseidon hasher is not wired (republic.hash.poseidon-bn254-x5-t3-v1). See circuits/HASH_SCHEME.md",
-      );
+      return poseidonHashLeftRight(left, right);
     }
     throw new Error(`unknown hash scheme: ${scheme}`);
   }
@@ -45,10 +44,11 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
     return zeros;
   }
 
-  function createTree(depth, scheme = HASH_SCHEMES.KECCAK_DEV_V1) {
+  function createTree(depth, scheme = HASH_SCHEMES.KECCAK_DEV_V1, opts = {}) {
     const d = Number(depth);
-    if (!Number.isInteger(d) || d < 16 || d > 32) {
-      throw new Error("treeDepth must be 16..32");
+    const minDepth = opts.minDepth == null ? 16 : Number(opts.minDepth);
+    if (!Number.isInteger(d) || d < minDepth || d > 32) {
+      throw new Error(`treeDepth must be ${minDepth}..32`);
     }
     const id = normalizeHashScheme(scheme);
     const zeros = computeZeros(d, id);
@@ -142,12 +142,12 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
   }
 
   /**
-   * Witness for Vote(levels) using standin-v0 (or an explicit scheme).
-   * Inserts a sibling leaf so the first Merkle level is not degenerate.
+   * Witness for Vote(levels). Default scheme is Poseidon, matching the circuit.
+   * Depth may be 1..15 only for the untrusted Vote(4) smoke fixture.
    */
   function buildVoteWitness(opts = {}) {
     const depth = Number(opts.depth ?? 20);
-    const scheme = normalizeHashScheme(opts.scheme ?? HASH_SCHEMES.STANDIN_V0);
+    const scheme = normalizeHashScheme(opts.scheme ?? HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1);
     const trapdoor = toFieldWord(opts.identityTrapdoor ?? 2n, toBigInt);
     const nullifierSecret = toFieldWord(opts.nullifierSecret ?? 3n, toBigInt);
     const siblingTrapdoor = toFieldWord(opts.siblingTrapdoor ?? 5n, toBigInt);
@@ -155,7 +155,7 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
     const electionId = toFieldWord(opts.electionId ?? 1n, toBigInt);
     const ballotHash = toFieldWord(opts.ballotHash ?? 7n, toBigInt);
 
-    const tree = createTree(depth, scheme);
+    const tree = createTree(depth, scheme, { minDepth: Math.min(16, depth) });
     const leaf = identityCommitment(trapdoor, nullifierSecret, scheme);
     const sibling = identityCommitment(siblingTrapdoor, siblingNullifierSecret, scheme);
     insertLeaf(tree, leaf);
@@ -169,7 +169,7 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       throw new Error("vote witness: inclusion check failed");
     }
 
-    const disqTree = createTree(depth, scheme);
+    const disqTree = createTree(depth, scheme, { minDepth: Math.min(16, depth) });
     const disqRoot = opts.disqRoot != null ? toFieldWord(opts.disqRoot, toBigInt) : disqTree.currentRoot;
     const nullifier = computeNullifier(nullifierSecret, electionId, scheme);
 

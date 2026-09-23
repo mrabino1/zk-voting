@@ -1,7 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Incremental Merkle tree. Default HASH_SCHEME is republic.hash.keccak-dev-v1
 // (keccak256 left||right), matching Solidity KeccakHasher used by Foundry tests.
-// Proving-path circuits use standin-v0 via @zk-voting/proof-helpers. Depth 16..32.
+// Vote-circuit proofs use Poseidon via @zk-voting/proof-helpers. This tree stays keccak-dev-v1. Depth 16..32.
 
 import { concat, keccak256, pad, toHex } from 'viem';
 

@@ -39,7 +39,7 @@ The Service on a given host is provided by the operator of that Node (a clerk, I
 
 Republic is not a law firm, not your agent, not a broker, not an escrow of funds, and not a substitute for professional legal, tax, or election-administration advice. Documents, rolls, and tallies in the Service are produced by users and officers of the hosting jurisdiction.
 
-This development line (`test/unstable`) is a working demo. Local tests still use a MockVerifier. Poseidon is not wired. There is no production Groth16 ceremony. Do not treat a local demo accept as court-ready.
+This development line (`test/unstable`) is a working demo. Local tests still use a MockVerifier. Poseidon(2) is the vote-circuit hasher. There is no production Groth16 ceremony. Do not treat a local demo accept as court-ready.
 
 ## 5. No fees to voters
 

@@ -9,11 +9,11 @@ pragma circom 2.0.0;
 // intended IHasher.hashLeftRight on chain once a Poseidon hasher is
 // wired, and is what Semaphore / MACI-style voting circuits use.
 //
-// HASH_SCHEME (gated include):
-//   republic.hash.standin-v0  — hasher/standin.circom (selected)
-//   republic.hash.poseidon-bn254-x5-t3-v1 — hasher/poseidon.circom (NOT selected)
+// HASH_SCHEME (selected include):
+//   republic.hash.poseidon-bn254-x5-t3-v1 — hasher/poseidon.circom (selected)
+//   republic.hash.standin-v0 — hasher/standin.circom (legacy, not included)
 // See circuits/HASH_SCHEME.md. Do not include both.
-include "./hasher/standin.circom";
+include "./hasher/poseidon.circom";
 
 // identityCommitment = Hash(identityTrapdoor, nullifierSecret)
 //

@@ -11,7 +11,7 @@ export const FAQ_ENTRIES = [
     a: [
       "Republic uses zero-knowledge proofs so the chain can check facts about a voter without putting the ballot in the clear. A valid vote proof is supposed to show: you are in the eligible set for that election, you are not on the disqualification set, and this ciphertext is a well-formed ballot. A nullifier marks that you already voted, without naming you.",
       "ZK does not mean nobody is in charge. A jurisdiction still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, counting and eligibility checks are not meant to be a second, invisible trust sink.",
-      "On this development line the product intent is that model. Implementation is incomplete: unit tests still default to a MockVerifier, Poseidon is not wired, and a production Groth16 ceremony has not been run. Do not treat a local demo accept as circuit-enforced exclusion.",
+      "On this development line the product intent is that model. Implementation is incomplete: unit tests still default to a MockVerifier, and a production Groth16 ceremony has not been run. Poseidon(2) is the vote-circuit hasher and matches the JS and Solidity helpers. The checked Groth16 fixture is an untrusted local Vote(4) setup, not an election and not a ceremony. Do not treat a local demo accept as circuit-enforced exclusion.",
     ],
   },
   {
@@ -173,7 +173,7 @@ export const FAQ_ENTRIES = [
     topic: "security-limits",
     q: "What are the security limits on this branch? Is MockVerifier still used?",
     a: [
-      "Yes — be precise. Local Foundry unit tests still use MockVerifier until Poseidon and a real Groth16 ceremony exist. The first proving path is in progress (compile / untrusted local powers-of-tau setup / export / prove scripts). That is not a production ceremony. Poseidon is not wired; the circuit hasher is gated as a stand-in (standin-v0 / keccak-dev-v1).",
+      "Yes — be precise. Local Foundry unit tests still use MockVerifier. Poseidon(2) is wired for the vote circuit, the proof helpers, and PoseidonHasher. A committed Groth16 check verifies an untrusted local Vote(4) proof and fails if those files are missing. That is not a production ceremony and not election depth 20. The demo passkey commitment on this screen is still keccak.",
       "Passkey demo addresses may be republic-local-address, not production secp256k1. Tally that opens ballots uses a threshold-1 operator key (NON-PRODUCTION), not guardian threshold > 1 or a mixnet. Do not treat MockVerifier, a local circuits:setup zkey, or the demo tally key as production cryptography. This is not court-ready.",
     ],
   },

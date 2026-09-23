@@ -51,7 +51,7 @@ export function getConfig(overrides = {}) {
   const hashScheme =
     overrides.hashScheme ||
     process.env.REPUBLIC_HASH_SCHEME ||
-    (provingPath ? 'republic.hash.standin-v0' : 'republic.hash.keccak-dev-v1');
+    (provingPath ? 'republic.hash.poseidon-bn254-x5-t3-v1' : 'republic.hash.keccak-dev-v1');
 
   return {
     nfp: true,
