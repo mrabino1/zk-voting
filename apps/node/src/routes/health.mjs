@@ -155,7 +155,10 @@ export function configRouter(deps) {
           mockVerifierDefault: deps.config.useMockVerifier !== false,
           provingPath: Boolean(deps.config.provingPath),
           hashScheme: deps.config.hashScheme || 'republic.hash.keccak-dev-v1',
-          poseidonWired: false,
+          circuitHashScheme: 'republic.hash.poseidon-bn254-x5-t3-v1',
+          poseidonWired: true,
+          groth16: 'untrusted-local-fixture-or-missing-keys',
+          note: 'Poseidon(2) matches the vote circuit, proof-helpers, and PoseidonHasher. Unit tests still use MockVerifier. The committed Groth16 check is an untrusted local setup, not a ceremony. Demo passkey commitments stay keccak-dev-v1.',
         },
         ballot: {
           methods: ['plurality', 'ranked_choice'],

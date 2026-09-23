@@ -9,8 +9,10 @@ import {IHasher} from "../src/interfaces/IHasher.sol";
 import {IGroth16Verifier} from "../src/interfaces/IGroth16Verifier.sol";
 import {KeccakHasher} from "../src/hasher/KeccakHasher.sol";
 import {StandInHasher} from "../src/hasher/StandInHasher.sol";
+import {PoseidonHasher} from "../src/hasher/PoseidonHasher.sol";
 import {MockVerifier} from "../src/zk/MockVerifier.sol";
 import {VoteVerifier} from "../src/zk/VoteVerifier.sol";
+import {Groth16VerifierAdapter} from "../src/zk/Groth16VerifierAdapter.sol";
 import {ElectionFactory} from "../src/ElectionFactory.sol";
 import {VoterRegistry} from "../src/VoterRegistry.sol";
 import {DisqualificationRegistry} from "../src/DisqualificationRegistry.sol";
@@ -44,7 +46,10 @@ struct RepublicStack {
 /// @notice Anvil / L2 helpers. `DeployLocal` and `DeployL2` inherit this.
 /// @dev Unit tests never call this script. Default is MockVerifier + keccak-dev-v1.
 ///      Integration: `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`)
-///      deploys `VoteVerifier` with no mock fallback (fail closed until a real VK).
+///      deploys PoseidonHasher and a non-mock verifier. Without
+///      `REPUBLIC_VOTE_VERIFIER`, that is `VoteVerifier` with a zero VK (fail closed).
+///      Set `REPUBLIC_VOTE_VERIFIER` to a snarkjs-exported verifier to wrap it in
+///      `Groth16VerifierAdapter`. That key is still untrusted until a ceremony.
 abstract contract RepublicStackScript is Script {
     function _log(string memory name, address addr) internal view {
         console2.log(string.concat(name, "=", vm.toString(addr)));
@@ -83,6 +88,12 @@ abstract contract RepublicStackScript is Script {
         return h == keccak256("republic.hash.standin-v0") || h == keccak256("standin-v0") || h == keccak256("standin");
     }
 
+    function _schemeIsPoseidon(string memory scheme) internal pure returns (bool) {
+        bytes32 h = keccak256(bytes(scheme));
+        return h == keccak256("republic.hash.poseidon-bn254-x5-t3-v1") || h == keccak256("poseidon")
+            || h == keccak256("poseidon-bn254-x5-t3-v1");
+    }
+
     function _logStack(RepublicStack memory s) internal view {
         _log("HASHER", address(s.hasher));
         _log("VERIFIER", address(s.verifier));
@@ -108,24 +119,33 @@ abstract contract RepublicStackScript is Script {
 
         string memory schemeEnv = vm.envOr("REPUBLIC_HASH_SCHEME", string(""));
         if (bytes(schemeEnv).length == 0) {
-            s.hashScheme = useMock ? "republic.hash.keccak-dev-v1" : "republic.hash.standin-v0";
+            s.hashScheme = useMock ? "republic.hash.keccak-dev-v1" : "republic.hash.poseidon-bn254-x5-t3-v1";
         } else {
             s.hashScheme = schemeEnv;
         }
 
-        if (_schemeIsStandIn(s.hashScheme)) {
+        if (_schemeIsPoseidon(s.hashScheme)) {
+            s.hasher = IHasher(address(new PoseidonHasher()));
+        } else if (_schemeIsStandIn(s.hashScheme)) {
             s.hasher = IHasher(address(new StandInHasher()));
         } else {
             s.hasher = IHasher(address(new KeccakHasher()));
         }
 
         if (useMock) {
+            // Test / demo only. acceptAll is not the proving path.
             MockVerifier mock = new MockVerifier();
             mock.setAccept(true);
             s.verifier = IGroth16Verifier(address(mock));
         } else {
-            // Fail closed: zero VK, no MockVerifier fallback. Dummy proofs cannot pass.
-            s.verifier = IGroth16Verifier(address(new VoteVerifier(address(0))));
+            address exported = vm.envOr("REPUBLIC_VOTE_VERIFIER", address(0));
+            if (exported != address(0)) {
+                // Caller deployed the snarkjs verifier. Still not a ceremony.
+                s.verifier = IGroth16Verifier(address(new Groth16VerifierAdapter(exported, 5)));
+            } else {
+                // Fail closed: zero VK, no MockVerifier fallback. Dummy proofs cannot pass.
+                s.verifier = IGroth16Verifier(address(new VoteVerifier(address(0))));
+            }
         }
 
         // address(0) implementation: factory deploys Election internally.

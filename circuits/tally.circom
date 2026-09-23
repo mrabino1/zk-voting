@@ -54,7 +54,7 @@ pragma circom 2.0.0;
 //   3. sum(counts) == acceptedCount
 //   4. electionId is bound as a public input (same id Tally.sol posts)
 //
-// HASH_SCHEME: republic.hash.standin-v0 via identity.circom. NOT production Poseidon.
+// identity.circom includes Poseidon Hasher(). This tally template does not call it.
 
 include "./identity.circom";
 

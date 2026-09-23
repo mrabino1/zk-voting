@@ -10,9 +10,8 @@ import {HashScheme} from "./HashScheme.sol";
 /// @title KeccakHasher
 /// @notice `republic.hash.keccak-dev-v1`. Default hasher for Foundry unit tests
 ///         and the Node Merkle tree so tests do not need a trusted setup.
-/// @dev Production circuits target Poseidon (`republic.hash.poseidon-bn254-x5-t3-v1`).
-///      The Circom proving path uses `StandInHasher` (`republic.hash.standin-v0`) until
-///      Poseidon is vendored. Do not mix keccak leaves with stand-in / Poseidon proofs.
+/// @dev The vote circuit uses Poseidon (`PoseidonHasher`). This keccak tree is the
+///      unit-test / demo default. Do not mix keccak leaves with Poseidon proofs.
 contract KeccakHasher is IHasher, IHashScheme {
     function schemeId() external pure returns (bytes32) {
         return HashScheme.KECCAK_DEV_V1;

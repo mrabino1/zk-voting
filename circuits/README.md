@@ -2,38 +2,29 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-Circom 2 circuits for Republic / zk-voting. Self-contained: **no circomlib path**. The in-circuit hasher is a **gated** stand-in (`republic.hash.standin-v0`) until Poseidon is vendored. Hash versions: [`HASH_SCHEME.md`](./HASH_SCHEME.md).
+Circom 2 circuits for Republic / zk-voting. The vote hasher is **Poseidon(2)** (`republic.hash.poseidon-bn254-x5-t3-v1`), the circomlib bn254 parameter set, vendored as t=3 constants (not a full circomlib checkout). Hash versions: [`HASH_SCHEME.md`](./HASH_SCHEME.md).
 
-**Proving path status: in progress.** Local compile / untrusted setup / export scripts exist. There is **no** published ceremony. `MockVerifier` remains the Foundry unit-test default.
+**Proving path status: in progress.** Poseidon matches Circom, JS, the browser helper, and `PoseidonHasher`. A committed **untrusted** Vote(4) Groth16 fixture can be verified. There is **no** published ceremony. `MockVerifier` remains the Foundry unit-test default. Do not use the local keys for a binding election.
 
 | File | Job |
 | --- | --- |
-| [`identity.circom`](./identity.circom) | Identity commitment + nullifier (`include` of gated hasher) |
-| [`hasher/standin.circom`](./hasher/standin.circom) | Selected `Hasher()` — bilinear mix, **not** Poseidon |
-| [`hasher/poseidon.circom`](./hasher/poseidon.circom) | Production target (not included; compile fails if selected too early) |
+| [`identity.circom`](./identity.circom) | Identity commitment + nullifier (`include` of Poseidon `Hasher()`) |
+| [`hasher/poseidon.circom`](./hasher/poseidon.circom) | Selected `Hasher()` — Poseidon(2). Not a ceremony |
+| [`hasher/standin.circom`](./hasher/standin.circom) | Legacy bilinear mix. **Not included** |
+| [`mains/vote_smoke.circom`](./mains/vote_smoke.circom) | `Vote(4)` for the untrusted Groth16 fixture only |
 | [`vote.circom`](./vote.circom) | Eligible-set Merkle membership + unique nullifier + ballot / disqualification-root bind |
 | [`tally.circom`](./tally.circom) | Published per-option counts match accepted ballots (plaintext / mock-homomorphic path) |
 | [`scripts/proving-path.mjs`](./scripts/proving-path.mjs) | Compile, untrusted ptau + Groth16, export verifier, demo prove |
 
 ---
 
-## Hasher: Poseidon is the production target
+## Hasher: Poseidon(2)
 
-Production identity commitments, Merkle `hashLeftRight`, and nullifiers **must** use **Poseidon** (`republic.hash.poseidon-bn254-x5-t3-v1`) — the same permutation Solidity `IHasher` will call once a Poseidon hasher is wired.
+`identity.circom` includes `hasher/poseidon.circom`. `Hasher()` is circomlib-compatible Poseidon(2). The same function is `poseidonHashLeftRight` in `@zk-voting/proof-helpers` and `PoseidonT3.hashLeftRight` in Solidity.
 
-Until circomlib is vendored, `identity.circom` includes only `hasher/standin.circom`:
+Foundry unit tests and the demo Node tree still use `KeccakHasher` (`keccak-dev-v1`). The demo passkey screen still shows a keccak commitment. `poseidonCommitmentHex` in `apps/node/public/poseidon.js` is the leaf that matches the circuit. Do not mix the two in one tree.
 
-```circom
-template Hasher() {
-    signal input a;
-    signal input b;
-    signal output out;
-    // STAND-IN HashLeftRight. NOT production Poseidon.
-    out <== a + b + a * b;
-}
-```
-
-That bilinear mix is **not collision-resistant** (`hash(x,0)==x`). It exists so the circuit topology can compile and so the local proving path can share one formula with `StandInHasher` and `@zk-voting/proof-helpers`. Foundry unit tests keep `KeccakHasher` (`keccak-dev-v1`). **Do not** run a binding election or a trusted setup on the stand-in.
+`hasher/standin.circom` (`out = a + b + a*b`) is legacy and not included. **There is no ceremony.** Local zkeys are untrusted.
 
 ---
 
@@ -101,11 +92,13 @@ Circom 2.0+ and snarkjs. Powers of tau, zkeys, and `verification_key.json` live 
 
 ```bash
 # from repo root
-npm run circuits:status     # tools, HASH_SCHEME, ceremony=not-done
-npm run circuits:compile     # requires circom on PATH
+npm run circuits:status     # tools, Poseidon HASH_SCHEME, ceremony=not-done
+npm run circuits:verify     # real Vote(4) proof, or GROTH16_KEYS_MISSING (not accept-all)
+npm run circuits:smoke      # regenerate that untrusted fixture (circom + snarkjs)
+npm run circuits:compile    # Vote(20) + tally; requires circom on PATH
 npm run circuits:setup      # UNTRUSTED local powers-of-tau + groth16 — NOT a ceremony
-npm run circuits:export      # circuits/build/vote_Groth16Verifier.sol (does not overwrite VoteVerifier.sol)
-npm run circuits:prove       # demo standin-v0 witness + groth16 verify
+npm run circuits:export     # circuits/build/vote_Groth16Verifier.sol (does not overwrite VoteVerifier.sol)
+npm run circuits:prove      # demo Poseidon witness + groth16 verify
 npm run circuits:all
 ```
 
@@ -119,13 +112,14 @@ circom vote.circom --r1cs --wasm --sym -o build
 circom tally.circom --r1cs --wasm --sym -o build
 # identity.circom has no main; it is included by the others.
 
-# UNTRUSTED ptau — anyone who ran this knows the toxic waste
-snarkjs powersoftau new bn128 12 build/pot12_0000.ptau -v
-snarkjs powersoftau contribute build/pot12_0000.ptau build/pot12_0001.ptau \
+# UNTRUSTED ptau — anyone who ran this knows the toxic waste.
+# Power 16 is the Vote(20) default. The Vote(4) smoke fixture uses power 13.
+snarkjs powersoftau new bn128 16 build/pot16_0000.ptau -v
+snarkjs powersoftau contribute build/pot16_0000.ptau build/pot16_0001.ptau \
   --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony -v
-snarkjs powersoftau prepare phase2 build/pot12_0001.ptau build/pot12_final.ptau -v
+snarkjs powersoftau prepare phase2 build/pot16_0001.ptau build/pot16_final.ptau -v
 
-snarkjs groth16 setup build/vote.r1cs build/pot12_final.ptau build/vote_0000.zkey
+snarkjs groth16 setup build/vote.r1cs build/pot16_final.ptau build/vote_0000.zkey
 snarkjs zkey contribute build/vote_0000.zkey build/vote_final.zkey \
   --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony
 snarkjs zkey export verificationkey build/vote_final.zkey build/vote_verification_key.json
@@ -134,10 +128,11 @@ snarkjs zkey export solidityverifier build/vote_final.zkey build/vote_Groth16Ver
 
 **Do not** `export solidityverifier` onto `smart-contracts/src/zk/VoteVerifier.sol`. That file is the structural verifier with a zero VK. Deploy the generated contract and wrap it with `Groth16VerifierAdapter`.
 
-Until a Poseidon hasher and a real ceremony exist:
+Ceremony status: **not done.**
 
-- **Foundry unit tests** use `MockVerifier` (`acceptAll = true`).
-- **Local proving-path integration:** `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`) deploys `VoteVerifier` **without** a mock fallback. Dummy proofs fail.
+- **Foundry unit tests** use `MockVerifier` (`acceptAll = true`) and `KeccakHasher`.
+- **`UntrustedGroth16Test`** verifies the committed Vote(4) proof with the exported verifier. Missing files revert `GROTH16_KEYS_MISSING`.
+- **Local proving-path deploy:** `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`) deploys `PoseidonHasher` and `VoteVerifier` **without** a mock fallback. Dummy proofs fail. Set `REPUBLIC_VOTE_VERIFIER` to wrap an exported verifier. That key is still untrusted, and Vote(4) does not match election depth 20.
 
 Witness inputs for `vote` (JSON for snarkjs) look like:
 
@@ -155,7 +150,7 @@ Witness inputs for `vote` (JSON for snarkjs) look like:
 }
 ```
 
-`pathElements` / `pathIndices` length must equal `levels`. `npm run circuits:prove` writes `circuits/build/vote_demo.input.json` (two leaves so the first sibling is not zero).
+`pathElements` / `pathIndices` length must equal `levels`. `npm run circuits:prove` writes `circuits/build/vote_demo.input.json` (Poseidon, depth 20). `npm run circuits:smoke` writes a depth-4 witness for the fixture.
 
 ---
 

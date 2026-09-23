@@ -154,7 +154,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 | `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
-| `REPUBLIC_HASH_SCHEME` | `keccak-dev-v1` | HashLeftRight version advertised in config; see `/circuits/HASH_SCHEME.md` |
+| `REPUBLIC_HASH_SCHEME` | `keccak-dev-v1` (Poseidon if `REPUBLIC_PROVING_PATH=1`) | HashLeftRight advertised in config. The vote circuit is Poseidon. See `/circuits/HASH_SCHEME.md` |
 
 Passkey rpName is always **Republic**.
 

@@ -3,10 +3,12 @@
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
- * Single strategy toward Poseidon:
- *   1. keccak-dev-v1     — Foundry / Node unit tests (default, no ceremony)
- *   2. standin-v0        — Circom + local Groth16 until Poseidon is vendored
- *   3. poseidon-bn254-x5-t3-v1 — production target (throws until wired)
+ * Single hash for the vote circuit:
+ *   1. poseidon-bn254-x5-t3-v1 — Circom Hasher(), JS, Solidity PoseidonHasher
+ *   2. keccak-dev-v1           — Foundry / Node unit tests (default, no ceremony)
+ *   3. standin-v0              — legacy bilinear mix, not included by the circuit
+ *
+ * Poseidon being wired is not a Groth16 ceremony.
  *
  * Do not mix schemes in one Merkle tree or one proof.
  */
@@ -20,9 +22,9 @@ const HASH_SCHEMES = Object.freeze({
 });
 
 const HASH_SCHEME_STATUS = Object.freeze({
-  [HASH_SCHEMES.STANDIN_V0]: "circom-proving-path",
+  [HASH_SCHEMES.STANDIN_V0]: "legacy-not-in-circuit",
   [HASH_SCHEMES.KECCAK_DEV_V1]: "evm-unit-tests",
-  [HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1]: "not-wired",
+  [HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1]: "wired-not-a-ceremony",
 });
 
 const SNARK_SCALAR_FIELD =
@@ -66,7 +68,7 @@ function normalizeHashScheme(name) {
 
 function resolveHashScheme(env = process.env) {
   if (env.REPUBLIC_HASH_SCHEME) return normalizeHashScheme(env.REPUBLIC_HASH_SCHEME);
-  if (provingPathEnabled(env)) return HASH_SCHEMES.STANDIN_V0;
+  if (provingPathEnabled(env)) return HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
   return HASH_SCHEMES.KECCAK_DEV_V1;
 }
 

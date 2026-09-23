@@ -13,7 +13,7 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 - `src/account/` — passkey AA + `RepublicPaymaster`
 - `src/l2/` — `RollupSettlement`, mailbox, L1 tally mirror
 - `src/zk/` — `MockVerifier` (tests), `TallyPublicInputs` (versioned tally instance), structural `VoteVerifier`, `Groth16VerifierAdapter`
-- `src/hasher/` — `KeccakHasher` (tests), `StandInHasher` (proving path), `HashScheme` ids
+- `src/hasher/` — `KeccakHasher` (unit tests), `PoseidonHasher` (vote circuit), legacy `StandInHasher`, `HashScheme` ids
 - `test/` — unit (`Tally.t.sol` covers SUM_ONLY vs OPENS_BALLOTS), fuzz (`test/fuzz`), invariant (`test/invariant`)
 - `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`, `CertifyL1` (tally hash → `L1TallyMirror`; `certify_l1.sh` no-ops if L1 env unset)
 
@@ -23,7 +23,7 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 forge test --via-ir
 ```
 
-Unit tests use `MockVerifier`. Non-mock deploy:
+Unit tests use `MockVerifier`. `UntrustedGroth16Test` verifies a real untrusted Vote(4) proof (not accept-all). Non-mock deploy:
 
 ```bash
 REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast

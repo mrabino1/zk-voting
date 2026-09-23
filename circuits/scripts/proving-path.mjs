@@ -7,10 +7,13 @@
  * vote/tally witness.
  *
  * This is NOT a ceremony. Anyone who ran `setup` knows the toxic waste.
- * Do not use these keys for a binding election. HASH_SCHEME is
- * republic.hash.standin-v0 until Poseidon is vendored.
+ * Do not use these keys for a binding election.
  *
- * Commands: status | compile | setup | export | prove | test | all | help
+ * HASH_SCHEME for the vote circuit is republic.hash.poseidon-bn254-x5-t3-v1.
+ * `smoke` builds an untrusted Vote(4) proof and refreshes circuits/fixtures/untrusted.
+ * `verify` checks that fixture with snarkjs and fails if the files or snarkjs are missing.
+ *
+ * Commands: status | compile | setup | export | prove | smoke | verify | test | all | help
  */
 
 import { spawnSync } from "node:child_process";
@@ -26,8 +29,10 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CIRCUITS = path.resolve(SCRIPT_DIR, "..");
 const REPO = path.resolve(CIRCUITS, "..");
 const BUILD = path.join(CIRCUITS, "build");
-const HASH_SCHEME = helpers.HASH_SCHEMES.STANDIN_V0;
-const PTAU_POWER = Number(process.env.REPUBLIC_PTAU_POWER || 12);
+const HASH_SCHEME = helpers.HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
+const PTAU_POWER = Number(process.env.REPUBLIC_PTAU_POWER || 16);
+const SMOKE_PTAU_POWER = Number(process.env.REPUBLIC_SMOKE_PTAU_POWER || 13);
+const FIXTURE = path.join(CIRCUITS, "fixtures", "untrusted");
 const UNTRUSTED_ENTROPY = "republic-local-untrusted-dev-only-not-a-ceremony";
 
 function log(msg) {
@@ -107,7 +112,9 @@ function printStatus() {
   log("  npm run circuits:compile");
   log("  npm run circuits:setup     # local powers-of-tau + groth16; NOT a ceremony");
   log("  npm run circuits:export    # writes circuits/build/*verifier*.sol, not VoteVerifier.sol");
-  log("  npm run circuits:prove      # demo witness + groth16 verify");
+  log("  npm run circuits:prove      # demo Poseidon witness + groth16 verify (Vote 20)");
+  log("  npm run circuits:smoke      # UNTRUSTED Vote(4) proof; refreshes circuits/fixtures/untrusted");
+  log("  npm run circuits:verify     # verify that fixture, or fail if keys/snarkjs are missing");
   log("  REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol");
   log("");
   log("Install Circom 2 if compile is needed: https://docs.circom.io/getting-started/installation/");
@@ -282,39 +289,155 @@ function prove() {
   const tallyVkey = path.join(BUILD, "tally_verification_key.json");
   if (!fs.existsSync(tallyVkey)) exportVerifier();
   run(snarkjs, ["groth16", "verify", tallyVkey, tallyPub, tallyProof]);
-  log("demo vote + tally Groth16 proofs verified (standin-v0, UNTRUSTED keys).");
+  log("demo vote + tally Groth16 proofs verified (Poseidon, UNTRUSTED keys, ceremony not done).");
 }
 
 function selfCheck() {
   const a = helpers.standInHashLeftRight(1n, 2n);
   if (a !== 5n) fail("stand-in vector 1,2 != 5");
-  const w = helpers.buildVoteWitness({ depth: 20 });
-  if (w.pathElements.length !== 20) fail("vote witness depth");
-  if (
-    !helpers.verifyInclusion(
-      w.leaf,
-      w.pathElements,
-      w.pathIndices,
-      w.root,
-      helpers.HASH_SCHEMES.STANDIN_V0,
-    )
-  ) {
+  const poseidon12 = helpers.poseidonHashLeftRight(1n, 2n);
+  const known = 7853200120776062878684798364095072458815029376092732009249414926327459813530n;
+  if (poseidon12 !== known) fail("poseidon(1,2) does not match circomlib");
+  const w = helpers.buildVoteWitness({ depth: 4 });
+  if (w.scheme !== HASH_SCHEME) fail("vote witness scheme");
+  if (w.pathElements.length !== 4) fail("vote witness depth");
+  if (!helpers.verifyInclusion(w.leaf, w.pathElements, w.pathIndices, w.root, HASH_SCHEME)) {
     fail("vote witness inclusion");
   }
-  log("hash-scheme + vote-witness self-check ok (no ceremony required).");
+  log("poseidon hash + vote-witness self-check ok (ceremony is still not done).");
 }
 
-function testCmd() {
+function loadSnarkjs() {
+  try {
+    return require("snarkjs");
+  } catch {
+    fail(
+      "snarkjs is not installed. From the repo root: npm install snarkjs --save-dev\n" +
+        "GROTH16_KEYS_MISSING or tools missing: refusing to treat this as accept-all.",
+    );
+  }
+  return null;
+}
+
+async function verifyFixture() {
+  const vkeyPath = path.join(FIXTURE, "vote_smoke_verification_key.json");
+  const proofPath = path.join(FIXTURE, "vote_smoke_proof.json");
+  const pubPath = path.join(FIXTURE, "vote_smoke_public.json");
+  for (const p of [vkeyPath, proofPath, pubPath]) {
+    if (!fs.existsSync(p)) {
+      fail(
+        `GROTH16_KEYS_MISSING: ${p}\n` +
+          "Run: npm run circuits:smoke\n" +
+          "This check does not use MockVerifier.acceptAll.",
+      );
+    }
+  }
+  const snarkjs = loadSnarkjs();
+  const vkey = JSON.parse(fs.readFileSync(vkeyPath, "utf8"));
+  const pub = JSON.parse(fs.readFileSync(pubPath, "utf8"));
+  const proof = JSON.parse(fs.readFileSync(proofPath, "utf8"));
+  const ok = await snarkjs.groth16.verify(vkey, pub, proof);
+  if (!ok) fail("Groth16 fixture failed verification");
+  const tampered = pub.slice();
+  tampered[0] = (BigInt(tampered[0]) + 1n).toString();
+  const bad = await snarkjs.groth16.verify(vkey, tampered, proof);
+  if (bad) fail("tampered public input was accepted");
+  const curve = await snarkjs.curves.getCurveFromName("bn128");
+  await curve.terminate();
+  log("untrusted Vote(4) Poseidon Groth16 fixture verified. Ceremony: not-done.");
+}
+
+function copySmokeFixture(solBuilt) {
+  ensureDir(FIXTURE);
+  const mapping = [
+    ["vote_smoke_verification_key.json", "vote_smoke_verification_key.json"],
+    ["vote_smoke_proof.json", "vote_smoke_proof.json"],
+    ["vote_smoke_public.json", "vote_smoke_public.json"],
+    ["vote_smoke_demo.input.json", "vote_smoke_input.json"],
+  ];
+  for (const [src, dest] of mapping) {
+    fs.copyFileSync(path.join(BUILD, src), path.join(FIXTURE, dest));
+  }
+  let sol = fs.readFileSync(solBuilt, "utf8");
+  sol = sol.replace("contract Groth16Verifier", "contract UntrustedVoteSmokeVerifier");
+  sol = sol.replace(
+    "Generated by circuits/scripts/proving-path.mjs export. Not committed.",
+    "Committed untrusted Vote(4) fixture. zkeys are not committed. Not a ceremony.",
+  );
+  const destSol = path.join(REPO, "smart-contracts/test/zk/fixtures/UntrustedVoteSmokeVerifier.sol");
+  fs.writeFileSync(destSol, sol);
+  log(`fixture updated: ${FIXTURE}`);
+  log(`solidity verifier: ${destSol}`);
+}
+
+async function smoke() {
+  const circom = requireCircom();
+  const snarkjsBinPath = requireSnarkjs();
+  ensureDir(BUILD);
+  log("UNTRUSTED Vote(4) Poseidon smoke. Not a ceremony. Not election depth 16..32.");
+  run(circom, ["mains/vote_smoke.circom", "--r1cs", "--wasm", "--sym", "-o", BUILD]);
+  const r1cs = path.join(BUILD, "vote_smoke.r1cs");
+  const ptau0 = path.join(BUILD, `pot${SMOKE_PTAU_POWER}_0000.ptau`);
+  const ptau1 = path.join(BUILD, `pot${SMOKE_PTAU_POWER}_0001.ptau`);
+  const ptauFinal = path.join(BUILD, `pot${SMOKE_PTAU_POWER}_final.ptau`);
+  log(`UNTRUSTED powers-of-tau power=${SMOKE_PTAU_POWER}. Toxic waste is known.`);
+  run(snarkjsBinPath, ["powersoftau", "new", "bn128", String(SMOKE_PTAU_POWER), ptau0, "-v"]);
+  run(snarkjsBinPath, [
+    "powersoftau",
+    "contribute",
+    ptau0,
+    ptau1,
+    "--name=republic-local-untrusted",
+    `-e=${UNTRUSTED_ENTROPY}`,
+    "-v",
+  ]);
+  run(snarkjsBinPath, ["powersoftau", "prepare", "phase2", ptau1, ptauFinal, "-v"]);
+  const z0 = path.join(BUILD, "vote_smoke_0000.zkey");
+  const zFinal = path.join(BUILD, "vote_smoke_final.zkey");
+  run(snarkjsBinPath, ["groth16", "setup", r1cs, ptauFinal, z0]);
+  run(snarkjsBinPath, [
+    "zkey",
+    "contribute",
+    z0,
+    zFinal,
+    "--name=republic-local-untrusted",
+    `-e=${UNTRUSTED_ENTROPY}`,
+  ]);
+  const witness = helpers.buildVoteWitness({ depth: 4, scheme: HASH_SCHEME });
+  const inputPath = path.join(BUILD, "vote_smoke_demo.input.json");
+  fs.writeFileSync(inputPath, JSON.stringify(helpers.voteWitnessToSnarkInput(witness), null, 2) + "\n");
+  const wasm = path.join(BUILD, "vote_smoke_js", "vote_smoke.wasm");
+  const proofPath = path.join(BUILD, "vote_smoke_proof.json");
+  const pubPath = path.join(BUILD, "vote_smoke_public.json");
+  run(snarkjsBinPath, ["groth16", "fullprove", inputPath, wasm, zFinal, proofPath, pubPath]);
+  const vkey = path.join(BUILD, "vote_smoke_verification_key.json");
+  const sol = path.join(BUILD, "vote_smoke_Groth16Verifier.sol");
+  run(snarkjsBinPath, ["zkey", "export", "verificationkey", zFinal, vkey]);
+  run(snarkjsBinPath, ["zkey", "export", "solidityverifier", zFinal, sol]);
+  prependUntrustedHeader(sol, "vote_smoke");
+  const snarkjs = loadSnarkjs();
+  const ok = await snarkjs.groth16.verify(
+    JSON.parse(fs.readFileSync(vkey, "utf8")),
+    JSON.parse(fs.readFileSync(pubPath, "utf8")),
+    JSON.parse(fs.readFileSync(proofPath, "utf8")),
+  );
+  if (!ok) fail("smoke proof did not verify");
+  const curve = await snarkjs.curves.getCurveFromName("bn128");
+  await curve.terminate();
+  copySmokeFixture(sol);
+  log("smoke Groth16 proof verified and fixture refreshed (UNTRUSTED, ceremony not done).");
+}
+
+async function testCmd() {
   selfCheck();
-  const required = helpers.provingPathEnabled();
+  await verifyFixture();
+  if (!helpers.provingPathEnabled()) {
+    log("REPUBLIC_PROVING_PATH is off. Fixture verify ran. Full Vote(20) setup was not repeated.");
+    return;
+  }
   const s = toolStatus();
   if (!s.circom || !s.snarkjs) {
-    if (required) {
-      fail("REPUBLIC_PROVING_PATH=1 but circom/snarkjs are missing.");
-    }
-    log("circom/snarkjs not present — skipping compile/setup/prove (hash checks still ran).");
-    log("Install tools, then: npm run circuits:all");
-    return;
+    fail("REPUBLIC_PROVING_PATH=1 but circom/snarkjs are missing.");
   }
   compile();
   setup();
@@ -330,13 +453,16 @@ Commands:
   compile   circom vote.circom + tally.circom
   setup     UNTRUSTED local powers-of-tau + groth16 setup (not a ceremony)
   export    Export verification keys + Solidity verifiers into circuits/build/
-  prove     Demo witness, groth16 prove, verify
-  test      Hash self-check; full groth16 if tools exist (required if REPUBLIC_PROVING_PATH=1)
+  prove     Demo Vote(20) witness, groth16 prove, verify
+  smoke     UNTRUSTED Vote(4) setup + proof; refresh circuits/fixtures/untrusted
+  verify    Verify the committed fixture, or fail if keys/snarkjs are missing
+  test      Poseidon self-check + fixture verify (full Vote(20) only if REPUBLIC_PROVING_PATH=1)
   all       compile + setup + export + prove
   help      This text
 
 HASH_SCHEME=${HASH_SCHEME}
-Env: REPUBLIC_PROVING_PATH=1  REPUBLIC_USE_MOCK_VERIFIER=0  REPUBLIC_PTAU_POWER=12
+Env: REPUBLIC_PROVING_PATH=1  REPUBLIC_USE_MOCK_VERIFIER=0  REPUBLIC_PTAU_POWER=16  REPUBLIC_SMOKE_PTAU_POWER=13
+Ceremony: not-done. MockVerifier stays the Foundry unit-test default.
 `);
 }
 
@@ -349,7 +475,9 @@ try {
   else if (cmd === "prove") {
     if (!fs.existsSync(path.join(BUILD, "vote_verification_key.json"))) exportVerifier();
     prove();
-  } else if (cmd === "test") testCmd();
+  } else if (cmd === "smoke") await smoke();
+  else if (cmd === "verify") await verifyFixture();
+  else if (cmd === "test") await testCmd();
   else if (cmd === "all") {
     compile();
     setup();

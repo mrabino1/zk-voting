@@ -79,7 +79,7 @@ There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resource
 | Local demo / town clerk, mock proofs | 2 vCPU | 4 GB | Three Node 22 processes; JSON store in RAM; mock prover is keccak/JSON, not a GPU SNARK. |
 | County election-window, tens of thousands of voters | 4 vCPU | 8–16 GB | Same processes; `republic.json` + explorer + hourly vote flush; Merkle trees keep **all leaves** in the JSON store. |
 | Always-on L2 for **months** at 2s | 2–4 vCPU | **grows with block count** | Sequencer holds the full chain in RAM. Not a coded prune. Prefer election-window or accept tens of GB after months (§2). |
-| Real Groth16 **vote** proofs in Node (`REPUBLIC_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Stand-in `Vote(20)` is **126 constraints** ([`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md)) — cheap. Production Poseidon `Vote(20)` will be heavier; **this repo has no prove-time benchmark.** |
+| Real Groth16 **vote** proofs in Node (`REPUBLIC_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Poseidon `Vote(4)` smoke is about **1966 non-linear** constraints. Poseidon `Vote(20)` is not benchmarked here. Ceremony is not done. |
 
 `master` must not ship mock rollup proofs ([`docs/L2.md`](./docs/L2.md)). Budget a real prover when that lands; today’s default is mock.
 
@@ -238,7 +238,7 @@ Tally mirror is cheap even on mainnet because it is **once per election**.
 | Sequencer RAM | Loads **all** historical blocks | Election-window: fine. Always-on months: RAM tracks ~1.4 KB × block count (JS objects larger). |
 | Hourly disclosure | Up to 4096 txs / 2s block after the hour closes | **50k votes in one hour** ≈ 13 blocks ≈ **~30 s** to unseal. **1M in one hour** ≈ 244 blocks ≈ **~8 min**. Throughput is OK; the JSON store is not. |
 | Explorer | `l2-chain.json` full rewrite; public APIs on the **same** Node | Same order as voter count, not empty L2. |
-| Vote SNARK | Stand-in `Vote(20)` is tiny (126 constraints). Poseidon + ceremony **Future** | Do not budget “1M Groth16 proves / hour on one laptop” until Poseidon is wired and measured. |
+| Vote SNARK | Poseidon is wired. Committed check is untrusted `Vote(4)`, not `Vote(20)`, and not a ceremony. | Do not budget “1M Groth16 proves / hour on one laptop” until `Vote(20)` is measured. |
 | Single sequencer | Liveness / censorship assumption (v1: one sequencer) | [`docs/L2.md`](./docs/L2.md). A stall stops voting; it must not silently change a tally. |
 
 **How many people can vote each time — answer for a commander**

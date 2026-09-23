@@ -54,7 +54,7 @@ on 27427 is **Future**.
 | Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
 | Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
 | Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |
-| Circuits | Circom 2: `vote.circom`, `tally.circom`, `identity.circom`. Hasher is a labeled Poseidon **stand-in**. |
+| Circuits | Circom 2: `vote.circom` (Vote 20), `tally.circom`, `identity.circom`. Hasher is Poseidon(2). Ceremony is not done. |
 | Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
 | Explorer | Node `/explorer` over `l2-chain.json`, filled by Node writes and `POST /api/explorer/ingest`. |
 | Ballot types | Node UI/API: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED` (IRV on the Node path). |
@@ -145,7 +145,7 @@ timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
   and local instant demo may set `0`.
 
-Hasher note: production circuits use Poseidon (`republic.hash.poseidon-bn254-x5-t3-v1`). Solidity trees in unit tests use `KeccakHasher` (`keccak-dev-v1`). The local proving path uses `StandInHasher` (`standin-v0`) so Circom, JS witnesses, and the on-chain tree share one formula. The `IHasher` interface is identical. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
+Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, and Solidity `PoseidonHasher` share Poseidon(2) (`republic.hash.poseidon-bn254-x5-t3-v1`). Unit-test trees and the demo passkey commitment stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
 ### Person (unique) vs one active Ethereum address
 
@@ -636,8 +636,8 @@ first): `[total, electionId, counts…, acceptedCount]`. Solidity `Tally.sol`
 uses a separately versioned mock instance (`TallyPublicInputs`). Do not wire a
 generated circuit verifier to `Tally.sol` without a translator. MockVerifier
 is the local Foundry path.
-`circuits/HASH_SCHEME.md` — keccak-dev-v1 vs standin-v0 vs Poseidon target.
-`circuits/identity.circom` — `Hasher()` stand-in, commitment, nullifier.
+`circuits/HASH_SCHEME.md` — Poseidon vote circuit, keccak unit tests, legacy stand-in, untrusted Groth16 fixture.
+`circuits/identity.circom` — Poseidon `Hasher()`, commitment, nullifier.
 `circuits/README.md` — exact `circom` + snarkjs commands. Proving path is
 **in progress**. Local `npm run circuits:setup` is UNTRUSTED. Until a real
 ceremony, MockVerifier is the Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`

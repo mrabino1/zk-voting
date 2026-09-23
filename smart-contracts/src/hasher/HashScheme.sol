@@ -5,10 +5,10 @@ pragma solidity ^0.8.24;
 
 /// @title HashScheme
 /// @notice Versioned HashLeftRight identifiers shared by Solidity, JS, and circuits.
-/// @dev Production target is Poseidon (bn254, x^5, t=3). Until that is vendored:
+/// @dev Poseidon (bn254, x^5, t=3) is wired (`PoseidonT3` / `PoseidonHasher`) and is
+///      the vote-circuit hasher. It is not a Groth16 ceremony.
 ///      - Foundry / Node tests use `KECCAK_DEV_V1` (`KeccakHasher`).
-///      - Local Groth16 proving-path uses `STANDIN_V0` (matches `circuits/hasher/standin.circom`).
-///      Neither keccak nor the bilinear stand-in is a ceremony-grade hasher.
+///      - `STANDIN_V0` remains for legacy vectors only. The circuit does not use it.
 library HashScheme {
     /// @notice Circom stand-in: `out = a + b + a*b` over Fr. NOT collision-resistant.
     bytes32 internal constant STANDIN_V0 = keccak256("republic.hash.standin-v0");
@@ -16,8 +16,8 @@ library HashScheme {
     /// @notice EVM-test keccak256(left || right). Matches `KeccakHasher`.
     bytes32 internal constant KECCAK_DEV_V1 = keccak256("republic.hash.keccak-dev-v1");
 
-    /// @notice Production target. Not wired. Do not run a trusted setup until this is live
-    ///         in-circuit, in JS witness builders, and in the on-chain `IHasher`.
+    /// @notice Vote-circuit hasher. Wired in Circom, JS, and `PoseidonHasher`.
+    ///         A matching hash is not a trusted setup.
     bytes32 internal constant POSEIDON_BN254_X5_T3_V1 = keccak256("republic.hash.poseidon-bn254-x5-t3-v1");
 
     /// @notice bn254 scalar field (Fr). Circom / Groth16 public inputs live here.

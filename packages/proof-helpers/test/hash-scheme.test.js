@@ -13,6 +13,8 @@ const {
   keccakHashLeftRight,
   hashLeftRight,
   standInHashLeftRight,
+  poseidonHashLeftRight,
+  snarkjsProofToSolidity,
   identityCommitment,
   computeNullifier,
   createTree,
@@ -57,12 +59,41 @@ describe("hash schemes", () => {
     assert.equal(packed.length, 2 + 128);
   });
 
-  test("poseidon is gated and throws until wired", () => {
-    assert.throws(
-      () => hashLeftRight(1n, 2n, HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1),
-      /not wired/,
-    );
+  test("poseidon matches circomlib Poseidon(2)", () => {
+    const known = 7853200120776062878684798364095072458815029376092732009249414926327459813530n;
+    assert.equal(poseidonHashLeftRight(1n, 2n), known);
+    assert.equal(hashLeftRight(1n, 2n, HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1), "0x" + known.toString(16).padStart(64, "0"));
     assert.equal(normalizeHashScheme("poseidon"), HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1);
+    assert.notEqual(poseidonHashLeftRight(1n, 2n), standInHashLeftRight(1n, 2n));
+  });
+
+  test("snarkjs G2 limbs are swapped for Solidity", () => {
+    const proof = {
+      pi_a: ["1", "2", "1"],
+      pi_b: [
+        ["3", "4"],
+        ["5", "6"],
+        ["1", "0"],
+      ],
+      pi_c: ["7", "8", "1"],
+    };
+    const sol = snarkjsProofToSolidity(proof);
+    assert.deepEqual(sol.b, [
+      [4n, 3n],
+      [6n, 5n],
+    ]);
+    const already = snarkjsProofToSolidity({
+      a: ["1", "2"],
+      b: [
+        ["4", "3"],
+        ["6", "5"],
+      ],
+      c: ["7", "8"],
+    });
+    assert.deepEqual(already.b, [
+      [4n, 3n],
+      [6n, 5n],
+    ]);
   });
 
   test("env flags: mock by default, proving path disables mock", () => {
@@ -71,7 +102,7 @@ describe("hash schemes", () => {
     assert.equal(resolveHashScheme({}), HASH_SCHEMES.KECCAK_DEV_V1);
     assert.equal(provingPathEnabled({ REPUBLIC_PROVING_PATH: "1" }), true);
     assert.equal(useMockVerifier({ REPUBLIC_PROVING_PATH: "1" }), false);
-    assert.equal(resolveHashScheme({ REPUBLIC_PROVING_PATH: "1" }), HASH_SCHEMES.STANDIN_V0);
+    assert.equal(resolveHashScheme({ REPUBLIC_PROVING_PATH: "1" }), HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1);
     assert.equal(useMockVerifier({ REPUBLIC_USE_MOCK_VERIFIER: "0" }), false);
     assert.equal(
       resolveHashScheme({ REPUBLIC_HASH_SCHEME: "standin-v0" }),
@@ -100,8 +131,17 @@ describe("stand-in merkle (proving path)", () => {
     assert.equal(verifyInclusion(leaf, proof.pathElements, proof.pathIndices, proof.root, scheme), true);
   });
 
+  test("poseidon witness inclusion is non-degenerate", () => {
+    const scheme = HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
+    const w = buildVoteWitness({ depth: 4, scheme });
+    assert.equal(w.pathElements.length, 4);
+    assert.notEqual(w.root, w.leaf);
+    assert.equal(verifyInclusion(w.leaf, w.pathElements, w.pathIndices, w.root, scheme), true);
+    assert.equal(w.nullifier, computeNullifier(3n, 1n, scheme));
+  });
+
   test("vote witness public inputs match serializePublicInputs order", () => {
-    const w = buildVoteWitness({ depth: 20 });
+    const w = buildVoteWitness({ depth: 20, scheme: HASH_SCHEMES.STANDIN_V0 });
     assert.equal(w.scheme, HASH_SCHEMES.STANDIN_V0);
     assert.equal(w.pathElements.length, 20);
     const snark = voteWitnessToSnarkInput(w);
