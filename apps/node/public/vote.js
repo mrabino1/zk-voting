@@ -67,6 +67,31 @@ export function mockVotePublicInputs({ eligibleRoot, disqRoot, nullifier, ballot
   ];
 }
 
+/**
+ * Relay envelope only. Choice stays inside `encryptedBallot`. The leaf, wallet,
+ * credential id, and plaintext `answers` are not fields of this POST.
+ */
+export function buildVoteRequestBody({
+  electionId,
+  nullifier,
+  ballotHash,
+  encryptedBallot,
+  pinToken,
+  userOpHash,
+  proof,
+}) {
+  const body = {
+    electionId: electionId == null || electionId === "" ? undefined : String(electionId),
+    nullifier,
+    ballotHash,
+    encryptedBallot,
+    userOpHash,
+    proof,
+  };
+  if (pinToken) body.pinToken = pinToken;
+  return body;
+}
+
 export async function renderVote(main, ctx) {
   const {
     h,
@@ -737,25 +762,13 @@ export async function renderVote(main, ctx) {
         ballotHash: auth.ballotHash,
         electionId: onChainId,
       });
-      const body = {
+      const body = buildVoteRequestBody({
         electionId: String(election.id),
-        identityCommitment: auth.identityCommitment,
-        address: auth.address,
-        addressScheme: auth.addressScheme,
-        credentialId: auth.credentialId,
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
         encryptedBallot: auth.encryptedBallot,
-        answers,
         pinToken: state.pinToken || undefined,
-        signature: auth.signature,
         userOpHash: auth.userOpHash,
-        userOp: {
-          sender: auth.address,
-          nonce: "0x0",
-          signature: auth.signature,
-          callData: "submitVote",
-        },
         proof: {
           mock: true,
           a: ["0x0", "0x0"],
@@ -766,7 +779,7 @@ export async function renderVote(main, ctx) {
           c: ["0x0", "0x0"],
           publicInputs,
         },
-      };
+      });
 
       let accepted = false;
       let message = "";

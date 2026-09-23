@@ -580,9 +580,12 @@ export function decodeBallotEnvelope(encryptedBallot) {
   }
 }
 
-export function answersFromVoteBody(body, encryptedBallot) {
-  if (Array.isArray(body?.answers)) return body.answers;
-  if (Array.isArray(body?.ballot?.answers)) return body.ballot.answers;
+/**
+ * Rankings used for a JSON-demo envelope. Plaintext `answers` on the vote
+ * body are ignored so the Node does not join a choice field to the request.
+ * A ciphertext that is still UTF-8 JSON (or hex of that JSON) can be decoded.
+ */
+export function answersFromVoteBody(_body, encryptedBallot) {
   const decoded = decodeBallotEnvelope(encryptedBallot);
   if (Array.isArray(decoded?.answers)) return decoded.answers;
   if (Array.isArray(decoded)) return decoded;
@@ -665,9 +668,7 @@ export function validateBallotAnswers(election, answers) {
 export function extractRankingPayload(election, body, encryptedBallot) {
   if (!electionHasRanked(election)) return null;
   const answers = extractAnswers(body, encryptedBallot);
-  if (!answers) {
-    throw new HttpError(400, 'ranked ballot answers required', { code: 'RANKING_REQUIRED' });
-  }
+  if (!answers) return null;
   return validateBallotAnswers(election, answers);
 }
 

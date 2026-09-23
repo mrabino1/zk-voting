@@ -48,7 +48,7 @@ Constraints:
 1. `leaf = Hash(identityTrapdoor, nullifierSecret)` (Poseidon in production).
 2. Merkle inclusion of `leaf` under `root` (the **eligible** tree: registered ∩ ¬disqualified).
 3. `nullifier = Hash(nullifierSecret, electionId)`.
-4. `disqRoot` is bound into the constraint system so a proof is specific to the live disqualification tree the contract publishes. A disqualified person cannot produce an accepting membership proof against the eligible root.
+4. `disqRoot` is bound into the constraint system so a proof is specific to the live disqualification log the contract publishes. A disqualified person cannot produce an accepting membership proof against the eligible root, because that root is rebuilt without them (`registered ∩ ¬currently-disqualified`). This circuit does not also prove non-membership in the disqualification log. `MockVerifier` checks that inclusion only when a test arms the witness; otherwise it still accepts any well-shaped proof. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
 5. `ballotHash` is a public commitment to the encrypted ballot. Choice bits are not plaintext public inputs.
 
 The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier; not last-vote-counts). The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.

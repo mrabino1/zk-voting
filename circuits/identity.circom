@@ -6,8 +6,8 @@ pragma circom 2.0.0;
 //
 // PRODUCTION HASHER: Poseidon is preferred for identity commitments,
 // Merkle trees, and nullifiers. It is cheap in-circuit, matches the
-// intended IHasher.hashLeftRight on chain once a Poseidon hasher is
-// wired, and is what Semaphore / MACI-style voting circuits use.
+// intended IHasher.hashLeftRight on chain (`PoseidonHasher`), and is
+// what Semaphore / MACI-style voting circuits use.
 //
 // HASH_SCHEME (selected include):
 //   republic.hash.poseidon-bn254-x5-t3-v1 — hasher/poseidon.circom (selected)

@@ -16,12 +16,13 @@ pragma circom 2.0.0;
 // Private witness:
 //   identityTrapdoor, nullifierSecret, pathElements, pathIndices
 //
-// The eligible Merkle root is `registered ∩ ¬disqualified` for this
-// election (see README: Eligibility, disqualification, and due process).
-// Membership in that tree is what lets a registered-but-disqualified
-// person fail to prove. disqRoot is bound into the public instance so
-// BallotInbox can reject a proof that does not name the live
-// disqualification tree.
+// The eligible Merkle root is `registered ∩ ¬currently-disqualified`,
+// rebuilt in registration order (VoterRegistry / Node freeze). Membership
+// in that tree is the exclusion: a disqualified leaf has no path, so this
+// inclusion constraint fails. This circuit does NOT add a separate
+// non-membership proof against the disqualification event log.
+// disqRoot is bound so BallotInbox can reject a proof that does not name
+// the live disqualification log. See docs/ARCHITECTURE.md.
 
 include "./identity.circom";
 
@@ -104,9 +105,10 @@ template Vote(levels) {
     nullifierCheck.nullifier === nullifier;
 
     // Bind disqRoot into the constraint system so a proof is specific to
-    // both the eligible tree and the disqualification tree the contract
-    // currently publishes. The cryptographic exclusion of a disqualified
-    // identity is membership in `root` (eligible = registered ∩ ¬disqualified).
+    // both the eligible tree and the disqualification log the contract
+    // currently publishes. Exclusion is membership in `root`
+    // (eligible = registered ∩ ¬currently-disqualified). There is no
+    // non-membership gate on the disqualification log in this template.
     // Hash(disqRoot, computedRoot) must equal Hash(disqRoot, public root).
     component disqBindComputed = Hasher();
     disqBindComputed.a <== disqRoot;

@@ -26,7 +26,9 @@ contract Election is IElection {
 
     bool public rollFrozen;
     uint256 public participantCount;
+    /// @notice Merkle root of registered ∩ ¬currently-disqualified, registration order.
     bytes32 public eligibleRoot;
+    /// @notice Append-only disqualification event log. Not the Node's current-DQ tree.
     bytes32 public disqualificationRoot;
 
     ElectionParams private _params;

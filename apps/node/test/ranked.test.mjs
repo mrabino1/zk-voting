@@ -187,16 +187,24 @@ describe('Ranked-choice ballots and IRV tally', () => {
     const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.json?.error);
 
-    const missing = await api('POST', `/api/elections/${id}/vote`, {
+    const opaque = await api('POST', `/api/elections/${id}/vote`, {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '1', electionId: id },
         encryptedBallot: '0xc0ffee',
         identityCommitment: '0x51',
+        answers: [{ questionId: 'q-office', ranking: ['a'] }],
+        address: '0x2222222222222222222222222222222222222222',
+        credentialId: 'cred',
       },
     });
-    assert.equal(missing.status, 400);
-    assert.equal(missing.json.code, 'RANKING_REQUIRED');
+    assert.equal(opaque.status, 201, opaque.json?.error);
+    const opaqueEnv = store.listEnvelopes(id)[0];
+    assert.equal(opaqueEnv.rankingPayload, undefined);
+    assert.equal(opaqueEnv.answers, undefined);
+    assert.equal(opaqueEnv.identityCommitment, undefined);
+    assert.equal(opaqueEnv.address, undefined);
+    assert.equal(opaqueEnv.credentialId, undefined);
 
     const dup = await api('POST', `/api/elections/${id}/vote`, {
       body: voteBody(id, '2', [{ questionId: 'q-office', ranking: ['a', 'a'] }], '0x51'),
@@ -215,7 +223,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     assert.equal(ok.status, 201, ok.json?.error);
     assert.equal(ok.json.vote.choice, undefined);
     assert.equal(ok.json.vote.ranking, undefined);
-    const env = store.listEnvelopes(id)[0];
+    const env = store.listEnvelopes(id).find((row) => Array.isArray(row.rankingPayload));
     assert.deepEqual(env.rankingPayload[0].ranking, ['b', 'c', 'a']);
     assert.equal(env.choice, undefined);
     assert.equal(env.userId, undefined);

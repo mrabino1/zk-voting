@@ -7,6 +7,7 @@ import {IDisqualificationRegistry} from "./interfaces/IDisqualificationRegistry.
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IHasher} from "./interfaces/IHasher.sol";
+import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 import {ReasonCodes} from "./ReasonCodes.sol";
 
 /// @title DisqualificationRegistry
@@ -18,6 +19,10 @@ import {ReasonCodes} from "./ReasonCodes.sol";
 ///        2. Inserts a **revocation leaf** Poseidon/keccak(commitment, reason, revokedFlag=1).
 ///      Officers read the mapping. The tree root is an append-only commitment
 ///      to (commitment, reason, revokedFlag) so the vote circuit can bind `disqRoot`.
+///      After each append, the voter registry rebuilds `eligibleRoot` as
+///      registered ∩ ¬currently-disqualified. That rebuilt root — not a
+///      non-membership proof inside the disqualification log — is what blocks
+///      a disqualified commitment from an honest vote proof.
 ///
 ///      Tree construction matches `src/tree/IncrementalMerkleTree.sol`:
 ///      depth 16–32, zeros precomputed via `IHasher.hashLeftRight`.
@@ -176,7 +181,18 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
             _initTree(tree, depth);
         }
         _insert(tree, leaf);
-        election.setRoots(election.eligibleRoot(), bytes32(tree.currentRoot));
+        bytes32 eligible = election.eligibleRoot();
+        address registry = _voterRegistry();
+        if (registry != address(0)) {
+            eligible = IVoterRegistry(registry).rebuildEligibleRoot(electionId);
+        }
+        election.setRoots(eligible, bytes32(tree.currentRoot));
+    }
+
+    function _voterRegistry() internal view returns (address) {
+        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+        return address(0);
     }
 
     function _initTree(Tree storage tree, uint8 depth) internal {

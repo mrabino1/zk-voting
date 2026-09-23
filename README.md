@@ -740,9 +740,9 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
    The vote proof shows membership in that set (or non-membership in the disqualification set plus membership in the registry), so a disqualified person **cannot** produce an accepting proof.
 
-   **Node path today:** `apps/node` rebuilds `eligibleRoot` from that intersection and the vote relay rejects currently-disqualified (and unregistered) commitments when `CHAIN_RPC` is unset. Freeze snapshots those roots for the open window.
+   **Enforced now:** the Node and `VoterRegistry` both rebuild `eligibleRoot` as that intersection (registration order). Freeze snapshots it on the Node; on chain, `freezeRoll` locks further disqualification unless `lateUpdateAllowed`. `BallotInbox` rejects a proof that does not name the published roots. An honest inclusion witness for a disqualified commitment does not meet that root. Foundry checks the witness under `MockVerifier` when the test arms it.
 
-   **Remaining ZK gap:** the vote circuit still only *binds* `disqRoot`; it does not prove non-membership. `MockVerifier` still accepts any proof. Do not treat a local demo accept as circuit-enforced exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+   **Remaining ZK gap:** `vote.circom` binds `disqRoot` and does not prove non-membership in the disqualification log. Unarmed `MockVerifier` still accepts a dummy proof that copies the published roots. Do not treat that accept as a ceremony-backed exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 4. **Visibility.**
 

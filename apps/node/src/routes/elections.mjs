@@ -19,7 +19,7 @@ import {
   resolveBallotSpecHash,
 } from '../ballotSpec.mjs';
 import { presentElection, electionState, electionChainMode, publishDue, electionDisclosure } from '../electionState.mjs';
-import { asyncHandler, HttpError } from '../http.mjs';
+import { asyncHandler, HttpError, sanitizeVoteBody } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
@@ -577,8 +577,9 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
+      const body = sanitizeVoteBody(req.body);
       if (req.user && pin) {
-        pin.assertVoteAllowed(req.user, req.body?.pinToken);
+        pin.assertVoteAllowed(req.user, body?.pinToken);
       }
       const result = await relayVote({
         store,
@@ -586,13 +587,12 @@ export function electionsRouter(deps) {
         chain,
         config,
         electionId: req.params.id,
-        body: req.body,
+        body,
         now: config.nowFn(),
         intervalSeconds: config.disclosureIntervalSeconds,
       });
       const election = store.getElection(req.params.id);
       const voterId = resolveVoterForOutcomeSubscribe(store, {
-        identityCommitment: req.body?.identityCommitment,
         userId: req.user?.id,
         electionId: election?.id || req.params.id,
       });
