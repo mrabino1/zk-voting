@@ -1276,8 +1276,8 @@ export class Store {
   }
 
   /**
-   * Node-path vote gate. The circuit still may not prove non-disqualification;
-   * this is the product control when CHAIN_RPC is unset.
+   * Node-path vote gate when CHAIN_RPC is unset. The published eligible root
+   * is the same intersection; this check rejects the commitment directly.
    */
   assertCanVote(electionId, identityCommitment) {
     if (identityCommitment == null || identityCommitment === '') {

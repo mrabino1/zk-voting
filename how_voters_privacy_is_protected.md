@@ -110,7 +110,7 @@ Meant to be visible. Process, not preference.
 
 `[eligibleRoot, disqRoot, nullifier, ballotHash, electionId]`
 
-Choice bits are **not** in that instance. `disqRoot` is bound so the proof names the live disqualification tree; the circuit still does **not** prove Merkle non-membership of a disqualified leaf (Node JSON path enforces that in software). **Demo gap:** `MockVerifier` accepts any well-shaped proof.
+Choice bits are **not** in that instance. `eligibleRoot` is `registered ∩ ¬currently-disqualified`, so inclusion in that root is the exclusion. `disqRoot` is bound to the live disqualification log; the circuit does **not** prove Merkle non-membership of a disqualified leaf. **Demo gap:** unarmed `MockVerifier` accepts any well-shaped proof that copies those roots.
 
 Civic L2 batch `dataHash` includes hashes, roots, nullifiers, reason codes, tally `countsHash` — not ballot plaintext ([`l2/README.md`](./l2/README.md)). If a client sends `choice` / `plaintext`, the sequencer strips it.
 
@@ -187,7 +187,7 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 
 | Gap | What is true today | Why it is not court-grade |
 | --- | --- | --- |
-| **MockVerifier** | Foundry / local inbox `acceptAll = true`. Dummy proofs in the SPA (`proof.mock: true`). | Anyone who can reach `submitVote` with a fresh nullifier can satisfy the verifier. Eligibility is **Node software** on the JSON path, not a ceremony-backed Groth16. |
+| **MockVerifier** | Foundry / local inbox `acceptAll = true` unless a test arms an inclusion witness. Dummy proofs in the SPA (`proof.mock: true`). | Anyone who can reach `submitVote` with a fresh nullifier and the published roots can satisfy the unarmed verifier. That is not a ceremony-backed Groth16. The published eligible root still excludes coded disqualifications; the mock does not check the witness unless armed. |
 | **Stand-in hasher / untrusted ptau** | Circom `Hasher()` is `a+b+a*b`. `npm run circuits:setup` is local powers-of-tau. Poseidon not wired. | Not the production hash. Not a trusted setup. |
 | **Passkey helper** | Account is `republic-local-address` (SHA-256 of seed), HMAC UserOp, keccak leaf. | Not secp256k1 / ERC-4337. Fine for UX demos. |
 | **SPA vote POST** | Body includes `answers`, `identityCommitment`, `address`, `credentialId` ([`vote.js`](./apps/node/public/vote.js)). | The **Node process** can join person → choice **if it logs or inspects bodies**. `stripBallotPii` does not strip the HTTP body; it strips banned keys from the **proof** object. Ranked elections **persist** `rankingPayload` on operator envelopes ([`store.acceptVote`](./apps/node/src/store.mjs)). |
@@ -196,7 +196,7 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 | **Single relayer** | JSON path sets `relayer: 'node'`. EVM path uses `RELAYER_PRIVATE_KEY`. All public senders look like the bundler. | Good for wallet unlinkability. Bad for **censorship / liveness** (one key can stall voting). Not a mixnet. |
 | **`opens_ballots` key** | Threshold **1**, private JWK on the Node. Never returned by `GET .../tally-key`. | That host **can** decrypt every envelope. Not guardians. |
 | **`sum_only`** | Invented partitions of the sum succeed. | Hides **individual** choice from the public; does **not** bind the operator to the real histogram. |
-| **Circuit vs disqualification** | `disqRoot` is bound; exclusion is membership in `eligibleRoot`. Node `assertCanVote` rejects disqualified commitments when `CHAIN_RPC` is unset. | MockVerifier does not enforce that. Remaining ZK gap: no non-membership proof ([README](./README.md) eligibility section). |
+| **Circuit vs disqualification** | Exclusion is membership in `eligibleRoot` (`registered ∩ ¬currently-disqualified`) on the Node and on chain. `disqRoot` is bound. Node `assertCanVote` still rejects the commitment when `CHAIN_RPC` is unset. | No non-membership proof in `vote.circom`. Unarmed MockVerifier does not evaluate the witness ([README](./README.md) eligibility section). |
 | **Coercion / receipts** | Receipt = nullifier, `ballotHash`, UserOp hash, holder token. PDF locked against edit. `receiptsProveChoice: false`. | A coercer who watches the **screen**, copies the device, or demands the **witness** (trapdoor / marked paper) still wins. No last-vote-counts. Not MACI. |
 | **Hourly interval `0`** | Tests and local instant demo. | Publishes immediately. Do not use on a public polling place. |
 | **EVM `acceptedBallots()`** | Increments **immediately** on `submitVote`. | If BallotInbox is on a **public EVM RPC**, live inbox size / `VoteAccepted` is visible even while the Node explorer still waits for the hour. Civic JSON L2 **seals** vote txs until the hour closes (`eth_getTransactionByHash` → null). Know which path you deployed. |

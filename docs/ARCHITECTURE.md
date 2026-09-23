@@ -340,14 +340,19 @@ Time: `block.timestamp < startTime` → not open. `>= cutoffTime` → closed.
 ```solidity
 function register(uint256 electionId, uint256 identityCommitment) external;
 function isRegistered(uint256 electionId, uint256 identityCommitment) external view returns (bool);
-function merkleRoot(uint256 electionId) external view returns (bytes32);
+function isEligible(uint256 electionId, uint256 identityCommitment) external view returns (bool);
+function merkleRoot(uint256 electionId) external view returns (bytes32); // registration roll, includes DQ
+function eligibleCount(uint256 electionId) external view returns (uint256);
+function rebuildEligibleRoot(uint256 electionId) external returns (bytes32);
 function leafIndexOf(uint256 electionId, uint256 identityCommitment) external view returns (uint256);
 function participantCount(uint256 electionId) external view returns (uint256);
 ```
 
 `register` is called by `REGISTRAR_ROLE` or by a voter UserOp after the Node
 has approved documents off-chain. The **leaf is the identity commitment**,
-never the wallet address, never a name.
+never the wallet address, never a name. `merkleRoot` is the append-only
+registration roll. `Election.eligibleRoot` is the intersection below.
+`rebuildEligibleRoot` is only for the disqualification registry.
 
 **Future (not in `IVoterRegistry`):** `registerWithProof`, a production
 `merklePath` helper (do not leak PII).
@@ -592,8 +597,11 @@ when it is not. CI must not supply mainnet keys.
 5. If `maxParticipants > 0`, `participantCount <= maxParticipants`.
 6. `electionCount` equals number of successful `createElection`.
 7. After tally, `sum(counts) == acceptedBallots`.
-8. Disqualified commitment cannot produce an accepted vote when the mock
-   verifier is in "check disqualification set" mode (handler simulates this).
+8. A coded disqualification drops that commitment from `eligibleRoot`.
+   An inclusion witness for the disqualified leaf does not verify against
+   the published root. `BallotInbox` rejects a proof whose public root is
+   still the registration roll. `MockVerifier` enforces the inclusion check
+   when a test arms the witness; `acceptAll` alone does not.
 9. Factory clones never share nullifier storage.
 
 `foundry.toml` sets `via_ir = true`, solc **0.8.24**, fuzz **256** runs.
@@ -804,13 +812,23 @@ Each person also sets a **vote PIN** used on a scrambled keypad at ballot submit
 Many ETH addresses may be verified internally; only one is active. The
 Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 
-### Eligible set on the Node path
+### Eligible set
 
-Product rule: **`eligible = registered ∩ ¬currently-disqualified`** (registration
-order). The Node rebuilds `eligibleRoot` on register, disqualify, and revoke.
-`POST /api/elections/:id/freeze` snapshots `frozenEligibleRoot` and
-`frozenDisqualificationRoot` — those are the roots for the open window unless
-the election was created with `lateUpdateAllowed` (discouraged).
+Product rule: **`eligible = registered ∩ ¬currently-disqualified`**, in
+registration order. Node freeze roots and `Election.eligibleRoot` use that
+same incremental tree (depth from the election, `republic.hash.keccak-dev-v1`
+on the Node and in Foundry).
+
+| Path | What publishes the eligible root |
+| --- | --- |
+| Node | `rebuildEligibleTree` on register, disqualify, and revoke. `POST /api/elections/:id/freeze` copies it to `frozenEligibleRoot`. While the roll is frozen and `lateUpdateAllowed` is false, votes bind to that snapshot. |
+| Chain | `VoterRegistry.merkleRoot` stays the append-only registration roll (disqualified commitments remain). Each register republishes `Election.eligibleRoot` from the intersection. `disqualify` / `revoke` rebuild that root, then publish the new disqualification-log root. After `freezeRoll`, those writes revert unless `lateUpdateAllowed`. |
+
+`BallotInbox` requires `publicInputs[0] == eligibleRoot` and
+`publicInputs[1] == disqualificationRoot`. A membership witness for a
+disqualified commitment hashes to the registration roll, not to the published
+eligible root, so the inbox rejects it (`EligibleRootMismatch`) even when
+`MockVerifier.acceptAll` is true.
 
 When `CHAIN_RPC` is unset, `POST /api/elections/:id/vote` requires
 `identityCommitment` and rejects with:
@@ -825,15 +843,37 @@ When `CHAIN_RPC` is unset, `POST /api/elections/:id/vote` requires
 `identityCommitment` is checked then discarded. It is never stored on the
 vote or envelope.
 
-### ZK non-membership gap (not fixed in this layer)
+### Circuit constraint plan
 
-`vote.circom` binds `disqRoot` as a public input; it does **not** prove
-non-membership in the disqualification tree. Cryptographic exclusion of a
-disqualified person depends on membership in a correctly rebuilt eligible
-root. `MockVerifier` still accepts any proof. **Node enforcement is the
-product control until a non-membership (or equivalent) constraint exists and
-a production hasher/verifier replaces the mock.** This layer does not
-replace MockVerifier or Poseidon.
+`vote.circom` already requires Merkle inclusion of
+`Hash(trapdoor, nullifierSecret)` under public `root`. It does **not** add a
+second non-membership proof against the disqualification log. Exclusion is
+that `root` is the rebuilt eligible set, so a disqualified leaf has no path.
+`disqRoot` stays a public bind: the proof names the log the inbox publishes,
+and `Hash(disqRoot, root)` is constrained so the signal cannot be dropped.
+
+Foundry CI has no Groth16 key. `MockVerifier.armInclusionWitness` plus
+`setInclusionHasher` makes `verifyProof` evaluate that same inclusion under
+`publicInputs[0]`. After a coded disqualification the disqualified witness
+returns false and `submitVote` reverts `InvalidProof`. A still-eligible
+witness against the rebuilt root verifies. Unarmed proofs still follow
+`acceptAll`.
+
+### Remaining ZK gap
+
+- No in-circuit non-membership of the disqualification log. A publisher who
+  set `eligibleRoot` back to the registration roll would let a disqualified
+  person prove again. These contracts no longer do that. The circuit does
+  not independently check it. A full non-membership gate needs another Merkle
+  path and a tree whose leaves are the identity commitments (the on-chain log
+  stores `Hash(commitment, Hash(reason, revokedFlag))` instead).
+- On-chain `disqualificationRoot` is that append-only event log. The Node's
+  `disqualificationRoot` is a rebuild of currently-disqualified identity
+  commitments. Do not treat those two byte strings as the same root.
+- `MockVerifier` without an armed witness does not evaluate the witness. A
+  dummy proof that copies the published roots still verifies. `VoteVerifier`
+  with a real key is what makes inclusion binding. This layer does not
+  replace that key or Poseidon.
 
 ### Pages (vanilla JS, served by Express)
 

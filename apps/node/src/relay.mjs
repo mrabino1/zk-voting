@@ -2,8 +2,9 @@
 // Relays a vote proof to BallotInbox when CHAIN_RPC is set; otherwise accepts
 // into the local store for demo. Never writes passkey user id onto a ballot.
 // When CHAIN_RPC is unset, the Node rejects ballots whose identityCommitment is
-// not in registered ∩ ¬currently-disqualified (the circuit still may not prove
-// non-disqualification; see docs/ARCHITECTURE.md).
+// not in registered ∩ ¬currently-disqualified. The chain publishes that same
+// intersection as eligibleRoot. The circuit proves membership in it and only
+// binds disqRoot; see docs/ARCHITECTURE.md.
 
 import { keccak256, toHex } from 'viem';
 
