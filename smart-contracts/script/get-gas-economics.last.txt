@@ -1,0 +1,572 @@
+Republic gas economics (zk-voting)
+Port of nuursha scripts/get-gas-economics.sh, adapted to Republic deployables.
+OUT_DIR: /workspace/smart-contracts/out
+
+Market
+  ETH/USD:  2,684.75  (CoinGecko)
+  Gas:      0.1406 gwei  (https://ethereum-rpc.publicnode.com eth_gasPrice)
+  USD = gas * gwei * 1e-9 * ETH_USD
+
+Bytecode vs EIP-170 (runtime <= 24576) and EIP-3860 (initcode <= 49152)
+  Runtime is deployedBytecode. Initcode is bytecode. Metadata is included.
+  Election is the EIP-1167 implementation. Clones are ~45 bytes and are not a separate artifact.
+  PoseidonT3 is an internal library; its constants sit inside PoseidonHasher.
+
+  contract                      runtime    %170     init   %3860  status
+  ----------------------------------------------------------------------
+  Election                         3952   16.1%     3979    8.1%  ok
+  ElectionFactory                  3407   13.9%     7737   15.7%  ok
+  BallotInbox                      3360   13.7%     3531    7.2%  ok
+  VoterRegistry                    5500   22.4%     6050   12.3%  ok
+  PersonRegistry                   1375    5.6%     1673    3.4%  ok
+  DisqualificationRegistry         4290   17.5%     4833    9.8%  ok
+  JurisdictionRegistry             2883   11.7%     3099    6.3%  ok
+  KeccakHasher                      250    1.0%      276    0.6%  ok
+  PoseidonHasher                   8765   35.7%     8792   17.9%  ok
+  StandInHasher                     237    1.0%      263    0.5%  ok
+  MockVerifier                     3708   15.1%     3794    7.7%  ok
+  VoteVerifier                     2401    9.8%     2787    5.7%  ok
+  Groth16VerifierAdapter            954    3.9%     1166    2.4%  ok
+  Tally                            4366   17.8%     4530    9.2%  ok
+  RepublicPaymaster                1789    7.3%     2049    4.2%  ok
+  PasskeyAccountFactory            3861   15.7%     4029    8.2%  ok
+  PasskeyAccount                   2764   11.2%     3003    6.1%  ok
+  RepublicEntryPoint               2384    9.7%     2411    4.9%  ok
+  RollupSettlement                 1954    8.0%     2278    4.6%  ok
+  RepublicMailbox                  2232    9.1%     2418    4.9%  ok
+  L1TallyMirror                    4094   16.7%     4321    8.8%  ok
+
+Size summary: 21 contracts, 0 over EIP-170, 0 over EIP-3860, 0 missing
+OVER EIP-170: none
+OVER EIP-3860: none
+
+Deployment schedule floor (not a forge measurement)
+  gas = 21000 + calldata(16 per nonzero init byte, 4 per zero) + 32000 CREATE
+        + 2 gas per 32-byte init word (EIP-3860) + 200 gas per runtime byte.
+  Constructor execution (SSTORE and external calls) is not included.
+
+  contract                        floor gas          usd
+  ------------------------------------------------------
+  Election                          906,450      $0.3421
+  ElectionFactory                   857,668      $0.3237
+  BallotInbox                       779,786      $0.2943
+  VoterRegistry                   1,245,380      $0.4701
+  PersonRegistry                    353,374      $0.1334
+  DisqualificationRegistry          984,432      $0.3716
+  JurisdictionRegistry              679,174      $0.2563
+  KeccakHasher                      107,386      $0.0405
+  PoseidonHasher                  1,946,406      $0.7347
+  StandInHasher                     104,542      $0.0395
+  MockVerifier                      852,530      $0.3218
+  VoteVerifier                      577,296      $0.2179
+  Groth16VerifierAdapter            260,658      $0.0984
+  Tally                             997,320      $0.3764
+  RepublicPaymaster                 440,678      $0.1663
+  PasskeyAccountFactory             885,044      $0.3341
+  PasskeyAccount                    650,628      $0.2456
+  RepublicEntryPoint                568,000      $0.2144
+  RollupSettlement                  479,792      $0.1811
+  RepublicMailbox                   537,028      $0.2027
+  L1TallyMirror                     940,812      $0.3551
+
+Usage (Nuursha NFT / claim / ERC-20 tables omitted)
+  Republic has no token and no voter fee. Voters do not pay L1 or L2 gas
+  on the civic path. The ranges below are order-of-magnitude scenarios from
+  voting_cost_estimate.md. This repo does not ship a measured submitBatch snapshot
+  in that document. Pass --gas-report for Foundry gas on the key calls.
+
+  op                                                          gas      usd low     usd high
+  ------------------------------------------------------------------------------------------
+  RollupSettlement.submitBatch mockMode          50,000–150,000       $0.0189      $0.0566
+  RollupSettlement.submitBatch real Groth16     230,000–350,000       $0.0868      $0.1321
+  L1TallyMirror.postResult                       40,000–100,000       $0.0151      $0.0377
+
+  - RollupSettlement.submitBatch mockMode: SSTORE + event, no pairing
+  - RollupSettlement.submitBatch real Groth16: industry BN254 verify + store; not measured here
+  - L1TallyMirror.postResult: once per election
+
+Key calls a --gas-report snapshot covers:
+  BallotInbox.submitVote, ElectionFactory.createElection, VoterRegistry.register,
+  Tally.submitTally / submitOpenedTally, RollupSettlement.submitBatch,
+  L1TallyMirror.postResult, RepublicPaymaster.validateAndPay.
+
+forge gas-report (key calls)
+  forge test --via-ir --gas-report on BallotInbox, ElectionFactory, ElectionLifecycle,
+  VoterRegistry, PersonRegistry, Tally, RollupSettlement, L1TallyMirror, Paymaster.
+  Fuzz and invariant tests are not included.
+
+No files changed, compilation skipped
+
+Ran 7 tests for test/L1TallyMirror.t.sol:L1TallyMirrorTest
+[PASS] testAdminCanPostResult() (gas: 183072)
+[PASS] testAlreadyPostedReverts() (gas: 196975)
+[PASS] testPackedCountsHashIsStable() (gas: 1257)
+[PASS] testPostAttachesRollupStateRoot() (gas: 422953)
+[PASS] testPublisherCanPostAfterGrant() (gas: 264728)
+[PASS] testStrangerCannotPost() (gas: 43004)
+[PASS] testStrangerCannotSetPublisher() (gas: 37239)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.09ms (591.38µs CPU time)
+
+Ran 5 tests for test/ElectionFactory.t.sol:ElectionFactoryTest
+[PASS] testCloneStorageIsIsolatedAcrossElections() (gas: 2192533)
+[PASS] testCreateStoresParamsOnClone() (gas: 566669)
+[PASS] testCreatesManyElectionsWithDistinctAddressesAndIsolatedIds() (gas: 6403515)
+[PASS] testGetElectionUnknownIdIsZero() (gas: 13503)
+[PASS] testStartTimeGteCutoffTimeReverts() (gas: 85636)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 5.08ms (2.36ms CPU time)
+
+Ran 5 tests for test/Paymaster.t.sol:PaymasterTest
+[PASS] testAdminCanToggleAlwaysSponsor() (gas: 107293)
+[PASS] testAlwaysSponsorDefaultsTrueAndPays() (gas: 27571)
+[PASS] testAlwaysSponsorFalseRequiresSponsoredTarget() (gas: 113162)
+[PASS] testDepositFundsPaymaster() (gas: 35240)
+[PASS] testHandleOpsDoesNotDebitVoterWhenAlwaysSponsor() (gas: 182011)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 8.18ms (861.63µs CPU time)
+
+Ran 9 tests for test/PersonRegistry.t.sol:PersonRegistryTest
+[PASS] testAdminCanActWithoutExtraGrant() (gas: 133396)
+[PASS] testCannotStealVerifiedAddress() (gas: 129925)
+[PASS] testNonRegistrarCannotVerifyOrSetActive() (gas: 144553)
+[PASS] testOneAddressBoundToOnePerson_secondPersonCannotClaimIt() (gas: 129903)
+[PASS] testSetActiveRequiresVerified() (gas: 41925)
+[PASS] testSetActiveSameAddressReverts() (gas: 168104)
+[PASS] testVerifyIsIdempotentForSamePerson() (gas: 119762)
+[PASS] testVerifyTwoAddressesOnlyOneActive() (gas: 327602)
+[PASS] testZeroPersonAndZeroAddressRevert() (gas: 187720)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 819.95µs (429.68µs CPU time)
+
+Ran 4 tests for test/RollupSettlement.t.sol:RollupSettlementTest
+[PASS] testDataHashMismatchReverts() (gas: 102868)
+[PASS] testNonSequentialBatchIndexReverts() (gas: 64040)
+[PASS] testSequentialBatchesAdvanceStateRoot() (gas: 506701)
+[PASS] testWrongPrevStateRootReverts() (gas: 66448)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 3.10ms (470.74µs CPU time)
+
+Ran 18 tests for test/BallotInbox.t.sol:BallotInboxTest
+[PASS] testDistinctNullifiersCountSeparately() (gas: 566463)
+[PASS] testDoubleVoteSameNullifierReverts() (gas: 494096)
+[PASS] testHappyPathSubmitVoteWithMockVerifier() (gas: 346877)
+[PASS] testNullifiersIsolatedPerElection() (gas: 2404569)
+[PASS] testOnceOnly_doubleVoteSameNullifierReverts() (gas: 494008)
+[PASS] testOnceOnly_identityCommitmentNullifierIsElectionScoped() (gas: 4408977)
+[PASS] testOnceOnly_multiQuestionElectionStillOneBallotPerNullifier() (gas: 2204752)
+[PASS] testOnceOnly_sameIdentityDifferentCiphertextStillRejected() (gas: 500290)
+[PASS] testPerElection_differentVotersDistinctNullifiersBothSucceed() (gas: 566155)
+[PASS] testPerElection_distinctNullifiersSucceedWhenQuestionCountIsTwo() (gas: 2277163)
+[PASS] testPerElection_mindChangeSameElectionStillRejected() (gas: 500026)
+[PASS] testPerElection_multiQuestionStillOneBallotPerNullifier() (gas: 2204422)
+[PASS] testPerElection_sameIdentityFirstVoteInEachElectionSucceeds() (gas: 4409175)
+[PASS] testPerElection_sameIdentitySecondSubmitReverts() (gas: 494052)
+[PASS] testSecondBallotDifferentCiphertextReverts() (gas: 500010)
+[PASS] testVoteWithoutFreezeReverts() (gas: 1790994)
+[PASS] testVotingAfterCutoffReverts() (gas: 165850)
+[PASS] testVotingBeforeStartReverts() (gas: 171007)
+Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 19.46ms (19.06ms CPU time)
+
+Ran 9 tests for test/ElectionLifecycle.t.sol:ElectionLifecycleTest
+[PASS] testCreatedStateBeforeFreeze() (gas: 44345)
+[PASS] testFreezeRollBlocksNewRegisters() (gas: 1360296)
+[PASS] testMaxParticipantsCap() (gas: 2623877)
+[PASS] testMaxParticipantsZeroIsUnlimitedRegister20() (gas: 13993889)
+[PASS] testStartTimeGteCutoffTimeReverts() (gas: 86150)
+[PASS] testStateClosedAfterCutoff() (gas: 184153)
+[PASS] testVotingAfterCutoffReverts() (gas: 1402036)
+[PASS] testVotingBeforeStartReverts() (gas: 1397231)
+[PASS] testVotingDuringWindowSucceeds() (gas: 1600388)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 27.17ms (26.44ms CPU time)
+
+Ran 15 tests for test/Tally.t.sol:TallyTest
+[PASS] testAlreadyTalliedReverts() (gas: 2324682)
+[PASS] testBallotRootChainsAcceptedHashes() (gas: 2745500)
+[PASS] testCreateElectionStoresTallySchemeAndPubKey() (gas: 615948)
+[PASS] testInvalidTallySchemeReverts() (gas: 52525)
+[PASS] testMockInstanceHasSixWordsVersionOne() (gas: 1872)
+[PASS] testNonOperatorCannotTally() (gas: 2210352)
+[PASS] testOpensBallotsHappyPathPlurality() (gas: 5163137)
+[PASS] testOpensBallotsOpeningLengthMustEqualAccepted() (gas: 2877187)
+[PASS] testOpensBallotsOptionOutOfRangeReverts() (gas: 2241287)
+[PASS] testOpensBallotsRejectsInventedCountsThatOnlyMatchTheSum() (gas: 3628918)
+[PASS] testOpensBallotsSubmitTallyRevertsWithoutOpenings() (gas: 3534144)
+[PASS] testSubmitTallyBeforeCutoffReverts() (gas: 2171091)
+[PASS] testSumOnlyAllowsAnyPartitionOfAccepted() (gas: 2973502)
+[PASS] testSumOnlyInventedPartitionStillSucceedsOnLegacyPath() (gas: 2943474)
+[PASS] testSumOnlyWrongSumReverts() (gas: 2856542)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 23.04ms (27.07ms CPU time)
+
+Ran 6 tests for test/VoterRegistry.t.sol:VoterRegistryTest
+[PASS] testDuplicateCommitmentReverts() (gas: 1252434)
+[PASS] testFreezeBlocksNewRegisters() (gas: 1326815)
+[PASS] testMaxParticipantsCap() (gas: 2171901)
+[PASS] testMaxParticipantsZeroUnlimitedRegister20() (gas: 14191064)
+[PASS] testRegisterInsertsIdentityCommitmentNotWallet() (gas: 1203212)
+[PASS] testRegistrationsIsolatedPerElection() (gas: 2852225)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 27.96ms (30.68ms CPU time)
+
+╭------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/BallotInbox.sol:BallotInbox Contract |                 |        |        |        |         |
++=================================================================================================+
+| Deployment Cost                          | Deployment Size |        |        |        |         |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                        0 |            3563 |        |        |        |         |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                          |                 |        |        |        |         |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                            | Min             | Avg    | Median | Max    | # Calls |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| acceptedBallots                          |            2313 |   2313 |   2313 |   2313 |      53 |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| ballotHashAt                             |            4606 |   4606 |   4606 |   4606 |       2 |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| ballotHashOf                             |            2490 |   2490 |   2490 |   2490 |      11 |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| ballotRoot                               |            2365 |   2365 |   2365 |   2365 |       4 |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| grantRole                                |           21778 |  22097 |  22162 |  22162 |     744 |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| nullifierUsed                            |            2564 |   2564 |   2564 |   2564 |      26 |
+|------------------------------------------+-----------------+--------+--------+--------+---------|
+| submitVote                               |           40043 | 184902 | 184692 | 236112 |      64 |
+╰------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭--------------------------------------------------------------------+-----------------+-------+--------+-------+---------╮
+| src/DisqualificationRegistry.sol:DisqualificationRegistry Contract |                 |       |        |       |         |
++=========================================================================================================================+
+| Deployment Cost                                                    | Deployment Size |       |        |       |         |
+|--------------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                                                  0 |            4897 |       |        |       |         |
+|--------------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                                                    |                 |       |        |       |         |
+|--------------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| Function Name                                                      | Min             | Avg   | Median | Max   | # Calls |
+|--------------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| grantRole                                                          |           21831 | 22150 |  22215 | 22215 |     744 |
+|--------------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| isDisqualified                                                     |             560 |  1560 |   1560 |  2560 |    1024 |
+|--------------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| merkleRoot                                                         |            2404 |  2404 |   2404 |  2404 |      64 |
+╰--------------------------------------------------------------------+-----------------+-------+--------+-------+---------╯
+
+╭------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/Election.sol:Election Contract |                 |        |        |        |         |
++===========================================================================================+
+| Deployment Cost                    | Deployment Size |        |        |        |         |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+|                                  0 |            3979 |        |        |        |         |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+|                                    |                 |        |        |        |         |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                      | Min             | Avg    | Median | Max    | # Calls |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| bumpParticipantCount               |            5511 |  13981 |   5511 |  22611 |     107 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| disqualificationRoot               |            2526 |   2526 |   2526 |   2526 |     230 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| electionId                         |            2253 |   2253 |   2253 |   2253 |      12 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| eligibleRoot                       |            2504 |   2504 |   2504 |   2504 |     123 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| factory                            |            2462 |   2462 |   2462 |   2462 |      12 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| freezeRoll                         |            7375 |   7375 |   7375 |   7375 |      44 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| inbox                              |            2588 |   2588 |   2588 |   2588 |      10 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| initialize                         |          362896 | 365018 | 362896 | 422596 |      75 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| params                             |            4337 |  15429 |   4337 |  30337 |     661 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| participantCount                   |            2284 |   2284 |   2284 |   2284 |       4 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| rollFrozen                         |            2568 |   2568 |   2568 |   2568 |     179 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| setRoots                           |            7511 |  15981 |   7511 |  24611 |     107 |
+|------------------------------------+-----------------+--------+--------+--------+---------|
+| state                              |           15677 |  18202 |  18923 |  20008 |       6 |
+╰------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭--------------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/ElectionFactory.sol:ElectionFactory Contract |                 |        |        |        |         |
++=========================================================================================================+
+| Deployment Cost                                  | Deployment Size |        |        |        |         |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                          1749818 |            7801 |        |        |        |         |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                  |                 |        |        |        |         |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                    | Min             | Avg    | Median | Max    | # Calls |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| admin                                            |            2609 |   2609 |   2609 |   2609 |     744 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| createElection                                   |           27280 | 462381 | 495211 | 554971 |      80 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| disqualificationRegistry                         |             346 |    554 |    346 |   2346 |    1024 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| electionCount                                    |            2410 |   2410 |   2410 |   2410 |       2 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| getElection                                      |            2515 |   2515 |   2515 |   2515 |     202 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| grantRole                                        |           26670 |  44846 |  46570 |  46570 |     744 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| hashLeftRight                                    |             438 |    438 |    438 |    438 |     124 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| implementation                                   |            2368 |   2368 |   2368 |   2368 |       1 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| setImplementation                                |           29150 |  29150 |  29150 |  29150 |      62 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| setJurisdictionRegistry                          |           26023 |  32656 |  26023 |  45923 |     186 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| setModules                                       |           34192 |  34192 |  34192 |  34192 |      62 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| tallyVerifier                                    |            2500 |   2500 |   2500 |   2500 |      65 |
+|--------------------------------------------------+-----------------+--------+--------+--------+---------|
+| wireModules                                      |           25265 |  69506 |  69506 | 113748 |     124 |
+╰--------------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭------------------------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/JurisdictionRegistry.sol:JurisdictionRegistry Contract |                 |        |        |        |         |
++===================================================================================================================+
+| Deployment Cost                                            | Deployment Size |        |        |        |         |
+|------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                          0 |            3131 |        |        |        |         |
+|------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                            |                 |        |        |        |         |
+|------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                              | Min             | Avg    | Median | Max    | # Calls |
+|------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| createJurisdiction                                         |          116711 | 116711 | 116711 | 116711 |      62 |
+╰------------------------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭------------------------------------------------+-----------------+-------+--------+-------+---------╮
+| src/PersonRegistry.sol:PersonRegistry Contract |                 |       |        |       |         |
++=====================================================================================================+
+| Deployment Cost                                | Deployment Size |       |        |       |         |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                              0 |            1705 |       |        |       |         |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                                |                 |       |        |       |         |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| Function Name                                  | Min             | Avg   | Median | Max   | # Calls |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| activeAddress                                  |            2355 |  2355 |   2355 |  2355 |       4 |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| grantRole                                      |           44501 | 44501 |  44501 | 44501 |       9 |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| isVerified                                     |            2586 |  2586 |   2586 |  2586 |       1 |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| personOf                                       |            2428 |  2428 |   2428 |  2428 |       4 |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| setActive                                      |           24192 | 35112 |  29063 | 51011 |       9 |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| verified                                       |            2630 |  2630 |   2630 |  2630 |       6 |
+|------------------------------------------------+-----------------+-------+--------+-------+---------|
+| verifyAddress                                  |           24254 | 52969 |  70916 | 70916 |      15 |
+╰------------------------------------------------+-----------------+-------+--------+-------+---------╯
+
+╭------------------------------+-----------------+--------+--------+--------+---------╮
+| src/Tally.sol:Tally Contract |                 |        |        |        |         |
++=====================================================================================+
+| Deployment Cost              | Deployment Size |        |        |        |         |
+|------------------------------+-----------------+--------+--------+--------+---------|
+|                            0 |            4562 |        |        |        |         |
+|------------------------------+-----------------+--------+--------+--------+---------|
+|                              |                 |        |        |        |         |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                | Min             | Avg    | Median | Max    | # Calls |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| grantRole                    |           21778 |  22097 |  22162 |  22162 |     744 |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| isTallied                    |            2443 |   2443 |   2443 |   2443 |      67 |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| openingsHash                 |            2343 |   2343 |   2343 |   2343 |       1 |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| postedScheme                 |            2371 |   2371 |   2371 |   2371 |       2 |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| submitOpenedTally            |           79347 | 114819 |  81554 | 251395 |       5 |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| submitTally                  |           25401 |  98538 |  76291 | 157677 |       8 |
+|------------------------------+-----------------+--------+--------+--------+---------|
+| tally                        |            7350 |   8105 |   7350 |   9615 |       3 |
+╰------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭----------------------------------------------+-----------------+--------+--------+---------+---------╮
+| src/VoterRegistry.sol:VoterRegistry Contract |                 |        |        |         |         |
++======================================================================================================+
+| Deployment Cost                              | Deployment Size |        |        |         |         |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+|                                            0 |            6114 |        |        |         |         |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+|                                              |                 |        |        |         |         |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| Function Name                                | Min             | Avg    | Median | Max     | # Calls |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| grantRole                                    |           49961 |  50280 |  50345 |   50345 |     744 |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| isRegistered                                 |            2551 |   2551 |   2551 |    2551 |      26 |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| leafIndexOf                                  |            2495 |   2495 |   2495 |    2495 |       2 |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| merkleRoot                                   |            2375 |   2375 |   2375 |    2375 |       1 |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| participantCount                             |            2318 |   2318 |   2318 |    2318 |      10 |
+|----------------------------------------------+-----------------+--------+--------+---------+---------|
+| register                                     |           69238 | 830012 | 856934 | 1155992 |     112 |
+╰----------------------------------------------+-----------------+--------+--------+---------+---------╯
+
+╭--------------------------------------------------------+-----------------+------+--------+------+---------╮
+| src/account/PasskeyAccount.sol:PasskeyAccount Contract |                 |      |        |      |         |
++===========================================================================================================+
+| Deployment Cost                                        | Deployment Size |      |        |      |         |
+|--------------------------------------------------------+-----------------+------+--------+------+---------|
+|                                                      0 |            3131 |      |        |      |         |
+|--------------------------------------------------------+-----------------+------+--------+------+---------|
+|                                                        |                 |      |        |      |         |
+|--------------------------------------------------------+-----------------+------+--------+------+---------|
+| Function Name                                          | Min             | Avg  | Median | Max  | # Calls |
+|--------------------------------------------------------+-----------------+------+--------+------+---------|
+| nonce                                                  |            2382 | 2382 |   2382 | 2382 |       1 |
+╰--------------------------------------------------------+-----------------+------+--------+------+---------╯
+
+╭----------------------------------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/account/PasskeyAccountFactory.sol:PasskeyAccountFactory Contract |                 |        |        |        |         |
++=============================================================================================================================+
+| Deployment Cost                                                      | Deployment Size |        |        |        |         |
+|----------------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                                    0 |            4061 |        |        |        |         |
+|----------------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                                      |                 |        |        |        |         |
+|----------------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                                        | Min             | Avg    | Median | Max    | # Calls |
+|----------------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| createAccount                                                        |          623726 | 623726 | 623726 | 623726 |       5 |
+╰----------------------------------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭----------------------------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/account/RepublicEntryPoint.sol:RepublicEntryPoint Contract |                 |        |        |        |         |
++=======================================================================================================================+
+| Deployment Cost                                                | Deployment Size |        |        |        |         |
+|----------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                              0 |            2411 |        |        |        |         |
+|----------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                                |                 |        |        |        |         |
+|----------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                                  | Min             | Avg    | Median | Max    | # Calls |
+|----------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| getUserOpHash                                                  |            2640 |   2640 |   2640 |   2640 |       1 |
+|----------------------------------------------------------------+-----------------+--------+--------+--------+---------|
+| handleOps                                                      |          119400 | 119400 | 119400 | 119400 |       1 |
+╰----------------------------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭--------------------------------------------------------------+-----------------+-------+--------+-------+---------╮
+| src/account/RepublicPaymaster.sol:RepublicPaymaster Contract |                 |       |        |       |         |
++===================================================================================================================+
+| Deployment Cost                                              | Deployment Size |       |        |       |         |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                                            0 |            2113 |       |        |       |         |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                                              |                 |       |        |       |         |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| Function Name                                                | Min             | Avg   | Median | Max   | # Calls |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| alwaysSponsor                                                |            2348 |  2348 |   2348 |  2348 |       4 |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| deposit                                                      |           22799 | 22799 |  22799 | 22799 |      63 |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| setAlwaysSponsor                                             |           21585 | 24895 |  24818 | 27618 |      66 |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| setSponsoredTargets                                          |           30788 | 72711 |  73388 | 73388 |      63 |
+|--------------------------------------------------------------+-----------------+-------+--------+-------+---------|
+| validateAndPay                                               |            2485 |  4415 |   3211 |  7550 |       3 |
+╰--------------------------------------------------------------+-----------------+-------+--------+-------+---------╯
+
+╭---------------------------------------------------+-----------------+-----+--------+-----+---------╮
+| src/hasher/KeccakHasher.sol:KeccakHasher Contract |                 |     |        |     |         |
++====================================================================================================+
+| Deployment Cost                                   | Deployment Size |     |        |     |         |
+|---------------------------------------------------+-----------------+-----+--------+-----+---------|
+|                                                 0 |             276 |     |        |     |         |
+|---------------------------------------------------+-----------------+-----+--------+-----+---------|
+|                                                   |                 |     |        |     |         |
+|---------------------------------------------------+-----------------+-----+--------+-----+---------|
+| Function Name                                     | Min             | Avg | Median | Max | # Calls |
+|---------------------------------------------------+-----------------+-----+--------+-----+---------|
+| hashLeftRight                                     |             336 | 336 |    336 | 336 |   12588 |
+╰---------------------------------------------------+-----------------+-----+--------+-----+---------╯
+
+╭-------------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/l2/L1TallyMirror.sol:L1TallyMirror Contract |                 |        |        |        |         |
++========================================================================================================+
+| Deployment Cost                                 | Deployment Size |        |        |        |         |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                               0 |            4385 |        |        |        |         |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                 |                 |        |        |        |         |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                   | Min             | Avg    | Median | Max    | # Calls |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| claimedStateRoot                                |            2431 |   2431 |   2431 |   2431 |       3 |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| postResult                                      |           28706 | 126733 | 155643 | 195827 |       6 |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| resultHashOf                                    |            2343 |   2343 |   2343 |   2343 |       4 |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| setPublisher                                    |           24063 |  35153 |  35153 |  46244 |       2 |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| totalBallotsOf                                  |            2629 |   2629 |   2629 |   2629 |       2 |
+╰-------------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭-------------------------------------------------------+-----------------+-------+--------+--------+---------╮
+| src/l2/RollupSettlement.sol:RollupSettlement Contract |                 |       |        |        |         |
++=============================================================================================================+
+| Deployment Cost                                       | Deployment Size |       |        |        |         |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+|                                                571063 |            2438 |       |        |        |         |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+|                                                       |                 |       |        |        |         |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| Function Name                                         | Min             | Avg   | Median | Max    | # Calls |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| admin                                                 |            2540 |  2540 |   2540 |   2540 |       1 |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| batchCount                                            |            2254 |  2254 |   2254 |   2254 |       9 |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| computeDataHash                                       |             689 |   689 |    689 |    689 |       6 |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| grantRole                                             |           23881 | 24200 |  24265 |  24265 |     744 |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| stateRoot                                             |            2454 |  2454 |   2454 |   2454 |      11 |
+|-------------------------------------------------------+-----------------+-------+--------+--------+---------|
+| submitBatch                                           |           28133 | 85170 |  82241 | 150032 |       8 |
+╰-------------------------------------------------------+-----------------+-------+--------+--------+---------╯
+
+╭-----------------------------------------------+-----------------+-------+--------+-------+---------╮
+| src/zk/MockVerifier.sol:MockVerifier Contract |                 |       |        |       |         |
++====================================================================================================+
+| Deployment Cost                               | Deployment Size |       |        |       |         |
+|-----------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                             0 |            3794 |       |        |       |         |
+|-----------------------------------------------+-----------------+-------+--------+-------+---------|
+|                                               |                 |       |        |       |         |
+|-----------------------------------------------+-----------------+-------+--------+-------+---------|
+| Function Name                                 | Min             | Avg   | Median | Max   | # Calls |
+|-----------------------------------------------+-----------------+-------+--------+-------+---------|
+| setAccept                                     |           23726 | 23726 |  23726 | 23726 |     124 |
+|-----------------------------------------------+-----------------+-------+--------+-------+---------|
+| verifyProof                                   |            2873 |  7027 |   7309 |  7309 |      63 |
+╰-----------------------------------------------+-----------------+-------+--------+-------+---------╯
+
+╭---------------------------------------------+-----------------+------+--------+------+---------╮
+| test/Paymaster.t.sol:PaymasterSink Contract |                 |      |        |      |         |
++================================================================================================+
+| Deployment Cost                             | Deployment Size |      |        |      |         |
+|---------------------------------------------+-----------------+------+--------+------+---------|
+|                                       85851 |             175 |      |        |      |         |
+|---------------------------------------------+-----------------+------+--------+------+---------|
+|                                             |                 |      |        |      |         |
+|---------------------------------------------+-----------------+------+--------+------+---------|
+| Function Name                               | Min             | Avg  | Median | Max  | # Calls |
+|---------------------------------------------+-----------------+------+--------+------+---------|
+| value                                       |            2247 | 2247 |   2247 | 2247 |       1 |
+╰---------------------------------------------+-----------------+------+--------+------+---------╯
+
+
+Ran 9 test suites in 79.29ms (115.89ms CPU time): 78 tests passed, 0 failed, 0 skipped (78 total tests)

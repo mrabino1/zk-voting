@@ -29,4 +29,15 @@ Unit tests use `MockVerifier`. `UntrustedGroth16Test` verifies a real untrusted 
 REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
+## Gas economics
+
+Spot ETH and gas, then compiled bytecode versus EIP-170 (24,576 bytes) and EIP-3860 (49,152 bytes):
+
+```bash
+forge build --via-ir
+./script/get-gas-economics.sh
+```
+
+From the repository root: `./scripts/get-gas-economics.sh`. Add `--gas-report` to append a Foundry gas snapshot for the inbox, factory, registries, tally, rollup settlement, the L1 tally mirror, and the paymaster. Nuursha NFT mint and claim tables are not part of this script.
+
 Solidity 0.8.24. License AGPL-3.0-or-later. See `/NOT_FOR_PROFIT.md`.
