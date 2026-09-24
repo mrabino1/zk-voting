@@ -4,7 +4,7 @@ OUT_DIR: /workspace/smart-contracts/out
 
 Market
   ETH/USD:  2,684.75  (CoinGecko)
-  Gas:      0.1277 gwei  (https://ethereum-rpc.publicnode.com eth_gasPrice)
+  Gas:      0.1406 gwei  (https://ethereum-rpc.publicnode.com eth_gasPrice)
   USD = gas * gwei * 1e-9 * ETH_USD
 
 Bytecode vs EIP-170 (runtime <= 24576) and EIP-3860 (initcode <= 49152)
@@ -47,27 +47,27 @@ Deployment schedule floor (not a forge measurement)
 
   contract                        floor gas          usd
   ------------------------------------------------------
-  Election                          906,450      $0.3108
-  ElectionFactory                   857,668      $0.2941
-  BallotInbox                       779,786      $0.2674
-  VoterRegistry                   1,245,380      $0.4270
-  PersonRegistry                    353,374      $0.1212
-  DisqualificationRegistry          984,432      $0.3376
-  JurisdictionRegistry              679,174      $0.2329
-  KeccakHasher                      107,386      $0.0368
-  PoseidonHasher                  1,946,406      $0.6674
-  StandInHasher                     104,542      $0.0358
-  MockVerifier                      852,530      $0.2923
-  VoteVerifier                      577,296      $0.1979
-  Groth16VerifierAdapter            260,658      $0.0894
-  Tally                             997,320      $0.3420
-  RepublicPaymaster                 440,678      $0.1511
-  PasskeyAccountFactory             885,044      $0.3035
-  PasskeyAccount                    650,628      $0.2231
-  RepublicEntryPoint                568,000      $0.1948
-  RollupSettlement                  479,792      $0.1645
-  RepublicMailbox                   537,028      $0.1841
-  L1TallyMirror                     940,812      $0.3226
+  Election                          906,450      $0.3421
+  ElectionFactory                   857,668      $0.3237
+  BallotInbox                       779,786      $0.2943
+  VoterRegistry                   1,245,380      $0.4701
+  PersonRegistry                    353,374      $0.1334
+  DisqualificationRegistry          984,432      $0.3716
+  JurisdictionRegistry              679,174      $0.2563
+  KeccakHasher                      107,386      $0.0405
+  PoseidonHasher                  1,946,406      $0.7347
+  StandInHasher                     104,542      $0.0395
+  MockVerifier                      852,530      $0.3218
+  VoteVerifier                      577,296      $0.2179
+  Groth16VerifierAdapter            260,658      $0.0984
+  Tally                             997,320      $0.3764
+  RepublicPaymaster                 440,678      $0.1663
+  PasskeyAccountFactory             885,044      $0.3341
+  PasskeyAccount                    650,628      $0.2456
+  RepublicEntryPoint                568,000      $0.2144
+  RollupSettlement                  479,792      $0.1811
+  RepublicMailbox                   537,028      $0.2027
+  L1TallyMirror                     940,812      $0.3551
 
 Usage (Nuursha NFT / claim / ERC-20 tables omitted)
   Republic has no token and no voter fee. Voters do not pay L1 or L2 gas
@@ -77,9 +77,9 @@ Usage (Nuursha NFT / claim / ERC-20 tables omitted)
 
   op                                                          gas      usd low     usd high
   ------------------------------------------------------------------------------------------
-  RollupSettlement.submitBatch mockMode          50,000–150,000       $0.0171      $0.0514
-  RollupSettlement.submitBatch real Groth16     230,000–350,000       $0.0789      $0.1200
-  L1TallyMirror.postResult                       40,000–100,000       $0.0137      $0.0343
+  RollupSettlement.submitBatch mockMode          50,000–150,000       $0.0189      $0.0566
+  RollupSettlement.submitBatch real Groth16     230,000–350,000       $0.0868      $0.1321
+  L1TallyMirror.postResult                       40,000–100,000       $0.0151      $0.0377
 
   - RollupSettlement.submitBatch mockMode: SSTORE + event, no pairing
   - RollupSettlement.submitBatch real Groth16: industry BN254 verify + store; not measured here
@@ -97,13 +97,23 @@ forge gas-report (key calls)
 
 No files changed, compilation skipped
 
+Ran 7 tests for test/L1TallyMirror.t.sol:L1TallyMirrorTest
+[PASS] testAdminCanPostResult() (gas: 183072)
+[PASS] testAlreadyPostedReverts() (gas: 196975)
+[PASS] testPackedCountsHashIsStable() (gas: 1257)
+[PASS] testPostAttachesRollupStateRoot() (gas: 422953)
+[PASS] testPublisherCanPostAfterGrant() (gas: 264728)
+[PASS] testStrangerCannotPost() (gas: 43004)
+[PASS] testStrangerCannotSetPublisher() (gas: 37239)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.09ms (591.38µs CPU time)
+
 Ran 5 tests for test/ElectionFactory.t.sol:ElectionFactoryTest
 [PASS] testCloneStorageIsIsolatedAcrossElections() (gas: 2192533)
 [PASS] testCreateStoresParamsOnClone() (gas: 566669)
 [PASS] testCreatesManyElectionsWithDistinctAddressesAndIsolatedIds() (gas: 6403515)
 [PASS] testGetElectionUnknownIdIsZero() (gas: 13503)
 [PASS] testStartTimeGteCutoffTimeReverts() (gas: 85636)
-Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 4.89ms (2.28ms CPU time)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 5.08ms (2.36ms CPU time)
 
 Ran 5 tests for test/Paymaster.t.sol:PaymasterTest
 [PASS] testAdminCanToggleAlwaysSponsor() (gas: 107293)
@@ -111,7 +121,7 @@ Ran 5 tests for test/Paymaster.t.sol:PaymasterTest
 [PASS] testAlwaysSponsorFalseRequiresSponsoredTarget() (gas: 113162)
 [PASS] testDepositFundsPaymaster() (gas: 35240)
 [PASS] testHandleOpsDoesNotDebitVoterWhenAlwaysSponsor() (gas: 182011)
-Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 8.28ms (891.88µs CPU time)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 8.18ms (861.63µs CPU time)
 
 Ran 9 tests for test/PersonRegistry.t.sol:PersonRegistryTest
 [PASS] testAdminCanActWithoutExtraGrant() (gas: 133396)
@@ -123,14 +133,14 @@ Ran 9 tests for test/PersonRegistry.t.sol:PersonRegistryTest
 [PASS] testVerifyIsIdempotentForSamePerson() (gas: 119762)
 [PASS] testVerifyTwoAddressesOnlyOneActive() (gas: 327602)
 [PASS] testZeroPersonAndZeroAddressRevert() (gas: 187720)
-Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 845.80µs (437.96µs CPU time)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 819.95µs (429.68µs CPU time)
 
 Ran 4 tests for test/RollupSettlement.t.sol:RollupSettlementTest
 [PASS] testDataHashMismatchReverts() (gas: 102868)
 [PASS] testNonSequentialBatchIndexReverts() (gas: 64040)
 [PASS] testSequentialBatchesAdvanceStateRoot() (gas: 506701)
 [PASS] testWrongPrevStateRootReverts() (gas: 66448)
-Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 3.06ms (559.79µs CPU time)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 3.10ms (470.74µs CPU time)
 
 Ran 18 tests for test/BallotInbox.t.sol:BallotInboxTest
 [PASS] testDistinctNullifiersCountSeparately() (gas: 566463)
@@ -151,7 +161,7 @@ Ran 18 tests for test/BallotInbox.t.sol:BallotInboxTest
 [PASS] testVoteWithoutFreezeReverts() (gas: 1790994)
 [PASS] testVotingAfterCutoffReverts() (gas: 165850)
 [PASS] testVotingBeforeStartReverts() (gas: 171007)
-Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 20.12ms (19.30ms CPU time)
+Suite result: ok. 18 passed; 0 failed; 0 skipped; finished in 19.46ms (19.06ms CPU time)
 
 Ran 9 tests for test/ElectionLifecycle.t.sol:ElectionLifecycleTest
 [PASS] testCreatedStateBeforeFreeze() (gas: 44345)
@@ -163,17 +173,7 @@ Ran 9 tests for test/ElectionLifecycle.t.sol:ElectionLifecycleTest
 [PASS] testVotingAfterCutoffReverts() (gas: 1402036)
 [PASS] testVotingBeforeStartReverts() (gas: 1397231)
 [PASS] testVotingDuringWindowSucceeds() (gas: 1600388)
-Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 27.49ms (24.18ms CPU time)
-
-Ran 7 tests for test/L1TallyMirror.t.sol:L1TallyMirrorTest
-[PASS] testAdminCanPostResult() (gas: 183072)
-[PASS] testAlreadyPostedReverts() (gas: 196975)
-[PASS] testPackedCountsHashIsStable() (gas: 1257)
-[PASS] testPostAttachesRollupStateRoot() (gas: 422953)
-[PASS] testPublisherCanPostAfterGrant() (gas: 264728)
-[PASS] testStrangerCannotPost() (gas: 43004)
-[PASS] testStrangerCannotSetPublisher() (gas: 37239)
-Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 728.57µs (426.66µs CPU time)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 27.17ms (26.44ms CPU time)
 
 Ran 15 tests for test/Tally.t.sol:TallyTest
 [PASS] testAlreadyTalliedReverts() (gas: 2324682)
@@ -191,7 +191,7 @@ Ran 15 tests for test/Tally.t.sol:TallyTest
 [PASS] testSumOnlyAllowsAnyPartitionOfAccepted() (gas: 2973502)
 [PASS] testSumOnlyInventedPartitionStillSucceedsOnLegacyPath() (gas: 2943474)
 [PASS] testSumOnlyWrongSumReverts() (gas: 2856542)
-Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 23.53ms (30.05ms CPU time)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 23.04ms (27.07ms CPU time)
 
 Ran 6 tests for test/VoterRegistry.t.sol:VoterRegistryTest
 [PASS] testDuplicateCommitmentReverts() (gas: 1252434)
@@ -200,7 +200,7 @@ Ran 6 tests for test/VoterRegistry.t.sol:VoterRegistryTest
 [PASS] testMaxParticipantsZeroUnlimitedRegister20() (gas: 14191064)
 [PASS] testRegisterInsertsIdentityCommitmentNotWallet() (gas: 1203212)
 [PASS] testRegistrationsIsolatedPerElection() (gas: 2852225)
-Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 24.93ms (23.72ms CPU time)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 27.96ms (30.68ms CPU time)
 
 ╭------------------------------------------+-----------------+--------+--------+--------+---------╮
 | src/BallotInbox.sol:BallotInbox Contract |                 |        |        |        |         |
@@ -569,4 +569,4 @@ Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 24.93ms (23.72ms CP
 ╰---------------------------------------------+-----------------+------+--------+------+---------╯
 
 
-Ran 9 test suites in 83.76ms (113.87ms CPU time): 78 tests passed, 0 failed, 0 skipped (78 total tests)
+Ran 9 test suites in 79.29ms (115.89ms CPU time): 78 tests passed, 0 failed, 0 skipped (78 total tests)
