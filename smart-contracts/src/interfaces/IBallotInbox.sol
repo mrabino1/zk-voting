@@ -25,4 +25,19 @@ interface IBallotInbox {
     function ballotRoot(uint256 electionId) external view returns (bytes32);
 
     function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
+
+    /// @notice Same as submitVote, plus a live external-party gate.
+    /// @dev `identityCommitment` is used only for the gate. It is not stored
+    ///      and is not in VoteAccepted. Calldata on an EVM is still public;
+    ///      the civic L2 path checks then discards the commitment.
+    function submitVoteWithClearance(
+        uint256 electionId,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot,
+        uint256 identityCommitment,
+        uint256[] calldata mustAttestIds
+    ) external;
 }

@@ -96,7 +96,8 @@ contract JurisdictionRegistryTest is Test {
         registry.setClerk(jid, newClerk);
         assertEq(registry.clerkOf(jid), newClerk);
         assertTrue(registry.isClerk(jid, newClerk));
-        assertTrue(registry.isClerk(jid, clerk));
+        assertFalse(registry.isClerk(jid, clerk));
+        assertTrue(registry.isOfficer(jid, clerk));
     }
 
     function testGrantOfficerByClerk() public {
@@ -105,7 +106,8 @@ contract JurisdictionRegistryTest is Test {
         registry.createJurisdiction(jid, clerk, "Ward");
         vm.prank(clerk);
         registry.grantOfficer(jid, officer);
-        assertTrue(registry.isClerk(jid, officer));
+        assertTrue(registry.isOfficer(jid, officer));
+        assertFalse(registry.isClerk(jid, officer));
     }
 
     function testGrantOfficerZeroReverts() public {

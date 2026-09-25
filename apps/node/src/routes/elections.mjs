@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 
-import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody } from '../auth.mjs';
+import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody, requirePlatformOperator } from '../auth.mjs';
 import {
   electionHasRanked,
   normalizeBallotMethod,
@@ -34,6 +34,8 @@ import {
   resolveVoterForOutcomeSubscribe,
   subscribeVoterToOutcome,
 } from '../outcomeReports.mjs';
+import { partiesRouter } from './parties.mjs';
+import { publicUser } from '../roles.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -217,6 +219,57 @@ export function electionsRouter(deps) {
         links: dto.links,
         nfp: true,
       });
+    }),
+  );
+
+  router.use('/:id/parties', partiesRouter(deps));
+
+  router.get(
+    '/:id/staff',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      if (!store.userIsElectionStaff(req.user, election)) {
+        throw new HttpError(403, 'forbidden', {
+          role: req.user.role,
+          jurisdictionId: election.jurisdictionId,
+        });
+      }
+      res.json({
+        nfp: true,
+        electionId: String(election.id),
+        staff: store.listElectionStaff(election),
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/staff',
+    requireAuth,
+    requirePlatformOperator,
+    asyncHandler(async (req, res) => {
+      const result = await store.approveElectionStaff(req.params.id, req.body || {});
+      res.status(201).json({
+        ok: true,
+        nfp: true,
+        staff: result.staff,
+        user: publicUser(result.user),
+      });
+    }),
+  );
+
+  router.delete(
+    '/:id/staff',
+    requireAuth,
+    requirePlatformOperator,
+    asyncHandler(async (req, res) => {
+      const result = await store.revokeElectionStaff(req.params.id, {
+        ...(req.body || {}),
+        handle: req.body?.handle || req.query?.handle,
+        userId: req.body?.userId || req.query?.userId,
+        address: req.body?.address || req.query?.address,
+      });
+      res.json({ ok: true, nfp: true, user: publicUser(result.user) });
     }),
   );
 

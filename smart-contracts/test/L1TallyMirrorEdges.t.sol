@@ -44,8 +44,9 @@ contract L1TallyMirrorEdgesTest is Test {
     }
 
     function testPostingZeroHashDoesNotLockSlot() public {
-        // resultHashOf == 0 is the "empty" sentinel, so a zero hash does not trip AlreadyPosted.
+        // Zero resultHash is rejected; the slot stays empty so a real post can follow.
         vm.prank(admin);
+        vm.expectRevert(L1TallyMirror.ZeroResultHash.selector);
         mirror.postResult(1, bytes32(0), 0, bytes32(0));
         assertEq(mirror.resultHashOf(1), bytes32(0));
 

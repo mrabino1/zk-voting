@@ -1,7 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import { parseCookies, setSessionCookie, clearSessionCookie, clearMfaCookie, HttpError } from './http.mjs';
-import { publicUser } from './roles.mjs';
+import { isPlatformOperator, isSuperAdmin, publicUser } from './roles.mjs';
 
 export function attachAuth(store, config) {
   return function authMiddleware(req, _res, next) {
@@ -31,7 +31,7 @@ export function requireRole(...roles) {
       next(new HttpError(401, 'unauthenticated'));
       return;
     }
-    if (req.user.role === 'platform_admin' || roles.includes(req.user.role)) {
+    if (isPlatformOperator(req.user) || roles.includes(req.user.role)) {
       next();
       return;
     }
@@ -39,11 +39,39 @@ export function requireRole(...roles) {
   };
 }
 
-/** Clerk / registrar / tally / disqualification officer on a jurisdiction, or platform_admin. */
+export function requireSuperAdmin(req, _res, next) {
+  if (!req.user) {
+    next(new HttpError(401, 'unauthenticated'));
+    return;
+  }
+  if (isSuperAdmin(req.user)) {
+    next();
+    return;
+  }
+  next(new HttpError(403, 'forbidden', { role: req.user.role, required: 'platform_super_admin' }));
+}
+
+export function requirePlatformOperator(req, _res, next) {
+  if (!req.user) {
+    next(new HttpError(401, 'unauthenticated'));
+    return;
+  }
+  if (isPlatformOperator(req.user)) {
+    next();
+    return;
+  }
+  next(new HttpError(403, 'forbidden', { role: req.user.role }));
+}
+
+/** Clerk / registrar / tally / disqualification officer on a jurisdiction, or platform operator. */
 export function requireJurisdictionRoleFromBody(store, ...roles) {
   return function jurisdictionRoleMiddleware(req, _res, next) {
     if (!req.user) {
       next(new HttpError(401, 'unauthenticated'));
+      return;
+    }
+    if (isPlatformOperator(req.user)) {
+      next();
       return;
     }
     const jurisdictionId = String(req.body?.jurisdictionId || 'demo');
@@ -59,7 +87,7 @@ export function requireJurisdictionRoleFromBody(store, ...roles) {
   };
 }
 
-/** Officer on the election's jurisdiction, or platform_admin. */
+/** Officer on the election's jurisdiction, or platform operator. */
 export function requireElectionRole(store, ...roles) {
   return function electionRoleMiddleware(req, _res, next) {
     if (!req.user) {
@@ -72,6 +100,10 @@ export function requireElectionRole(store, ...roles) {
       return;
     }
     req.election = election;
+    if (isPlatformOperator(req.user)) {
+      next();
+      return;
+    }
     if (store.userHasJurisdictionRole(req.user, roles, election.jurisdictionId)) {
       next();
       return;
@@ -85,11 +117,15 @@ export function requireElectionRole(store, ...roles) {
   };
 }
 
-/** Officer on any jurisdiction, or platform_admin (person-level registrar tools). */
+/** Officer on any jurisdiction, or platform operator (person-level registrar tools). */
 export function requireAnyJurisdictionRole(store, ...roles) {
   return function anyJurisdictionRoleMiddleware(req, _res, next) {
     if (!req.user) {
       next(new HttpError(401, 'unauthenticated'));
+      return;
+    }
+    if (isPlatformOperator(req.user)) {
+      next();
       return;
     }
     if (store.userHasAnyJurisdictionRole(req.user, roles)) {
@@ -112,4 +148,4 @@ export async function destroySession(req, res, store, config) {
   clearMfaCookie(res, config);
 }
 
-export { publicUser };
+export { publicUser, isSuperAdmin, isPlatformOperator };

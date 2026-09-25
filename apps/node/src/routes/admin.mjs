@@ -3,9 +3,9 @@
 import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
-import { requireAuth, requireRole, publicUser } from '../auth.mjs';
+import { requireAuth, requireRole, requireSuperAdmin, publicUser } from '../auth.mjs';
 import { REASON_CODES } from '../reasonCodes.mjs';
-import { OFFICER_ROLES, ROLES } from '../roles.mjs';
+import { APPROVAL_CHAIN, isPlatformOperator, isSuperAdmin, OFFICER_ROLES, ROLES } from '../roles.mjs';
 
 function publicJurisdiction(row) {
   if (!row) return null;
@@ -18,7 +18,7 @@ function publicJurisdiction(row) {
 
 function canSeeOfficers(store, user) {
   if (!user) return false;
-  if (user.role === 'platform_admin') return true;
+  if (isPlatformOperator(user)) return true;
   return store.userHasAnyJurisdictionRole(user, OFFICER_ROLES);
 }
 
@@ -51,7 +51,12 @@ export function adminRouter(deps) {
   });
 
   router.get('/roles', (_req, res) => {
-    res.json({ nfp: true, roles: ROLES, officerRoles: OFFICER_ROLES });
+    res.json({
+      nfp: true,
+      roles: ROLES,
+      officerRoles: OFFICER_ROLES,
+      approvalChain: APPROVAL_CHAIN,
+    });
   });
 
   router.get(
@@ -168,6 +173,44 @@ export function adminRouter(deps) {
     }),
   );
 
+  router.get(
+    '/admin/admins',
+    requireAuth,
+    requireRole('platform_admin'),
+    asyncHandler(async (_req, res) => {
+      res.json({
+        nfp: true,
+        admins: store.listAdmins().map((user) => publicUser(user)),
+      });
+    }),
+  );
+
+  router.post(
+    '/admin/admins',
+    requireAuth,
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      const user = await store.approveAdmin({
+        userId: req.body?.userId,
+        handle: req.body?.handle,
+      });
+      res.status(201).json({ ok: true, nfp: true, user: publicUser(user) });
+    }),
+  );
+
+  router.delete(
+    '/admin/admins',
+    requireAuth,
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      const user = await store.revokeAdmin({
+        userId: req.body?.userId || req.query?.userId,
+        handle: req.body?.handle || req.query?.handle,
+      });
+      res.json({ ok: true, nfp: true, user: publicUser(user) });
+    }),
+  );
+
   router.patch(
     '/users/:id',
     requireAuth,
@@ -175,6 +218,23 @@ export function adminRouter(deps) {
     asyncHandler(async (req, res) => {
       const role = req.body?.role;
       if (!role) throw new HttpError(400, 'role required');
+      const target = store.getUser(req.params.id);
+      if (!target) throw new HttpError(404, 'user not found');
+      const elevating =
+        role === 'platform_admin' ||
+        role === 'platform_super_admin' ||
+        target.role === 'platform_super_admin';
+      if (elevating && !isSuperAdmin(req.user)) {
+        throw new HttpError(403, 'only a platform super admin may approve admins', {
+          role: req.user.role,
+        });
+      }
+      if (target.role === 'platform_super_admin' && role !== 'platform_super_admin') {
+        const supers = store.listAdmins().filter((u) => u.role === 'platform_super_admin');
+        if (supers.length <= 1) {
+          throw new HttpError(400, 'cannot demote the last platform super admin');
+        }
+      }
       const user = await store.updateUserRole(req.params.id, role);
       res.json({ ok: true, user: publicUser(user), nfp: true });
     }),

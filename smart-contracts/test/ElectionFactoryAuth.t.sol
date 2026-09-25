@@ -90,9 +90,9 @@ contract ElectionFactoryAuthTest is Deployer {
         factory.createElection(p);
     }
 
-    function testStrangerCreateElectionRevertsMissingRole() public {
+    function testStrangerCreateElectionRevertsNotJurisdictionClerk() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.MissingRole.selector);
+        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(defaultParams());
     }
 
@@ -102,15 +102,16 @@ contract ElectionFactoryAuthTest is Deployer {
         assertEq(id, 1);
         assertTrue(el != address(0));
         assertTrue(factory.isElectionStaff(id, clerk));
+        assertTrue(factory.getPartyRegistry(id) != address(0));
     }
 
-    function testClerkRoleHolderCanCreateEvenIfNotParamsClerk() public {
+    function testClerkRoleHolderWithoutJurisdictionCannotCreate() public {
         address extraClerk = makeAddr("extraClerk");
         vm.prank(admin);
         factory.grantRole(Roles.CLERK_ROLE, extraClerk);
         vm.prank(extraClerk);
-        (uint256 id,) = factory.createElection(defaultParams());
-        assertEq(id, 1);
+        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        factory.createElection(defaultParams());
     }
 
     function testApproveAdminZeroReverts() public {

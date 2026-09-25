@@ -39,7 +39,7 @@ import {
   syncPersonEmails,
 } from './identity.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
-import { isOfficerRole, isRole } from './roles.mjs';
+import { isOfficerRole, isPlatformOperator, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 import {
   defaultSite,
@@ -121,6 +121,9 @@ function emptyData() {
     outcomeReports: [],
     outcomeReportDeliveries: [],
     outcomeReportTemplate: null,
+    externalParties: [],
+    partyRejections: [],
+    partyAttestations: [],
   };
 }
 
@@ -183,6 +186,9 @@ export class Store {
       data.outcomeReportDeliveries = Array.isArray(data.outcomeReportDeliveries)
         ? data.outcomeReportDeliveries
         : [];
+      data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
+      data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
+      data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
@@ -210,6 +216,9 @@ export class Store {
     if (!Array.isArray(store.data.outcomeSubscriptions)) store.data.outcomeSubscriptions = [];
     if (!Array.isArray(store.data.outcomeReports)) store.data.outcomeReports = [];
     if (!Array.isArray(store.data.outcomeReportDeliveries)) store.data.outcomeReportDeliveries = [];
+    if (!Array.isArray(store.data.externalParties)) store.data.externalParties = [];
+    if (!Array.isArray(store.data.partyRejections)) store.data.partyRejections = [];
+    if (!Array.isArray(store.data.partyAttestations)) store.data.partyAttestations = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
@@ -228,17 +237,17 @@ export class Store {
 
   async seed(config) {
     const handle = String(config.adminHandle || 'admin').trim() || 'admin';
-    const hasAdmin = this.data.users.some((u) => u.role === 'platform_admin');
-    if (!hasAdmin) {
+    const hasSuper = this.data.users.some((u) => u.role === 'platform_super_admin');
+    if (!hasSuper) {
       const existing = this.getUserByHandle(handle);
       if (existing) {
-        existing.role = 'platform_admin';
+        existing.role = 'platform_super_admin';
       } else {
         this.data.users.push(
           ensurePersonFields({
             id: randomUUID(),
             handle,
-            role: 'platform_admin',
+            role: 'platform_super_admin',
             createdAt: new Date().toISOString(),
             credentials: [],
             authMethods: [],
@@ -1085,6 +1094,7 @@ export class Store {
       tally: null,
       createdBy: params.createdBy || null,
       createdAt: new Date().toISOString(),
+      staff: [],
     };
     this.data.elections.push(election);
     await this.persist();
@@ -1303,6 +1313,401 @@ export class Store {
     if (!this.isRegistered(electionId, key)) {
       throw new HttpError(403, 'identity is not registered', { code: 'NOT_REGISTERED' });
     }
+  }
+
+  listAdmins() {
+    return this.data.users.filter(
+      (u) => u.role === 'platform_admin' || u.role === 'platform_super_admin',
+    );
+  }
+
+  async approveAdmin({ userId, handle } = {}) {
+    const user = this.resolveOfficerUser({ userId, handle });
+    if (!user) throw new HttpError(404, 'user not found');
+    if (user.role === 'platform_super_admin') {
+      throw new HttpError(400, 'cannot change a platform super admin with this approval');
+    }
+    user.role = 'platform_admin';
+    user.approvedAsAdminAt = new Date().toISOString();
+    await this.persist();
+    return user;
+  }
+
+  async revokeAdmin({ userId, handle } = {}) {
+    const user = this.resolveOfficerUser({ userId, handle });
+    if (!user) throw new HttpError(404, 'user not found');
+    if (user.role === 'platform_super_admin') {
+      throw new HttpError(400, 'cannot revoke the platform super admin');
+    }
+    if (user.role !== 'platform_admin') {
+      throw new HttpError(404, 'platform admin grant not found');
+    }
+    user.role = 'voter';
+    user.approvedAsAdminAt = null;
+    await this.persist();
+    return user;
+  }
+
+  userIsElectionStaff(user, election) {
+    if (!user || !election) return false;
+    if (isPlatformOperator(user)) return true;
+    if (this.userHasJurisdictionRole(user, ['election_staff', 'clerk'], election.jurisdictionId)) {
+      return true;
+    }
+    return (election.staff || []).some((grant) => this.officerMatchesUser(grant, user));
+  }
+
+  listElectionStaff(election) {
+    const out = [];
+    const seen = new Set();
+    const push = (row) => {
+      const key = `${row.userId || ''}::${row.handle || ''}::${row.address || ''}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(row);
+    };
+    for (const grant of election.staff || []) {
+      push({
+        electionId: String(election.id),
+        jurisdictionId: election.jurisdictionId,
+        role: 'election_staff',
+        source: 'election',
+        ...grant,
+      });
+    }
+    const jurisdiction = this.getJurisdiction(election.jurisdictionId);
+    for (const grant of jurisdiction?.officers || []) {
+      if (grant.role === 'election_staff' || grant.role === 'clerk') {
+        push({
+          electionId: String(election.id),
+          jurisdictionId: election.jurisdictionId,
+          role: grant.role,
+          source: 'jurisdiction',
+          ...grant,
+        });
+      }
+    }
+    return out;
+  }
+
+  async approveElectionStaff(electionId, { address, handle, userId } = {}) {
+    const election = this.requireElection(electionId);
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    if (!trimmedHandle && !trimmedAddress && !trimmedUserId) {
+      throw new HttpError(400, 'handle, userId, or address required');
+    }
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
+    election.staff = election.staff || [];
+    const exists = election.staff.some(
+      (grant) =>
+        (user && this.officerMatchesUser(grant, user)) ||
+        (trimmedUserId && grant.userId === trimmedUserId) ||
+        (trimmedHandle &&
+          String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()),
+    );
+    if (exists) {
+      return { election, staff: election.staff, user, created: false };
+    }
+    election.staff.push({
+      userId: user?.id || trimmedUserId || '',
+      handle: user?.handle || trimmedHandle,
+      address: trimmedAddress || user?.activeEthAddress || '',
+      role: 'election_staff',
+      grantedAt: new Date().toISOString(),
+    });
+    await this.persist();
+    return { election, staff: election.staff, user, created: true };
+  }
+
+  async revokeElectionStaff(electionId, { address, handle, userId } = {}) {
+    const election = this.requireElection(electionId);
+    const trimmedHandle = String(handle || '').trim();
+    const trimmedAddress = String(address || '').trim();
+    const trimmedUserId = String(userId || '').trim();
+    const user = this.resolveOfficerUser({
+      userId: trimmedUserId,
+      handle: trimmedHandle,
+      address: trimmedAddress,
+    });
+    const before = election.staff || [];
+    const next = before.filter((grant) => {
+      if (user && this.officerMatchesUser(grant, user)) return false;
+      if (trimmedUserId && grant.userId === trimmedUserId) return false;
+      if (
+        trimmedHandle &&
+        String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        trimmedAddress &&
+        String(grant.address || '').trim().toLowerCase() === trimmedAddress.toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+    if (next.length === before.length) {
+      throw new HttpError(404, 'election staff grant not found');
+    }
+    election.staff = next;
+    await this.persist();
+    return { election, user };
+  }
+
+  listElectionRolesForUser(user) {
+    if (!user) return [];
+    if (isPlatformOperator(user)) return [];
+    const out = [];
+    for (const election of this.data.elections) {
+      if (!this.userIsElectionStaff(user, election)) continue;
+      const onElection = (election.staff || []).some((g) => this.officerMatchesUser(g, user));
+      out.push({
+        electionId: String(election.id),
+        title: election.title,
+        role: 'election_staff',
+        source: onElection ? 'election' : 'jurisdiction',
+      });
+    }
+    return out;
+  }
+
+  listExternalParties(electionId, { includeEndpoint = false } = {}) {
+    const id = String(this.requireElection(electionId).id);
+    return (this.data.externalParties || [])
+      .filter((p) => String(p.electionId) === id)
+      .map((p) => this.presentExternalParty(p, { includeEndpoint }));
+  }
+
+  listActiveExternalParties(electionId) {
+    const id = String(this.requireElection(electionId).id);
+    return (this.data.externalParties || []).filter(
+      (p) => String(p.electionId) === id && p.status === 'active',
+    );
+  }
+
+  presentExternalParty(party, { includeEndpoint = false } = {}) {
+    if (!party) return null;
+    const row = {
+      id: party.id,
+      electionId: party.electionId,
+      name: party.name,
+      metadataURI: party.metadataURI || '',
+      mode: party.mode,
+      status: party.status,
+      operatorHandle: party.operatorHandle || '',
+      operatorUserId: party.operatorUserId || '',
+      operatorAddress: party.operatorAddress || '',
+      createdAt: party.createdAt,
+    };
+    if (includeEndpoint) {
+      row.endpointUrl = party.endpointUrl || '';
+      row.endpointTimeoutMs = party.endpointTimeoutMs || 2500;
+    }
+    return row;
+  }
+
+  getExternalParty(electionId, partyId) {
+    const id = String(this.requireElection(electionId).id);
+    return (
+      (this.data.externalParties || []).find(
+        (p) => String(p.electionId) === id && p.id === partyId,
+      ) || null
+    );
+  }
+
+  requireExternalParty(electionId, partyId) {
+    const party = this.getExternalParty(electionId, partyId);
+    if (!party) throw new HttpError(404, 'external party not found');
+    return party;
+  }
+
+  userOperatesParty(user, party) {
+    if (!user || !party) return false;
+    if (party.operatorUserId && party.operatorUserId === user.id) return true;
+    const handle = String(user.handle || '').trim().toLowerCase();
+    if (handle && String(party.operatorHandle || '').trim().toLowerCase() === handle) return true;
+    if (party.operatorAddress && sameEthAddress(user.activeEthAddress, party.operatorAddress)) {
+      return true;
+    }
+    return false;
+  }
+
+  async addExternalParty(electionId, input = {}) {
+    const election = this.requireElection(electionId);
+    const name = String(input.name || '').trim();
+    if (!name) throw new HttpError(400, 'name required');
+    const mode = String(input.mode || 'veto').trim();
+    if (mode !== 'veto' && mode !== 'must_attest') {
+      throw new HttpError(400, 'mode must be veto or must_attest');
+    }
+    const operatorHandle = String(input.operatorHandle || input.handle || '').trim();
+    const operatorUserId = String(input.operatorUserId || input.userId || '').trim();
+    const operatorAddress = String(input.operatorAddress || input.address || '').trim();
+    const operator = this.resolveOfficerUser({
+      userId: operatorUserId,
+      handle: operatorHandle,
+      address: operatorAddress,
+    });
+    if (!operator && !operatorHandle && !operatorAddress && !operatorUserId) {
+      throw new HttpError(400, 'operator handle, userId, or address required');
+    }
+    const endpointUrl = String(input.endpointUrl || '').trim();
+    if (endpointUrl && !/^https?:\/\//i.test(endpointUrl)) {
+      throw new HttpError(400, 'endpointUrl must be http(s)');
+    }
+    const party = {
+      id: randomUUID(),
+      electionId: String(election.id),
+      name,
+      metadataURI: String(input.metadataURI || ''),
+      mode,
+      status: input.status === 'paused' ? 'paused' : 'active',
+      operatorUserId: operator?.id || operatorUserId || '',
+      operatorHandle: operator?.handle || operatorHandle,
+      operatorAddress: operatorAddress || operator?.activeEthAddress || '',
+      endpointUrl,
+      endpointTimeoutMs: Number(input.endpointTimeoutMs) || 2500,
+      createdBy: input.createdBy || null,
+      createdAt: new Date().toISOString(),
+    };
+    this.data.externalParties.push(party);
+    await this.persist();
+    return { election, party };
+  }
+
+  async setExternalPartyStatus(electionId, partyId, status) {
+    const party = this.requireExternalParty(electionId, partyId);
+    if (status !== 'active' && status !== 'paused') {
+      throw new HttpError(400, 'status must be active or paused');
+    }
+    party.status = status;
+    await this.persist();
+    return party;
+  }
+
+  activePartyRejection(electionId, partyId, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    const id = String(this.requireElection(electionId).id);
+    return (
+      (this.data.partyRejections || []).find(
+        (r) =>
+          String(r.electionId) === id &&
+          r.partyId === partyId &&
+          r.identityCommitment === key &&
+          !r.revokedAt,
+      ) || null
+    );
+  }
+
+  activePartyAttestation(electionId, partyId, identityCommitment, now) {
+    const key = toBytes32(identityCommitment);
+    const id = String(this.requireElection(electionId).id);
+    const rec = (this.data.partyAttestations || []).find(
+      (a) =>
+        String(a.electionId) === id &&
+        a.partyId === partyId &&
+        a.identityCommitment === key &&
+        !a.revokedAt,
+    );
+    if (!rec) return null;
+    if (rec.expiresAt && Number(rec.expiresAt) > 0 && Number(rec.expiresAt) < Number(now)) {
+      return null;
+    }
+    return rec;
+  }
+
+  async recordPartyRejection(electionId, partyId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
+    const election = this.requireElection(electionId);
+    const party = this.requireExternalParty(election.id, partyId);
+    if (party.status !== 'active') throw new HttpError(409, 'party is paused');
+    if (!isValidReasonCode(reasonCode)) throw new HttpError(400, 'invalid reasonCode');
+    const key = toBytes32(identityCommitment);
+    if (this.activePartyRejection(election.id, party.id, key)) {
+      throw new HttpError(409, 'already rejected by this party');
+    }
+    const record = {
+      id: randomUUID(),
+      electionId: String(election.id),
+      partyId: party.id,
+      identityCommitment: key,
+      reasonCode: Number(reasonCode),
+      evidenceHash: evidenceHash ? toBytes32(evidenceHash) : toBytes32(0),
+      issuer: issuer || party.operatorHandle || 'external-party',
+      issuedAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    this.data.partyRejections.push(record);
+    await this.persist();
+    return { election, party, record };
+  }
+
+  async clearPartyRejection(electionId, partyId, { identityCommitment, evidenceHash, issuer }) {
+    const election = this.requireElection(electionId);
+    const party = this.requireExternalParty(election.id, partyId);
+    const rec = this.activePartyRejection(election.id, party.id, identityCommitment);
+    if (!rec) throw new HttpError(404, 'party rejection not found');
+    rec.revokedAt = new Date().toISOString();
+    rec.revokeEvidenceHash = evidenceHash ? toBytes32(evidenceHash) : toBytes32(0);
+    rec.revokedBy = issuer || 'external-party';
+    await this.persist();
+    return { election, party, record: rec };
+  }
+
+  async recordPartyAttestation(
+    electionId,
+    partyId,
+    { identityCommitment, expiresAt, evidenceHash, issuer },
+  ) {
+    const election = this.requireElection(electionId);
+    const party = this.requireExternalParty(election.id, partyId);
+    if (party.status !== 'active') throw new HttpError(409, 'party is paused');
+    if (party.mode !== 'must_attest') {
+      throw new HttpError(400, 'party is veto-only; attest does not apply');
+    }
+    const key = toBytes32(identityCommitment);
+    const existing = (this.data.partyAttestations || []).find(
+      (a) =>
+        String(a.electionId) === String(election.id) &&
+        a.partyId === party.id &&
+        a.identityCommitment === key &&
+        !a.revokedAt,
+    );
+    if (existing) {
+      existing.expiresAt = expiresAt == null || expiresAt === '' ? 0 : Number(expiresAt);
+      existing.evidenceHash = evidenceHash ? toBytes32(evidenceHash) : existing.evidenceHash;
+      existing.issuer = issuer || existing.issuer;
+      existing.issuedAt = new Date().toISOString();
+      await this.persist();
+      return { election, party, record: existing };
+    }
+    const record = {
+      id: randomUUID(),
+      electionId: String(election.id),
+      partyId: party.id,
+      identityCommitment: key,
+      expiresAt: expiresAt == null || expiresAt === '' ? 0 : Number(expiresAt),
+      evidenceHash: evidenceHash ? toBytes32(evidenceHash) : toBytes32(0),
+      issuer: issuer || party.operatorHandle || 'external-party',
+      issuedAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    this.data.partyAttestations.push(record);
+    await this.persist();
+    return { election, party, record };
+  }
+
+  listPartyRejections(electionId, partyId) {
+    const id = String(this.requireElection(electionId).id);
+    return (this.data.partyRejections || []).filter(
+      (r) => String(r.electionId) === id && (!partyId || r.partyId === partyId) && !r.revokedAt,
+    );
   }
 
   async disqualify(electionId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
