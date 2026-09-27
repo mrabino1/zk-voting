@@ -25,6 +25,8 @@ import { loadReceiptPdfSecret } from './receipts.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { authRouter } from './routes/auth.mjs';
 import { electionsRouter } from './routes/elections.mjs';
+import { pollsRouter } from './routes/polls.mjs';
+import { createTokenRegistry } from './tokenSource.mjs';
 import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
@@ -154,7 +156,14 @@ function spaFallback(config) {
 }
 
 export async function createApp(overrides = {}) {
-  const { chain: chainOverride, passkeyHooks, l1: l1Override, l1Hooks, ...configOverrides } = overrides;
+  const {
+    chain: chainOverride,
+    passkeyHooks,
+    l1: l1Override,
+    l1Hooks,
+    tokenRegistry: tokenRegistryOverride,
+    ...configOverrides
+  } = overrides;
   const config = getConfig(configOverrides);
   const store = await Store.open(config);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config);
@@ -167,7 +176,8 @@ export async function createApp(overrides = {}) {
   const terms = configOverrides.terms || createTermsService({ store, mailer, config });
   const mfa = createMfaService({ config, store, mailer, terms });
   const pin = createPinService({ store });
-  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms, pin };
+  const tokenRegistry = tokenRegistryOverride || createTokenRegistry(config);
+  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms, pin, tokenRegistry };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -204,6 +214,9 @@ export async function createApp(overrides = {}) {
   app.use(termsPdfRouter(deps));
   app.use('/api/auth', authRouter(deps));
   app.use('/api/elections', electionsRouter(deps));
+  if (config.pollsReady) {
+    app.use('/api/polls', pollsRouter(deps));
+  }
   app.use('/api/explorer', explorerRouter(deps));
   app.use('/api', identityRouter(deps));
   app.use('/api', pinRouter(deps));
@@ -216,7 +229,6 @@ export async function createApp(overrides = {}) {
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
   app.use('/api', configRouter(deps));
-  app.use('/api', mailRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });

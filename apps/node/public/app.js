@@ -38,6 +38,7 @@ import {
   homeDestination,
 } from "./audience.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
+import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
 import { renderReceiptPortal } from "./receipt.js";
 import { renderOutcomesIndex, renderOutcomesDetail } from "./outcomes.js";
@@ -513,16 +514,19 @@ export async function loadMe() {
 
 let chromeMe = null;
 let chromeExtra = [];
+let chromePollsEnabled = false;
 
-function updateNav(route, me, extraNav = []) {
+function updateNav(route, me, extraNav = [], pollsEnabled = false) {
   chromeMe = me;
   chromeExtra = extraNav;
+  chromePollsEnabled = pollsEnabled;
   applyAudienceChrome(document, {
     audience: audienceOf(me),
     currentPath: route.path,
     routeName: route.name,
     spa: true,
     extraNav,
+    pollsEnabled,
   });
 }
 
@@ -1096,8 +1100,15 @@ async function renderRoute(route) {
   try {
     const meHint = await loadMe();
     const cms = await loadPublicCms(api);
-    updateNav(route, meHint, cms.nav || []);
-    const context = { ...ctx(), route, me: meHint, cms };
+    let pollsEnabled = false;
+    try {
+      const cfg = await api("/api/config");
+      pollsEnabled = Boolean(cfg && cfg.pollsReady);
+    } catch {
+      pollsEnabled = false;
+    }
+    updateNav(route, meHint, cms.nav || [], pollsEnabled);
+    const context = { ...ctx(), route, me: meHint, cms, pollsEnabled };
 
     if (route.name === "home") {
       const audience = audienceOf(meHint);
@@ -1176,6 +1187,19 @@ async function renderRoute(route) {
         questionId: route.params.questionId,
         optionId: route.params.optionId,
       });
+    } else if (route.name === "polls" || route.name === "poll" || route.name === "pollVote" || route.name === "pollResults") {
+      if (!pollsEnabled) {
+        setTitle("Not found");
+        renderNotFound(main, route, meHint);
+      } else if (route.name === "polls") {
+        await renderPollsIndex(main, context);
+      } else if (route.name === "poll") {
+        await renderPollDetail(main, context);
+      } else if (route.name === "pollVote") {
+        await renderPollVote(main, context);
+      } else {
+        await renderPollResults(main, context);
+      }
     } else {
       setTitle("Not found");
       renderNotFound(main, route, meHint);
@@ -1205,6 +1229,6 @@ if (typeof document !== "undefined") {
     renderRoute(currentRoute());
   });
   window.addEventListener(LOCALE_EVENT, () => {
-    updateNav(currentRoute(), chromeMe, chromeExtra);
+    updateNav(currentRoute(), chromeMe, chromeExtra, chromePollsEnabled);
   });
 }

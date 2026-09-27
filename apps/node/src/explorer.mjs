@@ -24,6 +24,7 @@ function emptyChain(chainId) {
     blocks: [],
     txs: {},
     sealed: [],
+    sealedPolls: [],
   };
 }
 
@@ -82,6 +83,7 @@ export class Explorer {
     chain.blocks = chain.blocks || [];
     chain.txs = chain.txs || {};
     chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
+    chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
     const explorer = new Explorer(filePath, chain);
     await explorer.persist();
     return explorer;
@@ -103,6 +105,7 @@ export class Explorer {
         this.chain = onDisk;
         this.chain.txs = this.chain.txs || {};
         this.chain.sealed = Array.isArray(this.chain.sealed) ? this.chain.sealed : [];
+        this.chain.sealedPolls = Array.isArray(this.chain.sealedPolls) ? this.chain.sealedPolls : [];
       }
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
@@ -230,6 +233,49 @@ export class Explorer {
       );
       if (result) published.push(result.block);
     }
+    await this.disclosePolls(now, intervalSeconds);
+    return published;
+  }
+
+  async recordPollVote(payload, now, intervalSeconds) {
+    await this.refresh();
+    this.chain.sealedPolls = this.chain.sealedPolls || [];
+    const body = {
+      pollId: payload.pollId,
+      voter: payload.voter,
+      voteBlock: payload.voteBlock,
+      provisionalWeight: payload.provisionalWeight,
+      choicesHash: payload.choicesHash,
+      ballotDigest: payload.ballotDigest,
+    };
+    const interval = Number(intervalSeconds) || 0;
+    if (!interval || interval <= 0) {
+      return this.append('poll_vote', body, { timestamp: now });
+    }
+    this.chain.sealedPolls.push({ receivedAt: now, payload: body });
+    await this.persist();
+    return { sealed: true, published: false };
+  }
+
+  async disclosePolls(now, intervalSeconds) {
+    await this.refresh();
+    const interval = Number(intervalSeconds) || 0;
+    this.chain.sealedPolls = this.chain.sealedPolls || [];
+    if (!this.chain.sealedPolls.length) return [];
+    const remaining = [];
+    const ready = [];
+    for (const item of this.chain.sealedPolls) {
+      if (interval <= 0 || isDisclosed(item.receivedAt, now, interval)) ready.push(item);
+      else remaining.push(item);
+    }
+    this.chain.sealedPolls = remaining;
+    await this.persist();
+    const published = [];
+    for (const item of ready) {
+      const ts = interval > 0 ? hourBucket(item.receivedAt, interval) + interval : now;
+      const result = await this.append('poll_vote', item.payload, { timestamp: ts });
+      if (result) published.push(result.block);
+    }
     return published;
   }
 
@@ -262,7 +308,14 @@ export class Explorer {
     for (const row of rows) {
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
-      if (isDelayedPublicType(type) || type === 'vote_superseded') {
+      if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
+        if (type === 'poll_vote' && !l2Delayed) {
+          await this.recordPollVote(row.payload || {}, now, intervalSeconds);
+        } else {
+          await this.append(type, row.payload || row, { timestamp: blockTs || now });
+        }
+        imported += 1;
+      } else if (isDelayedPublicType(type) || type === 'vote_superseded') {
         const payload = votePayload(row.payload);
         if (!payload.nullifier) continue;
         if (this.findByNullifier(payload.nullifier) || this.sealedHasNullifier(payload.nullifier)) continue;

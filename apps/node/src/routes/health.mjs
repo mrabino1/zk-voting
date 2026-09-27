@@ -50,13 +50,20 @@ export function configRouter(deps) {
         nfp: true,
         app: 'zk-voting',
         product: 'Republic',
-        mail: {
-          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
-          note: 'Role-promotion mail is queued on the Node. It is never written to civic L2 transactions.',
-        },
         rpName: deps.config.rpName,
         rpID: deps.config.rpID,
         chainId: deps.config.chainId,
+        pollsEnabled: Boolean(deps.config.pollsEnabled),
+        pollsReady: Boolean(deps.config.pollsReady),
+        votingToken: {
+          configured: Boolean(deps.config.votingToken?.configured),
+          chainId: deps.config.votingToken?.chainId || 1,
+          address: deps.config.votingToken?.configured ? deps.config.votingToken.address : null,
+          reason: deps.config.pollsEnabled && !deps.config.votingToken?.configured
+            ? deps.config.votingToken?.reason || 'unset'
+            : null,
+          readOnly: true,
+        },
         origins: deps.config.origins,
         chainConfigured,
         sharedDeployment: true,
@@ -166,7 +173,7 @@ export function configRouter(deps) {
           circuitHashScheme: 'republic.hash.poseidon-bn254-x5-t3-v1',
           poseidonWired: true,
           groth16: 'untrusted-local-fixture-or-missing-keys',
-          note: 'Poseidon(2) matches the vote circuit, proof-helpers, and PoseidonHasher. Unit tests still use MockVerifier. The committed Groth16 check is an untrusted local setup, not a ceremony. Demo passkey commitments stay keccak-dev-v1.',
+          note: 'Poseidon(2) matches the vote circuit, proof-helpers, PoseidonHasher, and demo passkey commitments (prf-hkdf-poseidon-v3). Unit tests still use MockVerifier. The committed Groth16 check is an untrusted local setup, not a ceremony. The Node Merkle tree stays keccak-dev-v1.',
         },
         ballot: {
           methods: ['plurality', 'ranked_choice'],

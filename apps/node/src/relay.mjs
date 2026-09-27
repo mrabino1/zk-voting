@@ -301,7 +301,30 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       nextPublishAt: nextAt,
       pdfSha256: artifact.pdfSha256,
       integrity: artifact.integrity,
-      pdfProtected: true,
-    }),
+    pdfProtected: true,
+  }),
   };
+}
+
+const POLL_BALLOT_BANNED = new Set([
+  'userId',
+  'user_id',
+  'nullifier',
+  'pin',
+  'passkeyUserId',
+  'identityCommitment',
+  'credentialId',
+]);
+
+/** Token-poll ballots have no identity gate. Drop any identity keys and leave the civic relay alone. */
+export function relayTokenPollBallot(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new HttpError(400, 'invalid ballot', { code: 'INVALID_CHOICES' });
+  }
+  const out = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (POLL_BALLOT_BANNED.has(key)) continue;
+    out[key] = value;
+  }
+  return out;
 }

@@ -124,6 +124,9 @@ function emptyData() {
     externalParties: [],
     partyRejections: [],
     partyAttestations: [],
+    polls: [],
+    pollBallots: [],
+    pollResults: [],
     mailOutbox: [],
   };
 }
@@ -190,6 +193,9 @@ export class Store {
       data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
       data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
       data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
+      data.polls = Array.isArray(data.polls) ? data.polls : [];
+      data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
+      data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
       data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
@@ -221,6 +227,9 @@ export class Store {
     if (!Array.isArray(store.data.externalParties)) store.data.externalParties = [];
     if (!Array.isArray(store.data.partyRejections)) store.data.partyRejections = [];
     if (!Array.isArray(store.data.partyAttestations)) store.data.partyAttestations = [];
+    if (!Array.isArray(store.data.polls)) store.data.polls = [];
+    if (!Array.isArray(store.data.pollBallots)) store.data.pollBallots = [];
+    if (!Array.isArray(store.data.pollResults)) store.data.pollResults = [];
     if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
@@ -2692,5 +2701,85 @@ export class Store {
       reasonCode: dq ? dq.reasonCode : null,
       identityCommitment: link.identityCommitment,
     };
+  }
+
+  listPolls() {
+    return this.data.polls || [];
+  }
+
+  getPoll(id) {
+    const want = String(id ?? '');
+    return (this.data.polls || []).find((poll) => poll.id === want) || null;
+  }
+
+  async savePoll(poll) {
+    this.data.polls = this.data.polls || [];
+    const index = this.data.polls.findIndex((row) => row.id === poll.id);
+    if (index === -1) this.data.polls.push(poll);
+    else this.data.polls[index] = poll;
+    await this.persist();
+    return poll;
+  }
+
+  listPollBallots(pollId) {
+    return (this.data.pollBallots || []).filter((row) => row.pollId === pollId);
+  }
+
+  getPollBallot(pollId, voter) {
+    const who = String(voter || '').toLowerCase();
+    return (
+      (this.data.pollBallots || []).find(
+        (row) => row.pollId === pollId && String(row.voter || '').toLowerCase() === who,
+      ) || null
+    );
+  }
+
+  async insertPollBallot(ballot) {
+    if (ballot.userId != null) delete ballot.userId;
+    if (this.getPollBallot(ballot.pollId, ballot.voter)) {
+      throw new HttpError(409, 'address already voted', { code: 'ALREADY_VOTED' });
+    }
+    this.data.pollBallots = this.data.pollBallots || [];
+    this.data.pollBallots.push(ballot);
+    await this.persist();
+    return ballot;
+  }
+
+  async savePollBallot(ballot) {
+    if (ballot.userId != null) delete ballot.userId;
+    this.data.pollBallots = this.data.pollBallots || [];
+    const index = this.data.pollBallots.findIndex(
+      (row) => row.pollId === ballot.pollId && String(row.voter).toLowerCase() === String(ballot.voter).toLowerCase(),
+    );
+    if (index === -1) this.data.pollBallots.push(ballot);
+    else this.data.pollBallots[index] = ballot;
+    await this.persist();
+    return ballot;
+  }
+
+  getPollResult(pollId) {
+    return (this.data.pollResults || []).find((row) => row.pollId === pollId) || null;
+  }
+
+  async commitPollTally(poll, ballots, result) {
+    this.data.polls = this.data.polls || [];
+    const index = this.data.polls.findIndex((row) => row.id === poll.id);
+    if (index === -1) this.data.polls.push(poll);
+    else this.data.polls[index] = poll;
+    this.data.pollBallots = this.data.pollBallots || [];
+    for (const ballot of ballots) {
+      if (ballot.userId != null) delete ballot.userId;
+      const at = this.data.pollBallots.findIndex(
+        (row) => row.pollId === ballot.pollId && String(row.voter).toLowerCase() === String(ballot.voter).toLowerCase(),
+      );
+      if (at === -1) this.data.pollBallots.push(ballot);
+      else this.data.pollBallots[at] = ballot;
+    }
+    this.data.pollResults = this.data.pollResults || [];
+    const resultAt = this.data.pollResults.findIndex((row) => row.pollId === poll.id);
+    if (resultAt === -1) this.data.pollResults.push(result);
+    else this.data.pollResults[resultAt] = result;
+    await this.persist();
+    return result;
   }
 }

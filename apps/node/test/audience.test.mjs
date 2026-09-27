@@ -157,6 +157,10 @@ describe('audience helpers and FAQ', () => {
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
+    assert.ok(!pub.includes('Polls'));
+    const withPolls = mainNav('public', [], { pollsEnabled: true }).map((i) => i.label);
+    assert.ok(withPolls.includes('Polls'));
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Sign in', 'Register']);
   });
 
   test('officer detection matches Node roles helper', () => {

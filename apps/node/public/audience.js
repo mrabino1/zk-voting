@@ -104,14 +104,16 @@ export function signInHref(next) {
   return `/signin?next=${encodeURIComponent(safe)}`;
 }
 
-export function mainNav(audience, extraNav = []) {
+export function mainNav(audience, extraNav = [], options = {}) {
   const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
+  const polls = options && options.pollsEnabled ? [{ href: "/polls", label: t("polls.nav") }] : [];
   if (audience === "public") {
     return [
       { href: "/about", label: t("chrome.navAbout") },
       { href: "/faq", label: t("chrome.navFaq") },
       { href: "/receipt", label: t("chrome.navReceipt") },
       { href: "/outcomes", label: t("chrome.navOutcomes") },
+      ...polls,
       { href: "/terms", label: t("chrome.navTerms") },
       ...extra,
       { href: "/signin", label: t("chrome.navSignIn") },
@@ -122,6 +124,7 @@ export function mainNav(audience, extraNav = []) {
     { href: "/me", label: t("chrome.navDesk") },
     { href: "/register", label: t("chrome.navRegister") },
     { href: "/elections", label: t("chrome.navResults") },
+    ...polls,
     { href: "/receipt", label: t("chrome.navReceipt") },
     { href: "/outcomes", label: t("chrome.navOutcomes") },
     { href: "/terms", label: t("chrome.navTerms") },
@@ -151,12 +154,27 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   if (href === "/signin" && routeName === "signin") return true;
   if (href === "/register" && routeName === "register") return true;
   if (href === "/elections" && (routeName === "results" || routeName === "resultsIndex")) return true;
+  if (href === "/polls" && (path === "/polls" || path.startsWith("/polls/"))) return true;
   return false;
 }
 
-export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [] } = {}) {
+export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [], pollsEnabled = false } = {}) {
   if (!nav) return;
-  const items = mainNav(audience || "public", extraNav);
+  const items = mainNav(audience || "public", extraNav, { pollsEnabled });
+  const existing = [...nav.querySelectorAll(":scope > ul > li > a")];
+  const unchanged =
+    existing.length === items.length &&
+    items.every((item, i) => {
+      const a = existing[i];
+      const current = navItemIsCurrent(item, currentPath, routeName);
+      return (
+        a.getAttribute("href") === item.href &&
+        a.textContent === item.label &&
+        (a.getAttribute("aria-current") === "page") === current &&
+        a.hasAttribute("data-nav") === spa
+      );
+    });
+  if (unchanged) return;
   const ul = document.createElement("ul");
   for (const item of items) {
     const li = document.createElement("li");

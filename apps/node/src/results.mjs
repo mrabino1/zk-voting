@@ -15,6 +15,32 @@ const STATUS_BY_STATE = {
   4: 'tallied',
 };
 
+export const POLL_RESULTS_NOTE =
+  'Official results publish after the poll closes. There is no live provisional tally.';
+
+/** Token polls never publish a running tally. Official counts exist only after close. */
+export function tokenPollResultsDto(result, { tallied, pollId, state } = {}) {
+  if (!tallied || !result) {
+    return {
+      nfp: true,
+      binding: false,
+      official: false,
+      signal: 'Signal only · non-binding · NOT FOR PROFIT',
+      pollId: pollId || null,
+      state: state || null,
+      note: POLL_RESULTS_NOTE,
+      counts: null,
+    };
+  }
+  return {
+    ...result,
+    official: true,
+    nfp: true,
+    binding: false,
+    signal: result.signal || 'Signal only · non-binding · NOT FOR PROFIT',
+  };
+}
+
 export const EMPTY_RESULT_MESSAGES = {
   created:
     'This election is not open yet. Certified option counts appear after a tally is posted.',
