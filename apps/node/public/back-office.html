@@ -188,9 +188,20 @@
             <label class="field-label" for="e-tally-scheme">Tally binding</label>
             <select id="e-tally-scheme" name="tallyScheme">
               <option value="sum_only" selected>sum_only — any counts that sum to accepted ballots (legacy demo)</option>
-              <option value="opens_ballots">opens_ballots — Node opens ECIES envelopes (threshold-1 demo key, NON-PRODUCTION)</option>
+              <option value="opens_ballots">opens_ballots — Feldman t-of-n guardians (NON-PRODUCTION)</option>
             </select>
-            <span class="field-hint">Production guardians / mixnet are not this menu. The demo key is generated on create and labeled non-production.</span>
+            <span class="field-hint">opens_ballots starts a guardian ceremony. Homomorphic aggregation and a mixnet are an open product decision; neither is selected. The Node does not keep a tally private key.</span>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="e-threshold">Guardian threshold t</label>
+              <input id="e-threshold" name="threshold" type="number" min="2" max="16" value="2" />
+              <span class="field-hint">Used when tally binding is opens_ballots. t-1 guardians cannot decrypt.</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="e-guardian-count">Guardians n</label>
+              <input id="e-guardian-count" name="guardianCount" type="number" min="2" max="16" value="3" />
+            </div>
           </div>
           <p class="field-hint" id="ballot-lock-hint">
             Punch-list each question’s options like a questionnaire: name, short blurb, supporting text, and optional external links.
@@ -481,7 +492,45 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, leave counts blank to open the demo ECIES envelopes, or submit counts that must match the opened ballots — invented partitions are rejected. Threshold-1 operator key is NON-PRODUCTION. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, guardians enroll, publish Feldman deals, and after cutoff submit partial decryptions. t of n must verify before the Node opens envelopes. Invented partitions are rejected. Homomorphic vs mixnet aggregation is not decided. NON-PRODUCTION. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
+        <div id="guardian-status" class="field-hint">Choose an election to see the guardian ceremony.</div>
+        <form id="form-guardian-enroll" class="form-grid">
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="g-id">Guardian id</label>
+              <input id="g-id" name="guardianId" type="text" placeholder="guardian-1" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-label">Label</label>
+              <input id="g-label" name="label" type="text" placeholder="Clerk's office" />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="g-transport">Transport public key</label>
+            <textarea id="g-transport" spellcheck="false" placeholder="0x04… uncompressed P-256 from guardian init"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="submit">Enroll guardian</button>
+          </div>
+        </form>
+        <form id="form-guardian-deal" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="g-deal">Feldman deal JSON</label>
+            <textarea id="g-deal" spellcheck="false" placeholder='{"index":1,"commitments":["0x04…"],"encryptedShares":{"1":"0x…"}}'></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="submit">Submit deal</button>
+          </div>
+        </form>
+        <form id="form-guardian-partials" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="g-partials">Partial decryptions JSON</label>
+            <textarea id="g-partials" spellcheck="false" placeholder='{"index":1,"partials":[{"ballotHash":"0x…","point":"0x04…","proof":{"A":"0x04…","B":"0x04…","z":"0x…"}}]}'></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="submit">Submit partials</button>
+          </div>
+        </form>
         <form id="form-tally" class="form-grid">
           <div class="field">
             <label class="field-label" for="t-election">Election <span class="req">*</span></label>

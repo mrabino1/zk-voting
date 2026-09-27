@@ -18,6 +18,16 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 
+function tallyEncryptionBlurb(election) {
+  const ceremony = election.tallyCeremony;
+  const t = ceremony?.threshold;
+  const n = ceremony?.guardians;
+  if (t > 1 && n >= t) {
+    return `P-256 ECIES to a ${t}-of-${n} Feldman guardian key (NON-PRODUCTION). Homomorphic aggregation and a mixnet are not decided.`;
+  }
+  return "P-256 ECIES to the election tally pubkey (NON-PRODUCTION).";
+}
+
 export const SAMPLE_QUESTIONS = [
   {
     id: "q-ordinance",
@@ -191,7 +201,7 @@ export async function renderVote(main, ctx) {
           ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
           : null,
         election.tallyPubKey
-          ? h("li", {}, h("span", { class: "lbl", text: "Tally encryption" }), h("span", { text: "P-256 ECIES to the election tally pubkey (demo threshold-1 key, NON-PRODUCTION)" }))
+          ? h("li", {}, h("span", { class: "lbl", text: "Tally encryption" }), h("span", { text: tallyEncryptionBlurb(election) }))
           : null
       ),
       h(
@@ -201,7 +211,7 @@ export async function renderVote(main, ctx) {
             state.step === "receipt"
               ? "Your ballot was accepted. The receipt below cannot prove how you voted."
               : election.tallyPubKey
-                ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
+                ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
                 : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
         }
       ),

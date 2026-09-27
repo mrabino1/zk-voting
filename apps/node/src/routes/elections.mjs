@@ -25,8 +25,9 @@ import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { publicVoteRecord } from '../store.mjs';
+import { acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
-import { DEMO_KEY_WARNING, publicCeremonyView } from '../tallyCrypto.mjs';
+import { publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash, certifyArgsForElection } from '../l1Certify.mjs';
 import {
@@ -189,6 +190,9 @@ export function electionsRouter(deps) {
         lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
         tallyScheme: body.tallyScheme,
         opensBallots: body.opensBallots,
+        threshold: body.threshold,
+        guardianCount: body.guardianCount,
+        aggregation: body.aggregation,
         createdBy: req.user.id,
         onChainElectionId: requestedOnChainId,
         onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
@@ -770,21 +774,99 @@ export function electionsRouter(deps) {
     '/:id/tally-key',
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
-      const guardian = store.getTallyGuardian(election.id);
+      const fallback = {
+        scheme: 'none',
+        threshold: 0,
+        guardians: 0,
+        production: false,
+        aggregation: null,
+        warning:
+          'No tally encryption key. Legacy sum-only demo: any counts that sum to acceptedBallots are accepted.',
+      };
+      const ceremony = publicCeremonyView(election.tallyCeremony) || fallback;
       res.json({
         electionId: String(election.id),
         tallyScheme: election.tallyScheme || 'sum_only',
-        ceremony: publicCeremonyView(guardian) || election.tallyCeremony || {
-          scheme: 'none',
-          threshold: 0,
-          guardians: 0,
-          production: false,
-          warning: 'No tally encryption key. Legacy sum-only demo: any counts that sum to acceptedBallots are accepted.',
-        },
+        ceremony,
         production: false,
-        warning: DEMO_KEY_WARNING,
+        warning: ceremony.warning || fallback.warning,
         nfp: true,
       });
+    }),
+  );
+
+  router.post(
+    '/:id/guardians',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      const guardian = await enrollGuardian(store, req.params.id, req.body || {});
+      const election = store.requireElection(req.params.id);
+      res.status(201).json({
+        ok: true,
+        guardian,
+        ceremony: publicCeremonyView(election.tallyCeremony),
+        nfp: true,
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/guardians/deals',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      const election = await acceptDeal(store, req.params.id, req.body || {});
+      res.status(201).json({
+        ok: true,
+        status: election.tallyCeremony?.status,
+        ceremony: publicCeremonyView(election.tallyCeremony),
+        nfp: true,
+      });
+    }),
+  );
+
+  router.get(
+    '/:id/guardians/:index/inbox',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const index = Number(req.params.index);
+      const member = (election.tallyCeremony?.roster || []).find((g) => g.index === index);
+      if (!member) throw new HttpError(404, 'guardian not enrolled', { code: 'UNKNOWN_GUARDIAN' });
+      const bucket = store.guardianMaterial(election.id);
+      const encryptedShares = {};
+      const commitmentsByDealer = {};
+      for (const deal of bucket?.deals || []) {
+        if (deal.encryptedShares?.[String(index)]) encryptedShares[String(deal.index)] = deal.encryptedShares[String(index)];
+        commitmentsByDealer[String(deal.index)] = deal.commitments;
+      }
+      res.json({
+        electionId: String(election.id),
+        index,
+        guardianId: member.guardianId,
+        threshold: election.tallyCeremony.threshold,
+        guardians: election.tallyCeremony.guardians,
+        status: election.tallyCeremony.status,
+        transportPublicKey: member.transportPublicKey,
+        encryptedShares,
+        commitmentsByDealer,
+        nfp: true,
+      });
+    }),
+  );
+
+  router.post(
+    '/:id/guardians/partials',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const now = Math.floor(Date.now() / 1000);
+      if (now < election.cutoffTime) {
+        throw new HttpError(409, 'partial decryptions are accepted after cutoff', { code: 'NOT_CLOSED' });
+      }
+      const saved = await acceptPartials(store, election.id, req.body || {});
+      res.status(201).json({ ok: true, ...saved, nfp: true });
     }),
   );
 
@@ -803,12 +885,13 @@ export function electionsRouter(deps) {
       let nums;
       let source = 'sum_only';
       let openedBallots = null;
+      let opened = null;
       let irv = null;
 
       if (isOpensBallots(election)) {
-        const guardian = store.getTallyGuardian(election.id);
+        const bucket = store.guardianMaterial(election.id);
         const envelopes = store.listEnvelopes(election.id);
-        const opened = await openBallots(election, envelopes, guardian, election.questions);
+        opened = await openBallots(election, envelopes, bucket?.partials || [], election.questions);
         if (Array.isArray(req.body?.counts) && req.body.counts.length > 0) {
           const submitted = req.body.counts.map((n) => Number(n));
           if (submitted.some((n) => !Number.isInteger(n) || n < 0)) {
@@ -875,6 +958,8 @@ export function electionsRouter(deps) {
         ballotMethod: irv?.ballotMethod || (source === 'opens_ballots' ? 'plurality' : election.ballotMethod || 'plurality'),
         source,
         openedBallots,
+        aggregation: opened?.aggregation || null,
+        guardianThreshold: election.tallyCeremony?.threshold ?? null,
       };
       if (irv?.questions?.length) extras.questions = irv.questions;
       const tallied = await store.setTally(election.id, nums, extras);

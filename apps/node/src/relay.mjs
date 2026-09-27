@@ -16,6 +16,7 @@ import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
+import { isTallyEnvelope } from './tallyCrypto.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import {
   issueAndStoreReceiptPdf,
@@ -212,6 +213,20 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
+  if (
+    election.tallyScheme === 'opens_ballots' ||
+    election.tallyScheme === 1 ||
+    election.tallyScheme === '1'
+  ) {
+    if (election.tallyCeremony?.status !== 'ready' || !election.tallyPubKey) {
+      throw new HttpError(409, 'guardian ceremony is not ready', { code: 'CEREMONY_INCOMPLETE' });
+    }
+    if (!isTallyEnvelope(parsed.encryptedBallot)) {
+      throw new HttpError(400, 'opens_ballots ballots must be RTv1 tally envelopes', {
+        code: 'BAD_ENVELOPE',
+      });
+    }
+  }
   if (store.nullifierUsed(election.id, parsed.nullifier)) {
     throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
   }

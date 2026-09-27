@@ -83,7 +83,7 @@ These encodings are versioned separately. Circom fixes `nOptions` at compile tim
 
 Production tallying is homomorphic: inbox ciphertexts (ElGamal or equivalent) are multiplied, then a decryption proof (or mixnet) shows the same counts. The summation constraints stay; the ballot wires become decrypted shares. Do not publish decrypted ballots linked to nullifiers.
 
-The first vertical slice that **opens** ballots is off-circuit: Node P-256 ECIES (threshold-1 operator key, **NON-PRODUCTION**) plus `Tally.submitOpenedTally` histogram checks. See the root README “Tally encryption (honest status)”.
+The first vertical slice that **opens** ballots is off-circuit: Node P-256 ECIES under a Feldman t-of-n guardian key (**NON-PRODUCTION**) plus `Tally.submitOpenedTally` histogram checks. Homomorphic aggregation versus a mixnet is not selected. See [`docs/TALLY_GUARDIANS.md`](../docs/TALLY_GUARDIANS.md) and the root README “Tally encryption (honest status)”.
 
 ---
 

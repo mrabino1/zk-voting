@@ -1,12 +1,13 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Decrypt accepted envelopes with the demo threshold-1 operator key and
-// derive plurality counts. Never persist opened choices onto vote rows.
+// Open accepted envelopes with t verified guardian partials.
+// Aggregation is delegated; the only usable adapter is `undecided`.
 
+import { getAggregator } from './guardians/aggregate.mjs';
+import { decryptEnvelopeWithPartials } from './guardians/threshold.mjs';
 import { HttpError } from './http.mjs';
 import {
   TALLY_SCHEME_OPENS_BALLOTS,
   countsEqual,
-  decryptTallyEnvelope,
   expectedCountLength,
   histogramFromOpenings,
   unpackChoices,
@@ -20,15 +21,40 @@ export function isOpensBallots(election) {
   );
 }
 
+function httpFromCrypto(err) {
+  if (err instanceof HttpError) throw err;
+  const code = err.code || 'DECRYPT_FAILED';
+  const status = code === 'THRESHOLD_NOT_MET' || code === 'CEREMONY_INCOMPLETE' ? 409 : 400;
+  throw new HttpError(status, err.message, {
+    code,
+    ...(err.index != null ? { index: err.index } : {}),
+    ...(err.have != null ? { have: err.have, threshold: err.threshold } : {}),
+  });
+}
+
 /**
- * Open every envelope for an election. Requires the demo guardian private JWK.
- * @returns {{ openings: number[], counts: number[], nSlots: number }}
+ * Decrypt each aggregation unit. Opened choices are returned to the caller
+ * and are not written onto vote rows.
+ * @param {object[]} partialGroups `{ index, partials: [{ ballotHash, point, proof }] }[]`
  */
-export async function openBallots(election, envelopes, guardian, questions) {
-  if (!guardian?.privateJwk) {
-    throw new HttpError(500, 'tally guardian private key missing', { code: 'NO_TALLY_KEY' });
+export async function openBallots(election, envelopes, partialGroups, questions) {
+  const ceremony = election?.tallyCeremony;
+  if (!ceremony || ceremony.status !== 'ready' || !ceremony.publicKey || !ceremony.verificationKeys) {
+    throw new HttpError(409, 'guardian ceremony is not ready', { code: 'CEREMONY_INCOMPLETE' });
   }
-  const nSlots = Math.max(expectedCountLength(questions || election.questions), 1);
+  let units;
+  try {
+    units = getAggregator(ceremony.aggregation || 'undecided').prepare(envelopes);
+  } catch (err) {
+    httpFromCrypto(err);
+  }
+  if (units.length !== envelopes.length) {
+    throw new HttpError(
+      409,
+      'the selected aggregator did not return one ciphertext per ballot',
+      { code: 'AGGREGATION_UNDECIDED' },
+    );
+  }
   if (envelopes.length !== election.acceptedBallots) {
     throw new HttpError(409, 'envelope count does not match acceptedBallots', {
       code: 'ENVELOPE_GAP',
@@ -36,16 +62,27 @@ export async function openBallots(election, envelopes, guardian, questions) {
       acceptedBallots: election.acceptedBallots,
     });
   }
+  const nSlots = Math.max(expectedCountLength(questions || election.questions), 1);
   const openings = [];
-  for (const env of envelopes) {
+  for (const unit of units) {
+    const partials = [];
+    for (const group of partialGroups || []) {
+      const match = (group.partials || []).find((row) => String(row.ballotHash) === String(unit.ballotHash));
+      if (match) partials.push({ ...match, index: group.index, ballotHash: unit.ballotHash });
+    }
     let plain;
     try {
-      plain = await decryptTallyEnvelope(guardian.privateJwk, env.encryptedBallot);
-    } catch (err) {
-      throw new HttpError(400, 'failed to open a ballot envelope', {
-        code: 'DECRYPT_FAILED',
-        detail: err.message,
+      plain = await decryptEnvelopeWithPartials({
+        envelopeHex: unit.encryptedBallot,
+        electionId: election.id,
+        ballotHash: unit.ballotHash,
+        jointPublicKey: ceremony.publicKey,
+        verificationKeys: ceremony.verificationKeys,
+        partials,
+        threshold: ceremony.threshold,
       });
+    } catch (err) {
+      httpFromCrypto(err);
     }
     let choices;
     try {
@@ -63,7 +100,12 @@ export async function openBallots(election, envelopes, guardian, questions) {
     openings.push(idx);
   }
   const counts = histogramFromOpenings(openings, nSlots);
-  return { openings, counts, nSlots };
+  return {
+    openings,
+    counts,
+    nSlots,
+    aggregation: ceremony.aggregation || 'undecided',
+  };
 }
 
 export function rejectInventedCounts(submitted, derived) {

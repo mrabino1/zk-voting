@@ -186,7 +186,11 @@ POST /api/elections/:id/registration-requests/:requestId/deny
 POST /api/elections/:id/vote        (relays proof; signed-in ballots need a vote PIN token)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
-GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
+GET  /api/elections/:id/tally-key   (public Feldman ceremony; no shares, no private key)
+POST /api/elections/:id/guardians   (tally operator; enroll a guardian transport key)
+POST /api/elections/:id/guardians/deals   (tally operator; Feldman commitments + encrypted shares)
+GET  /api/elections/:id/guardians/:index/inbox   (encrypted shares for that guardian)
+POST /api/elections/:id/guardians/partials   (tally operator; after cutoff; proved partial decryptions)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 identity post; no-op if env unset)
 GET  /api/elections/:id/l1
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)
