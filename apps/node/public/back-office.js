@@ -218,7 +218,7 @@
     return `<li class="aspect-option">
       <input class="opt-id" spellcheck="false" placeholder="id" value="${esc(id)}" aria-label="Option id" />
       <input class="opt-label" placeholder="Label" value="${esc(label)}" aria-label="Option label" />
-      <button type="button" class="btn btn-secondary btn-remove-opt">Remove</button>
+      <button type="button" class="btn btn-secondary btn-remove-opt" aria-label="Remove option">Remove</button>
     </li>`;
   }
 
@@ -236,25 +236,25 @@
       </header>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Type</label>
-          <select class="aspect-type">${typeOpts}</select>
+          <label class="field-label" for="aq-${index}-type">Type</label>
+          <select id="aq-${index}-type" class="aspect-type">${typeOpts}</select>
         </div>
         <div class="field">
-          <label class="field-label">Id</label>
-          <input class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
+          <label class="field-label" for="aq-${index}-id">Id</label>
+          <input id="aq-${index}-id" class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
         </div>
       </div>
       <div class="field aspect-max"${maxHidden}>
-        <label class="field-label">Max selections</label>
-        <input class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
+        <label class="field-label" for="aq-${index}-max">Max selections</label>
+        <input id="aq-${index}-max" class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
       </div>
       <div class="field">
-        <label class="field-label">Prompt <span class="req">*</span></label>
-        <input class="aspect-prompt" required maxlength="400" value="${esc(q.prompt || "")}" />
+        <label class="field-label" for="aq-${index}-prompt">Prompt <span class="req">*</span></label>
+        <input id="aq-${index}-prompt" class="aspect-prompt" required maxlength="400" value="${esc(q.prompt || "")}" />
       </div>
       <div class="field">
-        <label class="field-label">Description</label>
-        <input class="aspect-desc" maxlength="500" value="${esc(q.description || "")}" />
+        <label class="field-label" for="aq-${index}-desc">Description</label>
+        <input id="aq-${index}-desc" class="aspect-desc" maxlength="500" value="${esc(q.description || "")}" />
       </div>
       <div class="field">
         <span class="field-label">Options</span>
@@ -596,7 +596,7 @@
     return `<div class="link-row" data-link="${li}">
       <input class="builder-mini" data-f="link-label" ${ballotLocked ? "disabled" : ""} placeholder="Label" value="${esc(link.label || "")}" aria-label="Link label" />
       <input class="builder-mini" data-f="link-url" ${ballotLocked ? "disabled" : ""} placeholder="https://…" value="${esc(link.url || "")}" aria-label="Link URL" />
-      <button class="btn btn-secondary" type="button" data-act="rm-link" data-q="${qi}" data-opt="${oi}" data-link="${li}" ${ballotLocked ? "disabled" : ""}>Remove</button>
+      <button class="btn btn-secondary" type="button" data-act="rm-link" data-q="${qi}" data-opt="${oi}" data-link="${li}" ${ballotLocked ? "disabled" : ""} aria-label="Remove link">Remove</button>
     </div>`;
   }
 
@@ -609,25 +609,25 @@
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Name / title</label>
-          <input class="builder-mini" data-f="opt-label" ${ballotLocked ? "disabled" : ""} required value="${esc(opt.label || "")}" placeholder="Jane Doe" />
+          <label class="field-label" for="bq-${qi}-o${oi}-label">Name / title</label>
+          <input id="bq-${qi}-o${oi}-label" class="builder-mini" data-f="opt-label" ${ballotLocked ? "disabled" : ""} required value="${esc(opt.label || "")}" placeholder="Jane Doe" />
         </div>
         <div class="field">
-          <label class="field-label">Option id</label>
-          <input class="builder-mini" data-f="opt-id" ${ballotLocked ? "disabled" : ""} value="${esc(opt.id || "")}" placeholder="o1" />
+          <label class="field-label" for="bq-${qi}-o${oi}-id">Option id</label>
+          <input id="bq-${qi}-o${oi}-id" class="builder-mini" data-f="opt-id" ${ballotLocked ? "disabled" : ""} value="${esc(opt.id || "")}" placeholder="o1" />
         </div>
       </div>
       <div class="field">
-        <label class="field-label">Short blurb</label>
-        <input class="builder-mini" data-f="opt-summary" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(opt.summary || "")}" placeholder="One-line summary on the voter list" />
+        <label class="field-label" for="bq-${qi}-o${oi}-summary">Short blurb</label>
+        <input id="bq-${qi}-o${oi}-summary" class="builder-mini" data-f="opt-summary" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(opt.summary || "")}" placeholder="One-line summary on the voter list" />
       </div>
       <div class="field">
-        <label class="field-label">Supporting information</label>
-        <textarea class="builder-body" data-f="opt-body" ${ballotLocked ? "disabled" : ""} placeholder="Plain text or light markdown for the mini info page">${esc(opt.body || "")}</textarea>
+        <label class="field-label" for="bq-${qi}-o${oi}-body">Supporting information</label>
+        <textarea id="bq-${qi}-o${oi}-body" class="builder-body" data-f="opt-body" ${ballotLocked ? "disabled" : ""} placeholder="Plain text or light markdown for the mini info page">${esc(opt.body || "")}</textarea>
       </div>
       <div class="field">
-        <label class="field-label">Image URL (optional)</label>
-        <input class="builder-mini" data-f="opt-image" ${ballotLocked ? "disabled" : ""} value="${esc(opt.imageUrl || "")}" placeholder="https://…" />
+        <label class="field-label" for="bq-${qi}-o${oi}-image">Image URL (optional)</label>
+        <input id="bq-${qi}-o${oi}-image" class="builder-mini" data-f="opt-image" ${ballotLocked ? "disabled" : ""} value="${esc(opt.imageUrl || "")}" placeholder="https://…" />
       </div>
       <div class="field">
         <span class="field-label">External links</span>
@@ -649,27 +649,27 @@
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Prompt</label>
-          <input class="builder-mini" data-f="q-prompt" ${ballotLocked ? "disabled" : ""} required value="${esc(q.prompt || "")}" placeholder="Office or measure text" />
+          <label class="field-label" for="bq-${qi}-prompt">Prompt</label>
+          <input id="bq-${qi}-prompt" class="builder-mini" data-f="q-prompt" ${ballotLocked ? "disabled" : ""} required value="${esc(q.prompt || "")}" placeholder="Office or measure text" />
         </div>
         <div class="field">
-          <label class="field-label">Type</label>
-          <select class="builder-mini" data-f="q-type" ${ballotLocked ? "disabled" : ""}>${typeOptions(type)}</select>
+          <label class="field-label" for="bq-${qi}-type">Type</label>
+          <select id="bq-${qi}-type" class="builder-mini" data-f="q-type" ${ballotLocked ? "disabled" : ""}>${typeOptions(type)}</select>
         </div>
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Question id</label>
-          <input class="builder-mini" data-f="q-id" ${ballotLocked ? "disabled" : ""} value="${esc(q.id || "")}" placeholder="q1" />
+          <label class="field-label" for="bq-${qi}-id">Question id</label>
+          <input id="bq-${qi}-id" class="builder-mini" data-f="q-id" ${ballotLocked ? "disabled" : ""} value="${esc(q.id || "")}" placeholder="q1" />
         </div>
         <div class="field aspect-max"${maxHidden}>
-          <label class="field-label">Max selections</label>
-          <input class="builder-mini" data-f="q-max" type="number" min="1" step="1" ${ballotLocked ? "disabled" : ""} value="${esc(q.maxSelections || 2)}" />
+          <label class="field-label" for="bq-${qi}-max">Max selections</label>
+          <input id="bq-${qi}-max" class="builder-mini" data-f="q-max" type="number" min="1" step="1" ${ballotLocked ? "disabled" : ""} value="${esc(q.maxSelections || 2)}" />
         </div>
       </div>
       <div class="field">
-        <label class="field-label">Description</label>
-        <input class="builder-mini" data-f="q-desc" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(q.description || "")}" placeholder="Voter-facing help text" />
+        <label class="field-label" for="bq-${qi}-desc">Description</label>
+        <input id="bq-${qi}-desc" class="builder-mini" data-f="q-desc" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(q.description || "")}" placeholder="Voter-facing help text" />
       </div>
       ${
         type === "RANKED"

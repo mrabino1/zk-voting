@@ -308,6 +308,7 @@ export async function renderVote(main, ctx) {
             type: "button",
             class: "btn btn-secondary rank-btn",
             text: "Up",
+            "aria-label": `Move ${opt.label} up`,
             disabled: rankIndex === 0,
             onClick: () => {
               const list = [...(rankingState.get(question.id) || [])];
@@ -320,6 +321,7 @@ export async function renderVote(main, ctx) {
             type: "button",
             class: "btn btn-secondary rank-btn",
             text: "Down",
+            "aria-label": `Move ${opt.label} down`,
             disabled: rankIndex === total - 1,
             onClick: () => {
               const list = [...(rankingState.get(question.id) || [])];
@@ -332,6 +334,7 @@ export async function renderVote(main, ctx) {
             type: "button",
             class: "btn btn-secondary rank-btn",
             text: "Remove",
+            "aria-label": `Remove ${opt.label} from the ranking`,
             onClick: () =>
               setRanking(
                 question,
@@ -385,6 +388,7 @@ export async function renderVote(main, ctx) {
                   type: "button",
                   class: "btn btn-secondary rank-btn",
                   text: "Add next",
+                  "aria-label": `Add ${opt.label} to the ranking`,
                   onClick: () => setRanking(question, [...(rankingState.get(question.id) || []), opt.id], index),
                 })
               )
@@ -439,11 +443,12 @@ export async function renderVote(main, ctx) {
                 ),
                 source === "sample"
                   ? null
-                  : h("a", {
+                  :                 h("a", {
                       class: "choice-info",
                       href: `/elections/${encodeURIComponent(election.id)}/info/${encodeURIComponent(question.id)}/${encodeURIComponent(opt.id)}`,
                       "data-nav": "",
                       text: "About",
+                      "aria-label": `About ${opt.label}`,
                     })
               )
             )

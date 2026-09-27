@@ -9,7 +9,7 @@
 # Local equivalents (repo root). Need Node 22+ and Foundry (`foundryup`):
 #
 #   npm install
-#   npm run test:node          # apps/node
+#   npm run test:node          # apps/node (includes WCAG 2.2 AA axe checks; needs Chrome)
 #   npm run test:packages      # @zk-voting/chain-client (L1 tally-hash; no keys)
 #   npm run test:l2            # skipped in CI if l2/test has no *.test.mjs
 #   npm run test:contracts     # forge test --via-ir
@@ -84,7 +84,18 @@ jobs:
           npm --version
           forge --version
 
-      - name: Node tests
+      - name: Ensure Chrome for axe
+        run: |
+          if command -v google-chrome >/dev/null 2>&1 || command -v google-chrome-stable >/dev/null 2>&1; then
+            command -v google-chrome || command -v google-chrome-stable
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y wget ca-certificates
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/chrome.deb
+
+      - name: Node tests (includes axe WCAG 2.2 AA)
         run: npm run test:node
 
       - name: Package tests
@@ -119,7 +130,8 @@ jobs:
             echo
             echo '```bash'
             echo "npm install"
-            echo "npm run test:node          # apps/node"
+            echo "npm run test:node          # apps/node, including axe (needs Chrome)"
+            echo "npm run test:a11y -w apps/node"
             echo "npm run test:packages      # chain-client L1 helpers (no keys)"
             echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
             echo "npm run test:contracts     # forge test --via-ir"

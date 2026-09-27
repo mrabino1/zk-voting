@@ -144,6 +144,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Independent auditor | `tools/auditor` + [`docs/AUDITOR.md`](./docs/AUDITOR.md); no Node private DB |
 | Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED` (IRV), `MEASURE`, `ARTICLE`. |
 | Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
+| Accessibility | WCAG 2.2 AA axe on the voter, registered, admin, and public shells. [`docs/ACCESSIBILITY.md`](./docs/ACCESSIBILITY.md) |
 | Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 | Intentional Node forks | Documented. Copy [`.env.example`](./.env.example), pin the shared factory / inbox / verifier, do not `DeployLocal` per city. |

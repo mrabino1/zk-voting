@@ -3,23 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="/lang-init.js"></script>
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#13294b" />
     <meta name="robots" content="noindex" />
-    <title>Platform admin · Republic</title>
+    <title data-i18n="chrome.titleAdmin">Platform admin · Republic</title>
     <script src="/canonical-url.js"></script>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/office.css" />
   </head>
   <body>
     <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
-    <a class="skip-link" href="#main">Skip to main content</a>
-    <div class="nfp-banner" role="note">
+    <a class="skip-link" href="#main" data-i18n="chrome.skip">Skip to main content</a>
+    <div class="nfp-banner" role="note" data-i18n="chrome.nfpBanner">
       NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
     </div>
     <header class="site-header">
       <div class="header-inner">
-        <a class="brand" href="/" aria-label="Republic home">
+        <a class="brand" href="/" aria-label="Republic home" data-i18n-aria-label="chrome.brandHome">
           <span class="brand-mark" aria-hidden="true">
             <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
               <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
@@ -35,10 +36,10 @@
           </span>
           <span class="brand-text">
             <span class="brand-name">Republic</span>
-            <span class="brand-sub">Office of civic elections</span>
+            <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
           </span>
         </a>
-        <nav class="nav-main" aria-label="Primary">
+        <nav class="nav-main" aria-label="Primary" data-i18n-aria-label="chrome.navPrimary">
           <ul>
             <li><a href="/about">About</a></li>
             <li><a href="/faq">FAQ</a></li>
@@ -47,8 +48,9 @@
             <li><a href="/register">Register</a></li>
           </ul>
         </nav>
-        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
-        <span class="office-badge">Not for profit</span>
+        <div id="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" aria-label="Session" data-i18n-aria-label="chrome.session"></div>
+        <span class="office-badge" data-i18n="chrome.officeBadge">Not for profit</span>
       </div>
     </header>
 
@@ -92,7 +94,7 @@
 
       <section aria-labelledby="host-heading">
         <h2 id="host-heading" class="visually-hidden">Host status</h2>
-        <div class="stat-grid" id="host-stats">
+        <dl class="stat-grid" id="host-stats">
           <div class="stat">
             <dt>Health</dt>
             <dd class="plain" id="stat-health"><span class="status-dot"></span>Checking…</dd>
@@ -109,7 +111,7 @@
             <dt>NOT FOR PROFIT</dt>
             <dd class="plain" id="stat-nfp">—</dd>
           </div>
-        </div>
+        </dl>
       </section>
 
       <div
@@ -360,13 +362,15 @@
     </main>
 
     <footer class="site-footer">
-      <p class="footer-nfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+      <p class="footer-nfp" data-i18n="chrome.footerNfp">NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
       <p class="footer-meta">
-        Product name Republic. No token. No ads.
-        <a href="/terms">Terms</a>
-        ·
-        <a href="/explorer">L2 explorer</a>
-        · AGPL-3.0-or-later
+        <span data-i18n="chrome.footerAdminMeta">Product name Republic. No token. No ads.</span>
+        <span lang="en">
+          <a href="/terms">Terms</a>
+          ·
+          <a href="/explorer">L2 explorer</a>
+          · AGPL-3.0-or-later
+        </span>
       </p>
     </footer>
     <script src="/disclosure-ui.js"></script>
