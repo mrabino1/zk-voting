@@ -469,18 +469,20 @@ path.
 **`tallyScheme == 1` (OPENS_BALLOTS):** `submitTally` reverts (`OpeningsRequired`).
 `submitOpenedTally` requires `openings.length == acceptedBallots` and
 `histogram(openings) == counts`. Invented vectors that only match the sum
-**revert**. Off-chain (Node) the operator key decrypts P-256 ECIES envelopes
-and derives those openings. The on-chain check does not itself decrypt; it
+**revert**. Off-chain, `t` guardians threshold-decrypt P-256 ECIES envelopes
+(Feldman verification keys, Chaum-Pedersen partials) and the Node derives
+those openings. The on-chain check does not itself decrypt; it
 binds the posted histogram to an openings vector and to `ballotRoot`.
 
 Public inputs for `Tally.sol` are **TALLY_SOL_MOCK_V1** (`TallyPublicInputs.sol`):
 `[version=1, electionId, acceptedCount, countsHash, ballotRoot, openingsHash]`.
 That is **not** the same array as `circuits/tally.circom` (`[total, electionId, counts…, acceptedCount]` for the default `Tally(8,4)`). MockVerifier remains the local path until a translating Groth16 wrapper exists.
 
-Demo tally encryption is **threshold-1** (a single operator key on the Node).
-Labeled **NON-PRODUCTION**. Not a guardian ceremony. Production is still
-homomorphic / mixnet decryption proofs. Do not pretend MACI coercion-resistance
-is done.
+Demo tally encryption is a **Feldman t-of-n** guardian ceremony
+(`p256-feldman-dkg-v1`, Chaum-Pedersen partials). Labeled **NON-PRODUCTION**.
+Ballot aggregation — homomorphic product or mixnet — is an open product
+decision and is not selected; see [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md).
+Do not pretend MACI coercion-resistance is done.
 
 ### Incremental Merkle tree
 
@@ -731,7 +733,11 @@ POST /api/elections/:id/disqualify   (officer of that jurisdiction)
 POST /api/elections/:id/disqualify/revoke
 POST /api/elections/:id/revoke
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; L1 postResult if env set)
-GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
+GET  /api/elections/:id/tally-key   (public Feldman ceremony; no shares)
+POST /api/elections/:id/guardians   (tally operator; enroll transport key)
+POST /api/elections/:id/guardians/deals
+GET  /api/elections/:id/guardians/:index/inbox
+POST /api/elections/:id/guardians/partials   (after cutoff; proved partials)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1; no-op if L1 env unset)
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)

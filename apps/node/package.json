@@ -13,10 +13,12 @@
     "dev": "node --watch src/server.mjs",
     "test": "NODE_ENV=test node --test test/*.test.mjs",
     "certify:l1": "node scripts/certify-l1.mjs",
+    "guardian": "node scripts/guardian.mjs",
     "build": "node -e \"console.log('NOT FOR PROFIT — Republic Node serves public/ and dist/; the SPA is built separately.')\""
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.864.0",
+    "@noble/curves": "^1.9.7",
     "@simplewebauthn/server": "13.1.2",
     "@zk-voting/chain-client": "0.1.0",
     "@zk-voting/proof-helpers": "file:../../packages/proof-helpers",

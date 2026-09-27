@@ -18,7 +18,7 @@ import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 ///      1 OPENS_BALLOTS — operator must submit `openings` whose histogram is
 ///        `counts` and whose length is `acceptedBallots`. That rejects invented
 ///        partitions that only match the sum. Decryption of ECIES envelopes is
-///        off-chain (Node / operator key, NON-PRODUCTION threshold-1). On-chain
+///        off-chain (Feldman t-of-n guardians, NON-PRODUCTION). On-chain
 ///        this slice binds openings ↔ counts ↔ inbox ballotRoot. MockVerifier
 ///        does not prove discrete-log decryption; do not treat it as a ceremony.
 ///

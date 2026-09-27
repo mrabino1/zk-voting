@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
+import { ephemeralFromEnvelope, partialDecrypt } from '../src/guardians/threshold.mjs';
+import { createSealedDeal, finalizeShare, initGuardian } from '../src/guardians/index.mjs';
 import { createApp } from '../src/server.mjs';
 import { encryptToTallyPub, packChoices } from '../src/tallyCrypto.mjs';
 
@@ -79,11 +81,81 @@ async function registerVoter(electionId, identityCommitment) {
     jar: adminJar,
     body: { identityCommitment },
   });
+  if (res.status === 202) {
+    const approved = await api(
+      'POST',
+      `/api/elections/${electionId}/registration-requests/${res.json.request.id}/approve`,
+      { jar: adminJar, body: {} },
+    );
+    assert.equal(approved.status, 200, approved.text);
+    return approved;
+  }
   assert.equal(res.status, 201, res.text);
   return res;
 }
 
-describe('tally opens ballots (demo ECIES)', () => {
+async function establishGuardians(electionId, { guardians = 3, threshold = 2 } = {}) {
+  const secrets = [];
+  for (let i = 1; i <= guardians; i++) {
+    secrets.push(await initGuardian({ index: i, guardianId: `g${i}` }));
+  }
+  for (const secret of secrets) {
+    const enrolled = await api('POST', `/api/elections/${electionId}/guardians`, {
+      jar: adminJar,
+      body: {
+        guardianId: secret.guardianId,
+        label: secret.guardianId,
+        transportPublicKey: secret.transportPublicKey,
+      },
+    });
+    assert.equal(enrolled.status, 201, enrolled.text);
+  }
+  const roster = secrets.map((secret) => ({
+    index: secret.index,
+    transportPublicKey: secret.transportPublicKey,
+  }));
+  const deals = [];
+  for (const secret of secrets) {
+    const deal = await createSealedDeal({ index: secret.index, threshold, roster });
+    deals.push(deal);
+    const posted = await api('POST', `/api/elections/${electionId}/guardians/deals`, {
+      jar: adminJar,
+      body: deal,
+    });
+    assert.equal(posted.status, 201, posted.text);
+  }
+  const shares = [];
+  for (const secret of secrets) {
+    shares.push(
+      await finalizeShare({
+        index: secret.index,
+        privateJwk: secret.transportPrivateJwk,
+        deals,
+        threshold,
+        guardianCount: guardians,
+      }),
+    );
+  }
+  return shares;
+}
+
+function partialBody(share, electionId, envelopes) {
+  return {
+    index: share.index,
+    partials: envelopes.map((env) =>
+      partialDecrypt({
+        shareScalar: share.shareScalar,
+        index: share.index,
+        electionId,
+        ballotHash: env.ballotHash,
+        jointPublicKey: share.jointPublicKey,
+        ephemeral: ephemeralFromEnvelope(env.encryptedBallot),
+      }),
+    ),
+  };
+}
+
+describe('tally opens ballots (guardian threshold)', () => {
   before(async () => {
     tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-tally-opens-'));
     const created = await createApp({
@@ -99,7 +171,7 @@ describe('tally opens ballots (demo ECIES)', () => {
     server = await listen(app);
     base = `http://127.0.0.1:${server.address().port}`;
     const login = await api('POST', '/api/auth/dev-login', {
-      body: { handle: 'admin', role: 'platform_admin' },
+      body: { handle: 'guardian-admin', role: 'platform_admin' },
       jar: adminJar,
     });
     assert.equal(login.status, 200, login.text);
@@ -112,11 +184,11 @@ describe('tally opens ballots (demo ECIES)', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('opens N demo ballots to the correct plurality; invented sum-only vector fails', async () => {
+  test('t guardians open ballots; t-1 cannot; a bad partial is rejected; invented counts fail', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
-        title: 'Opens-ballots demo',
+        title: 'Opens-ballots guardians',
         startTime: nowSec() - 10,
         cutoffTime: nowSec() + 3600,
         questions: [
@@ -132,20 +204,48 @@ describe('tally opens ballots (demo ECIES)', () => {
         ],
         jurisdictionId: 'demo',
         tallyScheme: 'opens_ballots',
+        threshold: 2,
+        guardianCount: 3,
       },
     });
     assert.equal(created.status, 201, created.text);
     const electionId = created.json.election.id;
     assert.equal(created.json.election.tallyScheme, 'opens_ballots');
-    assert.ok(created.json.election.tallyPubKey);
+    assert.equal(created.json.election.tallyPubKey, null);
+    assert.equal(created.json.election.tallyCeremony.threshold, 2);
+    assert.equal(created.json.election.tallyCeremony.guardians, 3);
+    assert.equal(created.json.election.tallyCeremony.aggregation, 'undecided');
+    assert.equal(created.json.election.tallyCeremony.status, 'awaiting_guardians');
     assert.equal(created.json.election.tallyCeremony.production, false);
     assert.match(created.json.election.tallyCeremony.warning, /NON-PRODUCTION/);
+    assert.equal(created.json.election.tallyCeremony.privateJwk, undefined);
 
+    const missing = await api('POST', '/api/elections', {
+      jar: adminJar,
+      body: {
+        title: 'Missing threshold',
+        startTime: nowSec() - 10,
+        cutoffTime: nowSec() + 3600,
+        questions: [{ type: 'YES_NO', prompt: 'Y?', options: [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }] }],
+        jurisdictionId: 'demo',
+        tallyScheme: 'opens_ballots',
+      },
+    });
+    assert.equal(missing.status, 400, missing.text);
+    assert.equal(missing.json.code, 'BAD_GUARDIANS');
+
+    const shares = await establishGuardians(electionId, { guardians: 3, threshold: 2 });
+    const ready = store.requireElection(electionId);
+    assert.equal(ready.tallyCeremony.status, 'ready');
+    assert.ok(ready.tallyPubKey);
     const key = await api('GET', `/api/elections/${electionId}/tally-key`);
     assert.equal(key.status, 200);
     assert.equal(key.json.ceremony.production, false);
+    assert.equal(key.json.ceremony.aggregation, 'undecided');
     assert.equal(key.json.ceremony.privateJwk, undefined);
-    const pub = created.json.election.tallyPubKey;
+    assert.equal(key.json.ceremony.shareScalar, undefined);
+    assert.equal(JSON.stringify(key.json).includes('encryptedShares'), false);
+    const pub = ready.tallyPubKey;
 
     // 5 ballots: 0,0,1,0,2 → [3,1,1]
     const choices = [0, 0, 1, 0, 2];
@@ -166,6 +266,36 @@ describe('tally opens ballots (demo ECIES)', () => {
     const election = store.requireElection(electionId);
     election.cutoffTime = nowSec() - 1;
     await store.persist();
+
+    const envelopes = store.listEnvelopes(electionId);
+    assert.equal(envelopes.length, 5);
+
+    const one = await api('POST', `/api/elections/${electionId}/guardians/partials`, {
+      jar: adminJar,
+      body: partialBody(shares[0], electionId, envelopes),
+    });
+    assert.equal(one.status, 201, one.text);
+    const tooFew = await api('POST', `/api/elections/${electionId}/tally`, {
+      jar: adminJar,
+      body: {},
+    });
+    assert.equal(tooFew.status, 409, tooFew.text);
+    assert.equal(tooFew.json.code, 'THRESHOLD_NOT_MET');
+
+    const bad = partialBody(shares[1], electionId, envelopes);
+    bad.partials[0].proof.z = `0x${(BigInt(bad.partials[0].proof.z) + 1n).toString(16).padStart(64, '0')}`;
+    const rejected = await api('POST', `/api/elections/${electionId}/guardians/partials`, {
+      jar: adminJar,
+      body: bad,
+    });
+    assert.equal(rejected.status, 400, rejected.text);
+    assert.equal(rejected.json.code, 'BAD_PARTIAL');
+
+    const two = await api('POST', `/api/elections/${electionId}/guardians/partials`, {
+      jar: adminJar,
+      body: partialBody(shares[1], electionId, envelopes),
+    });
+    assert.equal(two.status, 201, two.text);
 
     const invented = await api('POST', `/api/elections/${electionId}/tally`, {
       jar: adminJar,
@@ -190,6 +320,7 @@ describe('tally opens ballots (demo ECIES)', () => {
     assert.deepEqual(ok.json.election.tally.counts, [3, 1, 1]);
     assert.equal(ok.json.election.tally.source, 'opens_ballots');
     assert.equal(ok.json.election.tally.production, false);
+    assert.equal(ok.json.election.tally.aggregation, 'undecided');
     assert.equal(ok.json.tally.openedBallots, 5);
   });
 
@@ -238,10 +369,14 @@ describe('tally opens ballots (demo ECIES)', () => {
     assert.equal(ok.json.election.tally.source, 'sum_only');
   });
 
-  test('GET /api/config advertises both tally schemes and non-production demo key', async () => {
+  test('GET /api/config advertises both tally schemes and an undecided aggregator', async () => {
     const { status, json } = await api('GET', '/api/config');
     assert.equal(status, 200);
     assert.deepEqual(json.tally.schemes, ['sum_only', 'opens_ballots']);
     assert.equal(json.tally.production, false);
+    assert.equal(json.tally.aggregation, 'undecided');
+    assert.equal(json.tally.guardians, 'p256-feldman-dkg-v1');
+    const ids = json.tally.aggregators.map((row) => row.id).sort();
+    assert.deepEqual(ids, ['homomorphic', 'mixnet', 'undecided']);
   });
 });

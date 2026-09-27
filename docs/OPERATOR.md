@@ -373,7 +373,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 - `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
-- `opens_ballots` elections store a **threshold-1** P-256 private JWK in the Node data file (`tallyGuardians`). That key decrypts every ballot. It is a demo, labeled NON-PRODUCTION. Do not use it for a binding election. Production guardians / mixnet are not this host’s JSON file.
+- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. Decrypting takes `t` verified partials after cutoff. Guardians use `node apps/node/scripts/guardian.mjs`. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). Homomorphic aggregation and a mixnet are **not selected**. The ceremony is NON-PRODUCTION. Do not use it for a binding election.
 
 ## L1 certification (tally hash on Ethereum)
 

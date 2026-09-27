@@ -1225,6 +1225,10 @@
       tallyScheme: $("e-tally-scheme") ? $("e-tally-scheme").value : "sum_only",
       ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
     };
+    if (body.tallyScheme === "opens_ballots") {
+      body.threshold = Number($("e-threshold") ? $("e-threshold").value : 2);
+      body.guardianCount = Number($("e-guardian-count") ? $("e-guardian-count").value : 3);
+    }
     try {
       const created = await request("/api/elections", { method: "POST", body });
       const id = pick(created, ["election.id", "id"]) || "";
@@ -1442,7 +1446,7 @@
       const source = pick(data, ["tally.source", "election.tally.source"]);
       let msg = "Tally posted. Each plurality question is counted on its own options.";
       if (source === "opens_ballots") {
-        msg = "Tally posted from opened envelopes (demo key, NON-PRODUCTION).";
+        msg = "Tally posted from guardian partial decryptions (Feldman t-of-n, NON-PRODUCTION). Aggregation is undecided.";
       }
       const winner = pick(data, ["election.tally.questions.0.winnerLabel"]) || pick(data, ["election.tally.questions.0.winner"]);
       const method = pick(data, ["election.tally.ballotMethod"]);
@@ -1528,18 +1532,93 @@
     if (!plurality.length) $("t-counts").value = "";
   }
 
+  function renderGuardianStatus(ceremony) {
+    const host = $("guardian-status");
+    if (!host) return;
+    if (!ceremony) {
+      host.textContent = "This election has no guardian ceremony (sum_only).";
+      return;
+    }
+    const roster = ceremony.roster || [];
+    host.textContent =
+      "Ceremony " +
+      (ceremony.status || "unknown") +
+      " · " +
+      (ceremony.threshold || "?") +
+      "-of-" +
+      (ceremony.guardians || "?") +
+      " · aggregation " +
+      (ceremony.aggregation || "undecided") +
+      " · enrolled " +
+      roster.length +
+      (ceremony.publicKey ? " · joint key ready" : " · joint key not ready");
+  }
+
   async function loadTallyElection(id) {
     if (!id) {
       renderTallyAspects(null);
+      renderGuardianStatus(null);
       return;
     }
     try {
       const data = await request("/api/elections/" + encodeURIComponent(id));
-      renderTallyAspects(data.election || data);
+      const election = data.election || data;
+      renderTallyAspects(election);
+      renderGuardianStatus(election.tallyCeremony || null);
     } catch (err) {
       $("tally-aspects").innerHTML = `<p class="field-hint">${esc(errText(err))}</p>`;
     }
   }
+
+  function bindGuardianForm(formId, pathSuffix, readBody, okText) {
+    const form = $(formId);
+    if (!form) return;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = $("t-election").value;
+      if (!id) {
+        flash($("flash-tally"), "err", "Choose an election first.");
+        return;
+      }
+      let body;
+      try {
+        body = readBody();
+      } catch (err) {
+        flash($("flash-tally"), "err", err.message || "Guardian JSON is invalid.");
+        return;
+      }
+      try {
+        await request("/api/elections/" + encodeURIComponent(id) + pathSuffix, { method: "POST", body });
+        flash($("flash-tally"), "ok", okText);
+        await loadTallyElection(id);
+      } catch (err) {
+        flash($("flash-tally"), "err", errText(err));
+      }
+    });
+  }
+
+  bindGuardianForm(
+    "form-guardian-enroll",
+    "/guardians",
+    () => ({
+      guardianId: $("g-id").value.trim(),
+      label: $("g-label").value.trim(),
+      transportPublicKey: $("g-transport").value.trim(),
+    }),
+    "Guardian enrolled."
+  );
+  bindGuardianForm(
+    "form-guardian-deal",
+    "/guardians/deals",
+    () => JSON.parse($("g-deal").value),
+    "Deal stored. The Node keeps encrypted shares only."
+  );
+  bindGuardianForm(
+    "form-guardian-partials",
+    "/guardians/partials",
+    () => JSON.parse($("g-partials").value),
+    "Partial decryptions stored after proof checks."
+  );
 
   $("tally-aspects").addEventListener("input", () => {
     const inputs = [...document.querySelectorAll("#tally-aspects .tally-count")];

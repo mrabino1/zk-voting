@@ -67,8 +67,20 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
           threshold: election.tallyCeremony.threshold,
           guardians: election.tallyCeremony.guardians,
           production: false,
+          status: election.tallyCeremony.status || null,
+          aggregation: election.tallyCeremony.aggregation || null,
           warning: election.tallyCeremony.warning,
           publicKey: election.tallyCeremony.publicKey || election.tallyPubKey || null,
+          verificationKeys: election.tallyCeremony.verificationKeys || null,
+          roster: Array.isArray(election.tallyCeremony.roster)
+            ? election.tallyCeremony.roster.map((g) => ({
+                index: g.index,
+                guardianId: g.guardianId,
+                label: g.label || '',
+                transportPublicKey: g.transportPublicKey || null,
+                commitments: g.commitments || null,
+              }))
+            : [],
         }
       : null,
     lateUpdateAllowed: election.lateUpdateAllowed,
@@ -97,6 +109,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
           ...presentTally(election, election.acceptedBallots),
           source: election.tally.source || 'sum_only',
           production: false,
+          aggregation: election.tally.aggregation || null,
           openedBallots: election.tally.openedBallots ?? null,
         }
       : null,
