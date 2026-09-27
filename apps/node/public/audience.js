@@ -161,6 +161,20 @@ export function navItemIsCurrent(item, currentPath, routeName) {
 export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [], pollsEnabled = false } = {}) {
   if (!nav) return;
   const items = mainNav(audience || "public", extraNav, { pollsEnabled });
+  const existing = [...nav.querySelectorAll(":scope > ul > li > a")];
+  const unchanged =
+    existing.length === items.length &&
+    items.every((item, i) => {
+      const a = existing[i];
+      const current = navItemIsCurrent(item, currentPath, routeName);
+      return (
+        a.getAttribute("href") === item.href &&
+        a.textContent === item.label &&
+        (a.getAttribute("aria-current") === "page") === current &&
+        a.hasAttribute("data-nav") === spa
+      );
+    });
+  if (unchanged) return;
   const ul = document.createElement("ul");
   for (const item of items) {
     const li = document.createElement("li");
