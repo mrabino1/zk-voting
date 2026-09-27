@@ -4,7 +4,7 @@ import { Router } from 'express';
 
 import { HttpError } from '../http.mjs';
 import { requireAuth, requireRole } from '../auth.mjs';
-import { publicMailSummary } from '../mailer.mjs';
+import { publicMailSummary } from '../promotionMail.mjs';
 import {
   listPromotionTemplates,
   renderPromotionTemplate,

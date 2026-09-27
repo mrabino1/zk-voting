@@ -36,6 +36,8 @@ import {
 } from '../outcomeReports.mjs';
 import { partiesRouter } from './parties.mjs';
 import { publicUser } from '../roles.mjs';
+import { deliverRolePromotion } from '../promotionMail.mjs';
+import { assertExternalClearance } from '../voteGate.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -249,11 +251,24 @@ export function electionsRouter(deps) {
     requirePlatformOperator,
     asyncHandler(async (req, res) => {
       const result = await store.approveElectionStaff(req.params.id, req.body || {});
+      const mail = await deliverRolePromotion(deps, {
+        role: 'election_staff',
+        user: result.user,
+        created: Boolean(result.created && result.user),
+        skipReason: result.user ? (result.created ? null : 'already_granted') : 'no_user',
+        contactEmail: req.body?.contactEmail,
+        jurisdictionId: result.election.jurisdictionId,
+        electionId: result.election.id,
+        electionTitle: result.election.title,
+        grantedByHandle: req.user.handle,
+      });
       res.status(201).json({
         ok: true,
         nfp: true,
+        created: Boolean(result.created),
         staff: result.staff,
         user: publicUser(result.user),
+        mail,
       });
     }),
   );
@@ -630,6 +645,18 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
+      const electionForGate = store.getElection(req.params.id);
+      if (electionForGate && store.listActiveExternalParties(electionForGate.id).length) {
+        const rawCommitment = req.body?.identityCommitment;
+        if (rawCommitment == null || rawCommitment === '') {
+          throw new HttpError(400, 'identityCommitment required for external party clearance', {
+            code: 'IDENTITY_COMMITMENT_REQUIRED',
+          });
+        }
+        await assertExternalClearance(store, electionForGate.id, rawCommitment, {
+          now: config.nowFn(),
+        });
+      }
       const body = sanitizeVoteBody(req.body);
       if (req.user && pin) {
         pin.assertVoteAllowed(req.user, body?.pinToken);

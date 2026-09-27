@@ -94,6 +94,13 @@ const FACTORY_ABI = [
     inputs: [],
     outputs: [{ type: "address" }],
   },
+  {
+    type: "function",
+    name: "getPartyRegistry",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ name: "registry", type: "address" }],
+  },
 ];
 
 const INBOX_ABI = [
@@ -137,6 +144,46 @@ const INBOX_ABI = [
       { name: "nullifier", type: "uint256" },
     ],
     outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "submitVoteWithClearance",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2]" },
+      { name: "b", type: "uint256[2][2]" },
+      { name: "c", type: "uint256[2]" },
+      { name: "publicInputs", type: "uint256[]" },
+      { name: "encryptedBallot", type: "bytes" },
+      { name: "identityCommitment", type: "uint256" },
+      { name: "mustAttestIds", type: "uint256[]" },
+    ],
+    outputs: [],
+  },
+];
+
+const PARTY_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "partyCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "hasActiveGates",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "isRejected",
+    stateMutability: "view",
+    inputs: [{ name: "identityCommitment", type: "uint256" }],
+    outputs: [{ type: "bool" }],
   },
 ];
 
@@ -645,6 +692,7 @@ module.exports = {
   FACTORY_ABI,
   INBOX_ABI,
   ELECTION_ABI,
+  PARTY_REGISTRY_ABI,
   rpc,
   ethCall,
   ethSendTransaction,

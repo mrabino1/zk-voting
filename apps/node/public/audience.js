@@ -28,14 +28,14 @@ export function isOfficer(me) {
   const user = meUser(me);
   if (!user) return false;
   const role = normalizeRole(user.role);
-  if (role === "platform_admin") return true;
+  if (role === "platform_admin" || role === "platform_super_admin") return true;
   if (OFFICER_ROLES.includes(role)) return true;
   const grants = me?.jurisdictionRoles || me?.me?.jurisdictionRoles || user.jurisdictionRoles || [];
   if (grants.some((g) => isOfficerRoleName(g?.role))) return true;
   const roles = me?.roles || user.roles || [];
   return roles.some((r) => {
     const n = normalizeRole(r);
-    return n === "platform_admin" || OFFICER_ROLES.includes(n);
+    return n === "platform_admin" || n === "platform_super_admin" || OFFICER_ROLES.includes(n);
   });
 }
 

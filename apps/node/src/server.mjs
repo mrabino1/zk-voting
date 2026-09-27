@@ -29,6 +29,7 @@ import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { pinRouter } from './routes/pin.mjs';
+import { mailRouter } from './routes/mail.mjs';
 import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
@@ -207,6 +208,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', identityRouter(deps));
   app.use('/api', pinRouter(deps));
   app.use('/api', meRouter(deps));
+  app.use('/api', mailRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));

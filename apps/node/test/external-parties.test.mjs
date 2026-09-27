@@ -283,7 +283,7 @@ describe('approval chain and external vote parties', () => {
     const partyId = party.json.party.id;
 
     const reg = await api('POST', `/api/elections/${election.id}/register`, {
-      jar: voterJar,
+      jar: clerkJar,
       body: { identityCommitment: '0xabc1' },
     });
     assert.equal(reg.status, 201, reg.json?.error);
@@ -330,11 +330,11 @@ describe('approval chain and external vote parties', () => {
     assert.equal(party.status, 201, party.json?.error);
 
     await api('POST', `/api/elections/${election.id}/register`, {
-      jar: voterJar,
+      jar: clerkJar,
       body: { identityCommitment: '0xdead' },
     });
     await api('POST', `/api/elections/${election.id}/register`, {
-      jar: voterJar,
+      jar: clerkJar,
       body: { identityCommitment: '0xbeef' },
     });
     await api('POST', `/api/elections/${election.id}/freeze`, { jar: clerkJar });
@@ -360,7 +360,7 @@ describe('approval chain and external vote parties', () => {
     });
     const partyId = party.json.party.id;
     await api('POST', `/api/elections/${election.id}/register`, {
-      jar: voterJar,
+      jar: clerkJar,
       body: { identityCommitment: '0x333' },
     });
     await api('POST', `/api/elections/${election.id}/freeze`, { jar: clerkJar });
@@ -390,7 +390,7 @@ describe('approval chain and external vote parties', () => {
     });
     const partyId = party.json.party.id;
     await api('POST', `/api/elections/${election.id}/register`, {
-      jar: voterJar,
+      jar: clerkJar,
       body: { identityCommitment: '0x444' },
     });
     await api('POST', `/api/elections/${election.id}/freeze`, { jar: clerkJar });
