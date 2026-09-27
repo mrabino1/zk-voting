@@ -33,11 +33,18 @@ export function hashLeftRight(left, right) {
   return keccak256(concat([toBytes32(left), toBytes32(right)]));
 }
 
+const ZERO_CACHE = new Map();
+
+/** Zero-subtree hashes for one depth. The array is shared and must not be mutated. */
 export function computeZeros(depth) {
+  const d = Number(depth);
+  const cached = ZERO_CACHE.get(d);
+  if (cached) return cached;
   const zeros = [ZERO];
-  for (let i = 0; i < depth; i += 1) {
+  for (let i = 0; i < d; i += 1) {
     zeros.push(hashLeftRight(zeros[i], zeros[i]));
   }
+  ZERO_CACHE.set(d, zeros);
   return zeros;
 }
 

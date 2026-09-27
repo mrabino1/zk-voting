@@ -1187,7 +1187,7 @@ export class Store {
     );
   }
 
-  async registerCommitment(electionId, identityCommitment, { userId } = {}) {
+  async registerCommitment(electionId, identityCommitment, { userId, persist = true } = {}) {
     const election = this.requireElection(electionId);
     if (election.rollFrozen) {
       throw new HttpError(409, 'roll is frozen', { code: 'ROLL_FROZEN' });
@@ -1221,9 +1221,9 @@ export class Store {
         });
       }
     }
-    this.rebuildEligibleTree(election);
+    this.appendEligibleLeaf(election, key);
     const eligibleLeafIndex = election.eligibleTree.leaves.indexOf(key);
-    await this.persist();
+    if (persist) await this.persist();
     return {
       election,
       leafIndex: eligibleLeafIndex >= 0 ? eligibleLeafIndex : leafIndex,
@@ -1273,7 +1273,31 @@ export class Store {
   /**
    * Node eligible set: registered ∩ ¬currently-disqualified, in registration order.
    * Incremental Merkle trees cannot delete; disqualify/revoke rebuild this tree.
+   * A new registration appends one leaf when the in-memory tree already matches
+   * that set; any mismatch falls back to the same full rebuild.
    */
+  appendEligibleLeaf(election, identityCommitment) {
+    const key = toBytes32(identityCommitment);
+    const eligible = this.listEligibleRegistrations(election.id);
+    const tree = election.eligibleTree;
+    const prior = eligible.slice(0, -1);
+    const matches =
+      tree &&
+      Array.isArray(tree.leaves) &&
+      Number(tree.depth) === Number(election.treeDepth) &&
+      eligible.length === tree.leaves.length + 1 &&
+      eligible[eligible.length - 1]?.identityCommitment === key &&
+      prior.length === tree.leaves.length &&
+      prior.every((row, index) => row.identityCommitment === tree.leaves[index]);
+    if (!matches) {
+      this.rebuildEligibleTree(election);
+      return;
+    }
+    insertLeaf(tree, key);
+    election.eligibleRoot = tree.root;
+    election.eligibleCount = tree.leaves.length;
+  }
+
   rebuildEligibleTree(election) {
     const tree = emptyTree(election.treeDepth);
     for (const r of this.listEligibleRegistrations(election.id)) {
@@ -1893,6 +1917,13 @@ export class Store {
       ? Math.floor(Number(vote.acceptedAt))
       : Math.floor(Date.now() / 1000);
     const ballotHash = toBytes32(vote.ballotHash);
+    let pdfSha256 = null;
+    if (vote.pdfSha256) {
+      pdfSha256 = String(vote.pdfSha256).toLowerCase();
+      if (!/^[0-9a-f]{64}$/.test(pdfSha256)) {
+        throw new HttpError(500, 'receipt PDF fingerprint missing', { code: 'RECEIPT_PDF_DRIFT' });
+      }
+    }
     const record = {
       nullifier: toBytes32(vote.nullifier),
       ballotHash,
@@ -1913,9 +1944,9 @@ export class Store {
         acceptedAt,
         emailedAt: null,
         emailHint: null,
-        pdfSha256: null,
+        pdfSha256,
         pdfProtected: true,
-        pdfIntegrity: null,
+        pdfIntegrity: vote.pdfIntegrity ? String(vote.pdfIntegrity) : null,
       });
     }
     if (envelope) {
@@ -2103,6 +2134,7 @@ export class Store {
     }
     const result = await this.registerCommitment(election.id, request.identityCommitment, {
       userId: request.userId,
+      persist: false,
     });
     request.status = 'approved';
     request.reviewedAt = new Date().toISOString();
