@@ -1190,7 +1190,13 @@ async function renderRoute(route) {
       h("p", {}, h("a", { class: "btn", href: "/", "data-nav": "", text: "Return home" }))
     );
   }
-  main.focus({ preventScroll: true });
+  const active = document.activeElement;
+  const focusIdle =
+    !active ||
+    active === document.body ||
+    active === document.documentElement ||
+    main.contains(active);
+  if (focusIdle) main.focus({ preventScroll: true });
 }
 
 if (typeof document !== "undefined") {
