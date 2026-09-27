@@ -124,6 +124,7 @@ function emptyData() {
     externalParties: [],
     partyRejections: [],
     partyAttestations: [],
+    mailOutbox: [],
   };
 }
 
@@ -219,6 +220,7 @@ export class Store {
     if (!Array.isArray(store.data.externalParties)) store.data.externalParties = [];
     if (!Array.isArray(store.data.partyRejections)) store.data.partyRejections = [];
     if (!Array.isArray(store.data.partyAttestations)) store.data.partyAttestations = [];
+    if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
@@ -856,7 +858,7 @@ export class Store {
 
   userHasJurisdictionRole(user, roles, jurisdictionId) {
     if (!user) return false;
-    if (user.role === 'platform_admin') return true;
+    if (isPlatformOperator(user)) return true;
     const wanted = new Set((Array.isArray(roles) ? roles : [roles]).filter(Boolean));
     if (!wanted.size || jurisdictionId == null || jurisdictionId === '') return false;
     const jurisdiction = this.getJurisdiction(jurisdictionId);
@@ -868,7 +870,7 @@ export class Store {
 
   userHasAnyJurisdictionRole(user, roles) {
     if (!user) return false;
-    if (user.role === 'platform_admin') return true;
+    if (isPlatformOperator(user)) return true;
     return this.data.jurisdictions.some((jurisdiction) =>
       this.userHasJurisdictionRole(user, roles, jurisdiction.id),
     );
@@ -933,7 +935,7 @@ export class Store {
       if (user && !existing.userId) existing.userId = user.id;
       if (user && !existing.handle) existing.handle = user.handle;
       await this.persist();
-      return { jurisdiction, grant: existing, user };
+      return { jurisdiction, grant: existing, user, created: false };
     }
     const grant = {
       userId: user?.id || trimmedUserId || '',
@@ -944,7 +946,7 @@ export class Store {
     };
     jurisdiction.officers.push(grant);
     await this.persist();
-    return { jurisdiction, grant, user };
+    return { jurisdiction, grant, user, created: true };
   }
 
   async revokeJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
@@ -1328,16 +1330,21 @@ export class Store {
     );
   }
 
-  async approveAdmin({ userId, handle } = {}) {
+  async approveAdmin({ userId, handle, contactEmail } = {}) {
     const user = this.resolveOfficerUser({ userId, handle });
     if (!user) throw new HttpError(404, 'user not found');
     if (user.role === 'platform_super_admin') {
       throw new HttpError(400, 'cannot change a platform super admin with this approval');
     }
+    if (contactEmail) user.contactEmail = normalizeEmail(contactEmail);
+    if (user.role === 'platform_admin') {
+      await this.persist();
+      return { user, created: false };
+    }
     user.role = 'platform_admin';
     user.approvedAsAdminAt = new Date().toISOString();
     await this.persist();
-    return user;
+    return { user, created: true };
   }
 
   async revokeAdmin({ userId, handle } = {}) {
@@ -1397,7 +1404,7 @@ export class Store {
     return out;
   }
 
-  async approveElectionStaff(electionId, { address, handle, userId } = {}) {
+  async approveElectionStaff(electionId, { address, handle, userId, contactEmail } = {}) {
     const election = this.requireElection(electionId);
     const trimmedHandle = String(handle || '').trim();
     const trimmedAddress = String(address || '').trim();
@@ -1410,6 +1417,7 @@ export class Store {
       handle: trimmedHandle,
       address: trimmedAddress,
     });
+    if (user && contactEmail) user.contactEmail = normalizeEmail(contactEmail);
     election.staff = election.staff || [];
     const exists = election.staff.some(
       (grant) =>
@@ -1419,6 +1427,7 @@ export class Store {
           String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()),
     );
     if (exists) {
+      if (user && contactEmail) await this.persist();
       return { election, staff: election.staff, user, created: false };
     }
     election.staff.push({
@@ -2186,6 +2195,31 @@ export class Store {
     }
     await this.persist();
     return election;
+  }
+
+  listMailOutbox() {
+    const rows = Array.isArray(this.data.mailOutbox) ? this.data.mailOutbox : [];
+    return rows.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  getMail(id) {
+    const rows = Array.isArray(this.data.mailOutbox) ? this.data.mailOutbox : [];
+    return rows.find((row) => row.id === id) || null;
+  }
+
+  async recordMail(record) {
+    if (!Array.isArray(this.data.mailOutbox)) this.data.mailOutbox = [];
+    this.data.mailOutbox.push(record);
+    await this.persist();
+    return record;
+  }
+
+  async setContactEmail(userId, contactEmail) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.contactEmail = contactEmail || '';
+    await this.persist();
+    return user;
   }
 
   async addNotification({ userId, type, title, body, electionId }) {

@@ -27,6 +27,9 @@ export const CIVIC_TYPES = Object.freeze([
   'disqualify',
   'tally',
   'userop',
+  'party_add',
+  'party_reject',
+  'party_attest',
 ]);
 
 const FORBIDDEN_KEYS = new Set([
@@ -256,6 +259,9 @@ export function publicFieldsForTx(tx) {
     out.disqualificationRoot = topicWord(c.disqualificationRoot);
   }
   if (c.reasonCode != null) out.reasonCode = Number(c.reasonCode);
+  if (c.partyId != null) out.partyId = String(c.partyId);
+  if (c.partyName != null) out.partyName = String(c.partyName);
+  if (c.mode != null) out.mode = String(c.mode);
   if (c.evidenceHash != null) out.evidenceHash = topicWord(c.evidenceHash);
   if (c.countsHash != null) out.countsHash = topicWord(c.countsHash);
   if (type === 'userop' && c.sender) out.sender = normalizeAddress(c.sender);
@@ -402,6 +408,7 @@ export class ChainState {
       disqualified: topic0('Disqualified(uint256,uint256,uint16,bytes32)'),
       tallySubmitted: topic0('TallySubmitted(uint256,bytes32)'),
       userOpAccepted: topic0('UserOpAccepted(bytes32,address)'),
+      partyRejected: topic0('PartyRejected(uint256,uint256,uint16,bytes32)'),
     };
   }
 
@@ -751,6 +758,9 @@ export class ChainState {
       return normalizeAddress(c.disqualificationRegistry || '0x1003');
     }
     if (type === 'tally') return normalizeAddress(c.tallyVerifier || '0x1004');
+    if (type === 'party_add' || type === 'party_reject' || type === 'party_attest') {
+      return normalizeAddress(c.partyRegistry || '0x1006');
+    }
     return normalizeAddress(c.entryPoint || '0x1005');
   }
 
@@ -842,6 +852,20 @@ export class ChainState {
         logIndex: toQuantity(logIndexStart),
         topics: [this.eventTopics.tallySubmitted, topicWord(c.electionId || 0)],
         data: topicWord(c.countsHash || ZERO_HASH),
+      });
+    } else if (type === 'party_reject') {
+      logs.push({
+        ...base,
+        logIndex: toQuantity(logIndexStart),
+        topics: [
+          this.eventTopics.partyRejected,
+          topicWord(c.electionId || 0),
+          topicWord(c.identityCommitment || 0),
+        ],
+        data:
+          '0x' +
+          topicWord(c.reasonCode || 0).slice(2) +
+          topicWord(c.evidenceHash || ZERO_HASH).slice(2),
       });
     } else if (type === 'userop') {
       logs.push({

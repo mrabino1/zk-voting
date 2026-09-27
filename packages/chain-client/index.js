@@ -94,6 +94,13 @@ const FACTORY_ABI = [
     inputs: [],
     outputs: [{ type: "address" }],
   },
+  {
+    type: "function",
+    name: "getPartyRegistry",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ name: "registry", type: "address" }],
+  },
 ];
 
 const INBOX_ABI = [
@@ -108,6 +115,22 @@ const INBOX_ABI = [
       { name: "c", type: "uint256[2]" },
       { name: "publicInputs", type: "uint256[]" },
       { name: "encryptedBallot", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "submitVoteWithClearance",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2]" },
+      { name: "b", type: "uint256[2][2]" },
+      { name: "c", type: "uint256[2]" },
+      { name: "publicInputs", type: "uint256[]" },
+      { name: "encryptedBallot", type: "bytes" },
+      { name: "identityCommitment", type: "uint256" },
+      { name: "mustAttestIds", type: "uint256[]" },
     ],
     outputs: [],
   },
@@ -638,12 +661,40 @@ async function nullifierUsed(inboxAddress, electionId, nullifier, opts = {}) {
   return decodeUintWord(raw) !== 0n;
 }
 
+const PARTY_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "hasActiveGates",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ name: "active", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "isRejected",
+    stateMutability: "view",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "identityCommitment", type: "uint256" },
+    ],
+    outputs: [{ name: "rejected", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "partyCount",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ name: "count", type: "uint256" }],
+  },
+];
+
 const l1 = require("./l1");
 
 module.exports = {
   REPUBLIC_CHAIN_ID,
   FACTORY_ABI,
   INBOX_ABI,
+  PARTY_REGISTRY_ABI,
   ELECTION_ABI,
   rpc,
   ethCall,

@@ -20,6 +20,8 @@ import {
 } from '../ballotSpec.mjs';
 import { presentElection, electionState, electionChainMode, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError, sanitizeVoteBody } from '../http.mjs';
+import { deliverPromotionMail } from '../promotionMail.mjs';
+import { assertExternalClearance } from '../voteGate.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
@@ -249,11 +251,26 @@ export function electionsRouter(deps) {
     requirePlatformOperator,
     asyncHandler(async (req, res) => {
       const result = await store.approveElectionStaff(req.params.id, req.body || {});
+      const jurisdiction = store.getJurisdiction(result.election.jurisdictionId);
+      const mail = await deliverPromotionMail(store, config, {
+        created: result.created,
+        user: result.user,
+        role: 'election_staff',
+        vars: {
+          electionId: String(result.election.id),
+          electionTitle: result.election.title,
+          jurisdictionId: result.election.jurisdictionId,
+          jurisdictionName: jurisdiction?.name || '',
+          grantedByHandle: req.user?.handle,
+        },
+      });
       res.status(201).json({
         ok: true,
         nfp: true,
+        created: result.created,
         staff: result.staff,
         user: publicUser(result.user),
+        mail,
       });
     }),
   );
@@ -630,6 +647,10 @@ export function electionsRouter(deps) {
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
+      const rawCommitment = req.body?.identityCommitment;
+      if (rawCommitment != null && String(rawCommitment).trim() !== '') {
+        await assertExternalClearance(store, req.params.id, rawCommitment);
+      }
       const body = sanitizeVoteBody(req.body);
       if (req.user && pin) {
         pin.assertVoteAllowed(req.user, body?.pinToken);

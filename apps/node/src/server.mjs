@@ -29,6 +29,7 @@ import { explorerRouter } from './routes/explorer.mjs';
 import { configRouter, healthRouter } from './routes/health.mjs';
 import { identityRouter } from './routes/identity.mjs';
 import { pinRouter } from './routes/pin.mjs';
+import { mailRouter } from './routes/mail.mjs';
 import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
@@ -214,6 +215,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
   app.use('/api', configRouter(deps));
+  app.use('/api', mailRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });

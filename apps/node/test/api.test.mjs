@@ -159,13 +159,13 @@ describe('Republic Node API', () => {
     assert.equal(status, 401);
   });
 
-  test('dev-login seeds platform_admin and sets cookie', async () => {
+  test('dev-login seeds platform_super_admin and sets cookie', async () => {
     const { status, json } = await api('POST', '/api/auth/dev-login', {
       body: { handle: 'admin' },
       jar: adminJar,
     });
     assert.equal(status, 200);
-    assert.equal(json.user.role, 'platform_admin');
+    assert.equal(json.user.role, 'platform_super_admin');
     assert.ok(adminJar['republic.sid']);
     const me = await api('GET', '/api/me', { jar: adminJar });
     assert.equal(me.json.user.handle, 'admin');

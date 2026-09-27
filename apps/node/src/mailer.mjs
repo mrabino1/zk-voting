@@ -40,6 +40,20 @@ export function otpFromText(text) {
   return m ? m[1] : null;
 }
 
+/** Outbox row safe to list. Body text stays on the detail route. */
+export function publicMailSummary(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    templateId: record.templateId,
+    role: record.role,
+    to: record.to,
+    subject: record.subject,
+    status: record.status,
+    createdAt: record.createdAt,
+  };
+}
+
 function headerSafe(value) {
   return String(value || '').replace(/[\r\n]+/g, ' ').trim();
 }

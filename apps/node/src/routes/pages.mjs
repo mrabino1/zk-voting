@@ -16,11 +16,12 @@ import {
   publicSiteView,
 } from '../cms.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
+import { isPlatformOperator } from '../roles.mjs';
 
 function clerkJurisdictions(store, user) {
   const all = store.listJurisdictions();
   if (!user) return [];
-  if (user.role === 'platform_admin') return all;
+  if (isPlatformOperator(user)) return all;
   const ids = new Set(
     store
       .listJurisdictionRolesForUser(user)

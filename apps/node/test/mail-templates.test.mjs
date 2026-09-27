@@ -364,7 +364,7 @@ describe('role-promotion mail API', () => {
   });
 
   test('admin SPA includes the promotion-mail panel', async () => {
-    const page = await api('GET', '/admin');
+    const page = await api('GET', '/admin', { jar: superJar, redirect: 'manual' });
     assert.equal(page.status, 200);
     assert.match(page.text, /Role-promotion emails/);
     assert.match(page.text, /mail-template/);
