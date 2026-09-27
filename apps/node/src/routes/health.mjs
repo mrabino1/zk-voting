@@ -166,6 +166,10 @@ export function configRouter(deps) {
           questionTypes: ['YES_NO', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'RANKED', 'MEASURE', 'ARTICLE'],
           note: 'ranked_choice is instant-runoff (IRV). On-chain v1 may keep the method inside ballotSpecHash; ElectionParams has no method enum.',
         },
+        mail: {
+          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
+          note: 'Role-promotion mail is queued on the Node. It is never written to civic L2 transactions.',
+        },
         auth: {
           allowDevLogin: Boolean(deps.config.allowDevLogin),
           passkeyLogin: true,
