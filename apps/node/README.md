@@ -19,7 +19,7 @@ See `/NOT_FOR_PROFIT.md` at the repo root.
 | --- | --- |
 | Organizations | Jurisdictions |
 | Rooms / processes | Elections (start + cutoff, roll, inbox) |
-| Users + roles | `voter` / `observer` / `platform_admin` are global. `clerk`, `registrar`, `disqualification_officer`, and `tally_operator` are granted **per jurisdiction**. `platform_admin` is a global override. |
+| Users + roles | `voter` / `observer` / `platform_admin` / `platform_super_admin` are global. `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, and `election_staff` are granted **per jurisdiction**. `platform_super_admin` and `platform_admin` are global overrides. The seeded host is `platform_super_admin`. |
 | Host menu | repo-root `system_actions.sh` |
 
 Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
@@ -135,7 +135,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `L1_CHAIN_ID` | RPC | Optional override |
 | `RP_ID` | `localhost` | WebAuthn rpID |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
-| `ADMIN_HANDLE` | `admin` | Seeded `platform_admin` on first boot |
+| `ADMIN_HANDLE` | `admin` | Seeded `platform_super_admin` on first boot |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
@@ -186,7 +186,11 @@ POST /api/elections/:id/registration-requests/:requestId/deny
 POST /api/elections/:id/vote        (relays proof; signed-in ballots need a vote PIN token)
 POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
 POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
-GET  /api/elections/:id/tally-key   (public ceremony view; no private key)
+GET  /api/elections/:id/tally-key   (public Feldman ceremony; no shares, no private key)
+POST /api/elections/:id/guardians   (tally operator; enroll a guardian transport key)
+POST /api/elections/:id/guardians/deals   (tally operator; Feldman commitments + encrypted shares)
+GET  /api/elections/:id/guardians/:index/inbox   (encrypted shares for that guardian)
+POST /api/elections/:id/guardians/partials   (tally operator; after cutoff; proved partial decryptions)
 POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 identity post; no-op if env unset)
 GET  /api/elections/:id/l1
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)

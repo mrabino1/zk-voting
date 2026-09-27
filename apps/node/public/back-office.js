@@ -218,7 +218,7 @@
     return `<li class="aspect-option">
       <input class="opt-id" spellcheck="false" placeholder="id" value="${esc(id)}" aria-label="Option id" />
       <input class="opt-label" placeholder="Label" value="${esc(label)}" aria-label="Option label" />
-      <button type="button" class="btn btn-secondary btn-remove-opt">Remove</button>
+      <button type="button" class="btn btn-secondary btn-remove-opt" aria-label="Remove option">Remove</button>
     </li>`;
   }
 
@@ -236,25 +236,25 @@
       </header>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Type</label>
-          <select class="aspect-type">${typeOpts}</select>
+          <label class="field-label" for="aq-${index}-type">Type</label>
+          <select id="aq-${index}-type" class="aspect-type">${typeOpts}</select>
         </div>
         <div class="field">
-          <label class="field-label">Id</label>
-          <input class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
+          <label class="field-label" for="aq-${index}-id">Id</label>
+          <input id="aq-${index}-id" class="aspect-id" spellcheck="false" value="${esc(q.id || "q" + (index + 1))}" />
         </div>
       </div>
       <div class="field aspect-max"${maxHidden}>
-        <label class="field-label">Max selections</label>
-        <input class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
+        <label class="field-label" for="aq-${index}-max">Max selections</label>
+        <input id="aq-${index}-max" class="aspect-maxsel" type="number" min="1" step="1" value="${esc(q.maxSelections || 2)}" />
       </div>
       <div class="field">
-        <label class="field-label">Prompt <span class="req">*</span></label>
-        <input class="aspect-prompt" required maxlength="400" value="${esc(q.prompt || "")}" />
+        <label class="field-label" for="aq-${index}-prompt">Prompt <span class="req">*</span></label>
+        <input id="aq-${index}-prompt" class="aspect-prompt" required maxlength="400" value="${esc(q.prompt || "")}" />
       </div>
       <div class="field">
-        <label class="field-label">Description</label>
-        <input class="aspect-desc" maxlength="500" value="${esc(q.description || "")}" />
+        <label class="field-label" for="aq-${index}-desc">Description</label>
+        <input id="aq-${index}-desc" class="aspect-desc" maxlength="500" value="${esc(q.description || "")}" />
       </div>
       <div class="field">
         <span class="field-label">Options</span>
@@ -596,7 +596,7 @@
     return `<div class="link-row" data-link="${li}">
       <input class="builder-mini" data-f="link-label" ${ballotLocked ? "disabled" : ""} placeholder="Label" value="${esc(link.label || "")}" aria-label="Link label" />
       <input class="builder-mini" data-f="link-url" ${ballotLocked ? "disabled" : ""} placeholder="https://…" value="${esc(link.url || "")}" aria-label="Link URL" />
-      <button class="btn btn-secondary" type="button" data-act="rm-link" data-q="${qi}" data-opt="${oi}" data-link="${li}" ${ballotLocked ? "disabled" : ""}>Remove</button>
+      <button class="btn btn-secondary" type="button" data-act="rm-link" data-q="${qi}" data-opt="${oi}" data-link="${li}" ${ballotLocked ? "disabled" : ""} aria-label="Remove link">Remove</button>
     </div>`;
   }
 
@@ -609,25 +609,25 @@
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Name / title</label>
-          <input class="builder-mini" data-f="opt-label" ${ballotLocked ? "disabled" : ""} required value="${esc(opt.label || "")}" placeholder="Jane Doe" />
+          <label class="field-label" for="bq-${qi}-o${oi}-label">Name / title</label>
+          <input id="bq-${qi}-o${oi}-label" class="builder-mini" data-f="opt-label" ${ballotLocked ? "disabled" : ""} required value="${esc(opt.label || "")}" placeholder="Jane Doe" />
         </div>
         <div class="field">
-          <label class="field-label">Option id</label>
-          <input class="builder-mini" data-f="opt-id" ${ballotLocked ? "disabled" : ""} value="${esc(opt.id || "")}" placeholder="o1" />
+          <label class="field-label" for="bq-${qi}-o${oi}-id">Option id</label>
+          <input id="bq-${qi}-o${oi}-id" class="builder-mini" data-f="opt-id" ${ballotLocked ? "disabled" : ""} value="${esc(opt.id || "")}" placeholder="o1" />
         </div>
       </div>
       <div class="field">
-        <label class="field-label">Short blurb</label>
-        <input class="builder-mini" data-f="opt-summary" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(opt.summary || "")}" placeholder="One-line summary on the voter list" />
+        <label class="field-label" for="bq-${qi}-o${oi}-summary">Short blurb</label>
+        <input id="bq-${qi}-o${oi}-summary" class="builder-mini" data-f="opt-summary" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(opt.summary || "")}" placeholder="One-line summary on the voter list" />
       </div>
       <div class="field">
-        <label class="field-label">Supporting information</label>
-        <textarea class="builder-body" data-f="opt-body" ${ballotLocked ? "disabled" : ""} placeholder="Plain text or light markdown for the mini info page">${esc(opt.body || "")}</textarea>
+        <label class="field-label" for="bq-${qi}-o${oi}-body">Supporting information</label>
+        <textarea id="bq-${qi}-o${oi}-body" class="builder-body" data-f="opt-body" ${ballotLocked ? "disabled" : ""} placeholder="Plain text or light markdown for the mini info page">${esc(opt.body || "")}</textarea>
       </div>
       <div class="field">
-        <label class="field-label">Image URL (optional)</label>
-        <input class="builder-mini" data-f="opt-image" ${ballotLocked ? "disabled" : ""} value="${esc(opt.imageUrl || "")}" placeholder="https://…" />
+        <label class="field-label" for="bq-${qi}-o${oi}-image">Image URL (optional)</label>
+        <input id="bq-${qi}-o${oi}-image" class="builder-mini" data-f="opt-image" ${ballotLocked ? "disabled" : ""} value="${esc(opt.imageUrl || "")}" placeholder="https://…" />
       </div>
       <div class="field">
         <span class="field-label">External links</span>
@@ -649,27 +649,27 @@
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Prompt</label>
-          <input class="builder-mini" data-f="q-prompt" ${ballotLocked ? "disabled" : ""} required value="${esc(q.prompt || "")}" placeholder="Office or measure text" />
+          <label class="field-label" for="bq-${qi}-prompt">Prompt</label>
+          <input id="bq-${qi}-prompt" class="builder-mini" data-f="q-prompt" ${ballotLocked ? "disabled" : ""} required value="${esc(q.prompt || "")}" placeholder="Office or measure text" />
         </div>
         <div class="field">
-          <label class="field-label">Type</label>
-          <select class="builder-mini" data-f="q-type" ${ballotLocked ? "disabled" : ""}>${typeOptions(type)}</select>
+          <label class="field-label" for="bq-${qi}-type">Type</label>
+          <select id="bq-${qi}-type" class="builder-mini" data-f="q-type" ${ballotLocked ? "disabled" : ""}>${typeOptions(type)}</select>
         </div>
       </div>
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Question id</label>
-          <input class="builder-mini" data-f="q-id" ${ballotLocked ? "disabled" : ""} value="${esc(q.id || "")}" placeholder="q1" />
+          <label class="field-label" for="bq-${qi}-id">Question id</label>
+          <input id="bq-${qi}-id" class="builder-mini" data-f="q-id" ${ballotLocked ? "disabled" : ""} value="${esc(q.id || "")}" placeholder="q1" />
         </div>
         <div class="field aspect-max"${maxHidden}>
-          <label class="field-label">Max selections</label>
-          <input class="builder-mini" data-f="q-max" type="number" min="1" step="1" ${ballotLocked ? "disabled" : ""} value="${esc(q.maxSelections || 2)}" />
+          <label class="field-label" for="bq-${qi}-max">Max selections</label>
+          <input id="bq-${qi}-max" class="builder-mini" data-f="q-max" type="number" min="1" step="1" ${ballotLocked ? "disabled" : ""} value="${esc(q.maxSelections || 2)}" />
         </div>
       </div>
       <div class="field">
-        <label class="field-label">Description</label>
-        <input class="builder-mini" data-f="q-desc" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(q.description || "")}" placeholder="Voter-facing help text" />
+        <label class="field-label" for="bq-${qi}-desc">Description</label>
+        <input id="bq-${qi}-desc" class="builder-mini" data-f="q-desc" ${ballotLocked ? "disabled" : ""} maxlength="500" value="${esc(q.description || "")}" placeholder="Voter-facing help text" />
       </div>
       ${
         type === "RANKED"
@@ -910,7 +910,7 @@
   function hasOfficerRole(me, name) {
     const user = me && me.user;
     if (!user) return false;
-    if (user.role === "platform_admin") return true;
+    if (user.role === "platform_admin" || user.role === "platform_super_admin") return true;
     const grants = me.jurisdictionRoles || (me.me && me.me.jurisdictionRoles) || [];
     if (grants.some((g) => g.role === name)) return true;
     const roles = me.roles || [];
@@ -919,7 +919,7 @@
 
   function clerkJurisdictionIds(me) {
     if (!me || !me.user) return null;
-    if (me.user.role === "platform_admin") return null;
+    if (me.user.role === "platform_admin" || me.user.role === "platform_super_admin") return null;
     return new Set(
       (me.jurisdictionRoles || []).filter((g) => g.role === "clerk").map((g) => String(g.jurisdictionId))
     );
@@ -1225,6 +1225,10 @@
       tallyScheme: $("e-tally-scheme") ? $("e-tally-scheme").value : "sum_only",
       ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
     };
+    if (body.tallyScheme === "opens_ballots") {
+      body.threshold = Number($("e-threshold") ? $("e-threshold").value : 2);
+      body.guardianCount = Number($("e-guardian-count") ? $("e-guardian-count").value : 3);
+    }
     try {
       const created = await request("/api/elections", { method: "POST", body });
       const id = pick(created, ["election.id", "id"]) || "";
@@ -1442,7 +1446,7 @@
       const source = pick(data, ["tally.source", "election.tally.source"]);
       let msg = "Tally posted. Each plurality question is counted on its own options.";
       if (source === "opens_ballots") {
-        msg = "Tally posted from opened envelopes (demo key, NON-PRODUCTION).";
+        msg = "Tally posted from guardian partial decryptions (Feldman t-of-n, NON-PRODUCTION). Aggregation is undecided.";
       }
       const winner = pick(data, ["election.tally.questions.0.winnerLabel"]) || pick(data, ["election.tally.questions.0.winner"]);
       const method = pick(data, ["election.tally.ballotMethod"]);
@@ -1528,18 +1532,93 @@
     if (!plurality.length) $("t-counts").value = "";
   }
 
+  function renderGuardianStatus(ceremony) {
+    const host = $("guardian-status");
+    if (!host) return;
+    if (!ceremony) {
+      host.textContent = "This election has no guardian ceremony (sum_only).";
+      return;
+    }
+    const roster = ceremony.roster || [];
+    host.textContent =
+      "Ceremony " +
+      (ceremony.status || "unknown") +
+      " · " +
+      (ceremony.threshold || "?") +
+      "-of-" +
+      (ceremony.guardians || "?") +
+      " · aggregation " +
+      (ceremony.aggregation || "undecided") +
+      " · enrolled " +
+      roster.length +
+      (ceremony.publicKey ? " · joint key ready" : " · joint key not ready");
+  }
+
   async function loadTallyElection(id) {
     if (!id) {
       renderTallyAspects(null);
+      renderGuardianStatus(null);
       return;
     }
     try {
       const data = await request("/api/elections/" + encodeURIComponent(id));
-      renderTallyAspects(data.election || data);
+      const election = data.election || data;
+      renderTallyAspects(election);
+      renderGuardianStatus(election.tallyCeremony || null);
     } catch (err) {
       $("tally-aspects").innerHTML = `<p class="field-hint">${esc(errText(err))}</p>`;
     }
   }
+
+  function bindGuardianForm(formId, pathSuffix, readBody, okText) {
+    const form = $(formId);
+    if (!form) return;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = $("t-election").value;
+      if (!id) {
+        flash($("flash-tally"), "err", "Choose an election first.");
+        return;
+      }
+      let body;
+      try {
+        body = readBody();
+      } catch (err) {
+        flash($("flash-tally"), "err", err.message || "Guardian JSON is invalid.");
+        return;
+      }
+      try {
+        await request("/api/elections/" + encodeURIComponent(id) + pathSuffix, { method: "POST", body });
+        flash($("flash-tally"), "ok", okText);
+        await loadTallyElection(id);
+      } catch (err) {
+        flash($("flash-tally"), "err", errText(err));
+      }
+    });
+  }
+
+  bindGuardianForm(
+    "form-guardian-enroll",
+    "/guardians",
+    () => ({
+      guardianId: $("g-id").value.trim(),
+      label: $("g-label").value.trim(),
+      transportPublicKey: $("g-transport").value.trim(),
+    }),
+    "Guardian enrolled."
+  );
+  bindGuardianForm(
+    "form-guardian-deal",
+    "/guardians/deals",
+    () => JSON.parse($("g-deal").value),
+    "Deal stored. The Node keeps encrypted shares only."
+  );
+  bindGuardianForm(
+    "form-guardian-partials",
+    "/guardians/partials",
+    () => JSON.parse($("g-partials").value),
+    "Partial decryptions stored after proof checks."
+  );
 
   $("tally-aspects").addEventListener("input", () => {
     const inputs = [...document.querySelectorAll("#tally-aspects .tally-count")];

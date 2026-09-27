@@ -7,6 +7,7 @@
   "hashSchemeLegacy": "republic.hash.standin-v0",
   "poseidonWired": true,
   "groth16Fixture": "circuits/fixtures/untrusted (Vote(4), untrusted local setup)",
+  "phase2Tooling": "circuits/scripts/ceremony.mjs",
   "mockVerifierDefault": true,
-  "note": "Poseidon(2) matches the vote circuit, proof-helpers, the browser poseidon.js helper, and Solidity PoseidonHasher. The committed Groth16 fixture is an untrusted local Vote(4) setup, not a ceremony. Foundry unit tests still use MockVerifier and KeccakHasher. Do not use these keys for a binding election."
+  "note": "Poseidon(2) matches the vote circuit, proof-helpers, the browser poseidon.js helper, and Solidity PoseidonHasher. The committed Groth16 fixture is an untrusted local Vote(4) setup, not a ceremony. Phase-2 contribute/verify/beacon/export scripts exist (docs/CEREMONY.md). Running them, including the CI toy transcript, does not complete a ceremony. Foundry unit tests still use MockVerifier and KeccakHasher. Do not use these keys for a binding election."
 }

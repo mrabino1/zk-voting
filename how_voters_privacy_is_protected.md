@@ -29,14 +29,14 @@ A privacy failure here is a **join**: someone can say “this named person (or t
 
 | Join | What an adversary wants | Public / chain **design** | Residual (who can still do it) |
 | --- | --- | --- | --- |
-| **Name ↔ choice** | “Jane Doe voted for option 2.” | Vote rows have no name, no `userId`, no option. Receipts are hashes only. The SPA vote POST is an envelope (ciphertext, proof, public inputs, nullifier, election id). | Coercer with an off-chain witness (screenshot, device). A Node that can decrypt the tally ciphertext (`opens_ballots` threshold-1 key) or that is handed a JSON envelope instead of ciphertext. |
+| **Name ↔ choice** | “Jane Doe voted for option 2.” | Vote rows have no name, no `userId`, no option. Receipts are hashes only. The SPA vote POST is an envelope (ciphertext, proof, public inputs, nullifier, election id). | Coercer with an off-chain witness (screenshot, device). `t` colluding guardians on `opens_ballots`, or a Node that is handed a JSON envelope instead of ciphertext. One guardian, or the Node alone, does not hold the tally private key. |
 | **Wallet ↔ choice** | “This EOA / passkey account marked X.” | Merkle leaf is **not** the wallet. `BallotInbox` has **no voter-address argument**. `VoteAccepted` records the **relayer**, not the voter. | If PRF is skipped and the same secp256k1 key is used as the trapdoor, unlinkability collapses ([`docs/PASSKEYS.md`](./docs/PASSKEYS.md)). Do not ship that. |
 | **IP ↔ choice** | Match a kiosk / home IP to a marked ballot. | Inbox and explorer do not store IP. Node access log is method + URL + status, not body or IP ([`apps/node/src/server.mjs`](./apps/node/src/server.mjs)). | TLS terminator, reverse proxy, CDN, or host syslog. Single-relayer timing if operators keep identifying logs next to UserOp hashes. |
 | **Clerk DB ↔ choice** | Join the legal file (name, license hash, email) to the marked option. | Public ballot row is `{ nullifier, ballotHash, electionId, relayer }`. `identityLinks` (person ↔ commitment) stay in `republic.json`, not on the vote. `stripBallotPii` drops `userId`, the leaf, wallet ids, and choice keys from the **vote body** and the **proof** object before relay. | Clerk file **does** know person ↔ commitment (the legal roll). The **public** vote does not carry that link. The vote POST does not accept `identityCommitment` or plaintext `answers`. |
 
 **In scope for this brief:** observers, losing candidates, media, and anyone with the explorer or an Ethereum node.
 
-**Out of scope for “impossible”:** a hostile **Node operator** with request bodies, `republic.json`, and envelope storage; a coercer standing over the voter; a threshold-1 tally key on `opens_ballots`. Those are §7.
+**Out of scope for “impossible”:** a hostile **Node operator** with request bodies, `republic.json`, and envelope storage; a coercer standing over the voter; `t` colluding guardians on `opens_ballots`. Those are §7.
 
 [`docs/THREAT_MODEL.md`](./docs/THREAT_MODEL.md) covers a different adversary: occupying an L1 result slot, copying UUIDs, spoofing clerks. It is not this ballot-privacy map.
 
@@ -166,7 +166,7 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 
 | Scheme | What is posted | Who can open it |
 | --- | --- | --- |
-| **`opens_ballots`** | `RTv1` \|\| P-256 eph pub \|\| AES-GCM (`p256-ecies-aesgcm-v1`) to the election tally pubkey | Holder of the **threshold-1** private JWK on the Node (`tallyGuardians`). **NON-PRODUCTION.** |
+| **`opens_ballots`** | `RTv1` \|\| P-256 eph pub \|\| AES-GCM (`p256-ecies-aesgcm-v1`) to the Feldman joint public key | Any `t` guardians who publish verified partial decryptions. The Node stores encrypted shares only. **NON-PRODUCTION.** |
 | **`sum_only` (legacy)** | Seed-keyed AES-GCM stand-in (`republic-ballot-elgamal-standin`) when no tally pubkey | In the crypto, the **voter’s wrap seed**. The SPA does **not** also send plaintext `answers`. |
 | **EVM calldata** | `encryptedBallot` bytes on `submitVote` | Ciphertext is visible; option is not, unless someone has the opening key |
 | **Civic L2 JSON** | Vote tx is `nullifier` + `ballotHash` + roots. Ciphertext omitted from the proof batch | Sequencer may still have seen the submitted JSON |
@@ -178,11 +178,11 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 | Path | After cutoff | Invented `counts[]` that only match the **sum** |
 | --- | --- | --- |
 | **`sum_only` (default)** | Operator posts any vector with `sum(counts) == acceptedBallots` | **Accepted** (legacy demo). Operator cannot add or drop ballots; they **can** rearrange which option received them. |
-| **`opens_ballots`** | Node decrypts accepted envelopes, derives histogram. `submitOpenedTally` requires `histogram(openings) == counts` | **Rejected** (`INVENTED_COUNTS` / `OpeningMismatch`) |
+| **`opens_ballots`** | `t` guardians’ partials open accepted envelopes; the Node derives the histogram. `submitOpenedTally` requires `histogram(openings) == counts` | **Rejected** (`INVENTED_COUNTS` / `OpeningMismatch`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A bad proof fails `BAD_PARTIAL`. |
 
 Opened choices are **not** written back onto public vote rows ([`tallyOpen.mjs`](./apps/node/src/tallyOpen.mjs)). Certified totals appear on `/results` and the official outcome PDF **after** tally — aggregates, not “Jane voted for X.”
 
-**Not done:** Shamir / guardian threshold > 1, mixnet permutation, homomorphic ciphertext product, real Groth16 tally keys, MACI last-vote-counts. Do not run a binding election on the demo key ([`tally-crypto.js`](./apps/node/public/tally-crypto.js) `DEMO_KEY_WARNING`).
+**Not done:** a selected homomorphic product or mixnet ([`docs/TALLY_GUARDIANS.md`](./docs/TALLY_GUARDIANS.md)), real Groth16 tally keys, MACI last-vote-counts. The Feldman ceremony is in-tree and still **NON-PRODUCTION**. Do not run a binding election on it.
 
 ---
 
@@ -199,14 +199,14 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 | **Node operator / `republic.json`** | Person file, `identityLinks`, envelopes (`encryptedBallot`), optional `rankingPayload`, outcome-report subscriptions (`source: vote-default`). `GET .../envelopes` is tally-operator **after cutoff**. | Hostile or sloppy host is a **trust sink** for this demo. Forked Nodes can lie to their own visitors; they cannot occupy another body’s L1 slot ([`THREAT_MODEL.md`](./docs/THREAT_MODEL.md)). |
 | **Logs / IP** | App log: `METHOD URL status duration`. No vote-body logger in-tree. | nginx / Caddy / Coolify / AWS ALB access logs, packet capture, and support dumps are **operator policy**. Treat vote POSTs as election-critical. Do not ship identifying logs next to UserOp hashes ([`PASSKEYS.md`](./docs/PASSKEYS.md)). |
 | **Single relayer** | JSON path sets `relayer: 'node'`. EVM path uses `RELAYER_PRIVATE_KEY`. All public senders look like the bundler. | Good for wallet unlinkability. Bad for **censorship / liveness** (one key can stall voting). Not a mixnet. |
-| **`opens_ballots` key** | Threshold **1**, private JWK on the Node. Never returned by `GET .../tally-key`. | That host **can** decrypt every envelope. Not guardians. |
+| **`opens_ballots` key** | Feldman t-of-n. `GET .../tally-key` is public commitments and verification keys, not shares. | `t` guardians **can** decrypt. The Node host alone **cannot**. Still not a production ceremony. |
 | **`sum_only`** | Invented partitions of the sum succeed. | Hides **individual** choice from the public; does **not** bind the operator to the real histogram. |
 | **Circuit vs disqualification** | `vote.circom` proves inclusion in `eligibleRoot` and non-membership in the indexed `disqRoot` chain. The Node stores that chain under keccak-dev-v1; a Poseidon election must publish the Poseidon chain or the roots will not match. The vote POST does not take a leaf, so it does not call `assertCanVote`. | Unarmed MockVerifier does not evaluate the witness. A JSON-path ballot can still be accepted without a real Groth16 proof ([README](./README.md) eligibility section). An officer who omits someone from the chain can publish a root that does not bar them. |
 | **Coercion / receipts** | Receipt = nullifier, `ballotHash`, UserOp hash, holder token. PDF locked against edit. `receiptsProveChoice: false`. | A coercer who watches the **screen**, copies the device, or demands the **witness** (trapdoor / marked paper) still wins. No last-vote-counts. Not MACI. |
 | **Hourly interval `0`** | Tests and local instant demo. | Publishes immediately. Do not use on a public polling place. |
 | **EVM `acceptedBallots()`** | Increments **immediately** on `submitVote`. | If BallotInbox is on a **public EVM RPC**, live inbox size / `VoteAccepted` is visible even while the Node explorer still waits for the hour. Civic JSON L2 **seals** vote txs until the hour closes (`eth_getTransactionByHash` → null). Know which path you deployed. |
 
-**What is not yet court-grade (short list):** MockVerifier, untrusted local Groth16 (Poseidon Vote(20) dev key, no ceremony), threshold-1 tally key, JSON-path ballots accepted without a real proof, JSON store as roll, no MACI, no production passkey curve, no EVM execution on chainId 27427.
+**What is not yet court-grade (short list):** MockVerifier, untrusted local Groth16 (Poseidon Vote(4) and Vote(20) dev keys, no ceremony), unaudited Feldman guardian tally (aggregation still undecided), JSON-path ballots accepted without a real Groth16 proof, JSON store as roll, no MACI, no production passkey curve, no EVM execution on chainId 27427.
 
 Do not overclaim. A binding public election wants Poseidon + a real Groth16 ceremony + guardians / mixnet + a client that **never** puts choice next to identity on the operator’s HTTP log.
 
@@ -247,7 +247,7 @@ No dashboard should show “N waiting to publish in election E.” That still na
 | **Public observer / explorer** | **Not until the hour seals.** Then: a nullifier + hash, not a name. | No (name). Commitment on the **roll** is public; it is not on the vote row. | No |
 | **Holder of the receipt token** | Yes, for their ballot, before disclosure | Themselves (they already know) | No (receipt forbids it) |
 | **Node / relayer operator** | Yes, immediately (`acceptVote`, inbox `acceptedBallots`) | **Session** can show a signed-in person voted. The vote **body** does not name the leaf or the wallet. **Design of the stored vote row:** no. | **Ciphertext** they can decrypt, or a JSON envelope they can decode (`rankingPayload`). **Not** a plaintext `answers` field on the SPA POST. **Public APIs:** no |
-| **Tally operator after cutoff** | Real inbox size (needed for `sum(counts) == acceptedBallots`) | Not from public vote rows | `opens_ballots`: can decrypt. `sum_only`: can invent a partition of the sum |
+| **Tally operator after cutoff** | Real inbox size (needed for `sum(counts) == acceptedBallots`) | Not from public vote rows | `opens_ballots`: sees ciphertext and can post partials the guardians produced; cannot decrypt alone. `sum_only`: can invent a partition of the sum |
 | **Clerk with the legal file** | Knows who is **registered** (person ↔ commitment) | Yes, for the **roll** | Not from the public ballot. Same Node-host caveat as the operator |
 
 After the hour closes, the public learns **that some eligible secret voted** (a nullifier appeared). They still do not learn **which civil identity** that was, and they do not learn **the option**.

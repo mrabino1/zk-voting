@@ -5,6 +5,7 @@
  */
 
 import { applyAudienceChrome, isOfficer, signInHref } from "./audience.js";
+import { LOCALE_EVENT } from "./i18n.js";
 import { SESSION_EVENT, loadAuthState, logout } from "./signin.js";
 
 function show(el, on) {
@@ -61,6 +62,7 @@ function wireGateActions() {
 export function bootOfficeGate() {
   wireGateActions();
   window.addEventListener(SESSION_EVENT, refresh);
+  window.addEventListener(LOCALE_EVENT, refresh);
   refresh();
 }
 

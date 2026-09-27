@@ -15,6 +15,7 @@ Circom 2 circuits for Republic / zk-voting. The vote hasher is **Poseidon(2)** (
 | [`vote.circom`](./vote.circom) | Eligible-set membership + disqualification-chain non-membership + nullifier + ballot bind |
 | [`tally.circom`](./tally.circom) | Published per-option counts match accepted ballots (plaintext / mock-homomorphic path) |
 | [`scripts/proving-path.mjs`](./scripts/proving-path.mjs) | Compile, untrusted ptau + Groth16, export verifier, demo prove |
+| [`scripts/ceremony.mjs`](./scripts/ceremony.mjs) | Phase-2 contribute / verify / beacon / export. Not a ceremony. See [`docs/CEREMONY.md`](../docs/CEREMONY.md) |
 
 ---
 
@@ -84,7 +85,7 @@ These encodings are versioned separately. Circom fixes `nOptions` at compile tim
 
 Production tallying is homomorphic: inbox ciphertexts (ElGamal or equivalent) are multiplied, then a decryption proof (or mixnet) shows the same counts. The summation constraints stay; the ballot wires become decrypted shares. Do not publish decrypted ballots linked to nullifiers.
 
-The first vertical slice that **opens** ballots is off-circuit: Node P-256 ECIES (threshold-1 operator key, **NON-PRODUCTION**) plus `Tally.submitOpenedTally` histogram checks. See the root README “Tally encryption (honest status)”.
+The first vertical slice that **opens** ballots is off-circuit: Node P-256 ECIES under a Feldman t-of-n guardian key (**NON-PRODUCTION**) plus `Tally.submitOpenedTally` histogram checks. Homomorphic aggregation versus a mixnet is not selected. See [`docs/TALLY_GUARDIANS.md`](../docs/TALLY_GUARDIANS.md) and the root README “Tally encryption (honest status)”.
 
 ---
 
@@ -102,6 +103,8 @@ npm run circuits:setup      # UNTRUSTED local powers-of-tau + groth16 — NOT a 
 npm run circuits:export     # circuits/build/vote_Groth16Verifier.sol (does not overwrite VoteVerifier.sol)
 npm run circuits:prove      # demo Poseidon witness + groth16 verify
 npm run circuits:all
+npm run circuits:ceremony -- help   # phase-2 contribute / verify / beacon / export
+npm run circuits:ceremony:toy       # published-entropy multi-contributor drill; NOT a ceremony
 ```
 
 Manual equivalent (same steps the script runs):
@@ -130,7 +133,7 @@ snarkjs zkey export solidityverifier build/vote_final.zkey build/vote_Groth16Ver
 
 **Do not** `export solidityverifier` onto `smart-contracts/src/zk/VoteVerifier.sol`. That file is the structural verifier with a zero VK. Deploy the generated contract and wrap it with `Groth16VerifierAdapter`.
 
-Ceremony status: **not done.**
+Ceremony status: **not done.** Phase-2 tooling (contribute, verify, beacon, export) is in [`circuits/scripts/ceremony.mjs`](./scripts/ceremony.mjs). The runbook is [`docs/CEREMONY.md`](../docs/CEREMONY.md). `npm run circuits:ceremony:toy` checks a published-entropy multi-contributor transcript. That run is not a ceremony, and the scripts cannot mark keys trusted.
 
 - **Foundry unit tests** use `MockVerifier` (`acceptAll = true`) and `KeccakHasher`.
 - **`UntrustedGroth16Test`** verifies the committed Vote(4) proof with the exported verifier. Missing files revert `GROTH16_KEYS_MISSING`.

@@ -8,6 +8,7 @@ import { AUTH_METHOD_TYPES, identityCaps } from '../identity.mjs';
 import { PIN_MAX_LEN, PIN_MIN_LEN } from '../pin.mjs';
 import { credentialProviderPublic } from '../credentials.mjs';
 import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
+import { listAggregators } from '../guardians/aggregate.mjs';
 
 export function healthRouter(deps) {
   const router = Router();
@@ -150,8 +151,11 @@ export function configRouter(deps) {
           schemes: ['sum_only', 'opens_ballots'],
           defaultScheme: 'sum_only',
           demoEncryption: 'p256-ecies-aesgcm-v1',
+          guardians: 'p256-feldman-dkg-v1',
+          aggregation: 'undecided',
+          aggregators: listAggregators(),
           production: false,
-          note: 'opens_ballots uses a threshold-1 operator key (NON-PRODUCTION). sum_only still accepts any counts that sum to acceptedBallots. Circuit public signals (tally.circom) are versioned separately from Tally.sol mock inputs.',
+          note: 'opens_ballots encrypts to a Feldman t-of-n guardian public key (NON-PRODUCTION). Decrypting takes t verified partials; the Node does not hold a tally private key. Homomorphic aggregation and a mixnet are an open product decision and neither is selected. sum_only still accepts any counts that sum to acceptedBallots. Circuit public signals (tally.circom) are versioned separately from Tally.sol mock inputs.',
         },
         proving: {
           path: 'in-progress',
@@ -169,6 +173,10 @@ export function configRouter(deps) {
           defaultMethod: 'plurality',
           questionTypes: ['YES_NO', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'RANKED', 'MEASURE', 'ARTICLE'],
           note: 'ranked_choice is instant-runoff (IRV). On-chain v1 may keep the method inside ballotSpecHash; ElectionParams has no method enum.',
+        },
+        mail: {
+          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
+          note: 'Role-promotion mail is queued on the Node. It is never written to civic L2 transactions.',
         },
         auth: {
           allowDevLogin: Boolean(deps.config.allowDevLogin),

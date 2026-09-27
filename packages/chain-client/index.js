@@ -163,6 +163,30 @@ const INBOX_ABI = [
   },
 ];
 
+const PARTY_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "partyCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "hasActiveGates",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "isRejected",
+    stateMutability: "view",
+    inputs: [{ name: "identityCommitment", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+];
+
 const ELECTION_ABI = [
   {
     type: "function",
@@ -660,33 +684,6 @@ async function nullifierUsed(inboxAddress, electionId, nullifier, opts = {}) {
   });
   return decodeUintWord(raw) !== 0n;
 }
-
-const PARTY_REGISTRY_ABI = [
-  {
-    type: "function",
-    name: "hasActiveGates",
-    stateMutability: "view",
-    inputs: [{ name: "electionId", type: "uint256" }],
-    outputs: [{ name: "active", type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "isRejected",
-    stateMutability: "view",
-    inputs: [
-      { name: "electionId", type: "uint256" },
-      { name: "identityCommitment", type: "uint256" },
-    ],
-    outputs: [{ name: "rejected", type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "partyCount",
-    stateMutability: "view",
-    inputs: [{ name: "electionId", type: "uint256" }],
-    outputs: [{ name: "count", type: "uint256" }],
-  },
-];
 
 const l1 = require("./l1");
 

@@ -94,7 +94,7 @@
 
 .privacy-callout {
   background: var(--info-bg);
-  border-left: 4px solid var(--navy);
+  border-inline-start: 4px solid var(--navy);
   padding: 0.75rem 0.9rem;
   margin: 0.85rem 0 0;
 }

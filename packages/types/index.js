@@ -254,8 +254,8 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} ballotHash Hash / commitment of `encryptedBallot`.
  * @property {string} encryptedBallot Hex bytes of the tally-pubkey ECIES envelope
  *   (`RTv1` + P-256 eph pub + AES-GCM) when `tallyScheme == opens_ballots`, or
- *   the legacy seed-keyed AES-GCM stand-in. Does not reveal the option in the clear
- *   until the (demo) operator key opens it after cutoff.
+ *   the legacy seed-keyed AES-GCM stand-in. Does not reveal the option in the clear.
+ *   Opening an `opens_ballots` envelope takes t Feldman guardian partials after cutoff.
  * @property {bigint[]|string[]} publicInputs Length-5 array documented above.
  * @property {Groth16Proof} proof Pairing-shaped Groth16 proof.
  * @property {string} [relayer] Address that submits the UserOp / tx (bundler).

@@ -10,8 +10,12 @@
  *   packed: 0x01 || n || choice[0]..choice[n-1]   (uint8 option indices)
  *   or JSON starting with `{` with a `choices` array.
  *
- * Threshold-1 operator key. NON-PRODUCTION. Not a guardian ceremony.
- * Production is homomorphic / mixnet decryption proofs — not this file.
+ * The envelope is hybrid encryption under a P-256 point. Elections no longer
+ * keep a threshold-1 private key: the point is a Feldman t-of-n joint public
+ * key, and opening it takes threshold decryption (see src/guardians/).
+ * Whether those ciphertexts are aggregated homomorphically or through a mixnet
+ * is an open product decision — this file only encrypts and decrypts one
+ * envelope. NON-PRODUCTION. Not a binding-election ceremony.
  *
  * Uses WebCrypto so the same module runs in Node 22 (`globalThis.crypto`) and
  * in the voter SPA.
@@ -26,7 +30,14 @@ export const TALLY_HKDF_INFO = "republic-tally-ecies-p256-v1";
 export const TALLY_INSTANCE_VERSION = 1;
 
 export const DEMO_KEY_WARNING =
-  "NON-PRODUCTION threshold-1 operator key. The Node (or a single tally operator) can decrypt every ballot. This is not a guardian ceremony, not Shamir sharing, and not safe for a binding election.";
+  "NON-PRODUCTION single P-256 key used only to exercise this envelope format. Election tallies do not use it. A binding election needs the Feldman guardian ceremony, and even that ceremony is not a production Groth16 tally.";
+
+export const GUARDIAN_SCHEME = "p256-feldman-dkg-v1";
+
+export const GUARDIAN_WARNING =
+  "NON-PRODUCTION Feldman t-of-n guardian key. Decrypting a ballot takes t verified partial decryptions. The Node does not hold a tally private key. Homomorphic aggregation and a mixnet are an open product decision; neither is selected. Not safe for a binding election.";
+
+export const AGGREGATION_UNDECIDED = "undecided";
 
 const P256 = { name: "ECDH", namedCurve: "P-256" };
 
@@ -103,17 +114,35 @@ export async function generateDemoGuardian() {
   };
 }
 
+function publicRosterEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  return {
+    index: entry.index,
+    guardianId: entry.guardianId,
+    label: entry.label || "",
+    transportPublicKey: entry.transportPublicKey || null,
+    commitments: Array.isArray(entry.commitments) ? entry.commitments : null,
+  };
+}
+
 export function publicCeremonyView(guardian) {
   if (!guardian) return null;
+  const roster = Array.isArray(guardian.roster)
+    ? guardian.roster.map(publicRosterEntry).filter(Boolean)
+    : undefined;
   return {
     scheme: guardian.scheme || TALLY_CRYPTO_SCHEME,
     threshold: guardian.threshold ?? 1,
     guardians: guardian.guardians ?? 1,
     production: false,
+    status: guardian.status || null,
+    aggregation: guardian.aggregation || null,
     warning: guardian.warning || DEMO_KEY_WARNING,
     publicKey: guardian.publicKeyRaw || guardian.publicKey || null,
     publicKeyX: guardian.publicKeyX || null,
     publicKeyY: guardian.publicKeyY || null,
+    verificationKeys: guardian.verificationKeys || null,
+    ...(roster ? { roster } : {}),
   };
 }
 
@@ -163,19 +192,36 @@ export async function encryptToTallyPub(publicKeyRaw, plaintext) {
   return bytesToHex(concatBytes([TALLY_ENVELOPE_MAGIC, ephRaw, iv, ct]));
 }
 
-export async function decryptTallyEnvelope(privateJwk, envelopeHex) {
+export function tallyEnvelopeEphemeral(envelopeHex) {
   const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
   if (!eqMagic(bytes)) throw new Error("not a Republic tally envelope (missing RTv1 magic)");
   if (bytes.length < 4 + 65 + 12 + 16) throw new Error("tally envelope too short");
-  const ephRaw = bytes.subarray(4, 69);
+  return bytes.slice(4, 69);
+}
+
+/**
+ * Finish an envelope once the ECDH x-coordinate is known (32 bytes).
+ * Threshold decryption recovers that coordinate from partials; it does not
+ * pass the joint private scalar through here.
+ */
+export async function decryptTallyEnvelopeWithSharedBits(sharedBits, envelopeHex) {
+  const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
+  if (!eqMagic(bytes)) throw new Error("not a Republic tally envelope (missing RTv1 magic)");
+  if (bytes.length < 4 + 65 + 12 + 16) throw new Error("tally envelope too short");
   const iv = bytes.subarray(69, 81);
   const ct = bytes.subarray(81);
+  const ikm = sharedBits instanceof ArrayBuffer ? new Uint8Array(sharedBits) : sharedBits;
+  const aesKey = await aesFromShared(ikm);
+  return new Uint8Array(await subtle().decrypt({ name: "AES-GCM", iv }, aesKey, ct));
+}
+
+export async function decryptTallyEnvelope(privateJwk, envelopeHex) {
+  const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
+  const ephRaw = tallyEnvelopeEphemeral(bytes);
   const ephPub = await subtle().importKey("raw", ephRaw, P256, true, []);
   const priv = await importPrivateJwk(privateJwk);
   const shared = await subtle().deriveBits({ name: "ECDH", public: ephPub }, priv, 256);
-  const aesKey = await aesFromShared(shared);
-  const plain = new Uint8Array(await subtle().decrypt({ name: "AES-GCM", iv }, aesKey, ct));
-  return plain;
+  return decryptTallyEnvelopeWithSharedBits(shared, bytes);
 }
 
 export function packChoices(choices) {

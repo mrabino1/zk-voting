@@ -17,6 +17,8 @@ Shared check: `Poseidon(1, 2) = 785320012077606287868479836409507245881502937609
 
 This is **not** a completed ceremony. Keys from `npm run circuits:setup` or `npm run circuits:smoke` are **untrusted**. Anyone who ran that command knows the toxic waste. Do not use them for a binding election.
 
+Phase-2 ceremony scripts (`npm run circuits:ceremony`, runbook [`docs/CEREMONY.md`](../docs/CEREMONY.md)) also leave keys untrusted. The CI toy transcript uses published entropy. Neither one is a public ceremony.
+
 ## What is still not Poseidon
 
 | Id | Where | Status |

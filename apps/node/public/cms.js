@@ -31,7 +31,7 @@ function emptyBlock(type) {
 
 export function canEditPages(me) {
   if (!me?.user) return false;
-  if (me.user.role === "platform_admin") return true;
+  if (me.user.role === "platform_admin" || me.user.role === "platform_super_admin") return true;
   const grants = me.jurisdictionRoles || [];
   return grants.some((g) => String(g.role || "").toLowerCase() === "clerk");
 }

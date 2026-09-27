@@ -117,6 +117,13 @@ export function applyDocumentLang(locale = getLocale()) {
   const code = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
   document.documentElement.lang = localeTag(code);
   document.documentElement.dir = RTL_LOCALES.includes(code) ? "rtl" : "ltr";
+  // Route bodies are still English. Mark them so a screen reader does not
+  // pronounce that copy with the chrome language. Header and footer use t().
+  const main = document.getElementById("main");
+  if (main) {
+    if (code === DEFAULT_LOCALE) main.removeAttribute("lang");
+    else main.setAttribute("lang", DEFAULT_LOCALE);
+  }
 }
 
 const ATTR_MAP = [
@@ -448,12 +455,19 @@ function bindSwitcherDismiss() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    const open = [...document.querySelectorAll(".lang-toggle")].filter(
+      (btn) => btn.getAttribute("aria-expanded") === "true",
+    );
+    if (!open.length) return;
     document.querySelectorAll(".lang-menu").forEach((menu) => {
       menu.hidden = true;
     });
-    document.querySelectorAll(".lang-toggle").forEach((btn) => {
+    for (const btn of open) {
       btn.setAttribute("aria-expanded", "false");
-    });
+    }
+    const active = document.activeElement;
+    const inside = active && active.closest && active.closest(".lang-switcher");
+    if (inside) open[0].focus();
   });
 }
 
@@ -462,6 +476,7 @@ function optionButton(locale) {
   btn.type = "button";
   btn.className = "lang-option";
   btn.setAttribute("role", "option");
+  btn.tabIndex = -1;
   btn.setAttribute("aria-selected", getLocale() === locale ? "true" : "false");
   btn.dataset.testid = `language-option-${locale}`;
   btn.dataset.locale = locale;
@@ -475,8 +490,22 @@ function optionButton(locale) {
   btn.addEventListener("click", (event) => {
     event.stopPropagation();
     setLocale(locale);
+    document.querySelector(".lang-toggle")?.focus();
   });
   return btn;
+}
+
+function moveLangOption(menu, delta) {
+  const items = [...menu.querySelectorAll(".lang-option")];
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  let next = current;
+  if (delta === "home") next = 0;
+  else if (delta === "end") next = items.length - 1;
+  else next = current < 0 ? 0 : (current + delta + items.length) % items.length;
+  for (const item of items) item.tabIndex = -1;
+  items[next].tabIndex = 0;
+  items[next].focus();
 }
 
 export function mountLanguageSwitcher(root) {
@@ -492,9 +521,10 @@ export function mountLanguageSwitcher(root) {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "lang-toggle";
-  toggle.setAttribute("aria-label", t("lang.choose"));
+  toggle.setAttribute("aria-label", `${t("lang.choose")}, ${t(NAME_KEYS[locale])}`);
   toggle.setAttribute("aria-haspopup", "listbox");
   toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", "lang-menu");
   toggle.dataset.testid = "language-toggle";
   const currentFlag = document.createElement("span");
   currentFlag.className = "lang-toggle-flag";
@@ -502,17 +532,51 @@ export function mountLanguageSwitcher(root) {
   toggle.append(currentFlag);
 
   const menu = document.createElement("div");
+  menu.id = "lang-menu";
   menu.className = "lang-menu";
   menu.hidden = true;
   menu.setAttribute("role", "listbox");
   menu.setAttribute("aria-label", t("lang.group"));
   menu.append(...SUPPORTED_LOCALES.map((code) => optionButton(code)));
 
+  function openMenu() {
+    menu.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    const selected = menu.querySelector('[aria-selected="true"]') || menu.querySelector(".lang-option");
+    for (const item of menu.querySelectorAll(".lang-option")) item.tabIndex = item === selected ? 0 : -1;
+    selected?.focus();
+  }
+
+  function closeMenu(focusToggle) {
+    menu.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    if (focusToggle) toggle.focus();
+  }
+
   toggle.addEventListener("click", (event) => {
     event.stopPropagation();
-    const open = menu.hidden;
-    menu.hidden = !open;
-    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    if (menu.hidden) openMenu();
+    else closeMenu(false);
+  });
+
+  menu.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveLangOption(menu, 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveLangOption(menu, -1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      moveLangOption(menu, "home");
+    } else if (event.key === "End") {
+      event.preventDefault();
+      moveLangOption(menu, "end");
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu(true);
+    }
   });
 
   menu.addEventListener("click", (event) => {

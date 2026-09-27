@@ -126,7 +126,7 @@ export function pagesRouter(deps) {
     asyncHandler(async (req, res) => {
       const patch = { ...req.body };
       if (!canPinContracts(req.user)) {
-        throw new HttpError(403, 'only the Node host (platform_admin) can change site identity and contract pins');
+        throw new HttpError(403, 'only a platform admin or platform super admin can change site identity and contract pins');
       }
       if (patch.contracts) {
         rejectEnvPinnedContracts(config, patch.contracts);

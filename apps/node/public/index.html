@@ -3,26 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="/lang-init.js"></script>
     <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
       content="Republic is a not-for-profit civic voting system. Identify yourself with a passkey, Web3 wallet, or smart-card digital ID, then cast a private, publicly verifiable ballot."
+      data-i18n-content="chrome.metaDescription"
     />
     <meta name="theme-color" content="#13294b" />
-    <title>Republic — civic elections</title>
+    <title data-i18n="chrome.titleHome">Republic — civic elections</title>
     <script src="/canonical-url.js"></script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <!-- NOT FOR PROFIT — Republic is a civic public good. Not a commercial product. -->
     <!-- Voter SPA shell (apps/node/public/index.html). Do not replace with a placeholder. -->
-    <a class="skip-link skip" href="#main">Skip to main content</a>
-    <div id="nfp-banner" class="nfp-banner nfp-ribbon" role="note">
+    <a class="skip-link skip" href="#main" data-i18n="chrome.skip">Skip to main content</a>
+    <div id="nfp-banner" class="nfp-banner nfp-ribbon" role="note" data-i18n="chrome.nfpBanner">
       NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
     </div>
     <header class="site-header" id="site-header">
       <div class="header-inner">
-        <a class="brand" href="/" data-nav aria-label="Republic home">
+        <a class="brand" href="/" data-nav aria-label="Republic home" data-i18n-aria-label="chrome.brandHome">
           <span class="brand-mark" aria-hidden="true">
             <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
               <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
@@ -38,10 +40,10 @@
           </span>
           <span class="brand-text">
             <span class="brand-name">Republic</span>
-            <span class="brand-sub">Office of civic elections</span>
+            <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
           </span>
         </a>
-        <nav class="nav-main" aria-label="Public">
+        <nav class="nav-main" aria-label="Public" data-i18n-aria-label="chrome.navPublic">
           <ul>
             <li><a href="/about" data-nav>About</a></li>
             <li><a href="/faq" data-nav>FAQ</a></li>
@@ -52,22 +54,23 @@
             <li><a href="/register" data-nav>Register</a></li>
           </ul>
         </nav>
-        <div id="session-chrome" class="session-chrome" aria-label="Session"></div>
+        <div id="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" aria-label="Session" data-i18n-aria-label="chrome.session"></div>
       </div>
     </header>
     <main id="main" class="site-main" tabindex="-1">
-      <p class="loading-msg">Loading Republic…</p>
+      <p class="loading-msg" data-i18n="chrome.loading">Loading Republic…</p>
     </main>
     <footer class="site-footer" id="site-footer">
-      <p class="footer-nfp">
+      <p class="footer-nfp" data-i18n="chrome.footerNfp">
         NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
       </p>
-      <p class="footer-meta">
+      <p class="footer-meta" data-i18n="chrome.footerMeta">
         Product name Republic. Voters do not pay gas. Choice is never printed on a receipt.
         Production identity commitments use Poseidon; this Node demo may display a keccak256
         commitment hex only (never a trapdoor or seed phrase).
       </p>
-      <p class="footer-meta">
+      <p class="footer-meta" lang="en">
         <a href="/about" data-nav>About</a>
         ·
         <a href="/faq" data-nav>FAQ</a>
@@ -93,7 +96,7 @@
       </p>
     </footer>
     <div id="live" class="visually-hidden sr-only" aria-live="polite" aria-atomic="true"></div>
-    <noscript>
+    <noscript lang="en">
       <div class="noscript notice notice-warn">
         Republic needs JavaScript to talk to your device passkey (WebAuthn). Enable JavaScript
         and reload, or use an accessible poll site operated by your clerk.

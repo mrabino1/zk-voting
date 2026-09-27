@@ -170,7 +170,7 @@ textarea {
 
 .data-table th,
 .data-table td {
-  text-align: left;
+  text-align: start;
   padding: 0.6rem 0.7rem;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
@@ -299,7 +299,7 @@ textarea {
   height: 0.7rem;
   border-radius: 50%;
   background: var(--muted);
-  margin-right: 0.35rem;
+  margin-inline-end: 0.35rem;
   vertical-align: middle;
 }
 
@@ -429,7 +429,7 @@ details summary {
 
 .opt-card {
   background: var(--cream);
-  border-left: 4px solid var(--gold);
+  border-inline-start: 4px solid var(--gold);
 }
 
 .link-rows {

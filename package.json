@@ -34,6 +34,8 @@
     "circuits:verify": "node circuits/scripts/proving-path.mjs verify",
     "circuits:all": "node circuits/scripts/proving-path.mjs all",
     "circuits:test": "node circuits/scripts/proving-path.mjs test",
+    "circuits:ceremony": "node circuits/scripts/ceremony.mjs",
+    "circuits:ceremony:toy": "node --test circuits/scripts/ceremony.test.mjs",
     "dev": "npm run dev -w apps/node",
     "l2:sequencer": "node l2/sequencer/index.mjs",
     "l2:prover": "node l2/prover/index.mjs",

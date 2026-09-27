@@ -208,6 +208,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', identityRouter(deps));
   app.use('/api', pinRouter(deps));
   app.use('/api', meRouter(deps));
+  app.use('/api', mailRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));

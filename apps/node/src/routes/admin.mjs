@@ -5,8 +5,7 @@ import { Router } from 'express';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole, requireSuperAdmin, publicUser } from '../auth.mjs';
 import { REASON_CODES } from '../reasonCodes.mjs';
-import { deliverPromotionMail } from '../promotionMail.mjs';
-import { isPromotionRole } from '../mailTemplates.mjs';
+import { deliverRolePromotion } from '../promotionMail.mjs';
 import { APPROVAL_CHAIN, isPlatformOperator, isSuperAdmin, OFFICER_ROLES, ROLES } from '../roles.mjs';
 
 function publicJurisdiction(row) {
@@ -44,21 +43,29 @@ function officerPayload(req) {
   };
 }
 
-async function mailForJurisdictionGrant(store, config, req, result) {
-  return deliverPromotionMail(store, config, {
-    created: result.created,
+async function grantResponse(deps, req, result) {
+  const mail = await deliverRolePromotion(deps, {
+    role: result.grant.role,
     user: result.user,
-    role: result.grant?.role,
-    vars: {
-      jurisdictionId: result.jurisdiction?.id,
-      jurisdictionName: result.jurisdiction?.name,
-      grantedByHandle: req.user?.handle,
-    },
+    created: Boolean(result.created && result.user),
+    skipReason: result.user ? (result.created ? null : 'already_granted') : 'no_user',
+    contactEmail: req.body?.contactEmail,
+    jurisdictionId: result.jurisdiction.id,
+    jurisdictionName: result.jurisdiction.name,
+    grantedByHandle: req.user.handle,
   });
+  return {
+    ok: true,
+    ...result,
+    created: Boolean(result.created),
+    user: publicUser(result.user),
+    mail,
+    nfp: true,
+  };
 }
 
 export function adminRouter(deps) {
-  const { store, config } = deps;
+  const { store } = deps;
   const router = Router();
 
   router.get('/reason-codes', (_req, res) => {
@@ -135,8 +142,7 @@ export function adminRouter(deps) {
     requireRole('platform_admin'),
     asyncHandler(async (req, res) => {
       const result = await store.grantJurisdictionRole(req.params.id, officerPayload(req));
-      const mail = await mailForJurisdictionGrant(store, config, req, result);
-      res.json({ ok: true, ...result, mail, user: publicUser(result.user), nfp: true });
+      res.json(await grantResponse(deps, req, result));
     }),
   );
 
@@ -158,8 +164,7 @@ export function adminRouter(deps) {
       const jurisdictionId = req.body?.jurisdictionId;
       if (!jurisdictionId) throw new HttpError(400, 'jurisdictionId required');
       const result = await store.grantJurisdictionRole(jurisdictionId, officerPayload(req));
-      const mail = await mailForJurisdictionGrant(store, config, req, result);
-      res.json({ ok: true, ...result, mail, user: publicUser(result.user), nfp: true });
+      res.json(await grantResponse(deps, req, result));
     }),
   );
 
@@ -171,8 +176,7 @@ export function adminRouter(deps) {
       const jurisdictionId = req.body?.jurisdictionId;
       if (!jurisdictionId) throw new HttpError(400, 'jurisdictionId required');
       const result = await store.grantJurisdictionRole(jurisdictionId, officerPayload(req));
-      const mail = await mailForJurisdictionGrant(store, config, req, result);
-      res.json({ ok: true, ...result, mail, user: publicUser(result.user), nfp: true });
+      res.json(await grantResponse(deps, req, result));
     }),
   );
 
@@ -208,18 +212,19 @@ export function adminRouter(deps) {
     requireAuth,
     requireSuperAdmin,
     asyncHandler(async (req, res) => {
-      const result = await store.approveAdmin({
+      const approved = await store.approveAdmin({
         userId: req.body?.userId,
         handle: req.body?.handle,
         contactEmail: req.body?.contactEmail,
       });
-      const mail = await deliverPromotionMail(store, config, {
-        created: result.created,
-        user: result.user,
+      const mail = await deliverRolePromotion(deps, {
         role: 'platform_admin',
-        vars: { grantedByHandle: req.user?.handle },
+        user: approved.user,
+        created: approved.created,
+        skipReason: approved.created ? null : 'already_granted',
+        grantedByHandle: req.user.handle,
       });
-      res.status(201).json({ ok: true, nfp: true, user: publicUser(result.user), mail });
+      res.status(201).json({ ok: true, nfp: true, user: publicUser(approved.user), mail });
     }),
   );
 
@@ -260,17 +265,17 @@ export function adminRouter(deps) {
           throw new HttpError(400, 'cannot demote the last platform super admin');
         }
       }
-      const previous = target.role;
+      const before = target.role;
       const user = await store.updateUserRole(req.params.id, role);
-      let mail = { skipped: true };
-      if (role !== previous && isPromotionRole(role)) {
-        mail = await deliverPromotionMail(store, config, {
-          created: true,
-          user,
-          role,
-          vars: { grantedByHandle: req.user?.handle },
-        });
-      }
+      const promoted = before !== user.role && user.role !== 'voter' && user.role !== 'observer';
+      const mail = promoted
+        ? await deliverRolePromotion(deps, {
+            role: user.role,
+            user,
+            created: true,
+            grantedByHandle: req.user.handle,
+          })
+        : { skipped: true, reason: 'not_a_promotion' };
       res.json({ ok: true, user: publicUser(user), mail, nfp: true });
     }),
   );
