@@ -43,6 +43,7 @@
     "l2:archive:restore": "node l2/archive/cli.mjs restore",
     "l2:archive:daemon": "node l2/archive/cli.mjs daemon",
     "start": "npm run start -w apps/node",
+    "load:local": "node tools/load/harness.mjs",
     "compose:up": "docker compose up -d --build",
     "compose:down": "docker compose down",
     "compose:logs": "docker compose logs -f --tail=80",

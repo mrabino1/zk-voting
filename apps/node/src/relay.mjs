@@ -19,7 +19,7 @@ import { electionState } from './electionState.mjs';
 import { isTallyEnvelope } from './tallyCrypto.mjs';
 import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import {
-  issueAndStoreReceiptPdf,
+  buildReceiptPdf,
   mintHolderToken,
   optionalUserOpHash,
   presentHolderReceipt,
@@ -252,15 +252,33 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   }
 
   const holder = mintHolderToken();
+  const userOpHash = optionalUserOpHash(envelope?.userOpHash || envelope?.userOp?.hash);
+  const nullifier = toBytes32(parsed.nullifier);
+  const ballotHash = toBytes32(parsed.ballotHash);
+  const artifact = buildReceiptPdf({
+    election,
+    vote: {
+      nullifier,
+      ballotHash,
+      electionId: String(election.id),
+      acceptedAt: ts,
+      userOpHash,
+    },
+    receipt: { userOpHash, tokenHash: holder.receiptTokenHash },
+    token: holder.token,
+    hmacSecret: (config || {}).receiptPdfSecret,
+  });
   const vote = await store.acceptVote(
     {
-      nullifier: parsed.nullifier,
-      ballotHash: parsed.ballotHash,
+      nullifier,
+      ballotHash,
       electionId: election.id,
       relayer: 'node',
       acceptedAt: ts,
       receiptTokenHash: holder.receiptTokenHash,
-      userOpHash: optionalUserOpHash(envelope?.userOpHash || envelope?.userOp?.hash),
+      userOpHash,
+      pdfSha256: artifact.pdfSha256,
+      pdfIntegrity: artifact.integrity,
     },
     { encryptedBallot: parsed.encryptedBallot, rankingPayload },
   );
@@ -279,15 +297,6 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   const published = isDisclosed(vote.acceptedAt, ts, interval);
   const nextAt = nextPublishAt(ts, interval);
   const receiptRow = store.findReceiptForVote(vote.electionId, vote.nullifier);
-  const artifact = await issueAndStoreReceiptPdf(
-    { store, config: config || {} },
-    {
-      election,
-      vote,
-      receiptRow,
-      token: holder.token,
-    },
-  );
   return {
     ok: true,
     vote: publicVoteRecord(vote),

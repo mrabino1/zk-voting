@@ -1,0 +1,2730 @@
+[
+  {
+    "label": "before",
+    "startedAt": "2026-09-27T13:07:25.403Z",
+    "finishedAt": "2026-09-27T13:11:32.903Z",
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "linux",
+      "arch": "x64",
+      "cpus": 4,
+      "cpuModel": "Intel(R) Xeon(R) Processor",
+      "totalMemMb": 16014,
+      "loadAvg": [
+        0.09,
+        0.04,
+        0
+      ],
+      "dataDirParent": "/tmp"
+    },
+    "config": {
+      "scales": [
+        100,
+        200,
+        400,
+        800
+      ],
+      "concurrency": 1,
+      "disclosureIntervalSeconds": 3600,
+      "treeDepth": 20,
+      "maxPhaseMs": 300000,
+      "profile": false
+    },
+    "scales": [
+      {
+        "n": 100,
+        "phases": {
+          "provision": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 100
+            },
+            "wallMs": 179.705651,
+            "throughputPerSec": 556.4655281764067,
+            "cpuMs": 206.463,
+            "cpuOverWall": 1.1488954234388544,
+            "latencyMs": {
+              "min": 1.4133199999999988,
+              "mean": 1.7934695899999935,
+              "p50": 1.6091089999999895,
+              "p95": 2.790569000000005,
+              "p99": 4.357181999999966,
+              "max": 5.709317999999996,
+              "firstQuartileMean": 1.9485278799999923,
+              "lastQuartileMean": 1.7029752799999915
+            }
+          },
+          "registration_request": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 100
+            },
+            "wallMs": 225.89077499999996,
+            "throughputPerSec": 442.6918274993745,
+            "cpuMs": 246.701,
+            "cpuOverWall": 1.0921251653592319,
+            "latencyMs": {
+              "min": 1.6941249999999854,
+              "mean": 2.2547533599999987,
+              "p50": 2.2081139999999095,
+              "p95": 2.9137130000000298,
+              "p99": 3.1540959999999814,
+              "max": 3.4781490000000304,
+              "firstQuartileMean": 2.098129320000012,
+              "lastQuartileMean": 2.407256559999987
+            }
+          },
+          "registration_approve": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 100
+            },
+            "wallMs": 2606.352733,
+            "throughputPerSec": 38.36779217711511,
+            "cpuMs": 2659.759,
+            "cpuOverWall": 1.0204908055321151,
+            "latencyMs": {
+              "min": 4.781027999999992,
+              "mean": 26.058634909999974,
+              "p50": 27.34274400000004,
+              "p95": 43.170452000000296,
+              "p99": 45.37267500000007,
+              "max": 47.79622999999992,
+              "firstQuartileMean": 9.515414559999986,
+              "lastQuartileMean": 40.667371479999964
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 45.35335299999997,
+            "throughputPerSec": 22.049086425870225,
+            "cpuMs": 44.706,
+            "cpuOverWall": 0.9857264577549544,
+            "latencyMs": {
+              "min": 45.346645999999964,
+              "mean": 45.346645999999964,
+              "p50": 45.346645999999964,
+              "p95": 45.346645999999964,
+              "p99": 45.346645999999964,
+              "max": 45.346645999999964,
+              "firstQuartileMean": 45.346645999999964,
+              "lastQuartileMean": 45.346645999999964
+            }
+          },
+          "vote": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 100
+            },
+            "wallMs": 444.53247899999997,
+            "throughputPerSec": 224.95544133233065,
+            "cpuMs": 490.233,
+            "cpuOverWall": 1.1028058087067245,
+            "latencyMs": {
+              "min": 3.552310000000034,
+              "mean": 4.439290499999998,
+              "p50": 4.229125999999724,
+              "p95": 6.261369000000286,
+              "p99": 6.915713999999753,
+              "max": 8.581060999999863,
+              "firstQuartileMean": 4.520028199999997,
+              "lastQuartileMean": 4.627015439999977
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.2061969999999747,
+            "throughputPerSec": 453.2686790889533,
+            "cpuMs": 2.207,
+            "cpuOverWall": 1.0003639747493198,
+            "latencyMs": {
+              "min": 2.200749000000087,
+              "mean": 2.200749000000087,
+              "p50": 2.200749000000087,
+              "p95": 2.200749000000087,
+              "p99": 2.200749000000087,
+              "max": 2.200749000000087,
+              "firstQuartileMean": 2.200749000000087,
+              "lastQuartileMean": 2.200749000000087
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 12.934456999999838,
+            "throughputPerSec": 77.3128705750858,
+            "cpuMs": 12.461,
+            "cpuOverWall": 0.9633956802361441,
+            "latencyMs": {
+              "min": 12.931858999999804,
+              "mean": 12.931858999999804,
+              "p50": 12.931858999999804,
+              "p95": 12.931858999999804,
+              "p99": 12.931858999999804,
+              "max": 12.931858999999804,
+              "firstQuartileMean": 12.931858999999804,
+              "lastQuartileMean": 12.931858999999804
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 3.1694049999996423,
+            "throughputPerSec": 315.51663482581523,
+            "cpuMs": 6.476,
+            "cpuOverWall": 2.043285727131979,
+            "latencyMs": {
+              "min": 3.1660400000000664,
+              "mean": 3.1660400000000664,
+              "p50": 3.1660400000000664,
+              "p95": 3.1660400000000664,
+              "p99": 3.1660400000000664,
+              "max": 3.1660400000000664,
+              "firstQuartileMean": 3.1660400000000664,
+              "lastQuartileMean": 3.1660400000000664
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.7268109999999979,
+            "throughputPerSec": 579.1021715752339,
+            "cpuMs": 1.607,
+            "cpuOverWall": 0.9306171897214008,
+            "latencyMs": {
+              "min": 1.7241659999999683,
+              "mean": 1.7241659999999683,
+              "p50": 1.7241659999999683,
+              "p95": 1.7241659999999683,
+              "p99": 1.7241659999999683,
+              "max": 1.7241659999999683,
+              "firstQuartileMean": 1.7241659999999683,
+              "lastQuartileMean": 1.7241659999999683
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.1485609999999724,
+            "throughputPerSec": 465.4277909726616,
+            "cpuMs": 1.698,
+            "cpuOverWall": 0.7902963890715794,
+            "latencyMs": {
+              "min": 2.145418999999947,
+              "mean": 2.145418999999947,
+              "p50": 2.145418999999947,
+              "p95": 2.145418999999947,
+              "p99": 2.145418999999947,
+              "max": 2.145418999999947,
+              "firstQuartileMean": 2.145418999999947,
+              "lastQuartileMean": 2.145418999999947
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 20.27575999999999,
+            "throughputPerSec": 49.31997616858754,
+            "cpuMs": 33.99,
+            "cpuOverWall": 1.6763859899702904,
+            "latencyMs": {
+              "min": 20.271372000000156,
+              "mean": 20.271372000000156,
+              "p50": 20.271372000000156,
+              "p95": 20.271372000000156,
+              "p99": 20.271372000000156,
+              "max": 20.271372000000156,
+              "firstQuartileMean": 20.271372000000156,
+              "lastQuartileMean": 20.271372000000156
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 100,
+          "beforeCount": 0,
+          "afterCount": 100,
+          "ballotListCount": 100,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 100,
+          "counts": [
+            100,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 435352,
+          "l2ChainJsonBytes": 155690
+        },
+        "notes": [],
+        "port": 37627,
+        "electionId": "aa07d72d-9c3c-5994-aa52-b4af144fe585",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 0.5673759999999675,
+          "compactStringifyMs": 0.4444519999997283,
+          "prettyWriteMs": 0.2859240000002501,
+          "prettyBytes": 435352,
+          "compactBytes": 359769
+        },
+        "memory": {
+          "rssBytes": 172306432,
+          "heapUsedBytes": 49089712,
+          "eventLoopDelayP99Ms": 48.201727,
+          "eventLoopDelayMaxMs": 78.970879
+        }
+      },
+      {
+        "n": 200,
+        "phases": {
+          "provision": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 200
+            },
+            "wallMs": 343.67600100000027,
+            "throughputPerSec": 581.943456680293,
+            "cpuMs": 398.776,
+            "cpuOverWall": 1.1603254194057027,
+            "latencyMs": {
+              "min": 1.210711000000174,
+              "mean": 1.7155072400000178,
+              "p50": 1.6466410000002725,
+              "p95": 2.200948000000608,
+              "p99": 2.8256609999998545,
+              "max": 3.7908269999998083,
+              "firstQuartileMean": 1.4786315599999853,
+              "lastQuartileMean": 1.9668643200000953
+            }
+          },
+          "registration_request": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 200
+            },
+            "wallMs": 474.09838000000036,
+            "throughputPerSec": 421.8533714458165,
+            "cpuMs": 498.638,
+            "cpuOverWall": 1.0517606071549952,
+            "latencyMs": {
+              "min": 1.8229580000006536,
+              "mean": 2.3671664649999773,
+              "p50": 2.304446000000098,
+              "p95": 2.9780339999997523,
+              "p99": 4.4343180000005304,
+              "max": 4.861678000000211,
+              "firstQuartileMean": 2.0728827199999067,
+              "lastQuartileMean": 2.639193239999986
+            }
+          },
+          "registration_approve": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 200
+            },
+            "wallMs": 9675.47737,
+            "throughputPerSec": 20.67081471557408,
+            "cpuMs": 9383.389,
+            "cpuOverWall": 0.9698114771157796,
+            "latencyMs": {
+              "min": 4.311437000000296,
+              "mean": 48.37270561499998,
+              "p50": 47.51796000000013,
+              "p95": 86.07078000000001,
+              "p99": 91.32213199999933,
+              "max": 131.16922799999975,
+              "firstQuartileMean": 18.068695740000003,
+              "lastQuartileMean": 79.21976607999997
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 86.42890999999872,
+            "throughputPerSec": 11.570202609289122,
+            "cpuMs": 85.424,
+            "cpuOverWall": 0.9883729876959141,
+            "latencyMs": {
+              "min": 86.42623800000001,
+              "mean": 86.42623800000001,
+              "p50": 86.42623800000001,
+              "p95": 86.42623800000001,
+              "p99": 86.42623800000001,
+              "max": 86.42623800000001,
+              "firstQuartileMean": 86.42623800000001,
+              "lastQuartileMean": 86.42623800000001
+            }
+          },
+          "vote": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 200
+            },
+            "wallMs": 1761.7116720000013,
+            "throughputPerSec": 113.52595500088158,
+            "cpuMs": 1420.955,
+            "cpuOverWall": 0.8065763669413885,
+            "latencyMs": {
+              "min": 5.903021000000081,
+              "mean": 8.802804460000035,
+              "p50": 8.06808600000113,
+              "p95": 11.720229000000472,
+              "p99": 16.786761999999726,
+              "max": 84.723704,
+              "firstQuartileMean": 8.399324259999993,
+              "lastQuartileMean": 8.870572240000074
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.571900999999343,
+            "throughputPerSec": 388.81745448221193,
+            "cpuMs": 2.563,
+            "cpuOverWall": 0.9965391358379093,
+            "latencyMs": {
+              "min": 2.568446999999651,
+              "mean": 2.568446999999651,
+              "p50": 2.568446999999651,
+              "p95": 2.568446999999651,
+              "p99": 2.568446999999651,
+              "max": 2.568446999999651,
+              "firstQuartileMean": 2.568446999999651,
+              "lastQuartileMean": 2.568446999999651
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 20.858580999998594,
+            "throughputPerSec": 47.941899786954224,
+            "cpuMs": 29.246,
+            "cpuOverWall": 1.402108801169263,
+            "latencyMs": {
+              "min": 20.855742000001555,
+              "mean": 20.855742000001555,
+              "p50": 20.855742000001555,
+              "p95": 20.855742000001555,
+              "p99": 20.855742000001555,
+              "max": 20.855742000001555,
+              "firstQuartileMean": 20.855742000001555,
+              "lastQuartileMean": 20.855742000001555
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.1220639999992272,
+            "throughputPerSec": 471.2393217171415,
+            "cpuMs": 2.557,
+            "cpuOverWall": 1.2049589456307308,
+            "latencyMs": {
+              "min": 2.1181799999994837,
+              "mean": 2.1181799999994837,
+              "p50": 2.1181799999994837,
+              "p95": 2.1181799999994837,
+              "p99": 2.1181799999994837,
+              "max": 2.1181799999994837,
+              "firstQuartileMean": 2.1181799999994837,
+              "lastQuartileMean": 2.1181799999994837
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.641569999999774,
+            "throughputPerSec": 378.5627486684379,
+            "cpuMs": 2.091,
+            "cpuOverWall": 0.7915747074657037,
+            "latencyMs": {
+              "min": 2.6388049999986833,
+              "mean": 2.6388049999986833,
+              "p50": 2.6388049999986833,
+              "p95": 2.6388049999986833,
+              "p99": 2.6388049999986833,
+              "max": 2.6388049999986833,
+              "firstQuartileMean": 2.6388049999986833,
+              "lastQuartileMean": 2.6388049999986833
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.861456000000544,
+            "throughputPerSec": 537.2138798874149,
+            "cpuMs": 2.62,
+            "cpuOverWall": 1.407500365305027,
+            "latencyMs": {
+              "min": 1.8591440000000148,
+              "mean": 1.8591440000000148,
+              "p50": 1.8591440000000148,
+              "p95": 1.8591440000000148,
+              "p99": 1.8591440000000148,
+              "max": 1.8591440000000148,
+              "firstQuartileMean": 1.8591440000000148,
+              "lastQuartileMean": 1.8591440000000148
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 15.484104999999545,
+            "throughputPerSec": 64.5823571979155,
+            "cpuMs": 21.361,
+            "cpuOverWall": 1.379543732104673,
+            "latencyMs": {
+              "min": 15.481489999998303,
+              "mean": 15.481489999998303,
+              "p50": 15.481489999998303,
+              "p95": 15.481489999998303,
+              "p99": 15.481489999998303,
+              "max": 15.481489999998303,
+              "firstQuartileMean": 15.481489999998303,
+              "lastQuartileMean": 15.481489999998303
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 200,
+          "beforeCount": 0,
+          "afterCount": 200,
+          "ballotListCount": 200,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 200,
+          "counts": [
+            200,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 841200,
+          "l2ChainJsonBytes": 307990
+        },
+        "notes": [],
+        "port": 44777,
+        "electionId": "57859f23-80a6-5f71-b007-c2619b2e771a",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 1.1065710000002582,
+          "compactStringifyMs": 0.8380459999989398,
+          "prettyWriteMs": 1.3503900000014255,
+          "prettyBytes": 841200,
+          "compactBytes": 692117
+        },
+        "memory": {
+          "rssBytes": 215040000,
+          "heapUsedBytes": 91718696,
+          "eventLoopDelayP99Ms": 89.784319,
+          "eventLoopDelayMaxMs": 91.815935
+        }
+      },
+      {
+        "n": 400,
+        "phases": {
+          "provision": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 400
+            },
+            "wallMs": 883.9749599999996,
+            "throughputPerSec": 452.5015052462574,
+            "cpuMs": 945.259,
+            "cpuOverWall": 1.0693278008689302,
+            "latencyMs": {
+              "min": 1.1234989999993559,
+              "mean": 2.2064802750000037,
+              "p50": 2.031331999998656,
+              "p95": 3.4718490000013844,
+              "p99": 5.137216999999509,
+              "max": 13.334765999999945,
+              "firstQuartileMean": 1.4294781000000147,
+              "lastQuartileMean": 2.9979489700001793
+            }
+          },
+          "registration_request": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 400
+            },
+            "wallMs": 1682.0526659999996,
+            "throughputPerSec": 237.804682389178,
+            "cpuMs": 1458.202,
+            "cpuOverWall": 0.8669181586731604,
+            "latencyMs": {
+              "min": 2.4924040000005334,
+              "mean": 4.200939949999975,
+              "p50": 4.010008999997808,
+              "p95": 6.015674999998737,
+              "p99": 7.066971000000194,
+              "max": 8.208617000000231,
+              "firstQuartileMean": 3.0925175200000012,
+              "lastQuartileMean": 5.4404091300000434
+            }
+          },
+          "registration_approve": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 400
+            },
+            "wallMs": 40014.920518,
+            "throughputPerSec": 9.996271261367797,
+            "cpuMs": 38654.422,
+            "cpuOverWall": 0.9660002194084578,
+            "latencyMs": {
+              "min": 8.00443400000222,
+              "mean": 100.0315158324998,
+              "p50": 99.94970000000103,
+              "p95": 190.8595240000068,
+              "p99": 209.53327100000024,
+              "max": 327.74695500000234,
+              "firstQuartileMean": 34.17699359999977,
+              "lastQuartileMean": 173.3242419399997
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 183.72935800000414,
+            "throughputPerSec": 5.442788299515952,
+            "cpuMs": 189.773,
+            "cpuOverWall": 1.0328942639640406,
+            "latencyMs": {
+              "min": 183.72259699999995,
+              "mean": 183.72259699999995,
+              "p50": 183.72259699999995,
+              "p95": 183.72259699999995,
+              "p99": 183.72259699999995,
+              "max": 183.72259699999995,
+              "firstQuartileMean": 183.72259699999995,
+              "lastQuartileMean": 183.72259699999995
+            }
+          },
+          "vote": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 400
+            },
+            "wallMs": 6182.716264000002,
+            "throughputPerSec": 64.69648337722907,
+            "cpuMs": 6874.164,
+            "cpuOverWall": 1.1118355923958663,
+            "latencyMs": {
+              "min": 9.54236200000014,
+              "mean": 15.450440777499916,
+              "p50": 14.253978000000643,
+              "p95": 22.26765400000295,
+              "p99": 24.654427000001306,
+              "max": 141.78915399999823,
+              "firstQuartileMean": 13.458667989999885,
+              "lastQuartileMean": 16.579908660000218
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 13.749186000000918,
+            "throughputPerSec": 72.73157843671132,
+            "cpuMs": 43.677,
+            "cpuOverWall": 3.1766971513802402,
+            "latencyMs": {
+              "min": 13.746870000002673,
+              "mean": 13.746870000002673,
+              "p50": 13.746870000002673,
+              "p95": 13.746870000002673,
+              "p99": 13.746870000002673,
+              "max": 13.746870000002673,
+              "firstQuartileMean": 13.746870000002673,
+              "lastQuartileMean": 13.746870000002673
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 48.49202299999888,
+            "throughputPerSec": 20.621948480062855,
+            "cpuMs": 50.871,
+            "cpuOverWall": 1.0490591411292776,
+            "latencyMs": {
+              "min": 48.49021399999765,
+              "mean": 48.49021399999765,
+              "p50": 48.49021399999765,
+              "p95": 48.49021399999765,
+              "p99": 48.49021399999765,
+              "max": 48.49021399999765,
+              "firstQuartileMean": 48.49021399999765,
+              "lastQuartileMean": 48.49021399999765
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 3.430925999993633,
+            "throughputPerSec": 291.4665020469272,
+            "cpuMs": 3.13,
+            "cpuOverWall": 0.9122901514068821,
+            "latencyMs": {
+              "min": 3.428163000004133,
+              "mean": 3.428163000004133,
+              "p50": 3.428163000004133,
+              "p95": 3.428163000004133,
+              "p99": 3.428163000004133,
+              "max": 3.428163000004133,
+              "firstQuartileMean": 3.428163000004133,
+              "lastQuartileMean": 3.428163000004133
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.9566150000027847,
+            "throughputPerSec": 338.2246251199626,
+            "cpuMs": 2.652,
+            "cpuOverWall": 0.8969717058181408,
+            "latencyMs": {
+              "min": 2.9548070000018924,
+              "mean": 2.9548070000018924,
+              "p50": 2.9548070000018924,
+              "p95": 2.9548070000018924,
+              "p99": 2.9548070000018924,
+              "max": 2.9548070000018924,
+              "firstQuartileMean": 2.9548070000018924,
+              "lastQuartileMean": 2.9548070000018924
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 3.1694060000008903,
+            "throughputPerSec": 315.5165352749755,
+            "cpuMs": 2.628,
+            "cpuOverWall": 0.8291774547026357,
+            "latencyMs": {
+              "min": 3.1670180000000983,
+              "mean": 3.1670180000000983,
+              "p50": 3.1670180000000983,
+              "p95": 3.1670180000000983,
+              "p99": 3.1670180000000983,
+              "max": 3.1670180000000983,
+              "firstQuartileMean": 3.1670180000000983,
+              "lastQuartileMean": 3.1670180000000983
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 24.964688000000024,
+            "throughputPerSec": 40.05657911687096,
+            "cpuMs": 20.034,
+            "cpuOverWall": 0.8024935060273928,
+            "latencyMs": {
+              "min": 24.962396000002627,
+              "mean": 24.962396000002627,
+              "p50": 24.962396000002627,
+              "p95": 24.962396000002627,
+              "p99": 24.962396000002627,
+              "max": 24.962396000002627,
+              "firstQuartileMean": 24.962396000002627,
+              "lastQuartileMean": 24.962396000002627
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 400,
+          "beforeCount": 0,
+          "afterCount": 400,
+          "ballotListCount": 400,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 400,
+          "counts": [
+            400,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 1653549,
+          "l2ChainJsonBytes": 612590
+        },
+        "notes": [],
+        "port": 40357,
+        "electionId": "b92362e3-a126-5725-98c6-888efeb3ca91",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 2.246651000001293,
+          "compactStringifyMs": 1.777369000003091,
+          "prettyWriteMs": 10.168946999998298,
+          "prettyBytes": 1653549,
+          "compactBytes": 1357466
+        },
+        "memory": {
+          "rssBytes": 258658304,
+          "heapUsedBytes": 37869688,
+          "eventLoopDelayP99Ms": 197.918719,
+          "eventLoopDelayMaxMs": 216.662015
+        }
+      },
+      {
+        "n": 800,
+        "phases": {
+          "provision": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 800
+            },
+            "wallMs": 2936.2701779999916,
+            "throughputPerSec": 272.45449209476743,
+            "cpuMs": 2638.597,
+            "cpuOverWall": 0.8986220068472214,
+            "latencyMs": {
+              "min": 1.0913350000046194,
+              "mean": 3.6662510474996632,
+              "p50": 3.018181999999797,
+              "p95": 5.639744999993127,
+              "p99": 7.265534000005573,
+              "max": 365.16330399998697,
+              "firstQuartileMean": 3.4202842349997082,
+              "lastQuartileMean": 4.8240911199997205
+            }
+          },
+          "registration_request": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 800
+            },
+            "wallMs": 6217.747613999993,
+            "throughputPerSec": 128.66395512720806,
+            "cpuMs": 6177.101,
+            "cpuOverWall": 0.9934628073502899,
+            "latencyMs": {
+              "min": 4.487666999993962,
+              "mean": 7.768054807500084,
+              "p50": 6.877411000008578,
+              "p95": 12.292352999997092,
+              "p99": 16.004753000001074,
+              "max": 366.1772100000089,
+              "firstQuartileMean": 5.731594294999959,
+              "lastQuartileMean": 9.342095134999326
+            }
+          },
+          "registration_approve": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 800
+            },
+            "wallMs": 150168.021857,
+            "throughputPerSec": 5.32736590724897,
+            "cpuMs": 150460.57,
+            "cpuOverWall": 1.001948138754059,
+            "latencyMs": {
+              "min": 16.839438000009977,
+              "mean": 187.70534743874995,
+              "p50": 191.38965800000005,
+              "p95": 339.9605060000031,
+              "p99": 355.91470300001674,
+              "max": 412.74153299999307,
+              "firstQuartileMean": 62.89920984999983,
+              "lastQuartileMean": 312.72266377499955
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 338.1693309999828,
+            "throughputPerSec": 2.9570984365819113,
+            "cpuMs": 371.763,
+            "cpuOverWall": 1.099339786079001,
+            "latencyMs": {
+              "min": 338.16718799999217,
+              "mean": 338.16718799999217,
+              "p50": 338.16718799999217,
+              "p95": 338.16718799999217,
+              "p99": 338.16718799999217,
+              "max": 338.16718799999217,
+              "firstQuartileMean": 338.16718799999217,
+              "lastQuartileMean": 338.16718799999217
+            }
+          },
+          "vote": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 800
+            },
+            "wallMs": 22414.03517399999,
+            "throughputPerSec": 35.691922217021876,
+            "cpuMs": 16827.278,
+            "cpuOverWall": 0.7507473718752542,
+            "latencyMs": {
+              "min": 17.604561000014655,
+              "mean": 28.01176690375043,
+              "p50": 25.998955999995815,
+              "p95": 31.758139000012306,
+              "p99": 37.01052599999821,
+              "max": 441.49699400001555,
+              "firstQuartileMean": 24.741501270001027,
+              "lastQuartileMean": 30.794838779999992
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 7.391388000018196,
+            "throughputPerSec": 135.29258645298262,
+            "cpuMs": 6.935,
+            "cpuOverWall": 0.9382540870514343,
+            "latencyMs": {
+              "min": 7.3892959999793675,
+              "mean": 7.3892959999793675,
+              "p50": 7.3892959999793675,
+              "p95": 7.3892959999793675,
+              "p99": 7.3892959999793675,
+              "max": 7.3892959999793675,
+              "firstQuartileMean": 7.3892959999793675,
+              "lastQuartileMean": 7.3892959999793675
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 135.80468299999484,
+            "throughputPerSec": 7.363516322924137,
+            "cpuMs": 144.998,
+            "cpuOverWall": 1.0676951397913539,
+            "latencyMs": {
+              "min": 135.80244299999322,
+              "mean": 135.80244299999322,
+              "p50": 135.80244299999322,
+              "p95": 135.80244299999322,
+              "p99": 135.80244299999322,
+              "max": 135.80244299999322,
+              "firstQuartileMean": 135.80244299999322,
+              "lastQuartileMean": 135.80244299999322
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 5.319686000002548,
+            "throughputPerSec": 187.98101993228943,
+            "cpuMs": 6.831,
+            "cpuOverWall": 1.2840983471574692,
+            "latencyMs": {
+              "min": 5.316648999985773,
+              "mean": 5.316648999985773,
+              "p50": 5.316648999985773,
+              "p95": 5.316648999985773,
+              "p99": 5.316648999985773,
+              "max": 5.316648999985773,
+              "firstQuartileMean": 5.316648999985773,
+              "lastQuartileMean": 5.316648999985773
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 4.568498999986332,
+            "throughputPerSec": 218.89027446498113,
+            "cpuMs": 4.224,
+            "cpuOverWall": 0.9245925193400804,
+            "latencyMs": {
+              "min": 4.566492999991169,
+              "mean": 4.566492999991169,
+              "p50": 4.566492999991169,
+              "p95": 4.566492999991169,
+              "p99": 4.566492999991169,
+              "max": 4.566492999991169,
+              "firstQuartileMean": 4.566492999991169,
+              "lastQuartileMean": 4.566492999991169
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 5.624039999995148,
+            "throughputPerSec": 177.8081236977089,
+            "cpuMs": 5.945,
+            "cpuOverWall": 1.0570692953828795,
+            "latencyMs": {
+              "min": 5.62148500001058,
+              "mean": 5.62148500001058,
+              "p50": 5.62148500001058,
+              "p95": 5.62148500001058,
+              "p99": 5.62148500001058,
+              "max": 5.62148500001058,
+              "firstQuartileMean": 5.62148500001058,
+              "lastQuartileMean": 5.62148500001058
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 42.85784899999271,
+            "throughputPerSec": 23.33294888411619,
+            "cpuMs": 36.111,
+            "cpuOverWall": 0.8425761171543196,
+            "latencyMs": {
+              "min": 42.85525699998834,
+              "mean": 42.85525699998834,
+              "p50": 42.85525699998834,
+              "p95": 42.85525699998834,
+              "p99": 42.85525699998834,
+              "max": 42.85525699998834,
+              "firstQuartileMean": 42.85525699998834,
+              "lastQuartileMean": 42.85525699998834
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 800,
+          "beforeCount": 0,
+          "afterCount": 800,
+          "ballotListCount": 800,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 800,
+          "counts": [
+            800,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 3276681,
+          "l2ChainJsonBytes": 1221790
+        },
+        "notes": [],
+        "port": 42407,
+        "electionId": "3c1c0651-29dc-5364-824e-48e922bfb1fb",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 3.9625379999924917,
+          "compactStringifyMs": 3.0297910000081174,
+          "prettyWriteMs": 1.6523309999902267,
+          "prettyBytes": 3276681,
+          "compactBytes": 2686598
+        },
+        "memory": {
+          "rssBytes": 279334912,
+          "heapUsedBytes": 55030992,
+          "eventLoopDelayP99Ms": 324.534271,
+          "eventLoopDelayMaxMs": 375.652351
+        }
+      }
+    ],
+    "profile": {
+      "sampleHits": 11743,
+      "top": [
+        {
+          "functionName": "keccakP",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 49,
+          "hits": 2974,
+          "selfPercent": 25.325725964404327
+        },
+        {
+          "functionName": "keccakP",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 49,
+          "hits": 2859,
+          "selfPercent": 24.346419143319423
+        },
+        {
+          "functionName": "(idle)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 1208,
+          "selfPercent": 10.286979477135315
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/store.mjs",
+          "lineNumber": 230,
+          "hits": 645,
+          "selfPercent": 5.492633909563144
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/store.mjs",
+          "lineNumber": 230,
+          "hits": 501,
+          "selfPercent": 4.2663714553350935
+        },
+        {
+          "functionName": "hexToBytes",
+          "url": "file:///workspace/node_modules/viem/_esm/utils/encoding/toBytes.js",
+          "lineNumber": 106,
+          "hits": 306,
+          "selfPercent": 2.605807715234608
+        },
+        {
+          "functionName": "hexToBytes",
+          "url": "file:///workspace/node_modules/viem/_esm/utils/encoding/toBytes.js",
+          "lineNumber": 106,
+          "hits": 189,
+          "selfPercent": 1.6094694711743167
+        },
+        {
+          "functionName": "(garbage collector)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 177,
+          "selfPercent": 1.507280933321979
+        },
+        {
+          "functionName": "RegExp: ^0x[0-9a-fA-F]*$",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 140,
+          "selfPercent": 1.1921996082772717
+        },
+        {
+          "functionName": "Keccak",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 97,
+          "hits": 115,
+          "selfPercent": 0.9793068210849016
+        },
+        {
+          "functionName": "Keccak",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 97,
+          "hits": 98,
+          "selfPercent": 0.8345397257940901
+        },
+        {
+          "functionName": "(program)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 96,
+          "selfPercent": 0.8175083028187005
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/explorer.mjs",
+          "lineNumber": 91,
+          "hits": 91,
+          "selfPercent": 0.7749297453802265
+        },
+        {
+          "functionName": "refresh",
+          "url": "file:///workspace/apps/node/src/explorer.mjs",
+          "lineNumber": 99,
+          "hits": 91,
+          "selfPercent": 0.7749297453802265
+        },
+        {
+          "functionName": "toBytes32",
+          "url": "file:///workspace/apps/node/src/merkle.mjs",
+          "lineNumber": 10,
+          "hits": 84,
+          "selfPercent": 0.715319764966363
+        },
+        {
+          "functionName": "RegExp: ^0x[0-9a-fA-F]*$",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 81,
+          "selfPercent": 0.6897726305032785
+        },
+        {
+          "functionName": "toBytes32",
+          "url": "file:///workspace/apps/node/src/merkle.mjs",
+          "lineNumber": 10,
+          "hits": 64,
+          "selfPercent": 0.545005535212467
+        },
+        {
+          "functionName": "update",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 128,
+          "hits": 56,
+          "selfPercent": 0.4768798433109086
+        },
+        {
+          "functionName": "update",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 128,
+          "hits": 52,
+          "selfPercent": 0.4428169973601294
+        },
+        {
+          "functionName": "slice",
+          "url": "node:buffer",
+          "lineNumber": 636,
+          "hits": 41,
+          "selfPercent": 0.34914417099548667
+        }
+      ],
+      "note": "Separate process from the timing ladder: population 200, V8 profiler on, code before the tree append. Timings from that process are not in the tables above."
+    }
+  },
+  {
+    "label": "after",
+    "startedAt": "2026-09-27T13:18:39.595Z",
+    "finishedAt": "2026-09-27T13:19:34.115Z",
+    "environment": {
+      "node": "v22.14.0",
+      "platform": "linux",
+      "arch": "x64",
+      "cpus": 4,
+      "cpuModel": "Intel(R) Xeon(R) Processor",
+      "totalMemMb": 16014,
+      "loadAvg": [
+        0.08,
+        0.44,
+        0.33
+      ],
+      "dataDirParent": "/tmp"
+    },
+    "config": {
+      "scales": [
+        100,
+        200,
+        400,
+        800
+      ],
+      "concurrency": 1,
+      "disclosureIntervalSeconds": 3600,
+      "treeDepth": 20,
+      "maxPhaseMs": 300000,
+      "profile": false
+    },
+    "scales": [
+      {
+        "n": 100,
+        "phases": {
+          "provision": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 100
+            },
+            "wallMs": 193.90564100000006,
+            "throughputPerSec": 515.7147542706092,
+            "cpuMs": 227.361,
+            "cpuOverWall": 1.1725342224571997,
+            "latencyMs": {
+              "min": 1.4876899999999864,
+              "mean": 1.9350050600000004,
+              "p50": 1.7081410000000687,
+              "p95": 3.0452900000000227,
+              "p99": 3.8799390000000358,
+              "max": 10.86531500000001,
+              "firstQuartileMean": 2.060897679999991,
+              "lastQuartileMean": 1.8576910000000089
+            }
+          },
+          "registration_request": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 100
+            },
+            "wallMs": 225.32939399999998,
+            "throughputPerSec": 443.79474077847124,
+            "cpuMs": 257.851,
+            "cpuOverWall": 1.1443291770446957,
+            "latencyMs": {
+              "min": 1.7887980000000425,
+              "mean": 2.2489483199999962,
+              "p50": 2.1903559999999516,
+              "p95": 2.6673170000000255,
+              "p99": 3.757319999999936,
+              "max": 3.8228430000000344,
+              "firstQuartileMean": 2.1821145599999863,
+              "lastQuartileMean": 2.2994293600000035
+            }
+          },
+          "registration_approve": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 100
+            },
+            "wallMs": 374.01793699999996,
+            "throughputPerSec": 267.36685625855426,
+            "cpuMs": 412.657,
+            "cpuOverWall": 1.1033080480308624,
+            "latencyMs": {
+              "min": 3.1609849999999824,
+              "mean": 3.7347422600000004,
+              "p50": 3.575508000000127,
+              "p95": 4.974908000000141,
+              "p99": 5.800741000000016,
+              "max": 6.628857000000039,
+              "firstQuartileMean": 3.712167319999994,
+              "lastQuartileMean": 3.903595520000008
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 32.16949199999999,
+            "throughputPerSec": 31.08535254457858,
+            "cpuMs": 64.357,
+            "cpuOverWall": 2.0005600337114435,
+            "latencyMs": {
+              "min": 32.16189999999983,
+              "mean": 32.16189999999983,
+              "p50": 32.16189999999983,
+              "p95": 32.16189999999983,
+              "p99": 32.16189999999983,
+              "max": 32.16189999999983,
+              "firstQuartileMean": 32.16189999999983,
+              "lastQuartileMean": 32.16189999999983
+            }
+          },
+          "vote": {
+            "count": 100,
+            "ok": 100,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 100
+            },
+            "wallMs": 354.49313499999994,
+            "throughputPerSec": 282.09290992334735,
+            "cpuMs": 423.112,
+            "cpuOverWall": 1.1935689530348736,
+            "latencyMs": {
+              "min": 2.841768000000002,
+              "mean": 3.5385151599999993,
+              "p50": 3.212959999999839,
+              "p95": 5.371879000000035,
+              "p99": 6.314250000000129,
+              "max": 9.298646999999846,
+              "firstQuartileMean": 3.6053653999999553,
+              "lastQuartileMean": 3.6956715200000234
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.2314719999999397,
+            "throughputPerSec": 448.1346841905375,
+            "cpuMs": 2.238,
+            "cpuOverWall": 1.0029254232184228,
+            "latencyMs": {
+              "min": 2.2260129999999663,
+              "mean": 2.2260129999999663,
+              "p50": 2.2260129999999663,
+              "p95": 2.2260129999999663,
+              "p99": 2.2260129999999663,
+              "max": 2.2260129999999663,
+              "firstQuartileMean": 2.2260129999999663,
+              "lastQuartileMean": 2.2260129999999663
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 13.694520000000011,
+            "throughputPerSec": 73.02190949372444,
+            "cpuMs": 13.188,
+            "cpuOverWall": 0.9630129424032379,
+            "latencyMs": {
+              "min": 13.692066999999952,
+              "mean": 13.692066999999952,
+              "p50": 13.692066999999952,
+              "p95": 13.692066999999952,
+              "p99": 13.692066999999952,
+              "max": 13.692066999999952,
+              "firstQuartileMean": 13.692066999999952,
+              "lastQuartileMean": 13.692066999999952
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.6528019999998378,
+            "throughputPerSec": 605.0331497663351,
+            "cpuMs": 2.614,
+            "cpuOverWall": 1.5815566534891998,
+            "latencyMs": {
+              "min": 1.649642999999969,
+              "mean": 1.649642999999969,
+              "p50": 1.649642999999969,
+              "p95": 1.649642999999969,
+              "p99": 1.649642999999969,
+              "max": 1.649642999999969,
+              "firstQuartileMean": 1.649642999999969,
+              "lastQuartileMean": 1.649642999999969
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.6952340000000277,
+            "throughputPerSec": 589.8890654623395,
+            "cpuMs": 1.627,
+            "cpuOverWall": 0.9597495095072264,
+            "latencyMs": {
+              "min": 1.692728999999872,
+              "mean": 1.692728999999872,
+              "p50": 1.692728999999872,
+              "p95": 1.692728999999872,
+              "p99": 1.692728999999872,
+              "max": 1.692728999999872,
+              "firstQuartileMean": 1.692728999999872,
+              "lastQuartileMean": 1.692728999999872
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.7167120000001432,
+            "throughputPerSec": 582.5088890855989,
+            "cpuMs": 1.722,
+            "cpuOverWall": 1.0030803070054013,
+            "latencyMs": {
+              "min": 1.7132249999999658,
+              "mean": 1.7132249999999658,
+              "p50": 1.7132249999999658,
+              "p95": 1.7132249999999658,
+              "p99": 1.7132249999999658,
+              "max": 1.7132249999999658,
+              "firstQuartileMean": 1.7132249999999658,
+              "lastQuartileMean": 1.7132249999999658
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 16.90399000000002,
+            "throughputPerSec": 59.15763083153733,
+            "cpuMs": 32.212,
+            "cpuOverWall": 1.9055856043454806,
+            "latencyMs": {
+              "min": 16.899271,
+              "mean": 16.899271,
+              "p50": 16.899271,
+              "p95": 16.899271,
+              "p99": 16.899271,
+              "max": 16.899271,
+              "firstQuartileMean": 16.899271,
+              "lastQuartileMean": 16.899271
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 100,
+          "beforeCount": 0,
+          "afterCount": 100,
+          "ballotListCount": 100,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 100,
+          "counts": [
+            100,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 435152,
+          "l2ChainJsonBytes": 155690
+        },
+        "notes": [],
+        "port": 39661,
+        "electionId": "034b46e5-f355-5435-a72c-0e909092e081",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 0.6529779999998482,
+          "compactStringifyMs": 0.49009799999998904,
+          "prettyWriteMs": 0.650822000000062,
+          "prettyBytes": 435152,
+          "compactBytes": 359569
+        },
+        "memory": {
+          "rssBytes": 165093376,
+          "heapUsedBytes": 47949056,
+          "eventLoopDelayP99Ms": 45.678591,
+          "eventLoopDelayMaxMs": 99.155967
+        }
+      },
+      {
+        "n": 200,
+        "phases": {
+          "provision": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 200
+            },
+            "wallMs": 357.831281,
+            "throughputPerSec": 558.9226281198149,
+            "cpuMs": 408.812,
+            "cpuOverWall": 1.142471387234589,
+            "latencyMs": {
+              "min": 1.2629339999998592,
+              "mean": 1.7860928150000028,
+              "p50": 1.6571579999999813,
+              "p95": 2.4713509999999133,
+              "p99": 3.221900000000005,
+              "max": 3.813623000000007,
+              "firstQuartileMean": 1.5570515400000067,
+              "lastQuartileMean": 2.1286841800000094
+            }
+          },
+          "registration_request": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 200
+            },
+            "wallMs": 497.52226800000017,
+            "throughputPerSec": 401.99205716757973,
+            "cpuMs": 526.644,
+            "cpuOverWall": 1.0585335247748144,
+            "latencyMs": {
+              "min": 1.9290909999999712,
+              "mean": 2.484040134999982,
+              "p50": 2.426698000000215,
+              "p95": 2.9326139999998304,
+              "p99": 4.738886000000093,
+              "max": 5.067121999999927,
+              "firstQuartileMean": 2.229628539999985,
+              "lastQuartileMean": 2.6357151799999885
+            }
+          },
+          "registration_approve": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 200
+            },
+            "wallMs": 973.5115289999999,
+            "throughputPerSec": 205.44184022704061,
+            "cpuMs": 953.868,
+            "cpuOverWall": 0.979821986268434,
+            "latencyMs": {
+              "min": 3.068260999999893,
+              "mean": 4.862548624999997,
+              "p50": 4.744842000000062,
+              "p95": 6.717746000000261,
+              "p99": 7.971234999999979,
+              "max": 8.624505000000227,
+              "firstQuartileMean": 3.7940616999999657,
+              "lastQuartileMean": 5.59610512000002
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 48.21465900000021,
+            "throughputPerSec": 20.740580162560015,
+            "cpuMs": 48.369,
+            "cpuOverWall": 1.0032011218828654,
+            "latencyMs": {
+              "min": 48.212011000000075,
+              "mean": 48.212011000000075,
+              "p50": 48.212011000000075,
+              "p95": 48.212011000000075,
+              "p99": 48.212011000000075,
+              "max": 48.212011000000075,
+              "firstQuartileMean": 48.212011000000075,
+              "lastQuartileMean": 48.212011000000075
+            }
+          },
+          "vote": {
+            "count": 200,
+            "ok": 200,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 200
+            },
+            "wallMs": 1012.2807709999997,
+            "throughputPerSec": 197.57364333062102,
+            "cpuMs": 957.849,
+            "cpuOverWall": 0.9462285834529601,
+            "latencyMs": {
+              "min": 3.721006999999645,
+              "mean": 5.055859150000003,
+              "p50": 4.805390999999872,
+              "p95": 7.103677999999945,
+              "p99": 8.129453000000467,
+              "max": 8.875017999999727,
+              "firstQuartileMean": 4.510438600000007,
+              "lastQuartileMean": 5.902602099999967
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.8643920000004073,
+            "throughputPerSec": 349.11422738223604,
+            "cpuMs": 2.551,
+            "cpuOverWall": 0.8905903940520842,
+            "latencyMs": {
+              "min": 2.861402999999882,
+              "mean": 2.861402999999882,
+              "p50": 2.861402999999882,
+              "p95": 2.861402999999882,
+              "p99": 2.861402999999882,
+              "max": 2.861402999999882,
+              "firstQuartileMean": 2.861402999999882,
+              "lastQuartileMean": 2.861402999999882
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 20.135604000000058,
+            "throughputPerSec": 49.6632730758907,
+            "cpuMs": 29.344,
+            "cpuOverWall": 1.4573190851389368,
+            "latencyMs": {
+              "min": 20.133350000000064,
+              "mean": 20.133350000000064,
+              "p50": 20.133350000000064,
+              "p95": 20.133350000000064,
+              "p99": 20.133350000000064,
+              "max": 20.133350000000064,
+              "firstQuartileMean": 20.133350000000064,
+              "lastQuartileMean": 20.133350000000064
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.841659000000618,
+            "throughputPerSec": 542.9886857445729,
+            "cpuMs": 1.84,
+            "cpuOverWall": 0.9990991817700142,
+            "latencyMs": {
+              "min": 1.8388310000000274,
+              "mean": 1.8388310000000274,
+              "p50": 1.8388310000000274,
+              "p95": 1.8388310000000274,
+              "p99": 1.8388310000000274,
+              "max": 1.8388310000000274,
+              "firstQuartileMean": 1.8388310000000274,
+              "lastQuartileMean": 1.8388310000000274
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.450087000000167,
+            "throughputPerSec": 408.14877185991025,
+            "cpuMs": 2.493,
+            "cpuOverWall": 1.0175148882467562,
+            "latencyMs": {
+              "min": 2.4480970000004163,
+              "mean": 2.4480970000004163,
+              "p50": 2.4480970000004163,
+              "p95": 2.4480970000004163,
+              "p99": 2.4480970000004163,
+              "max": 2.4480970000004163,
+              "firstQuartileMean": 2.4480970000004163,
+              "lastQuartileMean": 2.4480970000004163
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 1.807158999999956,
+            "throughputPerSec": 553.3547407837519,
+            "cpuMs": 2.48,
+            "cpuOverWall": 1.3723197571437047,
+            "latencyMs": {
+              "min": 1.8050730000004478,
+              "mean": 1.8050730000004478,
+              "p50": 1.8050730000004478,
+              "p95": 1.8050730000004478,
+              "p99": 1.8050730000004478,
+              "max": 1.8050730000004478,
+              "firstQuartileMean": 1.8050730000004478,
+              "lastQuartileMean": 1.8050730000004478
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 14.65817700000025,
+            "throughputPerSec": 68.22130746544968,
+            "cpuMs": 24.316,
+            "cpuOverWall": 1.6588693123298746,
+            "latencyMs": {
+              "min": 14.655440999999882,
+              "mean": 14.655440999999882,
+              "p50": 14.655440999999882,
+              "p95": 14.655440999999882,
+              "p99": 14.655440999999882,
+              "max": 14.655440999999882,
+              "firstQuartileMean": 14.655440999999882,
+              "lastQuartileMean": 14.655440999999882
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 200,
+          "beforeCount": 0,
+          "afterCount": 200,
+          "ballotListCount": 200,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 200,
+          "counts": [
+            200,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 841936,
+          "l2ChainJsonBytes": 307990
+        },
+        "notes": [],
+        "port": 33915,
+        "electionId": "3021d7fb-e9a3-545f-8126-47192f61e105",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 1.1212139999997817,
+          "compactStringifyMs": 0.8546610000003056,
+          "prettyWriteMs": 0.5934420000003229,
+          "prettyBytes": 841936,
+          "compactBytes": 692853
+        },
+        "memory": {
+          "rssBytes": 206659584,
+          "heapUsedBytes": 85273496,
+          "eventLoopDelayP99Ms": 27.082751,
+          "eventLoopDelayMaxMs": 57.933823
+        }
+      },
+      {
+        "n": 400,
+        "phases": {
+          "provision": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 400
+            },
+            "wallMs": 1114.834637,
+            "throughputPerSec": 358.7976070391864,
+            "cpuMs": 962.62,
+            "cpuOverWall": 0.863464381220154,
+            "latencyMs": {
+              "min": 1.1070339999996577,
+              "mean": 2.783337175000006,
+              "p50": 2.0609230000000025,
+              "p95": 3.1063850000000457,
+              "p99": 4.85621700000047,
+              "max": 256.22859900000003,
+              "firstQuartileMean": 1.4265039299999445,
+              "lastQuartileMean": 5.506375220000045
+            }
+          },
+          "registration_request": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 400
+            },
+            "wallMs": 1768.1474260000005,
+            "throughputPerSec": 226.22547991085892,
+            "cpuMs": 1599.742,
+            "cpuOverWall": 0.9047560042088931,
+            "latencyMs": {
+              "min": 2.673197000000073,
+              "mean": 4.415797754999969,
+              "p50": 4.284964999999829,
+              "p95": 5.978935999999521,
+              "p99": 6.879406000000017,
+              "max": 7.465551999999661,
+              "firstQuartileMean": 3.886660489999995,
+              "lastQuartileMean": 5.113453949999984
+            }
+          },
+          "registration_approve": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 400
+            },
+            "wallMs": 3713.666859,
+            "throughputPerSec": 107.71025382382044,
+            "cpuMs": 2746.607,
+            "cpuOverWall": 0.739594342810705,
+            "latencyMs": {
+              "min": 4.912284999999429,
+              "mean": 9.278981904999933,
+              "p50": 8.095170000000508,
+              "p95": 11.774328999999852,
+              "p99": 13.291944999999032,
+              "max": 399.3733460000003,
+              "firstQuartileMean": 6.404995749999962,
+              "lastQuartileMean": 14.100734939999947
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 96.28255499999977,
+            "throughputPerSec": 10.386097460749793,
+            "cpuMs": 98.386,
+            "cpuOverWall": 1.0218465847733291,
+            "latencyMs": {
+              "min": 96.2781189999987,
+              "mean": 96.2781189999987,
+              "p50": 96.2781189999987,
+              "p95": 96.2781189999987,
+              "p99": 96.2781189999987,
+              "max": 96.2781189999987,
+              "firstQuartileMean": 96.2781189999987,
+              "lastQuartileMean": 96.2781189999987
+            }
+          },
+          "vote": {
+            "count": 400,
+            "ok": 400,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 400
+            },
+            "wallMs": 3587.303772000001,
+            "throughputPerSec": 111.50435687162093,
+            "cpuMs": 3080.084,
+            "cpuOverWall": 0.8586069638264241,
+            "latencyMs": {
+              "min": 6.210441999999603,
+              "mean": 8.96205968250003,
+              "p50": 8.627242000000479,
+              "p95": 11.641834000000017,
+              "p99": 12.929856000000655,
+              "max": 13.275440999999773,
+              "firstQuartileMean": 7.957646320000058,
+              "lastQuartileMean": 10.212080690000057
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 4.798006999999416,
+            "throughputPerSec": 208.41987100063042,
+            "cpuMs": 3.693,
+            "cpuOverWall": 0.7696945836053282,
+            "latencyMs": {
+              "min": 4.795518000000811,
+              "mean": 4.795518000000811,
+              "p50": 4.795518000000811,
+              "p95": 4.795518000000811,
+              "p99": 4.795518000000811,
+              "max": 4.795518000000811,
+              "firstQuartileMean": 4.795518000000811,
+              "lastQuartileMean": 4.795518000000811
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 50.58617400000003,
+            "throughputPerSec": 19.76824734758552,
+            "cpuMs": 54.704,
+            "cpuOverWall": 1.081402202902318,
+            "latencyMs": {
+              "min": 50.583527999999205,
+              "mean": 50.583527999999205,
+              "p50": 50.583527999999205,
+              "p95": 50.583527999999205,
+              "p99": 50.583527999999205,
+              "max": 50.583527999999205,
+              "firstQuartileMean": 50.583527999999205,
+              "lastQuartileMean": 50.583527999999205
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 3.7433470000014495,
+            "throughputPerSec": 267.140609726967,
+            "cpuMs": 3.411,
+            "cpuOverWall": 0.9112166197786845,
+            "latencyMs": {
+              "min": 3.7407100000000355,
+              "mean": 3.7407100000000355,
+              "p50": 3.7407100000000355,
+              "p95": 3.7407100000000355,
+              "p99": 3.7407100000000355,
+              "max": 3.7407100000000355,
+              "firstQuartileMean": 3.7407100000000355,
+              "lastQuartileMean": 3.7407100000000355
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 3.507465000000593,
+            "throughputPerSec": 285.1061949299083,
+            "cpuMs": 3.03,
+            "cpuOverWall": 0.8638717706376221,
+            "latencyMs": {
+              "min": 3.5053850000003877,
+              "mean": 3.5053850000003877,
+              "p50": 3.5053850000003877,
+              "p95": 3.5053850000003877,
+              "p99": 3.5053850000003877,
+              "max": 3.5053850000003877,
+              "firstQuartileMean": 3.5053850000003877,
+              "lastQuartileMean": 3.5053850000003877
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 2.9779690000013943,
+            "throughputPerSec": 335.79933169201286,
+            "cpuMs": 2.811,
+            "cpuOverWall": 0.943931921386248,
+            "latencyMs": {
+              "min": 2.9754760000014358,
+              "mean": 2.9754760000014358,
+              "p50": 2.9754760000014358,
+              "p95": 2.9754760000014358,
+              "p99": 2.9754760000014358,
+              "max": 2.9754760000014358,
+              "firstQuartileMean": 2.9754760000014358,
+              "lastQuartileMean": 2.9754760000014358
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 23.63717600000018,
+            "throughputPerSec": 42.30623827482574,
+            "cpuMs": 20.746,
+            "cpuOverWall": 0.8776852192495347,
+            "latencyMs": {
+              "min": 23.634587000000465,
+              "mean": 23.634587000000465,
+              "p50": 23.634587000000465,
+              "p95": 23.634587000000465,
+              "p99": 23.634587000000465,
+              "max": 23.634587000000465,
+              "firstQuartileMean": 23.634587000000465,
+              "lastQuartileMean": 23.634587000000465
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 400,
+          "beforeCount": 0,
+          "afterCount": 400,
+          "ballotListCount": 400,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 400,
+          "counts": [
+            400,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 1653469,
+          "l2ChainJsonBytes": 612590
+        },
+        "notes": [],
+        "port": 45183,
+        "electionId": "6ba3663f-2d58-5774-b518-cf1984975bc2",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 3.16971999999987,
+          "compactStringifyMs": 2.983905999999479,
+          "prettyWriteMs": 1.5709360000000743,
+          "prettyBytes": 1653469,
+          "compactBytes": 1357386
+        },
+        "memory": {
+          "rssBytes": 229650432,
+          "heapUsedBytes": 95344728,
+          "eventLoopDelayP99Ms": 23.543807,
+          "eventLoopDelayMaxMs": 105.054207
+        }
+      },
+      {
+        "n": 800,
+        "phases": {
+          "provision": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 800
+            },
+            "wallMs": 2801.690000999999,
+            "throughputPerSec": 285.5419406552682,
+            "cpuMs": 2436.829,
+            "cpuOverWall": 0.8697711021312957,
+            "latencyMs": {
+              "min": 1.0184129999997822,
+              "mean": 3.498252339999967,
+              "p50": 2.7589330000009795,
+              "p95": 5.932722000001377,
+              "p99": 7.171936999999161,
+              "max": 284.0989300000001,
+              "firstQuartileMean": 2.990049430000008,
+              "lastQuartileMean": 5.2727251099999926
+            }
+          },
+          "registration_request": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "202": 800
+            },
+            "wallMs": 6673.235119000001,
+            "throughputPerSec": 119.88188423366714,
+            "cpuMs": 5924.597,
+            "cpuOverWall": 0.8878148146064144,
+            "latencyMs": {
+              "min": 4.674522999997862,
+              "mean": 8.336840211250019,
+              "p50": 7.512636999999813,
+              "p95": 11.924702000000252,
+              "p99": 15.884144000003289,
+              "max": 383.76103899999725,
+              "firstQuartileMean": 6.181291619999938,
+              "lastQuartileMean": 10.141286425000072
+            }
+          },
+          "registration_approve": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 800
+            },
+            "wallMs": 14962.027891000002,
+            "throughputPerSec": 53.46868792306009,
+            "cpuMs": 14683.826,
+            "cpuOverWall": 0.9814061373881446,
+            "latencyMs": {
+              "min": 8.556000000000495,
+              "mean": 18.698531979999952,
+              "p50": 16.8831349999964,
+              "p95": 24.300304999997024,
+              "p99": 28.64011799999571,
+              "max": 481.51062900000034,
+              "firstQuartileMean": 15.338484400000016,
+              "lastQuartileMean": 23.388093640000115
+            }
+          },
+          "freeze": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 188.3661190000057,
+            "throughputPerSec": 5.3088103386573975,
+            "cpuMs": 218.101,
+            "cpuOverWall": 1.157856843671517,
+            "latencyMs": {
+              "min": 188.36427899999399,
+              "mean": 188.36427899999399,
+              "p50": 188.36427899999399,
+              "p95": 188.36427899999399,
+              "p99": 188.36427899999399,
+              "max": 188.36427899999399,
+              "firstQuartileMean": 188.36427899999399,
+              "lastQuartileMean": 188.36427899999399
+            }
+          },
+          "vote": {
+            "count": 800,
+            "ok": 800,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "201": 800
+            },
+            "wallMs": 14920.276843,
+            "throughputPerSec": 53.61830805273082,
+            "cpuMs": 11050.837,
+            "cpuOverWall": 0.7406589781331445,
+            "latencyMs": {
+              "min": 11.340157999999064,
+              "mean": 18.644799122500107,
+              "p50": 17.56434799999988,
+              "p95": 21.21194399999513,
+              "p99": 23.227206000003207,
+              "max": 337.7334150000024,
+              "firstQuartileMean": 16.626443455000008,
+              "lastQuartileMean": 19.20712349500005
+            }
+          },
+          "disclosure_sealed_read": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 6.962015000004612,
+            "throughputPerSec": 143.63657647955907,
+            "cpuMs": 7.692,
+            "cpuOverWall": 1.1048525462807683,
+            "latencyMs": {
+              "min": 6.958378000002995,
+              "mean": 6.958378000002995,
+              "p50": 6.958378000002995,
+              "p95": 6.958378000002995,
+              "p99": 6.958378000002995,
+              "max": 6.958378000002995,
+              "firstQuartileMean": 6.958378000002995,
+              "lastQuartileMean": 6.958378000002995
+            }
+          },
+          "disclosure_publish": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 132.45273099999758,
+            "throughputPerSec": 7.549863203651258,
+            "cpuMs": 137.226,
+            "cpuOverWall": 1.0360375279842475,
+            "latencyMs": {
+              "min": 132.4506079999992,
+              "mean": 132.4506079999992,
+              "p50": 132.4506079999992,
+              "p95": 132.4506079999992,
+              "p99": 132.4506079999992,
+              "max": 132.4506079999992,
+              "firstQuartileMean": 132.4506079999992,
+              "lastQuartileMean": 132.4506079999992
+            }
+          },
+          "disclosure_ballots": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 6.006301000001258,
+            "throughputPerSec": 166.49182250436508,
+            "cpuMs": 6.683,
+            "cpuOverWall": 1.1126648497966718,
+            "latencyMs": {
+              "min": 6.003393999999389,
+              "mean": 6.003393999999389,
+              "p50": 6.003393999999389,
+              "p95": 6.003393999999389,
+              "p99": 6.003393999999389,
+              "max": 6.003393999999389,
+              "firstQuartileMean": 6.003393999999389,
+              "lastQuartileMean": 6.003393999999389
+            }
+          },
+          "disclosure_reread": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 5.376187999994727,
+            "throughputPerSec": 186.0054001089584,
+            "cpuMs": 5.6,
+            "cpuOverWall": 1.041630240610167,
+            "latencyMs": {
+              "min": 5.37420099999872,
+              "mean": 5.37420099999872,
+              "p50": 5.37420099999872,
+              "p95": 5.37420099999872,
+              "p99": 5.37420099999872,
+              "max": 5.37420099999872,
+              "firstQuartileMean": 5.37420099999872,
+              "lastQuartileMean": 5.37420099999872
+            }
+          },
+          "disclosure_explorer": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 5.114676999997755,
+            "throughputPerSec": 195.51576766244258,
+            "cpuMs": 4.208,
+            "cpuOverWall": 0.8227303503235585,
+            "latencyMs": {
+              "min": 5.112511999999697,
+              "mean": 5.112511999999697,
+              "p50": 5.112511999999697,
+              "p95": 5.112511999999697,
+              "p99": 5.112511999999697,
+              "max": 5.112511999999697,
+              "firstQuartileMean": 5.112511999999697,
+              "lastQuartileMean": 5.112511999999697
+            }
+          },
+          "tally": {
+            "count": 1,
+            "ok": 1,
+            "errors": 0,
+            "errorSamples": [],
+            "statuses": {
+              "200": 1
+            },
+            "wallMs": 49.27715299999545,
+            "throughputPerSec": 20.293380179656328,
+            "cpuMs": 35.891,
+            "cpuOverWall": 0.7283497080280452,
+            "latencyMs": {
+              "min": 49.274837999997544,
+              "mean": 49.274837999997544,
+              "p50": 49.274837999997544,
+              "p95": 49.274837999997544,
+              "p99": 49.274837999997544,
+              "max": 49.274837999997544,
+              "firstQuartileMean": 49.274837999997544,
+              "lastQuartileMean": 49.274837999997544
+            }
+          }
+        },
+        "disclosure": {
+          "votesOk": 800,
+          "beforeCount": 0,
+          "afterCount": 800,
+          "ballotListCount": 800,
+          "explorerBlocks": 50
+        },
+        "tally": {
+          "status": 200,
+          "acceptedBallots": 800,
+          "counts": [
+            800,
+            0
+          ],
+          "l1Status": "skipped",
+          "subscribers": 0,
+          "error": null
+        },
+        "files": {
+          "republicJsonBytes": 3276481,
+          "l2ChainJsonBytes": 1221790
+        },
+        "notes": [],
+        "port": 45653,
+        "electionId": "ca293432-7b66-50a9-bdbf-ab045c7b47a4",
+        "snapshotMicrobench": {
+          "prettyStringifyMs": 4.719310000000405,
+          "compactStringifyMs": 3.0540250000049127,
+          "prettyWriteMs": 2.8810729999968316,
+          "prettyBytes": 3276481,
+          "compactBytes": 2686398
+        },
+        "memory": {
+          "rssBytes": 297750528,
+          "heapUsedBytes": 98930800,
+          "eventLoopDelayP99Ms": 25.346047,
+          "eventLoopDelayMaxMs": 195.166207
+        }
+      }
+    ],
+    "profile": {
+      "sampleHits": 10176,
+      "top": [
+        {
+          "functionName": "(idle)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 3495,
+          "selfPercent": 34.345518867924525
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/store.mjs",
+          "lineNumber": 230,
+          "hits": 1905,
+          "selfPercent": 18.72051886792453
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/store.mjs",
+          "lineNumber": 230,
+          "hits": 1082,
+          "selfPercent": 10.632861635220126
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/explorer.mjs",
+          "lineNumber": 91,
+          "hits": 373,
+          "selfPercent": 3.6654874213836477
+        },
+        {
+          "functionName": "refresh",
+          "url": "file:///workspace/apps/node/src/explorer.mjs",
+          "lineNumber": 99,
+          "hits": 327,
+          "selfPercent": 3.213443396226415
+        },
+        {
+          "functionName": "(garbage collector)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 192,
+          "selfPercent": 1.8867924528301887
+        },
+        {
+          "functionName": "(program)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 150,
+          "selfPercent": 1.474056603773585
+        },
+        {
+          "functionName": "slice",
+          "url": "node:buffer",
+          "lineNumber": 636,
+          "hits": 115,
+          "selfPercent": 1.1301100628930818
+        },
+        {
+          "functionName": "keccakP",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 49,
+          "hits": 63,
+          "selfPercent": 0.6191037735849056
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 56,
+          "selfPercent": 0.550314465408805
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 51,
+          "selfPercent": 0.5011792452830188
+        },
+        {
+          "functionName": "keccakP",
+          "url": "file:///workspace/node_modules/@noble/hashes/esm/sha3.js",
+          "lineNumber": 49,
+          "hits": 50,
+          "selfPercent": 0.4913522012578616
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 45,
+          "selfPercent": 0.44221698113207547
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "file:///workspace/apps/node/src/explorer.mjs",
+          "lineNumber": 172,
+          "hits": 39,
+          "selfPercent": 0.38325471698113206
+        },
+        {
+          "functionName": "runMicrotasks",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 35,
+          "selfPercent": 0.34394654088050314
+        },
+        {
+          "functionName": "writev",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 35,
+          "selfPercent": 0.34394654088050314
+        },
+        {
+          "functionName": "findByNullifier",
+          "url": "file:///workspace/apps/node/src/explorer.mjs",
+          "lineNumber": 331,
+          "hits": 26,
+          "selfPercent": 0.2555031446540881
+        },
+        {
+          "functionName": "request",
+          "url": "file:///workspace/tools/load/harness.mjs",
+          "lineNumber": 102,
+          "hits": 21,
+          "selfPercent": 0.20636792452830188
+        },
+        {
+          "functionName": "(anonymous)",
+          "url": "node:internal/buffer",
+          "lineNumber": 1061,
+          "hits": 21,
+          "selfPercent": 0.20636792452830188
+        },
+        {
+          "functionName": "openFileHandle",
+          "url": "",
+          "lineNumber": 0,
+          "hits": 17,
+          "selfPercent": 0.16705974842767296
+        }
+      ],
+      "note": "Separate process from the timing ladder: population 400, V8 profiler on, code after the tree append and single-persist vote/approve writes. Timings from that process are not in the tables above."
+    }
+  }
+]
