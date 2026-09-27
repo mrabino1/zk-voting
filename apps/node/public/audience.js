@@ -3,6 +3,8 @@
  * Session-aware audience: public (logged-out), registered voter, voting admin.
  */
 
+import { t } from "./i18n.js";
+
 export const OFFICER_ROLES = [
   "clerk",
   "registrar",
@@ -106,26 +108,26 @@ export function mainNav(audience, extraNav = []) {
   const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
   if (audience === "public") {
     return [
-      { href: "/about", label: "About" },
-      { href: "/faq", label: "FAQ" },
-      { href: "/receipt", label: "Receipt" },
-      { href: "/outcomes", label: "Outcomes" },
-      { href: "/terms", label: "Terms" },
+      { href: "/about", label: t("chrome.navAbout") },
+      { href: "/faq", label: t("chrome.navFaq") },
+      { href: "/receipt", label: t("chrome.navReceipt") },
+      { href: "/outcomes", label: t("chrome.navOutcomes") },
+      { href: "/terms", label: t("chrome.navTerms") },
       ...extra,
-      { href: "/signin", label: "Sign in" },
-      { href: "/register", label: "Register" },
+      { href: "/signin", label: t("chrome.navSignIn") },
+      { href: "/register", label: t("chrome.navRegister") },
     ];
   }
   const items = [
-    { href: "/me", label: "My desk" },
-    { href: "/register", label: "Register" },
-    { href: "/elections", label: "Results" },
-    { href: "/receipt", label: "Receipt" },
-    { href: "/outcomes", label: "Outcomes" },
-    { href: "/terms", label: "Terms" },
+    { href: "/me", label: t("chrome.navDesk") },
+    { href: "/register", label: t("chrome.navRegister") },
+    { href: "/elections", label: t("chrome.navResults") },
+    { href: "/receipt", label: t("chrome.navReceipt") },
+    { href: "/outcomes", label: t("chrome.navOutcomes") },
+    { href: "/terms", label: t("chrome.navTerms") },
   ];
   if (audience === "officer") {
-    items.push({ href: "/office", label: "Admin" });
+    items.push({ href: "/office", label: t("chrome.navAdmin") });
   }
   return items;
 }

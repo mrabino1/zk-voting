@@ -3,6 +3,7 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
+import { LOCALE_EVENT } from "./i18n.js";
 import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
@@ -510,7 +511,12 @@ export async function loadMe() {
   }
 }
 
+let chromeMe = null;
+let chromeExtra = [];
+
 function updateNav(route, me, extraNav = []) {
+  chromeMe = me;
+  chromeExtra = extraNav;
   applyAudienceChrome(document, {
     audience: audienceOf(me),
     currentPath: route.path,
@@ -1191,5 +1197,8 @@ if (typeof document !== "undefined") {
   startRouter(renderRoute);
   window.addEventListener(SESSION_EVENT, () => {
     renderRoute(currentRoute());
+  });
+  window.addEventListener(LOCALE_EVENT, () => {
+    updateNav(currentRoute(), chromeMe, chromeExtra);
   });
 }
