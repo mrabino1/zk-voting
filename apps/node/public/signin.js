@@ -4,6 +4,7 @@
  * passport, passkey. Every path completes with email MFA (AWS SES).
  */
 
+import "./i18n.js";
 import { loginPasskey, hasWebAuthn, webAuthnUnavailableMessage } from "./passkey-wallet.js";
 import { navigate } from "./router.js";
 import {
@@ -364,7 +365,7 @@ function renderForm(state, opts, statusEl) {
                 id: "signin-email",
                 name: "email",
                 type: "email",
-                autocomplete: "username email",
+                autocomplete: "email",
                 required: true,
               })
             ),

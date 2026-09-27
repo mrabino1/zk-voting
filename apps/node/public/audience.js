@@ -109,28 +109,28 @@ export function mainNav(audience, extraNav = [], options = {}) {
   const polls = options && options.pollsEnabled ? [{ href: "/polls", label: t("polls.nav") }] : [];
   if (audience === "public") {
     return [
-      { href: "/about", label: "About" },
-      { href: "/faq", label: "FAQ" },
-      { href: "/receipt", label: "Receipt" },
-      { href: "/outcomes", label: "Outcomes" },
+      { href: "/about", label: t("chrome.navAbout") },
+      { href: "/faq", label: t("chrome.navFaq") },
+      { href: "/receipt", label: t("chrome.navReceipt") },
+      { href: "/outcomes", label: t("chrome.navOutcomes") },
       ...polls,
-      { href: "/terms", label: "Terms" },
+      { href: "/terms", label: t("chrome.navTerms") },
       ...extra,
-      { href: "/signin", label: "Sign in" },
-      { href: "/register", label: "Register" },
+      { href: "/signin", label: t("chrome.navSignIn") },
+      { href: "/register", label: t("chrome.navRegister") },
     ];
   }
   const items = [
-    { href: "/me", label: "My desk" },
-    { href: "/register", label: "Register" },
-    { href: "/elections", label: "Results" },
+    { href: "/me", label: t("chrome.navDesk") },
+    { href: "/register", label: t("chrome.navRegister") },
+    { href: "/elections", label: t("chrome.navResults") },
     ...polls,
-    { href: "/receipt", label: "Receipt" },
-    { href: "/outcomes", label: "Outcomes" },
-    { href: "/terms", label: "Terms" },
+    { href: "/receipt", label: t("chrome.navReceipt") },
+    { href: "/outcomes", label: t("chrome.navOutcomes") },
+    { href: "/terms", label: t("chrome.navTerms") },
   ];
   if (audience === "officer") {
-    items.push({ href: "/office", label: "Admin" });
+    items.push({ href: "/office", label: t("chrome.navAdmin") });
   }
   return items;
 }

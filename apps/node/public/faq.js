@@ -174,7 +174,7 @@ export const FAQ_ENTRIES = [
     q: "What are the security limits on this branch? Is MockVerifier still used?",
     a: [
       "Yes — be precise. Local Foundry unit tests still use MockVerifier. Poseidon(2) is wired for the vote circuit, the proof helpers, and PoseidonHasher. A committed Groth16 check verifies an untrusted local Vote(4) proof and fails if those files are missing. That is not a production ceremony and not election depth 20. The demo passkey commitment on this screen is still keccak.",
-      "Passkey demo addresses may be republic-local-address, not production secp256k1. Tally that opens ballots uses a threshold-1 operator key (NON-PRODUCTION), not guardian threshold > 1 or a mixnet. Do not treat MockVerifier, a local circuits:setup zkey, or the demo tally key as production cryptography. This is not court-ready.",
+      "Passkey demo addresses may be republic-local-address, not production secp256k1. Tally that opens ballots uses a Feldman t-of-n guardian key (NON-PRODUCTION). Homomorphic aggregation versus a mixnet is not decided. Do not treat MockVerifier, a local circuits:setup zkey, or this guardian ceremony as production cryptography. This is not court-ready.",
     ],
   },
   {
@@ -237,7 +237,7 @@ export const FAQ_ENTRIES = [
     topic: "tally",
     q: "How are ballots opened and counted?",
     a: [
-      "Legacy sum_only still allows any partition of acceptedBallots (the operator cannot add or drop ballots, but they can rearrange which option received them). opens_ballots encrypts choices to a P-256 tally pubkey; the Node decrypts accepted envelopes and rejects invented counts[] that only match the sum. That demo key is threshold-1, held by the operator host, and labeled NON-PRODUCTION.",
+      "Legacy sum_only still allows any partition of acceptedBallots (the operator cannot add or drop ballots, but they can rearrange which option received them). opens_ballots encrypts choices to a Feldman t-of-n public key. t guardians each publish a proved partial decryption; t-1 cannot open the envelopes. Invented counts[] that only match the sum are rejected. The ceremony is NON-PRODUCTION. Homomorphic aggregation and a mixnet are not selected.",
       "Production remains homomorphic / mixnet decryption proofs plus a real Groth16 verifier. Do not run a binding election on the demo key. A corrupt tally operator can still stall (never submit a tally).",
     ],
   },
@@ -254,7 +254,7 @@ export const FAQ_ENTRIES = [
     topic: "maturity",
     q: "Is this ready for a binding public election?",
     a: [
-      "No. test/unstable is the development line. master is reserved for production when a jurisdiction pins addresses. Circuits, Node, L2, and contracts are in-tree, but Poseidon, a trusted setup ceremony, production passkey secp256k1, guardian tally threshold > 1, and MACI-style coercion resistance are not done.",
+      "No. test/unstable is the development line. master is reserved for production when a jurisdiction pins addresses. Circuits, Node, L2, and contracts are in-tree, but Poseidon, a trusted setup ceremony, production passkey secp256k1, a chosen homomorphic or mixnet tally, and MACI-style coercion resistance are not done. Feldman t-of-n guardians are in this tree and are still NON-PRODUCTION.",
       "Treat this Node as a working demo you can inspect, run locally, and improve. Do not tell a court, a clerk, or a voter that the current MockVerifier path is a finished, court-ready proving system.",
     ],
   },

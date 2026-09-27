@@ -36,6 +36,14 @@ export default {
     navHow: "How it works",
     navBackOffice: "Back office",
     navAdmin: "Admin",
+    navAbout: "About",
+    navFaq: "FAQ",
+    navReceipt: "Receipt",
+    navOutcomes: "Outcomes",
+    navTerms: "Terms",
+    navSignIn: "Sign in",
+    navDesk: "My desk",
+    navPublic: "Public",
     session: "Session",
     officeBadge: "Not for profit",
     loading: "Loading Republic…",
@@ -322,7 +330,7 @@ export default {
     aspects: "Aspects",
     ballotSpec: "Ballot spec",
     tallyEncryption:
-      "P-256 ECIES to the election tally pubkey (demo threshold-1 key, NON-PRODUCTION)",
+      "P-256 ECIES to a Feldman t-of-n guardian key (NON-PRODUCTION). Homomorphic aggregation and a mixnet are not decided.",
     tallyEncryptionLabel: "Tally encryption",
     readInfo: "Read candidate and measure information (does not record a vote)",
     electionResults: "Election results",
@@ -380,7 +388,7 @@ export default {
     envelopeHelp:
       "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
     envelopeHelpTally:
-      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the tally public key so the operator can open ballots after cutoff (demo key, NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted.",
+      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted.",
     aspectsCount: "{count} questions on this ballot",
     aspectsCount_one: "{count} question on this ballot",
     nonePublished: "None published",
@@ -678,9 +686,9 @@ export default {
     tallyBinding: "Tally binding",
     sumOnly: "sum_only — any counts that sum to accepted ballots (legacy demo)",
     opensBallots:
-      "opens_ballots — Node opens ECIES envelopes (threshold-1 demo key, NON-PRODUCTION)",
+      "opens_ballots — Feldman t-of-n guardians open ECIES envelopes (NON-PRODUCTION)",
     tallyHint:
-      "Production guardians / mixnet are not this menu. The demo key is generated on create and labeled non-production.",
+      "opens_ballots starts a guardian ceremony. Homomorphic aggregation and a mixnet are an open product decision; neither is selected. The Node does not keep a tally private key.",
     builderHint:
       "Punch-list each question’s options like a questionnaire: name, short blurb, supporting text, and optional external links. That copy is hashed into <code>ballotSpecHash</code> so the voter info pages cannot diverge from the ballot.",
     builderLabel: "Ballot option metadata",
@@ -742,7 +750,7 @@ export default {
       "Each election clones its own party registry. Staff may add any number of external systems (felony records, vital statistics, age verification, …). Those systems can still reject a person <strong>after registration was approved</strong>. The identity commitment is checked, then discarded — it is never stored on the ballot. HTTP oracles are fail-closed: timeout or a non-<code>allow: true</code> response rejects the vote.",
     tallyTitle: "Tally operator",
     tallyHint:
-      "Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, leave counts blank to open the demo ECIES envelopes, or submit counts that must match the opened ballots — invented partitions are rejected. Threshold-1 operator key is NON-PRODUCTION. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.",
+      "Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, guardians submit proved partial decryptions after cutoff; leave counts blank to open envelopes from t shares, or submit counts that must match the opened ballots — invented partitions are rejected. Feldman t-of-n is NON-PRODUCTION. Homomorphic vs mixnet aggregation is not decided. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.",
     countsJson: "Counts JSON",
     countsHint:
       "Concatenated plurality options in ballot order, or use the per-question fields above. For an all-ranked ballot, leave blank to compute IRV from envelopes. On <code>opens_ballots</code>, omit to derive counts from opened envelopes; invented partitions are rejected. Example YES_NO → <code>[yesCount, noCount]</code>.",
@@ -814,7 +822,7 @@ export default {
     dqRevoked: "Disqualification revoked (auditable event, not a silent delete).",
     dqRecorded: "Recorded {reason}. The person remains registered.",
     tallyPosted: "Tally posted. Each plurality question is counted on its own options.",
-    tallyPostedOpened: "Tally posted from opened envelopes (demo key, NON-PRODUCTION).",
+    tallyPostedOpened: "Tally posted from guardian partial decryptions (Feldman t-of-n, NON-PRODUCTION). Aggregation is undecided.",
     tallyPostedIrv: "Tally posted. IRV winner: {winner}",
     chooseElection: "Choose an election.",
     chooseElectionFirst: "Choose an election first.",

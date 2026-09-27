@@ -4,6 +4,7 @@
  */
 
 import { applyAudienceChrome, audienceOf } from "./audience.js";
+import { LOCALE_EVENT } from "./i18n.js";
 import { SESSION_EVENT, loadAuthState } from "./signin.js";
 
 async function extraNav() {
@@ -45,6 +46,7 @@ async function refresh() {
 
 if (typeof document !== "undefined") {
   window.addEventListener(SESSION_EVENT, refresh);
+  window.addEventListener(LOCALE_EVENT, refresh);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", refresh);
   } else {

@@ -52,12 +52,12 @@ import {
   sanitizeText,
 } from './cms.mjs';
 import {
-  DEMO_KEY_WARNING,
+  AGGREGATION_UNDECIDED,
+  GUARDIAN_SCHEME,
+  GUARDIAN_WARNING,
   TALLY_SCHEME_OPENS_BALLOTS,
   TALLY_SCHEME_SUM_ONLY,
-  generateDemoGuardian,
   normalizeTallyScheme,
-  publicCeremonyView,
 } from './tallyCrypto.mjs';
 
 /** Public aliases for an election id (numeric, UUID, or short code when stored). */
@@ -1040,25 +1040,50 @@ export class Store {
     let tallyPubKeyY = params.tallyPubKeyY || null;
     let tallyCeremony = null;
     if (tallyScheme === TALLY_SCHEME_OPENS_BALLOTS) {
-      const guardian = await generateDemoGuardian();
+      if (params.aggregation && params.aggregation !== AGGREGATION_UNDECIDED) {
+        throw new HttpError(
+          400,
+          'ballot aggregation is an open product decision; omit it or pass undecided',
+          { code: 'AGGREGATION_UNDECIDED' },
+        );
+      }
+      const guardianCount = Number(params.guardianCount);
+      const threshold = Number(params.threshold);
+      if (!Number.isInteger(guardianCount) || guardianCount < 2 || guardianCount > 16) {
+        throw new HttpError(400, 'guardianCount must be an integer from 2 to 16', {
+          code: 'BAD_GUARDIANS',
+        });
+      }
+      if (!Number.isInteger(threshold) || threshold < 2 || threshold > guardianCount) {
+        throw new HttpError(400, 'threshold must be an integer from 2 to guardianCount', {
+          code: 'BAD_THRESHOLD',
+        });
+      }
+      tallyCeremony = {
+        scheme: GUARDIAN_SCHEME,
+        threshold,
+        guardians: guardianCount,
+        aggregation: AGGREGATION_UNDECIDED,
+        production: false,
+        status: 'awaiting_guardians',
+        warning: GUARDIAN_WARNING,
+        publicKey: null,
+        publicKeyX: null,
+        publicKeyY: null,
+        verificationKeys: null,
+        roster: [],
+      };
+      tallyPubKey = null;
+      tallyPubKeyX = null;
+      tallyPubKeyY = null;
       if (!this.data.tallyGuardians) this.data.tallyGuardians = [];
       this.data.tallyGuardians.push({
         electionId: String(id),
-        scheme: guardian.scheme,
-        threshold: 1,
-        guardians: 1,
-        production: false,
-        warning: DEMO_KEY_WARNING,
-        publicKeyRaw: guardian.publicKeyRaw,
-        publicKeyX: guardian.publicKeyX,
-        publicKeyY: guardian.publicKeyY,
-        privateJwk: guardian.privateJwk,
+        scheme: GUARDIAN_SCHEME,
+        deals: [],
+        partials: [],
         createdAt: new Date().toISOString(),
       });
-      tallyPubKey = guardian.publicKeyRaw;
-      tallyPubKeyX = guardian.publicKeyX;
-      tallyPubKeyY = guardian.publicKeyY;
-      tallyCeremony = publicCeremonyView(guardian);
     }
     const election = {
       id,
@@ -2190,6 +2215,91 @@ export class Store {
     return list.find((g) => String(g.electionId) === String(electionId)) || null;
   }
 
+  guardianMaterial(electionId) {
+    return this.getTallyGuardian(electionId);
+  }
+
+  async enrollGuardian(electionId, entry) {
+    const election = this.requireElection(electionId);
+    const ceremony = election.tallyCeremony;
+    if (!ceremony || ceremony.scheme !== GUARDIAN_SCHEME) {
+      throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
+    }
+    if (ceremony.status !== 'awaiting_guardians') {
+      throw new HttpError(409, 'guardian roster is closed', { code: 'ROSTER_CLOSED' });
+    }
+    const roster = ceremony.roster || [];
+    const guardianId = String(entry.guardianId || '').trim();
+    if (!guardianId || guardianId.length > 80) {
+      throw new HttpError(400, 'guardianId is required', { code: 'BAD_GUARDIAN' });
+    }
+    if (roster.some((g) => g.guardianId === guardianId)) {
+      throw new HttpError(409, 'guardian already enrolled', { code: 'DUPLICATE_GUARDIAN' });
+    }
+    roster.push({
+      index: roster.length + 1,
+      guardianId,
+      label: String(entry.label || '').slice(0, 120),
+      transportPublicKey: entry.transportPublicKey,
+      commitments: null,
+    });
+    ceremony.roster = roster;
+    if (roster.length === ceremony.guardians) ceremony.status = 'awaiting_deals';
+    await this.persist();
+    return roster[roster.length - 1];
+  }
+
+  async saveGuardianDeal(electionId, deal) {
+    const election = this.requireElection(electionId);
+    const ceremony = election.tallyCeremony;
+    const bucket = this.getTallyGuardian(electionId);
+    if (!ceremony || !bucket) {
+      throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
+    }
+    if (ceremony.status !== 'awaiting_deals' && ceremony.status !== 'ready') {
+      throw new HttpError(409, 'deals are accepted after the roster is full', { code: 'ROSTER_OPEN' });
+    }
+    const index = Number(deal.index);
+    const member = (ceremony.roster || []).find((g) => g.index === index);
+    if (!member) throw new HttpError(400, 'unknown guardian index', { code: 'UNKNOWN_GUARDIAN' });
+    if ((bucket.deals || []).some((row) => row.index === index)) {
+      throw new HttpError(409, 'guardian already dealt', { code: 'DUPLICATE_DEAL' });
+    }
+    member.commitments = deal.commitments;
+    bucket.deals.push({
+      index,
+      guardianId: member.guardianId,
+      commitments: deal.commitments,
+      encryptedShares: deal.encryptedShares,
+    });
+    await this.persist();
+    return bucket.deals;
+  }
+
+  async markCeremonyReady(electionId, { publicKey, publicKeyX, publicKeyY, verificationKeys }) {
+    const election = this.requireElection(electionId);
+    election.tallyPubKey = publicKey;
+    election.tallyPubKeyX = publicKeyX;
+    election.tallyPubKeyY = publicKeyY;
+    election.tallyCeremony.publicKey = publicKey;
+    election.tallyCeremony.publicKeyX = publicKeyX;
+    election.tallyCeremony.publicKeyY = publicKeyY;
+    election.tallyCeremony.verificationKeys = verificationKeys;
+    election.tallyCeremony.status = 'ready';
+    await this.persist();
+    return election;
+  }
+
+  async saveGuardianPartials(electionId, { index, partials }) {
+    const bucket = this.getTallyGuardian(electionId);
+    if (!bucket) throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
+    const n = Number(index);
+    bucket.partials = (bucket.partials || []).filter((row) => row.index !== n);
+    bucket.partials.push({ index: n, partials });
+    await this.persist();
+    return bucket.partials;
+  }
+
   async setTally(id, counts, extras = {}) {
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
@@ -2199,6 +2309,8 @@ export class Store {
       source: extras.source || TALLY_SCHEME_SUM_ONLY,
       production: false,
       openedBallots: extras.openedBallots ?? null,
+      aggregation: extras.aggregation || null,
+      guardianThreshold: extras.guardianThreshold ?? null,
       countsHash: extras.countsHash || null,
       l1: extras.l1 || null,
       ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
