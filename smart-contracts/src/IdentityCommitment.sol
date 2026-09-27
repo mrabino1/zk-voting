@@ -7,10 +7,13 @@ import {HashScheme} from "./hasher/HashScheme.sol";
 import {PoseidonT3} from "./hasher/PoseidonT3.sol";
 
 /// @title IdentityCommitment
-/// @notice Leaf and nullifier helpers. Default EVM tests use keccak-dev-v1.
-/// @dev Vote circuit: Poseidon(trapdoor, nullifierSecret). The leaf is NEVER a
-///      wallet address. `toLeaf` stays keccak so existing unit tests keep their roots.
-///      Poseidon wiring is not a Groth16 ceremony.
+/// @notice Leaf and nullifier helpers.
+/// @dev The demo passkey leaf and the vote circuit use Poseidon
+///      (`poseidonLeaf` / `demoPasskeyLeaf`): Poseidon(trapdoor, nullifierSecret)
+///      after the 32-byte HKDF outputs are reduced mod the bn254 scalar field.
+///      The leaf is NEVER a wallet address. `toLeaf` stays keccak-dev-v1 so
+///      existing Merkle unit tests keep their roots. Do not insert a keccak
+///      leaf into a Poseidon tree. Poseidon wiring is not a Groth16 ceremony.
 library IdentityCommitment {
     /// @notice Default test leaf: keccak256(trapdoor || nullifierSecret).
     function toLeaf(uint256 trapdoor, uint256 nullifierSecret) internal pure returns (uint256) {
@@ -42,6 +45,11 @@ library IdentityCommitment {
     /// @notice Matches `IdentityCommitment()` in `circuits/identity.circom` (Poseidon).
     function poseidonLeaf(uint256 trapdoor, uint256 nullifierSecret) internal pure returns (uint256) {
         return PoseidonT3.hashLeftRight(trapdoor, nullifierSecret);
+    }
+
+    /// @notice Demo passkey commitment. Same as `poseidonLeaf`. Not keccak.
+    function demoPasskeyLeaf(uint256 trapdoor, uint256 nullifierSecret) internal pure returns (uint256) {
+        return poseidonLeaf(trapdoor, nullifierSecret);
     }
 
     /// @notice Matches `ComputeNullifier()` in `circuits/identity.circom` (Poseidon).

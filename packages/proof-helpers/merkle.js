@@ -142,8 +142,75 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
   }
 
   /**
+   * Sorted currently-disqualified commitments. Zero is the chain sentinel
+   * and is not a member. Duplicates are rejected.
+   * @param {Array<bigint|string|number>} commitments
+   */
+  function sortedDisqualified(commitments) {
+    const vals = (commitments || []).map((c) => toFieldWord(c, toBigInt));
+    for (const v of vals) {
+      if (v === 0n) throw new Error("disqualified commitment must be non-zero");
+    }
+    vals.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    for (let i = 1; i < vals.length; i += 1) {
+      if (vals[i] === vals[i - 1]) throw new Error("duplicate disqualified commitment");
+    }
+    return vals;
+  }
+
+  /**
+   * Indexed chain leaves: Hash(0, v0), Hash(v0, v1), …, Hash(vLast, 0).
+   * An empty set is the single leaf Hash(0, 0).
+   */
+  function disqChainLeaves(commitments, scheme) {
+    const sorted = sortedDisqualified(commitments);
+    const chain = [0n, ...sorted];
+    const leaves = [];
+    for (let i = 0; i < chain.length; i += 1) {
+      const next = i + 1 < chain.length ? chain[i + 1] : 0n;
+      leaves.push(hashLeftRightField(chain[i], next, scheme));
+    }
+    return { sorted, leaves };
+  }
+
+  /**
+   * Gap covering `target`, or null when `target` is a chain member.
+   * @returns {{index: number, low: bigint, next: bigint}|null}
+   */
+  function disqGap(commitments, target, scheme) {
+    const sorted = sortedDisqualified(commitments);
+    const t = toFieldWord(target, toBigInt);
+    if (sorted.includes(t)) return null;
+    const chain = [0n, ...sorted];
+    for (let i = 0; i < chain.length; i += 1) {
+      const next = i + 1 < chain.length ? chain[i + 1] : 0n;
+      if (chain[i] < t && (next === 0n || t < next)) {
+        return { index: i, low: chain[i], next };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * True when Hash(low, next) is included under disqRoot and `leaf` sits
+   * strictly in that gap. A disqualified leaf fails this check.
+   */
+  function verifyDisqNonMembership(leaf, low, next, pathElements, pathIndices, disqRoot, scheme) {
+    const target = toFieldWord(leaf, toBigInt);
+    const lo = toFieldWord(low, toBigInt);
+    const hi = toFieldWord(next, toBigInt);
+    if (!(lo < target)) return false;
+    if (!(hi === 0n || target < hi)) return false;
+    const chainLeaf = hashLeftRightField(lo, hi, scheme);
+    return verifyInclusion(chainLeaf, pathElements, pathIndices, disqRoot, scheme);
+  }
+
+  /**
    * Witness for Vote(levels). Default scheme is Poseidon, matching the circuit.
    * Depth may be 1..15 only for the untrusted Vote(4) smoke fixture.
+   *
+   * `disqualifiedCommitments` are identity commitments in the disqualification
+   * chain (not the eligible tree). The voter's own leaf must not be one of them.
    */
   function buildVoteWitness(opts = {}) {
     const depth = Number(opts.depth ?? 20);
@@ -169,8 +236,39 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       throw new Error("vote witness: inclusion check failed");
     }
 
+    const disqualified = opts.disqualifiedCommitments ?? [];
+    if (sortedDisqualified(disqualified).includes(leaf)) {
+      throw new Error("disqualified voter cannot prove non-membership against disqRoot");
+    }
+    const chain = disqChainLeaves(disqualified, scheme);
+    const gap = disqGap(disqualified, leaf, scheme);
+    if (!gap) {
+      throw new Error("disqualified voter cannot prove non-membership against disqRoot");
+    }
     const disqTree = createTree(depth, scheme, { minDepth: Math.min(16, depth) });
-    const disqRoot = opts.disqRoot != null ? toFieldWord(opts.disqRoot, toBigInt) : disqTree.currentRoot;
+    for (const chainLeaf of chain.leaves) insertLeaf(disqTree, chainLeaf);
+    const disqProof = merkleProof(chain.leaves, gap.index, depth, scheme);
+    if (disqProof.root !== disqTree.currentRoot) {
+      throw new Error("vote witness: disq chain root mismatch");
+    }
+    if (
+      !verifyDisqNonMembership(
+        leaf,
+        gap.low,
+        gap.next,
+        disqProof.pathElements,
+        disqProof.pathIndices,
+        disqProof.root,
+        scheme,
+      )
+    ) {
+      throw new Error("vote witness: disqualification non-membership check failed");
+    }
+    const disqRoot = opts.disqRoot != null ? toFieldWord(opts.disqRoot, toBigInt) : disqProof.root;
+    if (opts.disqRoot != null && disqRoot !== disqProof.root) {
+      throw new Error("vote witness: disqRoot does not match the disqualification chain");
+    }
+
     const nullifier = computeNullifier(nullifierSecret, electionId, scheme);
 
     return {
@@ -180,6 +278,10 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       nullifierSecret,
       pathElements: proof.pathElements,
       pathIndices: proof.pathIndices,
+      disqLow: gap.low,
+      disqNext: gap.next,
+      disqPathElements: disqProof.pathElements,
+      disqPathIndices: disqProof.pathIndices,
       root: proof.root,
       disqRoot,
       nullifier,
@@ -195,6 +297,10 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       nullifierSecret: witness.nullifierSecret.toString(),
       pathElements: witness.pathElements.map((x) => x.toString()),
       pathIndices: witness.pathIndices.map((x) => x.toString()),
+      disqLow: witness.disqLow.toString(),
+      disqNext: witness.disqNext.toString(),
+      disqPathElements: witness.disqPathElements.map((x) => x.toString()),
+      disqPathIndices: witness.disqPathIndices.map((x) => x.toString()),
       root: witness.root.toString(),
       disqRoot: witness.disqRoot.toString(),
       nullifier: witness.nullifier.toString(),
@@ -204,8 +310,9 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
   }
 
   function tallyDemoInput() {
-    // Tally(8, 4): pad sentinel is 4.
+    // Tally(8, 4): pad sentinel is 4. electionId is a public input.
     return {
+      electionId: "1",
       ballots: ["0", "1", "0", "4", "4", "4", "4", "4"],
       counts: ["2", "1", "0", "0"],
       acceptedCount: "3",
@@ -226,6 +333,10 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
     verifyInclusion,
     identityCommitment,
     computeNullifier,
+    sortedDisqualified,
+    disqChainLeaves,
+    disqGap,
+    verifyDisqNonMembership,
     buildVoteWitness,
     voteWitnessToSnarkInput,
     tallyDemoInput,

@@ -67,8 +67,8 @@ identityLinks: userId ↔ commitment          no userId, no name, no wallet
 
 **Leaf construction (do not mix these in one tree):**
 
-- Vote circuit, proof-helpers, `PoseidonHasher`, and `apps/node/public/poseidon.js`: `Poseidon(trapdoor, nullifierSecret)` (`poseidon-bn254-x5-t3-v1`).
-- Demo SPA commitment and Foundry unit tests: `keccak256(trapdoor || nullifierSecret)` ([`IdentityCommitment.sol`](./smart-contracts/src/IdentityCommitment.sol), [`passkey-wallet.js`](./apps/node/public/passkey-wallet.js)).
+- Vote circuit, proof-helpers, `PoseidonHasher`, `apps/node/public/poseidon.js`, and the demo passkey leaf (`deriveIdentitySecrets` in [`passkey-wallet.js`](./apps/node/public/passkey-wallet.js)): `Poseidon(trapdoor, nullifierSecret)` (`poseidon-bn254-x5-t3-v1`). 32-byte HKDF outputs are reduced mod the bn254 scalar field. Solidity name: `IdentityCommitment.demoPasskeyLeaf`.
+- Foundry Merkle **unit-test trees** still use `keccak-dev-v1` via `IdentityCommitment.toLeaf`. Do not put those leaves in a Poseidon tree.
 - Legacy stand-in `a+b+a*b` is not included by the circuit.
 
 The leaf is still never the active address. Tests: [`PrivacyUnlinkability.t.sol`](./smart-contracts/test/PrivacyUnlinkability.t.sol).
@@ -110,7 +110,12 @@ Meant to be visible. Process, not preference.
 
 `[eligibleRoot, disqRoot, nullifier, ballotHash, electionId]`
 
-Choice bits are **not** in that instance. `eligibleRoot` is `registered ∩ ¬currently-disqualified`, so inclusion in that root is the exclusion. `disqRoot` is bound to the live disqualification log; the circuit does **not** prove Merkle non-membership of a disqualified leaf. **Demo gap:** unarmed `MockVerifier` accepts any well-shaped proof that copies those roots.
+Choice bits are **not** in that instance. The circuit proves two things about the leaf `Hash(trapdoor, nullifierSecret)`:
+
+1. Merkle inclusion under `eligibleRoot` (`registered ∩ ¬currently-disqualified`, registration order).
+2. Non-membership under `disqRoot`. That root is an **indexed chain** of the currently-disqualified commitments, not an append-only event log. Leaves are `Hash(0, v0)`, `Hash(v0, v1)`, …, `Hash(vLast, 0)` (the empty set is the single link `Hash(0, 0)`). The witness shows one link and that the voter's leaf sits strictly in that gap. A disqualified commitment is a boundary, so the constraint is unsatisfiable.
+
+**Demo gap:** unarmed `MockVerifier` still accepts any well-shaped proof that copies those roots. It evaluates the gap only when a test arms the witness. The committed Vote(20) Groth16 key is **UNTRUSTED** (no ceremony).
 
 Civic L2 batch `dataHash` includes hashes, roots, nullifiers, reason codes, tally `countsHash` — not ballot plaintext ([`l2/README.md`](./l2/README.md)). If a client sends `choice` / `plaintext`, the sequencer strips it.
 
@@ -188,20 +193,20 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 | Gap | What is true today | Why it is not court-grade |
 | --- | --- | --- |
 | **MockVerifier** | Foundry / local inbox `acceptAll = true` unless a test arms an inclusion witness. Dummy proofs in the SPA (`proof.mock: true`). | Anyone who can reach `submitVote` with a fresh nullifier and the published roots can satisfy the unarmed verifier. That is not a ceremony-backed Groth16. The published eligible root still excludes coded disqualifications; the mock does not check the witness unless armed. |
-| **Untrusted Groth16** | Poseidon(2) is the vote hasher. `npm run circuits:verify` checks an untrusted local Vote(4) proof. `npm run circuits:setup` is still a local powers-of-tau. | Not a ceremony. Vote(4) is not an election depth. Do not ship those keys. |
-| **Passkey helper** | Account is `republic-local-address` (SHA-256 of seed), HMAC UserOp, keccak leaf. | Not secp256k1 / ERC-4337. Fine for UX demos. |
+| **Untrusted Groth16** | Poseidon(2) is the vote hasher. `npm run circuits:verify` checks an untrusted local Vote(4) proof. `npm run circuits:prove` checks an untrusted **Vote(20)** proof and refreshes the committed verifying key. `npm run circuits:setup` is still a local powers-of-tau. | **UNTRUSTED.** No ceremony. Do not ship those keys for a binding election. |
+| **Passkey helper** | Account is `republic-local-address` (SHA-256 of seed), HMAC UserOp. The leaf is Poseidon, matching the circuit. | Not secp256k1 / ERC-4337. Fine for UX demos. v1 wraps and v2 keccak commitments are stale. |
 | **SPA vote POST** | Envelope only: ciphertext, proof, public inputs, nullifier, election id, ballot hash, optional `pinToken` and `userOpHash` ([`buildVoteRequestBody`](./apps/node/public/vote.js)). Banned keys are stripped and ignored. | A client that puts the marked ballot in the ciphertext as readable JSON (the ranked JSON demo) still lets the Node decode rankings into `rankingPayload` ([`store.acceptVote`](./apps/node/src/store.mjs)). AES-GCM / ECIES ciphertext does not. The session cookie can still show that a signed-in person voted. |
 | **Node operator / `republic.json`** | Person file, `identityLinks`, envelopes (`encryptedBallot`), optional `rankingPayload`, outcome-report subscriptions (`source: vote-default`). `GET .../envelopes` is tally-operator **after cutoff**. | Hostile or sloppy host is a **trust sink** for this demo. Forked Nodes can lie to their own visitors; they cannot occupy another body’s L1 slot ([`THREAT_MODEL.md`](./docs/THREAT_MODEL.md)). |
 | **Logs / IP** | App log: `METHOD URL status duration`. No vote-body logger in-tree. | nginx / Caddy / Coolify / AWS ALB access logs, packet capture, and support dumps are **operator policy**. Treat vote POSTs as election-critical. Do not ship identifying logs next to UserOp hashes ([`PASSKEYS.md`](./docs/PASSKEYS.md)). |
 | **Single relayer** | JSON path sets `relayer: 'node'`. EVM path uses `RELAYER_PRIVATE_KEY`. All public senders look like the bundler. | Good for wallet unlinkability. Bad for **censorship / liveness** (one key can stall voting). Not a mixnet. |
 | **`opens_ballots` key** | Feldman t-of-n. `GET .../tally-key` is public commitments and verification keys, not shares. | `t` guardians **can** decrypt. The Node host alone **cannot**. Still not a production ceremony. |
 | **`sum_only`** | Invented partitions of the sum succeed. | Hides **individual** choice from the public; does **not** bind the operator to the real histogram. |
-| **Circuit vs disqualification** | Exclusion is membership in `eligibleRoot` (`registered ∩ ¬currently-disqualified`) on the Node and on chain. `disqRoot` is bound; the open-window root must match. The vote POST does not take a leaf, so it does not call `assertCanVote`. The store helper still encodes that intersection for a caller that already holds a commitment. | No non-membership proof in `vote.circom`. Unarmed MockVerifier does not evaluate the witness. A JSON-path ballot can be accepted without proving the nullifier’s leaf is eligible ([README](./README.md) eligibility section). |
+| **Circuit vs disqualification** | `vote.circom` proves inclusion in `eligibleRoot` and non-membership in the indexed `disqRoot` chain. The Node stores that chain under keccak-dev-v1; a Poseidon election must publish the Poseidon chain or the roots will not match. The vote POST does not take a leaf, so it does not call `assertCanVote`. | Unarmed MockVerifier does not evaluate the witness. A JSON-path ballot can still be accepted without a real Groth16 proof ([README](./README.md) eligibility section). An officer who omits someone from the chain can publish a root that does not bar them. |
 | **Coercion / receipts** | Receipt = nullifier, `ballotHash`, UserOp hash, holder token. PDF locked against edit. `receiptsProveChoice: false`. | A coercer who watches the **screen**, copies the device, or demands the **witness** (trapdoor / marked paper) still wins. No last-vote-counts. Not MACI. |
 | **Hourly interval `0`** | Tests and local instant demo. | Publishes immediately. Do not use on a public polling place. |
 | **EVM `acceptedBallots()`** | Increments **immediately** on `submitVote`. | If BallotInbox is on a **public EVM RPC**, live inbox size / `VoteAccepted` is visible even while the Node explorer still waits for the hour. Civic JSON L2 **seals** vote txs until the hour closes (`eth_getTransactionByHash` → null). Know which path you deployed. |
 
-**What is not yet court-grade (short list):** MockVerifier, untrusted local Groth16 (Poseidon Vote(4), no ceremony), unaudited Feldman guardian tally (aggregation still undecided), JSON-path ballots accepted without a leaf-membership proof, JSON store as roll, no MACI, no production passkey curve, no EVM execution on chainId 27427.
+**What is not yet court-grade (short list):** MockVerifier, untrusted local Groth16 (Poseidon Vote(4) and Vote(20) dev keys, no ceremony), unaudited Feldman guardian tally (aggregation still undecided), JSON-path ballots accepted without a real Groth16 proof, JSON store as roll, no MACI, no production passkey curve, no EVM execution on chainId 27427.
 
 Do not overclaim. A binding public election wants Poseidon + a real Groth16 ceremony + guardians / mixnet + a client that **never** puts choice next to identity on the operator’s HTTP log.
 

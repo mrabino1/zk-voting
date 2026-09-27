@@ -65,7 +65,7 @@ export const FAQ_ENTRIES = [
     q: "I am registered. Why might I still be barred?",
     a: [
       "Registered is not the same as eligible. A clerk or disqualification officer may bar a registered person for a coded reason: not of age, not resident, duplicate identity, deceased, moved out, district mismatch, already voted, court order, and others in the public catalog. The code is public so a mass purge cannot hide behind ZK. Personal evidence stays off-chain; only a hash of the evidence is posted.",
-      "A disqualified person is dropped from the eligible set (registered, and not currently disqualified). The vote proof is membership in that set, so they have no path. The vote POST does not carry the commitment; open-window roots must still match. The circuit binds the disqualification root and does not prove non-membership in the disqualification log. An unarmed MockVerifier still accepts a dummy proof that copies the published roots.",
+      "A disqualified person is dropped from the eligible set (registered, and not currently disqualified) and placed on an indexed disqualification chain. The vote proof must show membership in the eligible set and a gap in that chain, so a disqualified leaf has no accepting witness. The vote POST does not carry the commitment; open-window roots must still match. An unarmed MockVerifier still accepts a dummy proof that copies the published roots. The dev Vote(20) key is untrusted until a ceremony.",
     ],
   },
   {
@@ -173,7 +173,7 @@ export const FAQ_ENTRIES = [
     topic: "security-limits",
     q: "What are the security limits on this branch? Is MockVerifier still used?",
     a: [
-      "Yes — be precise. Local Foundry unit tests still use MockVerifier. Poseidon(2) is wired for the vote circuit, the proof helpers, and PoseidonHasher. A committed Groth16 check verifies an untrusted local Vote(4) proof and fails if those files are missing. That is not a production ceremony and not election depth 20. The demo passkey commitment on this screen is still keccak.",
+      "Yes — be precise. Local Foundry unit tests still use MockVerifier. Poseidon(2) is the vote hasher, the proof helpers, PoseidonHasher, and the passkey commitment on this screen. A committed Groth16 check verifies an untrusted local Vote(4) proof and an untrusted Vote(20) dev proof. Those keys are not a ceremony.",
       "Passkey demo addresses may be republic-local-address, not production secp256k1. Tally that opens ballots uses a Feldman t-of-n guardian key (NON-PRODUCTION). Homomorphic aggregation versus a mixnet is not decided. Do not treat MockVerifier, a local circuits:setup zkey, or this guardian ceremony as production cryptography. This is not court-ready.",
     ],
   },
@@ -182,7 +182,7 @@ export const FAQ_ENTRIES = [
     topic: "identity",
     q: "What is stored on the roll if not my name?",
     a: [
-      "An identity commitment. In the intended production construction, WebAuthn PRF derives identity secrets; the Merkle leaf is that commitment, never the active Ethereum address. This demo Node may show a keccak256 commitment hex. Trapdoors and seed phrases must never appear in the UI or in receipts.",
+      "An identity commitment. WebAuthn PRF derives identity secrets; the Merkle leaf is Poseidon(trapdoor, nullifierSecret), never the active Ethereum address. Trapdoors and seed phrases must never appear in the UI or in receipts.",
       "Several ETH addresses may be verified internally on your person record; only one is active. Switching the active address does not change the leaf.",
     ],
   },

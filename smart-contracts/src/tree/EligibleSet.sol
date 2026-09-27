@@ -9,8 +9,8 @@ import {IHasher} from "../interfaces/IHasher.sol";
 /// @notice Incremental Merkle root of `registered ∩ ¬currently-disqualified`,
 ///         in registration order. Same shape as `IncrementalMerkleTree`:
 ///         depth 16–32, sibling zeros from `IHasher.hashLeftRight`.
-/// @dev The vote circuit proves inclusion in this root. It does not prove
-///      non-membership in the disqualification event log. A disqualified
+/// @dev The vote circuit proves inclusion in this root and non-membership in
+///      the disqualification chain (`DisqualificationSet`). A disqualified
 ///      commitment has no path here, so an honest inclusion witness fails.
 library EligibleSet {
     error InvalidDepth();

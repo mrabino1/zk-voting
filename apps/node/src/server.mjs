@@ -229,6 +229,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
   app.use('/api', configRouter(deps));
+  app.use('/api', mailRouter(deps));
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });

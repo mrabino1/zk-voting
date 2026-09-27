@@ -38,7 +38,7 @@ import {
   sameEthAddress,
   syncPersonEmails,
 } from './identity.mjs';
-import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
+import { disqualificationTree, emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isPlatformOperator, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 import {
@@ -1028,7 +1028,7 @@ export class Store {
     }
     const shortCode = this._uniqueShortCode();
     const tree = emptyTree(params.treeDepth);
-    const dq = emptyTree(params.treeDepth);
+    const dq = disqualificationTree(params.treeDepth, []);
     let tallyScheme;
     try {
       tallyScheme = normalizeTallyScheme(params.tallyScheme, { opensBallots: params.opensBallots });
@@ -1285,12 +1285,19 @@ export class Store {
     return tree;
   }
 
+  /**
+   * Indexed chain of currently-disqualified commitments (keccak-dev-v1).
+   * Same shape the vote circuit proves against, under Poseidon when the
+   * proving path is on. Revoked rows are omitted, so the root is not an
+   * append-only event log.
+   */
   rebuildDisqualificationTree(election) {
-    const tree = emptyTree(election.treeDepth);
+    const commitments = [];
     for (const d of this.data.disqualifications) {
       if (String(d.electionId) !== String(election.id) || d.revokedAt) continue;
-      insertLeaf(tree, d.identityCommitment);
+      commitments.push(d.identityCommitment);
     }
+    const tree = disqualificationTree(election.treeDepth, commitments);
     election.disqualificationTree = tree;
     election.disqualificationRoot = tree.root;
   }
@@ -1378,26 +1385,6 @@ export class Store {
     return { user, created };
   }
 
-  listMailOutbox() {
-    return (this.data.mailOutbox || []).slice();
-  }
-
-  getMail(id) {
-    return (this.data.mailOutbox || []).find((row) => row.id === id) || null;
-  }
-
-  async saveMail(record) {
-    this.data.mailOutbox = this.data.mailOutbox || [];
-    const existing = this.data.mailOutbox.find((row) => row.id === record.id);
-    if (existing) {
-      Object.assign(existing, record);
-    } else {
-      this.data.mailOutbox.push(record);
-    }
-    await this.persist();
-    return existing || record;
-  }
-
   async revokeAdmin({ userId, handle } = {}) {
     const user = this.resolveOfficerUser({ userId, handle });
     if (!user) throw new HttpError(404, 'user not found');
@@ -1455,7 +1442,7 @@ export class Store {
     return out;
   }
 
-  async approveElectionStaff(electionId, { address, handle, userId } = {}) {
+  async approveElectionStaff(electionId, { address, handle, userId, contactEmail } = {}) {
     const election = this.requireElection(electionId);
     const trimmedHandle = String(handle || '').trim();
     const trimmedAddress = String(address || '').trim();
@@ -1468,6 +1455,7 @@ export class Store {
       handle: trimmedHandle,
       address: trimmedAddress,
     });
+    if (user && contactEmail) user.contactEmail = normalizeEmail(contactEmail);
     election.staff = election.staff || [];
     const exists = election.staff.some(
       (grant) =>
@@ -1477,6 +1465,7 @@ export class Store {
           String(grant.handle || '').trim().toLowerCase() === trimmedHandle.toLowerCase()),
     );
     if (exists) {
+      if (user && contactEmail) await this.persist();
       return { election, staff: election.staff, user, created: false };
     }
     election.staff.push({
@@ -2331,6 +2320,36 @@ export class Store {
     }
     await this.persist();
     return election;
+  }
+
+  listMailOutbox() {
+    const rows = Array.isArray(this.data.mailOutbox) ? this.data.mailOutbox : [];
+    return rows.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  getMail(id) {
+    const rows = Array.isArray(this.data.mailOutbox) ? this.data.mailOutbox : [];
+    return rows.find((row) => row.id === id) || null;
+  }
+
+  async saveMail(record) {
+    if (!Array.isArray(this.data.mailOutbox)) this.data.mailOutbox = [];
+    const existing = this.data.mailOutbox.find((row) => row.id === record.id);
+    if (existing) {
+      Object.assign(existing, record);
+    } else {
+      this.data.mailOutbox.push(record);
+    }
+    await this.persist();
+    return existing || record;
+  }
+
+  async setContactEmail(userId, contactEmail) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    user.contactEmail = contactEmail || '';
+    await this.persist();
+    return user;
   }
 
   async addNotification({ userId, type, title, body, electionId }) {

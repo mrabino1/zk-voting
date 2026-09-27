@@ -79,7 +79,7 @@ At vote time the circuit (`circuits/vote.circom`) proves knowledge of trapdoor +
 nullifier = Hash(nullifierSecret, electionId)
 ```
 
-(Circom `Hasher()` is Poseidon(2). The demo SPA commitment is still keccak — do not mix them.) The nullifier is unlinkable to the passkey account and to the civil file without the trapdoor. Wiring Poseidon is not a ceremony.
+Circom `Hasher()` and the demo SPA commitment are both Poseidon(2). The nullifier is unlinkable to the passkey account and to the civil file without the trapdoor. Wiring Poseidon is not a ceremony. The circuit also proves the leaf is outside the disqualification chain (`disqRoot`).
 
 Use **domain-separated salts** so account HKDF and identity HKDF cannot be swapped:
 
@@ -108,15 +108,15 @@ If the authenticator returns `first` but not `second`, the wallet runs a **secon
 
 `jurisdictionId` is bound when the wallet is provisioned (selected election, else `demo`) and stored on the IndexedDB record so later votes re-derive the same leaf. Default chain id is Republic L2 `27427`. Returning-user `loginPasskey` is session-only and does not eval these salts; wallet unwrap still uses `prfEvalSaltsForCredential` / `buildPrfEvalExtension`.
 
-#### IndexedDB v1 → v2 (breaking demo reset)
+#### IndexedDB record version 3 (Poseidon leaf)
 
-Wallet store `republic-wallet` is **version 2**. Record field `version` is `2`, `identityScheme` is `prf-hkdf-identity-v2`.
+Wallet store `republic-wallet` schema is **version 2**. Record field `version` is `3`, `identityScheme` is `prf-hkdf-poseidon-v3`.
 
-v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) **cannot** be unwrapped under the new salts. The SPA refuses to sign or register from a v1 record and asks the voter to **reset the device wallet** and create a new passkey. The local address and identity commitment change; any prior demo roll row will not match. There is no silent in-place identity regeneration, because v1’s PRF salt was not domain-separated.
+v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) cannot be unwrapped under the domain salts. v2 records stored `keccak256(trapdoor || nullifierSecret)`, which is not the circuit leaf. The SPA treats both as stale and asks the voter to **reset the device wallet** and create a new passkey. The identity commitment changes; any prior demo roll row will not match.
 
 #### Intentional demo deviations that remain
 
-- The demo SPA commitment is still **keccak256(trapdoor || nullifierSecret)**. The vote circuit leaf is Poseidon; `apps/node/public/poseidon.js` `poseidonCommitmentHex` matches it. Do not insert a keccak leaf into a Poseidon tree.
+- The demo SPA commitment is **Poseidon(trapdoor, nullifierSecret)** (`poseidonCommitmentHex`), the same leaf as `circuits/identity.circom`. 32-byte HKDF outputs are reduced mod the bn254 scalar field. Foundry `IdentityCommitment.toLeaf` is still keccak for unit-test trees. Do not insert a keccak leaf into a Poseidon tree.
 - Account “address” is still `SHA-256(seed)[0:20]` (`republic-local-address`), not secp256k1/keccak.
 - UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
 - When PRF is missing, account wrap and identity still use **two** HKDF domains of the credential id (not the same bytes). That path is weaker than authenticator PRF and is demo-only.

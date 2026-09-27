@@ -120,6 +120,22 @@ const INBOX_ABI = [
   },
   {
     type: "function",
+    name: "submitVoteWithClearance",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2]" },
+      { name: "b", type: "uint256[2][2]" },
+      { name: "c", type: "uint256[2]" },
+      { name: "publicInputs", type: "uint256[]" },
+      { name: "encryptedBallot", type: "bytes" },
+      { name: "identityCommitment", type: "uint256" },
+      { name: "mustAttestIds", type: "uint256[]" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "nullifierUsed",
     stateMutability: "view",
     inputs: [
@@ -144,22 +160,6 @@ const INBOX_ABI = [
       { name: "nullifier", type: "uint256" },
     ],
     outputs: [{ type: "bytes32" }],
-  },
-  {
-    type: "function",
-    name: "submitVoteWithClearance",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "electionId", type: "uint256" },
-      { name: "a", type: "uint256[2]" },
-      { name: "b", type: "uint256[2][2]" },
-      { name: "c", type: "uint256[2]" },
-      { name: "publicInputs", type: "uint256[]" },
-      { name: "encryptedBallot", type: "bytes" },
-      { name: "identityCommitment", type: "uint256" },
-      { name: "mustAttestIds", type: "uint256[]" },
-    ],
-    outputs: [],
   },
 ];
 
@@ -691,8 +691,8 @@ module.exports = {
   REPUBLIC_CHAIN_ID,
   FACTORY_ABI,
   INBOX_ABI,
-  ELECTION_ABI,
   PARTY_REGISTRY_ABI,
+  ELECTION_ABI,
   rpc,
   ethCall,
   ethSendTransaction,

@@ -50,6 +50,10 @@ export function configRouter(deps) {
         nfp: true,
         app: 'zk-voting',
         product: 'Republic',
+        mail: {
+          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
+          note: 'Role-promotion mail is queued on the Node. It is never written to civic L2 transactions.',
+        },
         rpName: deps.config.rpName,
         rpID: deps.config.rpID,
         chainId: deps.config.chainId,

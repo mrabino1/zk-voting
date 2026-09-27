@@ -21,6 +21,7 @@ import {
 } from '../ballotSpec.mjs';
 import { presentElection, electionState, electionChainMode, publishDue, electionDisclosure } from '../electionState.mjs';
 import { asyncHandler, HttpError, sanitizeVoteBody } from '../http.mjs';
+import { assertExternalClearance } from '../voteGate.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';

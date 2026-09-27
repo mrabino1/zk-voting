@@ -26,6 +26,8 @@ contract PoseidonTest is Test {
         assertEq(h.hashLeftRight(0, 0), POSEIDON_0_0);
         assertEq(h.hashLeftRight(2, 3), POSEIDON_2_3);
         assertEq(IdentityCommitment.poseidonLeaf(1, 2), POSEIDON_1_2);
+        assertEq(IdentityCommitment.demoPasskeyLeaf(2, 3), IdentityCommitment.poseidonLeaf(2, 3));
+        assertTrue(IdentityCommitment.demoPasskeyLeaf(2, 3) != IdentityCommitment.keccakLeaf(2, 3));
         assertEq(IdentityCommitment.poseidonNullifier(3, 1), h.hashLeftRight(3, 1));
         assertTrue(h.hashLeftRight(1, 2) != HashScheme.hashLeftRightStandIn(1, 2));
     }

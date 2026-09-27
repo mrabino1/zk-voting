@@ -591,7 +591,7 @@ This is a first-class feature, not an admin footnote.
 
 - A registered voter can be marked **ineligible to cast** (or to have a ballot counted) for a specific election, a specific question, or (if the jurisdiction allows) all current elections in that jurisdiction.
 - The mark carries a **reason code** from a published catalog (see [Eligibility, disqualification, and due process](#eligibility-disqualification-and-due-process)).
-- Vote circuits take the **disqualification tree / set** as a public input. A valid vote proves **non-membership** (or an equivalent “still eligible” delta) for that person. In v1 the eligible Merkle root is `registered ∩ ¬disqualified`; membership in that root is what a disqualified person cannot prove.
+- Vote circuits take the **disqualification set** as public `disqRoot`. A valid vote proves **non-membership** of the voter's leaf in that indexed chain, and membership in `eligibleRoot` (`registered ∩ ¬disqualified`).
 - Removing a disqualification (appeal granted, error, restored rights) is the same kind of auditable event, with its own actor and timestamp.
 - Once a poll is frozen for tally, new disqualifications must not rewrite history. Late legal changes are a **new** election or a jurisdiction-level process off this protocol, unless the election was parameterized to allow a documented freeze/unfreeze.
 
@@ -601,7 +601,7 @@ Contracts must be **boring Solidity**: explicit access control, no upgrade surpr
 
 ## Circuits
 
-Circom 2. The vote `Hasher()` is **Poseidon(2)** (`republic.hash.poseidon-bn254-x5-t3-v1`), the same permutation as `packages/proof-helpers` and Solidity `PoseidonHasher`. Constants are the circomlib bn254 t=3 set, vendored in-tree. **That match is not a trusted setup.** Local powers-of-tau keys are untrusted. Foundry tests keep `KeccakHasher` (`keccak-dev-v1`) and `MockVerifier`. The legacy stand-in (`a + b + a*b`) is not included by the circuit.
+Circom 2. The vote `Hasher()` is **Poseidon(2)** (`republic.hash.poseidon-bn254-x5-t3-v1`), the same permutation as `packages/proof-helpers`, Solidity `PoseidonHasher`, and the demo passkey leaf. Constants are the circomlib bn254 t=3 set, vendored in-tree. **That match is not a trusted setup.** Local powers-of-tau keys are **UNTRUSTED**. Foundry unit-test trees keep `KeccakHasher` (`keccak-dev-v1`) and `MockVerifier`. The legacy stand-in (`a + b + a*b`) is not included by the circuit.
 
 | Circuit | Role |
 | --- | --- |
@@ -688,7 +688,7 @@ The Node stores what the jurisdiction is legally required to keep. That store is
 
 ### On-chain
 
-- An **identity commitment** is added to the `VoterRegistry` for that jurisdiction. The vote circuit leaf is `Poseidon(identityTrapdoor, nullifierSecret)` (`poseidon-bn254-x5-t3-v1`). Foundry/Node tests and the demo passkey screen still use `keccak-dev-v1`. The browser helper `poseidonCommitmentHex` matches the circuit. The leaf is **never** the wallet address and **never** a name. Poseidon being wired is not a Groth16 ceremony.
+- An **identity commitment** is added to the `VoterRegistry` for that jurisdiction. The vote circuit leaf and the demo passkey screen are `Poseidon(identityTrapdoor, nullifierSecret)` (`poseidon-bn254-x5-t3-v1`, `poseidonCommitmentHex` / `IdentityCommitment.demoPasskeyLeaf`). Foundry Merkle unit tests still use `keccak-dev-v1` via `toLeaf`. The leaf is **never** the wallet address and **never** a name. Poseidon being wired is not a Groth16 ceremony.
 - Optional: a **district leaf**, so a municipal election can require residency in that district without putting the street address on chain.
 - Duplicate prevention: the jurisdiction’s uniqueness rule (national ID hash, one-person attestation, etc.) is checked before the commitment is inserted. The contracts can enforce “this uniqueness nullifier is unused,” which is stronger than a SQL unique index.
 
@@ -740,11 +740,11 @@ Election law (and private-body bylaws) routinely keep someone on a master list w
 
    `eligible = registered ∩ ¬disqualified(election, question)`
 
-   The vote proof shows membership in that set (or non-membership in the disqualification set plus membership in the registry), so a disqualified person **cannot** produce an accepting proof.
+   The vote proof shows membership in that eligible root **and** non-membership in the disqualification chain committed by `disqRoot`, so a disqualified person **cannot** produce an accepting proof against those roots.
 
-   **Enforced now:** the Node and `VoterRegistry` both rebuild `eligibleRoot` as that intersection (registration order). Freeze snapshots it on the Node; on chain, `freezeRoll` locks further disqualification unless `lateUpdateAllowed`. `BallotInbox` rejects a proof that does not name the published roots. An honest inclusion witness for a disqualified commitment does not meet that root. Foundry checks the witness under `MockVerifier` when the test arms it.
+   **Enforced now:** the Node and `VoterRegistry` both rebuild `eligibleRoot` as that intersection (registration order). `disqRoot` is the indexed chain of currently-disqualified commitments (`Hash(0, v0) … Hash(vLast, 0)`; empty set is `Hash(0, 0)`). `vote.circom` proves a gap in that chain. Freeze snapshots both roots on the Node; on chain, `freezeRoll` locks further disqualification unless `lateUpdateAllowed`. `BallotInbox` rejects a proof that does not name the published roots. Foundry checks inclusion and the gap under `MockVerifier` when a test arms the witness (`testDisqualifiedVoterNonMembershipProofFails`).
 
-   **Remaining ZK gap:** `vote.circom` binds `disqRoot` and does not prove non-membership in the disqualification log. Unarmed `MockVerifier` still accepts a dummy proof that copies the published roots. Do not treat that accept as a ceremony-backed exclusion. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+   **Remaining gap:** unarmed `MockVerifier` still accepts a dummy proof that copies the published roots. The committed Vote(20) Groth16 key is **UNTRUSTED** (public entropy, no ceremony). Node demo trees hash the chain with keccak-dev-v1; the circuit hash is Poseidon. Do not mix them. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 4. **Visibility.**
 
