@@ -6,6 +6,7 @@ import { electionState, presentElection } from './electionState.mjs';
 import { publicVoteRecord } from './store.mjs';
 
 export const AUDITOR_SCHEMA = 'republic.auditor.v1';
+export const POLL_AUDITOR_SCHEMA = 'republic.auditor.poll.v1';
 
 /**
  * Build a JSON bundle an independent verifier can check without the Node
@@ -55,5 +56,23 @@ export function buildAuditorPack(election, deps) {
       note:
         'Each nullifier is accepted once. A second ballot, including a new ciphertext, is rejected. Double voting is impossible. A receipt lists hashes only; it cannot prove which option was marked. Voters may change their mind on the ballot form before submit. This is not MACI.',
     },
+  };
+}
+
+/** Public token-poll bundle. Choices are included because phase 1 is public weighted. No userId. */
+export function assemblePollAuditorPack({ pollView, params, pollParamsHash, closeBlock, ballots, result }) {
+  return {
+    schema: POLL_AUDITOR_SCHEMA,
+    nfp: true,
+    binding: false,
+    signal: 'Signal only · non-binding · NOT FOR PROFIT',
+    product: 'Republic',
+    republicChainId: 27427,
+    poll: pollView,
+    params,
+    pollParamsHash: pollParamsHash || null,
+    closeBlock: closeBlock ?? null,
+    ballots,
+    result: result || null,
   };
 }

@@ -53,6 +53,21 @@ export function configRouter(deps) {
         rpName: deps.config.rpName,
         rpID: deps.config.rpID,
         chainId: deps.config.chainId,
+        pollsEnabled: Boolean(deps.config.pollsEnabled),
+        pollsReady: Boolean(deps.config.pollsReady),
+        votingToken: {
+          configured: Boolean(deps.config.votingToken?.configured),
+          chainId: deps.config.votingToken?.chainId || 1,
+          address: deps.config.votingToken?.configured ? deps.config.votingToken.address : null,
+          reason: deps.config.pollsEnabled && !deps.config.votingToken?.configured
+            ? deps.config.votingToken?.reason || 'unset'
+            : null,
+          readOnly: true,
+        },
+        mail: {
+          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
+          note: 'Role-promotion mail is queued on the Node and is never written to civic L2 transactions.',
+        },
         origins: deps.config.origins,
         chainConfigured,
         sharedDeployment: true,

@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 
-import { asyncHandler } from '../http.mjs';
+import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
 import { normalizeEmail } from '../identity.mjs';
@@ -89,6 +89,7 @@ export function meRouter(deps) {
           identity: publicIdentity(req.user),
           officer,
           audience,
+          contactEmail: req.user.contactEmail || '',
         }
       : null;
     return {
@@ -105,6 +106,20 @@ export function meRouter(deps) {
       unreadCount: notifications.filter((n) => !n.read).length,
     };
   }
+
+  router.patch(
+    '/me/contact-email',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const raw = String(req.body?.contactEmail ?? '').trim();
+      if (raw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+        throw new HttpError(400, 'contact email is invalid');
+      }
+      req.user.contactEmail = raw ? raw.toLowerCase() : '';
+      await store.persist();
+      res.json({ ok: true, nfp: true, contactEmail: req.user.contactEmail });
+    }),
+  );
 
   router.get(
     '/me',

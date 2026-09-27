@@ -168,6 +168,11 @@ describe('cms helpers', () => {
     assert.equal(parseRoute(loc('/p/hours')).name, 'cmsPage');
     assert.equal(parseRoute(loc('/p/hours')).params.slug, 'hours');
     assert.equal(parseRoute(loc('/admin.html')).name, 'notfound');
+    assert.equal(parseRoute(loc('/polls')).name, 'polls');
+    assert.equal(parseRoute(loc('/polls/poll-1')).name, 'poll');
+    assert.equal(parseRoute(loc('/polls/poll-1/vote')).name, 'pollVote');
+    assert.equal(parseRoute(loc('/polls/poll-1/results')).name, 'pollResults');
+    assert.equal(parseRoute(loc('/elections/1')).name, 'results');
     const pub = mainNav('public').map((i) => i.label);
     assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Sign in', 'Register']);
     const withExtra = mainNav('public', [{ href: '/p/hours', label: 'Hours' }]).map((i) => i.label);

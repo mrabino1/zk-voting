@@ -68,7 +68,8 @@ export function isDisclosed(eventTs, now, intervalSeconds) {
 }
 
 export function isHeldVoteType(type) {
-  return String(type || '').toLowerCase() === 'vote';
+  const name = String(type || '').toLowerCase();
+  return name === 'vote' || name === 'poll_vote';
 }
 
 export function disclosurePublicView(now, intervalSeconds, extras = {}) {

@@ -321,6 +321,21 @@ Bandwidth **estimate:** public JSON snapshots are KB–low MB per view. A county
 
 ---
 
+## Token polls (phase 1)
+
+**NOT FOR PROFIT.** Phase 1 posts **no EVM transactions**. Voters pay **$0**. Figures below are **estimates**. Archive-RPC spend is **market-variable**.
+
+| Item | Estimate | Note |
+| --- | --- | --- |
+| Ballot acceptance | 1 `eth_blockNumber` + 1 `balanceOf` (+1 ERC-1271 `eth_call`) | **Estimate.** Voter pays $0. The Node reads the token chain. |
+| Tally per ballot | 2 paged `eth_getLogs` + 1 `balanceOf` per touched block + 1 at close | **Estimate.** Holders who do not move tokens are about 3 calls. Archive RPC is **market-variable**, about $0 to a few dollars per poll. |
+| Optional later `createPoll` / `postResult` | ~1e5 / ~8e4 gas | **Estimate.** Not in phase 1. One-off, on an EVM venue, not chain 27427. |
+| Optional `L1TallyMirror.postResult` | ~4e4–1e5 gas | **Estimate.** Phase 1 skips this. The current mirror keys a uint256 civic election id. |
+
+The host token is `VOTING_TOKEN_ADDRESS` on Ethereum mainnet (chain id 1). Reads only: no transaction and no spend. Tests use an in-memory ERC-20 on a local chain and do not spend RPC quota.
+
+---
+
 ## Citations (tree)
 
 | Topic | Files |

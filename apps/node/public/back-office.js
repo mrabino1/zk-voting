@@ -1756,6 +1756,202 @@
     }
   });
 
+  function initTokenPolls(me) {
+    const role = me && me.user && me.user.role;
+    const superAdmin = role === "platform_super_admin";
+    const canTally =
+      superAdmin ||
+      role === "platform_admin" ||
+      role === "tally_operator" ||
+      hasOfficerRole(me, "tally_operator");
+    const work = document.getElementById("office-work");
+    const nav = document.querySelector(".local-nav");
+    if (!work || !nav) return;
+    Promise.all([
+      fetch("/api/config", { credentials: "same-origin", headers: { Accept: "application/json" } }).then((res) =>
+        res.ok ? res.json() : null
+      ),
+      import("/i18n.js"),
+    ])
+      .then(([cfg, i18n]) => {
+        if (!cfg || !cfg.pollsEnabled) return;
+        if (!superAdmin && !canTally) return;
+        const t = i18n.t;
+        const link = document.createElement("a");
+        link.href = "#token-polls";
+        link.textContent = "Token polls";
+        nav.append(link);
+        const section = document.createElement("section");
+        section.className = "panel";
+        section.id = "token-polls";
+        section.setAttribute("aria-labelledby", "token-polls-heading");
+        const ready = Boolean(cfg.pollsReady && cfg.votingToken && cfg.votingToken.configured);
+        section.innerHTML =
+          '<header><h2 id="token-polls-heading">Token polls</h2></header>' +
+          '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>' +
+          '<p class="field-hint">ERC-20 balance-weighted signal polls. Holding the token is the only credential. Tokens in staking or liquidity-pool contracts cannot vote unless that contract signs. Official results publish after close. There is no live provisional tally. Balances are read on Ethereum. No transaction is sent.</p>' +
+          (ready
+            ? '<p class="field-hint" id="poll-token-host"></p>' +
+              '<div id="token-poll-create"></div>' +
+              '<div id="token-poll-list"><p class="empty">Loading…</p></div>'
+            : '<p class="notice notice-error" id="poll-token-disabled" role="alert"></p>') +
+          '<div class="flash" id="flash-polls" role="status"></div>';
+        work.append(section);
+        if (!ready) {
+          const note = document.getElementById("poll-token-disabled");
+          if (note) note.textContent = t("polls.disabled");
+          return;
+        }
+        const host = document.getElementById("poll-token-host");
+        if (host) {
+          host.textContent = t("polls.tokenHost", {
+            token: cfg.votingToken.address,
+            chain: String(cfg.votingToken.chainId),
+          });
+        }
+        if (superAdmin) mountPollCreate();
+        loadPollAdminList(superAdmin, canTally);
+      })
+      .catch(() => {});
+  }
+
+  function mountPollCreate() {
+    const host = $("token-poll-create");
+    if (!host) return;
+    host.innerHTML =
+      '<form id="form-token-poll" class="form-grid">' +
+      '<div class="field"><label class="field-label" for="p-jurisdiction">Jurisdiction</label><select id="p-jurisdiction"></select></div>' +
+      '<div class="field"><label class="field-label" for="p-title">Title</label><input id="p-title" maxlength="200" /></div>' +
+      '<div class="field"><label class="field-label" for="p-type">Type</label><select id="p-type"><option value="plurality">Plurality</option><option value="ranked_irv">Ranked choice (IRV)</option></select></div>' +
+      '<div class="grid-2"><div class="field"><label class="field-label" for="p-start">Start</label><input id="p-start" type="datetime-local" /></div>' +
+      '<div class="field"><label class="field-label" for="p-cutoff">Cutoff</label><input id="p-cutoff" type="datetime-local" /></div></div>' +
+      '<div class="field"><label class="field-label" for="p-options">Options (one label per line, at least two). Abstain is added.</label><textarea id="p-options" rows="4">Yes\nNo</textarea></div>' +
+      '<div class="field"><label class="field-label" for="p-min">Minimum weight (base units)</label><input id="p-min" value="1" /></div>' +
+      '<div class="field"><label class="field-label" for="p-id">Existing draft id (blank creates a new poll)</label><input id="p-id" spellcheck="false" /></div>' +
+      '<p class="field-hint">Quorum and pass threshold default to none. Edit is available while the poll is still a draft or scheduled.</p>' +
+      '<div class="actions"><button class="btn" type="submit">Create poll</button></div>' +
+      '<pre id="p-preflight" class="field-hint"></pre>' +
+      "</form>";
+    const src = $("e-jurisdiction");
+    const jurisdiction = $("p-jurisdiction");
+    if (src && jurisdiction) {
+      jurisdiction.innerHTML = src.innerHTML;
+      const real = [...jurisdiction.options].find((option) => option.value);
+      if (real) jurisdiction.value = real.value;
+    }
+    const start = new Date(Date.now() + 60 * 1000);
+    const cutoff = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const iso = (d) => {
+      const pad = (n) => String(n).padStart(2, "0");
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    };
+    $("p-start").value = iso(start);
+    $("p-cutoff").value = iso(cutoff);
+    $("form-token-poll").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const missing = [];
+      if (!$("p-jurisdiction").value) missing.push("jurisdiction");
+      if (!$("p-title").value.trim()) missing.push("title");
+      if (!$("p-start").value || !$("p-cutoff").value) missing.push("start and cutoff");
+      if (missing.length) {
+        flash($("flash-polls"), "err", "Fill " + missing.join(", ") + " before creating the poll.");
+        return;
+      }
+      const options = $("p-options")
+        .value.split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      try {
+        const body = {
+          jurisdictionId: $("p-jurisdiction").value,
+          title: $("p-title").value.trim(),
+          pollType: $("p-type").value,
+          startTime: toUnix($("p-start").value),
+          cutoffTime: toUnix($("p-cutoff").value),
+          options,
+          minBallotWeight: $("p-min").value.trim() || "1",
+          privacyMode: "public_weighted",
+        };
+        const existing = $("p-id").value.trim();
+        const created = existing
+          ? { poll: await request("/api/polls/" + encodeURIComponent(existing), { method: "PATCH", body }) }
+          : await request("/api/polls", { method: "POST", body });
+        const warnings = (created.preflight && created.preflight.warnings) || [];
+        $("p-preflight").textContent =
+          (created.poll ? created.poll.id + " · " + (created.preflight && created.preflight.symbol) : "Created") +
+          (warnings.length ? "\n" + warnings.join("\n") : "");
+        flash($("flash-polls"), "ok", "Draft created. Schedule it when the window is right.");
+        await loadPollAdminList(true, true);
+      } catch (err) {
+        flash($("flash-polls"), "err", errText(err));
+      }
+    });
+  }
+
+  async function loadPollAdminList(superAdmin, canTally) {
+    const host = $("token-poll-list");
+    if (!host) return;
+    try {
+      const data = await request("/api/polls");
+      const polls = (data && data.polls) || [];
+      host.replaceChildren();
+      if (!polls.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "No token polls yet.";
+        host.append(empty);
+        return;
+      }
+      for (const poll of polls) {
+        const article = document.createElement("article");
+        article.className = "election-card";
+        const title = document.createElement("h3");
+        title.textContent = poll.title + " · " + poll.state;
+        const meta = document.createElement("p");
+        meta.textContent = (poll.tokenSymbol || "") + " " + poll.token + " · chain " + poll.tokenChainId;
+        article.append(title, meta);
+        if (superAdmin && (poll.state === "DRAFT" || poll.state === "SCHEDULED")) {
+          const schedule = document.createElement("button");
+          schedule.type = "button";
+          schedule.className = "btn";
+          schedule.textContent = "Schedule";
+          schedule.addEventListener("click", async () => {
+            try {
+              await request("/api/polls/" + encodeURIComponent(poll.id) + "/schedule", { method: "POST", body: {} });
+              flash($("flash-polls"), "ok", "Scheduled.");
+              await loadPollAdminList(superAdmin, canTally);
+            } catch (err) {
+              flash($("flash-polls"), "err", errText(err));
+            }
+          });
+          article.append(schedule);
+        }
+        if (canTally && (poll.state === "CLOSED" || poll.state === "TALLYING" || poll.state === "TALLIED")) {
+          const tally = document.createElement("button");
+          tally.type = "button";
+          tally.className = "btn btn-secondary";
+          tally.textContent = poll.state === "TALLIED" ? "View tally" : "Tally";
+          tally.addEventListener("click", async () => {
+            try {
+              const result = await request("/api/polls/" + encodeURIComponent(poll.id) + "/tally", { method: "POST", body: {} });
+              flash($("flash-polls"), "ok", "Outcome " + (result.outcome || "") + ". Signal only.");
+              await loadPollAdminList(superAdmin, canTally);
+            } catch (err) {
+              flash($("flash-polls"), "err", errText(err));
+            }
+          });
+          article.append(tally);
+        }
+        const view = document.createElement("a");
+        view.href = "/polls/" + encodeURIComponent(poll.id);
+        view.textContent = "Open";
+        article.append(view);
+        host.append(article);
+      }
+    } catch (err) {
+      host.textContent = errText(err);
+    }
+  }
+
   document.querySelectorAll(".local-nav a").forEach((link) => {
     link.addEventListener("click", () => {
       document.querySelectorAll(".local-nav a").forEach((a) => a.classList.remove("active"));
@@ -1774,5 +1970,6 @@
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
     if ($("t-election").value) await loadTallyElection($("t-election").value);
+    initTokenPolls(me);
   })();
 })();
