@@ -141,3 +141,13 @@ export function firstRoundCounts(optionIds, ballots) {
   }
   return { counts, exhausted };
 }
+
+/** Lexicographically first id wins a first-place tie. computeIrv is unchanged. */
+export function firstPlaceTieWinner(idA, idB) {
+  return String(idA).localeCompare(String(idB)) <= 0 ? String(idA) : String(idB);
+}
+
+/** Lexicographically last id is eliminated from a last-place tie. */
+export function lastPlaceTieEliminated(idA, idB) {
+  return String(idA).localeCompare(String(idB)) >= 0 ? String(idA) : String(idB);
+}

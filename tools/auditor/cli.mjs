@@ -7,6 +7,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { exportFromChain, exportFromNode } from './export.mjs';
 import { verifyAuditorBundle, AUDITOR_SCHEMA } from './verify.mjs';
+import { verifyPollBundle, POLL_AUDITOR_SCHEMA } from './verifyPoll.mjs';
 
 function usage() {
   return `Republic auditor (NOT FOR PROFIT)
@@ -34,7 +35,7 @@ function printResult(result, bundle) {
   const payload = {
     ok: result.ok,
     nfp: true,
-    schema: AUDITOR_SCHEMA,
+    schema: bundle?.schema || AUDITOR_SCHEMA,
     errors: result.errors,
     checks: result.checks,
     summary: result.summary,
@@ -115,6 +116,12 @@ async function main(argv) {
       return 1;
     }
     const bundle = await readJson(path.resolve(file));
+    if (bundle?.schema === POLL_AUDITOR_SCHEMA) {
+      const rpc = arg('--rpc', argv, '');
+      const offline = argv.includes('--offline') || !rpc;
+      const result = await verifyPollBundle(bundle, { offline, rpcUrl: rpc });
+      return printResult(result, bundle);
+    }
     return printResult(verifyAuditorBundle(bundle), bundle);
   }
 

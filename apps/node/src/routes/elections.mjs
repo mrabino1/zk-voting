@@ -3,6 +3,7 @@
 import { Router } from 'express';
 
 import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody, requirePlatformOperator } from '../auth.mjs';
+import { assertExternalClearance } from '../voteGate.mjs';
 import {
   electionHasRanked,
   normalizeBallotMethod,
@@ -37,7 +38,6 @@ import {
 import { partiesRouter } from './parties.mjs';
 import { publicUser } from '../roles.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
-import { assertExternalClearance } from '../voteGate.mjs';
 
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;

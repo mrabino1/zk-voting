@@ -139,3 +139,28 @@ cannot occupy another body’s certification slot.
 Foundry: `ElectionIdentity.t.sol` (copied UUID, two factories, clerk spoof, officer cannot create, rotated clerk, pinned factory rejects rogue factory / global publisher / legacy uint256 / unpin). Node + chain-client: ignored client ids, v5 scope, ingest secret, AlreadyPosted re-read / hash mismatch, unscoped CMS host-only.
 
 Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (identifiers), [`OPERATOR.md`](./OPERATOR.md) (pins and publishers).
+
+---
+
+## Token polls (signal only)
+
+**NOT FOR PROFIT.** These rows cover ERC-20 weighted polls. They are not binding elections. See [`POLLS.md`](./POLLS.md).
+
+| Threat | Handling |
+| --- | --- |
+| Flash loans | Borrowed and repaid inside one transaction, so no end-of-block balance changes. Weight is 0. |
+| Multi-block borrowing | The borrower must hold until close. The lender’s tokens do not vote while they are lent. Documented limit of any token-weighted poll. |
+| Buying during the poll | Allowed. The buyer must hold through close. The seller’s vote drops by what they sold. |
+| Double counting (move-and-revote, ping-pong) | `finalWeight(a) ≤ balance(a, closeBlock)`. Distinct addresses sum to at most supply at close. No nullifier. |
+| Sybil | Not relevant. Splitting tokens across addresses does not raise total weight. The UI leads with weight. |
+| Whale dominance | Inherent to token weighting. Stated as signal only. |
+| Forged ballot | EIP-712 or ERC-1271 signature from the holding address. |
+| Signature replay | Domain binds `pollDomain`, token, `ballotSpecHash`, and Republic chain id 27427. One ballot per address. |
+| Deanonymization | Public mode is public on purpose. Address-hiding is not offered. |
+| Lying RPC | Auditor re-derives weights on an independent RPC. Block hashes are pinned. A second archive RPC, if set, must agree. |
+| Reorgs | Tally waits until the close block is finalized and re-checks hashes. |
+| Operator edits the tally | Final weights are a pure function of public chain data and public ballots. |
+| Rebasing / fee-on-transfer / balance changes without `Transfer` | Weights read `balanceOf` at touched blocks and check the close balance. Drift is flagged `TOKEN_DRIFT`. Rebasing tokens are unsupported. |
+| Spam ballots | `minBallotWeight` defaults to 1 base unit, so a zero balance cannot vote. |
+| Relay censorship | The voter gets a receipt or a rejection code. |
+| Last-block games | Moves in `closeBlock` reduce weight like any other move. |

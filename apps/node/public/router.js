@@ -6,7 +6,8 @@
  * `/office`, `/office/pages`, `/office/site`,
  * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
  * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/receipt`,
- * `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/monitor`
+ * `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/monitor`,
+ * `/polls`, `/polls/:id`, `/polls/:id/vote`, `/polls/:id/results`
  */
 
 import { isStandaloneHtmlPath } from "./audience.js";
@@ -125,6 +126,34 @@ export function parseRoute(loc = window.location) {
       name: "vote",
       path,
       params: { id: decodeURIComponent(short[1]) },
+      query,
+    };
+  }
+  if (path === "/polls") return { name: "polls", path, params: {}, query };
+  const pollVote = path.match(/^\/polls\/([^/]+)\/vote$/);
+  if (pollVote) {
+    return {
+      name: "pollVote",
+      path,
+      params: { id: decodeURIComponent(pollVote[1]) },
+      query,
+    };
+  }
+  const pollResults = path.match(/^\/polls\/([^/]+)\/results$/);
+  if (pollResults) {
+    return {
+      name: "pollResults",
+      path,
+      params: { id: decodeURIComponent(pollResults[1]) },
+      query,
+    };
+  }
+  const pollDetail = path.match(/^\/polls\/([^/]+)$/);
+  if (pollDetail) {
+    return {
+      name: "poll",
+      path,
+      params: { id: decodeURIComponent(pollDetail[1]) },
       query,
     };
   }

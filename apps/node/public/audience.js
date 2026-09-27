@@ -3,6 +3,8 @@
  * Session-aware audience: public (logged-out), registered voter, voting admin.
  */
 
+import { t } from "./i18n.js";
+
 export const OFFICER_ROLES = [
   "clerk",
   "registrar",
@@ -102,14 +104,16 @@ export function signInHref(next) {
   return `/signin?next=${encodeURIComponent(safe)}`;
 }
 
-export function mainNav(audience, extraNav = []) {
+export function mainNav(audience, extraNav = [], options = {}) {
   const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
+  const polls = options && options.pollsEnabled ? [{ href: "/polls", label: t("polls.nav") }] : [];
   if (audience === "public") {
     return [
       { href: "/about", label: "About" },
       { href: "/faq", label: "FAQ" },
       { href: "/receipt", label: "Receipt" },
       { href: "/outcomes", label: "Outcomes" },
+      ...polls,
       { href: "/terms", label: "Terms" },
       ...extra,
       { href: "/signin", label: "Sign in" },
@@ -120,6 +124,7 @@ export function mainNav(audience, extraNav = []) {
     { href: "/me", label: "My desk" },
     { href: "/register", label: "Register" },
     { href: "/elections", label: "Results" },
+    ...polls,
     { href: "/receipt", label: "Receipt" },
     { href: "/outcomes", label: "Outcomes" },
     { href: "/terms", label: "Terms" },
@@ -149,12 +154,13 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   if (href === "/signin" && routeName === "signin") return true;
   if (href === "/register" && routeName === "register") return true;
   if (href === "/elections" && (routeName === "results" || routeName === "resultsIndex")) return true;
+  if (href === "/polls" && (path === "/polls" || path.startsWith("/polls/"))) return true;
   return false;
 }
 
-export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [] } = {}) {
+export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [], pollsEnabled = false } = {}) {
   if (!nav) return;
-  const items = mainNav(audience || "public", extraNav);
+  const items = mainNav(audience || "public", extraNav, { pollsEnabled });
   const ul = document.createElement("ul");
   for (const item of items) {
     const li = document.createElement("li");

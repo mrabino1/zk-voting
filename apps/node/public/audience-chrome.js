@@ -17,14 +17,29 @@ async function extraNav() {
   }
 }
 
+async function pollsEnabled() {
+  try {
+    const res = await fetch("/api/config", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data && data.pollsEnabled);
+  } catch {
+    return false;
+  }
+}
+
 async function refresh() {
-  const [state, nav] = await Promise.all([loadAuthState(), extraNav()]);
+  const [state, nav, polls] = await Promise.all([loadAuthState(), extraNav(), pollsEnabled()]);
   const audience = state.audience || audienceOf(state.me || { user: state.user, jurisdictionRoles: state.jurisdictionRoles });
   applyAudienceChrome(document, {
     audience,
     currentPath: window.location.pathname.replace(/\.html$/i, "") || "/",
     spa: false,
     extraNav: nav,
+    pollsEnabled: polls,
   });
 }
 

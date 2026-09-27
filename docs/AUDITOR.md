@@ -89,3 +89,16 @@ This is **not** MACI. Full collusion-resistant messaging remains later work.
 A lying Node can omit or delay disclosure (hourly policy) or refuse to serve `/artifacts`. It cannot make `sum(counts) != inbox.acceptedBallots` succeed on chain, and it cannot invent a choice that is not in the ciphertext. Prefer `export-chain` when a JSON-RPC endpoint is available; use `export-node` as a convenience over already-public HTTP.
 
 The Node also hosts `/outcomes`, which runs `verifyAuditorBundle` plus freeze-root and L1 hash checks for every election and groups them before / during / after voting from chain status. That page is a convenience monitor, not a substitute for an independent export.
+
+---
+
+## Token polls (`republic.auditor.poll.v1`)
+
+**NOT FOR PROFIT.** A token-poll pack is not a civic election pack. It lists the poll parameters, disclosed ballots (address, choice, signature, weight evidence), and the official result. It has no `userId` and no nullifier.
+
+```bash
+node tools/auditor/cli.mjs verify --file poll-bundle.json --offline
+node tools/auditor/cli.mjs verify --file poll-bundle.json --rpc "$TOKEN_RPC_11155111"
+```
+
+`--offline` checks signatures, one row per address, choices, weighted math, `resultHash`, and `ballotsRoot`. `--rpc` re-derives each final weight from the token chain. Civic `verifyAuditorBundle` is unchanged. The Node route is `GET /api/polls/:id/artifacts` when `POLLS_ENABLED=1`.

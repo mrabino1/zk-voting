@@ -145,6 +145,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED` (IRV), `MEASURE`, `ARTICLE`. |
 | Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
 | Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
+| Token polls (`POLLS_ENABLED`) | **Phase 1, flag off by default.** ERC-20 balance-weighted **signal** polls (plurality + IRV). Weight is the minimum balance from the vote block through close. No identity layer. Not binding. [`docs/POLLS.md`](./docs/POLLS.md). L1 result mirror skipped (follow-up). |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
 | Intentional Node forks | Documented. Copy [`.env.example`](./.env.example), pin the shared factory / inbox / verifier, do not `DeployLocal` per city. |
 | Election workflow diagram | Informational PNG: register → freeze → vote (nullifier / relayer) → hourly disclosure → tally → results. [`docs/images/election-workflow.png`](./docs/images/election-workflow.png); source [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd). |

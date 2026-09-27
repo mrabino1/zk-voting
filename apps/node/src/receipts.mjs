@@ -724,3 +724,20 @@ export function mintHolderToken() {
   const token = mintReceiptToken();
   return { token, receiptTokenHash: hashReceiptToken(token) };
 }
+
+/** Hash-only token-poll receipt. No choice, no userId. */
+export function buildPollReceipt(ballot) {
+  return {
+    schema: 'republic.receipt.poll.v1',
+    nfp: true,
+    binding: false,
+    signal: 'Signal only · non-binding · NOT FOR PROFIT',
+    pollId: ballot.pollId,
+    voter: ballot.voter,
+    voteBlock: ballot.voteBlock,
+    provisionalWeight: String(ballot.provisionalWeight),
+    ballotDigest: ballot.ballotDigest,
+    acceptedHour: ballot.disclosureHour,
+    note: 'final weight = min balance until close',
+  };
+}

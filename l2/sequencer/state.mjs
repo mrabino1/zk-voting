@@ -32,6 +32,9 @@ export const CIVIC_TYPES = Object.freeze([
   'party_attest',
 ]);
 
+/** Token-poll txs. Accepted only when POLLS_ENABLED is set. Vote validation is unchanged. */
+export const POLL_TX_TYPES = Object.freeze(['poll_params', 'poll_vote', 'poll_tally']);
+
 const FORBIDDEN_KEYS = new Set([
   'plaintext',
   'choice',
@@ -268,6 +271,12 @@ export function publicFieldsForTx(tx) {
   if (c.evidenceHash != null) out.evidenceHash = topicWord(c.evidenceHash);
   if (c.countsHash != null) out.countsHash = topicWord(c.countsHash);
   if (type === 'userop' && c.sender) out.sender = normalizeAddress(c.sender);
+  if (c.pollId != null) out.pollId = String(c.pollId);
+  if (c.voter != null) out.voter = normalizeAddress(c.voter);
+  if (c.partyId != null) out.partyId = String(c.partyId);
+  if (c.partyName != null) out.partyName = String(c.partyName);
+  if (c.mode != null) out.mode = String(c.mode);
+  if (c.resultHash != null) out.resultHash = topicWord(c.resultHash);
   return out;
 }
 
@@ -352,6 +361,7 @@ export function loadConfig(root = L2_ROOT) {
       process.env.DISCLOSURE_INTERVAL_SECONDS ?? file.disclosureIntervalSeconds,
       { isTest: process.env.NODE_ENV === 'test' },
     ),
+    pollsEnabled: parseBool(process.env.POLLS_ENABLED, false),
   };
 }
 
@@ -414,6 +424,9 @@ export class ChainState {
       partyRejected: topic0('PartyRejected(uint256,bytes32,uint256,uint16)'),
       partyAdded: topic0('PartyAdded(uint256,bytes32)'),
       partyAttested: topic0('PartyAttested(uint256,bytes32,uint256)'),
+      pollParams: topic0('PollParams(bytes32,address,uint256)'),
+      pollVote: topic0('PollVote(bytes32,address,uint256)'),
+      pollTally: topic0('PollTally(bytes32,bytes32)'),
     };
   }
 
@@ -717,7 +730,8 @@ export class ChainState {
     }
     const originalCivic = civic && typeof civic === 'object' ? civic : { type: 'userop' };
     let type = String(originalCivic.type || 'userop').toLowerCase();
-    if (!CIVIC_TYPES.includes(type)) {
+    const pollType = POLL_TX_TYPES.includes(type);
+    if (!CIVIC_TYPES.includes(type) && !(pollType && this.config.pollsEnabled)) {
       throw Object.assign(new Error(`unsupported civic tx type: ${type}`), {
         code: -32602,
       });
@@ -731,6 +745,7 @@ export class ChainState {
       delete civic.sender;
       delete civic.from;
     }
+    if (pollType) assertPollShape(type, civic);
     const from =
       type === 'vote' || type === 'userop'
         ? this.config.bundler
@@ -765,6 +780,9 @@ export class ChainState {
     if (type === 'tally') return normalizeAddress(c.tallyVerifier || '0x1004');
     if (type === 'party_add' || type === 'party_reject' || type === 'party_attest') {
       return normalizeAddress(c.externalPartyRegistry || '0x1006');
+    }
+    if (type === 'poll_params' || type === 'poll_vote' || type === 'poll_tally') {
+      return normalizeAddress(c.pollRegistry || '0x1007');
     }
     return normalizeAddress(c.entryPoint || '0x1005');
   }
@@ -886,6 +904,19 @@ export class ChainState {
         ],
         data: topicWord(c.identityCommitment || 0),
       });
+    } else if (type === 'poll_params' || type === 'poll_vote' || type === 'poll_tally') {
+      const topic =
+        type === 'poll_params'
+          ? this.eventTopics.pollParams
+          : type === 'poll_vote'
+            ? this.eventTopics.pollVote
+            : this.eventTopics.pollTally;
+      logs.push({
+        ...base,
+        logIndex: toQuantity(logIndexStart),
+        topics: [topic, topicWord(c.pollId || 0)],
+        data: '0x',
+      });
     } else if (type === 'userop') {
       logs.push({
         ...base,
@@ -965,7 +996,19 @@ export class ChainState {
   async postExplorer(block) {
     const base = this.config.republicNodeUrl;
     if (!base) return;
-    const outcomes = { register: [], vote: [], disqualify: [], tally: [], userop: [] };
+    const outcomes = {
+      register: [],
+      vote: [],
+      disqualify: [],
+      tally: [],
+      userop: [],
+      party_add: [],
+      party_reject: [],
+      party_attest: [],
+      poll_params: [],
+      poll_vote: [],
+      poll_tally: [],
+    };
     for (const tx of block.transactions) {
       const pub = publicFieldsForTx(tx);
       if (outcomes[pub.type]) outcomes[pub.type].push(pub);
@@ -1123,6 +1166,40 @@ function rememberArchivedTxHashes(state, archiveIndex) {
       if (!key || state.txsByHash.has(key)) continue;
       state.txsByHash.set(key, { hash, archived: true });
     }
+  }
+}
+
+function isPollBytes32(value) {
+  return /^0x[0-9a-fA-F]{64}$/.test(String(value || ''));
+}
+
+function isPollAddress(value) {
+  return /^0x[0-9a-fA-F]{40}$/.test(String(value || ''));
+}
+
+function assertPollShape(type, civic) {
+  const bad = (message) => Object.assign(new Error(message), { code: -32602 });
+  if (!civic || !civic.pollId) throw bad('pollId required');
+  if (type === 'poll_params') {
+    if (!isPollBytes32(civic.pollParamsHash)) throw bad('pollParamsHash required');
+    if (!isPollAddress(civic.token)) throw bad('token required');
+    const chain = Number(civic.tokenChainId);
+    if (!Number.isInteger(chain) || chain <= 0 || chain === CHAIN_ID) throw bad('tokenChainId invalid');
+    const start = Number(civic.startTime);
+    const cutoff = Number(civic.cutoffTime);
+    if (!Number.isFinite(start) || !Number.isFinite(cutoff) || start >= cutoff) throw bad('window invalid');
+  } else if (type === 'poll_vote') {
+    if (!isPollAddress(civic.voter)) throw bad('voter required');
+    if (!Number.isInteger(Number(civic.voteBlock))) throw bad('voteBlock required');
+    if (!/^\d+$/.test(String(civic.provisionalWeight ?? ''))) throw bad('provisionalWeight required');
+    if (!isPollBytes32(civic.choicesHash)) throw bad('choicesHash required');
+    if (!isPollBytes32(civic.ballotDigest)) throw bad('ballotDigest required');
+  } else if (type === 'poll_tally') {
+    if (!Number.isInteger(Number(civic.closeBlock))) throw bad('closeBlock required');
+    if (!isPollBytes32(civic.ballotsRoot)) throw bad('ballotsRoot required');
+    if (!isPollBytes32(civic.resultHash)) throw bad('resultHash required');
+    if (!/^\d+$/.test(String(civic.participation ?? ''))) throw bad('participation required');
+    if (!civic.outcome) throw bad('outcome required');
   }
 }
 

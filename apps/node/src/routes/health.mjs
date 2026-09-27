@@ -52,6 +52,11 @@ export function configRouter(deps) {
         rpName: deps.config.rpName,
         rpID: deps.config.rpID,
         chainId: deps.config.chainId,
+        pollsEnabled: Boolean(deps.config.pollsEnabled),
+        mail: {
+          webhookConfigured: Boolean(deps.config.mailWebhookUrl),
+          note: 'Role-promotion mail is queued on the Node and is never written to civic L2 transactions.',
+        },
         origins: deps.config.origins,
         chainConfigured,
         sharedDeployment: true,

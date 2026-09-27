@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
+import { tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -147,6 +148,9 @@ export function getConfig(overrides = {}) {
     provingPath,
     useMockVerifier,
     hashScheme,
+    pollsEnabled: envFlag(process.env.POLLS_ENABLED, false),
+    pollMaxOptions: Number(process.env.POLL_MAX_OPTIONS || 32),
+    tokenRpcs: tokenRpcMap(),
     ...overrides,
   };
 }
