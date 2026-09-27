@@ -257,7 +257,7 @@ describe('audience HTTP routes and admin gates', () => {
     const adminMe = await api('GET', '/api/me', { jar: adminJar });
     assert.equal(adminMe.json.audience, 'officer');
     assert.equal(adminMe.json.officer, true);
-    assert.equal(adminMe.json.user.role, 'platform_admin');
+    assert.equal(adminMe.json.user.role, 'platform_super_admin');
 
     const voterAdmin = await api('GET', '/admin', { jar: voterJar, redirect: 'manual' });
     assert.equal(voterAdmin.status, 200);

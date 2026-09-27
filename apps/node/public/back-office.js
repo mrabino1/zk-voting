@@ -910,7 +910,7 @@
   function hasOfficerRole(me, name) {
     const user = me && me.user;
     if (!user) return false;
-    if (user.role === "platform_admin") return true;
+    if (user.role === "platform_admin" || user.role === "platform_super_admin") return true;
     const grants = me.jurisdictionRoles || (me.me && me.me.jurisdictionRoles) || [];
     if (grants.some((g) => g.role === name)) return true;
     const roles = me.roles || [];
@@ -919,7 +919,7 @@
 
   function clerkJurisdictionIds(me) {
     if (!me || !me.user) return null;
-    if (me.user.role === "platform_admin") return null;
+    if (me.user.role === "platform_admin" || me.user.role === "platform_super_admin") return null;
     return new Set(
       (me.jurisdictionRoles || []).filter((g) => g.role === "clerk").map((g) => String(g.jurisdictionId))
     );

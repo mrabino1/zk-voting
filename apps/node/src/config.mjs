@@ -136,6 +136,7 @@ export function getConfig(overrides = {}) {
     allowCaptureMailer: isTest || envFlag(process.env.ALLOW_CAPTURE_MAILER, false),
     receiptPdfSecret: String(overrides.receiptPdfSecret ?? process.env.RECEIPT_PDF_SECRET ?? '').trim(),
     publicBaseUrl: String(overrides.publicBaseUrl ?? process.env.PUBLIC_BASE_URL ?? '').trim(),
+    mailWebhookUrl: String(overrides.mailWebhookUrl ?? process.env.MAIL_WEBHOOK_URL ?? '').trim(),
     sessionCookie: 'republic.sid',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     mfaCookie: 'republic.mfa',

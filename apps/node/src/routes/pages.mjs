@@ -16,11 +16,12 @@ import {
   publicSiteView,
 } from '../cms.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
+import { isPlatformOperator } from '../roles.mjs';
 
 function clerkJurisdictions(store, user) {
   const all = store.listJurisdictions();
   if (!user) return [];
-  if (user.role === 'platform_admin') return all;
+  if (isPlatformOperator(user)) return all;
   const ids = new Set(
     store
       .listJurisdictionRolesForUser(user)
@@ -125,7 +126,7 @@ export function pagesRouter(deps) {
     asyncHandler(async (req, res) => {
       const patch = { ...req.body };
       if (!canPinContracts(req.user)) {
-        throw new HttpError(403, 'only the Node host (platform_admin) can change site identity and contract pins');
+        throw new HttpError(403, 'only a platform admin or platform super admin can change site identity and contract pins');
       }
       if (patch.contracts) {
         rejectEnvPinnedContracts(config, patch.contracts);

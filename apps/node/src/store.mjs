@@ -124,6 +124,7 @@ function emptyData() {
     externalParties: [],
     partyRejections: [],
     partyAttestations: [],
+    mailOutbox: [],
   };
 }
 
@@ -189,6 +190,7 @@ export class Store {
       data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
       data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
       data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
+      data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
@@ -219,6 +221,7 @@ export class Store {
     if (!Array.isArray(store.data.externalParties)) store.data.externalParties = [];
     if (!Array.isArray(store.data.partyRejections)) store.data.partyRejections = [];
     if (!Array.isArray(store.data.partyAttestations)) store.data.partyAttestations = [];
+    if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
@@ -856,7 +859,7 @@ export class Store {
 
   userHasJurisdictionRole(user, roles, jurisdictionId) {
     if (!user) return false;
-    if (user.role === 'platform_admin') return true;
+    if (isPlatformOperator(user)) return true;
     const wanted = new Set((Array.isArray(roles) ? roles : [roles]).filter(Boolean));
     if (!wanted.size || jurisdictionId == null || jurisdictionId === '') return false;
     const jurisdiction = this.getJurisdiction(jurisdictionId);
@@ -868,7 +871,7 @@ export class Store {
 
   userHasAnyJurisdictionRole(user, roles) {
     if (!user) return false;
-    if (user.role === 'platform_admin') return true;
+    if (isPlatformOperator(user)) return true;
     return this.data.jurisdictions.some((jurisdiction) =>
       this.userHasJurisdictionRole(user, roles, jurisdiction.id),
     );
@@ -933,7 +936,7 @@ export class Store {
       if (user && !existing.userId) existing.userId = user.id;
       if (user && !existing.handle) existing.handle = user.handle;
       await this.persist();
-      return { jurisdiction, grant: existing, user };
+      return { jurisdiction, grant: existing, user, created: false };
     }
     const grant = {
       userId: user?.id || trimmedUserId || '',
@@ -944,7 +947,7 @@ export class Store {
     };
     jurisdiction.officers.push(grant);
     await this.persist();
-    return { jurisdiction, grant, user };
+    return { jurisdiction, grant, user, created: true };
   }
 
   async revokeJurisdictionRole(jurisdictionId, { address, role, handle, userId } = {}) {
@@ -1321,16 +1324,44 @@ export class Store {
     );
   }
 
-  async approveAdmin({ userId, handle } = {}) {
+  async approveAdmin({ userId, handle, contactEmail } = {}) {
     const user = this.resolveOfficerUser({ userId, handle });
     if (!user) throw new HttpError(404, 'user not found');
     if (user.role === 'platform_super_admin') {
       throw new HttpError(400, 'cannot change a platform super admin with this approval');
     }
-    user.role = 'platform_admin';
-    user.approvedAsAdminAt = new Date().toISOString();
+    let email = null;
+    if (contactEmail != null && String(contactEmail).trim() !== '') {
+      email = normalizeEmail(contactEmail);
+    }
+    const created = user.role !== 'platform_admin';
+    if (email) user.contactEmail = email;
+    if (created) {
+      user.role = 'platform_admin';
+      user.approvedAsAdminAt = new Date().toISOString();
+    }
+    if (email || created) await this.persist();
+    return { user, created };
+  }
+
+  listMailOutbox() {
+    return (this.data.mailOutbox || []).slice();
+  }
+
+  getMail(id) {
+    return (this.data.mailOutbox || []).find((row) => row.id === id) || null;
+  }
+
+  async saveMail(record) {
+    this.data.mailOutbox = this.data.mailOutbox || [];
+    const existing = this.data.mailOutbox.find((row) => row.id === record.id);
+    if (existing) {
+      Object.assign(existing, record);
+    } else {
+      this.data.mailOutbox.push(record);
+    }
     await this.persist();
-    return user;
+    return existing || record;
   }
 
   async revokeAdmin({ userId, handle } = {}) {

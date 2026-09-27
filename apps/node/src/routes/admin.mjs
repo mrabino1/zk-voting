@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole, requireSuperAdmin, publicUser } from '../auth.mjs';
 import { REASON_CODES } from '../reasonCodes.mjs';
+import { deliverRolePromotion } from '../promotionMail.mjs';
 import { APPROVAL_CHAIN, isPlatformOperator, isSuperAdmin, OFFICER_ROLES, ROLES } from '../roles.mjs';
 
 function publicJurisdiction(row) {
@@ -39,6 +40,27 @@ function officerPayload(req) {
     role: req.body?.role || req.query?.role,
     handle: req.body?.handle || req.query?.handle,
     userId: req.body?.userId || req.query?.userId,
+  };
+}
+
+async function grantResponse(deps, req, result) {
+  const mail = await deliverRolePromotion(deps, {
+    role: result.grant.role,
+    user: result.user,
+    created: Boolean(result.created && result.user),
+    skipReason: result.user ? (result.created ? null : 'already_granted') : 'no_user',
+    contactEmail: req.body?.contactEmail,
+    jurisdictionId: result.jurisdiction.id,
+    jurisdictionName: result.jurisdiction.name,
+    grantedByHandle: req.user.handle,
+  });
+  return {
+    ok: true,
+    ...result,
+    created: Boolean(result.created),
+    user: publicUser(result.user),
+    mail,
+    nfp: true,
   };
 }
 
@@ -120,7 +142,7 @@ export function adminRouter(deps) {
     requireRole('platform_admin'),
     asyncHandler(async (req, res) => {
       const result = await store.grantJurisdictionRole(req.params.id, officerPayload(req));
-      res.json({ ok: true, ...result, user: publicUser(result.user), nfp: true });
+      res.json(await grantResponse(deps, req, result));
     }),
   );
 
@@ -142,7 +164,7 @@ export function adminRouter(deps) {
       const jurisdictionId = req.body?.jurisdictionId;
       if (!jurisdictionId) throw new HttpError(400, 'jurisdictionId required');
       const result = await store.grantJurisdictionRole(jurisdictionId, officerPayload(req));
-      res.json({ ok: true, ...result, user: publicUser(result.user), nfp: true });
+      res.json(await grantResponse(deps, req, result));
     }),
   );
 
@@ -154,7 +176,7 @@ export function adminRouter(deps) {
       const jurisdictionId = req.body?.jurisdictionId;
       if (!jurisdictionId) throw new HttpError(400, 'jurisdictionId required');
       const result = await store.grantJurisdictionRole(jurisdictionId, officerPayload(req));
-      res.json({ ok: true, ...result, user: publicUser(result.user), nfp: true });
+      res.json(await grantResponse(deps, req, result));
     }),
   );
 
@@ -190,11 +212,19 @@ export function adminRouter(deps) {
     requireAuth,
     requireSuperAdmin,
     asyncHandler(async (req, res) => {
-      const user = await store.approveAdmin({
+      const approved = await store.approveAdmin({
         userId: req.body?.userId,
         handle: req.body?.handle,
+        contactEmail: req.body?.contactEmail,
       });
-      res.status(201).json({ ok: true, nfp: true, user: publicUser(user) });
+      const mail = await deliverRolePromotion(deps, {
+        role: 'platform_admin',
+        user: approved.user,
+        created: approved.created,
+        skipReason: approved.created ? null : 'already_granted',
+        grantedByHandle: req.user.handle,
+      });
+      res.status(201).json({ ok: true, nfp: true, user: publicUser(approved.user), mail });
     }),
   );
 
@@ -235,8 +265,18 @@ export function adminRouter(deps) {
           throw new HttpError(400, 'cannot demote the last platform super admin');
         }
       }
+      const before = target.role;
       const user = await store.updateUserRole(req.params.id, role);
-      res.json({ ok: true, user: publicUser(user), nfp: true });
+      const promoted = before !== user.role && user.role !== 'voter' && user.role !== 'observer';
+      const mail = promoted
+        ? await deliverRolePromotion(deps, {
+            role: user.role,
+            user,
+            created: true,
+            grantedByHandle: req.user.handle,
+          })
+        : { skipped: true, reason: 'not_a_promotion' };
+      res.json({ ok: true, user: publicUser(user), mail, nfp: true });
     }),
   );
 
