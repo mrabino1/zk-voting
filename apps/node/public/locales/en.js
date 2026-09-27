@@ -1025,5 +1025,7 @@ export default {
     baseUnits: "base units",
     state: "State",
     abstain: "Abstain",
+    disabled: "Token polls are disabled. Set VOTING_TOKEN_ADDRESS to an ERC-20 on Ethereum mainnet (chain id 1). This Node only reads balances. It does not send a transaction or spend tokens.",
+    tokenHost: "Every poll uses {token} on chain {chain}. Balances are read only. No transaction is sent and nothing is spent.",
   },
 };

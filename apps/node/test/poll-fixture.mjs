@@ -54,9 +54,14 @@ export async function listen(app) {
   });
 }
 
-export async function startPollNode({ pollsEnabled = true, disclosureIntervalSeconds = 0 } = {}) {
+export async function startPollNode({
+  pollsEnabled = true,
+  disclosureIntervalSeconds = 0,
+  votingTokenAddress,
+  votingTokenChainId,
+} = {}) {
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-poll-'));
-  const chain = createMemoryTokenChain();
+  const chain = createMemoryTokenChain({ chainId: 31337 });
   const registry = createTokenRegistry();
   registry.inject(chain.chainId, chain);
   const clock = { t: 1_700_000_100 };
@@ -67,6 +72,8 @@ export async function startPollNode({ pollsEnabled = true, disclosureIntervalSec
     nowFn: () => clock.t,
     disclosureIntervalSeconds,
     tokenRegistry: registry,
+    votingTokenAddress: votingTokenAddress === undefined ? chain.token : votingTokenAddress,
+    votingTokenChainId: votingTokenChainId === undefined ? chain.chainId : votingTokenChainId,
   });
   const server = await listen(created.app);
   const port = server.address().port;

@@ -332,7 +332,7 @@ Bandwidth **estimate:** public JSON snapshots are KB–low MB per view. A county
 | Optional later `createPoll` / `postResult` | ~1e5 / ~8e4 gas | **Estimate.** Not in phase 1. One-off, on an EVM venue, not chain 27427. |
 | Optional `L1TallyMirror.postResult` | ~4e4–1e5 gas | **Estimate.** Phase 1 skips this. The current mirror keys a uint256 civic election id. |
 
-Sepolia (`11155111`) is the documented test default chain. Tests use an in-memory ERC-20 and do not spend RPC quota.
+The host token is `VOTING_TOKEN_ADDRESS` on Ethereum mainnet (chain id 1). Reads only: no transaction and no spend. Tests use an in-memory ERC-20 on a local chain and do not spend RPC quota.
 
 ---
 

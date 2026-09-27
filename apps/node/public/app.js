@@ -1095,7 +1095,7 @@ async function renderRoute(route) {
     let pollsEnabled = false;
     try {
       const cfg = await api("/api/config");
-      pollsEnabled = Boolean(cfg && cfg.pollsEnabled);
+      pollsEnabled = Boolean(cfg && cfg.pollsReady);
     } catch {
       pollsEnabled = false;
     }

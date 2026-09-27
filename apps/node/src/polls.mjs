@@ -165,13 +165,13 @@ function applyParams(poll, body, config) {
   if (body.privacyMode && body.privacyMode !== 'public_weighted') {
     fail(400, 'phase 1 privacyMode is public_weighted', 'INVALID_CHOICES');
   }
-  const tokenChainId = intField(body.tokenChainId ?? poll.tokenChainId, 'tokenChainId');
-  if (tokenChainId === REPUBLIC_L2_CHAIN_ID) {
-    fail(400, 'tokenChainId must not be Republic L2 27427', 'TOKEN_UNSUPPORTED');
+  const token = config.votingToken;
+  if (!token?.configured || !isAddress(String(token.address || ''))) {
+    fail(503, 'token polls are disabled until VOTING_TOKEN_ADDRESS is a valid address', 'POLLS_DISABLED');
   }
-  if (tokenChainId <= 0) fail(400, 'tokenChainId is invalid', 'TOKEN_UNSUPPORTED');
-  const tokenRaw = body.token ?? poll.token;
-  if (!isAddress(String(tokenRaw || ''))) fail(400, 'token must be an address', 'TOKEN_UNSUPPORTED');
+  if (token.chainId === REPUBLIC_L2_CHAIN_ID || !Number.isInteger(token.chainId) || token.chainId <= 0) {
+    fail(503, 'VOTING_TOKEN_CHAIN_ID is invalid', 'POLLS_DISABLED');
+  }
   const startTime = intField(body.startTime ?? poll.startTime, 'startTime');
   const cutoffTime = intField(body.cutoffTime ?? poll.cutoffTime, 'cutoffTime');
   if (startTime >= cutoffTime) fail(400, 'startTime must be before cutoffTime', 'INVALID_CHOICES');
@@ -187,8 +187,8 @@ function applyParams(poll, body, config) {
   );
   poll.title = title;
   poll.pollType = pollType;
-  poll.token = getAddress(tokenRaw);
-  poll.tokenChainId = tokenChainId;
+  poll.token = getAddress(token.address);
+  poll.tokenChainId = token.chainId;
   poll.startTime = startTime;
   poll.cutoffTime = cutoffTime;
   poll.options = options;
@@ -265,7 +265,9 @@ export async function updatePoll(deps, actor, id, body) {
   if (phase !== 'DRAFT' && phase !== 'SCHEDULED') {
     fail(409, 'poll params are frozen', 'POLL_NOT_OPEN');
   }
-  applyParams(poll, { ...poll, ...body, options: body.options || poll.options }, deps.config);
+  const input = body || {};
+  const { token: _ignoredToken, tokenChainId: _ignoredChain, ...editable } = input;
+  applyParams(poll, { ...poll, ...editable, options: input.options || poll.options }, deps.config);
   if (!deps.store.getJurisdiction(poll.jurisdictionId)) fail(400, 'unknown jurisdictionId', 'INVALID_CHOICES');
   await probe(deps, poll);
   if (phase === 'SCHEDULED') {
@@ -296,6 +298,8 @@ export async function schedulePoll(deps, actor, id) {
   const now = deps.config.nowFn();
   const phase = pollPhase(poll, now);
   if (phase !== 'DRAFT' && phase !== 'SCHEDULED') fail(409, 'poll cannot be scheduled', 'POLL_NOT_OPEN');
+  applyParams(poll, poll, deps.config);
+  await probe(deps, poll);
   poll.pollParamsHash = hashCanonical(canonicalPollParams(poll));
   poll.state = 'SCHEDULED';
   await deps.store.savePoll(poll);

@@ -1688,11 +1688,16 @@
     const work = document.getElementById("office-work");
     const nav = document.querySelector(".local-nav");
     if (!work || !nav) return;
-    fetch("/api/config", { credentials: "same-origin", headers: { Accept: "application/json" } })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((cfg) => {
+    Promise.all([
+      fetch("/api/config", { credentials: "same-origin", headers: { Accept: "application/json" } }).then((res) =>
+        res.ok ? res.json() : null
+      ),
+      import("/i18n.js"),
+    ])
+      .then(([cfg, i18n]) => {
         if (!cfg || !cfg.pollsEnabled) return;
         if (!superAdmin && !canTally) return;
+        const t = i18n.t;
         const link = document.createElement("a");
         link.href = "#token-polls";
         link.textContent = "Token polls";
@@ -1701,14 +1706,30 @@
         section.className = "panel";
         section.id = "token-polls";
         section.setAttribute("aria-labelledby", "token-polls-heading");
+        const ready = Boolean(cfg.pollsReady && cfg.votingToken && cfg.votingToken.configured);
         section.innerHTML =
           '<header><h2 id="token-polls-heading">Token polls</h2></header>' +
           '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>' +
-          '<p class="field-hint">ERC-20 balance-weighted signal polls. Holding the token is the only credential. Tokens in staking or liquidity-pool contracts cannot vote unless that contract signs. Official results publish after close. There is no live provisional tally.</p>' +
-          '<div id="token-poll-create"></div>' +
-          '<div id="token-poll-list"><p class="empty">Loading…</p></div>' +
+          '<p class="field-hint">ERC-20 balance-weighted signal polls. Holding the token is the only credential. Tokens in staking or liquidity-pool contracts cannot vote unless that contract signs. Official results publish after close. There is no live provisional tally. Balances are read on Ethereum. No transaction is sent.</p>' +
+          (ready
+            ? '<p class="field-hint" id="poll-token-host"></p>' +
+              '<div id="token-poll-create"></div>' +
+              '<div id="token-poll-list"><p class="empty">Loading…</p></div>'
+            : '<p class="notice notice-error" id="poll-token-disabled" role="alert"></p>') +
           '<div class="flash" id="flash-polls" role="status"></div>';
         work.append(section);
+        if (!ready) {
+          const note = document.getElementById("poll-token-disabled");
+          if (note) note.textContent = t("polls.disabled");
+          return;
+        }
+        const host = document.getElementById("poll-token-host");
+        if (host) {
+          host.textContent = t("polls.tokenHost", {
+            token: cfg.votingToken.address,
+            chain: String(cfg.votingToken.chainId),
+          });
+        }
         if (superAdmin) mountPollCreate();
         loadPollAdminList(superAdmin, canTally);
       })
@@ -1723,9 +1744,6 @@
       '<div class="field"><label class="field-label" for="p-jurisdiction">Jurisdiction</label><select id="p-jurisdiction"></select></div>' +
       '<div class="field"><label class="field-label" for="p-title">Title</label><input id="p-title" maxlength="200" /></div>' +
       '<div class="field"><label class="field-label" for="p-type">Type</label><select id="p-type"><option value="plurality">Plurality</option><option value="ranked_irv">Ranked choice (IRV)</option></select></div>' +
-      '<div class="field"><label class="field-label" for="p-token">ERC-20 address</label><input id="p-token" spellcheck="false" placeholder="0x…" /></div>' +
-      '<div class="field"><label class="field-label" for="p-chain">Token chain</label><select id="p-chain"><option value="11155111" selected>Sepolia 11155111</option><option value="1">Ethereum 1</option><option value="custom">Other chain id</option></select></div>' +
-      '<div class="field" id="p-chain-custom-wrap" hidden><label class="field-label" for="p-chain-custom">Chain id</label><input id="p-chain-custom" inputmode="numeric" /></div>' +
       '<div class="grid-2"><div class="field"><label class="field-label" for="p-start">Start</label><input id="p-start" type="datetime-local" /></div>' +
       '<div class="field"><label class="field-label" for="p-cutoff">Cutoff</label><input id="p-cutoff" type="datetime-local" /></div></div>' +
       '<div class="field"><label class="field-label" for="p-options">Options (one label per line, at least two). Abstain is added.</label><textarea id="p-options" rows="4">Yes\nNo</textarea></div>' +
@@ -1750,21 +1768,16 @@
     };
     $("p-start").value = iso(start);
     $("p-cutoff").value = iso(cutoff);
-    $("p-chain").addEventListener("change", () => {
-      $("p-chain-custom-wrap").hidden = $("p-chain").value !== "custom";
-    });
     $("form-token-poll").addEventListener("submit", async (event) => {
       event.preventDefault();
       const missing = [];
       if (!$("p-jurisdiction").value) missing.push("jurisdiction");
       if (!$("p-title").value.trim()) missing.push("title");
-      if (!$("p-token").value.trim()) missing.push("ERC-20 address");
       if (!$("p-start").value || !$("p-cutoff").value) missing.push("start and cutoff");
       if (missing.length) {
         flash($("flash-polls"), "err", "Fill " + missing.join(", ") + " before creating the poll.");
         return;
       }
-      const chainRaw = $("p-chain").value === "custom" ? $("p-chain-custom").value.trim() : $("p-chain").value;
       const options = $("p-options")
         .value.split("\n")
         .map((line) => line.trim())
@@ -1774,8 +1787,6 @@
           jurisdictionId: $("p-jurisdiction").value,
           title: $("p-title").value.trim(),
           pollType: $("p-type").value,
-          token: $("p-token").value.trim(),
-          tokenChainId: Number(chainRaw),
           startTime: toUnix($("p-start").value),
           cutoffTime: toUnix($("p-cutoff").value),
           options,

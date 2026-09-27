@@ -4,6 +4,8 @@
 
 Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes, no poll nav entry, and the civic L2 rejects `poll_params`, `poll_vote`, and `poll_tally`.
 
+Every poll reads one host token: `VOTING_TOKEN_ADDRESS` on `VOTING_TOKEN_CHAIN_ID` (default **1**, Ethereum mainnet). The Node only reads `balanceOf`. It does not send a transaction and it does not spend tokens. If `VOTING_TOKEN_ADDRESS` is unset or not an address, polls stay disabled and the back office shows that message. `pollParamsHash` still commits the token address and chain id that were in force when the poll was scheduled.
+
 ## Polling, not an executive
 
 This follows the MakerDAO **governance polling** shape: one fixed window, one question, plurality or ranked-choice IRV. It is not the continuous executive / “hat” model. There is no token lock, no spell, and no execution.
@@ -37,7 +39,7 @@ Address-hiding weighted voting conflicts with hold-through-close, because the ta
 
 ## Where the token lives
 
-Republic L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20. The token chain is read-only through `TOKEN_RPC_<chainId>`. An optional `TOKEN_RPC_<chainId>_2` must agree with the first when both are set. The Node never writes to the token chain. `tokenChainId` 27427 is rejected. Sepolia (`11155111`) is the documented test default. Tests use an in-memory ERC-20, not a live RPC.
+Republic L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Tests use an in-memory ERC-20 on a local chain id, not a public testnet and not a live RPC.
 
 ## Math
 

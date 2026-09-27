@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, describe, test } from 'node:test';
 
+import { canonicalPollParams, hashCanonical } from '../src/pollTypedData.mjs';
 import { freshAccount, login, startPollNode } from './poll-fixture.mjs';
 
 const A_LABEL = { id: 'a', label: 'A' };
@@ -18,8 +19,6 @@ async function openPoll(fx, { pollType = 'plurality', quorum = null, passThresho
     body: {
       title: 'Signal poll',
       pollType,
-      token: fx.chain.token,
-      tokenChainId: fx.chain.chainId,
       options: [A_LABEL, B_LABEL],
       startTime: fx.clock.t - 10,
       cutoffTime: fx.clock.t + 400,
@@ -89,8 +88,6 @@ describe('token poll API', () => {
         body: {
           title: 'Nope',
           pollType: 'plurality',
-          token: fx.chain.token,
-          tokenChainId: 11155111,
           options: [A_LABEL, B_LABEL],
           startTime: 10,
           cutoffTime: 20,
@@ -108,6 +105,36 @@ describe('token poll API', () => {
     assert.equal(cfg.json.pollsEnabled, false);
     const on = await fx.api('GET', '/api/config');
     assert.equal(on.json.pollsEnabled, true);
+    assert.equal(on.json.pollsReady, true);
+    assert.equal(on.json.votingToken.address, fx.chain.token);
+    assert.equal(on.json.votingToken.chainId, fx.chain.chainId);
+    assert.equal(on.json.votingToken.readOnly, true);
+  });
+
+  test('polls are disabled when VOTING_TOKEN_ADDRESS is unset or invalid', async () => {
+    const unset = await startPollNode({ votingTokenAddress: '', votingTokenChainId: '' });
+    stops.push(() => unset.stop());
+    const cfg = await unset.api('GET', '/api/config');
+    assert.equal(cfg.json.pollsEnabled, true);
+    assert.equal(cfg.json.pollsReady, false);
+    assert.equal(cfg.json.votingToken.configured, false);
+    assert.equal(cfg.json.votingToken.address, null);
+    assert.equal(cfg.json.votingToken.reason, 'unset');
+    assert.equal(cfg.json.votingToken.chainId, 1);
+    const hidden = await unset.api('POST', '/api/polls', { body: { title: 'x' } });
+    assert.equal(hidden.status, 404);
+    const listed = await unset.api('GET', '/api/polls');
+    assert.equal(listed.status, 404);
+
+    const invalid = await startPollNode({ votingTokenAddress: 'not-an-address', votingTokenChainId: '' });
+    stops.push(() => invalid.stop());
+    const badCfg = await invalid.api('GET', '/api/config');
+    assert.equal(badCfg.json.pollsEnabled, true);
+    assert.equal(badCfg.json.pollsReady, false);
+    assert.equal(badCfg.json.votingToken.reason, 'invalid');
+    assert.equal(badCfg.json.votingToken.address, null);
+    const stillHidden = await invalid.api('GET', '/api/polls');
+    assert.equal(stillHidden.status, 404);
   });
 
   test('a zero balance cannot vote, and a wallet with no account can', async () => {
@@ -266,28 +293,36 @@ describe('token poll API', () => {
     assert.equal(ok.json.receipt.provisionalWeight, '9');
   });
 
-  test('creation rejects Republic L2, a bad token, too few options, and a bad window', async () => {
+  test('creation ignores a client token and chain, and still checks options and window', async () => {
     const fx = await startPollNode();
     stops.push(() => fx.stop());
     const { jar } = await login(fx.api, 'admin');
     const base = {
       title: 'X',
       pollType: 'plurality',
-      token: fx.chain.token,
-      tokenChainId: 11155111,
       options: [A_LABEL, B_LABEL],
       startTime: 10,
       cutoffTime: 20,
       jurisdictionId: 'demo',
     };
-    const l2 = await fx.api('POST', '/api/polls', { jar, body: { ...base, tokenChainId: 27427 } });
-    assert.equal(l2.status, 400);
-    const badToken = await fx.api('POST', '/api/polls', {
+    const created = await fx.api('POST', '/api/polls', {
       jar,
-      body: { ...base, token: '0x2222222222222222222222222222222222222222' },
+      body: {
+        ...base,
+        token: '0x2222222222222222222222222222222222222222',
+        tokenChainId: 27427,
+      },
     });
-    assert.equal(badToken.status, 400);
-    assert.equal(badToken.json.code, 'TOKEN_UNSUPPORTED');
+    assert.equal(created.status, 201, created.text);
+    assert.equal(created.json.poll.token, fx.chain.token);
+    assert.equal(created.json.poll.tokenChainId, fx.chain.chainId);
+    const scheduled = await fx.api('POST', `/api/polls/${created.json.poll.id}/schedule`, { jar });
+    assert.equal(scheduled.status, 200, scheduled.text);
+    const frozen = canonicalPollParams(scheduled.json);
+    assert.equal(frozen.token, fx.chain.token);
+    assert.equal(frozen.tokenChainId, fx.chain.chainId);
+    assert.equal(hashCanonical(frozen), scheduled.json.pollParamsHash);
+    assert.notEqual(hashCanonical({ ...frozen, token: '0x2222222222222222222222222222222222222222' }), scheduled.json.pollParamsHash);
     const few = await fx.api('POST', '/api/polls', { jar, body: { ...base, options: [A_LABEL] } });
     assert.equal(few.status, 400);
     const window = await fx.api('POST', '/api/polls', { jar, body: { ...base, startTime: 30, cutoffTime: 20 } });

@@ -22,8 +22,6 @@ async function talliedPack() {
     body: {
       title: 'Audit me',
       pollType: 'plurality',
-      token: fx.chain.token,
-      tokenChainId: fx.chain.chainId,
       options: [
         { id: 'a', label: 'A' },
         { id: 'b', label: 'B' },

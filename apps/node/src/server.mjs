@@ -214,7 +214,7 @@ export async function createApp(overrides = {}) {
   app.use(termsPdfRouter(deps));
   app.use('/api/auth', authRouter(deps));
   app.use('/api/elections', electionsRouter(deps));
-  if (config.pollsEnabled) {
+  if (config.pollsReady) {
     app.use('/api/polls', pollsRouter(deps));
   }
   app.use('/api/explorer', explorerRouter(deps));

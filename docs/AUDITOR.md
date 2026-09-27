@@ -98,7 +98,7 @@ The Node also hosts `/outcomes`, which runs `verifyAuditorBundle` plus freeze-ro
 
 ```bash
 node tools/auditor/cli.mjs verify --file poll-bundle.json --offline
-node tools/auditor/cli.mjs verify --file poll-bundle.json --rpc "$TOKEN_RPC_11155111"
+node tools/auditor/cli.mjs verify --file poll-bundle.json --rpc "$TOKEN_RPC_1"
 ```
 
 `--offline` checks signatures, one row per address, choices, weighted math, `resultHash`, and `ballotsRoot`. `--rpc` re-derives each final weight from the token chain. Civic `verifyAuditorBundle` is unchanged. The Node route is `GET /api/polls/:id/artifacts` when `POLLS_ENABLED=1`.

@@ -1019,5 +1019,7 @@ export default {
     baseUnits: "unités de base",
     state: "État",
     abstain: "Abstention",
+    disabled: "Les sondages à jeton sont désactivés. Définissez VOTING_TOKEN_ADDRESS sur un ERC-20 du réseau principal Ethereum (identifiant de chaîne 1). Ce nœud ne fait que lire les soldes. Il n’envoie aucune transaction et ne dépense aucun jeton.",
+    tokenHost: "Chaque sondage utilise {token} sur la chaîne {chain}. Les soldes sont seulement lus. Aucune transaction n’est envoyée et rien n’est dépensé.",
   },
 };

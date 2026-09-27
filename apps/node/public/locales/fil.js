@@ -1019,5 +1019,7 @@ export default {
     baseUnits: "base unit",
     state: "Estado",
     abstain: "Abstain",
+    disabled: "Naka-disable ang mga token poll. Itakda ang VOTING_TOKEN_ADDRESS sa isang ERC-20 sa Ethereum mainnet (chain id 1). Binabasa lang ng Node na ito ang mga balanse. Hindi ito nagpapadala ng transaksyon at hindi gumagastos ng token.",
+    tokenHost: "Ginagamit ng bawat poll ang {token} sa chain {chain}. Binabasa lang ang mga balanse. Walang ipinapadalang transaksyon at walang ginagastos.",
   },
 };

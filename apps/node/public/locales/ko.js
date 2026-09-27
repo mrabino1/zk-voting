@@ -1019,5 +1019,7 @@ export default {
     baseUnits: "기본 단위",
     state: "상태",
     abstain: "기권",
+    disabled: "토큰 여론조사가 꺼져 있습니다. VOTING_TOKEN_ADDRESS를 이더리움 메인넷(체인 ID 1)의 ERC-20으로 설정하세요. 이 노드는 잔액만 읽습니다. 트랜잭션을 보내지 않으며 토큰을 쓰지 않습니다.",
+    tokenHost: "모든 여론조사는 체인 {chain}의 {token}을 사용합니다. 잔액만 읽습니다. 트랜잭션을 보내지 않으며 아무것도 지출하지 않습니다.",
   },
 };

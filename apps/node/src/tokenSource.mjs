@@ -7,6 +7,7 @@ import {
   encodeFunctionData,
   decodeFunctionResult,
   getAddress,
+  isAddress,
   hexToBytes,
   http,
   keccak256,
@@ -276,8 +277,35 @@ function lower(addr) {
  * A flash loan borrows and repays inside the open block, so the mined
  * end balance does not include it.
  */
+export const ETHEREUM_MAINNET_CHAIN_ID = 1;
+
+/**
+ * The one ERC-20 every poll reads. Unset or invalid address fails closed.
+ * Chain id defaults to Ethereum mainnet. The Node never sends a transaction.
+ */
+export function resolveVotingToken({
+  address = process.env.VOTING_TOKEN_ADDRESS,
+  chainId = process.env.VOTING_TOKEN_CHAIN_ID,
+} = {}) {
+  const raw = String(address ?? '').trim();
+  const chainText = chainId == null || String(chainId).trim() === '' ? String(ETHEREUM_MAINNET_CHAIN_ID) : String(chainId).trim();
+  const parsed = Number(chainText);
+  const chainOk = Number.isInteger(parsed) && parsed > 0 && parsed !== 27427;
+  const addressOk = Boolean(raw) && isAddress(raw);
+  const configured = addressOk && chainOk;
+  let reason = null;
+  if (!configured) reason = !raw ? 'unset' : 'invalid';
+  return {
+    configured,
+    address: addressOk ? getAddress(raw) : '',
+    chainId: chainOk ? parsed : ETHEREUM_MAINNET_CHAIN_ID,
+    reason,
+    readOnly: true,
+  };
+}
+
 export function createMemoryTokenChain({
-  chainId = 11155111,
+  chainId = 31337,
   symbol = 'TEST',
   decimals = 18,
   token = '0x1111111111111111111111111111111111111111',

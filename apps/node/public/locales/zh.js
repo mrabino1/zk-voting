@@ -1020,5 +1020,7 @@ export default {
     baseUnits: "基本单位",
     state: "状态",
     abstain: "弃权",
+    disabled: "代币民意调查已关闭。请将 VOTING_TOKEN_ADDRESS 设为以太坊主网（链 ID 1）上的 ERC-20。本节点只读取余额，不发送交易，也不花费代币。",
+    tokenHost: "每次调查都使用链 {chain} 上的 {token}。只读取余额。不发送交易，也不花费任何资产。",
   },
 };

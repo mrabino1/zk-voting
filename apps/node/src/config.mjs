@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
-import { tokenRpcMap } from './tokenSource.mjs';
+import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -54,7 +54,7 @@ export function getConfig(overrides = {}) {
     process.env.REPUBLIC_HASH_SCHEME ||
     (provingPath ? 'republic.hash.poseidon-bn254-x5-t3-v1' : 'republic.hash.keccak-dev-v1');
 
-  return {
+  const config = {
     nfp: true,
     app: 'zk-voting',
     product: 'Republic',
@@ -148,11 +148,26 @@ export function getConfig(overrides = {}) {
     provingPath,
     useMockVerifier,
     hashScheme,
-    pollsEnabled: envFlag(process.env.POLLS_ENABLED, false),
+    pollsEnabled:
+      overrides.pollsEnabled !== undefined
+        ? Boolean(overrides.pollsEnabled)
+        : envFlag(process.env.POLLS_ENABLED, false),
     pollMaxOptions: Number(process.env.POLL_MAX_OPTIONS || 32),
     tokenRpcs: tokenRpcMap(),
     ...overrides,
   };
+  config.votingToken = resolveVotingToken({
+    address:
+      overrides.votingTokenAddress !== undefined
+        ? overrides.votingTokenAddress
+        : process.env.VOTING_TOKEN_ADDRESS,
+    chainId:
+      overrides.votingTokenChainId !== undefined
+        ? overrides.votingTokenChainId
+        : process.env.VOTING_TOKEN_CHAIN_ID,
+  });
+  config.pollsReady = Boolean(config.pollsEnabled) && config.votingToken.configured;
+  return config;
 }
 
 export { PKG_ROOT };

@@ -1019,5 +1019,7 @@ export default {
     baseUnits: "unidades base",
     state: "Estado",
     abstain: "Abstenção",
+    disabled: "As sondagens com token estão desativadas. Defina VOTING_TOKEN_ADDRESS como um ERC-20 na rede principal da Ethereum (id de cadeia 1). Este nó só lê saldos. Não envia transações nem gasta tokens.",
+    tokenHost: "Cada sondagem usa {token} na cadeia {chain}. Os saldos são apenas lidos. Nenhuma transação é enviada e nada é gasto.",
   },
 };

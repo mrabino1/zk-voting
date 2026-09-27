@@ -90,7 +90,7 @@ describe('L2 token poll txs', () => {
         pollId: 'poll-1',
         pollParamsHash: HASH,
         token: TOKEN,
-        tokenChainId: 11155111,
+        tokenChainId: 1,
         startTime: 10,
         cutoffTime: 20,
       }),

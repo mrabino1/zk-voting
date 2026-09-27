@@ -1019,5 +1019,7 @@ export default {
     baseUnits: "đơn vị cơ sở",
     state: "Trạng thái",
     abstain: "Phiếu trắng",
+    disabled: "Thăm dò token đang tắt. Đặt VOTING_TOKEN_ADDRESS thành một ERC-20 trên Ethereum mainnet (chain id 1). Node này chỉ đọc số dư. Nó không gửi giao dịch và không tiêu token.",
+    tokenHost: "Mọi thăm dò dùng {token} trên chuỗi {chain}. Chỉ đọc số dư. Không gửi giao dịch và không tiêu gì.",
   },
 };
