@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
+import { normalizeEmail } from '../identity.mjs';
 import { audienceOfUser, isPlatformOperator, isSuperAdmin, userIsOfficer } from '../roles.mjs';
 
 function expandedRoles(store, user) {
@@ -79,6 +80,7 @@ export function meRouter(deps) {
     const me = user
       ? {
           ...user,
+          contactEmail: req.user.contactEmail || '',
           name: user.handle,
           roles,
           jurisdictionRoles,
@@ -115,6 +117,24 @@ export function meRouter(deps) {
     '/session',
     asyncHandler(async (req, res) => {
       res.json(mePayload(req));
+    }),
+  );
+
+  router.patch(
+    '/me/contact-email',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const raw = req.body?.contactEmail;
+      if (raw == null || String(raw).trim() === '') {
+        req.user.contactEmail = '';
+        await store.persist();
+        res.json({ ok: true, nfp: true, contactEmail: '' });
+        return;
+      }
+      const contactEmail = normalizeEmail(raw);
+      req.user.contactEmail = contactEmail;
+      await store.persist();
+      res.json({ ok: true, nfp: true, contactEmail });
     }),
   );
 

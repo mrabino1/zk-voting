@@ -27,6 +27,9 @@ export const CIVIC_TYPES = Object.freeze([
   'disqualify',
   'tally',
   'userop',
+  'party_add',
+  'party_reject',
+  'party_attest',
 ]);
 
 const FORBIDDEN_KEYS = new Set([
@@ -248,8 +251,14 @@ export function publicFieldsForTx(tx) {
   if (c.electionId != null) out.electionId = String(c.electionId);
   if (c.nullifier != null) out.nullifier = topicWord(c.nullifier);
   if (c.ballotHash != null) out.ballotHash = topicWord(c.ballotHash);
+  const partyTx = type === 'party_add' || type === 'party_reject' || type === 'party_attest';
   if (c.identityCommitment != null) {
-    out.identityCommitment = topicWord(c.identityCommitment);
+    out.identityCommitment = partyTx ? String(c.identityCommitment) : topicWord(c.identityCommitment);
+  }
+  if (partyTx) {
+    if (c.partyId != null) out.partyId = String(c.partyId);
+    if (c.partyName != null) out.partyName = String(c.partyName);
+    if (c.mode != null) out.mode = String(c.mode);
   }
   if (c.eligibleRoot != null) out.eligibleRoot = topicWord(c.eligibleRoot);
   if (c.disqualificationRoot != null) {
@@ -402,6 +411,9 @@ export class ChainState {
       disqualified: topic0('Disqualified(uint256,uint256,uint16,bytes32)'),
       tallySubmitted: topic0('TallySubmitted(uint256,bytes32)'),
       userOpAccepted: topic0('UserOpAccepted(bytes32,address)'),
+      partyRejected: topic0('PartyRejected(uint256,bytes32,uint256,uint16)'),
+      partyAdded: topic0('PartyAdded(uint256,bytes32)'),
+      partyAttested: topic0('PartyAttested(uint256,bytes32,uint256)'),
     };
   }
 
@@ -751,6 +763,9 @@ export class ChainState {
       return normalizeAddress(c.disqualificationRegistry || '0x1003');
     }
     if (type === 'tally') return normalizeAddress(c.tallyVerifier || '0x1004');
+    if (type === 'party_add' || type === 'party_reject' || type === 'party_attest') {
+      return normalizeAddress(c.externalPartyRegistry || '0x1006');
+    }
     return normalizeAddress(c.entryPoint || '0x1005');
   }
 
@@ -842,6 +857,34 @@ export class ChainState {
         logIndex: toQuantity(logIndexStart),
         topics: [this.eventTopics.tallySubmitted, topicWord(c.electionId || 0)],
         data: topicWord(c.countsHash || ZERO_HASH),
+      });
+    } else if (type === 'party_reject') {
+      logs.push({
+        ...base,
+        logIndex: toQuantity(logIndexStart),
+        topics: [this.eventTopics.partyRejected, topicWord(c.electionId || 0), topicWord(c.partyId || 0)],
+        data:
+          '0x' +
+          topicWord(c.identityCommitment || 0).slice(2) +
+          topicWord(c.reasonCode || 0).slice(2),
+      });
+    } else if (type === 'party_add') {
+      logs.push({
+        ...base,
+        logIndex: toQuantity(logIndexStart),
+        topics: [this.eventTopics.partyAdded, topicWord(c.electionId || 0), topicWord(c.partyId || 0)],
+        data: '0x',
+      });
+    } else if (type === 'party_attest') {
+      logs.push({
+        ...base,
+        logIndex: toQuantity(logIndexStart),
+        topics: [
+          this.eventTopics.partyAttested,
+          topicWord(c.electionId || 0),
+          topicWord(c.partyId || 0),
+        ],
+        data: topicWord(c.identityCommitment || 0),
       });
     } else if (type === 'userop') {
       logs.push({

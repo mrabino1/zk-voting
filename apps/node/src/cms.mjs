@@ -1,6 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Jurisdiction CMS: fork the Node UI; pin one shared contract deployment.
 
+import { isPlatformOperator } from './roles.mjs';
+
 export const SHARED_DEPLOYMENT_NOTE =
   'Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here like a WordPress site.';
 
@@ -171,7 +173,7 @@ export function pageSummary(page) {
 
 export function canManagePages(store, user, page) {
   if (!user) return false;
-  if (user.role === 'platform_admin') return true;
+  if (isPlatformOperator(user)) return true;
   if (page?.jurisdictionId) {
     return store.userHasJurisdictionRole(user, ['clerk'], page.jurisdictionId);
   }
@@ -242,7 +244,7 @@ export function publicSiteView(site, config) {
 }
 
 export function canPinContracts(user) {
-  return Boolean(user && user.role === 'platform_admin');
+  return isPlatformOperator(user);
 }
 
 export function sanitizeAddress(value) {
