@@ -639,8 +639,10 @@ is the local Foundry path.
 `circuits/HASH_SCHEME.md` — Poseidon vote circuit, keccak unit tests, legacy stand-in, untrusted Groth16 fixture.
 `circuits/identity.circom` — Poseidon `Hasher()`, commitment, nullifier.
 `circuits/README.md` — exact `circom` + snarkjs commands. Proving path is
-**in progress**. Local `npm run circuits:setup` is UNTRUSTED. Until a real
-ceremony, MockVerifier is the Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`
+**in progress**. Local `npm run circuits:setup` is UNTRUSTED. Phase-2
+contribute / verify / beacon / export tooling is `docs/CEREMONY.md`. Running
+it does not complete a ceremony. Until a real ceremony, MockVerifier is the
+Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`
 is the fail-closed integration flag.
 
 ---

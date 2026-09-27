@@ -74,6 +74,9 @@ npm run test:proof-helpers
 # Groth16 fixture (needs snarkjs; fails if the untrusted Vote(4) files are missing)
 npm run circuits:verify
 
+# Phase-2 ceremony tooling (toy transcript; published entropy; not a ceremony)
+npm run circuits:ceremony:toy
+
 # Shared JS packages (L1 tally-hash client, etc.)
 npm run test:packages
 
