@@ -22,7 +22,7 @@ This is **not** a completed ceremony. Keys from `npm run circuits:setup` or `npm
 | Id | Where | Status |
 | --- | --- | --- |
 | `republic.hash.poseidon-bn254-x5-t3-v1` | Vote circuit, proof-helpers, `PoseidonHasher`, browser `poseidon.js` | **Wired.** Not a ceremony. |
-| `republic.hash.keccak-dev-v1` | Foundry unit tests, Node Merkle, demo passkey commitment (`deriveIdentitySecrets`) | Default when `REPUBLIC_PROVING_PATH` is off. Do not mix these leaves into a Poseidon proof. |
+| `republic.hash.keccak-dev-v1` | Foundry unit-test trees, Node Merkle (including the disqualification chain shape) | Default when `REPUBLIC_PROVING_PATH` is off. Do not mix these leaves into a Poseidon proof. The demo passkey leaf is Poseidon. |
 | `republic.hash.standin-v0` | `StandInHasher`, `standInHashLeftRight`, `hasher/standin.circom` | **Legacy.** Not included by the circuit. `hash(x, 0) == x`. |
 
 `schemeId()` on the Solidity hashers is `keccak256` of the id string.
@@ -36,7 +36,7 @@ This is **not** a completed ceremony. Keys from `npm run circuits:setup` or `npm
 - no `REPUBLIC_VOTE_VERIFIER`: `VoteVerifier` with a **zero** verifying key. Dummy proofs revert `VerifierNotConfigured`.
 - `REPUBLIC_VOTE_VERIFIER=<exported verifier>`: `Groth16VerifierAdapter` around that contract. Still untrusted until a ceremony, and the circuit depth must match the election (`Vote(20)` vs the Vote(4) smoke fixture).
 
-The committed check is **Vote(4)**, not an election depth (elections are 16..32):
+The committed checks are **Vote(4)** (smoke) and **Vote(20)** (dev election depth). Both verifying keys are **UNTRUSTED** — the setup entropy is public and no ceremony has been held:
 
 ```bash
 npm run circuits:verify
@@ -44,10 +44,12 @@ npm run circuits:verify
 #   GROTH16_KEYS_MISSING ... This check does not use MockVerifier.acceptAll.
 ```
 
-Regenerate the untrusted fixture (circom + snarkjs; zkeys stay gitignored):
+Regenerate the untrusted fixtures (circom + snarkjs; proving zkeys stay gitignored):
 
 ```bash
-npm run circuits:smoke
+npm run circuits:smoke    # Vote(4) → circuits/fixtures/untrusted/vote_smoke_*
+npm run circuits:setup    # UNTRUSTED Vote(20) proving key (circuits/build/vote_final.zkey)
+npm run circuits:prove    # verifies it and refreshes vote20_* + UntrustedVote20Verifier.sol
 ```
 
 Full election circuit (heavier; default `REPUBLIC_PTAU_POWER=16`):
@@ -73,6 +75,6 @@ Foundry also verifies the committed smoke proof against the exported Solidity ve
 | `REPUBLIC_HASH_SCHEME` | keccak-dev-v1, or Poseidon when proving path is on | Override (`poseidon`, `keccak-dev-v1`, `standin-v0`). |
 | `REPUBLIC_VOTE_VERIFIER` | unset | Address of a snarkjs verifier to wrap when the proving path is on. |
 | `REPUBLIC_PTAU_POWER` | `16` | Local untrusted powers-of-tau for Vote(20). |
-| `REPUBLIC_SMOKE_PTAU_POWER` | `13` | Enough for the Vote(4) smoke circuit (~5k constraints). |
+| `REPUBLIC_SMOKE_PTAU_POWER` | `14` | Enough for the Vote(4) smoke circuit (non-membership adds a 254-bit compare; ~12k constraints). |
 
 snarkjs JSON proofs (`pi_a` / `pi_b` / `pi_c`) need the G2 limb swap before Solidity. `snarkjsProofToSolidity` does that. Proofs already shaped as `{a,b,c}` are left alone.

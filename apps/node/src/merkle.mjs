@@ -1,7 +1,9 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Incremental Merkle tree. Default HASH_SCHEME is republic.hash.keccak-dev-v1
 // (keccak256 left||right), matching Solidity KeccakHasher used by Foundry tests.
-// Vote-circuit proofs use Poseidon via @zk-voting/proof-helpers. This tree stays keccak-dev-v1. Depth 16..32.
+// Vote-circuit proofs use Poseidon via @zk-voting/proof-helpers. This tree stays keccak-dev-v1.
+// The disqualification root is the same indexed chain as the circuit (sentinel 0,
+// then sorted commitments), hashed with keccak here. Depth 16..32.
 
 import { concat, keccak256, pad, toHex } from 'viem';
 
@@ -52,6 +54,55 @@ export function emptyTree(depth) {
     leaves: [],
     root: zeros[d],
   };
+}
+
+function asUint(value) {
+  return BigInt(toBytes32(value));
+}
+
+/**
+ * Indexed disqualification chain under keccak-dev-v1.
+ * leaf 0 = Hash(0, v0) or Hash(0, 0); later links Hash(v_i, v_{i+1}); last Hash(vLast, 0).
+ * @param {Array<string|bigint|number>} commitments currently disqualified identity commitments
+ */
+export function disqualificationChain(commitments) {
+  const sorted = (commitments || []).map(asUint);
+  for (const v of sorted) {
+    if (v === 0n) throw new Error('disqualified commitment must be non-zero');
+  }
+  sorted.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i] === sorted[i - 1]) throw new Error('duplicate disqualified commitment');
+  }
+  const chain = [0n, ...sorted];
+  const leaves = [];
+  for (let i = 0; i < chain.length; i += 1) {
+    const next = i + 1 < chain.length ? chain[i + 1] : 0n;
+    leaves.push(hashLeftRight(chain[i], next));
+  }
+  return { sorted, leaves };
+}
+
+/** Gap covering `target`, or null when `target` is disqualified. */
+export function disqualificationGap(commitments, target) {
+  const { sorted, leaves } = disqualificationChain(commitments);
+  const t = asUint(target);
+  if (sorted.includes(t)) return null;
+  const chain = [0n, ...sorted];
+  for (let i = 0; i < chain.length; i += 1) {
+    const next = i + 1 < chain.length ? chain[i + 1] : 0n;
+    if (chain[i] < t && (next === 0n || t < next)) {
+      return { index: i, low: chain[i], next, chainLeaf: leaves[i] };
+    }
+  }
+  return null;
+}
+
+export function disqualificationTree(depth, commitments) {
+  const tree = emptyTree(depth);
+  const { leaves } = disqualificationChain(commitments);
+  for (const leaf of leaves) insertLeaf(tree, leaf);
+  return tree;
 }
 
 export function insertLeaf(tree, leaf) {

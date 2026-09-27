@@ -28,7 +28,8 @@ contract Election is IElection {
     uint256 public participantCount;
     /// @notice Merkle root of registered ∩ ¬currently-disqualified, registration order.
     bytes32 public eligibleRoot;
-    /// @notice Append-only disqualification event log. Not the Node's current-DQ tree.
+    /// @notice Indexed chain of currently-disqualified commitments (non-membership).
+    ///         Empty set is the sentinel chain Hash(0, 0), not the zero word.
     bytes32 public disqualificationRoot;
 
     ElectionParams private _params;

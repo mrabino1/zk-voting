@@ -38,7 +38,7 @@ import {
   sameEthAddress,
   syncPersonEmails,
 } from './identity.mjs';
-import { emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
+import { disqualificationTree, emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isPlatformOperator, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
 import {
@@ -1016,7 +1016,7 @@ export class Store {
     }
     const shortCode = this._uniqueShortCode();
     const tree = emptyTree(params.treeDepth);
-    const dq = emptyTree(params.treeDepth);
+    const dq = disqualificationTree(params.treeDepth, []);
     let tallyScheme;
     try {
       tallyScheme = normalizeTallyScheme(params.tallyScheme, { opensBallots: params.opensBallots });
@@ -1248,12 +1248,19 @@ export class Store {
     return tree;
   }
 
+  /**
+   * Indexed chain of currently-disqualified commitments (keccak-dev-v1).
+   * Same shape the vote circuit proves against, under Poseidon when the
+   * proving path is on. Revoked rows are omitted, so the root is not an
+   * append-only event log.
+   */
   rebuildDisqualificationTree(election) {
-    const tree = emptyTree(election.treeDepth);
+    const commitments = [];
     for (const d of this.data.disqualifications) {
       if (String(d.electionId) !== String(election.id) || d.revokedAt) continue;
-      insertLeaf(tree, d.identityCommitment);
+      commitments.push(d.identityCommitment);
     }
+    const tree = disqualificationTree(election.treeDepth, commitments);
     election.disqualificationTree = tree;
     election.disqualificationRoot = tree.root;
   }

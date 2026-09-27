@@ -23,6 +23,8 @@ const {
   verifyInclusion,
   buildVoteWitness,
   voteWitnessToSnarkInput,
+  verifyDisqNonMembership,
+  disqGap,
   serializePublicInputs,
   provingPathEnabled,
   useMockVerifier,
@@ -135,9 +137,73 @@ describe("stand-in merkle (proving path)", () => {
     const scheme = HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
     const w = buildVoteWitness({ depth: 4, scheme });
     assert.equal(w.pathElements.length, 4);
+    assert.equal(w.disqPathElements.length, 4);
     assert.notEqual(w.root, w.leaf);
     assert.equal(verifyInclusion(w.leaf, w.pathElements, w.pathIndices, w.root, scheme), true);
+    assert.equal(
+      verifyDisqNonMembership(
+        w.leaf,
+        w.disqLow,
+        w.disqNext,
+        w.disqPathElements,
+        w.disqPathIndices,
+        w.disqRoot,
+        scheme,
+      ),
+      true,
+    );
+    assert.equal(w.disqLow, 0n);
+    assert.equal(w.disqNext, 0n);
     assert.equal(w.nullifier, computeNullifier(3n, 1n, scheme));
+  });
+
+  test("a disqualified voter's non-membership proof fails", () => {
+    const scheme = HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
+    const voter = identityCommitment(2n, 3n, scheme);
+    const other = identityCommitment(11n, 13n, scheme);
+    assert.notEqual(voter, other);
+    assert.throws(
+      () =>
+        buildVoteWitness({
+          depth: 4,
+          scheme,
+          disqualifiedCommitments: [voter],
+        }),
+      /disqualified voter cannot prove non-membership/,
+    );
+    assert.equal(disqGap([voter], voter, scheme), null);
+
+    const w = buildVoteWitness({
+      depth: 4,
+      scheme,
+      disqualifiedCommitments: [other],
+    });
+    assert.equal(
+      verifyDisqNonMembership(
+        w.leaf,
+        w.disqLow,
+        w.disqNext,
+        w.disqPathElements,
+        w.disqPathIndices,
+        w.disqRoot,
+        scheme,
+      ),
+      true,
+    );
+    assert.equal(
+      verifyDisqNonMembership(
+        other,
+        w.disqLow,
+        w.disqNext,
+        w.disqPathElements,
+        w.disqPathIndices,
+        w.disqRoot,
+        scheme,
+      ),
+      false,
+      "the disqualified commitment is a chain boundary, not a gap",
+    );
+    assert.equal(disqGap([other], other, scheme), null);
   });
 
   test("vote witness public inputs match serializePublicInputs order", () => {

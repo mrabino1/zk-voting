@@ -8,6 +8,7 @@ import {IHasher} from "./interfaces/IHasher.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
+import {DisqualificationSet} from "./tree/DisqualificationSet.sol";
 import {EligibleSet} from "./tree/EligibleSet.sol";
 import {IncrementalMerkleTree} from "./tree/IncrementalMerkleTree.sol";
 import {Roles} from "./Roles.sol";
@@ -132,10 +133,17 @@ contract VoterRegistry is IVoterRegistry {
     }
 
     function _publishEligibleRoot(uint256 electionId, IElection election) internal returns (bytes32 eligible) {
+        uint8 depth = election.params().treeDepth;
         uint256[] memory leaves = _eligibleLeaves(electionId);
-        eligible = bytes32(EligibleSet.rootOf(leaves, election.params().treeDepth, hasher));
+        eligible = bytes32(EligibleSet.rootOf(leaves, depth, hasher));
         _eligibleCounts[electionId] = leaves.length;
-        election.setRoots(eligible, election.disqualificationRoot());
+        bytes32 disq = election.disqualificationRoot();
+        // Unset root is not the empty indexed chain. Publish Hash(0, 0) so a
+        // vote can prove non-membership before anyone is disqualified.
+        if (disq == bytes32(0)) {
+            disq = bytes32(DisqualificationSet.rootOf(new uint256[](0), depth, hasher));
+        }
+        election.setRoots(eligible, disq);
     }
 
     function _eligibleLeaves(uint256 electionId) internal view returns (uint256[] memory leaves) {

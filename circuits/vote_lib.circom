@@ -2,7 +2,8 @@ pragma circom 2.0.0;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 //
-// Vote circuit: eligible-set membership + unique nullifier + ballot bind.
+// Vote circuit: eligible-set membership + disqualification non-membership
+// + unique nullifier + ballot bind.
 //
 // HASH_SCHEME: republic.hash.poseidon-bn254-x5-t3-v1 via identity.circom →
 // hasher/poseidon.circom (circomlib Poseidon(2)). Merkle paths on chain and in
@@ -14,17 +15,107 @@ pragma circom 2.0.0;
 //   [root, disqRoot, nullifier, ballotHash, electionId]
 //
 // Private witness:
-//   identityTrapdoor, nullifierSecret, pathElements, pathIndices
+//   identityTrapdoor, nullifierSecret,
+//   pathElements, pathIndices,                         // eligible inclusion
+//   disqLow, disqNext, disqPathElements, disqPathIndices
 //
-// The eligible Merkle root is `registered ∩ ¬currently-disqualified`,
-// rebuilt in registration order (VoterRegistry / Node freeze). Membership
-// in that tree is the exclusion: a disqualified leaf has no path, so this
-// inclusion constraint fails. This circuit does NOT add a separate
-// non-membership proof against the disqualification event log.
-// disqRoot is bound so BallotInbox can reject a proof that does not name
-// the live disqualification log. See docs/ARCHITECTURE.md.
+// Disqualification non-membership (indexed chain against disqRoot)
+// ---------------------------------------------------------------
+// disqRoot is the incremental Merkle root of a sorted chain of the
+// currently-disqualified identity commitments, bookended by a 0 sentinel.
+// Commitments of 0 are rejected on chain and are not valid leaves.
+//
+//   sorted = v0 < v1 < … < v_{k-1}     (k = 0 when nobody is disqualified)
+//   leaf 0     = Hash(0, v0)           or Hash(0, 0) when k = 0
+//   leaf i+1   = Hash(v_i, v_{i+1})    for i < k-1
+//   leaf k     = Hash(v_{k-1}, 0)      0 means "no successor"
+//
+// The prover shows one chain leaf Hash(disqLow, disqNext) included under
+// disqRoot such that:
+//
+//   disqLow < identityCommitment
+//   AND (disqNext == 0 OR identityCommitment < disqNext)
+//
+// A commitment that appears in the chain is a boundary, not a gap, so the
+// range constraint is unsatisfiable. Comparison is integer order on the
+// bn254 scalar field (every signal is < p < 2^254).
+//
+// Soundness is relative to a well-formed chain. The registry must insert
+// exactly those links. An officer who omits a person from the chain can
+// publish a root that does not bar them; that is the same roll trust as
+// eligibleRoot. The circuit no longer treats disqRoot as an unbound label.
+//
+// Eligible membership is still required: root is
+// registered ∩ ¬currently-disqualified, in registration order.
+// See docs/ARCHITECTURE.md.
 
 include "./identity.circom";
+
+// n-bit little-endian decomposition. n <= 254 so every field element fits
+// (bn254 prime < 2^254). `var` doublings stay inside the compiler's field
+// arithmetic for the linear combination; the bit hints are witnesses.
+template Num2Bits(n) {
+    signal input in;
+    signal output out[n];
+
+    var lc = 0;
+    var e2 = 1;
+    for (var i = 0; i < n; i++) {
+        out[i] <-- (in >> i) & 1;
+        out[i] * (out[i] - 1) === 0;
+        lc += out[i] * e2;
+        e2 = e2 + e2;
+    }
+    lc === in;
+}
+
+// 1 iff a < b as integers in [0, 2^254).
+template FieldLessThan() {
+    signal input a;
+    signal input b;
+    signal output out;
+
+    component na = Num2Bits(254);
+    component nb = Num2Bits(254);
+    na.in <== a;
+    nb.in <== b;
+
+    signal eqPrefix[255];
+    signal ltAcc[255];
+    eqPrefix[254] <== 1;
+    ltAcc[254] <== 0;
+
+    signal aLtBBit[254];
+    signal diff[254];
+    signal diffSq[254];
+    signal bitEq[254];
+    signal eqTimesLt[254];
+    signal eqTimesBitEq[254];
+
+    for (var i = 0; i < 254; i++) {
+        var bit = 253 - i;
+        aLtBBit[i] <== (1 - na.out[bit]) * nb.out[bit];
+        diff[i] <== na.out[bit] - nb.out[bit];
+        diffSq[i] <== diff[i] * diff[i];
+        bitEq[i] <== 1 - diffSq[i];
+        eqTimesLt[i] <== eqPrefix[bit + 1] * aLtBBit[i];
+        ltAcc[bit] <== ltAcc[bit + 1] + eqTimesLt[i];
+        eqTimesBitEq[i] <== eqPrefix[bit + 1] * bitEq[i];
+        eqPrefix[bit] <== eqTimesBitEq[i];
+    }
+
+    out <== ltAcc[0];
+}
+
+template IsZero() {
+    signal input in;
+    signal output out;
+
+    signal inv;
+    inv <-- in == 0 ? 0 : 1 / in;
+    out <== 1 - in * inv;
+    in * out === 0;
+}
 
 // Merkle inclusion. pathIndices[i] is 0 (current is left child) or 1
 // (current is right child). Sibling is pathElements[i].
@@ -76,6 +167,11 @@ template Vote(levels) {
     signal input nullifierSecret;
     signal input pathElements[levels];
     signal input pathIndices[levels];
+    // Indexed-chain non-membership witness against disqRoot.
+    signal input disqLow;
+    signal input disqNext;
+    signal input disqPathElements[levels];
+    signal input disqPathIndices[levels];
 
     // ---- public (declaration order == Groth16 / BallotInbox publicInputs) ----
     // serializePublicInputs: [root, disqRoot, nullifier, ballotHash, electionId]
@@ -85,7 +181,7 @@ template Vote(levels) {
     signal input ballotHash;
     signal input electionId;
 
-    // Leaf = Hash(trapdoor, nullifierSecret). Poseidon preferred in production.
+    // Leaf = Hash(trapdoor, nullifierSecret). Poseidon, matching the demo passkey leaf.
     component identity = IdentityCommitment();
     identity.identityTrapdoor <== identityTrapdoor;
     identity.nullifierSecret <== nullifierSecret;
@@ -104,21 +200,36 @@ template Vote(levels) {
     nullifierCheck.electionId <== electionId;
     nullifierCheck.nullifier === nullifier;
 
-    // Bind disqRoot into the constraint system so a proof is specific to
-    // both the eligible tree and the disqualification log the contract
-    // currently publishes. Exclusion is membership in `root`
-    // (eligible = registered ∩ ¬currently-disqualified). There is no
-    // non-membership gate on the disqualification log in this template.
-    // Hash(disqRoot, computedRoot) must equal Hash(disqRoot, public root).
-    component disqBindComputed = Hasher();
-    disqBindComputed.a <== disqRoot;
-    disqBindComputed.b <== merkle.root;
+    // Non-membership: Hash(disqLow, disqNext) is in the disqualification chain,
+    // and the identity commitment sits strictly inside that gap.
+    component chainLeaf = Hasher();
+    chainLeaf.a <== disqLow;
+    chainLeaf.b <== disqNext;
 
-    component disqBindPublic = Hasher();
-    disqBindPublic.a <== disqRoot;
-    disqBindPublic.b <== root;
+    component disqMerkle = MerkleTreeInclusionProof(levels);
+    disqMerkle.leaf <== chainLeaf.out;
+    for (var j = 0; j < levels; j++) {
+        disqMerkle.pathElements[j] <== disqPathElements[j];
+        disqMerkle.pathIndices[j] <== disqPathIndices[j];
+    }
+    disqMerkle.root === disqRoot;
 
-    disqBindComputed.out === disqBindPublic.out;
+    component lowLtLeaf = FieldLessThan();
+    lowLtLeaf.a <== disqLow;
+    lowLtLeaf.b <== identity.commitment;
+    lowLtLeaf.out === 1;
+
+    component nextIsZero = IsZero();
+    nextIsZero.in <== disqNext;
+
+    component leafLtNext = FieldLessThan();
+    leafLtNext.a <== identity.commitment;
+    leafLtNext.b <== disqNext;
+
+    // next == 0 OR commitment < next. A member of the chain is not in any gap.
+    signal gapHigh;
+    gapHigh <== (1 - nextIsZero.out) * leafLtNext.out;
+    nextIsZero.out + gapHigh === 1;
 
     // ballotHash is the public commitment / hash of the encrypted ballot
     // (ElGamal or hashed commitment). Choice bits stay off this circuit

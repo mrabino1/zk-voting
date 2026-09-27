@@ -9,20 +9,22 @@ import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IHasher} from "./interfaces/IHasher.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 import {ReasonCodes} from "./ReasonCodes.sol";
+import {DisqualificationSet} from "./tree/DisqualificationSet.sol";
 
 /// @title DisqualificationRegistry
-/// @notice Per-election disqualification set plus an IncrementalMerkleTree log.
+/// @notice Per-election disqualification set. `merkleRoot` is the indexed chain
+///         the vote circuit uses for non-membership (`DisqualificationSet`).
 ///
-/// @dev Tombstones
-///      Incremental Merkle trees cannot delete a leaf. A revoke therefore:
-///        1. Sets `isDisqualified[election][commitment] = false` (officer source of truth).
-///        2. Inserts a **revocation leaf** Poseidon/keccak(commitment, reason, revokedFlag=1).
-///      Officers read the mapping. The tree root is an append-only commitment
-///      to (commitment, reason, revokedFlag) so the vote circuit can bind `disqRoot`.
-///      After each append, the voter registry rebuilds `eligibleRoot` as
-///      registered ∩ ¬currently-disqualified. That rebuilt root — not a
-///      non-membership proof inside the disqualification log — is what blocks
-///      a disqualified commitment from an honest vote proof.
+/// @dev The mapping `isDisqualified` is the officer source of truth. Reason
+///      codes stay on the mapping and on `Disqualified` / `DisqualificationRevoked`
+///      events. The tree is not an append-only event log: each disqualify or
+///      revoke rebuilds the sorted chain of commitments that are currently
+///      disqualified. A revoke drops the commitment from that chain, so the
+///      root changes and a later vote can prove a gap again.
+///
+///      After each rebuild, the voter registry republishes `eligibleRoot` as
+///      registered ∩ ¬currently-disqualified. The vote circuit proves both
+///      membership in that root and non-membership in this chain.
 ///
 ///      Tree construction matches `src/tree/IncrementalMerkleTree.sol`:
 ///      depth 16–32, zeros precomputed via `IHasher.hashLeftRight`.
@@ -59,6 +61,9 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
     mapping(uint256 => mapping(uint256 => bool)) private _isDisqualified;
     mapping(uint256 => mapping(uint256 => uint16)) private _reasonCodeOf;
+    /// @dev Currently disqualified commitments. Order is not significant; the
+    ///      published tree sorts them before hashing the indexed chain.
+    mapping(uint256 => uint256[]) private _active;
 
     mapping(uint256 => Tree) private _trees;
 
@@ -93,15 +98,15 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
         _isDisqualified[electionId][identityCommitment] = true;
         _reasonCodeOf[electionId][identityCommitment] = reasonCode;
+        _active[electionId].push(identityCommitment);
 
-        _appendLeaf(electionId, election, _eventLeaf(identityCommitment, reasonCode, false));
+        _publishChain(electionId, election);
 
         emit Disqualified(electionId, identityCommitment, reasonCode, evidenceHash);
     }
 
     /// @inheritdoc IDisqualificationRegistry
-    /// @dev Tombstone: mapping cleared, a revocation leaf is appended. The original
-    ///      disqualification leaf remains in the tree (append-only).
+    /// @dev Clears the mapping and rebuilds the indexed chain without this commitment.
     function revoke(uint256 electionId, uint256 identityCommitment, bytes32 evidenceHash) external {
         if (identityCommitment == 0) revert ZeroCommitment();
 
@@ -111,11 +116,11 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
         if (!_isDisqualified[electionId][identityCommitment]) revert NotDisqualified();
 
-        uint16 reason = _reasonCodeOf[electionId][identityCommitment];
         _isDisqualified[electionId][identityCommitment] = false;
         _reasonCodeOf[electionId][identityCommitment] = ReasonCodes.NONE;
+        _removeActive(electionId, identityCommitment);
 
-        _appendLeaf(electionId, election, _eventLeaf(identityCommitment, reason, true));
+        _publishChain(electionId, election);
 
         emit DisqualificationRevoked(electionId, identityCommitment, evidenceHash);
     }
@@ -166,21 +171,31 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         if (election.rollFrozen() && !lateUpdateAllowed[electionId]) revert RollFrozen();
     }
 
-    /// @dev Poseidon/keccak(commitment, reason, revokedFlag) folded through IHasher.
-    function _eventLeaf(uint256 identityCommitment, uint16 reasonCode, bool revoked) internal view returns (uint256) {
-        uint256 flag = revoked ? 1 : 0;
-        uint256 inner = hasher.hashLeftRight(uint256(reasonCode), flag);
-        return hasher.hashLeftRight(identityCommitment, inner);
+    function _removeActive(uint256 electionId, uint256 commitment) internal {
+        uint256[] storage arr = _active[electionId];
+        uint256 n = arr.length;
+        for (uint256 i; i < n; ++i) {
+            if (arr[i] == commitment) {
+                arr[i] = arr[n - 1];
+                arr.pop();
+                return;
+            }
+        }
     }
 
-    function _appendLeaf(uint256 electionId, IElection election, uint256 leaf) internal {
+    /// @dev Rebuild the indexed chain and publish it as `disqualificationRoot`.
+    function _publishChain(uint256 electionId, IElection election) internal {
+        uint8 depth = election.params().treeDepth;
+        if (depth < MIN_DEPTH || depth > MAX_DEPTH) revert InvalidTreeDepth();
+        uint256[] memory sorted = _sortedActive(electionId);
+        uint256[] memory leaves = DisqualificationSet.chainLeaves(sorted, hasher);
+
         Tree storage tree = _trees[electionId];
-        if (tree.depth == 0) {
-            uint8 depth = election.params().treeDepth;
-            if (depth < MIN_DEPTH || depth > MAX_DEPTH) revert InvalidTreeDepth();
-            _initTree(tree, depth);
+        _resetTree(tree, depth);
+        for (uint256 i; i < leaves.length; ++i) {
+            _insert(tree, leaves[i]);
         }
-        _insert(tree, leaf);
+
         bytes32 eligible = election.eligibleRoot();
         address registry = _voterRegistry();
         if (registry != address(0)) {
@@ -189,10 +204,35 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         election.setRoots(eligible, bytes32(tree.currentRoot));
     }
 
+    function _sortedActive(uint256 electionId) internal view returns (uint256[] memory out) {
+        uint256[] storage src = _active[electionId];
+        uint256 n = src.length;
+        out = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            out[i] = src[i];
+        }
+        for (uint256 i = 1; i < n; ++i) {
+            uint256 key = out[i];
+            uint256 j = i;
+            while (j > 0 && out[j - 1] > key) {
+                out[j] = out[j - 1];
+                unchecked {
+                    --j;
+                }
+            }
+            out[j] = key;
+        }
+    }
+
     function _voterRegistry() internal view returns (address) {
         (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
+    }
+
+    function _resetTree(Tree storage tree, uint8 depth) internal {
+        _initTree(tree, depth);
+        tree.nextIndex = 0;
     }
 
     function _initTree(Tree storage tree, uint8 depth) internal {

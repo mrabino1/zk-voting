@@ -16,15 +16,17 @@
  * - getAddress() therefore returns `0x` + first 20 bytes of SHA-256(seed) and
  *   labels the scheme `republic-local-address`.
  * - Production (Ethereum) addresses are keccak256(uncompressed secp256k1 pubkey)[12:32].
- *   A compact keccak256 is included here for commitments, ballot hashes, and docs.
+ *   A compact keccak256 remains for ballot hashes. The identity commitment is Poseidon.
  * - NEVER render a seed phrase. The seed never leaves RAM except as AES-GCM ciphertext
  *   in IndexedDB. signUserOp() unwraps, HMAC-signs, then zeroes the seed.
  *
- * IndexedDB `republic-wallet` version 2. v1 wraps derived the ZK identity from the
- * account seed (weaker than the spec) and used a random PRF salt, so they cannot be
- * unwrapped under the new domain salts. Reset the demo wallet and create a new passkey.
+ * IndexedDB `republic-wallet` schema version 2. Record `version` 3 stores a Poseidon
+ * identity commitment (`prf-hkdf-poseidon-v3`). v1 wraps derived the ZK identity from
+ * the account seed. v2 stored keccak256(trapdoor || nullifierSecret). Neither matches
+ * the vote circuit. Reset the demo wallet and create a new passkey.
  */
 
+import { POSEIDON_HASH_SCHEME, poseidonCommitmentHex } from "./poseidon.js";
 import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
 const DB_NAME = "republic-wallet";
 const DB_VERSION = 2;
@@ -36,8 +38,8 @@ export const ACCOUNT_PRF_DOMAIN = "republic:account:v1";
 export const IDENTITY_PRF_DOMAIN = "republic:identity:v1";
 export const ACCOUNT_HKDF_INFO = "republic-secp256k1-wrap";
 export const IDENTITY_HKDF_INFO = "trapdoor+nullifier";
-export const WALLET_RECORD_VERSION = 2;
-export const IDENTITY_SCHEME = "prf-hkdf-identity-v2";
+export const WALLET_RECORD_VERSION = 3;
+export const IDENTITY_SCHEME = "prf-hkdf-poseidon-v3";
 export const DEFAULT_CHAIN_ID = 27427;
 export const DEFAULT_JURISDICTION_ID = "demo";
 
@@ -47,7 +49,7 @@ const FALLBACK_IDENTITY_INFO = "republic-prf-fallback-identity-v1";
 const PRF_ENABLE_INFO = "republic:prf-enable:v1";
 
 export const STALE_WALLET_MESSAGE =
-  "This browser has a v1 passkey wrap (IndexedDB republic-wallet). v1 derived the ZK trapdoor from the same seed as the account key, which is weaker than docs/PASSKEYS.md. The demo cannot migrate that wrap in place: v1 used a random PRF salt and a single HKDF domain, so the new account/identity salts cannot unwrap it. Reset the device wallet and create a new passkey. The local address and identity commitment will change; any prior demo roll entry will not match.";
+  "This browser has a v1 passkey wrap or a pre-Poseidon identity commitment (IndexedDB republic-wallet). v1 derived the ZK trapdoor from the same seed as the account key. v2 hashed the leaf with keccak256. The demo leaf is now Poseidon(trapdoor, nullifierSecret), the same hash as the vote circuit. Reset the device wallet and create a new passkey. The identity commitment will change; any prior demo roll entry will not match.";
 
 export const ADDRESS_SCHEME = "republic-local-address";
 export const PRODUCTION_ADDRESS_NOTE =
@@ -467,12 +469,17 @@ export async function deriveIdentitySecrets(prfIdentityOutput) {
   });
   const trapdoor = bits.subarray(0, 32);
   const nullifierSecret = bits.subarray(32, 64);
-  const commitment = "0x" + bytesToHex(keccak256(concatBytes(trapdoor, nullifierSecret)));
+  // 32-byte HKDF outputs are reduced mod the bn254 scalar field inside Poseidon,
+  // matching PoseidonT3.hashLeftRight and the vote circuit.
+  const commitment = poseidonCommitmentHex(
+    BigInt(`0x${bytesToHex(trapdoor)}`),
+    BigInt(`0x${bytesToHex(nullifierSecret)}`),
+  );
   return {
     trapdoor,
     nullifierSecret,
     commitment,
-    hasher: "keccak256(trapdoor || nullifierSecret) demo; production circuits use Poseidon",
+    hasher: POSEIDON_HASH_SCHEME,
   };
 }
 

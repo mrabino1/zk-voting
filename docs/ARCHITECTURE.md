@@ -145,7 +145,7 @@ timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
   and local instant demo may set `0`.
 
-Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, and Solidity `PoseidonHasher` share Poseidon(2) (`republic.hash.poseidon-bn254-x5-t3-v1`). Unit-test trees and the demo passkey commitment stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
+Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`republic.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
 ### Person (unique) vs one active Ethereum address
 
@@ -824,7 +824,7 @@ on the Node and in Foundry).
 | Path | What publishes the eligible root |
 | --- | --- |
 | Node | `rebuildEligibleTree` on register, disqualify, and revoke. `POST /api/elections/:id/freeze` copies it to `frozenEligibleRoot`. While the roll is frozen and `lateUpdateAllowed` is false, votes bind to that snapshot. |
-| Chain | `VoterRegistry.merkleRoot` stays the append-only registration roll (disqualified commitments remain). Each register republishes `Election.eligibleRoot` from the intersection. `disqualify` / `revoke` rebuild that root, then publish the new disqualification-log root. After `freezeRoll`, those writes revert unless `lateUpdateAllowed`. |
+| Chain | `VoterRegistry.merkleRoot` stays the append-only registration roll (disqualified commitments remain). Each register republishes `Election.eligibleRoot` from the intersection and, if unset, the empty disqualification sentinel. `disqualify` / `revoke` rebuild that eligible root and the indexed disqualification chain. After `freezeRoll`, those writes revert unless `lateUpdateAllowed`. |
 
 `BallotInbox` requires `publicInputs[0] == eligibleRoot` and
 `publicInputs[1] == disqualificationRoot`. A membership witness for a
@@ -861,35 +861,45 @@ the vote or envelope.
 
 ### Circuit constraint plan
 
-`vote.circom` already requires Merkle inclusion of
-`Hash(trapdoor, nullifierSecret)` under public `root`. It does **not** add a
-second non-membership proof against the disqualification log. Exclusion is
-that `root` is the rebuilt eligible set, so a disqualified leaf has no path.
-`disqRoot` stays a public bind: the proof names the log the inbox publishes,
-and `Hash(disqRoot, root)` is constrained so the signal cannot be dropped.
+`vote.circom` requires both:
 
-Foundry CI has no Groth16 key. `MockVerifier.armInclusionWitness` plus
-`setInclusionHasher` makes `verifyProof` evaluate that same inclusion under
-`publicInputs[0]`. After a coded disqualification the disqualified witness
-returns false and `submitVote` reverts `InvalidProof`. A still-eligible
-witness against the rebuilt root verifies. Unarmed proofs still follow
-`acceptAll`.
+1. Merkle inclusion of `Hash(trapdoor, nullifierSecret)` under public `root`
+   (the eligible set).
+2. Non-membership of that same leaf under public `disqRoot`.
+
+`disqRoot` is an indexed chain, not an event log. Sorted currently-disqualified
+commitments `v0 < v1 < … < vLast` become leaves
+
+```text
+Hash(0, v0), Hash(v0, v1), …, Hash(vLast, 0)
+```
+
+The empty set is the one leaf `Hash(0, 0)`. The private witness is one link
+`(disqLow, disqNext)` plus its Merkle path. The circuit enforces
+`disqLow < leaf` and (`disqNext == 0` or `leaf < disqNext`). A disqualified
+leaf is a boundary of that chain, so no witness satisfies the range check.
+Reason codes stay on the `Disqualified` event and the officer mapping; they
+are not hashed into the chain.
+
+The Node builds the same chain with `keccak-dev-v1`. The circuit and a
+`PoseidonHasher` deployment build it with Poseidon. Those roots differ.
+Foundry unit tests use `KeccakHasher` and arm `MockVerifier` to evaluate the
+same gap.
+
+`MockVerifier.armInclusionWitness` checks inclusion under `publicInputs[0]`.
+`armNonMembershipWitness` checks the gap under `publicInputs[1]`. After a
+coded disqualification the disqualified witness returns false and
+`submitVote` reverts `InvalidProof`. Unarmed proofs still follow `acceptAll`.
 
 ### Remaining ZK gap
 
-- No in-circuit non-membership of the disqualification log. A publisher who
-  set `eligibleRoot` back to the registration roll would let a disqualified
-  person prove again. These contracts no longer do that. The circuit does
-  not independently check it. A full non-membership gate needs another Merkle
-  path and a tree whose leaves are the identity commitments (the on-chain log
-  stores `Hash(commitment, Hash(reason, revokedFlag))` instead).
-- On-chain `disqualificationRoot` is that append-only event log. The Node's
-  `disqualificationRoot` is a rebuild of currently-disqualified identity
-  commitments. Do not treat those two byte strings as the same root.
-- `MockVerifier` without an armed witness does not evaluate the witness. A
-  dummy proof that copies the published roots still verifies. `VoteVerifier`
-  with a real key is what makes inclusion binding. This layer does not
-  replace that key or Poseidon.
+- Unarmed `MockVerifier` does not evaluate the witness. A dummy proof that
+  copies the published roots still verifies. The committed Vote(20) Groth16
+  verifying key is **UNTRUSTED** (known entropy, no ceremony).
+- Soundness of the gap is relative to a well-formed chain. An officer who
+  leaves a person out of the chain publishes a root that does not bar them.
+  That is the same roll trust as `eligibleRoot`.
+- Do not mix a keccak chain root with a Poseidon proof.
 
 ### Pages (vanilla JS, served by Express)
 

@@ -6,6 +6,7 @@ pragma solidity ^0.8.24;
 import {IElection} from "../src/interfaces/IElection.sol";
 import {ReasonCodes} from "../src/ReasonCodes.sol";
 import {BallotInbox} from "../src/BallotInbox.sol";
+import {DisqualificationSet} from "../src/tree/DisqualificationSet.sol";
 import {EligibleSet} from "../src/tree/EligibleSet.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
@@ -160,6 +161,94 @@ contract EligibleDisqualificationTest is Deployer {
         inbox.submitVote(electionId, a, b, c, publishedOk, encOk);
         assertTrue(inbox.nullifierUsed(electionId, nullifierOk));
         assertEq(inbox.acceptedBallots(electionId), 1);
+    }
+
+    /// @notice A disqualified commitment has no indexed-chain gap under disqRoot.
+    ///         Arming that witness makes verifyProof return false, including when
+    ///         the eligible root was stuffed back to the full registration roll.
+    function testDisqualifiedVoterNonMembershipProofFails() public {
+        registerVoter(electionId, A);
+        registerVoter(electionId, B);
+
+        bytes32 emptyDisq = bytes32(DisqualificationSet.rootOf(new uint256[](0), Fixtures.TREE_DEPTH, hasher));
+        assertEq(IElection(election).disqualificationRoot(), emptyDisq, "empty set is the sentinel chain");
+
+        vm.prank(officer);
+        disqualification.disqualify(electionId, B, ReasonCodes.COURT_ORDER, keccak256("nm"));
+
+        uint256[] memory sorted = new uint256[](1);
+        sorted[0] = B;
+        bytes32 disq = IElection(election).disqualificationRoot();
+        assertEq(disq, bytes32(DisqualificationSet.rootOf(sorted, Fixtures.TREE_DEPTH, hasher)));
+
+        uint256[] memory chain = DisqualificationSet.chainLeaves(sorted, hasher);
+        DisqualificationSet.Gap memory gapA = DisqualificationSet.gapFor(sorted, A);
+        EligibleSet.Proof memory gapProof =
+            EligibleSet.inclusionProof(chain, gapA.index, Fixtures.TREE_DEPTH, hasher);
+        assertTrue(
+            DisqualificationSet.verifyNonMembership(
+                A, gapA.low, gapA.next, gapProof.pathElements, gapProof.pathIndices, uint256(disq), hasher
+            )
+        );
+
+        vm.expectRevert(DisqualificationSet.NotAGap.selector);
+        this.gapForDisqualified(sorted, B);
+        assertFalse(
+            DisqualificationSet.verifyNonMembership(
+                B, gapA.low, gapA.next, gapProof.pathElements, gapProof.pathIndices, uint256(disq), hasher
+            ),
+            "disqualified voter is not inside the published gap"
+        );
+
+        uint256[] memory rollLeaves = new uint256[](2);
+        rollLeaves[0] = A;
+        rollLeaves[1] = B;
+        EligibleSet.Proof memory rollProof = EligibleSet.inclusionProof(rollLeaves, 1, Fixtures.TREE_DEPTH, hasher);
+
+        freezeRoll(election);
+        warpOpen(election);
+
+        uint256 nullifier = uint256(keccak256("dq-nonmember"));
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        bytes memory enc = Fixtures.encryptedBallot(nullifier);
+
+        verifier.armInclusionWitness(nullifier, B, rollProof.pathElements, rollProof.pathIndices);
+        verifier.armNonMembershipWitness(
+            nullifier, B, gapA.low, gapA.next, gapProof.pathElements, gapProof.pathIndices
+        );
+
+        uint256[] memory forged = Fixtures.publicInputs(
+            bytes32(rollProof.root), disq, nullifier, Fixtures.ballotHash(enc), electionId
+        );
+        assertFalse(verifier.verifyProof(a, b, c, forged), "disqualified voter's proof fails");
+
+        uint256[] memory published = voteInputs(electionId, election, nullifier, enc);
+        assertFalse(verifier.verifyProof(a, b, c, published));
+        vm.expectRevert(BallotInbox.InvalidProof.selector);
+        vm.prank(relayer);
+        inbox.submitVote(electionId, a, b, c, published, enc);
+        assertFalse(inbox.nullifierUsed(electionId, nullifier));
+
+        uint256[] memory eligibleLeaves = new uint256[](1);
+        eligibleLeaves[0] = A;
+        EligibleSet.Proof memory okProof =
+            EligibleSet.inclusionProof(eligibleLeaves, 0, Fixtures.TREE_DEPTH, hasher);
+        uint256 nullifierOk = uint256(keccak256("still-eligible-gap"));
+        bytes memory encOk = Fixtures.encryptedBallot(nullifierOk);
+        verifier.armInclusionWitness(nullifierOk, A, okProof.pathElements, okProof.pathIndices);
+        verifier.armNonMembershipWitness(
+            nullifierOk, A, gapA.low, gapA.next, gapProof.pathElements, gapProof.pathIndices
+        );
+        uint256[] memory publishedOk = voteInputs(electionId, election, nullifierOk, encOk);
+        assertTrue(verifier.verifyProof(a, b, c, publishedOk), "eligible voter proves the gap");
+        vm.prank(relayer);
+        inbox.submitVote(electionId, a, b, c, publishedOk, encOk);
+        assertTrue(inbox.nullifierUsed(electionId, nullifierOk));
+    }
+
+    /// @dev External wrapper so `vm.expectRevert` can see the library revert.
+    function gapForDisqualified(uint256[] calldata sorted, uint256 target) external pure {
+        DisqualificationSet.gapFor(sorted, target);
     }
 
     /// @notice Remaining gap: MockVerifier does not see a leaf unless a test arms

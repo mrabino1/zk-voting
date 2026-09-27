@@ -12,7 +12,7 @@ Circom 2 circuits for Republic / zk-voting. The vote hasher is **Poseidon(2)** (
 | [`hasher/poseidon.circom`](./hasher/poseidon.circom) | Selected `Hasher()` — Poseidon(2). Not a ceremony |
 | [`hasher/standin.circom`](./hasher/standin.circom) | Legacy bilinear mix. **Not included** |
 | [`mains/vote_smoke.circom`](./mains/vote_smoke.circom) | `Vote(4)` for the untrusted Groth16 fixture only |
-| [`vote.circom`](./vote.circom) | Eligible-set Merkle membership + unique nullifier + ballot / disqualification-root bind |
+| [`vote.circom`](./vote.circom) | Eligible-set membership + disqualification-chain non-membership + nullifier + ballot bind |
 | [`tally.circom`](./tally.circom) | Published per-option counts match accepted ballots (plaintext / mock-homomorphic path) |
 | [`scripts/proving-path.mjs`](./scripts/proving-path.mjs) | Compile, untrusted ptau + Groth16, export verifier, demo prove |
 
@@ -22,7 +22,7 @@ Circom 2 circuits for Republic / zk-voting. The vote hasher is **Poseidon(2)** (
 
 `identity.circom` includes `hasher/poseidon.circom`. `Hasher()` is circomlib-compatible Poseidon(2). The same function is `poseidonHashLeftRight` in `@zk-voting/proof-helpers` and `PoseidonT3.hashLeftRight` in Solidity.
 
-Foundry unit tests and the demo Node tree still use `KeccakHasher` (`keccak-dev-v1`). The demo passkey screen still shows a keccak commitment. `poseidonCommitmentHex` in `apps/node/public/poseidon.js` is the leaf that matches the circuit. Do not mix the two in one tree.
+Foundry unit tests and the demo Node tree still use `KeccakHasher` (`keccak-dev-v1`) for Merkle links. The demo passkey screen uses `poseidonCommitmentHex` (`Poseidon(trapdoor, nullifierSecret)`), the same leaf as the circuit. Do not mix keccak leaves into a Poseidon tree.
 
 `hasher/standin.circom` (`out = a + b + a*b`) is legacy and not included. **There is no ceremony.** Local zkeys are untrusted.
 
@@ -36,6 +36,8 @@ Foundry unit tests and the demo Node tree still use `KeccakHasher` (`keccak-dev-
 - `nullifierSecret`
 - `pathElements[levels]`
 - `pathIndices[levels]` (0 = current is left child, 1 = right)
+- `disqLow`, `disqNext` — indexed-chain gap around the leaf
+- `disqPathElements[levels]`, `disqPathIndices[levels]` — inclusion of `Hash(disqLow, disqNext)` under `disqRoot`
 
 Public instance — **same order** as `@zk-voting/proof-helpers` `serializePublicInputs` and `IBallotInbox.submitVote`:
 
@@ -45,10 +47,10 @@ Public instance — **same order** as `@zk-voting/proof-helpers` `serializePubli
 
 Constraints:
 
-1. `leaf = Hash(identityTrapdoor, nullifierSecret)` (Poseidon in production).
+1. `leaf = Hash(identityTrapdoor, nullifierSecret)` (Poseidon).
 2. Merkle inclusion of `leaf` under `root` (the **eligible** tree: registered ∩ ¬disqualified).
 3. `nullifier = Hash(nullifierSecret, electionId)`.
-4. `disqRoot` is bound into the constraint system so a proof is specific to the live disqualification log the contract publishes. A disqualified person cannot produce an accepting membership proof against the eligible root, because that root is rebuilt without them (`registered ∩ ¬currently-disqualified`). This circuit does not also prove non-membership in the disqualification log. `MockVerifier` checks that inclusion only when a test arms the witness; otherwise it still accepts any well-shaped proof. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
+4. Non-membership of `leaf` in the disqualification chain under `disqRoot`. The chain is sorted currently-disqualified commitments with a 0 sentinel: `Hash(0, v0) … Hash(vLast, 0)`, or `Hash(0, 0)` when nobody is disqualified. The witness is one link whose open interval contains `leaf`. A disqualified leaf is a boundary, so the range check fails. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). `MockVerifier` evaluates this only when a test arms the witness.
 5. `ballotHash` is a public commitment to the encrypted ballot. Choice bits are not plaintext public inputs.
 
 The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier; not last-vote-counts). The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.
@@ -113,7 +115,7 @@ circom tally.circom --r1cs --wasm --sym -o build
 # identity.circom has no main; it is included by the others.
 
 # UNTRUSTED ptau — anyone who ran this knows the toxic waste.
-# Power 16 is the Vote(20) default. The Vote(4) smoke fixture uses power 13.
+# Power 16 is the Vote(20) default. The Vote(4) smoke fixture uses power 14.
 snarkjs powersoftau new bn128 16 build/pot16_0000.ptau -v
 snarkjs powersoftau contribute build/pot16_0000.ptau build/pot16_0001.ptau \
   --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony -v
@@ -142,6 +144,10 @@ Witness inputs for `vote` (JSON for snarkjs) look like:
   "nullifierSecret": "…",
   "pathElements": ["…", "…"],
   "pathIndices": ["0", "1"],
+  "disqLow": "0",
+  "disqNext": "0",
+  "disqPathElements": ["…"],
+  "disqPathIndices": ["0"],
   "root": "…",
   "disqRoot": "…",
   "nullifier": "…",

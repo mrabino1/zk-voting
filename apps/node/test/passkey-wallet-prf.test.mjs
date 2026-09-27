@@ -37,7 +37,7 @@ const VECTORS = {
   wrapKey: '6ca996ea0e238fcba6f7df6e4b9a1c9751b9e2f3d4d54226a215a9e3b3cae658',
   trapdoor: '47d056fe5167727938ff04f1418d5b6392cd0e229507d3823c99a30897a1cddf',
   nullifierSecret: 'f799aaeb233a9818b15ec079ecdfe1a7d922f7b05108322ea12841b58d7ea2ab',
-  commitment: '0x64bf9260086772f0a30e42c687b52569bce194aa384613054ed3ed362c661ed7',
+  commitment: '0x2a72c42b0d52e0f7be848c88043ccad13d5fc1cddaa938c77425e3303d745b0a',
 };
 
 function hexEq(a, b) {
@@ -164,12 +164,20 @@ describe('passkey PRF/HKDF domain separation', () => {
     await assert.rejects(() => unwrapSeedWithAccountPrf(PRF_IDENTITY, wrapped));
   });
 
-  test('commitment is keccak256(trapdoor || nullifierSecret)', async () => {
+  test('commitment is Poseidon(trapdoor, nullifierSecret), not keccak', async () => {
+    const { poseidonCommitmentHex } = await import('../public/poseidon.js');
     const ident = await deriveIdentitySecrets(PRF_IDENTITY);
+    const expected = poseidonCommitmentHex(
+      BigInt(`0x${bytesToHex(ident.trapdoor)}`),
+      BigInt(`0x${bytesToHex(ident.nullifierSecret)}`),
+    );
+    assert.equal(ident.commitment, expected);
+    assert.equal(ident.hasher, 'republic.hash.poseidon-bn254-x5-t3-v1');
     const packed = new Uint8Array(64);
     packed.set(ident.trapdoor, 0);
     packed.set(ident.nullifierSecret, 32);
-    assert.equal('0x' + bytesToHex(keccak256(packed)), ident.commitment);
+    assert.notEqual('0x' + bytesToHex(keccak256(packed)), ident.commitment);
+    assert.equal(ident.commitment, VECTORS.commitment);
   });
 
   test('buildPrfEvalExtension exposes first and second salts for login merge', async () => {
@@ -185,8 +193,9 @@ describe('passkey PRF/HKDF domain separation', () => {
     assert.equal(accountOnly.prf.eval.second, undefined);
   });
 
-  test('v1 IndexedDB records are stale; v2 records with both domains are current', () => {
-    assert.equal(WALLET_RECORD_VERSION, 2);
+  test('v1 and keccak v2 records are stale; Poseidon v3 records are current', () => {
+    assert.equal(WALLET_RECORD_VERSION, 3);
+    assert.equal(IDENTITY_SCHEME, 'prf-hkdf-poseidon-v3');
     assert.equal(ACCOUNT_PRF_DOMAIN, 'republic:account:v1');
     assert.equal(IDENTITY_PRF_DOMAIN, 'republic:identity:v1');
     assert.equal(
@@ -196,6 +205,14 @@ describe('passkey PRF/HKDF domain separation', () => {
     assert.equal(
       isCurrentWalletRecord({
         version: 2,
+        identityScheme: 'prf-hkdf-identity-v2',
+        prfDomains: { account: ACCOUNT_PRF_DOMAIN, identity: IDENTITY_PRF_DOMAIN },
+      }),
+      false,
+    );
+    assert.equal(
+      isCurrentWalletRecord({
+        version: 3,
         identityScheme: IDENTITY_SCHEME,
         prfDomains: { account: ACCOUNT_PRF_DOMAIN, identity: IDENTITY_PRF_DOMAIN },
       }),
