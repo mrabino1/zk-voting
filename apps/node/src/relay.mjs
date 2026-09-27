@@ -310,8 +310,8 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       nextPublishAt: nextAt,
       pdfSha256: artifact.pdfSha256,
       integrity: artifact.integrity,
-    pdfProtected: true,
-  }),
+      pdfProtected: true,
+    }),
   };
 }
 
