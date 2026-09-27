@@ -2630,21 +2630,6 @@ export class Store {
     return (this.data.pollResults || []).find((row) => row.pollId === pollId) || null;
   }
 
-  listMailOutbox() {
-    return this.data.mailOutbox || [];
-  }
-
-  getMail(id) {
-    return (this.data.mailOutbox || []).find((row) => row.id === id) || null;
-  }
-
-  async saveMail(record) {
-    this.data.mailOutbox = this.data.mailOutbox || [];
-    this.data.mailOutbox.push(record);
-    await this.persist();
-    return record;
-  }
-
   async commitPollTally(poll, ballots, result) {
     this.data.polls = this.data.polls || [];
     const index = this.data.polls.findIndex((row) => row.id === poll.id);
