@@ -110,7 +110,40 @@ Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_K
 
 ### Forked jurisdiction Nodes
 
-Forking this Node is **intentional**. Paste the [copy-paste credentials](../README.md#copy-paste-credentials) block (or copy [`.env.example`](../.env.example)), set this host’s `RP_ID` / origins / SES / AWS keys (or the host IAM role), and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
+Forking this Node is **intentional**. Paste the [copy-paste credentials](../README.md#copy-paste-credentials) block (or copy [`.env.example`](../.env.example)), set `VOTE_FQDN` to the voting subdomain (below), set SES / AWS keys (or the host IAM role), and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
+
+### Voting subdomain (`VOTE_FQDN`)
+
+A jurisdiction that runs this repo publishes the Node on a **subdomain it controls**. That FQDN is the voting authority: voters open it, passkeys are bound to it, and official links use it.
+
+```text
+vote.domain.tld
+```
+
+`domain.tld` is the body’s domain. `vote` is the usual host label. Create a DNS `A`, `AAAA`, or `CNAME` for that name pointing at this host, and terminate TLS for it. This repo does not register the name. The Node itself keeps listening on `ZK_VOTING_PORT` (HTTP). Put Caddy, nginx, or the host load balancer in front.
+
+```env
+VOTE_FQDN=vote.domain.tld
+```
+
+Leave it empty for a local demo (`RP_ID` stays `localhost`).
+
+| Derived setting | When `VOTE_FQDN` is set |
+| --- | --- |
+| `RP_ID` | Becomes the FQDN. The template value `localhost` does not override it. Set `RP_ID` to another public hostname only when the relying party must be a parent of the subdomain. |
+| `WEBAUTHN_ORIGINS` | `https://<VOTE_FQDN>` is always accepted, including when the env list is still the localhost default. |
+| `PUBLIC_BASE_URL` | Defaults to `https://<VOTE_FQDN>` when empty (official-outcome QR codes). |
+
+Check it after the process is up:
+
+```bash
+curl -fsS http://127.0.0.1:3000/health
+# "voteFqdn": "vote.domain.tld"
+curl -fsS http://127.0.0.1:3000/api/config
+# "vote": { "fqdn": "vote.domain.tld", "origin": "https://vote.domain.tld", ... }
+```
+
+The value is a bare hostname. `https://vote.domain.tld`, a port, or a path is rejected at startup.
 
 ---
 
@@ -346,8 +379,8 @@ After `cutoffTime` has fully expired **and** a certified tally is posted, the No
 
 | Variable | Role |
 | --- | --- |
-| `PUBLIC_BASE_URL` | Origin printed in the official-PDF QR (defaults to the first WebAuthn origin) |
-| --- | --- |
+| `VOTE_FQDN` | Voting subdomain, e.g. `vote.domain.tld`. When set, official links default to `https://` that host |
+| `PUBLIC_BASE_URL` | Origin printed in the official-PDF QR (defaults to `https://$VOTE_FQDN`, else the first WebAuthn origin) |
 | `SES_FROM_ADDRESS` | From address (required to send) |
 | `AWS_REGION` (alias `SES_REGION`) | SES region |
 | `SES_CONFIGURATION_SET` | Optional SESv2 configuration set |

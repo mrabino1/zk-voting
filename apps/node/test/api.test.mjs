@@ -110,6 +110,7 @@ describe('Republic Node API', () => {
   test('GET /api/config advertises proving path in progress', async () => {
     const { status, json } = await api('GET', '/api/config');
     assert.equal(status, 200);
+    assert.equal(json.vote.origin, json.vote.fqdn ? `https://${json.vote.fqdn}` : null);
     assert.equal(json.proving.path, 'in-progress');
     assert.equal(json.proving.ceremony, 'not-done');
     assert.equal(json.proving.mockVerifierDefault, true);

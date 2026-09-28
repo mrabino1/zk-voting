@@ -48,6 +48,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Operating cost estimate](#operating-cost-estimate)
 - [Copy-paste credentials](#copy-paste-credentials)
 - [Intentional forking](#intentional-forking)
+- [Voting subdomain](#voting-subdomain)
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
 - [Circuits](#circuits)
@@ -148,7 +149,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
 | Token polls (`POLLS_ENABLED`) | **Phase 1, flag off by default.** One host ERC-20 (`VOTING_TOKEN_ADDRESS`, Ethereum mainnet chain id 1) weights **signal** polls (plurality + IRV). Read-only balances. Weight is the minimum from the vote block through close. No identity layer. Not binding. [`docs/POLLS.md`](./docs/POLLS.md). L1 result mirror skipped (follow-up). |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
-| Intentional Node forks | Documented. Copy [`.env.example`](./.env.example), pin the shared factory / inbox / verifier, do not `DeployLocal` per city. |
+| Intentional Node forks | Documented. Copy [`.env.example`](./.env.example), publish the Node at a voting subdomain (`VOTE_FQDN`, e.g. `vote.domain.tld`), pin the shared factory / inbox / verifier, do not `DeployLocal` per city. |
 | Election workflow diagram | Informational PNG: register → freeze → vote (nullifier / relayer) → hourly disclosure → tally → results. [`docs/images/election-workflow.png`](./docs/images/election-workflow.png); source [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd). |
 
 ---
@@ -350,6 +351,9 @@ Paste **as-is** for a local demo (empty keys, mock L2 proofs, no SES). For a pub
 ZK_VOTING_PORT=3000
 CHAIN_ID=27427
 CHAIN_RPC=http://l2:8546
+# Public voting hostname. Empty here = local demo.
+# A jurisdiction creates this name in DNS (example: vote.domain.tld).
+VOTE_FQDN=
 RP_ID=localhost
 WEBAUTHN_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 PUBLIC_BASE_URL=
@@ -413,7 +417,8 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 
 | Fill this | When |
 | --- | --- |
-| `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Public site (hostname, not `localhost`) |
+| `VOTE_FQDN` | The subdomain this body creates for voting, e.g. `vote.domain.tld`. That hostname is the voting authority (passkeys, browser origin, official links). Empty on a local demo. |
+| `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Optional once `VOTE_FQDN` is set. The Node derives the relying party, the `https://` origin, and the official base URL from that hostname. Set `RP_ID` only to pin a different public parent hostname. |
 | `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA and Terms PDF mail. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | Pin the **shared** factory / inbox / verifier. Env wins over `/office/site`. Do not run `DeployLocal` again for a new city |
 | `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |
@@ -444,7 +449,7 @@ This is a GitHub / host fork of **this** Node. It is not a fork of MACI, Semapho
 | --- | --- |
 | Node process, vanilla JS in `apps/node/public/`, `/office` CMS | `ElectionFactory` (`ELECTION_FACTORY_ADDRESS` or `FACTORY`) |
 | JSON store (`apps/node/data/republic.json`), officer grants | `BallotInbox` (`BALLOT_INBOX_ADDRESS`) |
-| WebAuthn `RP_ID` / `WEBAUTHN_ORIGINS`, SES MFA | Vote verifier (`VERIFIER_ADDRESS` or `VERIFIER`) |
+| Voting hostname `VOTE_FQDN` (e.g. `vote.domain.tld`), WebAuthn `RP_ID` / `WEBAUTHN_ORIGINS`, SES MFA | Vote verifier (`VERIFIER_ADDRESS` or `VERIFIER`) |
 | Relayer key and paymaster funds for **this** host | Optional L1 `L1TallyMirror` / `RollupSettlement` when you settle with the same contracts |
 
 Do **not** run `forge script script/DeployLocal.s.sol` again for a new city. Env wins over the clerk CMS at `/office/site`. Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`).
@@ -458,7 +463,7 @@ Do **not** run `forge script script/DeployLocal.s.sol` again for a new city. Env
 cp .env.example .env
 ```
 
-3. Fill **this host’s** RP id, origins, SES, AWS keys (or rely on the host IAM role), and relayer key. Paste the **existing** shared factory / inbox / verifier addresses. Leave those addresses empty only for a JSON-only demo (`CHAIN_RPC` unset) or to pin them later as `platform_admin` on `/office/site`.
+3. Create the voting subdomain and set `VOTE_FQDN` (see [Voting subdomain](#voting-subdomain)). Fill SES, AWS keys (or rely on the host IAM role), and the relayer key. Leave `RP_ID` as `localhost` unless the WebAuthn relying party must be a different public hostname. Paste the **existing** shared factory / inbox / verifier addresses. Leave those addresses empty only for a JSON-only demo (`CHAIN_RPC` unset) or to pin them later as `platform_admin` on `/office/site`.
 4. Start the Node (Compose is the host path `system_actions.sh` already looks for):
 
 ```bash
@@ -472,6 +477,32 @@ curl -fsS http://127.0.0.1:3000/health
 
 Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Site pin: `/office/site`. Pages: `/office/pages`.
 
+### Voting subdomain
+
+People who run this repository publish the Node on a **subdomain they control**. That hostname is the voting authority for the body: the address voters open, the WebAuthn relying party passkeys are bound to, and the origin printed on official links and QR codes.
+
+```text
+vote.domain.tld
+```
+
+`domain.tld` is the body’s own domain. `vote` is the host label. A city, county, union, or cooperative creates that DNS record (`A`, `AAAA`, or `CNAME`) and serves this Node there over HTTPS. The software does not register the name.
+
+```env
+VOTE_FQDN=vote.domain.tld
+```
+
+Leave `VOTE_FQDN` empty for a local demo. WebAuthn then stays on `localhost`.
+
+When `VOTE_FQDN` is set:
+
+- `RP_ID` becomes that hostname. `localhost` in the template does not override it. Set `RP_ID` to a different public hostname only when the relying party must be a **parent** of the subdomain (one passkey on more than one host).
+- `https://vote.domain.tld` is always an accepted `WEBAUTHN_ORIGINS` entry.
+- `PUBLIC_BASE_URL` defaults to `https://vote.domain.tld` when it is left empty (official-outcome QR codes and mailed links).
+
+Terminate TLS in front of `ZK_VOTING_PORT` (Caddy, nginx, or the host load balancer). The Node listens on HTTP inside the host. The public origin is the subdomain.
+
+`GET /api/config` returns `vote.fqdn` and `vote.origin`. `GET /health` returns `voteFqdn`.
+
 ### Environment example
 
 The full copy-paste file (every credential Compose reads) is [Copy-paste credentials](#copy-paste-credentials). Committed template: [`.env.example`](./.env.example).
@@ -479,9 +510,12 @@ The full copy-paste file (every credential Compose reads) is [Copy-paste credent
 A forked city typically changes only these lines (placeholders — never commit real keys):
 
 ```env
-RP_ID=votes.example.gov
-WEBAUTHN_ORIGINS=https://votes.example.gov
-PUBLIC_BASE_URL=https://votes.example.gov
+VOTE_FQDN=vote.example.gov
+# RP_ID=localhost is enough: the FQDN becomes the relying party.
+# Set RP_ID only to pin a different public parent hostname.
+RP_ID=localhost
+WEBAUTHN_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+PUBLIC_BASE_URL=
 SES_FROM_ADDRESS=elections@example.gov
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=
@@ -1003,6 +1037,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 | **Republic** | Product name. Civic ZK voting / tally stack in this monorepo. |
 | **Jurisdiction** | The body that owns a roll and elections (government or other). |
 | **Fork (this Node)** | An intentional copy of the Node UI/host for a jurisdiction. Pins the shared `ElectionFactory` / inbox / verifier. Not a new factory deploy and not a commercial L2. |
+| **Voting FQDN** | The subdomain a jurisdiction creates for this Node (`vote.domain.tld`), set as `VOTE_FQDN`. It is the public voting authority: passkeys, browser origin, and official links. |
 | **Roll / registry** | The set of registered identity commitments. |
 | **Eligible set** | Registered minus disqualified, for a given election/question. |
 | **Disqualification** | An on-chain record that blocks voting despite registration. |

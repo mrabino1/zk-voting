@@ -193,6 +193,6 @@ POST /api/persons/:id/eth-accounts
 POST /api/persons/:id/eth-accounts/active
 ```
 
-Relying party id, origins, and attestation policy are jurisdiction / host configuration. Production (`master`) must pin RP id to the public site. `test/unstable` may use localhost.
+Relying party id, origins, and attestation policy are jurisdiction / host configuration. Production (`master`) publishes the Node at `VOTE_FQDN` (for example `vote.domain.tld`) and uses that hostname as the RP id, so a passkey created there is a credential for that voting authority. Set `RP_ID` only when the relying party must be a parent of that subdomain. `test/unstable` may leave `VOTE_FQDN` empty and use localhost. See the root README [Voting subdomain](../README.md#voting-subdomain).
 
 The Node stores credential ids and wrapped-key **ciphertexts** if the wrap-in-IndexedDB-plus-backup path is enabled. It must not store PRF output or trapdoors.

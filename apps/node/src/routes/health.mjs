@@ -26,6 +26,7 @@ export function healthRouter(deps) {
       notForProfit: true,
       chainId: deps.config.chainId,
       product: 'Republic',
+      voteFqdn: deps.config.voteFqdn || null,
       sharedDeployment: true,
       electionFactoryAddress: contracts.factory || '',
       chainConfigured: deps.chain.isConfigured(),
@@ -52,6 +53,13 @@ export function configRouter(deps) {
         product: 'Republic',
         rpName: deps.config.rpName,
         rpID: deps.config.rpID,
+        vote: {
+          fqdn: deps.config.voteFqdn || null,
+          origin: deps.config.voteFqdn ? `https://${deps.config.voteFqdn}` : null,
+          note: deps.config.voteFqdn
+            ? 'VOTE_FQDN is the public voting authority for this Node. Passkeys, the browser origin, and official links use this hostname.'
+            : 'VOTE_FQDN is unset. This process is a local demo on localhost. A jurisdiction sets VOTE_FQDN to its voting subdomain (vote.domain.tld).',
+        },
         chainId: deps.config.chainId,
         pollsEnabled: Boolean(deps.config.pollsEnabled),
         pollsReady: Boolean(deps.config.pollsReady),
