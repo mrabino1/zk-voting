@@ -116,7 +116,7 @@ ballots still post a plurality-only `counts` vector for L1 certification.
 
 ## Environment
 
-Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example) to `.env` and **pin the one shared factory**. Env wins over `/office/site`. Do not deploy a new `ElectionFactory` per city. Root README: [Intentional forking](../../README.md#intentional-forking).
+Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example) to `.env`, set `VOTE_FQDN` to the voting subdomain (`vote.domain.tld`), and **pin the one shared factory**. Env wins over `/office/site`. Do not deploy a new `ElectionFactory` per city. Root README: [Intentional forking](../../README.md#intentional-forking) and [Voting subdomain](../../README.md#voting-subdomain).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -133,8 +133,9 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
 | `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
 | `L1_CHAIN_ID` | RPC | Optional override |
-| `RP_ID` | `localhost` | WebAuthn rpID |
-| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). |
+| `VOTE_FQDN` | _empty_ | Public voting hostname this jurisdiction creates, e.g. `vote.domain.tld`. Bare FQDN (no scheme, port, or path). It is the voting authority: when set, `RP_ID` becomes this host unless `RP_ID` is already a different public hostname, `https://<VOTE_FQDN>` is always an accepted origin, and `PUBLIC_BASE_URL` defaults to that `https://` origin. Empty = local demo. |
+| `RP_ID` | `localhost`, or `VOTE_FQDN` when that is set | WebAuthn rpID. `localhost` does not override `VOTE_FQDN`. |
+| `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). `https://$VOTE_FQDN` is prepended when `VOTE_FQDN` is set. |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_super_admin` on first boot |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
@@ -150,7 +151,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `CREDENTIAL_PROVIDER_SECRET` | _empty_ | Shared secret for `POST /api/integrations/credentials/status`. Unset = manual officer review |
 | `CREDENTIAL_PROVIDER_ID` | `manual` | Label stored on credential methods until a DMV / eID connector exists |
 | `RECEIPT_PDF_SECRET` | `$DATA_DIR/receipt-pdf.secret` | HMAC + PDF owner password for locked vote-receipt **and** official outcome PDFs. Unset → Node mints a file |
-| `PUBLIC_BASE_URL` | first WebAuthn origin | Origin printed in official-outcome QR codes (`/o/<reportId>`) |
+| `PUBLIC_BASE_URL` | `https://$VOTE_FQDN` when that is set, else first WebAuthn origin | Origin printed in official-outcome QR codes (`/o/<reportId>`) |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
 | `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |

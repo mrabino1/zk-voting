@@ -32,6 +32,10 @@ services:
       DATA_DIR: /data
       CHAIN_ID: ${CHAIN_ID:-27427}
       CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
+      # Public voting hostname (vote.domain.tld). Empty = localhost demo.
+      # When set, the Node treats it as the voting authority unless RP_ID is
+      # some other public hostname. See README § Intentional forking.
+      VOTE_FQDN: ${VOTE_FQDN:-}
       RP_ID: ${RP_ID:-localhost}
       WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}

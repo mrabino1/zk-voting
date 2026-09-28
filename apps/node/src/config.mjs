@@ -24,6 +24,73 @@ function envFlag(value, fallback) {
   return fallback;
 }
 
+/** At least two labels, no scheme, port, path, or IPv4 literal. */
+const VOTE_FQDN_RE =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+function isIpv4Literal(host) {
+  if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host)) return false;
+  return host.split('.').every((octet) => Number(octet) <= 255);
+}
+
+/**
+ * Bare public hostname for this Node, e.g. `vote.domain.tld`.
+ * Empty means a local demo. A trailing DNS dot is stripped.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normalizeVoteFqdn(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const host = raw.toLowerCase().replace(/\.$/, '');
+  const tld = host.slice(host.lastIndexOf('.') + 1);
+  if (!VOTE_FQDN_RE.test(host) || isIpv4Literal(host) || !/[a-z]/.test(tld)) {
+    throw new Error(
+      `VOTE_FQDN must be a bare hostname such as vote.domain.tld (no scheme, port, or path); received ${JSON.stringify(raw)}`,
+    );
+  }
+  return host;
+}
+
+function isDevHost(value) {
+  const host = String(value || '').trim().toLowerCase();
+  return host === '' || host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
+function originList(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return csv(value);
+}
+
+/**
+ * `VOTE_FQDN` is the voting authority for this host. Passkeys, the browser
+ * origin, and official links follow it unless the operator set a public
+ * `RP_ID` or an explicit `PUBLIC_BASE_URL`. `localhost` does not override it.
+ * @param {Record<string, unknown>} overrides
+ * @param {string[]} defaultOrigins
+ */
+function resolveVoteAuthority(overrides, defaultOrigins) {
+  const voteFqdn = normalizeVoteFqdn(
+    overrides.voteFqdn !== undefined ? overrides.voteFqdn : process.env.VOTE_FQDN,
+  );
+  const rpRaw = String(overrides.rpID !== undefined ? overrides.rpID : process.env.RP_ID || '').trim();
+  const rpID = isDevHost(rpRaw) ? voteFqdn || rpRaw || 'localhost' : rpRaw;
+
+  const listed = originList(overrides.origins !== undefined ? overrides.origins : process.env.WEBAUTHN_ORIGINS);
+  let origins = listed.length ? listed.slice() : voteFqdn ? [] : defaultOrigins.slice();
+  if (voteFqdn) {
+    const authorityOrigin = `https://${voteFqdn}`;
+    origins = [authorityOrigin, ...origins.filter((origin) => origin !== authorityOrigin)];
+  }
+
+  const publicRaw = String(
+    overrides.publicBaseUrl !== undefined ? overrides.publicBaseUrl : process.env.PUBLIC_BASE_URL || '',
+  ).trim();
+  const publicBaseUrl = publicRaw || (voteFqdn ? `https://${voteFqdn}` : '');
+
+  return { voteFqdn, rpID, origins, publicBaseUrl };
+}
+
 /**
  * @param {Record<string, unknown>} [overrides]
  */
@@ -35,9 +102,7 @@ export function getConfig(overrides = {}) {
     'http://localhost:5173',
     'http://127.0.0.1:5173',
   ];
-  const origins = csv(process.env.WEBAUTHN_ORIGINS).length
-    ? csv(process.env.WEBAUTHN_ORIGINS)
-    : defaultOrigins;
+  const authority = resolveVoteAuthority(overrides, defaultOrigins);
 
   const isTest = process.env.NODE_ENV === 'test';
   const disclosureIntervalSeconds = resolveDisclosureIntervalSeconds(
@@ -65,8 +130,9 @@ export function getConfig(overrides = {}) {
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpName: 'Republic',
-    rpID: process.env.RP_ID || 'localhost',
-    origins,
+    rpID: authority.rpID,
+    voteFqdn: authority.voteFqdn,
+    origins: authority.origins,
     adminHandle: process.env.ADMIN_HANDLE || 'admin',
     chainRpc: process.env.CHAIN_RPC || '',
     ballotInboxAddress: process.env.BALLOT_INBOX_ADDRESS || '',
@@ -136,7 +202,7 @@ export function getConfig(overrides = {}) {
     includeOtpInCapture: isTest,
     allowCaptureMailer: isTest || envFlag(process.env.ALLOW_CAPTURE_MAILER, false),
     receiptPdfSecret: String(overrides.receiptPdfSecret ?? process.env.RECEIPT_PDF_SECRET ?? '').trim(),
-    publicBaseUrl: String(overrides.publicBaseUrl ?? process.env.PUBLIC_BASE_URL ?? '').trim(),
+    publicBaseUrl: authority.publicBaseUrl,
     mailWebhookUrl: String(overrides.mailWebhookUrl ?? process.env.MAIL_WEBHOOK_URL ?? '').trim(),
     sessionCookie: 'republic.sid',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
@@ -156,6 +222,11 @@ export function getConfig(overrides = {}) {
     tokenRpcs: tokenRpcMap(),
     ...overrides,
   };
+  // `VOTE_FQDN` wins over a localhost template even when overrides spread last.
+  config.voteFqdn = authority.voteFqdn;
+  config.rpID = authority.rpID;
+  config.origins = authority.origins;
+  config.publicBaseUrl = authority.publicBaseUrl;
   config.votingToken = resolveVotingToken({
     address:
       overrides.votingTokenAddress !== undefined
