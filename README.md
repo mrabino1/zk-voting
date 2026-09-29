@@ -363,7 +363,7 @@ ALLOW_DEV_LOGIN=
 ALLOW_SMART_CARD_MOCK=
 ALLOW_CIVIC_ID_MOCK=
 
-# --- AWS SES (email MFA + Terms PDF). Empty = local demo, no outbound mail. ---
+# --- AWS SES (email MFA, Terms PDF, /feedback). Empty = local demo, no outbound mail. ---
 SES_FROM_ADDRESS=
 AWS_REGION=
 AWS_ACCESS_KEY_ID=
@@ -372,6 +372,10 @@ SES_CONFIGURATION_SET=
 SES_ENDPOINT=
 SES_DRY_RUN=
 REQUIRE_EMAIL_MFA=
+FEEDBACK_RATE_WINDOW_SECONDS=3600
+FEEDBACK_MIN_SUBMIT_MS=3000
+FEEDBACK_MAX_BODY_BYTES=16384
+TRUST_PROXY=
 
 # --- civil credential connector. Empty secret = manual officer review. ---
 CREDENTIAL_PROVIDER_SECRET=
@@ -422,7 +426,7 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 | --- | --- |
 | `VOTE_FQDN` | The subdomain this body creates for voting, e.g. `vote.domain.tld`. That hostname is the voting authority (passkeys, browser origin, official links). Empty on a local demo. |
 | `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Optional once `VOTE_FQDN` is set. The Node derives the relying party, the `https://` origin, and the official base URL from that hostname. Set `RP_ID` only to pin a different public parent hostname. |
-| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA and Terms PDF mail. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA, Terms PDF mail, and `/feedback` to the platform super admin. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. `SES_DRY_RUN=1` captures feedback and does not call SES. `FEEDBACK_RATE_WINDOW_SECONDS` defaults to `3600` and cannot be shorter (one accepted note per IP per hour) |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | Pin the **shared** factory / inbox / verifier. Env wins over `/office/site`. Do not run `DeployLocal` again for a new city |
 | `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |
 | `CREDENTIAL_PROVIDER_SECRET` | Optional later DMV / eID webhook. Unset = officers review credentials by hand |

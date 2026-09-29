@@ -204,7 +204,7 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/feedback`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
 
 ### Creating elections (chain vs demo)
 
@@ -402,7 +402,32 @@ termsAcceptances: [{ id, action: "accept"|"view", userId, handle, email, session
 users[].termsHash / termsVersion / termsAcceptedAt / termsEmailSentAt / termsEmailHash
 ```
 
-Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted.
+Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted. Version 2 adds the feedback assignment clause. A person who accepted version 1 keeps that PDF hash; the next acceptance stores the new one.
+
+### Feedback (`/feedback`)
+
+Public page `/feedback` (nav and footer on the voter SPA). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `republic.json`, not written to civic L2, and not logged at info level.
+
+**Inbox.** The To address is the `platform_super_admin` person’s `contactEmail`, or that person’s sign-in email if no contact email is set. There is no separate inbox env var. If neither address is set, the Node **fails closed**: it logs a warning naming the missing super-admin email, returns `503 FEEDBACK_UNAVAILABLE`, and does not drop the message silently. The visitor sees “Feedback cannot be delivered right now. Please try again later.” The same `503` is returned when SES is not configured (`SES_FROM_ADDRESS` and `AWS_REGION` both required) unless `SES_DRY_RUN=1` with those two set (capture, no SES call) or the process is allowed to capture mail (`NODE_ENV=test` or `ALLOW_CAPTURE_MAILER=1`).
+
+The visitor must tick the checkbox that feedback becomes the property of the project’s legal owner. The server rejects a missing tick with `400 ASSIGNMENT_REQUIRED`. The acceptance record (timestamp, terms version, PDF SHA-256, markdown SHA-256) is in the email and on one info log line. That log line does not include the message, the name, or the reply address.
+
+| Env | Role |
+| --- | --- |
+| `SES_FROM_ADDRESS` | From address. Required to deliver, including dry-run. |
+| `AWS_REGION` (alias `SES_REGION`) | SES region. Required with the From address. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Optional. Empty uses the host IAM role. |
+| `SES_CONFIGURATION_SET` | Optional SESv2 configuration set. |
+| `SES_ENDPOINT` | Optional SESv2 endpoint override. |
+| `SES_DRY_RUN` | `1` captures the message and does not call SES. Still requires From + region. |
+| `FEEDBACK_RATE_WINDOW_SECONDS` | Gap between accepted submissions from one IP. Default `3600`. Values below `3600` are raised to `3600` (at most one per hour). A larger value waits longer. |
+| `FEEDBACK_MIN_SUBMIT_MS` | Minimum time from form open to submit. Default `3000`. |
+| `FEEDBACK_MAX_BODY_BYTES` | Maximum POST body. Default `16384`. The message is also capped at 4,000 characters. |
+| `TRUST_PROXY` | Set to `1` when a reverse proxy is the TCP peer, so the limit uses the client address. Unset keys the limit on the socket peer. |
+
+**Rate limit.** One **accepted** submission per IP per window, in memory on that Node process (not shared across replicas, cleared on restart). The second accepted-path submit returns `429` with `Retry-After` (seconds) and “You can send another message in about N minutes”. A missing checkbox, honeypot hit, too-fast submit, oversized body, or fail-closed delivery does **not** consume the slot. Another IP is not affected.
+
+Reply-To is set only when the optional address validates. Names, the message, and request metadata are stripped of control characters. HTML in the mail is escaped. The email may include User-Agent and Accept-Language. It does not include an IP address, a cookie, a voter id, or any election field.
 
 ---
 

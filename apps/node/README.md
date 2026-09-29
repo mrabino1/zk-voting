@@ -93,7 +93,7 @@ On-chain / circuit `electionId` stays the factory `uint256`, stored as
 `onChainElectionId` on the Node record. L1 proof slots use
 `(factory, onChainElectionId, jurisdictionId)`, not the public UUID.
 
-Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/receipt`, `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
+Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/feedback`, `/receipt`, `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
 `/elections/:id/info`, `/elections/:id/info/:questionId/:optionId`.
 Public URLs are `/admin`, `/back-office`, `/explorer` (not `*.html`). The host edits About / FAQ / home at `/office/pages`. Clerks publish jurisdiction-tagged pages.
@@ -168,6 +168,9 @@ Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **s
 ```
 GET  /health
 GET  /terms                         (SPA Terms of Use; hashes from GET /api/terms)
+GET  /feedback                      (SPA feedback form)
+GET  /api/feedback                  (categories, terms hashes, inboxConfigured)
+POST /api/feedback                  (SES to platform super admin; 1 per IP per hour)
 GET  /terms.pdf                     (deterministic PDF; X-Pdf-SHA256 header)
 GET  /v/:shortCode                  (302 → /vote/<uuid>)
 GET  /e/:shortCode                  (302 → /vote/<uuid>)
