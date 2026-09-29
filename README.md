@@ -274,7 +274,7 @@ npm run l2:prover           # node l2/prover/index.mjs
 ./l2/bin/start-local.sh     # both
 ```
 
-Genesis **chainId 27427**, 2s blocks, one sequencer. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+Genesis **chainId 27427**, one sequencer. The producer wakes every ~2s and, by default, seals a block only when there is a transaction, when the disclosure hour closes, or once an hour (`L2_SKIP_EMPTY_BLOCKS=1`, `L2_HEARTBEAT_SECONDS=3600`). Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ```bash
 export L2_RPC_PORT=8546
@@ -392,6 +392,8 @@ RELAYER_PRIVATE_KEY=
 # --- Republic L2 ---
 L2_RPC_PORT=8546
 L2_BATCH_SIZE=4
+L2_SKIP_EMPTY_BLOCKS=1
+L2_HEARTBEAT_SECONDS=3600
 DEV_MOCK_PROOF=true
 REPUBLIC_NODE_URL=http://node:3000
 
@@ -404,8 +406,9 @@ L1_PUBLISHER_PRIVATE_KEY=
 L1_SETTLEMENT_ADDRESS=
 L1_CHAIN_ID=
 
-# --- L2 hourly attic (S3 or R2). Leave ENABLED=0 for a local demo. ---
-ARCHIVE_ENABLED=0
+# --- L2 hourly attic (S3 or R2). On by default. Empty bucket does not delete. ---
+ARCHIVE_ENABLED=1
+ARCHIVE_COMPRESS=1
 ARCHIVE_S3_BUCKET=
 ARCHIVE_S3_ENDPOINT=
 ARCHIVE_S3_REGION=auto
@@ -427,7 +430,8 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 | `EXPLORER_INGEST_SECRET` | L2 sequencer ingest of `/api/explorer/ingest`. Unset in production refuses ingest (explorer is not a second tally) |
 | `L1_RPC`, `L1_TALLY_MIRROR_ADDRESS`, `L1_PUBLISHER_PRIVATE_KEY` | Certify tally hashes on Ethereum. Unset = tally still works (`skipped`) |
 | `SETTLEMENT_ADDRESS`, `PRIVATE_KEY` | L2 prover posts `RollupSettlement.submitBatch`. **Not** the Node `L1_PUBLISHER_PRIVATE_KEY` |
-| `ARCHIVE_ENABLED`, `ARCHIVE_S3_*` | Optional hourly L2 attic to S3/R2. Default off. Sequencer disk stays the hot window |
+| `ARCHIVE_ENABLED`, `ARCHIVE_S3_*`, `ARCHIVE_COMPRESS` | Hourly L2 attic to S3/R2. Default on and gzip. Empty bucket and no `file://` sink warns and does not prune. `ARCHIVE_ENABLED=0` turns it off |
+| `L2_SKIP_EMPTY_BLOCKS`, `L2_HEARTBEAT_SECONDS` | Default: seal on transactions, hour close, and one empty heartbeat per hour. `L2_SKIP_EMPTY_BLOCKS=0` seals every ~2s |
 | `ALLOW_DEV_LOGIN` | Local fallback only. Must stay empty on `master` |
 | `CHAIN_RPC` | Empty = JSON-only demo (no factory call). Compose default `http://l2:8546` is the civic sequencer |
 

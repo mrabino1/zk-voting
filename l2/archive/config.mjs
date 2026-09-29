@@ -5,10 +5,14 @@ import path from 'node:path';
 import { loadConfig, parseBool } from '../sequencer/state.mjs';
 import { DEFAULT_HOT_WINDOW_HOURS } from './hours.mjs';
 
+export const NO_STORE_REASON =
+  'no object store configured (ARCHIVE_S3_BUCKET is empty and no file:// sink); refusing to prune local data';
+
 export function loadArchiveConfig({ env = process.env, l2Config } = {}) {
   const l2 = l2Config || loadConfig();
   const endpoint = String(env.ARCHIVE_S3_ENDPOINT || '').trim();
-  const enabled = parseBool(env.ARCHIVE_ENABLED, false);
+  const enabled = parseBool(env.ARCHIVE_ENABLED, true);
+  const compress = parseBool(env.ARCHIVE_COMPRESS, true);
   const hotWindowHours = Math.max(
     1,
     Math.floor(Number(env.ARCHIVE_HOT_WINDOW_HOURS || DEFAULT_HOT_WINDOW_HOURS) || DEFAULT_HOT_WINDOW_HOURS),
@@ -24,6 +28,7 @@ export function loadArchiveConfig({ env = process.env, l2Config } = {}) {
   }
   return {
     enabled,
+    compress,
     l2,
     chainId: Number(l2.chainId),
     dataDir: l2.dataDir,
@@ -46,8 +51,11 @@ export function loadArchiveConfig({ env = process.env, l2Config } = {}) {
 
 export function assertArchiveReady(cfg) {
   if (!cfg.enabled) return { ok: true, skipped: true, reason: 'ARCHIVE_ENABLED=0' };
-  if (!cfg.bucket) {
-    return { ok: false, skipped: true, reason: 'ARCHIVE_S3_BUCKET is required when ARCHIVE_ENABLED=1' };
+  // Default-on must not delete the hot path when nobody configured a sink.
+  // A file:// endpoint is a real sink even if the bucket env var is empty
+  // (loadArchiveConfig fills a default bucket name for that mode).
+  if (!cfg.bucket && !cfg.fileMode) {
+    return { ok: true, skipped: true, reason: NO_STORE_REASON, warn: true };
   }
   if (!cfg.fileMode && !cfg.memoryMode && !cfg.endpoint && !cfg.accessKeyId) {
     // AWS with instance-role style empty keys is allowed; unsigned requests will fail at PUT.

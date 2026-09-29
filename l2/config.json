@@ -10,6 +10,8 @@
   "paymasterBalanceWei": "1000000000000000000000000000",
   "devMockProof": true,
   "disclosureIntervalSeconds": 3600,
+  "skipEmptyBlocks": true,
+  "heartbeatSeconds": 3600,
   "l1Rpc": "",
   "settlementAddress": "",
   "republicNodeUrl": "",

@@ -7,9 +7,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
+import { gunzipSync } from 'node:zlib';
 
 import { ChainState, loadConfig } from '../sequencer/state.mjs';
-import { loadArchiveConfig } from '../archive/config.mjs';
+import { loadArchiveConfig, NO_STORE_REASON } from '../archive/config.mjs';
 import {
   defaultArchiveIo,
   restoreHour,
@@ -141,7 +142,8 @@ describe('L2 hourly S3/R2 archive attic', () => {
   test('upload-then-prune sealed hours outside the hot window', async () => {
     const h0 = seedChain();
     const now = h0 + 3 * HOUR + 30;
-    const expectedBlockHash = sha256Hex(fs.readFileSync(path.join(dataDir, 'blocks', '1.json')));
+    const rawBlock = fs.readFileSync(path.join(dataDir, 'blocks', '1.json'));
+    const expectedBlockHash = sha256Hex(rawBlock);
     const result = await runArchiveJob({
       config: archiveCfg(),
       now,
@@ -167,10 +169,21 @@ describe('L2 hourly S3/R2 archive attic', () => {
     assert.ok(blockObj);
     assert.equal(blockObj.algorithm, 'sha256');
     assert.equal(blockObj.hashedAt, 'pre-upload');
-    assert.equal(blockObj.sha256, expectedBlockHash);
+    assert.equal(blockObj.contentEncoding, 'gzip');
+    assert.equal(blockObj.rawSha256, expectedBlockHash);
+    assert.equal(blockObj.rawBytes, rawBlock.length);
     const remote = await store.get(blockObj.key);
-    assert.equal(sha256Hex(remote), expectedBlockHash);
+    assert.equal(sha256Hex(remote), blockObj.sha256, 'stored sha256 covers the gzip bytes');
     assert.equal(remote.length, blockObj.bytes);
+    const inflated = gunzipSync(remote);
+    assert.equal(sha256Hex(inflated), expectedBlockHash);
+    assert.equal(inflated.length, blockObj.rawBytes);
+    const proofObj = manifest.objects.find((o) => o.kind === 'proof');
+    assert.ok(proofObj);
+    assert.equal(proofObj.contentEncoding, 'gzip');
+    const proofRemote = await store.get(proofObj.key);
+    assert.equal(sha256Hex(proofRemote), proofObj.sha256);
+    assert.equal(sha256Hex(gunzipSync(proofRemote)), proofObj.rawSha256);
 
     const local = listLocalBlocks(dataDir).map((b) => b.number);
     assert.ok(local.includes(0));
@@ -256,6 +269,7 @@ describe('L2 hourly S3/R2 archive attic', () => {
 
   test('restore helper rehydrates a hour prefix read-only', async () => {
     const h0 = seedChain();
+    const before = fs.readFileSync(path.join(dataDir, 'blocks', '1.json'));
     await runArchiveJob({
       config: archiveCfg(),
       now: h0 + 3 * HOUR + 30,
@@ -270,6 +284,7 @@ describe('L2 hourly S3/R2 archive attic', () => {
     assert.ok(result.restored >= 1);
     const restoredBlock = path.join(out, 'blocks', '1.json');
     assert.equal(fs.existsSync(restoredBlock), true);
+    assert.equal(sha256Hex(fs.readFileSync(restoredBlock)), sha256Hex(before));
     const srcMissing = fs.existsSync(path.join(dataDir, 'blocks', '1.json'));
     assert.equal(srcMissing, false, 'restore is read-only toward the live data dir');
   });
@@ -621,5 +636,155 @@ describe('L2 hourly S3/R2 archive attic', () => {
     const store = createFileStore(`file://${sinkRoot}`, 'l2-archive');
     const snap = await store.get(`${objectPrefix(27427, h0)}/explorer/l2-chain.json`);
     assert.equal(snap, null);
+  });
+
+  test('default ARCHIVE_ENABLED is on and compresses', () => {
+    const cfg = loadArchiveConfig({ l2Config: l2Config(), env: {} });
+    assert.equal(cfg.enabled, true);
+    assert.equal(cfg.compress, true);
+  });
+
+  test('default-on with no object store skips and does not delete', async () => {
+    const h0 = seedChain();
+    const warnings = [];
+    const orig = console.warn;
+    console.warn = (...args) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    try {
+      const cfg = loadArchiveConfig({ l2Config: l2Config(), env: {} });
+      assert.equal(cfg.bucket, '');
+      assert.equal(cfg.fileMode, false);
+      const result = await runArchiveJob({
+        config: cfg,
+        now: h0 + 3 * HOUR + 30,
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.skipped, true);
+      assert.equal(result.reason, NO_STORE_REASON);
+      assert.equal(result.hours.length, 0);
+    } finally {
+      console.warn = orig;
+    }
+    assert.ok(warnings.some((line) => line.includes(NO_STORE_REASON)));
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '2.json')), true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '3.json')), true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'proofs', 'batch-0.json')), true);
+    assert.equal(fs.existsSync(path.join(dataDir, 'proofs', 'batch-1.json')), true);
+  });
+
+  test('empty https endpoint with an empty bucket does not prune', async () => {
+    const h0 = seedChain();
+    const cfg = loadArchiveConfig({
+      l2Config: l2Config(),
+      env: {
+        ARCHIVE_ENABLED: '1',
+        ARCHIVE_S3_BUCKET: '   ',
+        ARCHIVE_S3_ENDPOINT: '',
+      },
+    });
+    const result = await runArchiveJob({
+      config: cfg,
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.skipped, true);
+    assert.match(result.reason, /refusing to prune/);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), true);
+  });
+
+  test('file:// sink archives when ARCHIVE_S3_BUCKET is empty', async () => {
+    const h0 = seedChain();
+    const result = await runArchiveJob({
+      config: archiveCfg({ ARCHIVE_S3_BUCKET: '' }),
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.skipped, false);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '1.json')), false);
+    assert.equal(fs.existsSync(path.join(dataDir, 'blocks', '4.json')), true);
+  });
+
+  test('ARCHIVE_COMPRESS=0 stores raw JSON and lists raw and stored hashes', async () => {
+    const h0 = seedChain();
+    const raw = fs.readFileSync(path.join(dataDir, 'blocks', '1.json'));
+    const rawHash = sha256Hex(raw);
+    const result = await runArchiveJob({
+      config: archiveCfg({ ARCHIVE_COMPRESS: '0' }),
+      now: h0 + 3 * HOUR + 30,
+    });
+    assert.equal(result.ok, true);
+    const store = createFileStore(`file://${sinkRoot}`, 'l2-archive');
+    const prefix = objectPrefix(27427, h0);
+    const manifest = JSON.parse((await store.get(`${prefix}/manifest.json`)).toString('utf8'));
+    const blockObj = manifest.objects.find((o) => o.key.endsWith('/blocks/1.json'));
+    assert.equal(blockObj.contentEncoding, 'identity');
+    assert.equal(blockObj.sha256, rawHash);
+    assert.equal(blockObj.rawSha256, rawHash);
+    assert.equal(blockObj.bytes, raw.length);
+    assert.equal(blockObj.rawBytes, raw.length);
+    const remote = await store.get(blockObj.key);
+    assert.equal(sha256Hex(remote), rawHash);
+    assert.equal(remote.length, raw.length);
+  });
+
+  test('restoreHour reads previously archived uncompressed objects', async () => {
+    const h0 = seedChain();
+    const raw = fs.readFileSync(path.join(dataDir, 'blocks', '1.json'));
+    const store = createMemoryStore();
+    const prefix = objectPrefix(27427, h0);
+    const key = `${prefix}/blocks/1.json`;
+    await store.put(key, raw);
+    const manifest = {
+      nfp: true,
+      kind: 'l2-hour-archive',
+      hashAlgorithm: 'sha256',
+      objects: [
+        {
+          key,
+          sha256: sha256Hex(raw),
+          bytes: raw.length,
+          kind: 'block',
+          localPath: 'blocks/1.json',
+          algorithm: 'sha256',
+          hashedAt: 'pre-upload',
+        },
+      ],
+    };
+    await store.put(`${prefix}/manifest.json`, Buffer.from(JSON.stringify(manifest) + '\n'));
+    const out = path.join(tmp, 'restore-legacy');
+    const result = await restoreHour({
+      config: archiveCfg(),
+      store,
+      hour: hourPath(h0),
+      out,
+    });
+    assert.equal(result.ok, true);
+    const restored = fs.readFileSync(path.join(out, 'blocks', '1.json'));
+    assert.equal(sha256Hex(restored), sha256Hex(raw));
+  });
+
+  test('restoreHour rejects a gzip object whose raw hash does not match', async () => {
+    const h0 = seedChain();
+    await runArchiveJob({
+      config: archiveCfg(),
+      now: h0 + 3 * HOUR + 30,
+    });
+    const store = createFileStore(`file://${sinkRoot}`, 'l2-archive');
+    const prefix = objectPrefix(27427, h0);
+    const manifest = JSON.parse((await store.get(`${prefix}/manifest.json`)).toString('utf8'));
+    const blockObj = manifest.objects.find((o) => o.key.endsWith('/blocks/1.json'));
+    blockObj.rawSha256 = 'ab'.repeat(32);
+    await store.put(`${prefix}/manifest.json`, Buffer.from(JSON.stringify(manifest) + '\n'));
+    const out = path.join(tmp, 'restore-bad-raw');
+    await assert.rejects(
+      () => restoreHour({ config: archiveCfg(), store, hour: hourPath(h0), out }),
+      (err) => {
+        assert.equal(err.code, 'RAW_HASH_MISMATCH');
+        return true;
+      },
+    );
+    assert.equal(fs.existsSync(path.join(out, 'blocks', '1.json')), false);
   });
 });

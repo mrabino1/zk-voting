@@ -656,8 +656,8 @@ prove the operations, settle on L1). Plain Node. No Docker. **Not** an
 Anvil proxy and **not** a general-purpose EVM.
 
 - `l2/genesis.json` — chainId `27427` (Republic), period 2s, 1 sequencer.
-- `l2/sequencer/index.mjs` — mempool, ~2s blocks, hourly sealed votes.
-- `l2/archive/` — optional hourly S3/R2 attic for sealed hours (default off).
+- `l2/sequencer/index.mjs` — mempool, blocks when there is work plus an hourly heartbeat, hourly sealed votes.
+- `l2/archive/` — hourly S3/R2 attic for sealed hours (on by default; no prune without a bucket or `file://` sink). Gzip block and proof objects.
 - `l2/rpc/server.mjs` — JSON-RPC subset (`eth_chainId`, `eth_getBlockByNumber`,
   `eth_sendRawTransaction` as hex-encoded civic JSON, …). Bind **:8546**.
 - `l2/prover/index.mjs` — for each batch, compute new state root, produce a

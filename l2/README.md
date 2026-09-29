@@ -80,9 +80,21 @@ Blocks are written under `l2/data/`. If `REPUBLIC_NODE_URL` is set, each
 block is also `POST`ed to `{REPUBLIC_NODE_URL}/api/explorer/ingest` with
 `x-republic-ingest-secret: $EXPLORER_INGEST_SECRET`. The Node refuses ingest
 in production when that secret is unset. Ingest failures are logged and
-**do not** halt the chain. Optional hourly attic (`ARCHIVE_ENABLED=1`) copies
-**sealed** hours to S3 or R2 and prunes local JSON outside the hot window;
-it does not replace the ~2s write path.
+**do not** halt the chain. The producer tick is still ~2s (`L2_BLOCK_TIME_MS`).
+With `L2_SKIP_EMPTY_BLOCKS=1` (default) it seals a block only when the mempool
+has a transaction, when sealed votes are ready at the disclosure hour close,
+or once per `L2_HEARTBEAT_SECONDS` (default 3600) so the chain still moves.
+Parent hashes and block numbers stay contiguous. Set `L2_SKIP_EMPTY_BLOCKS=0`
+to seal every tick, including empty blocks. Historical empty blocks are not
+rewritten.
+
+The hourly attic is **on** by default (`ARCHIVE_ENABLED=1`). It copies
+**sealed** hours to S3 or R2 and prunes local JSON outside the hot window
+only after the remote sha256 of the stored bytes matches. With an empty
+bucket and no `file://` sink it warns and deletes nothing. `ARCHIVE_ENABLED=0`
+turns the job off. `ARCHIVE_COMPRESS=1` (default) gzips each block and proof;
+the manifest lists both the stored hash and the raw hash. Older uncompressed
+objects still restore.
 
 ## Prover and L1 settlement
 
@@ -119,7 +131,7 @@ From the repo root:
 ```bash
 npm run l2:sequencer
 npm run l2:prover
-npm run l2:archive          # no-op unless ARCHIVE_ENABLED=1
+npm run l2:archive          # on by default; warns and does not delete without a store
 ```
 
 ### Environment
@@ -132,9 +144,12 @@ npm run l2:archive          # no-op unless ARCHIVE_ENABLED=1
 | `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped **rollup batch** proof |
 | `REPUBLIC_PROVING_PATH` | `false` | Vote-circuit proving path (distinct from rollup `DEV_MOCK_PROOF`). See `/circuits/HASH_SCHEME.md`. |
 | `REPUBLIC_NODE_URL` | unset | Node app base URL for explorer ingest |
-| `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). |
-| `ARCHIVE_ENABLED` | `0` | `1` runs hourly attic offload of sealed L2 hours to S3/R2. Sequencer writes stay local. |
-| `ARCHIVE_S3_BUCKET` / `ARCHIVE_S3_ENDPOINT` | empty | Empty endpoint = AWS; set endpoint for Cloudflare R2 (path-style). `file:///path` for a local sink. |
+| `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). Unchanged by the empty-block skip. |
+| `L2_SKIP_EMPTY_BLOCKS` | `1` | `1` seals only when there is a tx, the disclosure hour closes, or the heartbeat elapses. `0` seals every period, including empty blocks. |
+| `L2_HEARTBEAT_SECONDS` | `3600` | One empty block when this long has passed since the head timestamp and nothing else is ready. `0` disables the heartbeat (hour close and txs still seal). |
+| `ARCHIVE_ENABLED` | `1` | Hourly attic. `0` turns it off. On with an empty bucket and no `file://` sink: warn, exit 0, do not prune. |
+| `ARCHIVE_COMPRESS` | `1` | Gzip block and proof bodies. Stored sha256 is over those bytes. Manifest also lists raw sha256 and sizes. `0` uploads raw JSON. |
+| `ARCHIVE_S3_BUCKET` / `ARCHIVE_S3_ENDPOINT` | empty | Empty endpoint = AWS; set endpoint for Cloudflare R2 (path-style). `file:///path` for a local sink. Empty bucket and no `file://` sink does not prune. |
 | `ARCHIVE_HOT_WINDOW_HOURS` | `2` | Keep this many hours of block JSON on the VPS after a successful upload+checksum. |
 | `ARCHIVE_MIN_FREE_BYTES` | `8MiB` | Below this, skip extra local copies; still offload sealed hours. Failure matrix: [`docs/OPERATOR.md`](../docs/OPERATOR.md). |
 | `L1_RPC` | unset | Ethereum RPC for settlement |
