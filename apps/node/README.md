@@ -136,7 +136,8 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `VOTE_FQDN` | _empty_ | Public voting hostname this jurisdiction creates, e.g. `vote.domain.tld`. Bare FQDN (no scheme, port, or path). It is the voting authority: when set, `RP_ID` becomes this host unless `RP_ID` is already a different public hostname, `https://<VOTE_FQDN>` is always an accepted origin, and `PUBLIC_BASE_URL` defaults to that `https://` origin. Empty = local demo. |
 | `RP_ID` | `localhost`, or `VOTE_FQDN` when that is set | WebAuthn rpID. `localhost` does not override `VOTE_FQDN`. |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). `https://$VOTE_FQDN` is prepended when `VOTE_FQDN` is set. |
-| `ADMIN_HANDLE` | `admin` | Seeded `platform_super_admin` on first boot |
+| `ADMIN_HANDLE` | `admin` | Seeded `platform_super_admin` when the store has none. Does not create a second super admin |
+| `SUPER_ADMIN_EMAIL` | _empty_ | Contact email for that person. Empty leaves `contactEmail` as stored. Invalid refuses to start. Read at process start (not a build arg). The active writer applies it on every boot; standby does not write |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
 | `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |

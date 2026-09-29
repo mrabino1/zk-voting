@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { resolveSuperAdminEmail } from './config.mjs';
 import { isDisclosed } from './disclosure.mjs';
 import {
   electionMatchesRef,
@@ -27,6 +28,7 @@ import {
 import {
   assertEmailRoom,
   assertPasskeyRoom,
+  emailHint,
   ensurePersonFields,
   isAuthMethodType,
   normalizeEmail,
@@ -204,6 +206,8 @@ export class Store {
       data = emptyData();
     }
     const store = new Store(filePath, data);
+    store.writerActive = config.writerActive !== false;
+    store.lease = config.writerLeaseHandle || null;
     for (const user of store.data.users) {
       ensurePersonFields(user);
       for (const cred of user.credentials) {
@@ -234,8 +238,6 @@ export class Store {
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
-    store.writerActive = config.writerActive !== false;
-    store.lease = config.writerLeaseHandle || null;
     if (store.writerActive) await store.persist();
     return store;
   }
@@ -335,6 +337,42 @@ export class Store {
         createdAt: new Date().toISOString(),
       });
     }
+    return this.applySuperAdminEmail(config);
+  }
+
+  /**
+   * Point the existing platform super admin's contactEmail at SUPER_ADMIN_EMAIL.
+   * Empty env is a no-op. The active writer overwrites on every boot so
+   * operators can rotate. Standby must not mutate the store. Does not create
+   * a user. Returns true when contactEmail changed.
+   * @param {Record<string, unknown>} [config]
+   * @returns {boolean}
+   */
+  applySuperAdminEmail(config = {}) {
+    const email = resolveSuperAdminEmail(config.superAdminEmail);
+    if (!email) return false;
+    if (config.writerActive === false || this.writerActive === false) return false;
+    const user = this.data.users.find((row) => row && row.role === 'platform_super_admin');
+    if (!user || user.contactEmail === email) return false;
+    user.contactEmail = email;
+    if (!config.quiet) {
+      console.info(
+        `[republic] platform super admin contact email set from SUPER_ADMIN_EMAIL (${emailHint(email)})`,
+      );
+    }
+    return true;
+  }
+
+  /**
+   * After this process takes the writer lease, apply SUPER_ADMIN_EMAIL and
+   * persist only when the contact email changed. Standby must not call this.
+   * @param {Record<string, unknown>} [config]
+   */
+  async adoptSuperAdminEmail(config = {}) {
+    if (this.writerActive === false || config.writerActive === false) return false;
+    const changed = this.applySuperAdminEmail(config);
+    if (changed) await this.persist();
+    return changed;
   }
 
   snapshot() {

@@ -223,6 +223,17 @@ npm test -w apps/node
 
 Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/feedback`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
 
+### Platform super admin
+
+On an empty store the Node seeds one `platform_super_admin`. A later boot does not create a second one. Register that handle at `/register` so the person can sign in.
+
+`SUPER_ADMIN_EMAIL` is read when the process starts. It is not a Docker build arg and it is not baked into the image. An empty value leaves `contactEmail` as it was set in the app. A non-empty value must be a valid email (the same check as sign-in). Anything else refuses to start. The active writer writes that address onto the existing super admin on every boot, so a new value rotates the inbox. A standby process does not write the store. When it takes the writer lease, it applies the env then. Info logs show a masked address, not the full one. `/feedback` delivers to that `contactEmail`.
+
+| Env | Role |
+| --- | --- |
+| `ADMIN_HANDLE` | Handle seeded as `platform_super_admin` when the store has none. Default `admin`. Does not add another user if a super admin already exists. |
+| `SUPER_ADMIN_EMAIL` | Contact email for that person. Empty: leave `contactEmail` unchanged. Set: the active writer stores it on every boot. Invalid: the process refuses to start. Runtime env only. |
+
 ### Creating elections (chain vs demo)
 
 Clerk **Create election** in `/back-office` is `POST /api/elections`.
@@ -428,7 +439,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 
 Public page `/feedback` (nav and footer on the voter SPA). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `republic.json`, not written to civic L2, and not logged at info level.
 
-**Inbox.** The To address is the `platform_super_admin` person’s `contactEmail`, or that person’s sign-in email if no contact email is set. There is no separate inbox env var. If neither address is set, the Node **fails closed**: it logs a warning naming the missing super-admin email, returns `503 FEEDBACK_UNAVAILABLE`, and does not drop the message silently. The visitor sees “Feedback cannot be delivered right now. Please try again later.” The same `503` is returned when SES is not configured (`SES_FROM_ADDRESS` and `AWS_REGION` both required) unless `SES_DRY_RUN=1` with those two set (capture, no SES call) or the process is allowed to capture mail (`NODE_ENV=test` or `ALLOW_CAPTURE_MAILER=1`).
+**Inbox.** The To address is the `platform_super_admin` person’s `contactEmail`, or that person’s sign-in email if no contact email is set. Set `SUPER_ADMIN_EMAIL` at deploy time (see [Platform super admin](#platform-super-admin)) to fill `contactEmail` on boot. If neither address is set, the Node **fails closed**: it logs a warning naming the missing super-admin email, returns `503 FEEDBACK_UNAVAILABLE`, and does not drop the message silently. The visitor sees “Feedback cannot be delivered right now. Please try again later.” The same `503` is returned when SES is not configured (`SES_FROM_ADDRESS` and `AWS_REGION` both required) unless `SES_DRY_RUN=1` with those two set (capture, no SES call) or the process is allowed to capture mail (`NODE_ENV=test` or `ALLOW_CAPTURE_MAILER=1`).
 
 The visitor must tick the checkbox that feedback becomes the property of the project’s legal owner. The server rejects a missing tick with `400 ASSIGNMENT_REQUIRED`. The acceptance record (timestamp, terms version, PDF SHA-256, markdown SHA-256) is in the email and on one info log line. That log line does not include the message, the name, or the reply address.
 

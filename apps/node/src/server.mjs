@@ -310,6 +310,7 @@ export async function startServer(overrides = {}) {
         created.store.writerActive = true;
         created.explorer.writerActive = true;
         created.config.writerActive = true;
+        await created.store.adoptSuperAdminEmail(created.config);
         console.log(`node writer active epoch=${created.writer.epoch()}`);
       } catch (err) {
         console.error('node promote failed:', err);
