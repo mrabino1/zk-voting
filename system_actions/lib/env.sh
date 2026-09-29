@@ -34,7 +34,7 @@ load_dotenv_file() {
 }
 
 source_project_env() {
-  # Parent .env first (shared across sibling repos), then repo .env, then .env.local.
+  # Optional parent-directory .env, then this repo's .env, then .env.local.
   load_dotenv_file "$ROOT/../.env"
   load_dotenv_file "$ROOT/.env"
   load_dotenv_file "$ROOT/.env.local"
@@ -42,7 +42,7 @@ source_project_env() {
 
 source_project_env
 
-# Same branch policy as DealPunchList: feature/* → integration → release.
+# Branch policy: feature/* → test/unstable (integration) → master (release).
 DEV_BRANCH="${ZK_VOTING_DEV_BRANCH:-test/unstable}"
 PROD_BRANCH="${ZK_VOTING_PROD_BRANCH:-master}"
 INTEGRATION_BRANCH="${ZK_VOTING_INTEGRATION_BRANCH:-$DEV_BRANCH}"

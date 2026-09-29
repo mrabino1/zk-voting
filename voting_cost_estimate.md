@@ -24,7 +24,7 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 
 | Line item | Quiet month / demo | Election month (small) | Election month (medium) | Notes |
 | --- | --- | --- | --- | --- |
-| Hosts (Node + sequencer + prover) | **~$15–60** always-on small VPS | same, or **~$5–20** if you only run the box for the window | **~$40–150** 4 vCPU / 8–16 GB | **Estimate.** Coolify on one VM is typical. |
+| Hosts (Node + sequencer + prover) | **~$15–60** always-on small VPS | same, or **~$5–20** if you only run the box for the window | **~$40–150** 4 vCPU / 8–16 GB | **Estimate.** One small VM running Docker Compose is typical. |
 | L1 proof posting (`RollupSettlement`) | **$0** if `L1_RPC` unset (**repo default**) | **$0** on testnet / unset | **Do not** post default 2s / `batchSize=4` to mainnet | **Repo fact** + **estimate** below. |
 | L1 tally hash (`L1TallyMirror`) | $0 if unset | **cents–tens of USD** per election | same (one tx / election) | **Estimate**, market-variable ETH/gwei. |
 | AWS SES (MFA + Terms PDF + optional receipt / outcome PDFs) | **~$0–2** | **~$1–5** (~2k people) | **~$25–50** (~50k people) | **Estimate** from AWS list prices. |
@@ -34,7 +34,7 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 **Do this / don’t do this**
 
 - **Do** leave L1 env empty on `test/unstable` until a jurisdiction pins `master` addresses. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
-- **Do** persist Coolify / Compose volumes at `/data` (Node) and a **separate** L2 volume at `/data` (`L2_DATA_DIR`).
+- **Do** persist Compose volumes at `/data` (Node) and a **separate** L2 volume at `/data` (`L2_DATA_DIR`).
 - **Don’t** point `L1_RPC` + `SETTLEMENT_ADDRESS` + prover `PRIVATE_KEY` at Ethereum mainnet while the sequencer mints a block every **2 seconds** with `L2_BATCH_SIZE=4`. That is tens of thousands of L1 txs per day. **Estimate:** hundreds of thousands of USD per month at 10 gwei — see §3.
 - **Don’t** treat Merkle depth 20 (~1M leaves) as “this Node can serve 1M voters today.” The JSON store is the practical cap. See §4.
 
@@ -85,7 +85,7 @@ There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resource
 
 ### Monthly host $ (**estimate**, market-variable)
 
-Assumes one VM running Docker Compose (or Coolify wrapping the same images). Not AWS list for a three-AZ production mesh — this repo does not define that.
+Assumes one VM running Docker Compose. Not AWS list for a three-AZ production mesh — this repo does not define that.
 
 | Shape | Always-on $/month | Election-window only |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ Assumes one VM running Docker Compose (or Coolify wrapping the same images). Not
 | Medium (4 vCPU / 8–16 GB) | **$40–150** | A 1–2 week window ≈ **$10–50** |
 | Cloud VM in the same class (e.g. AWS `t3.medium` / `t3.large` + gp3) | Often **the high end** of those bands + disk | Same |
 
-Coolify itself is not billed by this repo. You pay the VPS (or whatever Coolify is installed on).
+You pay the VPS. This repository does not bill a platform fee.
 
 ---
 
@@ -110,17 +110,17 @@ Coolify itself is not billed by this repo. You pay the VPS (or whatever Coolify 
 | Store type | JSON files. **No SQLite.** Pretty-printed rewrite of the **whole** file on persist | [`apps/node/src/store.mjs`](./apps/node/src/store.mjs), [`apps/node/src/explorer.mjs`](./apps/node/src/explorer.mjs) |
 | Logs | Compose `json-file` `max-size: 10m`, `max-file: 3` per service | ~30 MB cap per service | [`docker-compose.yml`](./docker-compose.yml) |
 
-### Coolify `/data` volume
+### Persistent `/data` volume
 
-**Repo fact:** this repository never names Coolify. The Node image **does** set `DATA_DIR=/data` and `mkdir /data` ([`Dockerfile`](./Dockerfile)) — the same DealPunchList-shaped persistent mount operators use on Coolify.
+**Repo fact:** the Node image sets `DATA_DIR=/data` and `mkdir /data` ([`Dockerfile`](./Dockerfile)). Mount a volume there. A redeploy without that mount wipes the roll.
 
 | If you deploy… | Mount |
 | --- | --- |
-| **Node image only** (typical Coolify Dockerfile) | Persistent volume → container **`/data`**. That is `republic.json` + `l2-chain.json`. Redeploys without this mount **wipe the roll.** |
+| **Node image only** | Persistent volume → container **`/data`**. That is `republic.json` + `l2-chain.json`. Redeploys without this mount **wipe the roll.** |
 | **Compose** (`node` + `l2` + `prover`) | **Two** volumes. Node `/data` ≠ L2 `/data`. Do not point both services at one empty dir and expect isolation — Compose already uses two named volumes. |
 | Proving keys / ptau | Separate mount. Not in the image. |
 
-Size the Coolify volume for **Node JSON + explorer**, and a second volume (or the Compose `l2-data` volume) for **L2 blocks + proofs**. They scale differently (below).
+Size the Node volume for **Node JSON + explorer**, and a second volume (the Compose `l2-data` volume) for **L2 blocks + proofs**. They scale differently (below).
 
 ### GB estimates (**estimate**, from measured empty-block size)
 
@@ -132,8 +132,8 @@ Empty sequencer block JSON was measured at **~1.4 KB** compact (includes a 256-b
 | L2 `proofs/` | One pretty JSON per 4-block batch | tens of MB | **~0.3–0.8 GB/month** | same |
 | `republic.json` | Full pretty rewrite; eligible tree **stores every leaf** (~70 B/leaf compact; vote row ~0.2 KB) | **< 50 MB** | grows with people, not with empty L2 | **~0.2–1 GB** order of magnitude if identity + envelope + CMS sit on the person |
 | `l2-chain.json` | Explorer. Empty L2 blocks **are not** appended (ingest only civic rows) | **< 50 MB** | modest unless you ingest every vote | **~0.1–0.5 GB** for tens of thousands of disclosed votes |
-| Coolify Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | **50–200 GB** gives headroom |
-| Coolify / Compose L2 `/data` | blocks + proofs | **20–80 GB** | **plan 50–200 GB** if always-on for months | election-window: **20–80 GB** is usually enough |
+| Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | **50–200 GB** gives headroom |
+| Compose L2 `/data` | blocks + proofs | **20–80 GB** | **plan 50–200 GB** if always-on for months | election-window: **20–80 GB** is usually enough |
 
 **Practical disk takeaway:** always-on L2 disk is dominated by **empty 2s blocks**, not by voters. Node `/data` is dominated by **people and ballots**. Size them separately. Turn on hourly attic offload (`ARCHIVE_ENABLED=1`) so the VPS keeps only the last 1–2 hours of L2 JSON; S3/R2 holds the rest.
 

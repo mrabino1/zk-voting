@@ -2,7 +2,7 @@
 
 **Republic** Node — civic public good, not a commercial product.
 
-This package is the DealPunchList-shaped long-lived Node process for **zk-voting**
+This package is the long-lived Node process for **zk-voting**
 (product name Republic): JSON HTTP API, WebAuthn passkeys, email / Web3 /
 smart-card / license-passport person identity with AWS SES email MFA, a gasless
 vote relayer, an L2 block-explorer backend, and a
@@ -15,10 +15,10 @@ See `/NOT_FOR_PROFIT.md` at the repo root.
 
 ## What it is
 
-| DealPunchList-node | This process |
+| Piece | What this process holds |
 | --- | --- |
-| Organizations | Jurisdictions |
-| Rooms / processes | Elections (start + cutoff, roll, inbox) |
+| Jurisdictions | The body that owns a roll and its elections |
+| Elections | Start, cutoff, roll, and inbox |
 | Users + roles | `voter` / `observer` / `platform_admin` / `platform_super_admin` are global. `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, and `election_staff` are granted **per jurisdiction**. `platform_super_admin` and `platform_admin` are global overrides. The seeded host is `platform_super_admin`. |
 | Host menu | repo-root `system_actions.sh` |
 
@@ -291,7 +291,7 @@ from the repo root is the same no-op unless those vars are set.
 
 ---
 
-## Ops (DealPunchList / system_actions)
+## Ops (`system_actions`)
 
 Development happens on `test/unstable`. `master` is production only.
 

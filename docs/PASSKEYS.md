@@ -25,7 +25,7 @@ are **Future** in that helper — it does not ship a curve implementation.
 | “The voter paid gas, so their EOA is next to the ballot” | Bundler submits the UserOp; paymaster pays; vote `msg.sender` is the relayer. |
 | Linking civil identity → wallet → choice | Wallet is not the Merkle leaf; choice is not a public field. |
 
-This follows the same idea as Inertia-style passkey-held wallets: the browser never displays a mnemonic. Republic adds a second PRF domain for the ZK trapdoor so the **account key and the vote identity are not the same bytes**.
+The browser never displays a mnemonic. Republic adds a second PRF domain for the ZK trapdoor so the **account key and the vote identity are not the same bytes**.
 
 ---
 

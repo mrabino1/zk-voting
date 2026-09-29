@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # NOT FOR PROFIT — civic public good, not a commercial product.
-# system_actions.sh — host/operator + DealPunchList git-flow menu for zk-voting
+# system_actions.sh — host/operator menu for zk-voting
 #
 # Branch policy
 #   feature/*      short-lived work
@@ -279,7 +279,7 @@ ${BLD}zk-voting system_actions.sh${RST}
 Development happens on ${CYN}${DEV_BRANCH}${RST} (feature/* merges here).
 Production is ${CYN}${PROD_BRANCH}${RST} only.
 
-Git workflow (DealPunchList-shaped)
+Git workflow
   1, launch, --launch-test-system
                   fetch + pull, npm install, npm run dev
   2, create-feature, --create-feature [name]
@@ -289,15 +289,13 @@ Git workflow (DealPunchList-shaped)
   4, merge-to-master, --merge-to-master
                   merge $DEV_BRANCH into $PROD_BRANCH (type MERGE)
 
-Data / chain (no Postgres in this repo)
+Data / chain (JSON store, no SQL database)
   5, data, --data-status
-                  republic.json counts (not Drizzle)
-  6, connectivity, --db-status
+                  republic.json counts
+  6, connectivity
                   Node / L2 / CHAIN_RPC / L1_RPC reachability
-  7, users, --list-users, --sandbox-participant
+  7, users, --list-users
                   local Node handles + roles (no emails)
-  8, --list-sandbox-participants
-                  same user list (DealPunchList option 8)
   dev-flags       ALLOW_DEV_LOGIN and mock flags
 
 Host / operator
@@ -338,7 +336,6 @@ menu() {
     echo "    5) JSON store status"
     echo "    6) connectivity (Node / L2 / chain)"
     echo "    7) list local Node users (handle + role)"
-    echo "    8) list local Node users (DealPunchList sandbox list)"
     echo "    v) dev-only flags (ALLOW_DEV_LOGIN / mocks)"
     echo
     echo "  Host"
@@ -364,7 +361,6 @@ menu() {
       5) cmd_data_status ;;
       6) cmd_connectivity ;;
       7) cmd_list_users ;;
-      8) cmd_list_users ;;
       v|V) cmd_dev_flags ;;
       s|S) cmd_status ;;
       c) git_sync "$DEV_BRANCH" ;;
@@ -392,11 +388,9 @@ main() {
     2|--create-feature|create-feature) create_feature_branch "${1:-}" ;;
     3|--merge-feature|merge-feature) merge_feature_to_main ;;
     4|--merge-to-master|--merge-to-release|merge-to-master|merge-to-release) merge_to_release ;;
-    5|--data-status|--db-push|--push-schema|data) push_schema ;;
-    6|--db-status|connectivity) cmd_connectivity ;;
-    7|--sandbox-participant) add_sandbox_participant "${1:-}" "${2:-}" "${3:-}" ;;
-    --list-users|users) cmd_list_users "${1:-}" ;;
-    8|--list-sandbox-participants) list_sandbox_participants "${1:-}" ;;
+    5|--data-status|data) cmd_data_status ;;
+    6|connectivity) cmd_connectivity ;;
+    7|--list-users|users) cmd_list_users "${1:-}" ;;
     dev-flags|--dev-flags) cmd_dev_flags ;;
     status) cmd_status ;;
     checkout-dev) git_sync "$DEV_BRANCH" ;;

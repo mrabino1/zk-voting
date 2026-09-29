@@ -6,7 +6,7 @@ A monorepo for a **zero-knowledge, Ethereum-settled voting system**. Product nam
 
 This repository holds two tightly coupled pieces of software (and the circuits, L2, and packages that bind them):
 
-1. A **Node application** (same operational shape as [DealPunchList](https://dealpunchlist.com) / `dealpunchlist-node`): the product surface for voters, election officials, and public observers (`apps/node`).
+1. A **Node application**: the product surface for voters, election officials, and public observers (`apps/node`).
 2. A **`smart-contracts/`** package: Solidity for Ethereum that registers voters, opens ballots, records (or commits to) votes with zero-knowledge proofs, and **enforces disqualification** so that a person who is on the roll can still be barred from a given election for jurisdiction-defined reasons.
 
 The same **Solidity** is meant to run **on Ethereum mainnet (L1)** and on any EVM venue a jurisdiction chooses (Lighter, other L2s, Foundry Anvil). Cheap, high-volume civic activity in *this* repo lands on **Republic L2** (this repo’s civic JSON sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): prove the operations, settle proofs and state to Ethereum. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there.
@@ -166,7 +166,7 @@ zk-voting/
   NOT_FOR_PROFIT.md
   LICENSE                      AGPL-3.0-or-later
   CONTRIBUTING.md
-  system_actions.sh            host/operator menu (DealPunchList pattern)
+  system_actions.sh            host/operator menu
   package.json                 npm workspaces
   docker-compose.yml           Node + L2 host path
   docs/
@@ -313,7 +313,7 @@ node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1
 
 ```bash
 ./system_actions.sh              # interactive menu
-./system_actions.sh 1            # pull + npm run dev (DealPunchList option 1)
+./system_actions.sh 1            # pull + npm run dev
 ./system_actions.sh 2 my-feature # feature/* from test/unstable
 ./system_actions.sh 3            # merge feature/* into test/unstable
 ./system_actions.sh 4            # merge test/unstable → master (type MERGE)
@@ -532,7 +532,7 @@ RELAYER_PRIVATE_KEY=
 
 ## Node application
 
-The Node side is the human product. It should feel operationally familiar to anyone who has run `dealpunchlist-node`: a long-lived Node process, a web frontend, authenticated users, organizations (here: **jurisdictions**), admin tools, notifications, and a host script (`system_actions.sh`) that can pull a branch, build, and restart.
+The Node side is the human product: a long-lived Node process, a web frontend, authenticated users, **jurisdictions**, admin tools, notifications, and a host script (`system_actions.sh`) that can pull a branch, build, and restart.
 
 ### What it is responsible for
 
@@ -549,16 +549,16 @@ The Node side is the human product. It should feel operationally familiar to any
 - Silently “fixing” a tally. If the chain rejects a proof, the UI reports failure. Do not edit `republic.json` to change counts after freeze.
 - Inventing disqualification law. The app presents **coded reasons** the jurisdiction configured; clerks apply them.
 
-### Shape (DealPunchList parallel)
+### Shape
 
-| DealPunchList-node | zk-voting Node |
+| Piece | What the Node holds |
 | --- | --- |
-| Organizations / companies | Jurisdictions (nation, state, county, city, other body) |
+| Jurisdictions | The body that owns a roll (nation, state, county, city, or other) |
 | Users with roles | Voters, clerks, registrars, observers, admins |
-| A “room” with a process | An election with a roll, a ballot, and a result |
-| Requirements that get satisfied | Registration steps, eligibility checks, disqualification holds |
+| Election | A roll, a ballot, and a result |
+| Registration | Steps, eligibility checks, and disqualification holds |
 | Notifications | “You are registered”, “you are disqualified from X”, “polls are open”, “tally posted” |
-| Hosting via `system_actions.sh` | Same: `test/unstable` for development, `master` for production |
+| Hosting | `system_actions.sh`: `test/unstable` for development, `master` for production |
 
 **Implemented UI (vanilla JS, Express static):**
 
@@ -569,7 +569,7 @@ The Node side is the human product. It should feel operationally familiar to any
 | `/elections/:id/info` | Voter punch-list of option supporting info (`info.js`) |
 | `/elections/:id/info/:questionId/:optionId` | One option + external links |
 | `/about`, `/faq`, `/p/:slug` | Public CMS pages. Clerks publish from `/office/pages`. |
-| `/office/pages`, `/office/site` | WordPress-style page editor; pin the one shared factory (env wins) |
+| `/office/pages`, `/office/site` | Page editor; pin the one shared factory (env wins) |
 | `/admin` | Platform admin (file `admin.html`, URL has no `.html`) |
 | `/back-office` | Clerks / registrars / officers (file `back-office.html`) |
 | `/explorer` | Civic L2 explorer (file `explorer.html`) |
@@ -973,7 +973,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ### Host actions
 
-`system_actions.sh` is the operator menu, adapted from the DealPunchList (`dealpunchlist-node`) pattern. Numbers 1–4 are the same git-flow: launch, create `feature/*`, merge into `test/unstable`, merge to `master`.
+`system_actions.sh` is the operator menu. Numbers 1–4 are the git flow: launch, create `feature/*`, merge into `test/unstable`, merge to `master`.
 
 ```bash
 ./system_actions.sh              # interactive menu
@@ -1014,7 +1014,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 
 1. **Spec freeze (this README)** — purpose, monorepo, L1 + L2, registration, disqualification. **Done (kept current as code landed).**
 2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and an EVM configured as Republic L2. **In-tree.**
-3. **Node skeleton** — DealPunchList-style app: jurisdictions, users, roles, election admin, voter home. **In-tree** (vanilla JS + JSON store, not Vite/React/SQLite).
+3. **Node skeleton** — jurisdictions, users, roles, election admin, voter home. **In-tree** (vanilla JS + JSON store, not Vite/React/SQLite).
 4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
 5. **First proving path** — **in progress.** Eligible-vote circuit compiles; untrusted local powers-of-tau + Groth16 setup/export/prove scripts exist (`npm run circuits:*`). `MockVerifier` still default for unit tests. Poseidon + ceremony still outstanding.
 6. **Disqualification path** — same voter, after a coded disqualification, cannot obtain a valid proof against production keys. **Future** (eligible-root membership is in the circuit topology today).
@@ -1059,7 +1059,6 @@ Jurisdictions **are meant to fork this repository** (the Node). That is document
 - [MACI](https://maci.pse.dev/) — on-chain polls, signup policies, collusion-resistant messaging, proven tallies.
 - [Semaphore](https://semaphore.pse.dev/) — anonymous group membership proofs (a likely building block for “I am still in the eligible set”).
 - [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 *family* this repo treats as the high-throughput venue. Republic L2 is operated from `l2/` (chainId 27427) as a **civic JSON** sequencer, not as a Lighter-hosted or Anvil-proxied EVM.
-- DealPunchList / `dealpunchlist-node` — the Node/product and hosting pattern this monorepo’s application side follows.
 
 ---
 

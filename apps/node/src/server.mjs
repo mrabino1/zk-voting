@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Republic Node: JSON API + SPA host (DealPunchList shape).
+// Republic Node: JSON API + static page host.
 
 import fs from 'node:fs';
 import path from 'node:path';

@@ -313,8 +313,7 @@ const REASON_CODE_LABELS = Object.freeze({
  */
 
 /**
- * Administrative owner of a roll and of elections. DealPunchList
- * "organization" analogue.
+ * Administrative owner of a roll and of elections.
  *
  * @typedef {Object} Jurisdiction
  * @property {string} id bytes32 (or hex) jurisdiction id used on chain.

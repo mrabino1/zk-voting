@@ -682,7 +682,7 @@ sequencer / paymaster report a fake sponsored balance for tooling.
 
 ---
 
-## Node app (`apps/node`) — DealPunchList shape
+## Node app (`apps/node`)
 
 Long-lived Node 22 process, web UI + HTTP API, `system_actions.sh` restarts it.
 Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`)
@@ -690,8 +690,8 @@ are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
 `platform_admin` is a global override and may act in every jurisdiction.
 
 **Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
-addons such as `better-sqlite3` are **not** used. Jurisdictions are the
-DealPunchList "organizations". Elections are the "rooms".
+addons such as `better-sqlite3` are **not** used. A jurisdiction owns
+its elections.
 
 **UI:** vanilla JS modules and HTML in `apps/node/public/`. Express
 `express.static` + a GET fallback that serves `admin.html` / `back-office.html`
@@ -911,9 +911,9 @@ coded disqualification the disqualified witness returns false and
 
 ### Pages (vanilla JS, served by Express)
 
-Inspired by DealPunchList operational UX (organizations → jurisdictions,
-admin tools, notifications) and Inertia-style passkey-held wallets
-(WebAuthn PRF wraps the Ethereum key; no seed phrase shown).
+Voter and officer pages cover registration, jurisdiction admin, and
+notifications. The passkey-held wallet wraps the Ethereum key with WebAuthn
+PRF; no seed phrase is shown.
 
 | Path | Files | Status |
 | --- | --- | --- |
@@ -936,7 +936,7 @@ Question types the ballot UI renders: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`,
 `ballotSpecHash` is keccak256 of the canonical ballot JSON `{ title, questions }`.
 IRV is hashed via type `RANKED` and/or per-question `ballotMethod: "ranked_choice"` (election-level plurality is the default and is omitted so `{ id, label }` hashes stay stable). On-chain v1 does **not** add a method enum to `ElectionParams`.
 
-### Passkey wallet (Inertia-style)
+### Passkey wallet
 
 1. Create WebAuthn credential (`residentKey: required`, `extensions.prf`).
 2. `prf.eval` **account** salt → HKDF → encrypt a generated 32-byte seed

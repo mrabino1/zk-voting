@@ -1,13 +1,13 @@
 /**
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Jurisdiction CMS: clerks edit pages like a WordPress site. One shared factory.
+ * Jurisdiction CMS: clerks edit public pages. One shared factory.
  */
 
 import { audienceOf, isOfficer, signInHref } from "./audience.js";
 import { logout } from "./signin.js";
 
 export const SHARED_DEPLOYMENT_NOTE =
-  "Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here like a WordPress site.";
+  "Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here.";
 
 function mount(node, ...children) {
   node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
@@ -104,7 +104,7 @@ function gateScreen(h, me, kind) {
   const copy =
     kind === "officer"
       ? `Signed in as ${me.user.handle} (${me.user.role}). This hub is for election officials.`
-      : `Signed in as ${me.user.handle} (${me.user.role}). Pages are edited by clerks and the Node host, like a WordPress site. Registrars and tally operators use the back office for the roll and counts.`;
+      : `Signed in as ${me.user.handle} (${me.user.role}). Pages are edited by clerks and the Node host. Registrars and tally operators use the back office for the roll and counts.`;
   return h(
     "div",
     { class: "page-head audience-gate", id: "officer-gate" },
@@ -211,7 +211,7 @@ export async function renderOfficePages(main, ctx, bundle) {
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "WordPress-style pages" }),
+      h("p", { class: "kicker", text: "Public pages" }),
       h("h1", { text: "Update public pages" }),
       h(
         "p",
@@ -618,7 +618,7 @@ export async function renderOfficePageEditor(main, ctx, bundle, { isNew = false 
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "WordPress-style editor" }),
+      h("p", { class: "kicker", text: "Page editor" }),
       h("h1", { text: isNew ? "New page" : `Edit: ${page.title || "Untitled"}` }),
       h("p", { class: "lede", text: "Blocks are plain text. HTML is stripped on save so a clerk cannot inject scripts." })
     ),

@@ -416,7 +416,7 @@ describe('passkey and email caps (primary email)', () => {
     assert.ok(again.json.passkeys.some((p) => p.credentialId === 'cred-new'));
   });
 
-  test('GET /api/config advertises the DealPunchList caps', async () => {
+  test('GET /api/config advertises the identity caps', async () => {
     const { status, json } = await api('GET', '/api/config');
     assert.equal(status, 200);
     assert.equal(json.identity.maxPasskeys, 5);

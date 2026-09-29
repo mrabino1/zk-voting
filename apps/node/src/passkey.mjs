@@ -161,7 +161,7 @@ export function createPasskeyService(config, store, hooks = {}) {
     const account = user || (trimmedHandle ? store.getUserByHandle(trimmedHandle) : null);
     if (trimmedHandle && !account) throw new HttpError(404, 'unknown handle');
     const creds = account ? existingCredentials(account) : [];
-    // Discoverable / resident-key login (DFC-style): omit allowCredentials so
+    // Discoverable / resident-key login: omit allowCredentials so
     // the authenticator can present the passkey. Handle-scoped login only
     // lists that person's credentials when they already exist.
     const options = await generateAuth({

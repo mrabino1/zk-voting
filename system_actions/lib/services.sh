@@ -19,7 +19,7 @@ rpc_ok() {
 cmd_data_status() {
   source_project_env
   echo
-  printf '%s%s%s\n' "$BLD" "JSON data store (not Postgres / not Drizzle)" "$RST"
+  printf '%s%s%s\n' "$BLD" "JSON data store (no SQL database)" "$RST"
   echo "  this repo has no db:push / db:migrate — clerks write $STORE_FILE"
   echo "  path      $STORE_FILE"
   if [[ ! -f "$STORE_FILE" ]]; then
@@ -105,7 +105,7 @@ cmd_connectivity() {
   fi
 
   echo
-  echo "  Pin factory / inbox / verifier in .env; this repo does not run Drizzle."
+  echo "  Pin factory / inbox / verifier in .env."
   echo "  CLI: ./system_actions.sh 6   or   ./system_actions.sh connectivity"
   echo
 }
@@ -164,32 +164,8 @@ cmd_dev_flags() {
   echo "  ALLOW_CIVIC_ID_MOCK     ${ALLOW_CIVIC_ID_MOCK:-}"
   echo "  REQUIRE_EMAIL_MFA       ${REQUIRE_EMAIL_MFA:-}"
   echo
-  echo "  DealPunchList sandbox_participant does not exist here."
   echo "  Dev login is POST /api/auth/dev-login when ALLOW_DEV_LOGIN=1"
   echo "  (ignored when NODE_ENV=production). Local users: ./system_actions.sh 7"
   echo
 }
 
-# Honest aliases for DealPunchList option names that do not apply.
-push_schema() {
-  warn "no Drizzle / Postgres in zk-voting — JSON store only"
-  cmd_data_status
-}
-
-db_access_report() {
-  cmd_connectivity
-}
-
-add_sandbox_participant() {
-  if [[ "${1:-}" == "remove" || "${1:-}" == "prod" || "${1:-}" == "production" || "${1:-}" == "test" ]]; then
-    warn "sandbox_participant add/remove is a DealPunchList Postgres flag; zk-voting has no such table"
-    shift
-  fi
-  warn "listing local Node users (handle + role) instead"
-  cmd_list_users "${1:-}"
-}
-
-list_sandbox_participants() {
-  warn "no sandbox_participant flag — listing local Node users instead"
-  cmd_list_users "${1:-}"
-}

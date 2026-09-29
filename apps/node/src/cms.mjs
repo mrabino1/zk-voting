@@ -4,7 +4,7 @@
 import { isPlatformOperator } from './roles.mjs';
 
 export const SHARED_DEPLOYMENT_NOTE =
-  'Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here like a WordPress site.';
+  'Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here.';
 
 export const PAGE_KINDS = ['home', 'about', 'faq', 'custom'];
 export const PAGE_STATUSES = ['draft', 'published'];

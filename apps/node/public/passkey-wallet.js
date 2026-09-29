@@ -1,7 +1,7 @@
 /**
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
  *
- * Inertia-style passkey-held wallet for Republic.
+ * Passkey-held wallet for Republic.
  *
  * - WebAuthn resident key + userVerification required.
  * - Two PRF / HKDF domains (docs/PASSKEYS.md): account key ≠ trapdoor/nullifierSecret.
