@@ -266,6 +266,8 @@ curl -fsS http://127.0.0.1:3000/health
 
 See [`.env.example`](./.env.example) and [`docs/OPERATOR.md`](./docs/OPERATOR.md). Forked hosts pin the shared factory in that same file — [Intentional forking](#intentional-forking).
 
+Coolify rolling update: old and new containers share `node-data` and `l2-data` on one host. A standby container stays healthy (`ok: true`, `"mode":"standby"`) and does not write until it holds the lease. Healthchecks must not require `mode=active`. Archive is on by default; only the lease holder prunes. L1 contracts (`SETTLEMENT_ADDRESS`, `VERIFIER_ADDRESS`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`) are deployed once — `npm run deploy:l1 -- --check` — and containers only read those addresses. Settings: [`docs/ROLLING_UPDATES.md`](./docs/ROLLING_UPDATES.md).
+
 ### Republic L2 (sequencer + prover)
 
 ```bash
@@ -274,7 +276,7 @@ npm run l2:prover           # node l2/prover/index.mjs
 ./l2/bin/start-local.sh     # both
 ```
 
-Genesis **chainId 27427**, one sequencer. The producer wakes every ~2s and, by default, seals a block only when there is a transaction, when the disclosure hour closes, or once an hour (`L2_SKIP_EMPTY_BLOCKS=1`, `L2_HEARTBEAT_SECONDS=3600`). Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+Genesis **chainId 27427**, one sequencer. The producer wakes every ~2s and, by default, seals a block only when there is a transaction, when the disclosure hour closes, or once an hour (`L2_SKIP_EMPTY_BLOCKS=1`, `L2_HEARTBEAT_SECONDS=3600`). A second sequencer on the same data directory stays standby and does not seal that heartbeat block. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC`, `SETTLEMENT_ADDRESS`, and `L1_CHAIN_ID` are configured and the address has code; otherwise mock proofs under `l2/data/proofs/`, or fail closed if `L1_RPC` is set but the address is missing. The prover never deploys. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ```bash
 export L2_RPC_PORT=8546

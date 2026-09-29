@@ -14,6 +14,7 @@ import { getConfig } from './config.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
+import { openNodeWriter, standbyGuard } from './writerMode.mjs';
 import { createPasskeyService } from './passkey.mjs';
 import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
@@ -166,10 +167,16 @@ export async function createApp(overrides = {}) {
     ...configOverrides
   } = overrides;
   const config = getConfig(configOverrides);
+  const writer = openNodeWriter(config);
+  config.writerActive = writer.active;
+  config.writerLeaseHandle = writer.lease;
   const store = await Store.open(config);
-  config.receiptPdfSecret = await loadReceiptPdfSecret(config);
+  store.writerActive = writer.active;
+  store.lease = writer.lease;
+  config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
+  explorer.writerActive = writer.active;
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
@@ -178,7 +185,20 @@ export async function createApp(overrides = {}) {
   const mfa = createMfaService({ config, store, mailer, terms });
   const pin = createPinService({ store });
   const tokenRegistry = tokenRegistryOverride || createTokenRegistry(config);
-  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms, pin, tokenRegistry };
+  const deps = {
+    config,
+    store,
+    explorer,
+    chain,
+    l1,
+    passkeys,
+    mailer,
+    mfa,
+    terms,
+    pin,
+    tokenRegistry,
+    writer,
+  };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -202,6 +222,7 @@ export async function createApp(overrides = {}) {
     next();
   });
   app.use(express.json({ limit: '2mb' }));
+  app.use(standbyGuard(writer));
   app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && 'body' in err) {
       res.status(400).json({ error: 'invalid JSON', nfp: true });
@@ -261,7 +282,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer };
 }
 
 export async function startServer(overrides = {}) {
@@ -278,13 +299,60 @@ export async function startServer(overrides = {}) {
       `Republic Node (NOT FOR PROFIT) listening on ${config.host}:${port}  chainId=${config.chainId}`,
     );
   }
+  if (created.writer?.enabled && !created.writer.active) {
+    const timer = setInterval(async () => {
+      if (!created.writer.tryPromote()) return;
+      clearInterval(timer);
+      try {
+        if (typeof created.store.reloadFromDisk === 'function') await created.store.reloadFromDisk();
+        if (typeof created.explorer.refresh === 'function') await created.explorer.refresh();
+        created.config.receiptPdfSecret = await loadReceiptPdfSecret(created.config, { mint: true });
+        created.store.writerActive = true;
+        created.explorer.writerActive = true;
+        created.config.writerActive = true;
+        console.log(`node writer active epoch=${created.writer.epoch()}`);
+      } catch (err) {
+        console.error('node promote failed:', err);
+      }
+    }, created.writer.lease?.pollMs || 1000);
+    if (typeof timer.unref === 'function') timer.unref();
+  }
+
   return { ...created, server, port };
 }
 
 const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
 if (isMain) {
-  startServer().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+  startServer()
+    .then((created) => {
+      let stopping = false;
+      const shutdown = () => {
+        if (stopping) return;
+        stopping = true;
+        console.log('node stopping');
+        created.writer?.beginDrain();
+        const force = setTimeout(() => process.exit(0), 20_000);
+        if (typeof force.unref === 'function') force.unref();
+        created.server.close(async () => {
+          try {
+            if (created.store?.writerActive !== false) await created.store.persist();
+          } catch (err) {
+            console.warn('node flush failed:', err.message || err);
+          }
+          try {
+            created.writer?.release();
+          } catch {
+            // lease already released
+          }
+          clearTimeout(force);
+          process.exit(0);
+        });
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

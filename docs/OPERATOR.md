@@ -107,6 +107,23 @@ The Node image installs the npm **workspaces** from the repository root (`@zk-vo
 
 Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY`, or paymaster keys into the image.
 
+### Coolify rolling update
+
+Old and new containers overlap. They must mount the **same** `node-data` and `l2-data` volumes on **one** host. Each stateful process takes a file lease (`l2/lease/lease.mjs`) before it writes. The new container starts **standby**: `/health` is HTTP 200 with `ok: true` and `"mode":"standby"`. It does not produce blocks, prove, prune, ingest, or mutate the store. Do not configure Coolify to require `mode=active` — that deadlocks the rollout. On SIGTERM the old container flushes, releases the lease, and exits 0 inside `stop_grace_period: 30s`. The standby polls and takes over. A crash is taken over after the lease TTL (default 8s).
+
+Skip-empty blocks stay on (`L2_SKIP_EMPTY_BLOCKS=1`). Only the sequencer lease holder runs `tickProducer`, so only one process seals the hourly chain heartbeat. Archive stays on (`ARCHIVE_ENABLED=1`). Only the archive lease holder uploads or prunes; an empty bucket warns and does not delete local blocks.
+
+| Coolify setting | Value |
+| --- | --- |
+| Strategy | Rolling update (start new, wait healthy, stop old) |
+| Node health | `http://127.0.0.1:3000/health` — success is HTTP 200 and `ok` is not false |
+| L2 health | `http://127.0.0.1:8546/health` — same success rule |
+| Grace | 30 seconds |
+| Volumes | Persistent `node-data` and `l2-data` already attached to this host. Not a new volume per container |
+| Two hosts | Not supported. File locks do not cross hosts. Stop the old container first |
+
+Clients retry HTTP 503 `maintenance handover` (`Retry-After: 2`). Full failure modes, fencing, and the one-time L1 deploy: [`ROLLING_UPDATES.md`](./ROLLING_UPDATES.md). Smoke the overlap with `docker-compose.rolling.yml` (`l2-next` on 8547, `node-next` on 3001).
+
 ### Forked jurisdiction Nodes
 
 Forking this Node is **intentional**. Paste the [copy-paste credentials](../README.md#copy-paste-credentials) block (or copy [`.env.example`](../.env.example)), set `VOTE_FQDN` to the voting subdomain (below), set SES / AWS keys (or the host IAM role), and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
@@ -459,6 +476,20 @@ This is the default. The Node **still tallies**. Certification is a documented n
 | `L1_PUBLISHER_PRIVATE_KEY` (alias `L1_PRIVATE_KEY`) | yes | Key that is `admin` or `setPublisher`'d on the mirror. **Not** the L2 prover `PRIVATE_KEY`. |
 | `L1_SETTLEMENT_ADDRESS` (alias `SETTLEMENT`) | no | `RollupSettlement` — attach current L2 state root |
 | `L1_CHAIN_ID` | no | Defaults to whatever the RPC reports |
+
+Deploy the mirror, settlement, and verifier **once** (Anvil, Sepolia, or mainnet). Container start and a rolling update only read the addresses. `npm run deploy:l1 -- --check` refuses when `SETTLEMENT_ADDRESS`, `VERIFIER_ADDRESS`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `ELECTION_FACTORY_ADDRESS`, or `BALLOT_INBOX_ADDRESS` is already set, or when `deployments/<chainId>.json` (or `DEPLOYMENTS_FILE`) has `"deployed": true`. `FORCE_REDEPLOY=1` overrides that and prints a warning. Do not set it on a live election. After broadcast, `npm run deploy:l1 -- --verify` checks `eth_getCode` and prints env lines. The prover fails closed when `L1_RPC` is set but `SETTLEMENT_ADDRESS` is missing, has no code, or `L1_CHAIN_ID` does not match. Only the prover that holds the writer lease submits. Runbook: [`ROLLING_UPDATES.md`](./ROLLING_UPDATES.md).
+
+```bash
+npm run deploy:l1 -- --check
+cd smart-contracts
+L2_FACTORY="$ELECTION_FACTORY_ADDRESS" forge script script/DeployL1.s.sol \
+  --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
+# stdout includes TALLY_MIRROR=0x… SETTLEMENT=0x… L2_FACTORY=0x…
+# DeployL1 reverts MissingL2Factory if the shared factory is not set,
+# and AlreadyDeployed if an address env var or deployment record is set.
+```
+
+The historical one-shot (same script) is below. Prefer the check above so a second run cannot land new addresses.
 
 Deploy the mirror (Anvil or Sepolia):
 

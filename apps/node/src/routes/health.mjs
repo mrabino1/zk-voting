@@ -19,8 +19,14 @@ export function healthRouter(deps) {
       ? deps.store.publishedAcceptedBallotsAll(now, interval)
       : undefined;
     const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
+    const mode = deps.writer?.mode?.() || 'active';
+    res.set('x-republic-mode', mode);
     res.json({
       ok: true,
+      ready: true,
+      mode,
+      acceptingWrites: deps.writer ? deps.writer.acceptingWrites() : true,
+      epoch: deps.writer?.epoch?.() || 0,
       app: 'zk-voting',
       nfp: true,
       notForProfit: true,

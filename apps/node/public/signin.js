@@ -5,6 +5,7 @@
  */
 
 import "./i18n.js";
+import { fetchWithStandbyRetry } from "./standby-retry.js";
 import { loginPasskey, hasWebAuthn, webAuthnUnavailableMessage } from "./passkey-wallet.js";
 import { navigate } from "./router.js";
 import {
@@ -28,7 +29,7 @@ export async function fetchJson(path, options = {}) {
     ...(options.body != null ? { "Content-Type": "application/json" } : {}),
     ...(options.headers || {}),
   };
-  const res = await fetch(path, {
+  const res = await fetchWithStandbyRetry(path, {
     credentials: "same-origin",
     ...options,
     headers,

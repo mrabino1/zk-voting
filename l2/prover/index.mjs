@@ -4,32 +4,18 @@
 // RollupSettlement — or writes mock proofs locally.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig, ZERO_HASH } from '../sequencer/state.mjs';
-import { buildBatch, ROLLUP_SETTLEMENT_ABI } from './batch.mjs';
+import { WriterLease } from '../lease/lease.mjs';
+import { loadConfig } from '../sequencer/state.mjs';
+import { ROLLUP_SETTLEMENT_ABI } from './batch.mjs';
+import {
+  assertProverDoesNotDeploy,
+  loadSettlementView,
+  readCursor,
+  runProverTick,
+} from './settle.mjs';
 
 const config = loadConfig();
 fs.mkdirSync(path.join(config.dataDir, 'proofs'), { recursive: true });
-
-const cursorPath = path.join(config.dataDir, 'proofs', 'cursor.json');
-
-function readCursor() {
-  if (!fs.existsSync(cursorPath)) {
-    return { lastProvenBlock: 0, lastBatchIndex: -1 };
-  }
-  return JSON.parse(fs.readFileSync(cursorPath, 'utf8'));
-}
-
-function writeCursor(cursor) {
-  const tmp = cursorPath + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(cursor) + '\n');
-  fs.renameSync(tmp, cursorPath);
-}
-
-function writeJsonAtomic(file, obj) {
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
-  fs.renameSync(tmp, file);
-}
 
 async function rpc(method, params = []) {
   const res = await fetch(config.l2RpcUrl, {
@@ -43,22 +29,6 @@ async function rpc(method, params = []) {
     throw new Error(json.error.message || 'rpc error');
   }
   return json.result;
-}
-
-function hexToNumber(q) {
-  if (q == null) return 0;
-  return Number(BigInt(q));
-}
-
-function rpcBlockToLocal(block) {
-  return {
-    number: hexToNumber(block.number),
-    hash: block.hash,
-    parentHash: block.parentHash,
-    stateRoot: block.stateRoot,
-    timestamp: hexToNumber(block.timestamp),
-    transactions: Array.isArray(block.transactions) ? block.transactions : [],
-  };
 }
 
 async function waitForRpc() {
@@ -134,58 +104,43 @@ async function submitBatchL1(batch) {
   return { submitted: true, l1TxHash: hash };
 }
 
-async function proveRange(cursor, start, end) {
-  const blocks = [];
-  for (let n = start; n <= end; n++) {
-    const raw = await rpc('eth_getBlockByNumber', ['0x' + n.toString(16), true]);
-    if (!raw) throw new Error(`missing block ${n}`);
-    blocks.push(rpcBlockToLocal(raw));
+async function tick(cursor, lease) {
+  if (lease && !lease.holds()) {
+    const got = lease.tryAcquire();
+    if (!got.acquired) return;
+    lease.startHeartbeat();
+    console.log(`prover active epoch=${got.epoch}`);
+    Object.assign(cursor, readCursor(config.dataDir));
   }
-  let prevStateRoot = ZERO_HASH;
-  if (start === 0) {
-    prevStateRoot = config.genesisStateRoot || ZERO_HASH;
-  } else {
-    const parent = await rpc('eth_getBlockByNumber', ['0x' + (start - 1).toString(16), false]);
-    prevStateRoot = parent?.stateRoot || ZERO_HASH;
+  const gate = await loadSettlementView(config);
+  if (gate.mode === 'fail-closed') {
+    console.error(`prover fail closed: ${gate.reason}`);
+    return;
   }
-  const batchIndex = cursor.lastBatchIndex + 1;
-  const batch = buildBatch({ batchIndex, blocks, prevStateRoot });
-  const proofPath = path.join(config.dataDir, 'proofs', `batch-${batchIndex}.json`);
-  const settlement = await submitBatchL1(batch);
-  const record = {
-    ...batch,
-    mock: Boolean(config.devMockProof),
-    submitted: Boolean(settlement.submitted),
-    submitReason: settlement.reason || null,
-    l1TxHash: settlement.l1TxHash || null,
-    writtenAt: new Date().toISOString(),
-  };
-  writeJsonAtomic(proofPath, record);
-  writeCursor({
-    lastProvenBlock: end,
-    lastBatchIndex: batchIndex,
-    lastDataHash: batch.dataHash,
+  const result = await runProverTick({
+    config,
+    cursor,
+    l2Rpc: config.l2RpcUrl,
+    gate,
+    submit: submitBatchL1,
   });
-  const dest = settlement.submitted
-    ? `L1 ${settlement.l1TxHash}`
-    : proofPath;
-  console.log(
-    `batch ${batchIndex} blocks ${start}-${end} dataHash=${batch.dataHash} -> ${dest}`,
-  );
-}
-
-async function tick(cursor) {
-  const latest = hexToNumber(await rpc('eth_blockNumber'));
-  const batchSize = config.batchSize || 4;
-  while (latest - cursor.lastProvenBlock >= batchSize) {
-    const start = cursor.lastProvenBlock + 1;
-    const end = start + batchSize - 1;
-    await proveRange(cursor, start, end);
-    Object.assign(cursor, readCursor());
+  Object.assign(cursor, result.cursor);
+  for (const action of result.actions) {
+    if (action.failClosed) {
+      console.error(`prover fail closed: ${action.reason}`);
+      continue;
+    }
+    if (action.duplicate) {
+      console.log(`batch already recorded (${action.reason})`);
+      continue;
+    }
+    const dest = action.submitted ? `L1 ${action.l1TxHash}` : 'local proof';
+    console.log(`batch settled -> ${dest}`);
   }
 }
 
 async function main() {
+  assertProverDoesNotDeploy();
   console.log(
     'Republic L2 prover  NOT FOR PROFIT  rpc=' +
       config.l2RpcUrl +
@@ -197,16 +152,32 @@ async function main() {
       Boolean(config.voteProvingPath) +
       ' (vote circuit; distinct from DEV_MOCK_PROOF rollup batches)',
   );
+  const lease = new WriterLease({ dataDir: config.dataDir, role: 'prover' });
+  let stop = false;
+  const requestStop = () => {
+    stop = true;
+  };
+  process.on('SIGTERM', requestStop);
+  process.on('SIGINT', requestStop);
   await waitForRpc();
-  const cursor = readCursor();
-  while (true) {
+  const cursor = readCursor(config.dataDir);
+  while (!stop) {
     try {
-      await tick(cursor);
+      await tick(cursor, lease);
     } catch (err) {
       console.warn('prover tick failed (will retry):', err.message || err);
     }
-    await new Promise((r) => setTimeout(r, Math.min(config.blockTimeMs, 1000)));
+    const slice = Math.min(config.blockTimeMs || 1000, 1000);
+    const step = 100;
+    let left = slice;
+    while (left > 0 && !stop) {
+      await new Promise((r) => setTimeout(r, Math.min(step, left)));
+      left -= step;
+    }
   }
+  lease.release();
+  console.log('prover stopped');
+  process.exit(0);
 }
 
 main().catch((err) => {

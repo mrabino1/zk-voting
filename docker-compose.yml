@@ -25,6 +25,7 @@ services:
     container_name: zk-voting-node
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     ports:
       - "${ZK_VOTING_PORT:-3000}:3000"
     environment:
@@ -100,6 +101,7 @@ services:
     container_name: zk-voting-l2
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     command: ["node", "sequencer/index.mjs"]
     ports:
       - "${L2_RPC_PORT:-8546}:8546"
@@ -139,6 +141,7 @@ services:
     container_name: zk-voting-prover
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     command: ["node", "prover/index.mjs"]
     environment:
       L2_RPC_URL: http://l2:8546
@@ -149,6 +152,7 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
       L1_RPC: ${L1_RPC:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
       SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
       PRIVATE_KEY: ${PRIVATE_KEY:-}
     volumes:
@@ -180,6 +184,7 @@ services:
     container_name: zk-voting-archive
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     command: ["node", "archive/cli.mjs", "daemon"]
     environment:
       L2_DATA_DIR: /data

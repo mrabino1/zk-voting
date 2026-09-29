@@ -12,6 +12,7 @@ import {
   publishedThrough,
   resolveDisclosureIntervalSeconds,
 } from '../disclosure.mjs';
+import { StaleFenceError, WriterLease } from '../lease/lease.mjs';
 
 export const L2_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CHAIN_ID = 27427;
@@ -380,6 +381,8 @@ export function loadConfig(root = L2_ROOT) {
       process.env.L2_HEARTBEAT_SECONDS ?? file.heartbeatSeconds,
       3600,
     ),
+    l1ChainId: process.env.L1_CHAIN_ID || file.l1ChainId || '',
+    leaseTtlMs: Number(process.env.WRITER_LEASE_TTL_MS || 0) || undefined,
   };
 }
 
@@ -398,6 +401,21 @@ function writeJsonAtomic(file, obj) {
   const tmp = file + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(obj, jsonReplacer) + '\n');
   fs.renameSync(tmp, file);
+}
+
+function writeJsonExclusive(file, obj) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const flags = fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY;
+  const fd = fs.openSync(file, flags);
+  try {
+    fs.writeFileSync(fd, JSON.stringify(obj, jsonReplacer) + '\n');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function normId(value) {
+  return String(value ?? '').trim().toLowerCase();
 }
 
 function topic0(signature) {
@@ -433,6 +451,13 @@ export class ChainState {
     this.producing = false;
     this.running = false;
     this.producerTask = null;
+    this.writerLease = null;
+    this.writerActive = true;
+    this.shuttingDown = false;
+    this._flushing = false;
+    this.nullifierIndex = new Set();
+    this.commitmentIndex = new Set();
+    this.tallyIndex = new Set();
     this.eventTopics = {
       registered: topic0('Registered(uint256,uint256)'),
       voteAccepted: topic0('VoteAccepted(uint256,uint256,bytes32,address)'),
@@ -453,7 +478,8 @@ export class ChainState {
     fs.mkdirSync(path.join(config.dataDir, 'blocks'), { recursive: true });
     fs.mkdirSync(path.join(config.dataDir, 'proofs'), { recursive: true });
     state.load();
-    if (state.blocks.length === 0) {
+    state.attachLease();
+    if (state.writerActive && state.blocks.length === 0) {
       state.writeGenesis();
     }
     return state;
@@ -548,6 +574,7 @@ export class ChainState {
         }
         this.sealed.push(tx);
         this.sealedHashes.add(hash);
+        this._indexCivic(tx);
       }
     }
   }
@@ -562,6 +589,7 @@ export class ChainState {
     for (const tx of txs) {
       if (typeof tx === 'string') continue;
       this.txsByHash.set(tx.hash.toLowerCase(), tx);
+      this._indexCivic(tx);
       const next = BigInt(tx.nonce || 0) + 1n;
       if (next > this.txNonce) this.txNonce = next;
     }
@@ -571,22 +599,49 @@ export class ChainState {
   }
 
   persistHead() {
+    this.assertWritable();
+    const epoch = this.writerEpoch();
     writeJsonAtomic(path.join(this.config.dataDir, 'head.json'), {
       number: this.head.number,
       hash: this.head.hash,
       stateRoot: this.head.stateRoot,
       txNonce: this.txNonce.toString(),
+      epoch,
     });
     writeJsonAtomic(path.join(this.config.dataDir, 'mempool.json'), this.mempool);
     this.persistSealed();
   }
 
   persistSealed() {
+    this.assertWritable();
     writeJsonAtomic(path.join(this.config.dataDir, 'sealed.json'), this.sealed);
   }
 
   persistBlock(block) {
-    writeJsonAtomic(this.blockPath(block.number), block);
+    this.assertWritable();
+    const file = this.blockPath(block.number);
+    if (fs.existsSync(file)) {
+      throw Object.assign(new Error(`block ${block.number} already exists`), { code: -32000 });
+    }
+    if (block.number > 0) {
+      const prevFile = this.blockPath(block.number - 1);
+      if (!fs.existsSync(prevFile)) {
+        throw Object.assign(new Error(`missing parent block ${block.number - 1}`), { code: -32000 });
+      }
+      const prev = JSON.parse(fs.readFileSync(prevFile, 'utf8'));
+      if (String(prev.hash).toLowerCase() !== String(block.parentHash).toLowerCase()) {
+        throw Object.assign(new Error('parent hash mismatch'), { code: -32000 });
+      }
+    }
+    const fenced = { ...block, epoch: this.writerEpoch() };
+    try {
+      writeJsonExclusive(file, fenced);
+    } catch (err) {
+      if (err && err.code === 'EEXIST') {
+        throw Object.assign(new Error(`block ${block.number} already exists`), { code: -32000 });
+      }
+      throw err;
+    }
     this.persistHead();
   }
 
@@ -715,6 +770,7 @@ export class ChainState {
     }
     this.mempool.push(tx);
     this.mempoolHashes.add(hash);
+    this._indexCivic(tx);
     if (persist) this.persistHead();
   }
 
@@ -725,6 +781,7 @@ export class ChainState {
     }
     this.sealed.push(tx);
     this.sealedHashes.add(hash);
+    this._indexCivic(tx);
     this.persistSealed();
   }
 
@@ -807,6 +864,9 @@ export class ChainState {
 
   enqueueRaw(rawHex) {
     const tx = this.decodeCivicRaw(rawHex);
+    if (this._knownHash(tx.hash)) return tx.hash;
+    this.assertWritable();
+    this._assertUniqueCivic(tx);
     if (this.shouldHoldVote(tx)) {
       tx.receivedAt = this.now();
       this.rememberSealed(tx);
@@ -843,6 +903,10 @@ export class ChainState {
   }
 
   async tickProducer() {
+    // Chain heartbeat (L2_HEARTBEAT_SECONDS) and skip-empty still apply.
+    // Only the lease holder reaches them, so a standby cannot seal a
+    // second heartbeat block for the same head.
+    if (!this.acceptingWrites()) return null;
     if (!this.shouldProduceBlock()) return null;
     return this.produceBlock();
   }
@@ -983,9 +1047,12 @@ export class ChainState {
   }
 
   async produceBlock() {
+    if (!this.acceptingWrites()) return null;
     if (this.producing) return null;
+    if (!this.head) return null;
     this.producing = true;
     try {
+      this.assertWritable();
       const parent = this.head;
       const number = parent.number + 1;
       const timestamp = this.now();
@@ -1072,12 +1139,21 @@ export class ChainState {
     if (this.config.explorerIngestSecret) {
       headers['x-republic-ingest-secret'] = this.config.explorerIngestSecret;
     }
-    const res = await fetch(`${base}/api/explorer/ingest`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(4000),
-    });
+    let wait = 400;
+    let res;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      res = await fetch(`${base}/api/explorer/ingest`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.status !== 503 || attempt === 4) break;
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : wait;
+      await new Promise((r) => setTimeout(r, delay));
+      wait = Math.min(wait * 2, 2000);
+    }
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -1189,10 +1265,169 @@ export class ChainState {
   }
 
   async stop() {
+    this.shuttingDown = true;
     this.running = false;
+    if (this._promoteTimer) {
+      clearInterval(this._promoteTimer);
+      this._promoteTimer = null;
+    }
     if (this.producerTask) {
       await this.producerTask.catch(() => {});
     }
+    const deadline = Date.now() + 8_000;
+    while (this.producing && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    if (this.writerLease && this.writerActive && this.head) {
+      this._flushing = true;
+      try {
+        this.persistHead();
+      } catch (err) {
+        console.warn('sequencer flush failed:', err.message || err);
+      }
+      this._flushing = false;
+    }
+    if (this.writerLease) this.writerLease.release();
+    this.writerActive = false;
+  }
+
+  attachLease() {
+    if (this.config.writerLease === false) {
+      this.writerLease = null;
+      this.writerActive = true;
+      return;
+    }
+    this.writerLease = new WriterLease({
+      dataDir: this.config.dataDir,
+      role: 'sequencer',
+      ttlMs: this.config.leaseTtlMs,
+      ownerId: this.config.leaseOwnerId,
+      nowFn: this.config.leaseNowFn,
+    });
+    const got = this.writerLease.tryAcquire();
+    this.writerActive = got.acquired;
+    if (got.acquired) this.writerLease.startHeartbeat();
+  }
+
+  writerEpoch() {
+    return this.writerLease && this.writerActive ? this.writerLease.epoch : 0;
+  }
+
+  acceptingWrites() {
+    if (this.shuttingDown && !this._flushing) return false;
+    if (!this.writerLease) return true;
+    return Boolean(this.writerActive && this.writerLease.holds() && !this.writerLease.draining);
+  }
+
+  assertWritable() {
+    if (this.shuttingDown && !this._flushing) {
+      throw Object.assign(new Error('maintenance handover'), {
+        code: -32003,
+        httpStatus: 503,
+        retryAfter: 2,
+      });
+    }
+    if (!this.writerLease) return;
+    if (!this.writerActive || this.writerLease.draining || !this.writerLease.holds()) {
+      throw Object.assign(new Error('maintenance handover'), {
+        code: -32003,
+        httpStatus: 503,
+        retryAfter: 2,
+      });
+    }
+    try {
+      this.writerLease.assertFence();
+    } catch (err) {
+      if (err instanceof StaleFenceError || err.code === 'STALE_FENCE') {
+        this.writerActive = false;
+        throw Object.assign(new Error('stale writer fence'), { code: -32003, httpStatus: 503 });
+      }
+      throw err;
+    }
+  }
+
+  _knownHash(hash) {
+    const key = String(hash || '').toLowerCase();
+    return this.txsByHash.has(key) || this.mempoolHashes.has(key) || this.sealedHashes.has(key);
+  }
+
+  _indexCivic(tx) {
+    if (!tx || typeof tx !== 'object') return;
+    const civic = tx.civic || {};
+    const type = String(tx.civicType || civic.type || '').toLowerCase();
+    const election = String(civic.electionId ?? '');
+    if (type === 'vote' && civic.nullifier != null && normId(civic.nullifier)) {
+      this.nullifierIndex.add(`${election}|${normId(civic.nullifier)}`);
+    }
+    if ((type === 'register' || type === 'disqualify') && civic.identityCommitment != null) {
+      const id = normId(civic.identityCommitment);
+      if (id) this.commitmentIndex.add(`${type}|${election}|${id}`);
+    }
+    if (type === 'tally') this.tallyIndex.add(election);
+  }
+
+  _assertUniqueCivic(tx) {
+    const civic = tx.civic || {};
+    const type = String(tx.civicType || '').toLowerCase();
+    const election = String(civic.electionId ?? '');
+    if (type === 'vote' && civic.nullifier != null && normId(civic.nullifier)) {
+      const key = `${election}|${normId(civic.nullifier)}`;
+      if (this.nullifierIndex.has(key)) {
+        throw Object.assign(new Error('duplicate nullifier'), { code: -32000 });
+      }
+    }
+    if ((type === 'register' || type === 'disqualify') && civic.identityCommitment != null) {
+      const key = `${type}|${election}|${normId(civic.identityCommitment)}`;
+      if (this.commitmentIndex.has(key)) {
+        throw Object.assign(new Error(`duplicate identityCommitment for ${type}`), { code: -32000 });
+      }
+    }
+    if (type === 'tally' && this.tallyIndex.has(election)) {
+      throw Object.assign(new Error('duplicate tally'), { code: -32000 });
+    }
+  }
+
+  reloadFromDisk() {
+    this.blocks = [];
+    this.blocksByHash = new Map();
+    this.txsByHash = new Map();
+    this.logs = [];
+    this.mempool = [];
+    this.mempoolHashes = new Set();
+    this.sealed = [];
+    this.sealedHashes = new Set();
+    this.txNonce = 0n;
+    this._latestNumber = null;
+    this.nullifierIndex = new Set();
+    this.commitmentIndex = new Set();
+    this.tallyIndex = new Set();
+    this.load();
+    if (this.writerActive && this.blocks.length === 0) this.writeGenesis();
+  }
+
+  /** Active producer, or poll until the previous container releases the lease. */
+  armProducer() {
+    const start = () => {
+      this.writerLease?.startHeartbeat();
+      this.startProducer();
+    };
+    if (!this.writerLease || this.writerActive) {
+      start();
+      return;
+    }
+    console.log('sequencer standby; waiting for the writer lease');
+    this._promoteTimer = setInterval(() => {
+      if (this.shuttingDown) return;
+      const got = this.writerLease.tryAcquire();
+      if (!got.acquired) return;
+      clearInterval(this._promoteTimer);
+      this._promoteTimer = null;
+      this.writerActive = true;
+      this.reloadFromDisk();
+      console.log(`sequencer active epoch=${got.epoch} head=${this.latestNumber}`);
+      start();
+    }, this.writerLease.pollMs);
+    if (typeof this._promoteTimer.unref === 'function') this._promoteTimer.unref();
   }
 }
 
