@@ -10,11 +10,19 @@ export function standbyDelayMs(response, attempt) {
   return Math.min(400 * 2 ** attempt, 2000);
 }
 
+function isStandbyResponse(response) {
+  if (!response || response.status !== 503) return false;
+  const mode = response.headers && typeof response.headers.get === 'function'
+    ? response.headers.get('x-republic-mode')
+    : null;
+  return String(mode || '').toLowerCase() === 'standby';
+}
+
 export async function fetchWithStandbyRetry(url, options = {}, fetchImpl = globalThis.fetch) {
   let waitAttempt = 0;
   for (let attempt = 0; attempt < 5; attempt++) {
     const response = await fetchImpl(url, options);
-    if (response.status !== 503 || attempt === 4) return response;
+    if (!isStandbyResponse(response) || attempt === 4) return response;
     const delay = standbyDelayMs(response, waitAttempt);
     waitAttempt += 1;
     await new Promise((resolve) => setTimeout(resolve, delay));

@@ -39,6 +39,7 @@ import { receiptsRouter } from './routes/receipts.mjs';
 import { outcomesRouter } from './routes/outcomes.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
+import { feedbackRouter } from './routes/feedback.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -202,6 +203,7 @@ export async function createApp(overrides = {}) {
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
   app.disable('x-powered-by');
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
   app.use(
     cors({
@@ -210,6 +212,15 @@ export async function createApp(overrides = {}) {
       maxAge: 86400,
     }),
   );
+  app.use('/api/feedback', (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    const len = Number(req.headers['content-length'] || 0);
+    if (len > config.feedbackMaxBodyBytes) {
+      res.status(413).json({ error: 'Feedback is too large.', nfp: true, code: 'PAYLOAD_TOO_LARGE' });
+      return;
+    }
+    next();
+  });
   app.use(express.json({ limit: '2mb' }));
   app.use(standbyGuard(writer));
   app.use((err, req, res, next) => {
@@ -246,6 +257,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));
+  app.use('/api/feedback', feedbackRouter(deps));
   app.use('/api', receiptsRouter(deps));
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));

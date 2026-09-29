@@ -5,7 +5,7 @@
  * Routes: `/`, `/public`, `/about`, `/faq`, `/p/:slug`, `/signin`, `/me`, `/app`,
  * `/office`, `/office/pages`, `/office/site`,
  * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
- * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/receipt`,
+ * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/feedback`, `/receipt`,
  * `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/monitor`,
  * `/polls`, `/polls/:id`, `/polls/:id/vote`, `/polls/:id/results`
  */
@@ -40,6 +40,7 @@ export function parseRoute(loc = window.location) {
   if (path === "/about") return { name: "about", path, params: {}, query };
   if (path === "/faq") return { name: "faq", path, params: {}, query };
   if (path === "/terms") return { name: "terms", path, params: {}, query };
+  if (path === "/feedback") return { name: "feedback", path, params: {}, query };
   if (path === "/signin") return { name: "signin", path, params: {}, query };
   if (path === "/me" || path === "/app") return { name: "desk", path, params: {}, query };
   if (path === "/office/pages/new") return { name: "officePageNew", path, params: {}, query };

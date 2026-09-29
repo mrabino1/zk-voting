@@ -20,6 +20,7 @@ export const RESERVED_SLUGS = new Set([
   'elections',
   'explorer',
   'faq',
+  'feedback',
   'health',
   'home',
   'index',

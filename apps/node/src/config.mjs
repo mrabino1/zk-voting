@@ -52,6 +52,46 @@ export function normalizeVoteFqdn(value) {
   return host;
 }
 
+/** Hop count for Express `trust proxy`, or false when the TCP peer is the client. */
+export function resolveTrustProxy(value) {
+  if (value === undefined || value === null || value === '') return false;
+  if (value === true) return 1;
+  if (value === false) return false;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.floor(value);
+  const s = String(value).trim().toLowerCase();
+  if (!s || ['0', 'false', 'no', 'off'].includes(s)) return false;
+  if (['1', 'true', 'yes', 'on'].includes(s)) return 1;
+  const n = Number(s);
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return false;
+}
+
+/**
+ * Seconds between accepted /feedback submissions for one IP.
+ * The floor is 3600: one per hour is the maximum rate.
+ */
+export function resolveFeedbackRateWindow(value) {
+  if (value === undefined || value === null || value === '') return 3600;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 3600;
+  return Math.max(3600, Math.floor(n));
+}
+
+export function resolveFeedbackMinSubmitMs(value) {
+  if (value === undefined || value === null || value === '') return 3000;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 3000;
+  return Math.min(60_000, Math.floor(n));
+}
+
+export function resolveFeedbackMaxBodyBytes(value) {
+  const fallback = 16 * 1024;
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1024) return fallback;
+  return Math.min(256 * 1024, Math.floor(n));
+}
+
 function isDevHost(value) {
   const host = String(value || '').trim().toLowerCase();
   return host === '' || host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
@@ -227,6 +267,24 @@ export function getConfig(overrides = {}) {
   config.rpID = authority.rpID;
   config.origins = authority.origins;
   config.publicBaseUrl = authority.publicBaseUrl;
+  config.trustProxy = resolveTrustProxy(
+    overrides.trustProxy !== undefined ? overrides.trustProxy : process.env.TRUST_PROXY,
+  );
+  config.feedbackRateWindowSeconds = resolveFeedbackRateWindow(
+    overrides.feedbackRateWindowSeconds !== undefined
+      ? overrides.feedbackRateWindowSeconds
+      : process.env.FEEDBACK_RATE_WINDOW_SECONDS,
+  );
+  config.feedbackMinSubmitMs = resolveFeedbackMinSubmitMs(
+    overrides.feedbackMinSubmitMs !== undefined
+      ? overrides.feedbackMinSubmitMs
+      : process.env.FEEDBACK_MIN_SUBMIT_MS,
+  );
+  config.feedbackMaxBodyBytes = resolveFeedbackMaxBodyBytes(
+    overrides.feedbackMaxBodyBytes !== undefined
+      ? overrides.feedbackMaxBodyBytes
+      : process.env.FEEDBACK_MAX_BODY_BYTES,
+  );
   config.votingToken = resolveVotingToken({
     address:
       overrides.votingTokenAddress !== undefined

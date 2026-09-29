@@ -1,6 +1,6 @@
 ---
-version: 1
-lastUpdated: 2026-09-19
+version: 2
+lastUpdated: 2026-09-29
 title: Republic Terms of Use
 filename: republic-terms.pdf
 ---
@@ -9,7 +9,7 @@ filename: republic-terms.pdf
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. No token. No fees to voters.
 
-Last updated: 19 September 2026. Version 1.
+Last updated: 29 September 2026. Version 2.
 
 These Terms of Use (“Terms”) govern access to and use of Republic (repository name zk-voting), including this Node, its public pages, registration, voting, officer desks, and related APIs (the “Service”). The English text controls.
 
@@ -71,7 +71,7 @@ The Node JSON store (`republic.json`) may hold handles, hashed authenticators, s
 
 Session cookies (`republic.sid`, `republic.mfa`) are first-party, HttpOnly, and needed to keep you signed in and to complete email MFA. Blocking them prevents sign-in.
 
-Transactional email (MFA codes, a PDF of these Terms on acceptance, and optional hash-only vote receipts) is sent with AWS SES when `SES_FROM_ADDRESS` and `AWS_REGION` are set. Do not reply to those messages; the From address may be unmonitored.
+Transactional email (MFA codes, a PDF of these Terms on acceptance, optional hash-only vote receipts, and feedback sent to the site operator from `/feedback`) is sent with AWS SES when `SES_FROM_ADDRESS` and `AWS_REGION` are set. Do not reply to those messages; the From address may be unmonitored. Feedback mail goes to the platform super admin, not onto the roll and not onto civic L2.
 
 Independent auditors use public artifacts, not the private Node data file.
 
@@ -86,6 +86,8 @@ Viewing `/terms` shows the current fingerprints. Acceptance (checkbox at registe
 Source code is licensed AGPL-3.0-or-later unless a file says otherwise. These Terms are part of the civic public-good documentation. You may run, study, and share the software under that license. You may not wrap it in a token, sell it as SaaS, or skim voter or jurisdiction funds.
 
 Marks such as “Republic” as used here name this civic project. They are not a claim of government endorsement.
+
+**Feedback.** Any and all feedback you submit through the Service, including at /feedback, becomes the property of the legal owner of this project. Any intellectual property given via feedback becomes the ownership of the website's legal owner. Where an assignment of that intellectual property is not possible under applicable law, you grant the website's legal owner a perpetual, irrevocable, worldwide, royalty-free (zero cost) license to that intellectual property. The website's legal owner has no obligation to use, credit, or compensate you for feedback or for that intellectual property. This assignment and license do not create a fee, a royalty, a token, or any duty to pay. The Service remains NOT FOR PROFIT — a civic public good, not a commercial product. No token. No fees to voters.
 
 ## 11. Availability and limitations
 

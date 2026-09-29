@@ -19,7 +19,14 @@ describe('standby fetch retry', () => {
       if (seen.length === 1) {
         return {
           status: 503,
-          headers: { get: () => '0.01' },
+          headers: {
+            get: (name) => {
+              const key = String(name || '').toLowerCase();
+              if (key === 'retry-after') return '0.01';
+              if (key === 'x-republic-mode') return 'standby';
+              return null;
+            },
+          },
         };
       }
       return { status: 200, headers: { get: () => null }, json: async () => ({ ok: true }) };
@@ -27,5 +34,16 @@ describe('standby fetch retry', () => {
     const response = await fetchWithStandbyRetry('http://node/api/elections', { method: 'GET' }, fetchImpl);
     assert.equal(response.status, 200);
     assert.equal(seen.length, 2);
+  });
+
+  test('does not retry a fail-closed 503 that is not a standby handover', async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return { status: 503, headers: { get: () => null } };
+    };
+    const response = await fetchWithStandbyRetry('http://node/api/feedback', { method: 'POST' }, fetchImpl);
+    assert.equal(response.status, 503);
+    assert.equal(calls, 1);
   });
 });

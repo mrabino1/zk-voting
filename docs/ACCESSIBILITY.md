@@ -10,7 +10,7 @@ Audit date: 2026-09-27. Standard: **WCAG 2.2 Level AA**. Automated engine: **axe
 
 | Audience | Routes |
 | --- | --- |
-| Public | `/`, `/public`, `/about`, `/faq`, `/signin`, `/register`, `/terms`, `/receipt`, `/outcomes` |
+| Public | `/`, `/public`, `/about`, `/faq`, `/signin`, `/register`, `/terms`, `/feedback`, `/receipt`, `/outcomes` |
 | Registered voter | `/me`, `/register`, `/vote/:id`, `/elections/:id/results` |
 | Officer / admin | `/admin`, `/back-office`, `/office`, `/explorer` |
 

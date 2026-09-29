@@ -191,6 +191,7 @@ describe('WCAG 2.2 AA axe', () => {
     ['sign in', '/signin'],
     ['register', '/register'],
     ['terms', '/terms'],
+    ['feedback', '/feedback'],
     ['receipt', '/receipt'],
     ['outcomes', '/outcomes'],
     ['registered desk', '/me', 'voter'],
