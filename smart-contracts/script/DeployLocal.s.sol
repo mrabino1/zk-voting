@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
+import {DeployOnce} from "./DeployGuard.sol";
 import {ElectionParams} from "../src/interfaces/ElectionParams.sol";
 import {IHasher} from "../src/interfaces/IHasher.sol";
 import {IGroth16Verifier} from "../src/interfaces/IGroth16Verifier.sol";
@@ -50,7 +51,7 @@ struct RepublicStack {
 ///      `REPUBLIC_VOTE_VERIFIER`, that is `VoteVerifier` with a zero VK (fail closed).
 ///      Set `REPUBLIC_VOTE_VERIFIER` to a snarkjs-exported verifier to wrap it in
 ///      `Groth16VerifierAdapter`. That key is still untrusted until a ceremony.
-abstract contract RepublicStackScript is Script {
+abstract contract RepublicStackScript is DeployOnce {
     function _log(string memory name, address addr) internal view {
         console2.log(string.concat(name, "=", vm.toString(addr)));
     }
@@ -190,6 +191,7 @@ abstract contract RepublicStackScript is Script {
 /// @notice Broadcast the full local stack to Anvil, then create one sample election.
 contract DeployLocal is RepublicStackScript {
     function run() external {
+        _refuseIfAlreadyDeployed();
         vm.startBroadcast();
         address admin = msg.sender;
 

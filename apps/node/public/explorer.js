@@ -8,8 +8,19 @@
   const TX_TYPES = ["REGISTER", "VOTE", "DISQUALIFY", "TALLY", "BATCH"];
   const LIMIT = 25;
 
+  async function fetchRetry(url, options) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await fetch(url, options);
+      if (res.status !== 503 || attempt === 4) return res;
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : Math.min(400 * 2 ** attempt, 2000);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    throw new Error("maintenance handover");
+  }
+
   async function request(path) {
-    const res = await fetch(path, { credentials: "include", headers: { Accept: "application/json" } });
+    const res = await fetchRetry(path, { credentials: "include", headers: { Accept: "application/json" } });
     const text = await res.text();
     let data = null;
     try {

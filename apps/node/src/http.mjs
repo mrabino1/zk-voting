@@ -77,6 +77,10 @@ export function clearMfaCookie(res, config) {
 
 export function errorHandler(err, req, res, _next) {
   const status = Number(err.status || err.statusCode || 500);
+  if (status === 503) {
+    res.set('Retry-After', String(err.extra?.retryAfter || 2));
+    res.set('x-republic-mode', err.extra?.mode || 'standby');
+  }
   const hideInternals = status >= 500 && !(err instanceof HttpError);
   if (status >= 500 && !req.app?.locals?.quiet) {
     console.error(err);

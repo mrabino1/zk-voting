@@ -1,0 +1,93 @@
+# NOT FOR PROFIT — civic public good, not a commercial product.
+#
+# Overlap smoke for a Coolify-style rolling update. Start this beside the
+# main compose file so a second sequencer and a second Node mount the same
+# volumes. The second process must stay healthy while mode is standby.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build l2-next node-next
+#   curl -fsS http://127.0.0.1:8547/health    # "mode":"standby"
+#   curl -fsS http://127.0.0.1:3001/health    # "mode":"standby"
+#   curl -fsS http://127.0.0.1:8546/health    # "mode":"active"
+
+name: zk-voting
+
+services:
+  l2-next:
+    image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
+    restart: "no"
+    init: true
+    stop_grace_period: 30s
+    command: ["node", "sequencer/index.mjs"]
+    ports:
+      - "8547:8546"
+    environment:
+      L2_RPC_HOST: "0.0.0.0"
+      L2_RPC_PORT: "8546"
+      L2_DATA_DIR: /data
+      L2_CHAIN_ID: ${CHAIN_ID:-27427}
+      L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
+      L2_SKIP_EMPTY_BLOCKS: ${L2_SKIP_EMPTY_BLOCKS:-1}
+      L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
+      DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
+      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
+      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
+    volumes:
+      - l2-data:/data
+    healthcheck:
+      test: ["CMD", "node", "/healthcheck.mjs", "http://127.0.0.1:8546/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - republic
+
+  node-next:
+    image: zk-voting-node:${ZK_VOTING_IMAGE_TAG:-local}
+    restart: "no"
+    init: true
+    stop_grace_period: 30s
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      DATA_DIR: /data
+      CHAIN_ID: ${CHAIN_ID:-27427}
+      CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
+      VOTE_FQDN: ${VOTE_FQDN:-}
+      RP_ID: ${RP_ID:-localhost}
+      WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
+      ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
+      VERIFIER_ADDRESS: ${VERIFIER_ADDRESS:-}
+      RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY:-}
+      DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
+      ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-}
+      EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
+      L1_RPC: ${L1_RPC:-}
+      L1_TALLY_MIRROR_ADDRESS: ${L1_TALLY_MIRROR_ADDRESS:-}
+      L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
+      L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+    volumes:
+      - node-data:/data
+    healthcheck:
+      test: ["CMD", "node", "/healthcheck.mjs", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    networks:
+      - republic
+
+volumes:
+  node-data:
+  l2-data:
+
+networks:
+  republic:
+    driver: bridge

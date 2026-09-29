@@ -32,6 +32,7 @@ COPY --chown=node:node apps/node/scripts ./apps/node/scripts
 COPY --chown=node:node apps/node/legal ./apps/node/legal
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
+COPY --chown=node:node l2/lease ./l2/lease
 COPY --chown=node:node docker/healthcheck.mjs /healthcheck.mjs
 
 USER node

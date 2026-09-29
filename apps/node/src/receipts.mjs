@@ -52,7 +52,7 @@ export function mintReceiptToken() {
   return randomBytes(32).toString('base64url');
 }
 
-export async function loadReceiptPdfSecret(config) {
+export async function loadReceiptPdfSecret(config, { mint = true } = {}) {
   const fromConfig = String(config?.receiptPdfSecret || '').trim();
   if (fromConfig) return fromConfig;
   const fromEnv = String(process.env.RECEIPT_PDF_SECRET || '').trim();
@@ -66,6 +66,7 @@ export async function loadReceiptPdfSecret(config) {
   } catch (err) {
     if (err.code !== 'ENOENT') throw err;
   }
+  if (!mint) return '';
   const secret = randomBytes(32).toString('base64url');
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(file, `${secret}\n`, { encoding: 'utf8', mode: 0o600 });

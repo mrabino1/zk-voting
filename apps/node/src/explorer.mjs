@@ -25,6 +25,7 @@ function emptyChain(chainId) {
     txs: {},
     sealed: [],
     sealedPolls: [],
+    seenBlockHashes: [],
   };
 }
 
@@ -84,12 +85,15 @@ export class Explorer {
     chain.txs = chain.txs || {};
     chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
     chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
+    chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
     const explorer = new Explorer(filePath, chain);
-    await explorer.persist();
+    explorer.writerActive = config.writerActive !== false;
+    if (explorer.writerActive) await explorer.persist();
     return explorer;
   }
 
   async persist() {
+    if (this.writerActive === false) return this._write;
     this._write = this._write.then(async () => {
       const tmp = `${this.filePath}.${process.pid}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(this.chain, null, 2));
@@ -106,6 +110,9 @@ export class Explorer {
         this.chain.txs = this.chain.txs || {};
         this.chain.sealed = Array.isArray(this.chain.sealed) ? this.chain.sealed : [];
         this.chain.sealedPolls = Array.isArray(this.chain.sealedPolls) ? this.chain.sealedPolls : [];
+        this.chain.seenBlockHashes = Array.isArray(this.chain.seenBlockHashes)
+          ? this.chain.seenBlockHashes
+          : [];
       }
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
@@ -280,9 +287,20 @@ export class Explorer {
   }
 
   async ingest(body, now, intervalSeconds) {
+    if (this.writerActive === false) {
+      const err = new Error('maintenance handover');
+      err.status = 503;
+      throw err;
+    }
     const src = body && typeof body === 'object' ? body : {};
     const block = src.block && typeof src.block === 'object' ? src.block : null;
     const outcomes = src.outcomes && typeof src.outcomes === 'object' ? src.outcomes : {};
+    await this.refresh();
+    this.chain.seenBlockHashes = Array.isArray(this.chain.seenBlockHashes) ? this.chain.seenBlockHashes : [];
+    const blockHash = block && block.hash ? String(block.hash).toLowerCase() : '';
+    if (blockHash && this.chain.seenBlockHashes.some((h) => String(h).toLowerCase() === blockHash)) {
+      return { ok: true, imported: 0, duplicate: true };
+    }
     let imported = 0;
 
     const fromOutcomes = [];
@@ -331,8 +349,12 @@ export class Explorer {
         imported += 1;
       }
     }
+    if (blockHash) {
+      this.chain.seenBlockHashes.push(blockHash);
+      await this.persist();
+    }
     await this.disclose(now, intervalSeconds);
-    return { ok: true, imported };
+    return { ok: true, imported, duplicate: false };
   }
 
   presentTx(tx) {
