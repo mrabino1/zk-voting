@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// JSON file store (no native addons). Jurisdictions ≈ DealPunchList organizations;
-// elections ≈ rooms. Identity links (passkey user ↔ commitment) live in a
+// JSON file store (no native addons). A jurisdiction owns its elections.
+// Identity links (passkey user ↔ commitment) live in a
 // separate collection from ballots and are never copied onto a vote record.
 
 import { randomUUID } from 'node:crypto';

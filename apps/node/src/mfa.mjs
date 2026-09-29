@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// DealPunchList-shaped email OTP: first factor, then a 6-digit code via SES.
+// Email OTP: first factor, then a 6-digit code via SES.
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 

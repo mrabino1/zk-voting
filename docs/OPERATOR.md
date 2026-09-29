@@ -10,7 +10,7 @@ This software may be run **at cost** by a government, county clerk, union, coope
 
 ## What you are operating
 
-1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/republic.json`). Same operational shape as DealPunchList (`dealpunchlist-node`). **No SQLite.**
+1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/republic.json`). **No SQLite.**
 2. **`smart-contracts/`** — Solidity 0.8.24, Foundry (`via_ir = true`). Factory, registries, inbox, `Tally.sol`, passkey account, L1 `RollupSettlement`.
 3. **`l2/`** — Republic **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
 4. **`circuits/`** — circom vote / tally. Foundry unit tests use `MockVerifier`. Proving path is **in progress** (`npm run circuits:status`). Local setup is untrusted until Poseidon + a ceremony exist.
@@ -34,13 +34,13 @@ Never point a production jurisdiction’s published contract addresses at a `tes
 
 ## `system_actions.sh`
 
-From the repository root. Numbers **1–4** match DealPunchList (`dealpunchlist-node`): feature branches land on `test/unstable`, then promote to `master`.
+From the repository root. Numbers **1–4** are the git flow: feature branches land on `test/unstable`, then promote to `master`.
 
 ```bash
 ./system_actions.sh              # interactive menu
 ./system_actions.sh help
 
-# Git workflow (DealPunchList-shaped)
+# Git workflow
 ./system_actions.sh 1            # fetch + pull, npm install, npm run dev
 ./system_actions.sh 2 my-feature # create feature/my-feature from test/unstable
 ./system_actions.sh 3            # merge feature/* into test/unstable and push
@@ -50,7 +50,6 @@ From the repository root. Numbers **1–4** match DealPunchList (`dealpunchlist-
 ./system_actions.sh 5            # republic.json counts
 ./system_actions.sh 6            # Node / L2 / CHAIN_RPC / L1_RPC reachability
 ./system_actions.sh 7            # local Node users (handle + role)
-./system_actions.sh 8            # same user list (DPL sandbox list)
 
 # Host / operator
 ./system_actions.sh status       # branch, SHA, dirty, pm2/systemd/compose
@@ -66,7 +65,7 @@ From the repository root. Numbers **1–4** match DealPunchList (`dealpunchlist-
 
 `4` only **merges and pushes git**. It does not install, build, or restart. After a release merge, run `deploy-prod` on the host that serves the jurisdiction.
 
-This repo has **no Drizzle / Postgres**. Options 5–8 are the civic analogs (JSON store, HTTP/RPC probes, local handles). There is no `users.sandbox_participant` table.
+This repo has **no SQL database**. Options 5–7 read the JSON store, probe HTTP/RPC, and list local handles.
 
 Environment overrides: `ZK_VOTING_DEV_BRANCH`, `ZK_VOTING_PROD_BRANCH`, `ZK_VOTING_APP_NAME`, `ZK_VOTING_PM2_NAME`, `ZK_VOTING_SYSTEMD_UNIT`, `ZK_VOTING_HEALTH_URL`, `ZK_VOTING_PORT`, `ZK_VOTING_LOG_LINES`, `ZK_VOTING_HOST`, `ZK_VOTING_L2_HEALTH_URL`.
 
@@ -336,14 +335,14 @@ Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). Firs
 2. SES delivers the OTP
 3. `POST /api/auth/mfa/verify` `{ code }` — set `republic.sid`
 
-**Passkey (DFC-shaped ceremony, Republic stack)**
+**Passkey**
 
 1. `POST /api/auth/passkey/login/begin` — discoverable / resident-key options (no username). An optional `handle` scopes `allowCredentials` when the authenticator cannot discover the passkey.
 2. Browser `navigator.credentials.get` (WebAuthn assertion).
 3. `POST /api/auth/passkey/login/finish` — verify assertion, then email MFA when required.
 4. The credential id already maps to a Person. Roles are unchanged (`voter`, `clerk`, `platform_admin`, …).
 
-This mirrors Daily Family Call’s challenge → assertion → HttpOnly session shape. Republic implements it with `@simplewebauthn/server`, Express, and the JSON store — it does not vendor DFC.
+Republic implements this with `@simplewebauthn/server`, Express, and the JSON store: challenge, assertion, then an HttpOnly session.
 
 **Ethereum wallet**
 

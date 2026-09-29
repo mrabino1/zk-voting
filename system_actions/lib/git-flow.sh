@@ -1,5 +1,5 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
-# Git workflow helpers for system_actions.sh (DealPunchList-shaped).
+# Git workflow helpers for system_actions.sh.
 #
 # Branch flow:
 #   feature/*  →  test/unstable (integration)  →  master (release)

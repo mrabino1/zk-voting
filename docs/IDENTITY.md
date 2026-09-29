@@ -4,7 +4,7 @@
 
 A **person** is one Node user. They are uniquely identified. They may prove who they are with **email**, an **Ethereum wallet** (signature verification), a **smart-card reader** (PIV, CAC, national eID), a **driver’s license or passport** (hashed civic ID), or a **passkey**. Several Ethereum addresses may be **internally verified** (each extra address must **sign a challenge**). **Exactly one** Ethereum address is **active**. A person may bind **multiple** smart cards and **multiple** driver’s licenses / passports. Civil officers inspect each card or license and **revoke** it when that civil registration has expired. A later third-party DMV / eID connector can POST the same status; until then review is **manual**.
 
-**Every sign-in path completes with email MFA** (a 6-digit code sent by **AWS SES**), in the same transactional-mail pattern as DealPunchList. Dev login on a local host can skip MFA. `NODE_ENV=test` skips MFA on non-email factors unless `REQUIRE_EMAIL_MFA=1` so existing passkey/web3 tests stay green.
+**Every sign-in path completes with email MFA** (a 6-digit code sent by **AWS SES**). Dev login on a local host can skip MFA. `NODE_ENV=test` skips MFA on non-email factors unless `REQUIRE_EMAIL_MFA=1` so existing passkey/web3 tests stay green.
 
 The vote Merkle leaf is still an **identity commitment**. It is never the active address, never a name, never a credential id, and never a license or passport number.
 

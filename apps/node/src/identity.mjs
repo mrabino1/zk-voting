@@ -19,7 +19,7 @@ import {
 import { HttpError } from './http.mjs';
 import { pinPublicFields } from './pin.mjs';
 
-/** DealPunchList-shaped product caps: per Person, not per Node. */
+/** Product caps: per Person, not per Node. */
 export const MAX_PASSKEYS_PER_PERSON = 5;
 export const MAX_EMAILS_PER_PERSON = 5;
 export { MAX_CIVIC_IDS_PER_PERSON, MAX_SMART_CARDS_PER_PERSON };

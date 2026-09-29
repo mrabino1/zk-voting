@@ -79,8 +79,8 @@ function attachmentMeta(file) {
 }
 
 /**
- * SES Simple content cannot carry attachments. DealPunchList emails the terms
- * PDF as an attachment; SESv2 Raw MIME is the same vendor path as OTP mail.
+ * SES Simple content cannot carry attachments. The terms PDF is sent as a
+ * raw MIME attachment on the same SES path as OTP mail.
  */
 export function buildRawMime({ from, to, subject, text, html, attachments = [] }) {
   const mixed = `RepublicMixed_${randomBytes(12).toString('hex')}`;

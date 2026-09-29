@@ -19,7 +19,7 @@ Jurisdictions are **meant to fork** this repository: run your own Node, pin the 
 
 ## Operator script
 
-Hosts use [`system_actions.sh`](./system_actions.sh) (DealPunchList / `dealpunchlist-node` pattern):
+Hosts use [`system_actions.sh`](./system_actions.sh):
 
 ```bash
 ./system_actions.sh              # interactive menu
@@ -43,7 +43,7 @@ Hosts use [`system_actions.sh`](./system_actions.sh) (DealPunchList / `dealpunch
 | Foundry tests | `smart-contracts/test/` | Unit, fuzz (`--fuzz-runs 256`), invariants. |
 | Circuits | `circuits/` | Circom 2. Vote hasher is Poseidon(2). Ceremony is not done (`HASH_SCHEME.md`). |
 | Shared JS | `packages/types`, `proof-helpers`, `chain-client` | JSDoc types; optional `viem`. |
-| Node app | `apps/node/` | DealPunchList-shaped API + **vanilla JS** pages in `public/`. JSON store. Footer: NOT FOR PROFIT. |
+| Node app | `apps/node/` | JSON API + **vanilla JS** pages in `public/`. JSON store. Footer: NOT FOR PROFIT. |
 | L2 | `l2/` | Civic JSON sequencer + prover, chainId **27427**, RPC **:8546**. Not Anvil. |
 | Docker Compose | `docker-compose.yml`, `Dockerfile`, `l2/Dockerfile` | Host Node + L2. Secrets in `.env`, data on volumes. |
 

@@ -1,7 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Canonical Terms of Use: markdown source, deterministic PDF, SHA-256 of
-// exact PDF bytes (the hash stored on accept, matching DealPunchList's
-// terms_hash of the emailed artifact). Markdown SHA-256 is published too.
+// exact PDF bytes (the hash stored on accept: SHA-256 of the emailed PDF).
+// Markdown SHA-256 is published too.
 
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const TERMS_MARKDOWN_PATH = path.join(PKG_ROOT, 'legal', 'terms.md');
 export const TERMS_PDF_FILENAME = 'republic-terms.pdf';
 
-/** DealPunchList stores terms_hash as 64 hex chars — SHA-256 of the PDF bytes. */
+/** Terms hash is 64 hex chars — SHA-256 of the PDF bytes. */
 export const TERMS_HASH_ALGO = 'sha256';
 export const TERMS_HASH_OF = 'pdf-bytes';
 

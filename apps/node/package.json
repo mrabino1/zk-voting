@@ -2,7 +2,7 @@
   "name": "zk-voting-node",
   "version": "0.1.0",
   "private": true,
-  "description": "NOT FOR PROFIT — Republic Node (DealPunchList-shaped API + SPA host) for zk-voting.",
+  "description": "NOT FOR PROFIT — Republic Node (JSON API + static page host) for zk-voting.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "engines": {

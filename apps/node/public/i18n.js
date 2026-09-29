@@ -2,8 +2,8 @@
  * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
  * Website locale (English default). Optional locales follow ACS home-language
  * rank in the United States after English: Spanish, Chinese, Tagalog, Vietnamese,
- * Arabic, French, Korean, Portuguese, Hindi. Same shape as DealPunchList: fallback
- * en, persist only in localStorage (no navigator sniff). Smart-contract code and
+ * Arabic, French, Korean, Portuguese, Hindi. Fallback is English. Persist only
+ * in localStorage (no navigator sniff). Smart-contract code and
  * operator documentation stay English.
  */
 
