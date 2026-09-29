@@ -20,7 +20,7 @@ async function tempDir() {
   return mkdtemp(path.join(os.tmpdir(), 'republic-super-email-'));
 }
 
-describe('SUPER_ADMIN_EMAIL', () => {
+describe('SUPER_ADMIN_EMAIL', { concurrency: false }, () => {
   const dirs = [];
 
   after(async () => {
