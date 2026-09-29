@@ -9,6 +9,7 @@ import {
   disclosurePublicView,
   isDisclosed,
   isHeldVoteType,
+  publishedThrough,
   resolveDisclosureIntervalSeconds,
 } from '../disclosure.mjs';
 
@@ -306,6 +307,13 @@ export function parseBool(value, fallback) {
   return fallback;
 }
 
+function parseNonNegativeInt(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.floor(n);
+}
+
 export function loadConfig(root = L2_ROOT) {
   const genesis = JSON.parse(
     fs.readFileSync(path.join(root, 'genesis.json'), 'utf8'),
@@ -362,6 +370,16 @@ export function loadConfig(root = L2_ROOT) {
       { isTest: process.env.NODE_ENV === 'test' },
     ),
     pollsEnabled: parseBool(process.env.POLLS_ENABLED, false),
+    // Seal only when there is a tx, the disclosure hour closes, or the heartbeat
+    // interval has elapsed. L2_SKIP_EMPTY_BLOCKS=0 restores a block every period.
+    skipEmptyBlocks: parseBool(
+      process.env.L2_SKIP_EMPTY_BLOCKS ?? file.skipEmptyBlocks,
+      true,
+    ),
+    heartbeatSeconds: parseNonNegativeInt(
+      process.env.L2_HEARTBEAT_SECONDS ?? file.heartbeatSeconds,
+      3600,
+    ),
   };
 }
 
@@ -799,6 +817,36 @@ export class ChainState {
     return tx.hash;
   }
 
+  readySealedCount() {
+    const now = this.now();
+    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
+    let n = 0;
+    for (const tx of this.sealed) {
+      if (interval <= 0 || isDisclosed(tx.receivedAt, now, interval)) n += 1;
+    }
+    return n;
+  }
+
+  // Producer gate. Explicit produceBlock() still seals immediately so tests and
+  // a manual mine keep parent-hash numbering contiguous.
+  shouldProduceBlock() {
+    if (!this.config.skipEmptyBlocks) return true;
+    if (this.mempool.length > 0) return true;
+    if (this.readySealedCount() > 0) return true;
+    const now = this.now();
+    const headTs = Number(this.head?.timestamp || 0);
+    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
+    if (interval > 0 && headTs < publishedThrough(now, interval)) return true;
+    const heartbeat = Number(this.config.heartbeatSeconds) || 0;
+    if (heartbeat > 0 && now - headTs >= heartbeat) return true;
+    return false;
+  }
+
+  async tickProducer() {
+    if (!this.shouldProduceBlock()) return null;
+    return this.produceBlock();
+  }
+
   promoteReadyVotes() {
     const now = this.now();
     const interval = Number(this.config.disclosureIntervalSeconds) || 0;
@@ -1129,7 +1177,7 @@ export class ChainState {
       while (this.running) {
         const started = Date.now();
         try {
-          await this.produceBlock();
+          await this.tickProducer();
         } catch (err) {
           console.error('block production error:', err);
         }

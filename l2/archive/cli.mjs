@@ -47,7 +47,12 @@ Usage:
   node l2/archive/cli.mjs restore --hour YYYY/MM/DD/HH [--out DIR]
   node l2/archive/cli.mjs daemon
 
-Env: ARCHIVE_ENABLED=0 (default), ARCHIVE_S3_BUCKET, ARCHIVE_S3_ENDPOINT
+Env: ARCHIVE_ENABLED=1 (default; set 0 to turn the job off).
+     With an empty ARCHIVE_S3_BUCKET and no file:// sink the job warns and
+     does not delete local files.
+     ARCHIVE_COMPRESS=1 (default) gzips each block and proof. The stored
+     sha256 is over those exact bytes; the manifest also lists the raw hash.
+     ARCHIVE_S3_BUCKET, ARCHIVE_S3_ENDPOINT
      (empty = AWS; set for R2; file:///path for a local sink), ARCHIVE_HOT_WINDOW_HOURS=2
 `;
 }

@@ -2,6 +2,7 @@
 // Hourly offload of sealed L2 artifacts to S3 / R2 / file://. Prune only after verify.
 import fs from 'node:fs';
 import path from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { loadConfig } from '../sequencer/state.mjs';
 import { assertArchiveReady, loadArchiveConfig } from './config.mjs';
@@ -17,6 +18,7 @@ import { acquireArchiveLock, lockBusyResult } from './lock.mjs';
 import {
   createObjectStore,
   getAndVerify,
+  hashBytes,
   hashLocalFile,
   putAndVerify,
   sha256Hex,
@@ -194,17 +196,23 @@ function artifactKey(prefix, kind, name) {
   return `${prefix}/${kind}/${name}`;
 }
 
-function planObject({ key, file, kind, dataDir, io }) {
+function planObject({ key, file, kind, dataDir, io, compress }) {
   const hashed = hashLocalFile(file, io);
+  const useGzip = Boolean(compress) && (kind === 'block' || kind === 'proof');
+  const body = useGzip ? gzipSync(hashed.body) : hashed.body;
+  const stored = hashBytes(body);
   return {
     key,
-    sha256: hashed.sha256,
-    bytes: hashed.bytes,
+    sha256: stored.sha256,
+    bytes: stored.bytes,
+    rawSha256: hashed.sha256,
+    rawBytes: hashed.bytes,
+    contentEncoding: useGzip ? 'gzip' : 'identity',
     kind,
     localPath: path.isAbsolute(file) ? path.relative(dataDir, file) : file,
     algorithm: 'sha256',
     hashedAt: 'pre-upload',
-    body: hashed.body,
+    body,
     file,
   };
 }
@@ -214,6 +222,9 @@ function publicObject(obj) {
     key: obj.key,
     sha256: obj.sha256,
     bytes: obj.bytes,
+    rawSha256: obj.rawSha256,
+    rawBytes: obj.rawBytes,
+    contentEncoding: obj.contentEncoding || 'identity',
     kind: obj.kind,
     localPath: obj.localPath,
     algorithm: obj.algorithm || 'sha256',
@@ -244,7 +255,7 @@ async function putPlanned(store, planned, stage = 'PUT') {
 function verifyRemainingLocal(planned, io) {
   for (const obj of planned) {
     if (!obj.file) continue;
-    verifyLocalHash(obj.file, obj.sha256, io);
+    verifyLocalHash(obj.file, obj.rawSha256 || obj.sha256, io);
   }
 }
 
@@ -273,7 +284,16 @@ export async function archiveHour({
   for (const item of items) {
     const name = path.basename(item.file);
     const key = artifactKey(prefix, 'blocks', name);
-    planned.push(planObject({ key, file: item.file, kind: 'block', dataDir: cfg.dataDir, io }));
+    planned.push(
+      planObject({
+        key,
+        file: item.file,
+        kind: 'block',
+        dataDir: cfg.dataDir,
+        io,
+        compress: cfg.compress,
+      }),
+    );
     txHashes.push(...item.txHashes);
     maxNonce = maxNextNonceFromBlock(item.block, maxNonce);
     blockNumbers.push(item.number);
@@ -281,7 +301,16 @@ export async function archiveHour({
 
   for (const proof of proofs) {
     const key = artifactKey(prefix, 'proofs', proof.name);
-    planned.push(planObject({ key, file: proof.file, kind: 'proof', dataDir: cfg.dataDir, io }));
+    planned.push(
+      planObject({
+        key,
+        file: proof.file,
+        kind: 'proof',
+        dataDir: cfg.dataDir,
+        io,
+        compress: cfg.compress,
+      }),
+    );
   }
 
   if (cfg.explorerSnapshot && cfg.explorerFile && io.existsSync(cfg.explorerFile) && !lowDisk) {
@@ -292,6 +321,7 @@ export async function archiveHour({
         kind: 'explorer',
         dataDir: cfg.dataDir,
         io,
+        compress: false,
       }),
     );
   }
@@ -399,6 +429,9 @@ export async function runArchiveJob(opts = {}) {
   const io = opts.io || defaultArchiveIo();
   const ready = assertArchiveReady(cfg);
   if (!ready.ok || ready.skipped) {
+    if (ready.warn) {
+      console.warn(`archive skipped: ${ready.reason}`);
+    }
     return {
       ok: ready.ok,
       skipped: true,
@@ -582,6 +615,7 @@ export async function restoreHour(opts = {}) {
   const verified = [];
   for (const obj of manifest.objects || []) {
     const remote = await getAndVerify(store, obj.key, obj.sha256, obj.bytes);
+    const decoded = decodeStoredObject(obj, remote.body);
     const rel = restoreRelativePath(obj, prefix);
     const file = path.resolve(dest, rel);
     if (file !== path.resolve(dest) && !file.startsWith(path.resolve(dest) + path.sep)) {
@@ -589,12 +623,12 @@ export async function restoreHour(opts = {}) {
     }
     try {
       io.mkdirSync(path.dirname(file), { recursive: true });
-      io.writeFileSync(file, remote.body);
+      io.writeFileSync(file, decoded.body);
     } catch (err) {
       throw wrapEnospc(err, `restore write ${file}`);
     }
-    verifyLocalHash(file, obj.sha256, io);
-    verified.push({ key: obj.key, sha256: remote.sha256, file });
+    verifyLocalHash(file, decoded.sha256, io);
+    verified.push({ key: obj.key, sha256: decoded.sha256, storedSha256: remote.sha256, file });
   }
   const manifestFile = path.join(dest, 'manifest.json');
   try {
@@ -603,6 +637,44 @@ export async function restoreHour(opts = {}) {
     throw wrapEnospc(err, `restore write ${manifestFile}`);
   }
   return { ok: true, prefix, dest, restored: verified.length, manifest: manifestKey };
+}
+
+function decodeStoredObject(obj, storedBody) {
+  const encoding = String(obj.contentEncoding || 'identity').toLowerCase();
+  if (encoding === 'gzip') {
+    let raw;
+    try {
+      raw = gunzipSync(storedBody);
+    } catch (err) {
+      throw archiveError(
+        'GZIP_DECODE_FAILED',
+        `gzip decode failed for ${obj.key}: ${err.message || err}`,
+        { key: obj.key },
+      );
+    }
+    const rawSha = sha256Hex(raw);
+    if (obj.rawSha256 && rawSha !== obj.rawSha256) {
+      throw archiveError(
+        'RAW_HASH_MISMATCH',
+        `raw sha256 mismatch for ${obj.key}: ${rawSha} != ${obj.rawSha256}`,
+        { key: obj.key, sha256: rawSha, expected: obj.rawSha256 },
+      );
+    }
+    if (
+      obj.rawBytes != null &&
+      Number.isFinite(Number(obj.rawBytes)) &&
+      raw.length !== Number(obj.rawBytes)
+    ) {
+      throw archiveError(
+        'RAW_SIZE_MISMATCH',
+        `raw size mismatch for ${obj.key}: ${raw.length} != ${obj.rawBytes}`,
+        { key: obj.key, bytes: raw.length, expected: Number(obj.rawBytes) },
+      );
+    }
+    return { body: raw, sha256: obj.rawSha256 || rawSha };
+  }
+  // Legacy hours stored the raw JSON. sha256/bytes are those exact bytes.
+  return { body: storedBody, sha256: obj.sha256 };
 }
 
 function restoreRelativePath(obj, prefix) {

@@ -308,7 +308,7 @@ Host / operator
   restart         reload pm2 / systemd / compose
   logs            last ${LOG_LINES} log lines
   health          GET ${HEALTH_URL}
-  archive         hourly L2 attic offload (no-op unless ARCHIVE_ENABLED=1)
+  archive         hourly L2 attic (on by default; no delete without a bucket or file:// sink)
   archive-restore restore one sealed hour from S3/R2 (read-only)
 
 Environment overrides

@@ -4,7 +4,7 @@
 
 Commander-facing ranges for **this tree on `test/unstable`**. Pull facts from the cited files. Dollar figures are **order-of-magnitude estimates** (assumptions stated). They are not invoices, quotes, or a SaaS price list.
 
-**As of:** 20 September 2026. **Branch facts:** `test/unstable`.
+**As of:** 29 September 2026. **Branch facts:** `test/unstable`.
 
 ---
 
@@ -28,14 +28,14 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 | L1 proof posting (`RollupSettlement`) | **$0** if `L1_RPC` unset (**repo default**) | **$0** on testnet / unset | **Do not** post default 2s / `batchSize=4` to mainnet | **Repo fact** + **estimate** below. |
 | L1 tally hash (`L1TallyMirror`) | $0 if unset | **cents–tens of USD** per election | same (one tx / election) | **Estimate**, market-variable ETH/gwei. |
 | AWS SES (MFA + Terms PDF + optional receipt / outcome PDFs) | **~$0–2** | **~$1–5** (~2k people) | **~$25–50** (~50k people) | **Estimate** from AWS list prices. |
-| Optional S3 / R2 attic | **off by default** (`ARCHIVE_ENABLED=0`) | **~$0–2** for tens of GB | **~$2–10** for ~100–400 GB | **Estimate**, us-east-1 Standard or R2. VPS keeps the hot window. |
+| Optional S3 / R2 attic | **on by default**, **$0 and no delete** until a bucket or `file://` sink is set | **~$0–2** for tens of GB once a bucket is set | **~$2–10** for ~100–400 GB | **Estimate**, us-east-1 Standard or R2. Uploads are gzipped. VPS keeps the hot window. |
 | Extra “live results” cluster | **none required** | none | none | Hourly disclosure, same Node. |
 
 **Do this / don’t do this**
 
 - **Do** leave L1 env empty on `test/unstable` until a jurisdiction pins `master` addresses. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 - **Do** persist Compose volumes at `/data` (Node) and a **separate** L2 volume at `/data` (`L2_DATA_DIR`).
-- **Don’t** point `L1_RPC` + `SETTLEMENT_ADDRESS` + prover `PRIVATE_KEY` at Ethereum mainnet while the sequencer mints a block every **2 seconds** with `L2_BATCH_SIZE=4`. That is tens of thousands of L1 txs per day. **Estimate:** hundreds of thousands of USD per month at 10 gwei — see §3.
+- **Don’t** point `L1_RPC` + `SETTLEMENT_ADDRESS` + prover `PRIVATE_KEY` at Ethereum mainnet with `L2_BATCH_SIZE=4` while the mempool stays full, or with `L2_SKIP_EMPTY_BLOCKS=0`. A block every **2 seconds** is tens of thousands of L1 txs per day. **Estimate:** hundreds of thousands of USD per month at 10 gwei — see §3. The default skip seals idle time about once an hour (one batch every 4 hours).
 - **Don’t** treat Merkle depth 20 (~1M leaves) as “this Node can serve 1M voters today.” The JSON store is the practical cap. See §4.
 
 ---
@@ -47,7 +47,7 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 | Item | Value | Source |
 | --- | --- | --- |
 | chainId | **27427** | [`l2/genesis.json`](./l2/genesis.json), [`packages/types`](./packages/types/index.js) `REPUBLIC_CHAIN_ID` |
-| Block period | **2 seconds**, 1 sequencer | `genesis.json` `blockTime` / `period`; [`docs/L2.md`](./docs/L2.md) |
+| Block period | Producer wakes every **2 seconds**, 1 sequencer. Default `L2_SKIP_EMPTY_BLOCKS=1` seals only when there is a tx, when the disclosure hour closes, or once per `L2_HEARTBEAT_SECONDS` (3600) | `genesis.json` `blockTime` / `period`; [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `shouldProduceBlock`; [`docs/L2.md`](./docs/L2.md) |
 | Processes | Node 22 sequencer (`l2/sequencer/index.mjs`) + prover (`l2/prover/index.mjs`) | [`l2/Dockerfile`](./l2/Dockerfile), [`docker-compose.yml`](./docker-compose.yml) |
 | RPC | JSON-RPC subset **:8546** | [`docs/L2.md`](./docs/L2.md) |
 | What it is | Civic **JSON** txs (`register` / `vote` / `disqualify` / `tally` / `userop`). **Not** an EVM, **not** Anvil, **not** a hosted Lighter sequencer | [`docs/L2.md`](./docs/L2.md), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
@@ -56,7 +56,7 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 | Mock proofs | `DEV_MOCK_PROOF` default **true**; prover writes `a=[1,0], b=[[1,0],[1,0]], c=[1,0]` | [`l2/README.md`](./l2/README.md), [`l2/prover/batch.mjs`](./l2/prover/batch.mjs) |
 | L1 submit | Only if `L1_RPC` + `SETTLEMENT_ADDRESS` + `PRIVATE_KEY` are **all** set; else JSON under the L2 volume | [`l2/README.md`](./l2/README.md), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
 | Batch size | `L2_BATCH_SIZE` default **4** blocks / proof | [`l2/config.json`](./l2/config.json), `.env.example` |
-| Empty blocks | Producer loop **always** calls `produceBlock()` on the period, including empty blocks | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `startProducer` |
+| Empty blocks | Default: no empty block every 2s. One heartbeat (or the hour-close block) per hour when idle. `L2_SKIP_EMPTY_BLOCKS=0` seals every period, including empty blocks (~43,200 files/day) | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `shouldProduceBlock` |
 | Startup RAM | Sequencer **loads every** `blocks/N.json` into memory | `ChainState.load()` |
 | Voters | No L2 gas token. `eth_getBalance` is `0` for ordinary addresses | [`docs/L2.md`](./docs/L2.md) |
 | Who pays | Jurisdiction funds host + (on an EVM) paymaster **at cost** | [`docs/L2.md`](./docs/L2.md), [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
@@ -68,9 +68,9 @@ There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resource
 
 | Mode | What the tree does | When to use |
 | --- | --- | --- |
-| **Always-on** | Compose `unless-stopped`: empty 2s blocks, prover batches of 4, logs | Staging, or a public Node that must accept registration any day. **Estimate:** light CPU, **growing RAM/disk** from the block log (§2). |
+| **Always-on** | Compose `unless-stopped`: about one block per idle hour, prover batches of 4 over contiguous numbers, logs | Staging, or a public Node that must accept registration any day. **Estimate:** light CPU. Disk grows with real txs, not with empty 2s files, unless `L2_SKIP_EMPTY_BLOCKS=0` (§2). |
 | **Election-window** | Run sequencer + prover while the poll (and registration, if on this L2) is live; stop them after tally. Keep the Node up if you still need `/explorer`, `/results`, `/outcomes` | Binding elections. Matches “Node may be down; chain records remain.” |
-| **L1 posting** | Independent of the host being up. Default env **does not** post to Ethereum | Keep unset until you have a batching policy that is not “every 8 seconds.” |
+| **L1 posting** | Independent of the host being up. Default env **does not** post to Ethereum | Keep unset. Idle default is about one batch every 4 hours. A full mempool with `L2_BATCH_SIZE=4` is still about every 8 seconds. |
 
 ### CPU / RAM assumptions (**estimate**)
 
@@ -78,7 +78,7 @@ There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resource
 | --- | --- | --- | --- |
 | Local demo / town clerk, mock proofs | 2 vCPU | 4 GB | Three Node 22 processes; JSON store in RAM; mock prover is keccak/JSON, not a GPU SNARK. |
 | County election-window, tens of thousands of voters | 4 vCPU | 8–16 GB | Same processes; `republic.json` + explorer + hourly vote flush; Merkle trees keep **all leaves** in the JSON store. |
-| Always-on L2 for **months** at 2s | 2–4 vCPU | **grows with block count** | Sequencer holds the full chain in RAM. Not a coded prune. Prefer election-window or accept tens of GB after months (§2). |
+| Always-on L2 for **months** (default skip) | 2–4 vCPU | grows with **tx** blocks, not empty ticks | Sequencer holds the blocks it has sealed. Idle is ~24 blocks/day. `L2_SKIP_EMPTY_BLOCKS=0` restores the 2s empty-block flood (§2). |
 | Real Groth16 **vote** proofs in Node (`REPUBLIC_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Poseidon `Vote(4)` smoke is about **1966 non-linear** constraints. Poseidon `Vote(20)` is not benchmarked here. Ceremony is not done. |
 
 `master` must not ship mock rollup proofs ([`docs/L2.md`](./docs/L2.md)). Budget a real prover when that lands; today’s default is mock.
@@ -104,7 +104,7 @@ You pay the VPS. This repository does not bill a platform fee.
 | Volume / path | Env | Contents |
 | --- | --- | --- |
 | Node `DATA_DIR` default `apps/node/data`; **Compose `/data`** | `DATA_DIR=/data` | `republic.json` (users, elections, votes, envelopes, terms, CMS), `l2-chain.json` (explorer), `receipt-pdf.secret` | [`apps/node/src/config.mjs`](./apps/node/src/config.mjs), [`Dockerfile`](./Dockerfile), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
-| L2 `L2_DATA_DIR` default `l2/data`; **Compose `/data`** | `L2_DATA_DIR=/data` | Hot window: `blocks/N.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json`, `archive/index.json`. Sealed hours older than `ARCHIVE_HOT_WINDOW_HOURS` (default 2) offload to S3/R2 when `ARCHIVE_ENABLED=1`. | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/archive/job.mjs`](./l2/archive/job.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
+| L2 `L2_DATA_DIR` default `l2/data`; **Compose `/data`** | `L2_DATA_DIR=/data` | Hot window: `blocks/N.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json`, `archive/index.json`. `ARCHIVE_ENABLED` defaults to 1. Sealed hours older than `ARCHIVE_HOT_WINDOW_HOURS` (default 2) offload only when a bucket or `file://` sink is set. No store: warn, do not prune. | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/archive/job.mjs`](./l2/archive/job.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
 | Compose volumes | `node-data:/data`, `l2-data:/data` | **Two** named volumes. Both appear as `/data` **inside** their containers. | [`docker-compose.yml`](./docker-compose.yml) |
 | Image build | `.dockerignore` excludes `apps/node/data`, `l2/data`, `.ptau`, `.zkey` | Mount data and proving keys; do not `COPY` them | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 | Store type | JSON files. **No SQLite.** Pretty-printed rewrite of the **whole** file on persist | [`apps/node/src/store.mjs`](./apps/node/src/store.mjs), [`apps/node/src/explorer.mjs`](./apps/node/src/explorer.mjs) |
@@ -124,18 +124,22 @@ Size the Node volume for **Node JSON + explorer**, and a second volume (the Comp
 
 ### GB estimates (**estimate**, from measured empty-block size)
 
-Empty sequencer block JSON was measured at **~1.4 KB** compact (includes a 256-byte `logsBloom` hex string). Period **2s** ⇒ **43,200 blocks/day** if the producer is left up.
+Empty sequencer block JSON was measured at **~1.4 KB** compact (includes a 256-byte `logsBloom` hex string).
 
-| Store | Driver | Quiet / demo | Always-on 30 days (mostly empty blocks) | ~50k voters, one election |
-| --- | --- | --- | --- | --- |
-| L2 `blocks/` | One file per block, including empty | tens of MB | **~1.5–2.5 GB/month** (~60 MB/day × 30) | same **plus** vote txs (usually smaller than the empty-block flood) |
-| L2 `proofs/` | One pretty JSON per 4-block batch | tens of MB | **~0.3–0.8 GB/month** | same |
-| `republic.json` | Full pretty rewrite; eligible tree **stores every leaf** (~70 B/leaf compact; vote row ~0.2 KB) | **< 50 MB** | grows with people, not with empty L2 | **~0.2–1 GB** order of magnitude if identity + envelope + CMS sit on the person |
-| `l2-chain.json` | Explorer. Empty L2 blocks **are not** appended (ingest only civic rows) | **< 50 MB** | modest unless you ingest every vote | **~0.1–0.5 GB** for tens of thousands of disclosed votes |
-| Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | **50–200 GB** gives headroom |
-| Compose L2 `/data` | blocks + proofs | **20–80 GB** | **plan 50–200 GB** if always-on for months | election-window: **20–80 GB** is usually enough |
+Default (`L2_SKIP_EMPTY_BLOCKS=1`, heartbeat 3600): an idle producer writes about **24 blocks/day** (one heartbeat or hour-close block per hour), not 43,200. A busy mempool can still seal about every 2s.
 
-**Practical disk takeaway:** always-on L2 disk is dominated by **empty 2s blocks**, not by voters. Node `/data` is dominated by **people and ballots**. Size them separately. Turn on hourly attic offload (`ARCHIVE_ENABLED=1`) so the VPS keeps only the last 1–2 hours of L2 JSON; S3/R2 holds the rest.
+`L2_SKIP_EMPTY_BLOCKS=0`: period **2s** ⇒ **43,200 blocks/day** if the producer is left up.
+
+| Store | Driver | Quiet / demo (default skip) | Always-on 30 days, idle, default skip | `L2_SKIP_EMPTY_BLOCKS=0` for 30 days | ~50k voters, one election |
+| --- | --- | --- | --- | --- | --- |
+| L2 `blocks/` | One file per sealed block | **< 5 MB** | **~1 MB** (~24 × 1.4 KB × 30) plus any real txs | **~1.5–2.5 GB/month** (~60 MB/day × 30) | vote txs dominate; empty flood does not |
+| L2 `proofs/` | One pretty JSON per 4-block batch | small | ~6 batches/day when idle | **~0.3–0.8 GB/month** | one batch per 4 sealed blocks |
+| `republic.json` | Full pretty rewrite; eligible tree **stores every leaf** (~70 B/leaf compact; vote row ~0.2 KB) | **< 50 MB** | grows with people, not with empty L2 | same | **~0.2–1 GB** order of magnitude if identity + envelope + CMS sit on the person |
+| `l2-chain.json` | Explorer. Empty L2 blocks **are not** appended (ingest only civic rows) | **< 50 MB** | modest unless you ingest every vote | same | **~0.1–0.5 GB** for tens of thousands of disclosed votes |
+| Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | same | **50–200 GB** gives headroom |
+| Compose L2 `/data` | blocks + proofs | **20–80 GB** is plenty | same, unless skip is off | **plan 50–200 GB** if always-on for months with skip off | election-window: **20–80 GB** is usually enough |
+
+**Practical disk takeaway:** with the default skip, idle L2 disk is a heartbeat an hour, not an empty-block flood. Node `/data` is dominated by **people and ballots**. Size them separately. The attic is on by default, but it **does not delete** until a bucket or `file://` sink is configured and each hour has been uploaded and hash-verified. With a store, the VPS keeps the hot window; S3/R2 holds gzipped hours.
 
 ### Hourly L2 attic (**repo fact**)
 
@@ -143,11 +147,12 @@ Object storage is the attic, not the live sequencer disk. ~2s writes and Node `D
 
 | Item | Fact |
 | --- | --- |
-| Default | `ARCHIVE_ENABLED=0` — sequencer unchanged |
+| Default | `ARCHIVE_ENABLED=1`. No bucket and no `file://` sink: warn, exit 0, **do not prune**. `ARCHIVE_ENABLED=0` turns the job off |
+| Compress | `ARCHIVE_COMPRESS=1`. Gzip block and proof bodies. Manifest lists stored sha256/size and raw sha256/size. Restore gunzips. Older raw objects still restore |
 | Hot window | `ARCHIVE_HOT_WINDOW_HOURS=2` (disclosure hour buckets) |
-| Prefix | `l2/{chainId}/YYYY/MM/DD/HH/` plus `manifest.json` (keys + sha256) |
-| Prune | Only after PUT + GET checksum verify. Failed hours stay on the VPS |
-| API | Path-style S3 (`ARCHIVE_S3_ENDPOINT` empty = AWS; set for Cloudflare R2) |
+| Prefix | `l2/{chainId}/YYYY/MM/DD/HH/` plus `manifest.json` |
+| Prune | Only after PUT + GET checksum of the **stored** bytes, and only when the prover cursor covers the hour. Failed hours stay on the VPS |
+| API | Path-style S3 (`ARCHIVE_S3_ENDPOINT` empty = AWS; set for Cloudflare R2). `file:///path` is a real sink |
 
 Merkle **depth 20** (~1M leaves) is **not** “reserve 1M × 32-byte hashes only.” The Node also stores persons, sessions, envelopes, terms rows, and pretty-printed JSON. See §4.
 
@@ -192,23 +197,28 @@ Using **~250k gas** as a round “real verify + store” stand-in: at **10 gwei*
 
 ### Per-batch vs per-election (**repo math** × **estimate $**)
 
-Default: 2s blocks × batch of 4 ⇒ **one L1 submit every 8 seconds** if L1 env is set, **including empty batches**.
+Two cadences, same `L2_BATCH_SIZE=4`, if L1 env is set:
+
+- **Idle, default skip:** about one block per hour ⇒ **one L1 submit every 4 hours**.
+- **Mempool full every tick, or `L2_SKIP_EMPTY_BLOCKS=0`:** a block every 2s ⇒ **one L1 submit every 8 seconds**, including empty batches when skip is off.
 
 | Cadence | Batches | At ~$10 / real batch (10 gwei, $4k ETH) |
 | --- | --- | --- |
-| 1 hour | 450 | **~$4,500** |
-| 12-hour election day | 5,400 | **~$54,000** |
-| 30 days always-on | **324,000** | **~$3 million** |
-| Same, mock ~$3 / batch | 324,000 | **~$1 million** |
+| Idle default (1 block/hour, batch of 4) | 6 / day | **~$60 / day** |
+| 1 hour of a full mempool (or skip off) | 450 | **~$4,500** |
+| 12-hour election day, mempool full the whole time | 5,400 | **~$54,000** |
+| 30 days always-on, skip off or always full | **324,000** | **~$3 million** |
+| 30 days always-on, idle default skip | ~180 | **~$1,800** |
+| Same 324k, mock ~$3 / batch | 324,000 | **~$1 million** |
 | **L1 env unset** (Compose / `.env.example` default) | 0 | **$0** |
 | **Sepolia / Anvil** | testnet ETH | **$0** (plus any RPC vendor fee) |
 | **1 `postResult` / election** | 1 | **cents to tens of USD** |
 
-**Commander rule:** with the code as written, **mainnet `submitBatch` at default batch size is not a civic budget item — it is a misconfiguration.** Options that *are* in policy/docs today:
+**Commander rule:** **mainnet `submitBatch` at `L2_BATCH_SIZE=4` during a busy election is not a civic budget item — it is a misconfiguration.** Idle heartbeats are cheaper and still not free. Options that *are* in policy/docs today:
 
 1. Leave L1 unset; write `proofs/batch-N.json` only (**default**).
 2. Use a testnet for staging.
-3. If mainnet settlement is required later: raise `L2_BATCH_SIZE` a lot, run L2 only in the election window, and/or change the prover to skip empty batches (**not implemented**). Example **estimate:** `L2_BATCH_SIZE=1800` (~1 hour / proof) → ~$10/hour at the 10 gwei / $4k scenario — still a policy choice, not current default.
+3. If mainnet settlement is required later: raise `L2_BATCH_SIZE` a lot and run L2 only in the election window. The prover still batches contiguous block numbers; it does not skip a partial tail. Example **estimate:** `L2_BATCH_SIZE=1800` on a 2s full mempool (~1 hour / proof) → ~$10/hour at the 10 gwei / $4k scenario — still a policy choice, not the current default.
 
 Tally mirror is cheap even on mainnet because it is **once per election**.
 
@@ -281,7 +291,7 @@ Dedicated IPs, Virtual Deliverability Manager, and Mail Manager are **optional A
 
 ### S3 / R2 hourly attic (**in this repo**)
 
-Hourly job (`npm run l2:archive`, Compose `archive`, `./system_actions.sh archive`). Default **off**. When `ARCHIVE_ENABLED=1`, sealed L2 hours older than the hot window upload to AWS S3 or Cloudflare R2 (same path-style client). The VPS keeps ~2 hours of block JSON plus `head.json` / mempool / sealed votes / Node `DATA_DIR`.
+Hourly job (`npm run l2:archive`, Compose `archive`, `./system_actions.sh archive`). Default **on**. With an empty bucket and no `file://` sink it warns and does not upload or delete. When a store is set, sealed L2 hours older than the hot window upload to AWS S3 or Cloudflare R2 (same path-style client), gzipped by default. The VPS keeps ~2 hours of block JSON plus `head.json` / mempool / sealed votes / Node `DATA_DIR`. Prune runs only after the stored-byte sha256 matches.
 
 | Item | **Estimate** (S3 Standard, us-east-1 first 50 TB, list ~**$0.023 / GB-month**; R2 is often similar or cheaper, no egress to Workers) |
 | --- | --- |

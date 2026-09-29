@@ -8,7 +8,9 @@
 #   docker compose up -d --build
 #   curl -fsS http://127.0.0.1:3000/health
 #
-# Optional Compose `archive` sidecar is off until ARCHIVE_ENABLED=1.
+# The archive sidecar is on by default. With an empty ARCHIVE_S3_BUCKET and
+# no file:// ARCHIVE_S3_ENDPOINT it warns and does not delete sequencer files.
+# Set ARCHIVE_ENABLED=0 to turn the job off.
 #
 # system_actions.sh restart/logs/status pick this file up automatically.
 
@@ -103,6 +105,8 @@ services:
       L2_DATA_DIR: /data
       L2_CHAIN_ID: ${CHAIN_ID:-27427}
       L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
+      L2_SKIP_EMPTY_BLOCKS: ${L2_SKIP_EMPTY_BLOCKS:-1}
+      L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
@@ -159,9 +163,11 @@ services:
     networks:
       - republic
 
-  # Hourly L2 attic. Default ARCHIVE_ENABLED=0 is a no-op (does not touch
-  # sequencer writes). When enabled, sealed hours older than the hot window
-  # go to S3 / R2; the VPS keeps only recent blocks + head/mempool/sealed.
+  # Hourly L2 attic. Default ARCHIVE_ENABLED=1. With no bucket and no
+  # file:// sink the daemon warns and does not touch sequencer files.
+  # When a store is set, sealed hours older than the hot window go to
+  # S3 / R2 (gzip by default); the VPS keeps recent blocks + head/mempool/sealed.
+  # ARCHIVE_ENABLED=0 turns the job off.
   archive:
     build:
       context: .
@@ -175,7 +181,8 @@ services:
       L2_DATA_DIR: /data
       L2_CHAIN_ID: ${CHAIN_ID:-27427}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      ARCHIVE_ENABLED: ${ARCHIVE_ENABLED:-0}
+      ARCHIVE_ENABLED: ${ARCHIVE_ENABLED:-1}
+      ARCHIVE_COMPRESS: ${ARCHIVE_COMPRESS:-1}
       ARCHIVE_S3_BUCKET: ${ARCHIVE_S3_BUCKET:-}
       ARCHIVE_S3_ENDPOINT: ${ARCHIVE_S3_ENDPOINT:-}
       ARCHIVE_S3_REGION: ${ARCHIVE_S3_REGION:-auto}

@@ -60,7 +60,7 @@ From the repository root. Numbers **1–4** are the git flow: feature branches l
 ./system_actions.sh restart
 ./system_actions.sh logs
 ./system_actions.sh health       # GET $ZK_VOTING_HEALTH_URL (default :3000/health)
-./system_actions.sh archive      # L2 hourly attic (no-op unless ARCHIVE_ENABLED=1)
+./system_actions.sh archive      # L2 hourly attic (on by default; no delete without a store)
 ```
 
 `4` only **merges and pushes git**. It does not install, build, or restart. After a release merge, run `deploy-prod` on the host that serves the jurisdiction.
@@ -97,7 +97,7 @@ docker compose down           # or: npm run compose:down
 | `node` | `Dockerfile` | `${ZK_VOTING_PORT:-3000}` | Republic Node — voter / admin SPA + JSON API |
 | `l2` | `l2/Dockerfile` | `${L2_RPC_PORT:-8546}` | Sequencer JSON-RPC (`GET /health`, `eth_chainId`) |
 | `prover` | same as `l2` | none | Batch prover; writes proofs on the `l2-data` volume |
-| `archive` | same as `l2` | none | Hourly L2 attic to S3/R2. Default `ARCHIVE_ENABLED=0` is a no-op |
+| `archive` | same as `l2` | none | Hourly L2 attic to S3/R2. Default on. Empty bucket and no `file://` sink warns and does not prune. `ARCHIVE_ENABLED=0` turns it off |
 
 Voter JSON lives on the `node-data` volume (`DATA_DIR=/data`). L2 blocks and proofs live on `l2-data`. Secrets stay in `.env` (gitignored). Host-specific live-reload mounts belong in `docker-compose.override.yml` (also gitignored); start from [`docker-compose.override.example.yml`](../docker-compose.override.example.yml).
 
@@ -245,16 +245,21 @@ Details: [`docs/L2.md`](./L2.md).
 
 ### Hourly L2 attic (S3 / Cloudflare R2)
 
-The sequencer keeps writing ~2s blocks to local `L2_DATA_DIR`. Object storage is the **attic**, not the live L2 filesystem. A sidecar / cron job (`node l2/archive/cli.mjs archive`, Compose `archive` service, `./system_actions.sh archive`, or `npm run l2:archive`) uploads **sealed hours** older than `ARCHIVE_HOT_WINDOW_HOURS` (default **2**, aligned with the disclosure hour boundary) to a path-style S3 API:
+The sequencer wakes about every 2s. With `L2_SKIP_EMPTY_BLOCKS=1` (default) it writes a block only when there is a transaction, when the disclosure hour closes, or once per `L2_HEARTBEAT_SECONDS` (default **3600**). `L2_SKIP_EMPTY_BLOCKS=0` restores a file every tick, including empty blocks. Object storage is the **attic**, not the live L2 filesystem. A sidecar / cron job (`node l2/archive/cli.mjs archive`, Compose `archive` service, `./system_actions.sh archive`, or `npm run l2:archive`) uploads **sealed hours** older than `ARCHIVE_HOT_WINDOW_HOURS` (default **2**, aligned with the disclosure hour boundary) to a path-style S3 API:
 
 `s3://$ARCHIVE_S3_BUCKET/l2/{chainId}/YYYY/MM/DD/HH/…`
 
-Each hour has a `manifest.json` (keys + sha256). Local copies are deleted **only after** GET+checksum verify. Failed uploads leave the VPS files in place. Default **`ARCHIVE_ENABLED=0`**: the job exits 0 and does not touch the sequencer.
+Each hour has a `manifest.json`. Block and proof objects are gzipped when `ARCHIVE_COMPRESS=1` (default). The manifest lists the sha256 and size of the **exact bytes stored** and the sha256 and size of the **raw** JSON. Local copies are deleted **only after** GET+checksum verify of those stored bytes, and only for hours the prover cursor has covered. Failed uploads leave the VPS files in place. Restore gunzips and checks the raw hash. Objects archived before compression (no `contentEncoding`, or `identity`) restore as the original JSON.
+
+Default **`ARCHIVE_ENABLED=1`**. If `ARCHIVE_S3_BUCKET` is empty and `ARCHIVE_S3_ENDPOINT` is not a `file://` sink, the job prints a warning, exits 0, and **does not delete anything**. `ARCHIVE_ENABLED=0` turns the job off the same way.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ARCHIVE_ENABLED` | `0` | `1` turns the job on |
-| `ARCHIVE_S3_BUCKET` | empty | Required when enabled |
+| `L2_SKIP_EMPTY_BLOCKS` | `1` | `0` seals every ~2s, including empty blocks |
+| `L2_HEARTBEAT_SECONDS` | `3600` | One empty block after this many seconds with no other seal. `0` disables the heartbeat |
+| `ARCHIVE_ENABLED` | `1` | `0` turns the job off. On with no bucket and no `file://` sink: warn and do not prune |
+| `ARCHIVE_COMPRESS` | `1` | Gzip block and proof uploads. `0` stores raw JSON. Hash check is always over the stored bytes |
+| `ARCHIVE_S3_BUCKET` | empty | Required to actually upload. Empty plus no `file://` sink does not prune |
 | `ARCHIVE_S3_ENDPOINT` | empty | Empty = AWS. R2: `https://<accountid>.r2.cloudflarestorage.com`. Tests: `file:///path` |
 | `ARCHIVE_S3_REGION` | `auto` | R2 uses `auto`; AWS e.g. `us-east-1` |
 | `ARCHIVE_S3_ACCESS_KEY_ID` / `ARCHIVE_S3_SECRET_ACCESS_KEY` | empty | R2 API token or IAM user. Distinct from SES when you want |
@@ -277,7 +282,7 @@ Cron (host already exporting archive env, or a root `.env` the CLI will read):
 
 Node `DATA_DIR` (`republic.json`, working explorer) stays local. See [`voting_cost_estimate.md`](../voting_cost_estimate.md).
 
-The archive job is a **sidecar**. A failed hour (hash mismatch, PUT/GET error, timeout, `ENOSPC` in the attic job, lock held) **does not stop the sequencer**. If the VPS is so full that the sequencer cannot write `blocks/N.json` or Node cannot write `republic.json`, that is a **separate** hot-path `ENOSPC` alert — free disk, turn archive on, or stop empty-block production. Overlapping crons share `L2_DATA_DIR/archive/archive.lock`; the second run exits non-zero and does not prune.
+The archive job is a **sidecar**. A failed hour (hash mismatch, PUT/GET error, timeout, `ENOSPC` in the attic job, lock held) **does not stop the sequencer**. If the VPS is so full that the sequencer cannot write `blocks/N.json` or Node cannot write `republic.json`, that is a **separate** hot-path `ENOSPC` alert — free disk or configure the attic. Overlapping crons share `L2_DATA_DIR/archive/archive.lock`; the second run exits non-zero and does not prune.
 
 #### Attic failure matrix
 
@@ -294,6 +299,9 @@ Mismatch or failure at any verify stage: **do not prune**; that hour exits non-z
 | `ENOSPC` after some hours verified | those hours may already be pruned | those hours complete | abort remaining; retry the rest after freeing disk |
 | Disk critically low **before** start | hot path untouched | sealed hours still offloaded | skip explorer snapshot and other large local copies; log `ENOSPC` |
 | Second run while lock held | intact | unchanged | wait for the first job; overlapping cron is a no-op prune-wise |
+| No bucket and no `file://` sink | intact | none | warn and exit 0; never prune |
+| Gzip stored sha256 mismatch, or raw hash mismatch on restore | intact (upload) | bad or incomplete object | no prune; restore refuses the object |
+| Pre-compression object (no `contentEncoding`) | n/a | raw JSON | restore writes those bytes and checks `sha256` |
 | Archive process crash / Compose `archive` restart | sequencer still producing | last complete hour only | restart sidecar; sequencer does not import this job |
 
 ### Block explorer
