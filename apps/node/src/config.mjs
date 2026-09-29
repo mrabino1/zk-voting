@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
+import { normalizeEmail } from './identity.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,6 +91,28 @@ export function resolveFeedbackMaxBodyBytes(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 1024) return fallback;
   return Math.min(256 * 1024, Math.floor(n));
+}
+
+/**
+ * Deploy-time contact email for the seeded platform super admin.
+ * Empty (or whitespace) leaves the stored contactEmail alone.
+ * Any other value must pass `normalizeEmail` or startup fails closed.
+ * The address is read from the process environment at runtime. It is not
+ * baked into the image.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function resolveSuperAdminEmail(value) {
+  if (value === undefined || value === null) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  try {
+    return normalizeEmail(raw);
+  } catch {
+    throw new Error(
+      'SUPER_ADMIN_EMAIL is set but is not a valid email address. Refusing to start.',
+    );
+  }
 }
 
 function isDevHost(value) {
@@ -296,6 +319,11 @@ export function getConfig(overrides = {}) {
         : process.env.VOTING_TOKEN_CHAIN_ID,
   });
   config.pollsReady = Boolean(config.pollsEnabled) && config.votingToken.configured;
+  config.superAdminEmail = resolveSuperAdminEmail(
+    Object.prototype.hasOwnProperty.call(overrides, 'superAdminEmail')
+      ? overrides.superAdminEmail
+      : process.env.SUPER_ADMIN_EMAIL,
+  );
   return config;
 }
 
