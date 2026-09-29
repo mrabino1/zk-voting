@@ -184,6 +184,25 @@ jobs:
             | tee /tmp/l2-chain.json
           grep -q '0x6b23' /tmp/l2-chain.json
 
+      - name: Rolling overlap stays healthy while standby
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build l2-next node-next
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8546/health | grep -q '"mode":"active"' \
+              && curl -fsS http://127.0.0.1:3000/health | grep -q '"mode":"active"' \
+              && curl -fsS http://127.0.0.1:8547/health | grep -q '"mode":"standby"' \
+              && curl -fsS http://127.0.0.1:3001/health | grep -q '"mode":"standby"'; then
+              echo "rolling overlap ok"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "rolling overlap did not reach active+standby"
+          docker compose -f docker-compose.yml -f docker-compose.rolling.yml ps
+          docker compose -f docker-compose.yml -f docker-compose.rolling.yml logs
+          exit 1
+
       - name: Teardown
         if: always()
         run: docker compose down -v

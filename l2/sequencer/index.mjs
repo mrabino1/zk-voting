@@ -9,17 +9,24 @@ const state = ChainState.open(config);
 const rpc = createRpcServer(state);
 
 const { host, port } = await rpc.listen();
-state.startProducer();
+state.armProducer();
 
 console.log(
   `Republic L2 sequencer  chainId=${config.chainId}  rpc=http://${host}:${port}  head=${state.latestNumber}  skipEmpty=${config.skipEmptyBlocks}  heartbeat=${config.heartbeatSeconds}s`,
 );
 console.log('NOT FOR PROFIT — our L2, our prover. Voters are gasless. No token.');
 
+let stopping = false;
 const shutdown = async () => {
+  if (stopping) return;
+  stopping = true;
   console.log('sequencer stopping');
-  await state.stop();
-  await rpc.close();
+  try {
+    await state.stop();
+    await rpc.close();
+  } catch (err) {
+    console.warn('sequencer shutdown:', err.message || err);
+  }
   process.exit(0);
 };
 process.on('SIGINT', shutdown);

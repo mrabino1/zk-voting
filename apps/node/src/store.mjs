@@ -234,11 +234,64 @@ export class Store {
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
-    await store.persist();
+    store.writerActive = config.writerActive !== false;
+    store.lease = config.writerLeaseHandle || null;
+    if (store.writerActive) await store.persist();
     return store;
   }
 
+  refuseIfStandby() {
+    if (this.writerActive === false) {
+      throw new HttpError(503, 'maintenance handover', {
+        code: 'STANDBY',
+        mode: 'standby',
+        retryAfter: 2,
+      });
+    }
+  }
+
+  async reloadFromDisk() {
+    let raw;
+    try {
+      raw = await fs.readFile(this.filePath, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      throw err;
+    }
+    const data = { ...emptyData(), ...JSON.parse(raw) };
+    data.pages = Array.isArray(data.pages) ? data.pages : [];
+    data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
+    data.receipts = Array.isArray(data.receipts) ? data.receipts : [];
+    data.outcomeSubscriptions = Array.isArray(data.outcomeSubscriptions) ? data.outcomeSubscriptions : [];
+    data.outcomeReports = Array.isArray(data.outcomeReports) ? data.outcomeReports : [];
+    data.outcomeReportDeliveries = Array.isArray(data.outcomeReportDeliveries)
+      ? data.outcomeReportDeliveries
+      : [];
+    data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
+    data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
+    data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
+    data.polls = Array.isArray(data.polls) ? data.polls : [];
+    data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
+    data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
+    data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
+    data.site = { ...defaultSite(), ...(data.site || {}) };
+    data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
+    data.meta = data.meta || {};
+    this.data = data;
+    this.rebuildAllEligibility();
+  }
+
   async persist() {
+    this.refuseIfStandby();
+    if (this.lease) {
+      this.lease.assertFence();
+      this.data.meta = this.data.meta || {};
+      const diskEpoch = Number(this.data.meta.writerEpoch || 0);
+      if (diskEpoch > this.lease.epoch) {
+        throw new HttpError(503, 'stale writer fence', { code: 'STALE_FENCE', mode: 'standby' });
+      }
+      this.data.meta.writerEpoch = this.lease.epoch;
+    }
     this._write = this._write.then(async () => {
       const tmp = `${this.filePath}.${process.pid}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(this.data, null, 2));
@@ -1188,6 +1241,7 @@ export class Store {
   }
 
   async registerCommitment(electionId, identityCommitment, { userId, persist = true } = {}) {
+    this.refuseIfStandby();
     const election = this.requireElection(electionId);
     if (election.rollFrozen) {
       throw new HttpError(409, 'roll is frozen', { code: 'ROLL_FROZEN' });
@@ -1789,6 +1843,7 @@ export class Store {
   }
 
   async disqualify(electionId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
+    this.refuseIfStandby();
     const election = this.requireElection(electionId);
     if (election.rollFrozen && !election.lateUpdateAllowed) {
       throw new HttpError(409, 'roll frozen; late disqualification not allowed', {
@@ -1909,6 +1964,7 @@ export class Store {
    * is 409 NULLIFIER_USED. Double voting is impossible.
    */
   async acceptVote(vote, envelope) {
+    this.refuseIfStandby();
     const existing = this.findVote(vote.electionId, vote.nullifier);
     if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
@@ -2322,6 +2378,7 @@ export class Store {
   }
 
   async setTally(id, counts, extras = {}) {
+    this.refuseIfStandby();
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {

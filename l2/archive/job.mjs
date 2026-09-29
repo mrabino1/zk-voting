@@ -14,6 +14,7 @@ import {
   parseHourPath,
   hourPath,
 } from './hours.mjs';
+import { claimRoleLease } from '../lease/lease.mjs';
 import { acquireArchiveLock, lockBusyResult } from './lock.mjs';
 import {
   createObjectStore,
@@ -427,11 +428,38 @@ export async function runArchiveJob(opts = {}) {
   const cfg = opts.config || loadArchiveConfig({ env: opts.env, l2Config: opts.l2Config });
   const now = opts.now != null ? Number(opts.now) : Math.floor(Date.now() / 1000);
   const io = opts.io || defaultArchiveIo();
+  let releaseWriter = () => {};
+  if (!opts.skipWriterLease) {
+    const claim = claimRoleLease({
+      dataDir: cfg.dataDir,
+      role: 'archive',
+      existing: opts.writerLease,
+      ttlMs: opts.leaseTtlMs,
+    });
+    if (!claim.acquired) {
+      return {
+        ok: true,
+        skipped: true,
+        locked: true,
+        reason: 'ARCHIVE_STANDBY',
+        code: 'ARCHIVE_STANDBY',
+        error: 'archive standby; another container holds the writer lease',
+        hours: [],
+        now,
+      };
+    }
+    releaseWriter = () => {
+      claim.release();
+      releaseWriter = () => {};
+    };
+  }
+
   const ready = assertArchiveReady(cfg);
   if (!ready.ok || ready.skipped) {
     if (ready.warn) {
       console.warn(`archive skipped: ${ready.reason}`);
     }
+    releaseWriter();
     return {
       ok: ready.ok,
       skipped: true,
@@ -448,6 +476,7 @@ export async function runArchiveJob(opts = {}) {
       : acquireArchiveLock(cfg.dataDir, opts.lock || {});
   } catch (err) {
     const wrapped = wrapEnospc(err, `archive lock under ${cfg.dataDir}`);
+    releaseWriter();
     return {
       ok: false,
       skipped: false,
@@ -458,7 +487,10 @@ export async function runArchiveJob(opts = {}) {
       now,
     };
   }
-  if (!lock.acquired) return lockBusyResult(lock, now);
+  if (!lock.acquired) {
+    releaseWriter();
+    return lockBusyResult(lock, now);
+  }
 
   try {
     const minFree = Number(cfg.minFreeBytes) || 0;
@@ -583,6 +615,7 @@ export async function runArchiveJob(opts = {}) {
     };
   } finally {
     if (typeof lock.release === 'function') lock.release();
+    releaseWriter();
   }
 }
 

@@ -4,10 +4,21 @@
 
   const $ = (id) => document.getElementById(id);
 
+  async function fetchRetry(url, options) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await fetch(url, options);
+      if (res.status !== 503 || attempt === 4) return res;
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : Math.min(400 * 2 ** attempt, 2000);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    throw new Error("maintenance handover");
+  }
+
   async function request(path, opts = {}) {
     const headers = { Accept: "application/json", ...(opts.headers || {}) };
     if (opts.body != null) headers["Content-Type"] = "application/json";
-    const res = await fetch(path, {
+    const res = await fetchRetry(path, {
       credentials: "include",
       ...opts,
       headers,

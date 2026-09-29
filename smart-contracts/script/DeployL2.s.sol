@@ -9,6 +9,7 @@ import {RepublicStack, RepublicStackScript} from "./DeployLocal.s.sol";
 ///         on the Republic L2 RPC (`--rpc-url`). Settlement stays on L1.
 contract DeployL2 is RepublicStackScript {
     function run() external {
+        _refuseIfAlreadyDeployed();
         vm.startBroadcast();
         address admin = msg.sender;
         RepublicStack memory s = _deployElectionStack(admin);

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Generic HTTP health probe for Compose / Dockerfile HEALTHCHECK.
+// HTTP 200 with ok!==false is success for both active and standby.
+// Coolify must treat standby as healthy or a rolling update deadlocks.
+// The JSON `mode` field is active or standby; do not require mode=active.
 const url = process.argv[2] || process.env.HEALTHCHECK_URL;
 if (!url) {
   console.error('usage: healthcheck.mjs <url>');

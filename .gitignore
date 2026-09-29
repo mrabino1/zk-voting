@@ -55,6 +55,10 @@ apps/node/data/
 l2/data/
 l2/.anvil*
 
+# One-time L1 deploy records (template stays tracked)
+deployments/*.json
+!deployments/template.json
+
 # Nested tool repos
 smart-contracts/lib/**/.git
 
