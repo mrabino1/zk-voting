@@ -147,6 +147,7 @@ export function loadTermsDocument({ filePath = TERMS_MARKDOWN_PATH } = {}) {
     lines: markdownToPdfLines(markdown, { skipTitle: title }),
     created: lastUpdated,
   });
+  const plainTextSha256 = sha256Hex(markdownBytes);
   return {
     title,
     version,
@@ -154,7 +155,9 @@ export function loadTermsDocument({ filePath = TERMS_MARKDOWN_PATH } = {}) {
     filename,
     markdown,
     markdownBytes,
-    markdownSha256: sha256Hex(markdownBytes),
+    plainText: markdown,
+    markdownSha256: plainTextSha256,
+    plainTextSha256,
     pdf,
     pdfSha256: sha256Hex(pdf),
     hashOf: TERMS_HASH_OF,
@@ -189,7 +192,8 @@ export function publicTermsView(doc = getTermsDocument()) {
     hashOf: doc.hashOf,
     pdfSha256: doc.pdfSha256,
     markdownSha256: doc.markdownSha256,
-    note: 'termsHash stored on accept is SHA-256 of the exact PDF bytes (the emailed attachment). markdownSha256 is SHA-256 of the UTF-8 markdown body after front matter.',
+    plainTextSha256: doc.plainTextSha256,
+    note: 'termsHash stored on accept is SHA-256 of the exact PDF bytes (the emailed attachment). plainTextSha256 (same bytes as markdownSha256) is SHA-256 of the UTF-8 /terms plain text after front matter. Sign-in stores that digest as termsNotifiedHash only after a successful SES send.',
     blocks: doc.blocks,
     markdown: doc.markdown,
   };
@@ -223,6 +227,53 @@ export function termsEmailBodies(doc) {
   return { subject, text, html };
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function termsPageUrls(config = {}) {
+  const base = String(config.publicBaseUrl || '').trim().replace(/\/+$/, '');
+  if (!base) return { pageUrl: '/terms', pdfUrl: '/terms.pdf' };
+  return { pageUrl: `${base}/terms`, pdfUrl: `${base}/terms.pdf` };
+}
+
+/**
+ * Sign-in notice. The PDF is attached and the public /terms URL is in the body.
+ * Sent once per member per plain-text hash.
+ */
+export function termsUpdatedEmailBodies(doc, { pageUrl = '/terms', pdfUrl = '/terms.pdf' } = {}) {
+  const subject = 'Republic Terms of Use were updated';
+  const text = [
+    'NOT FOR PROFIT — civic public good. Not a commercial product.',
+    '',
+    'The Republic Terms of Use were updated. The current terms are attached as a PDF.',
+    '',
+    `Read them: ${pageUrl}`,
+    `PDF: ${pdfUrl}`,
+    '',
+    `Plain-text SHA-256: ${doc.plainTextSha256}`,
+    `PDF SHA-256: ${doc.pdfSha256}`,
+    `Version: ${doc.version} · Last updated: ${doc.lastUpdated}`,
+    '',
+    'This message is sent once for this text, the next time you sign in.',
+  ].join('\n');
+  const html = `<!DOCTYPE html>
+<html lang="en"><body style="font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5;color:#111">
+<p class="nfp" style="font-weight:700;letter-spacing:0.04em">NOT FOR PROFIT</p>
+<p>The Republic Terms of Use were updated. The current terms are attached as a PDF.</p>
+<p><a href="${escapeHtml(pageUrl)}">Read the Terms of Use</a></p>
+<p>PDF SHA-256: <code>${escapeHtml(doc.pdfSha256)}</code></p>
+<p>Plain-text SHA-256: <code>${escapeHtml(doc.plainTextSha256)}</code></p>
+<p>Version ${escapeHtml(doc.version)} · Last updated ${escapeHtml(doc.lastUpdated)}.</p>
+<p style="color:#444">Civic public good. Not a commercial product. Sent once per version of this text.</p>
+</body></html>`;
+  return { subject, text, html };
+}
+
 function publicRecord(row) {
   if (!row) return null;
   return {
@@ -244,9 +295,81 @@ function publicRecord(row) {
 /**
  * @param {{ store: import('./store.mjs').Store, mailer: ReturnType<typeof import('./mailer.mjs').createMailer>, config?: object }} deps
  */
-export function createTermsService({ store, mailer, config = {} }) {
+export function createTermsService({ store, mailer, config = {}, getDocument = null }) {
+  const inflight = new Map();
+
   function document() {
-    return getTermsDocument();
+    return (getDocument || getTermsDocument)();
+  }
+
+  /**
+   * On sign-in, email the current terms once per member per plain-text hash.
+   * The stored hash and sent timestamp change only after SES (or the capture
+   * mailer) accepts the message. A send failure leaves them unchanged and
+   * does not throw, so sign-in can continue.
+   */
+  async function maybeNotifyTermsUpdated(user) {
+    if (!user?.id) return { sent: false, reason: 'no_user' };
+    const running = inflight.get(user.id);
+    if (running) {
+      await running;
+      return maybeNotifyTermsUpdated(store.getUser(user.id) || user);
+    }
+    const job = deliverTermsUpdate(store.getUser(user.id) || user);
+    inflight.set(user.id, job);
+    try {
+      return await job;
+    } finally {
+      inflight.delete(user.id);
+    }
+  }
+
+  async function deliverTermsUpdate(user) {
+    const account = user?.id ? store.getUser(user.id) || user : null;
+    if (!account?.id) return { sent: false, reason: 'no_user' };
+    const doc = document();
+    const hash = doc.plainTextSha256;
+    if (account.termsNotifiedHash === hash) {
+      return { sent: false, reason: 'unchanged', plainTextSha256: hash };
+    }
+    const to = userEmail(account);
+    if (!to) return { sent: false, reason: 'no_email', plainTextSha256: hash };
+    if (!mailer) return { sent: false, reason: 'no_mailer', plainTextSha256: hash };
+
+    const urls = termsPageUrls(config);
+    const bodies = termsUpdatedEmailBodies(doc, urls);
+    try {
+      await mailer.send({
+        to,
+        ...bodies,
+        attachments: [
+          {
+            filename: doc.filename,
+            contentType: 'application/pdf',
+            content: doc.pdf,
+          },
+        ],
+        meta: {
+          purpose: 'terms-updated',
+          plainTextSha256: hash,
+          pdfSha256: doc.pdfSha256,
+          termsVersion: doc.version,
+        },
+      });
+    } catch {
+      console.warn(`[republic] terms-updated notice userId=${account.id} reason=send_failed`);
+      return { sent: false, reason: 'send_failed', plainTextSha256: hash };
+    }
+
+    const now = new Date().toISOString();
+    account.termsNotifiedHash = hash;
+    account.termsNotifiedAt = now;
+    try {
+      await store.persist();
+    } catch {
+      console.warn(`[republic] terms-updated notice userId=${account.id} reason=persist_failed`);
+    }
+    return { sent: true, plainTextSha256: hash, termsNotifiedAt: account.termsNotifiedAt };
   }
 
   async function recordEvent({
@@ -389,6 +512,7 @@ export function createTermsService({ store, mailer, config = {} }) {
     accept,
     view,
     maybeAcceptNewPerson,
+    maybeNotifyTermsUpdated,
     publicRecord,
     vendor: 'ses',
     hashOf: TERMS_HASH_OF,
