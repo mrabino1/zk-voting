@@ -28,6 +28,7 @@ async function boot(overrides = {}) {
       dataDir: dir,
       feedbackNowMs: () => now,
       feedbackClientIp: (req) => String(req.headers['x-test-ip'] || '203.0.113.10'),
+      superAdminEmail: '',
       ...overrides,
     });
   } catch (err) {
@@ -258,6 +259,29 @@ describe('POST /api/feedback', { concurrency: false }, () => {
     } finally {
       console.warn = orig;
       await closeApp(app);
+    }
+  });
+
+  test('dry-run delivery uses the seeded SUPER_ADMIN_EMAIL', async () => {
+    const dry = await boot({
+      superAdminEmail: 'Operator@Example.Gov',
+      sesFromAddress: 'elections@example.gov',
+      awsRegion: 'us-east-1',
+      sesDryRun: true,
+      sesEndpoint: 'http://127.0.0.1:9',
+    });
+    try {
+      const supers = dry.store.listUsers().filter((row) => row.role === 'platform_super_admin');
+      assert.equal(supers.length, 1);
+      assert.equal(supers[0].contactEmail, 'operator@example.gov');
+      const sent = await api(dry, payload(dry, { category: 'suggestion', message: 'Route feedback to the env inbox.' }));
+      assert.equal(sent.status, 200, sent.text);
+      const mail = dry.mailer.lastFeedback();
+      assert.equal(mail.meta.delivery, 'dry-run');
+      assert.equal(mail.to, 'operator@example.gov');
+      assert.match(mail.text, /Route feedback to the env inbox/);
+    } finally {
+      await closeApp(dry);
     }
   });
 
