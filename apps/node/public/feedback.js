@@ -313,10 +313,9 @@ export function renderFeedback(main, ctx) {
                 { for: "feedback-assignment" },
                 t("feedback.assignmentLabel"),
                 h("span", { class: "field-hint", id: "feedback-assignment-hint", text: t("feedback.assignmentHint") }),
-                " ",
-                h("a", { href: "/terms", "data-nav": "", text: t("feedback.termsLink") }),
               ),
             ),
+            h("p", {}, h("a", { href: "/terms", "data-nav": "", text: t("feedback.termsLink") })),
             assignErr
               ? h("p", { class: "field-error", id: "feedback-assignment-error", text: assignErr.message })
               : null,
