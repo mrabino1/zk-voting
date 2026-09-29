@@ -360,6 +360,9 @@ RP_ID=localhost
 WEBAUTHN_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 PUBLIC_BASE_URL=
 ADMIN_HANDLE=admin
+# Platform super admin contact email. Empty = leave the stored address.
+# Invalid refuses to start. Runtime only (not baked into the image).
+SUPER_ADMIN_EMAIL=
 DISCLOSURE_INTERVAL_SECONDS=3600
 ALLOW_DEV_LOGIN=
 ALLOW_SMART_CARD_MOCK=
@@ -428,6 +431,8 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 | --- | --- |
 | `VOTE_FQDN` | The subdomain this body creates for voting, e.g. `vote.domain.tld`. That hostname is the voting authority (passkeys, browser origin, official links). Empty on a local demo. |
 | `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Optional once `VOTE_FQDN` is set. The Node derives the relying party, the `https://` origin, and the official base URL from that hostname. Set `RP_ID` only to pin a different public parent hostname. |
+| `ADMIN_HANDLE` | Handle of the seeded `platform_super_admin` when none exists. Default `admin` |
+| `SUPER_ADMIN_EMAIL` | Contact email written onto that person at process start. Empty leaves the stored address. The active writer applies it on every boot. `/feedback` delivers there |
 | `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA, Terms PDF mail, and `/feedback` to the platform super admin. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. `SES_DRY_RUN=1` captures feedback and does not call SES. `FEEDBACK_RATE_WINDOW_SECONDS` defaults to `3600` and cannot be shorter (one accepted note per IP per hour) |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | Pin the **shared** factory / inbox / verifier. Env wins over `/office/site`. Do not run `DeployLocal` again for a new city |
 | `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |

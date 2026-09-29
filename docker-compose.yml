@@ -42,6 +42,8 @@ services:
       RP_ID: ${RP_ID:-localhost}
       WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      # Runtime only. Do not bake this into the image. Empty leaves contactEmail alone.
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
       ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
       VERIFIER_ADDRESS: ${VERIFIER_ADDRESS:-}
