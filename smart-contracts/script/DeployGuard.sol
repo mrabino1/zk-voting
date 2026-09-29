@@ -42,7 +42,7 @@ abstract contract DeployOnce is Script {
     /// @dev Call before broadcast. Empty env values do not count as a deploy.
     function _refuseIfAlreadyDeployed() internal view {
         if (_forceRedeploy()) {
-            console2.log("WARNING: FORCE_REDEPLOY=1 — this can split the chain of record. Do not use on a live election.");
+            console2.log("WARNING: FORCE_REDEPLOY=1 - this can split the chain of record. Do not use on a live election.");
             return;
         }
         _refuseIfSet("SETTLEMENT_ADDRESS");
