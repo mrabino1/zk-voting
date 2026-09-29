@@ -105,6 +105,12 @@ export function ensurePersonFields(user) {
   if (!Object.prototype.hasOwnProperty.call(user, 'termsEmailHash')) {
     user.termsEmailHash = null;
   }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsNotifiedHash')) {
+    user.termsNotifiedHash = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(user, 'termsNotifiedAt')) {
+    user.termsNotifiedAt = null;
+  }
   if (!Object.prototype.hasOwnProperty.call(user, 'pinHash')) {
     user.pinHash = null;
   }

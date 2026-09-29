@@ -411,12 +411,15 @@ After `cutoffTime` has fully expired **and** a certified tally is posted, the No
 
 SESv2 Simple content cannot attach files. The Node sends **raw MIME** (`multipart/mixed`) with `republic-terms.pdf`. A second accept of the same PDF hash does not resend (`already_sent_this_hash`). If SES is unset, the Node still records the accept and **captures** the message in-process (tests use `mailer.lastTermsPdf()`, same pattern as MFA OTP capture).
 
+**Terms updated (sign-in).** `plainTextSha256` is SHA-256 of the UTF-8 `/terms` plain text (the markdown body after front matter; same digest as `markdownSha256`). Each member stores `termsNotifiedHash` and `termsNotifiedAt`. On the next sign-in (dev login, or after email MFA), if that hash differs from the current plain-text hash, the same AWS SES mailer sends one message: the terms PDF attached and a link to `/terms`. It is sent once per member per hash. The hash and timestamp are written only after the send succeeds. A send failure is logged as `userId` plus `reason=send_failed` (no address, no message body, no credentials) and sign-in still succeeds; the next sign-in tries again. A member with no email is skipped and not marked notified. Opening an older `republic.json` backfills the two fields to null and raises `meta.version` to 8. No new environment variables: `SES_FROM_ADDRESS`, `AWS_REGION`, and optional `PUBLIC_BASE_URL` (the link origin).
+
 Store (private `apps/node/data/republic.json`, gitignored):
 
 ```
 termsAcceptances: [{ id, action: "accept"|"view", userId, handle, email, sessionId,
   termsVersion, pdfSha256, markdownSha256, hashOf: "pdf-bytes", emailed, emailedAt, createdAt }]
 users[].termsHash / termsVersion / termsAcceptedAt / termsEmailSentAt / termsEmailHash
+users[].termsNotifiedHash / termsNotifiedAt
 ```
 
 Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted. Version 2 adds the feedback assignment clause. A person who accepted version 1 keeps that PDF hash; the next acceptance stores the new one.
