@@ -115,6 +115,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
       { href: "/outcomes", label: t("chrome.navOutcomes") },
       ...polls,
       { href: "/terms", label: t("chrome.navTerms") },
+      { href: "/feedback", label: t("chrome.navFeedback") },
       ...extra,
       { href: "/signin", label: t("chrome.navSignIn") },
       { href: "/register", label: t("chrome.navRegister") },
@@ -128,6 +129,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
     { href: "/receipt", label: t("chrome.navReceipt") },
     { href: "/outcomes", label: t("chrome.navOutcomes") },
     { href: "/terms", label: t("chrome.navTerms") },
+    { href: "/feedback", label: t("chrome.navFeedback") },
   ];
   if (audience === "officer") {
     items.push({ href: "/office", label: t("chrome.navAdmin") });
@@ -148,6 +150,7 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   if (href === "/about" && routeName === "about") return true;
   if (href === "/faq" && routeName === "faq") return true;
   if (href === "/terms" && routeName === "terms") return true;
+  if (href === "/feedback" && routeName === "feedback") return true;
   if (href === "/receipt" && routeName === "receipt") return true;
   if (href === "/outcomes" && (routeName === "outcomes" || routeName === "outcome" || routeName === "outcomeVerify")) return true;
   if (href.startsWith("/p/") && path === href) return true;

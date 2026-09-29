@@ -40,6 +40,7 @@ import {
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
+import { renderFeedback } from "./feedback.js";
 import { renderReceiptPortal } from "./receipt.js";
 import { renderOutcomesIndex, renderOutcomesDetail } from "./outcomes.js";
 import { renderOutcomeVerify } from "./outcome-verify.js";
@@ -1132,6 +1133,8 @@ async function renderRoute(route) {
     } else if (route.name === "terms") {
       setTitle("Terms of Use");
       await renderTerms(main, context);
+    } else if (route.name === "feedback") {
+      await renderFeedback(main, context);
     } else if (route.name === "receipt") {
       await renderReceiptPortal(main, context);
     } else if (route.name === "outcomeVerify") {
