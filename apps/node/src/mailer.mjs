@@ -257,6 +257,12 @@ export function createMailer(config = {}) {
       }
       return null;
     },
+    lastTermsUpdated() {
+      for (let i = sent.length - 1; i >= 0; i -= 1) {
+        if (sent[i]?.meta?.purpose === 'terms-updated') return sent[i];
+      }
+      return null;
+    },
     lastVoteReceipt() {
       for (let i = sent.length - 1; i >= 0; i -= 1) {
         if (sent[i]?.meta?.purpose === 'vote-receipt') return sent[i];

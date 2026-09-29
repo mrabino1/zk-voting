@@ -99,7 +99,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 7,
+      version: 8,
       nextElectionId: 1,
       nodeId: randomUUID(),
     },
@@ -237,7 +237,7 @@ export class Store {
     if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
     if (store.writerActive) await store.persist();
     return store;
   }
@@ -279,6 +279,8 @@ export class Store {
     data.site = { ...defaultSite(), ...(data.site || {}) };
     data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     data.meta = data.meta || {};
+    data.meta.version = Math.max(Number(data.meta.version || 0), 8);
+    for (const user of data.users || []) ensurePersonFields(user);
     this.data = data;
     this.rebuildAllEligibility();
   }

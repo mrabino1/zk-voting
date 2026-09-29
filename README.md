@@ -368,7 +368,7 @@ ALLOW_DEV_LOGIN=
 ALLOW_SMART_CARD_MOCK=
 ALLOW_CIVIC_ID_MOCK=
 
-# --- AWS SES (email MFA, Terms PDF, /feedback). Empty = local demo, no outbound mail. ---
+# --- AWS SES (email MFA, Terms PDF, sign-in terms notice, /feedback). Empty = local demo, no outbound mail. ---
 SES_FROM_ADDRESS=
 AWS_REGION=
 AWS_ACCESS_KEY_ID=
@@ -433,7 +433,7 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 | `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Optional once `VOTE_FQDN` is set. The Node derives the relying party, the `https://` origin, and the official base URL from that hostname. Set `RP_ID` only to pin a different public parent hostname. |
 | `ADMIN_HANDLE` | Handle of the seeded `platform_super_admin` when none exists. Default `admin` |
 | `SUPER_ADMIN_EMAIL` | Contact email written onto that person at process start. Empty leaves the stored address. The active writer applies it on every boot. `/feedback` delivers there |
-| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA, Terms PDF mail, and `/feedback` to the platform super admin. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. `SES_DRY_RUN=1` captures feedback and does not call SES. `FEEDBACK_RATE_WINDOW_SECONDS` defaults to `3600` and cannot be shorter (one accepted note per IP per hour) |
+| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA, Terms PDF mail (on accept, and once per member per plain-text hash on sign-in), and `/feedback` to the platform super admin. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. `SES_DRY_RUN=1` captures feedback and does not call SES. `PUBLIC_BASE_URL` is the origin of the sign-in terms link. `FEEDBACK_RATE_WINDOW_SECONDS` defaults to `3600` and cannot be shorter (one accepted note per IP per hour) |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | Pin the **shared** factory / inbox / verifier. Env wins over `/office/site`. Do not run `DeployLocal` again for a new city |
 | `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |
 | `CREDENTIAL_PROVIDER_SECRET` | Optional later DMV / eID webhook. Unset = officers review credentials by hand |

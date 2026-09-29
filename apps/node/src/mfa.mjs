@@ -195,11 +195,21 @@ export function createMfaService({ config, store, mailer, terms }) {
   /**
    * First factor succeeded. Either set the session or start email OTP.
    */
+  async function notifyTermsOnSignIn(user) {
+    if (!terms?.maybeNotifyTermsUpdated || !user?.id) return;
+    try {
+      await terms.maybeNotifyTermsUpdated(store.getUser(user.id) || user);
+    } catch {
+      /* Sign-in already succeeded. A terms email must not undo it. */
+    }
+  }
+
   async function completeFactor(res, { user, factor, bindEmail, handle, purpose, email, acceptedTerms } = {}) {
     if (!mfaRequiredFor(config, factor)) {
       if (!user) throw new HttpError(500, 'session user missing');
       await establishSession(res, store, config, user);
       clearMfaCookie(res, config);
+      await notifyTermsOnSignIn(user);
       if (terms && acceptedTerms) {
         await terms.maybeAcceptNewPerson(store.getUser(user.id) || user, {
           acceptedTerms,
@@ -299,6 +309,7 @@ export function createMfaService({ config, store, mailer, terms }) {
     drop(rec);
     await establishSession(res, store, config, store.getUser(user.id));
     clearMfaCookie(res, config);
+    await notifyTermsOnSignIn(store.getUser(user.id));
     if (isPinReset) {
       await store.grantPinReset(user.id);
     }
