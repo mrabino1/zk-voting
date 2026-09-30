@@ -1,0 +1,36 @@
+# Republic (zk-voting)
+
+> NOT FOR PROFIT — civic public good. Not a commercial product.
+
+This repository is a zero-knowledge voting monorepo (product name Republic). Read it in this order when answering questions or calling the Node API.
+
+## Bot API
+
+A running Node publishes the user API for external bots:
+
+- Documentation page: `/api`
+- OpenAPI: `/api/openapi.json`
+- Live LLM guide: `/api/llms.txt`
+- Repo guide: `docs/BOT_API.md`
+
+A person creates API keys on the signed-in profile `/me`.
+
+- Levels: `read` (read-only), `voter`, `officer`
+- Expiration: `7d`, `30d`, `90d`, `180d`, `365d`, `never` (default `30d`)
+- Header: `Authorization: Bearer rk_…` or `X-Api-Key: rk_…`
+- Many keys, each with its own level and expiration. Revoke with `DELETE /api/me/api-keys/:id`.
+- Creating a key emails template `api_key.created`. If the person did not create the key, they contact support as soon as possible.
+- Path ids (`id`, `partyId`, `requestId`, `methodId`, `electionId`) are UUIDs. Sequential integers are rejected (`ID_NOT_UUID`).
+
+## Product map
+
+- `README.md` — what Republic is for and how to run it
+- `docs/ARCHITECTURE.md` — packages and interfaces
+- `docs/BOT_API.md` — every bot route
+- `docs/IDENTITY.md` — person, emails, passkeys, vote PIN
+- `apps/node` — Express API and vanilla JS pages
+- `smart-contracts/` — Solidity
+- `circuits/` — vote, tally, identity
+- `l2/` — civic sequencer, chain id 27427
+
+Ballot choice is never printed on a receipt or in an API response.

@@ -7,6 +7,18 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import {
+  API_KEY_LIMIT,
+  apiKeyExpiresAt,
+  apiKeyHashesEqual,
+  hashApiKey,
+  isApiKeySecret,
+  mintApiKeySecret,
+  normalizeApiKeyExpiration,
+  normalizeApiKeyLevel,
+  normalizeApiKeyName,
+  publicApiKey,
+} from './apiKeys.mjs';
 import { resolveSuperAdminEmail } from './config.mjs';
 import { isDisclosed } from './disclosure.mjs';
 import {
@@ -15,6 +27,7 @@ import {
   mintShortCode,
   parseOnChainElectionId,
 } from './electionIds.mjs';
+import { DEMO_JURISDICTION_ID, canonicalJurisdictionId } from './recordIds.mjs';
 import { HttpError } from './http.mjs';
 import {
   applyCredentialReview,
@@ -130,6 +143,7 @@ function emptyData() {
     pollBallots: [],
     pollResults: [],
     mailOutbox: [],
+    apiKeys: [],
   };
 }
 
@@ -220,6 +234,7 @@ export class Store {
       }
     }
     await store.seed(config);
+    store.ensureJurisdictionIds();
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
     if (!Array.isArray(store.data.termsAcceptances)) store.data.termsAcceptances = [];
@@ -235,6 +250,7 @@ export class Store {
     if (!Array.isArray(store.data.pollBallots)) store.data.pollBallots = [];
     if (!Array.isArray(store.data.pollResults)) store.data.pollResults = [];
     if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
+    if (!Array.isArray(store.data.apiKeys)) store.data.apiKeys = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
@@ -276,12 +292,14 @@ export class Store {
     data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
     data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
     data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
+    data.apiKeys = Array.isArray(data.apiKeys) ? data.apiKeys : [];
     data.site = { ...defaultSite(), ...(data.site || {}) };
     data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     data.meta = data.meta || {};
     data.meta.version = Math.max(Number(data.meta.version || 0), 8);
     for (const user of data.users || []) ensurePersonFields(user);
     this.data = data;
+    this.ensureJurisdictionIds();
     this.rebuildAllEligibility();
   }
 
@@ -330,7 +348,7 @@ export class Store {
     }
     if (this.data.jurisdictions.length === 0) {
       this.data.jurisdictions.push({
-        id: 'demo',
+        id: DEMO_JURISDICTION_ID,
         name: 'Demo jurisdiction',
         metadataURI: '',
         officers: [],
@@ -906,15 +924,22 @@ export class Store {
     return this.data.jurisdictions.slice();
   }
 
-  getJurisdiction(id) {
-    return this.data.jurisdictions.find((j) => String(j.id) === String(id)) || null;
+  ensureJurisdictionIds() {
+    for (const jurisdiction of this.data.jurisdictions || []) {
+      if (jurisdiction && jurisdiction.id === 'demo') jurisdiction.id = DEMO_JURISDICTION_ID;
+    }
   }
 
-  async createJurisdiction({ id, name, metadataURI = '' }) {
+  getJurisdiction(id) {
+    const want = canonicalJurisdictionId(id);
+    return this.data.jurisdictions.find((j) => String(j.id) === want) || null;
+  }
+
+  async createJurisdiction({ name, metadataURI = '' } = {}) {
     const trimmed = String(name || '').trim();
     if (!trimmed) throw new HttpError(400, 'name required');
     const jurisdiction = {
-      id: id ? String(id) : randomUUID(),
+      id: randomUUID(),
       name: trimmed,
       metadataURI: String(metadataURI || ''),
       officers: [],
@@ -2471,6 +2496,83 @@ export class Store {
     }
     await this.persist();
     return existing || record;
+  }
+
+  _apiKeys() {
+    if (!Array.isArray(this.data.apiKeys)) this.data.apiKeys = [];
+    return this.data.apiKeys;
+  }
+
+  listApiKeys(userId) {
+    return this._apiKeys()
+      .filter((row) => row.userId === userId)
+      .map((row) => publicApiKey(row))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  }
+
+  async createApiKey(userId, { name, level, expiresIn, nowMs = Date.now() } = {}) {
+    const user = this.getUser(userId);
+    if (!user) throw new HttpError(404, 'user not found');
+    const cleanName = normalizeApiKeyName(name);
+    const cleanLevel = normalizeApiKeyLevel(level);
+    const cleanExpiration = normalizeApiKeyExpiration(expiresIn);
+    const active = this._apiKeys().filter((row) => row.userId === userId && !row.revokedAt);
+    if (active.length >= API_KEY_LIMIT) {
+      throw new HttpError(409, 'api key limit reached', { code: 'API_KEY_LIMIT', limit: API_KEY_LIMIT });
+    }
+    const minted = mintApiKeySecret();
+    const row = {
+      id: randomUUID(),
+      userId,
+      name: cleanName,
+      prefix: minted.prefix,
+      secretHash: minted.secretHash,
+      level: cleanLevel,
+      expiresIn: cleanExpiration,
+      createdAt: new Date(nowMs).toISOString(),
+      expiresAt: apiKeyExpiresAt(cleanExpiration, nowMs),
+      revokedAt: null,
+      lastUsedAt: null,
+    };
+    this._apiKeys().push(row);
+    await this.persist();
+    return { record: publicApiKey(row), secret: minted.secret };
+  }
+
+  async revokeApiKey(userId, keyId, nowMs = Date.now()) {
+    const row = this._apiKeys().find((item) => item.id === keyId && item.userId === userId);
+    if (!row) throw new HttpError(404, 'api key not found');
+    if (!row.revokedAt) {
+      row.revokedAt = new Date(nowMs).toISOString();
+      await this.persist();
+    }
+    return publicApiKey(row);
+  }
+
+  /**
+   * @returns {{ user: object, key: object } | { error: 'invalid' | 'revoked' | 'expired' }}
+   */
+  authenticateApiKey(secret, nowMs = Date.now()) {
+    const token = String(secret || '').trim();
+    if (!isApiKeySecret(token)) return { error: 'invalid' };
+    const digest = hashApiKey(token);
+    const row = this._apiKeys().find((item) => apiKeyHashesEqual(item.secretHash, digest));
+    if (!row) return { error: 'invalid' };
+    if (row.revokedAt) return { error: 'revoked' };
+    if (row.expiresAt && Date.parse(row.expiresAt) <= nowMs) return { error: 'expired' };
+    const user = this.getUser(row.userId);
+    if (!user) return { error: 'invalid' };
+    return { user, key: row };
+  }
+
+  async touchApiKey(id, nowMs = Date.now()) {
+    if (this.writerActive === false) return;
+    const row = this._apiKeys().find((item) => item.id === id);
+    if (!row) return;
+    const prev = row.lastUsedAt ? Date.parse(row.lastUsedAt) : 0;
+    if (prev && nowMs - prev < 60_000) return;
+    row.lastUsedAt = new Date(nowMs).toISOString();
+    await this.persist();
   }
 
   async setContactEmail(userId, contactEmail) {

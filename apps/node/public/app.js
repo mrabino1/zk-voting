@@ -33,6 +33,7 @@ import {
   renderPasskeyAccounts,
 } from "./identity-accounts.js";
 import { renderPinManager } from "./pin-pad.js";
+import { renderApiKeysSection } from "./api-keys.js";
 import {
   applyAudienceChrome,
   audienceOf,
@@ -728,6 +729,16 @@ function renderDesk(main, route, bundle) {
         },
       })
     ),
+    signedIn
+      ? renderApiKeysSection(h, {
+          api,
+          keys: bundle.apiKeys,
+          onRefresh: async () => {
+            const next = await loadDeskBundle();
+            renderDesk(main, route, next);
+          },
+        })
+      : null,
     h(
       "section",
       { "aria-labelledby": "outcome-sub-heading" },
@@ -1078,11 +1089,17 @@ async function loadDeskBundle() {
     wallet.getPublicRecord().catch(() => null),
   ]);
   let outcomeSubscriptions = null;
+  let apiKeys = { apiKeys: [] };
   if (me?.user) {
     try {
       outcomeSubscriptions = await api("/api/me/outcome-subscriptions");
     } catch {
       outcomeSubscriptions = { subscriptions: [] };
+    }
+    try {
+      apiKeys = await api("/api/me/api-keys");
+    } catch {
+      apiKeys = { apiKeys: [] };
     }
   }
   return {
@@ -1091,6 +1108,7 @@ async function loadDeskBundle() {
     me,
     walletRecord,
     outcomeSubscriptions,
+    apiKeys,
     store: readVoterStore(),
   };
 }

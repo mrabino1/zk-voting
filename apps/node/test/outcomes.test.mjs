@@ -281,8 +281,11 @@ describe('outcomes monitor HTTP', () => {
   });
 
   test('missing election is 404', async () => {
-    const missing = await api('GET', '/api/outcomes/not-a-real-election');
+    const missing = await api('GET', '/api/outcomes/6f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e99');
     assert.equal(missing.status, 404);
+    const counted = await api('GET', '/api/outcomes/1');
+    assert.equal(counted.status, 400);
+    assert.equal(counted.json.code, 'ID_NOT_UUID');
   });
 
   test('one contest moves before → during → after with verification', async () => {

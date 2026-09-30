@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
+import { DEMO_JURISDICTION_ID } from '../src/recordIds.mjs';
 import { createApp } from '../src/server.mjs';
 
 let tmp;
@@ -159,7 +160,7 @@ describe('approval chain and external vote parties', () => {
       assert.equal(status, 200, json?.error);
     }
 
-    const grantClerk = await api('POST', '/api/jurisdictions/demo/roles', {
+    const grantClerk = await api('POST', `/api/jurisdictions/${DEMO_JURISDICTION_ID}/roles`, {
       jar: superJar,
       body: { handle: 'demo-clerk', role: 'clerk' },
     });

@@ -18,8 +18,12 @@ import {
   subscribeVoterToOutcome,
 } from '../outcomeReports.mjs';
 
+import { uuidParam } from '../recordIds.mjs';
+
 export function outcomeReportsRouter(deps) {
   const router = Router();
+  router.param('id', uuidParam('id'));
+  router.param('electionId', uuidParam('electionId'));
 
   router.get(
     '/outcomes/reports',

@@ -42,6 +42,7 @@ export default {
     navOutcomes: "Outcomes",
     navTerms: "Terms",
     navFeedback: "Feedback",
+    navApi: "Bot API",
     navSignIn: "Sign in",
     navDesk: "My desk",
     navPublic: "Public",

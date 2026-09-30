@@ -42,6 +42,7 @@ export default {
     navOutcomes: "Mga kinalabasan",
     navTerms: "Mga tuntunin",
     navFeedback: "Puna",
+    navApi: "Bot API",
     navSignIn: "Mag-sign in",
     navDesk: "Aking mesa",
     navPublic: "Publiko",

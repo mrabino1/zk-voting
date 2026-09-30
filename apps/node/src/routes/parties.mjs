@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { isPlatformOperator } from '../roles.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import { assertExternalClearance } from '../voteGate.mjs';
 
 function requirePartyManager(store) {
@@ -61,6 +62,7 @@ function requirePartyOperatorOrStaff(store) {
 export function partiesRouter(deps) {
   const { store, explorer } = deps;
   const router = Router({ mergeParams: true });
+  router.param('partyId', uuidParam('partyId'));
 
   router.get(
     '/',

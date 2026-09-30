@@ -6,6 +6,7 @@ import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth } from '../auth.mjs';
 import { publicIdentity } from '../identity.mjs';
 import { normalizeEmail } from '../identity.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import { audienceOfUser, isPlatformOperator, isSuperAdmin, userIsOfficer } from '../roles.mjs';
 
 function expandedRoles(store, user) {
@@ -67,6 +68,7 @@ function electionsMap(store, user) {
 export function meRouter(deps) {
   const { store } = deps;
   const router = Router();
+  router.param('id', uuidParam('id'));
 
   function mePayload(req) {
     const notifications = req.user ? store.listNotifications(req.user.id) : [];

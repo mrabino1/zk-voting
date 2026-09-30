@@ -388,7 +388,6 @@
     event.preventDefault();
     const body = {
       name: $("j-name").value.trim(),
-      id: $("j-code").value.trim() || undefined,
       metadataURI: $("j-uri").value.trim() || undefined,
     };
     try {

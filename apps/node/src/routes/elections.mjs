@@ -25,6 +25,7 @@ import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import { publicVoteRecord } from '../store.mjs';
 import { acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
@@ -78,6 +79,8 @@ async function revokeHandler(req, store, explorer) {
 export function electionsRouter(deps) {
   const { store, explorer, chain, config, l1, pin } = deps;
   const router = Router();
+  router.param('id', uuidParam('id'));
+  router.param('requestId', uuidParam('requestId'));
 
   router.get(
     '/',
@@ -122,10 +125,11 @@ export function electionsRouter(deps) {
         questions,
         ballotSpecHash: body.ballotSpecHash,
       });
-      const jurisdictionId = String(body.jurisdictionId || 'demo');
-      if (!store.getJurisdiction(jurisdictionId)) {
+      const jurisdiction = store.getJurisdiction(String(body.jurisdictionId || 'demo'));
+      if (!jurisdiction) {
         throw new HttpError(400, 'unknown jurisdictionId');
       }
+      const jurisdictionId = jurisdiction.id;
       let chainResult = null;
       if (chain.isConfigured()) {
         const jurisdiction = store.getJurisdiction(jurisdictionId);

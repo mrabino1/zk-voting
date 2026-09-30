@@ -42,6 +42,7 @@ export default {
     navOutcomes: "结果监测",
     navTerms: "条款",
     navFeedback: "反馈",
+    navApi: "机器人 API",
     navSignIn: "登录",
     navDesk: "我的办公桌",
     navPublic: "公开",

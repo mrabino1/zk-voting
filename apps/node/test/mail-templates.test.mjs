@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
+import { DEMO_JURISDICTION_ID } from '../src/recordIds.mjs';
 import { createApp } from '../src/server.mjs';
 import {
   PROMOTION_ROLES,
@@ -229,7 +230,7 @@ describe('role-promotion mail API', () => {
 
   test('granting clerk queues the clerk template, notifies, and posts the webhook', async () => {
     webhookPosts.length = 0;
-    const granted = await api('POST', '/api/jurisdictions/demo/roles', {
+    const granted = await api('POST', `/api/jurisdictions/${DEMO_JURISDICTION_ID}/roles`, {
       jar: superJar,
       body: { handle: 'north-clerk', role: 'clerk' },
     });
@@ -256,7 +257,7 @@ describe('role-promotion mail API', () => {
 
   test('re-granting the same clerk does not send a second mail', async () => {
     webhookPosts.length = 0;
-    const granted = await api('POST', '/api/jurisdictions/demo/roles', {
+    const granted = await api('POST', `/api/jurisdictions/${DEMO_JURISDICTION_ID}/roles`, {
       jar: superJar,
       body: { handle: 'north-clerk', role: 'clerk' },
     });

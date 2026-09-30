@@ -8,6 +8,7 @@ import { Router } from 'express';
 import { keccak256, stringToHex } from 'viem';
 
 import { asyncHandler, HttpError } from '../http.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import { requireAuth, requireAnyJurisdictionRole, publicUser } from '../auth.mjs';
 import {
   credentialProviderPublic,
@@ -45,6 +46,8 @@ export function identityRouter(deps) {
   const { store, config, mfa } = deps;
   const challenges = createIdentityChallenges();
   const router = Router();
+  router.param('id', uuidParam('id'));
+  router.param('methodId', uuidParam('methodId'));
 
   function originOf(req) {
     const origin = req.headers.origin;

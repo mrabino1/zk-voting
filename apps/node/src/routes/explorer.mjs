@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { presentElection, publishDue } from '../electionState.mjs';
 import { refsOf } from '../electionIds.mjs';
+import { uuidParam } from '../recordIds.mjs';
 
 function ingestSecretsEqual(expected, provided) {
   if (!expected || !provided) return false;
@@ -26,6 +27,7 @@ function ingestSecretFromRequest(req) {
 export function explorerRouter(deps) {
   const { explorer, config, store } = deps;
   const router = Router();
+  router.param('id', uuidParam('id'));
 
   router.post(
     '/ingest',

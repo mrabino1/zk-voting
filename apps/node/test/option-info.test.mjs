@@ -273,7 +273,7 @@ describe('option metadata info API', () => {
     const tree = emptyTree(16);
     const dq = emptyTree(16);
     const election = {
-      id: 'legacy-uuid',
+      id: '6f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01',
       title: 'Pre-metadata election',
       metadataURI: '',
       startTime: nowSec() + 10,
@@ -309,14 +309,14 @@ describe('option metadata info API', () => {
     store.data.elections.push(election);
     await store.persist();
 
-    const info = await api('GET', '/api/elections/legacy-uuid/info');
+    const info = await api('GET', '/api/elections/6f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01/info');
     assert.equal(info.status, 200);
     assert.equal(info.json.title, 'Pre-metadata election');
     assert.equal(info.json.createdBy, undefined);
     assert.equal(info.json.clerkNotes, undefined);
     assert.equal(info.json.questions[0].options[0].label, 'Kim');
     assert.equal(info.json.questions[0].options[1].label, 'Lee');
-    const mini = await api('GET', '/api/elections/legacy-uuid/info/q1/o1');
+    const mini = await api('GET', '/api/elections/6f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01/info/q1/o1');
     assert.equal(mini.status, 200);
     assert.equal(mini.json.option.label, 'Kim');
   });

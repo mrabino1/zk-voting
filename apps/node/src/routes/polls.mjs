@@ -6,6 +6,7 @@ import { Router } from 'express';
 
 import { requireAuth, requireSuperAdmin } from '../auth.mjs';
 import { asyncHandler } from '../http.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import {
   buildPollAuditorPack,
   castBallot,
@@ -32,6 +33,7 @@ function tallyActor(req, res, next) {
 
 export function pollsRouter(deps) {
   const router = Router();
+  router.param('id', uuidParam('id'));
 
   router.post(
     '/',

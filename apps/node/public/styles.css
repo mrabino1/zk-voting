@@ -1022,6 +1022,53 @@ dl.status-dl {
   color: var(--muted);
 }
 
+.secret-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  max-width: 40rem;
+  margin: 0.75rem 0;
+}
+
+.secret-row input {
+  flex: 1 1 auto;
+  max-width: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target);
+  min-width: var(--target);
+  height: var(--target);
+  padding: 0;
+}
+
+.secret-row .icon-btn {
+  flex: 0 0 auto;
+  background: var(--paper);
+  color: var(--navy);
+  border-color: var(--navy);
+}
+
+.secret-row .icon-btn:hover {
+  background: var(--cream-dark);
+}
+
+.secret-row .icon-btn[aria-label="API key copied"] {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.icon-btn svg {
+  display: block;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
