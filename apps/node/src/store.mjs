@@ -3,7 +3,7 @@
 // Identity links (passkey user ↔ commitment) live in a
 // separate collection from ballots and are never copied onto a vote record.
 
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -20,6 +20,7 @@ import {
   publicApiKey,
 } from './apiKeys.mjs';
 import { resolveSuperAdminEmail } from './config.mjs';
+import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
 import { isDisclosed } from './disclosure.mjs';
 import {
   electionMatchesRef,
@@ -144,6 +145,9 @@ function emptyData() {
     pollResults: [],
     mailOutbox: [],
     apiKeys: [],
+    superAdminKeys: [],
+    superAdminAudit: [],
+    runtime: {},
   };
 }
 
@@ -251,6 +255,7 @@ export class Store {
     if (!Array.isArray(store.data.pollResults)) store.data.pollResults = [];
     if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     if (!Array.isArray(store.data.apiKeys)) store.data.apiKeys = [];
+    ensureSuperAdminCollections(store.data);
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
@@ -292,8 +297,9 @@ export class Store {
     data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
     data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
     data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
-    data.apiKeys = Array.isArray(data.apiKeys) ? data.apiKeys : [];
-    data.site = { ...defaultSite(), ...(data.site || {}) };
+      data.apiKeys = Array.isArray(data.apiKeys) ? data.apiKeys : [];
+      ensureSuperAdminCollections(data);
+      data.site = { ...defaultSite(), ...(data.site || {}) };
     data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     data.meta = data.meta || {};
     data.meta.version = Math.max(Number(data.meta.version || 0), 8);
@@ -596,11 +602,15 @@ export class Store {
 
   async createSession(userId, ttlMs) {
     this.data.sessions = this.data.sessions.filter((s) => s.expiresAt > Date.now());
+    const now = Date.now();
     const session = {
       id: randomUUID(),
       userId,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + ttlMs,
+      createdAt: now,
+      authenticatedAt: now,
+      stepUpAt: now,
+      csrfToken: randomBytes(32).toString('base64url'),
+      expiresAt: now + ttlMs,
     };
     this.data.sessions.push(session);
     await this.persist();

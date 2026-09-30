@@ -324,7 +324,31 @@ export function getConfig(overrides = {}) {
       ? overrides.superAdminEmail
       : process.env.SUPER_ADMIN_EMAIL,
   );
+  config.superAdminApiPepper = String(
+    Object.prototype.hasOwnProperty.call(overrides, 'superAdminApiPepper')
+      ? overrides.superAdminApiPepper
+      : process.env.SUPER_ADMIN_API_PEPPER || '',
+  ).trim();
+  config.superAdminStepUpMs = resolveStepUpMs(
+    Object.prototype.hasOwnProperty.call(overrides, 'superAdminStepUpMs')
+      ? overrides.superAdminStepUpMs
+      : process.env.SUPER_ADMIN_STEP_UP_MS,
+  );
+  config.logLevel = LOG_LEVELS.includes(overrides.logLevel) ? overrides.logLevel : 'info';
+  config.archiveEnabled = envFlag(
+    overrides.archiveEnabled !== undefined ? overrides.archiveEnabled : process.env.ARCHIVE_ENABLED,
+    true,
+  );
   return config;
+}
+
+const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
+
+function resolveStepUpMs(value) {
+  if (value === undefined || value === null || value === '') return 15 * 60 * 1000;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 60_000) return 15 * 60 * 1000;
+  return Math.min(24 * 60 * 60 * 1000, Math.floor(n));
 }
 
 export { PKG_ROOT };

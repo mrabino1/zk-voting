@@ -37,8 +37,17 @@ export function attachAuth(store, config) {
         next();
         return;
       }
+      if (found.user?.suspendedAt) {
+        req.user = null;
+        req.publicUser = null;
+        req.apiKey = null;
+        req.apiKeyError = 'revoked';
+        req.authVia = 'api_key';
+        next();
+        return;
+      }
       req.user = found.user;
-      req.publicUser = publicUser(found.user);
+      req.publicUser = publicUser(req.user);
       req.apiKey = publicApiKey(found.key);
       req.authVia = 'api_key';
       store.touchApiKey(found.key.id).catch(() => {});
@@ -47,6 +56,10 @@ export function attachAuth(store, config) {
     }
 
     req.user = req.session ? store.getUser(req.session.userId) : null;
+    if (req.user?.suspendedAt) {
+      req.user = null;
+      req.session = null;
+    }
     req.publicUser = publicUser(req.user);
     next();
   };
@@ -60,6 +73,10 @@ const API_KEY_ERROR = Object.freeze({
 
 /** Personal API keys may call only the published bot catalog, and only up to their level. */
 export function enforceApiKeyAccess(req, _res, next) {
+  if (String(req.path || '').startsWith('/api/_sa')) {
+    next();
+    return;
+  }
   if (req.apiKeyError) {
     const code = String(req.apiKeyError).toUpperCase();
     next(
@@ -212,6 +229,9 @@ export function requireAnyJurisdictionRole(store, ...roles) {
 }
 
 export async function establishSession(res, store, config, user) {
+  if (user?.suspendedAt) {
+    throw new HttpError(403, 'account suspended', { code: 'SUSPENDED' });
+  }
   const session = await store.createSession(user.id, config.sessionTtlMs);
   setSessionCookie(res, config, session.id);
   return session;

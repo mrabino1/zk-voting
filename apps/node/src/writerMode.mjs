@@ -77,6 +77,12 @@ export function standbyGuard(writer) {
       next();
       return;
     }
+    // Super-admin routes authenticate first. Auth failures stay a generic 404;
+    // an authorized mutation on standby is rejected inside that router.
+    if (String(req.path || '').startsWith('/api/_sa')) {
+      next();
+      return;
+    }
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
       next();
       return;

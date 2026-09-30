@@ -184,10 +184,23 @@ async function sendViaSesv2(config, { to, subject, text, html, attachments = [],
  */
 export function createMailer(config = {}) {
   const sent = [];
+  let sendCount = 0;
+  let failureCount = 0;
   const sesReady = Boolean(config.sesFromAddress && config.awsRegion);
   const captureCodes = config.includeOtpInCapture !== false && (config.captureEmail || !sesReady);
 
-  async function send({ to, subject, text, html, attachments = [], meta = {}, replyTo } = {}) {
+  async function send(input = {}) {
+    try {
+      const record = await deliver(input);
+      sendCount += 1;
+      return record;
+    } catch (err) {
+      failureCount += 1;
+      throw err;
+    }
+  }
+
+  async function deliver({ to, subject, text, html, attachments = [], meta = {}, replyTo } = {}) {
     const files = Array.isArray(attachments) ? attachments.map(attachmentMeta) : [];
     const reply = safeReplyTo(replyTo);
     const record = {
@@ -283,5 +296,11 @@ export function createMailer(config = {}) {
     },
     sesReady,
     vendor: 'ses',
+    get sendCount() {
+      return sendCount;
+    },
+    get failureCount() {
+      return failureCount;
+    },
   };
 }

@@ -9,6 +9,8 @@ import cors from 'cors';
 import express from 'express';
 
 import { attachAuth, enforceApiKeyAccess } from './auth.mjs';
+import { installConsoleCapture, recordLog, setLogLevel } from './superAdmin/logs.mjs';
+import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
 import { getConfig } from './config.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
@@ -175,6 +177,20 @@ export async function createApp(overrides = {}) {
   const store = await Store.open(config);
   store.writerActive = writer.active;
   store.lease = writer.lease;
+  const runtime = store.data.runtime || {};
+  if (runtime.feedbackRateWindowSeconds) {
+    config.feedbackRateWindowSeconds = runtime.feedbackRateWindowSeconds;
+  }
+  if (runtime.logLevel) {
+    config.logLevel = runtime.logLevel;
+    try {
+      setLogLevel(runtime.logLevel);
+    } catch {
+      /* ignore a corrupt runtime level */
+    }
+  }
+  if (typeof runtime.archiveEnabled === 'boolean') config.archiveEnabled = runtime.archiveEnabled;
+  installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper]);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
@@ -239,12 +255,16 @@ export async function createApp(overrides = {}) {
     app.use((req, res, next) => {
       const t = Date.now();
       res.on('finish', () => {
-        console.log(`[republic] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - t}ms`);
+        const line = `[republic] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - t}ms`;
+        recordLog('info', line, [config.superAdminEmail, config.superAdminApiPepper]);
+        if (config.logLevel === 'error' || config.logLevel === 'warn') return;
+        console.log(line);
       });
       next();
     });
   }
 
+  app.use('/api/_sa/v1', superAdminRouter(deps));
   app.use(healthRouter(deps));
   app.use(termsPdfRouter(deps));
   app.use('/api/auth', authRouter(deps));
