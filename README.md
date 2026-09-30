@@ -146,6 +146,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED` (IRV), `MEASURE`, `ARTICLE`. |
 | Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
 | Accessibility | WCAG 2.2 AA axe on the voter, registered, admin, and public shells. [`docs/ACCESSIBILITY.md`](./docs/ACCESSIBILITY.md) |
+| Bot API | Public `/api` docs, OpenAPI, and `llms.txt`. Personal keys on `/me`: read-only, voter, or officer; expiration `7d` / `30d` / `90d` / `180d` / `365d` / `never`. The secret is shown once. [`docs/BOT_API.md`](./docs/BOT_API.md) |
 | Results page `/elections/:id/results` | Linked from explorer / back-office / voter SPA |
 | Token polls (`POLLS_ENABLED`) | **Phase 1, flag off by default.** One host ERC-20 (`VOTING_TOKEN_ADDRESS`, Ethereum mainnet chain id 1) weights **signal** polls (plurality + IRV). Read-only balances. Weight is the minimum from the vote block through close. No identity layer. Not binding. [`docs/POLLS.md`](./docs/POLLS.md). L1 result mirror skipped (follow-up). |
 | Production deployment | None on `master` until a jurisdiction pins addresses. `master` is reserved for it. |
@@ -591,6 +592,8 @@ The Node side is the human product: a long-lived Node process, a web frontend, a
 | `/elections/:id/results` | Certified plurality / IRV results |
 | `/outcomes`, `/outcomes/:id` | Public monitor of every election before / during / after voting, with auditor + chain verification |
 | `/outcomes/verify` | Drop the locked official outcome PDF (or scan its QR) to confirm SHA-256 authenticity |
+| `/api` | Public bot API documentation (HTML, OpenAPI at `/api/openapi.json`, LLM text at `/api/llms.txt`) |
+| `/me` | Profile, including personal API keys (create, copy once, revoke) |
 
 Public election ids are UUID v5 bound to the shared factory, the factory uint256, and the jurisdiction (legacy records may be v4). On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`. L1 certification keys by `(factory, electionId, jurisdictionId)`, not by the UUID.
 

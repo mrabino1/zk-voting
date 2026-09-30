@@ -42,6 +42,7 @@ export default {
     navOutcomes: "Resultados públicos",
     navTerms: "Termos",
     navFeedback: "Comentários",
+    navApi: "API de bots",
     navSignIn: "Entrar",
     navDesk: "Minha mesa",
     navPublic: "Público",

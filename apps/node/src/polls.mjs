@@ -227,7 +227,7 @@ export async function createPoll(deps, actor, body) {
   }
   const store = deps.store;
   const poll = {
-    id: `poll-${randomUUID()}`,
+    id: randomUUID(),
     kind: 'token_poll',
     state: 'DRAFT',
     createdBy: actor.id,

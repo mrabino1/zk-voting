@@ -133,11 +133,7 @@
               <label class="field-label" for="j-name">Name <span class="req">*</span></label>
               <input id="j-name" name="name" required maxlength="120" autocomplete="organization" placeholder="County of Example" />
             </div>
-            <div class="field">
-              <label class="field-label" for="j-code">Public id</label>
-              <input id="j-code" name="id" maxlength="64" placeholder="demo" />
-              <span class="field-hint">Optional slug. Legal names stay off-chain.</span>
-            </div>
+            <p class="field-hint" id="j-id-note">The Node assigns a UUID. You cannot choose the id.</p>
             <div class="field">
               <label class="field-label" for="j-uri">Metadata URI</label>
               <input id="j-uri" name="metadataURI" inputmode="url" placeholder="ipfs://… or https://…" />

@@ -9,8 +9,11 @@ import { publishDue } from '../electionState.mjs';
 import { presentOutcomeDetail, presentOutcomesIndex } from '../outcomes.mjs';
 import { dispatchOfficialOutcomeReports } from '../outcomeReports.mjs';
 
+import { uuidParam } from '../recordIds.mjs';
+
 export function outcomesRouter(deps) {
   const router = Router();
+  router.param('id', uuidParam('id'));
 
   router.get(
     '/outcomes',

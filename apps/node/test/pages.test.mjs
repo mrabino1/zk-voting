@@ -36,6 +36,8 @@ const northClerkJar = {};
 const southClerkJar = {};
 const registrarJar = {};
 const voterJar = {};
+let northId;
+let southId;
 
 function applyCookies(res, jar) {
   const list = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
@@ -175,9 +177,9 @@ describe('cms helpers', () => {
     assert.equal(parseRoute(loc('/polls/poll-1/results')).name, 'pollResults');
     assert.equal(parseRoute(loc('/elections/1')).name, 'results');
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Sign in', 'Register']);
     const withExtra = mainNav('public', [{ href: '/p/hours', label: 'Hours' }]).map((i) => i.label);
-    assert.deepEqual(withExtra, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Hours', 'Sign in', 'Register']);
+    assert.deepEqual(withExtra, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Hours', 'Sign in', 'Register']);
   });
 
   test('canManagePages: platform_admin all; clerk scoped; registrar no', () => {
@@ -218,16 +220,18 @@ describe('pages HTTP CMS and clean URLs', () => {
 
     const admin = await api('POST', '/api/auth/dev-login', { body: { handle: 'admin' }, jar: adminJar });
     assert.equal(admin.status, 200);
-    for (const [id, name] of [
-      ['north', 'North'],
-      ['south', 'South'],
-    ]) {
-      const createdJ = await api('POST', '/api/jurisdictions', {
-        jar: adminJar,
-        body: { id, name },
-      });
-      assert.equal(createdJ.status, 201, createdJ.json?.error);
-    }
+    const north = await api('POST', '/api/jurisdictions', {
+      jar: adminJar,
+      body: { name: 'North' },
+    });
+    const south = await api('POST', '/api/jurisdictions', {
+      jar: adminJar,
+      body: { name: 'South' },
+    });
+    assert.equal(north.status, 201, north.json?.error);
+    assert.equal(south.status, 201, south.json?.error);
+    northId = north.json.id;
+    southId = south.json.id;
     for (const [jar, handle] of [
       [northClerkJar, 'north-clerk'],
       [southClerkJar, 'south-clerk'],
@@ -240,9 +244,9 @@ describe('pages HTTP CMS and clean URLs', () => {
       });
       assert.equal(login.status, 200, login.json?.error);
     }
-    await grant('north', 'north-clerk', 'clerk');
-    await grant('south', 'south-clerk', 'clerk');
-    await grant('north', 'north-registrar', 'registrar');
+    await grant(northId, 'north-clerk', 'clerk');
+    await grant(southId, 'south-clerk', 'clerk');
+    await grant(northId, 'north-registrar', 'registrar');
   });
 
   after(async () => {
@@ -307,7 +311,7 @@ describe('pages HTTP CMS and clean URLs', () => {
         slug: 'admin',
         title: 'Admin',
         status: 'published',
-        jurisdictionId: 'north',
+        jurisdictionId: northId,
         blocks: [{ type: 'paragraph', text: 'x' }],
       },
     });
@@ -322,7 +326,7 @@ describe('pages HTTP CMS and clean URLs', () => {
         navLabel: 'Hours',
         showInNav: true,
         status: 'draft',
-        jurisdictionId: 'north',
+        jurisdictionId: northId,
         blocks: [
           { type: 'heading', text: '<script>alert(1)</script>Hours' },
           { type: 'paragraph', text: 'Open 7am–8pm. <img src=x onerror=alert(1)>' },
@@ -366,7 +370,7 @@ describe('pages HTTP CMS and clean URLs', () => {
         slug: 'north-only',
         title: 'North only',
         status: 'published',
-        jurisdictionId: 'north',
+        jurisdictionId: northId,
         blocks: [{ type: 'paragraph', text: 'North copy' }],
       },
     });
@@ -400,7 +404,7 @@ describe('pages HTTP CMS and clean URLs', () => {
         slug: 'south-hours',
         title: 'South hours',
         status: 'published',
-        jurisdictionId: 'south',
+        jurisdictionId: southId,
         blocks: [{ type: 'paragraph', text: 'South copy' }],
       },
     });

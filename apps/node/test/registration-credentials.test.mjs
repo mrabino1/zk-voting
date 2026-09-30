@@ -11,6 +11,7 @@ import { after, before, describe, test } from 'node:test';
 import { mnemonicToAccount } from 'viem/accounts';
 
 import { civicIdHash } from '../src/identity.mjs';
+import { DEMO_JURISDICTION_ID } from '../src/recordIds.mjs';
 import { createApp } from '../src/server.mjs';
 
 const MNEMONIC = 'test test test test test test test test test test test junk';
@@ -124,7 +125,7 @@ describe('registration approval and revocable credentials', () => {
     });
     assert.equal(clerk.status, 200, clerk.json?.error);
     const clerkId = clerk.json.user.id;
-    const grant = await api('POST', '/api/jurisdictions/demo/roles', {
+    const grant = await api('POST', `/api/jurisdictions/${DEMO_JURISDICTION_ID}/roles`, {
       jar: adminJar,
       body: { userId: clerkId, role: 'clerk' },
     });

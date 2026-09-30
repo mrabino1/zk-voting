@@ -42,6 +42,7 @@ export default {
     navOutcomes: "परिणाम मॉनिटर",
     navTerms: "शर्तें",
     navFeedback: "प्रतिक्रिया",
+    navApi: "बॉट API",
     navSignIn: "साइन इन",
     navDesk: "मेरी डेस्क",
     navPublic: "सार्वजनिक",

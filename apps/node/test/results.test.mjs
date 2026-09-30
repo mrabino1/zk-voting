@@ -271,7 +271,10 @@ describe('results API', () => {
   });
 
   test('unknown election is 404', async () => {
-    const { status, json } = await api('GET', '/api/elections/99999/results');
+    const counted = await api('GET', '/api/elections/99999/results');
+    assert.equal(counted.status, 400);
+    assert.equal(counted.json.code, 'ID_NOT_UUID');
+    const { status, json } = await api('GET', '/api/elections/6f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e99/results');
     assert.equal(status, 404);
     assert.equal(json.nfp, true);
     assert.match(json.error, /not found/i);
@@ -320,7 +323,7 @@ describe('results API', () => {
     assert.match(json.results.message, /tally has not been posted/i);
   });
 
-  test('tallied plurality winner and UUID/short-code lookup', async () => {
+  test('tallied plurality winner and UUID lookup; a short code is not an API id', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -401,8 +404,8 @@ describe('results API', () => {
     assert.equal(byUuid.json.results.questions[0].outcome.winner.label, 'Yes');
 
     const byCode = await api('GET', `/api/elections/${election.code}/results`);
-    assert.equal(byCode.status, 200);
-    assert.equal(byCode.json.results.questions[0].options[1].count, 0);
+    assert.equal(byCode.status, 400);
+    assert.equal(byCode.json.code, 'ID_NOT_UUID');
   });
 
   test('tie is declared for equal YES_NO counts', async () => {

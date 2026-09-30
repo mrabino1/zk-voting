@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
+import { DEMO_JURISDICTION_ID } from '../src/recordIds.mjs';
 import { createApp } from '../src/server.mjs';
 import { toBytes32 } from '../src/merkle.mjs';
 
@@ -416,7 +417,7 @@ describe('Republic Node API', () => {
       body: { handle: 'officer', role: 'voter' },
       jar: officerJar,
     });
-    const grant = await api('POST', '/api/jurisdictions/demo/roles', {
+    const grant = await api('POST', `/api/jurisdictions/${DEMO_JURISDICTION_ID}/roles`, {
       jar: adminJar,
       body: { handle: 'officer', role: 'disqualification_officer' },
     });
@@ -488,7 +489,13 @@ describe('Republic Node API', () => {
 
   test('jurisdictions list includes seeded demo', async () => {
     const { json } = await api('GET', '/api/jurisdictions');
-    assert.ok(json.jurisdictions.some((j) => j.id === 'demo'));
+    assert.ok(json.jurisdictions.some((j) => j.id === DEMO_JURISDICTION_ID));
+    const byAlias = await api('GET', '/api/jurisdictions/demo');
+    assert.equal(byAlias.status, 400);
+    assert.equal(byAlias.json.code, 'ID_NOT_UUID');
+    const byId = await api('GET', `/api/jurisdictions/${DEMO_JURISDICTION_ID}`);
+    assert.equal(byId.status, 200);
+    assert.equal(byId.json.jurisdiction.id, DEMO_JURISDICTION_ID);
     assert.ok(json.jurisdictions.every((j) => j.officers === undefined));
   });
 

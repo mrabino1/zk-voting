@@ -262,14 +262,14 @@ describe('election UUID + short code', () => {
     const byShort = await api('GET', `/api/elections/${json.shortCode}`);
     const byChain = await api('GET', `/api/elections/${json.onChainElectionId}`);
     assert.equal(byUuid.status, 200);
-    assert.equal(byShort.status, 200);
-    assert.equal(byChain.status, 200);
     assert.equal(byUuid.json.id, json.election.id);
-    assert.equal(byShort.json.id, json.election.id);
-    assert.equal(byChain.json.id, json.election.id);
+    assert.equal(byShort.status, 400);
+    assert.equal(byShort.json.code, 'ID_NOT_UUID');
+    assert.equal(byChain.status, 400);
+    assert.equal(byChain.json.code, 'ID_NOT_UUID');
   });
 
-  test('short HTTP routes 302 to /vote/<uuid>; vote/register accept both forms', async () => {
+  test('short HTTP routes 302 to /vote/<uuid>; the API path accepts only the UUID', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -301,8 +301,14 @@ describe('election UUID + short code', () => {
       jar: adminJar,
       body: { identityCommitment: '0xabc1' },
     });
-    assert.equal(regShort.status, 201, regShort.json?.error);
-    assert.equal(regShort.json.electionId, uuid);
+    assert.equal(regShort.status, 400);
+    assert.equal(regShort.json.code, 'ID_NOT_UUID');
+    const reg = await api('POST', `/api/elections/${uuid}/register`, {
+      jar: adminJar,
+      body: { identityCommitment: '0xabc1' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    assert.equal(reg.json.electionId, uuid);
 
     const freeze = await api('POST', `/api/elections/${uuid}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.json?.error);
@@ -315,8 +321,8 @@ describe('election UUID + short code', () => {
         encryptedBallot: '0xab',
       },
     });
-    assert.equal(voteShort.status, 201, voteShort.json?.error);
-    assert.equal(voteShort.json.vote.electionId, uuid);
+    assert.equal(voteShort.status, 400);
+    assert.equal(voteShort.json.code, 'ID_NOT_UUID');
 
     const voteOnChain = await api('POST', `/api/elections/${uuid}/vote`, {
       body: {
@@ -335,14 +341,19 @@ describe('election UUID + short code', () => {
   test('client-supplied UUID is ignored; two jurisdictions do not share a public id', async () => {
     const stolen = '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01';
     const now = nowSec();
-    await api('POST', '/api/jurisdictions', {
+    const north = await api('POST', '/api/jurisdictions', {
       jar: adminJar,
       body: { id: 'north', name: 'North' },
     });
-    await api('POST', '/api/jurisdictions', {
+    const south = await api('POST', '/api/jurisdictions', {
       jar: adminJar,
       body: { id: 'south', name: 'South' },
     });
+    assert.equal(north.status, 201, north.json?.error);
+    assert.equal(south.status, 201, south.json?.error);
+    assert.equal(isUuid(north.json.id), true);
+    assert.notEqual(north.json.id, 'north');
+    assert.equal(isUuid(south.json.id), true);
     const a = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -353,7 +364,7 @@ describe('election UUID + short code', () => {
         startTime: now - 30,
         cutoffTime: now + 3600,
         treeDepth: 16,
-        jurisdictionId: 'north',
+        jurisdictionId: north.json.id,
         questions: [{ type: 'YES_NO', prompt: 'N?' }],
       },
     });
@@ -365,7 +376,7 @@ describe('election UUID + short code', () => {
         startTime: now - 30,
         cutoffTime: now + 3600,
         treeDepth: 16,
-        jurisdictionId: 'south',
+        jurisdictionId: south.json.id,
         questions: [{ type: 'YES_NO', prompt: 'S?' }],
       },
     });

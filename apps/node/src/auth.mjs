@@ -1,7 +1,18 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import { publicApiKey } from './apiKeys.mjs';
+import { apiKeyAllowsOperation, matchBotOperation } from './botApiCatalog.mjs';
 import { parseCookies, setSessionCookie, clearSessionCookie, clearMfaCookie, HttpError } from './http.mjs';
 import { isPlatformOperator, isSuperAdmin, publicUser } from './roles.mjs';
+
+function presentedApiKey(req) {
+  const header = String(req.get('x-api-key') || '').trim();
+  if (header) return header;
+  const auth = String(req.get('authorization') || '');
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
+  if (match && match[1].startsWith('rk_')) return match[1];
+  return '';
+}
 
 export function attachAuth(store, config) {
   return function authMiddleware(req, _res, next) {
@@ -10,11 +21,71 @@ export function attachAuth(store, config) {
     const mfaName = config.mfaCookie || 'republic.mfa';
     req.sessionId = sid || null;
     req.session = sid ? store.getSession(sid) : null;
+    req.mfaNonce = cookies[mfaName] || null;
+    req.apiKey = null;
+    req.apiKeyError = null;
+    req.authVia = req.session ? 'session' : null;
+
+    const token = presentedApiKey(req);
+    if (token) {
+      const found = store.authenticateApiKey(token);
+      if (found.error) {
+        req.apiKeyError = found.error;
+        req.user = null;
+        req.publicUser = null;
+        req.authVia = 'api_key';
+        next();
+        return;
+      }
+      req.user = found.user;
+      req.publicUser = publicUser(found.user);
+      req.apiKey = publicApiKey(found.key);
+      req.authVia = 'api_key';
+      store.touchApiKey(found.key.id).catch(() => {});
+      next();
+      return;
+    }
+
     req.user = req.session ? store.getUser(req.session.userId) : null;
     req.publicUser = publicUser(req.user);
-    req.mfaNonce = cookies[mfaName] || null;
     next();
   };
+}
+
+const API_KEY_ERROR = Object.freeze({
+  invalid: 'invalid api key',
+  revoked: 'api key revoked',
+  expired: 'api key expired',
+});
+
+/** Personal API keys may call only the published bot catalog, and only up to their level. */
+export function enforceApiKeyAccess(req, _res, next) {
+  if (req.apiKeyError) {
+    const code = String(req.apiKeyError).toUpperCase();
+    next(
+      new HttpError(401, API_KEY_ERROR[req.apiKeyError] || 'invalid api key', {
+        code: `API_KEY_${code}`,
+      }),
+    );
+    return;
+  }
+  if (!req.apiKey) {
+    next();
+    return;
+  }
+  const method = req.method === 'HEAD' ? 'GET' : req.method;
+  const operation = matchBotOperation(method, req.path);
+  if (!apiKeyAllowsOperation(req.apiKey.level, operation)) {
+    next(
+      new HttpError(403, 'api key cannot call this route', {
+        code: 'API_KEY_SCOPE',
+        level: req.apiKey.level,
+        required: operation?.minLevel || null,
+      }),
+    );
+    return;
+  }
+  next();
 }
 
 export function requireAuth(req, _res, next) {
@@ -42,6 +113,10 @@ export function requireRole(...roles) {
 export function requireSuperAdmin(req, _res, next) {
   if (!req.user) {
     next(new HttpError(401, 'unauthenticated'));
+    return;
+  }
+  if (req.apiKey) {
+    next(new HttpError(403, 'api key cannot call this route', { code: 'API_KEY_SCOPE' }));
     return;
   }
   if (isSuperAdmin(req.user)) {

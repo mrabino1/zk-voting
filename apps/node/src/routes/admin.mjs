@@ -6,6 +6,7 @@ import { asyncHandler, HttpError } from '../http.mjs';
 import { requireAuth, requireRole, requireSuperAdmin, publicUser } from '../auth.mjs';
 import { REASON_CODES } from '../reasonCodes.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import { APPROVAL_CHAIN, isPlatformOperator, isSuperAdmin, OFFICER_ROLES, ROLES } from '../roles.mjs';
 
 function publicJurisdiction(row) {
@@ -67,6 +68,7 @@ async function grantResponse(deps, req, result) {
 export function adminRouter(deps) {
   const { store } = deps;
   const router = Router();
+  router.param('id', uuidParam('id'));
 
   router.get('/reason-codes', (_req, res) => {
     res.json({ nfp: true, reasonCodes: REASON_CODES });
@@ -97,7 +99,6 @@ export function adminRouter(deps) {
     requireRole('platform_admin'),
     asyncHandler(async (req, res) => {
       const jurisdiction = await store.createJurisdiction({
-        id: req.body?.id || req.body?.code,
         name: req.body?.name,
         metadataURI: req.body?.metadataURI,
       });
@@ -254,6 +255,11 @@ export function adminRouter(deps) {
         role === 'platform_admin' ||
         role === 'platform_super_admin' ||
         target.role === 'platform_super_admin';
+      if (req.apiKey && elevating) {
+        throw new HttpError(403, 'api key cannot change platform administration', {
+          code: 'API_KEY_SCOPE',
+        });
+      }
       if (elevating && !isSuperAdmin(req.user)) {
         throw new HttpError(403, 'only a platform super admin may approve admins', {
           role: req.user.role,

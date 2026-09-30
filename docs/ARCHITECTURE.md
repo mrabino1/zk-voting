@@ -50,7 +50,8 @@ on 27427 is **Future**.
 | Layer | What is in the tree |
 | --- | --- |
 | Node UI | Vanilla JS + HTML/CSS in `apps/node/public/`. Express serves `public/` (and `dist/` if present). **No Vite. No React.** |
-| Node API | Express 4, Node 22, `apps/node/src/*.mjs`. |
+| Node API | Express 4, Node 22, `apps/node/src/*.mjs`. Personal API keys (`Authorization: Bearer rk_…`) call the published bot catalog. |
+| Bot docs | `GET /api` (HTML), `GET /api/openapi.json`, `GET /api/llms.txt`, repo `docs/BOT_API.md` and `llms.txt`. |
 | Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
 | Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
 | Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |

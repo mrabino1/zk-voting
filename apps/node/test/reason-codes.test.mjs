@@ -12,6 +12,7 @@ import { after, before, describe, test } from 'node:test';
 import { MAX_CODE, REASON_CODES, isValidReasonCode, reasonName } from '../src/reasonCodes.mjs';
 import { HttpError } from '../src/http.mjs';
 import { emptyTree, insertLeaf, toBytes32 } from '../src/merkle.mjs';
+import { DEMO_JURISDICTION_ID } from '../src/recordIds.mjs';
 import { createApp } from '../src/server.mjs';
 
 let tmp;
@@ -138,7 +139,7 @@ describe('reason codes and Node disqualification vote gate', () => {
       body: { handle: 'officer', role: 'voter' },
       jar: officerJar,
     });
-    const grant = await api('POST', '/api/jurisdictions/demo/roles', {
+    const grant = await api('POST', `/api/jurisdictions/${DEMO_JURISDICTION_ID}/roles`, {
       jar: adminJar,
       body: { handle: 'officer', role: 'disqualification_officer' },
     });

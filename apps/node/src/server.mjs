@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
 
-import { attachAuth } from './auth.mjs';
+import { attachAuth, enforceApiKeyAccess } from './auth.mjs';
 import { createChain } from './chain.mjs';
 import { getConfig } from './config.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
@@ -24,6 +24,8 @@ import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
 import { loadReceiptPdfSecret } from './receipts.mjs';
 import { adminRouter } from './routes/admin.mjs';
+import { apiKeysRouter } from './routes/apiKeys.mjs';
+import { botDocsRouter, repoLlmsRouter } from './routes/botDocs.mjs';
 import { authRouter } from './routes/auth.mjs';
 import { electionsRouter } from './routes/elections.mjs';
 import { pollsRouter } from './routes/polls.mjs';
@@ -231,6 +233,7 @@ export async function createApp(overrides = {}) {
     next(err);
   });
   app.use(attachAuth(store, config));
+  app.use(enforceApiKeyAccess);
 
   if (!config.quiet) {
     app.use((req, res, next) => {
@@ -253,6 +256,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', identityRouter(deps));
   app.use('/api', pinRouter(deps));
   app.use('/api', meRouter(deps));
+  app.use('/api', apiKeysRouter(deps));
   app.use('/api', mailRouter(deps));
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
@@ -262,6 +266,8 @@ export async function createApp(overrides = {}) {
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
   app.use('/api', configRouter(deps));
+  app.use('/api', botDocsRouter());
+  app.use(repoLlmsRouter());
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });

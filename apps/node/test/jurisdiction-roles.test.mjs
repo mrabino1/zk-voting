@@ -24,6 +24,8 @@ const southTallyJar = {};
 const globalClerkJar = {};
 const voterJar = {};
 const voter2Jar = {};
+let northId;
+let southId;
 
 function applyCookies(res, jar) {
   const list = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
@@ -113,16 +115,20 @@ describe('per-jurisdiction officer roles', () => {
     });
     assert.equal(admin.status, 200);
 
-    for (const [id, name] of [
-      ['north', 'North'],
-      ['south', 'South'],
-    ]) {
-      const createdJ = await api('POST', '/api/jurisdictions', {
-        jar: adminJar,
-        body: { id, name },
-      });
-      assert.equal(createdJ.status, 201, createdJ.json?.error);
-    }
+    const north = await api('POST', '/api/jurisdictions', {
+      jar: adminJar,
+      body: { name: 'North' },
+    });
+    const south = await api('POST', '/api/jurisdictions', {
+      jar: adminJar,
+      body: { name: 'South' },
+    });
+    assert.equal(north.status, 201, north.json?.error);
+    assert.equal(south.status, 201, south.json?.error);
+    northId = north.json.id;
+    southId = south.json.id;
+    assert.match(northId, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.notEqual(northId, southId);
 
     const logins = [
       [northClerkJar, 'north-clerk'],
@@ -145,14 +151,14 @@ describe('per-jurisdiction officer roles', () => {
       assert.equal(status, 200, json?.error);
     }
 
-    await grant('north', 'north-clerk', 'clerk');
-    await grant('south', 'south-clerk', 'clerk');
-    await grant('north', 'north-registrar', 'registrar');
-    await grant('south', 'south-registrar', 'registrar');
-    await grant('north', 'north-dq', 'disqualification_officer');
-    await grant('south', 'south-dq', 'disqualification_officer');
-    await grant('north', 'north-tally', 'tally_operator');
-    await grant('south', 'south-tally', 'tally_operator');
+    await grant(northId, 'north-clerk', 'clerk');
+    await grant(southId, 'south-clerk', 'clerk');
+    await grant(northId, 'north-registrar', 'registrar');
+    await grant(southId, 'south-registrar', 'registrar');
+    await grant(northId, 'north-dq', 'disqualification_officer');
+    await grant(southId, 'south-dq', 'disqualification_officer');
+    await grant(northId, 'north-tally', 'tally_operator');
+    await grant(southId, 'south-tally', 'tally_operator');
   });
 
   after(async () => {
@@ -163,13 +169,13 @@ describe('per-jurisdiction officer roles', () => {
   });
 
   test('grant is idempotent and does not overwrite the global user role', async () => {
-    const again = await api('POST', '/api/jurisdictions/north/roles', {
+    const again = await api('POST', `/api/jurisdictions/${northId}/roles`, {
       jar: adminJar,
       body: { handle: 'north-clerk', role: 'clerk' },
     });
     assert.equal(again.status, 200, again.json?.error);
     assert.equal(again.json.user.role, 'voter');
-    const listed = await api('GET', '/api/jurisdictions/north/roles', { jar: adminJar });
+    const listed = await api('GET', `/api/jurisdictions/${northId}/roles`, { jar: adminJar });
     assert.equal(listed.status, 200);
     const clerks = listed.json.officers.filter((o) => o.handle === 'north-clerk' && o.role === 'clerk');
     assert.equal(clerks.length, 1);
@@ -178,16 +184,16 @@ describe('per-jurisdiction officer roles', () => {
   test('anonymous GET /api/jurisdictions omits the officer roster', async () => {
     const anon = await api('GET', '/api/jurisdictions');
     assert.equal(anon.status, 200);
-    const north = anon.json.jurisdictions.find((j) => j.id === 'north');
+    const north = anon.json.jurisdictions.find((j) => j.id === northId);
     assert.ok(north);
     assert.equal(north.name, 'North');
     assert.equal(north.officers, undefined);
 
-    const rolesAnon = await api('GET', '/api/jurisdictions/north/roles');
+    const rolesAnon = await api('GET', `/api/jurisdictions/${northId}/roles`);
     assert.equal(rolesAnon.status, 401);
 
     const host = await api('GET', '/api/jurisdictions', { jar: adminJar });
-    const northHost = host.json.jurisdictions.find((j) => j.id === 'north');
+    const northHost = host.json.jurisdictions.find((j) => j.id === northId);
     assert.ok(Array.isArray(northHost.officers));
     assert.ok(northHost.officers.some((o) => o.handle === 'north-clerk' && o.role === 'clerk'));
   });
@@ -196,15 +202,15 @@ describe('per-jurisdiction officer roles', () => {
     const me = await api('GET', '/api/me', { jar: northClerkJar });
     assert.equal(me.status, 200);
     assert.equal(me.json.user.role, 'voter');
-    assert.ok(me.json.jurisdictionRoles.some((g) => g.jurisdictionId === 'north' && g.role === 'clerk'));
+    assert.ok(me.json.jurisdictionRoles.some((g) => g.jurisdictionId === northId && g.role === 'clerk'));
     assert.ok(me.json.roles.includes('CLERK'));
-    assert.ok(!me.json.jurisdictionRoles.some((g) => g.jurisdictionId === 'south'));
+    assert.ok(!me.json.jurisdictionRoles.some((g) => g.jurisdictionId === southId));
   });
 
   test('platform_admin can create an election in any jurisdiction', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
-      body: electionBody('south', { title: 'Admin south' }),
+      body: electionBody(southId, { title: 'Admin south' }),
     });
     assert.equal(created.status, 201, created.json?.error);
   });
@@ -212,29 +218,29 @@ describe('per-jurisdiction officer roles', () => {
   test('clerk of north can create in north and is denied in south', async () => {
     const ok = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', { title: 'North general' }),
+      body: electionBody(northId, { title: 'North general' }),
     });
     assert.equal(ok.status, 201, ok.json?.error);
-    assert.equal(ok.json.election.jurisdictionId, 'north');
+    assert.equal(ok.json.election.jurisdictionId, northId);
 
     const denied = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('south', { title: 'North clerk in south' }),
+      body: electionBody(southId, { title: 'North clerk in south' }),
     });
     assert.equal(denied.status, 403);
-    assert.equal(denied.json.jurisdictionId, 'south');
+    assert.equal(denied.json.jurisdictionId, southId);
   });
 
   test('global clerk role without a jurisdiction grant cannot create', async () => {
     const denied = await api('POST', '/api/elections', {
       jar: globalClerkJar,
-      body: electionBody('north', { title: 'Global clerk' }),
+      body: electionBody(northId, { title: 'Global clerk' }),
     });
     assert.equal(denied.status, 403);
   });
 
   test('voter cannot grant jurisdiction roles', async () => {
-    const denied = await api('POST', '/api/jurisdictions/north/roles', {
+    const denied = await api('POST', `/api/jurisdictions/${northId}/roles`, {
       jar: voterJar,
       body: { handle: 'voter-a', role: 'clerk' },
     });
@@ -242,12 +248,12 @@ describe('per-jurisdiction officer roles', () => {
   });
 
   test('invalid officer role and missing identity are 400', async () => {
-    const badRole = await api('POST', '/api/jurisdictions/north/roles', {
+    const badRole = await api('POST', `/api/jurisdictions/${northId}/roles`, {
       jar: adminJar,
       body: { handle: 'north-clerk', role: 'platform_admin' },
     });
     assert.equal(badRole.status, 400);
-    const missing = await api('POST', '/api/jurisdictions/north/roles', {
+    const missing = await api('POST', `/api/jurisdictions/${northId}/roles`, {
       jar: adminJar,
       body: { role: 'clerk' },
     });
@@ -260,7 +266,7 @@ describe('per-jurisdiction officer roles', () => {
   test('PATCH ballot metadata is allowed only for the election jurisdiction clerk', async () => {
     const north = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', { title: 'North metadata' }),
+      body: electionBody(northId, { title: 'North metadata' }),
     });
     assert.equal(north.status, 201, north.json?.error);
     const id = north.json.election.id;
@@ -282,11 +288,11 @@ describe('per-jurisdiction officer roles', () => {
   test('freeze is allowed only for the election jurisdiction clerk', async () => {
     const north = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', { title: 'North freeze' }),
+      body: electionBody(northId, { title: 'North freeze' }),
     });
     const south = await api('POST', '/api/elections', {
       jar: southClerkJar,
-      body: electionBody('south', { title: 'South freeze' }),
+      body: electionBody(southId, { title: 'South freeze' }),
     });
     assert.equal(north.status, 201, north.json?.error);
     assert.equal(south.status, 201, south.json?.error);
@@ -295,7 +301,7 @@ describe('per-jurisdiction officer roles', () => {
 
     const cross = await api('POST', `/api/elections/${southElectionId}/freeze`, { jar: northClerkJar });
     assert.equal(cross.status, 403);
-    assert.equal(cross.json.jurisdictionId, 'south');
+    assert.equal(cross.json.jurisdictionId, southId);
 
     const allowed = await api('POST', `/api/elections/${northElectionId}/freeze`, { jar: northClerkJar });
     assert.equal(allowed.status, 200, allowed.json?.error);
@@ -321,11 +327,11 @@ describe('per-jurisdiction officer roles', () => {
     const voterId = voterMe.json.user.id;
     const openNorth = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', { title: 'North register' }),
+      body: electionBody(northId, { title: 'North register' }),
     });
     const openSouth = await api('POST', '/api/elections', {
       jar: southClerkJar,
-      body: electionBody('south', { title: 'South register' }),
+      body: electionBody(southId, { title: 'South register' }),
     });
     assert.equal(openNorth.status, 201, openNorth.json?.error);
     assert.equal(openSouth.status, 201, openSouth.json?.error);
@@ -361,7 +367,7 @@ describe('per-jurisdiction officer roles', () => {
   test('disqualify is allowed only for the election jurisdiction officer', async () => {
     const election = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', { title: 'North dq' }),
+      body: electionBody(northId, { title: 'North dq' }),
     });
     assert.equal(election.status, 201, election.json?.error);
     const id = election.json.election.id;
@@ -393,7 +399,7 @@ describe('per-jurisdiction officer roles', () => {
   test('tally is allowed only for the election jurisdiction operator', async () => {
     const election = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', {
+      body: electionBody(northId, {
         title: 'North tally',
         startTime: nowSec() - 120,
         cutoffTime: nowSec() - 1,
@@ -431,7 +437,7 @@ describe('per-jurisdiction officer roles', () => {
   test('platform_admin can tally in a jurisdiction with no local operator grant', async () => {
     const election = await api('POST', '/api/elections', {
       jar: adminJar,
-      body: electionBody('south', {
+      body: electionBody(southId, {
         title: 'Admin tally',
         startTime: nowSec() - 120,
         cutoffTime: nowSec() - 1,
@@ -451,21 +457,21 @@ describe('per-jurisdiction officer roles', () => {
     const clerk = json.users.find((u) => u.handle === 'north-clerk');
     assert.ok(clerk);
     assert.equal(clerk.role, 'voter');
-    assert.ok(clerk.jurisdictionRoles.some((g) => g.jurisdictionId === 'north' && g.role === 'clerk'));
+    assert.ok(clerk.jurisdictionRoles.some((g) => g.jurisdictionId === northId && g.role === 'clerk'));
   });
 
   test('revoke removes the grant and subsequent create is denied', async () => {
-    const revoked = await api('DELETE', '/api/jurisdictions/north/roles', {
+    const revoked = await api('DELETE', `/api/jurisdictions/${northId}/roles`, {
       jar: adminJar,
       body: { handle: 'north-clerk', role: 'clerk' },
     });
     assert.equal(revoked.status, 200, revoked.json?.error);
     const denied = await api('POST', '/api/elections', {
       jar: northClerkJar,
-      body: electionBody('north', { title: 'After revoke' }),
+      body: electionBody(northId, { title: 'After revoke' }),
     });
     assert.equal(denied.status, 403);
-    const missing = await api('DELETE', '/api/jurisdictions/north/roles', {
+    const missing = await api('DELETE', `/api/jurisdictions/${northId}/roles`, {
       jar: adminJar,
       body: { handle: 'north-clerk', role: 'clerk' },
     });

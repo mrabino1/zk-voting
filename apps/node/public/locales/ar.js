@@ -43,6 +43,7 @@ export default {
     navOutcomes: "متابعة النتائج",
     navTerms: "الشروط",
     navFeedback: "ملاحظات",
+    navApi: "واجهة البوت",
     navSignIn: "تسجيل الدخول",
     navDesk: "مكتبي",
     navPublic: "عام",

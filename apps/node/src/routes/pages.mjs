@@ -16,6 +16,7 @@ import {
   publicSiteView,
 } from '../cms.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
+import { uuidParam } from '../recordIds.mjs';
 import { isPlatformOperator } from '../roles.mjs';
 
 function clerkJurisdictions(store, user) {
@@ -60,6 +61,7 @@ function rejectEnvPinnedContracts(config, contracts) {
 export function pagesRouter(deps) {
   const { store, config } = deps;
   const router = Router();
+  router.param('id', uuidParam('id'));
 
   function publicBundle() {
     const site = store.getSite();

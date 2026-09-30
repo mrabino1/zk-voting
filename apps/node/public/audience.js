@@ -116,6 +116,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
       ...polls,
       { href: "/terms", label: t("chrome.navTerms") },
       { href: "/feedback", label: t("chrome.navFeedback") },
+      { href: "/api", label: t("chrome.navApi"), spa: false },
       ...extra,
       { href: "/signin", label: t("chrome.navSignIn") },
       { href: "/register", label: t("chrome.navRegister") },
@@ -130,6 +131,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
     { href: "/outcomes", label: t("chrome.navOutcomes") },
     { href: "/terms", label: t("chrome.navTerms") },
     { href: "/feedback", label: t("chrome.navFeedback") },
+    { href: "/api", label: t("chrome.navApi"), spa: false },
   ];
   if (audience === "officer") {
     items.push({ href: "/office", label: t("chrome.navAdmin") });
@@ -174,7 +176,7 @@ export function paintMainNav(nav, { audience, currentPath, routeName, spa = true
         a.getAttribute("href") === item.href &&
         a.textContent === item.label &&
         (a.getAttribute("aria-current") === "page") === current &&
-        a.hasAttribute("data-nav") === spa
+        a.hasAttribute("data-nav") === (spa && item.spa !== false)
       );
     });
   if (unchanged) return;
@@ -184,7 +186,7 @@ export function paintMainNav(nav, { audience, currentPath, routeName, spa = true
     const a = document.createElement("a");
     a.href = item.href;
     a.textContent = item.label;
-    if (spa) a.setAttribute("data-nav", "");
+    if (spa && item.spa !== false) a.setAttribute("data-nav", "");
     if (navItemIsCurrent(item, currentPath, routeName)) a.setAttribute("aria-current", "page");
     li.append(a);
     ul.append(li);
