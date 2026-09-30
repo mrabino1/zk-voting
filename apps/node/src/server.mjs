@@ -38,6 +38,14 @@ import { receiptsRouter } from './routes/receipts.mjs';
 import { outcomesRouter } from './routes/outcomes.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
+import { feedbackRouter } from './routes/feedback.mjs';
+import {
+  FEEDBACK_OPERATOR_WARNING,
+  FEEDBACK_SES_WARNING,
+  feedbackDeliveryMode,
+  feedbackRefusalLog,
+  resolveOperatorInbox,
+} from './feedback.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -179,6 +187,13 @@ export async function createApp(overrides = {}) {
   const tokenRegistry = tokenRegistryOverride || createTokenRegistry(config);
   const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms, pin, tokenRegistry };
 
+  if (!config.quiet) {
+    const inbox = resolveOperatorInbox(store, config);
+    const delivery = feedbackDeliveryMode(config);
+    if (!inbox) console.warn(feedbackRefusalLog(FEEDBACK_OPERATOR_WARNING));
+    else if (delivery.mode === 'unavailable') console.warn(feedbackRefusalLog(FEEDBACK_SES_WARNING));
+  }
+
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
   app.disable('x-powered-by');
@@ -225,6 +240,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));
+  app.use('/api', feedbackRouter(deps));
   app.use('/api', receiptsRouter(deps));
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));

@@ -391,6 +391,25 @@ After `cutoffTime` has fully expired **and** a certified tally is posted, the No
 | `SES_FROM_ADDRESS` | From address (required to send) |
 | `AWS_REGION` (alias `SES_REGION`) | SES region |
 | `SES_CONFIGURATION_SET` | Optional SESv2 configuration set |
+| `SES_ENDPOINT` | Optional SES endpoint override (local stack). Empty uses the AWS default |
+| `SES_DRY_RUN` | `1` captures the message and does not call SES. Use this to check `/feedback` without sending |
+
+### Feedback (`/feedback`)
+
+Public page `/feedback` (footer link on the voter shell, admin, back office, and explorer). A person may send a note: optional name, optional reply-to email, a category, and a message (4,000 characters). A checkbox is required, in the browser and on `POST /api/feedback`: any and all feedback becomes the property of the project's legal owner. The acceptance timestamp, terms version, and PDF SHA-256 are written into the operator email and one info log line. The message body is not logged at info level and is not stored in `republic.json`.
+
+The message is sent with the same AWS SES client as MFA and the Terms PDF (`SES_FROM_ADDRESS`, `AWS_REGION`, optional `SES_CONFIGURATION_SET`, `SES_ENDPOINT`, `SES_DRY_RUN`). The To address is the platform super admin (the domain operator): that person's primary email, or their contact email if they have no primary. If neither is set, the Node **refuses** the request (`503`, `FEEDBACK_NOT_CONFIGURED`), logs a warning, and shows a friendly message. It does not drop the note silently. A platform operator who is signed in also sees that warning on `/feedback`.
+
+Reply-To is set only when the optional address passes the same email check as identity mail. User text is escaped in the HTML part. The mail is not a vote receipt: no voter identity and no election data.
+
+Anti-spam on `POST /api/feedback`: 5 requests per 15 minutes per connecting address, a honeypot field (`website`), a 3 second minimum time from `startedAt`, a 16 KiB JSON body cap, and control characters stripped from the fields. These limits are code defaults (`feedbackMaxPerWindow`, `feedbackWindowMs`, `feedbackMinSubmitMs`, `feedbackMaxBodyBytes`, `feedbackMaxMessageChars` on the Node config). They are not required host env.
+
+To deliver feedback in production:
+
+1. Verify the From address in SES in `AWS_REGION`.
+2. Set `SES_FROM_ADDRESS` and `AWS_REGION`. Leave `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` empty to use the host IAM role.
+3. Set a primary email or a contact email on the `platform_super_admin` person (the seeded `ADMIN_HANDLE`).
+4. Leave `SES_DRY_RUN` empty. Set it to `1` only when you want a capture and no SES call.
 
 SESv2 Simple content cannot attach files. The Node sends **raw MIME** (`multipart/mixed`) with `republic-terms.pdf`. A second accept of the same PDF hash does not resend (`already_sent_this_hash`). If SES is unset, the Node still records the accept and **captures** the message in-process (tests use `mailer.lastTermsPdf()`, same pattern as MFA OTP capture).
 

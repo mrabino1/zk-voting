@@ -15,6 +15,13 @@ function csv(value) {
     .filter(Boolean);
 }
 
+function positiveInt(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.floor(n);
+}
+
 function envFlag(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'boolean') return value;
@@ -209,6 +216,11 @@ export function getConfig(overrides = {}) {
     mfaCookie: 'republic.mfa',
     mfaTtlMs: 10 * 60 * 1000,
     quiet: process.env.NODE_ENV === 'test',
+    feedbackMinSubmitMs: positiveInt(process.env.FEEDBACK_MIN_SUBMIT_MS, 3000),
+    feedbackWindowMs: positiveInt(process.env.FEEDBACK_WINDOW_MS, 15 * 60 * 1000),
+    feedbackMaxPerWindow: positiveInt(process.env.FEEDBACK_MAX_PER_WINDOW, 5),
+    feedbackMaxBodyBytes: positiveInt(process.env.FEEDBACK_MAX_BODY_BYTES, 16 * 1024),
+    feedbackMaxMessageChars: positiveInt(process.env.FEEDBACK_MAX_MESSAGE_CHARS, 4000),
     publicDir: path.join(PKG_ROOT, 'public'),
     distDir: path.join(PKG_ROOT, 'dist'),
     provingPath,

@@ -1,6 +1,6 @@
 ---
-version: 1
-lastUpdated: 2026-09-19
+version: 2
+lastUpdated: 2026-09-29
 title: Republic Terms of Use
 filename: republic-terms.pdf
 ---
@@ -9,7 +9,7 @@ filename: republic-terms.pdf
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. No token. No fees to voters.
 
-Last updated: 19 September 2026. Version 1.
+Last updated: 29 September 2026. Version 2.
 
 These Terms of Use (“Terms”) govern access to and use of Republic (repository name zk-voting), including this Node, its public pages, registration, voting, officer desks, and related APIs (the “Service”). The English text controls.
 
@@ -73,6 +73,8 @@ Session cookies (`republic.sid`, `republic.mfa`) are first-party, HttpOnly, and 
 
 Transactional email (MFA codes, a PDF of these Terms on acceptance, and optional hash-only vote receipts) is sent with AWS SES when `SES_FROM_ADDRESS` and `AWS_REGION` are set. Do not reply to those messages; the From address may be unmonitored.
 
+Feedback submitted at `/feedback` is emailed to the platform super admin (the domain operator) when that person has an email configured. The Node records the acceptance timestamp and the Terms version hash in that email and in the server log. It does not keep the feedback message as a personal-data record, and it does not include a voter identity or any election data.
+
 Independent auditors use public artifacts, not the private Node data file.
 
 ## 9. Electronic records and this PDF
@@ -81,11 +83,15 @@ You agree that the Node may provide these Terms and related notices electronical
 
 Viewing `/terms` shows the current fingerprints. Acceptance (checkbox at register, or the accept control while signed in) writes a record: person or email, timestamp, version, PDF SHA-256, markdown SHA-256, and whether the PDF was emailed.
 
-## 10. Intellectual property and license
+## 10. Intellectual property, feedback, and license
 
 Source code is licensed AGPL-3.0-or-later unless a file says otherwise. These Terms are part of the civic public-good documentation. You may run, study, and share the software under that license. You may not wrap it in a token, sell it as SaaS, or skim voter or jurisdiction funds.
 
 Marks such as “Republic” as used here name this civic project. They are not a claim of government endorsement.
+
+Any and all feedback you submit through the Service, including at /feedback, and any intellectual property in that feedback, becomes the property of the legal owner of the website that hosts this Service (the project's legal owner for this deploy). You assign to that legal owner all right, title, and interest in and to that feedback, including copyright and any other intellectual-property rights. Where an assignment is not possible under applicable law, you grant that legal owner a perpetual, irrevocable, worldwide, royalty-free license, at zero cost, to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, display, and otherwise exploit the feedback for any purpose, including operating and improving this not-for-profit civic public good. That legal owner has no obligation to use the feedback, to credit you, or to compensate you. This assignment and license do not create a paid product, a token, a fee to voters, or any right to payment. The Service remains NOT FOR PROFIT — a civic public good, not a commercial product.
+
+Submitting feedback requires an affirmative checkbox that any and all feedback becomes the property of the project's legal owner. The Node records the acceptance timestamp and the Terms version hash (the version and the SHA-256 of the exact PDF bytes) in the operator email and in the server log. It does not keep the feedback message as a personal-data record.
 
 ## 11. Availability and limitations
 
@@ -131,7 +137,7 @@ If a provision is unenforceable, the rest remains. These Terms plus the AGPL lic
 
 ## 19. Contact
 
-Questions about a live election belong to the hosting clerk, not to unmonitored SES mail. Questions about the software belong in the public repository for zk-voting.
+Questions about a live election belong to the hosting clerk, not to unmonitored SES mail. Questions about the software belong in the public repository for zk-voting. Notes about this host may be sent at `/feedback`. That form is not a ballot and is not a place for trapdoors, seed phrases, document numbers, or ballot choices.
 
 Do not send trapdoors, seed phrases, document numbers, or ballot choices to email.
 

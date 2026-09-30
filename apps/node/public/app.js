@@ -3,7 +3,7 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
-import { LOCALE_EVENT } from "./i18n.js";
+import { LOCALE_EVENT, applyDocumentLang } from "./i18n.js";
 import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
@@ -40,6 +40,7 @@ import {
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
+import { renderFeedback } from "./feedback.js";
 import { renderReceiptPortal } from "./receipt.js";
 import { renderOutcomesIndex, renderOutcomesDetail } from "./outcomes.js";
 import { renderOutcomeVerify } from "./outcome-verify.js";
@@ -1096,6 +1097,8 @@ async function loadDeskBundle() {
 async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
+  if (route.name !== "feedback") delete main.dataset.pageLang;
+  applyDocumentLang();
   main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
   try {
     const meHint = await loadMe();
@@ -1132,6 +1135,8 @@ async function renderRoute(route) {
     } else if (route.name === "terms") {
       setTitle("Terms of Use");
       await renderTerms(main, context);
+    } else if (route.name === "feedback") {
+      await renderFeedback(main, context);
     } else if (route.name === "receipt") {
       await renderReceiptPortal(main, context);
     } else if (route.name === "outcomeVerify") {

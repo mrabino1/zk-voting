@@ -142,11 +142,12 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
 | `ALLOW_SMART_CARD_MOCK` | off (`1` in tests) | Self-service smart-card `{ mock: true }` (kiosk demo). Production uses registrar attest |
 | `ALLOW_CIVIC_ID_MOCK` | off (`1` in tests) | Self-service driver’s license / passport bind `{ mock: true }` |
-| `SES_FROM_ADDRESS` | _empty_ | AWS SES From address. With `AWS_REGION`, turns on email MFA for every non-dev login **and** emails the Terms PDF on accept |
+| `SES_FROM_ADDRESS` | _empty_ | AWS SES From address. With `AWS_REGION`, turns on email MFA for every non-dev login, emails the Terms PDF on accept, **and** sends `/feedback` to the platform super admin |
 | `AWS_REGION` | _empty_ | SES region (also `SES_REGION`) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | host IAM role | Optional static SES credentials. Leave empty to use the default AWS credential chain |
 | `SES_CONFIGURATION_SET` | _empty_ | Optional SESv2 configuration set |
 | `SES_ENDPOINT` | AWS default | Optional SES endpoint override (local stack) |
+| `SES_DRY_RUN` | off | `1` captures SES mail (including feedback) and does not call AWS |
 | `REQUIRE_EMAIL_MFA` | off in tests; on when SES is configured | Force or disable email OTP MFA |
 | `CREDENTIAL_PROVIDER_SECRET` | _empty_ | Shared secret for `POST /api/integrations/credentials/status`. Unset = manual officer review |
 | `CREDENTIAL_PROVIDER_ID` | `manual` | Label stored on credential methods until a DMV / eID connector exists |
@@ -168,6 +169,7 @@ Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **s
 ```
 GET  /health
 GET  /terms                         (SPA Terms of Use; hashes from GET /api/terms)
+GET  /feedback                      (SPA feedback form; mailed to the platform super admin)
 GET  /terms.pdf                     (deterministic PDF; X-Pdf-SHA256 header)
 GET  /v/:shortCode                  (302 → /vote/<uuid>)
 GET  /e/:shortCode                  (302 → /vote/<uuid>)
@@ -253,6 +255,8 @@ GET  /api/terms                     (public: pdfSha256, markdownSha256, hashOf=p
 GET  /api/terms.pdf
 POST /api/terms/view                (signed-in: one view record per session+hash)
 POST /api/terms/accept              (signed-in; `{ acceptedTerms: true }`; emails PDF via SES)
+GET  /api/feedback                  (public form limits; operator warning only for a platform operator)
+POST /api/feedback                  (public; ownership checkbox required; SES to the super admin email)
 GET  /api/receipts/metrics          (disclosed turnout hours; never by candidate)
 POST /api/receipts/verify           (paste proof and/or drop PDF; pdfUnmodified)
 POST /api/receipts/email            (holder token; SES body + locked PDF)

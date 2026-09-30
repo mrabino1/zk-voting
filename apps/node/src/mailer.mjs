@@ -55,7 +55,9 @@ export function publicMailSummary(record) {
 }
 
 function headerSafe(value) {
-  return String(value || '').replace(/[\r\n]+/g, ' ').trim();
+  return String(value || '')
+    .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+    .trim();
 }
 
 function foldBase64(value) {
@@ -82,13 +84,15 @@ function attachmentMeta(file) {
  * SES Simple content cannot carry attachments. The terms PDF is sent as a
  * raw MIME attachment on the same SES path as OTP mail.
  */
-export function buildRawMime({ from, to, subject, text, html, attachments = [] }) {
+export function buildRawMime({ from, to, subject, text, html, attachments = [], replyTo }) {
   const mixed = `RepublicMixed_${randomBytes(12).toString('hex')}`;
   const alt = `RepublicAlt_${randomBytes(12).toString('hex')}`;
+  const safeReply = replyTo ? headerSafe(replyTo) : '';
   const lines = [
     `From: ${headerSafe(from)}`,
     `To: ${headerSafe(to)}`,
     `Subject: ${headerSafe(subject)}`,
+    ...(safeReply ? [`Reply-To: ${safeReply}`] : []),
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${mixed}"`,
     '',
@@ -122,7 +126,7 @@ export function buildRawMime({ from, to, subject, text, html, attachments = [] }
   return Buffer.from(lines.join('\r\n'), 'utf8');
 }
 
-async function sendViaSesv2(config, { to, subject, text, html, attachments = [] }) {
+async function sendViaSesv2(config, { to, subject, text, html, attachments = [], replyTo }) {
   let SESv2Client;
   let SendEmailCommand;
   try {
@@ -134,9 +138,11 @@ async function sendViaSesv2(config, { to, subject, text, html, attachments = [] 
     region: config.awsRegion,
     ...(config.sesEndpoint ? { endpoint: config.sesEndpoint } : {}),
   });
+  const safeReply = replyTo ? headerSafe(replyTo) : '';
   const input = {
     FromEmailAddress: config.sesFromAddress,
     Destination: { ToAddresses: [to] },
+    ...(safeReply ? { ReplyToAddresses: [safeReply] } : {}),
   };
   if (attachments.length) {
     input.Content = {
@@ -148,6 +154,7 @@ async function sendViaSesv2(config, { to, subject, text, html, attachments = [] 
           text,
           html,
           attachments,
+          replyTo: safeReply,
         }),
       },
     };
@@ -176,11 +183,13 @@ export function createMailer(config = {}) {
   const sesReady = Boolean(config.sesFromAddress && config.awsRegion);
   const captureCodes = config.includeOtpInCapture !== false && (config.captureEmail || !sesReady);
 
-  async function send({ to, subject, text, html, attachments = [], meta = {} }) {
+  async function send({ to, subject, text, html, attachments = [], replyTo, meta = {} }) {
     const files = Array.isArray(attachments) ? attachments.map(attachmentMeta) : [];
+    const safeReply = replyTo ? headerSafe(replyTo) : '';
     const record = {
       to,
-      subject,
+      subject: headerSafe(subject),
+      replyTo: safeReply || undefined,
       text,
       html,
       attachments: files.map((f) => ({
@@ -198,10 +207,11 @@ export function createMailer(config = {}) {
     if (sesReady && !config.sesDryRun) {
       await sendViaSesv2(config, {
         to,
-        subject,
+        subject: record.subject,
         text,
         html,
         attachments: files,
+        replyTo: safeReply,
       });
       return record;
     }
@@ -252,6 +262,12 @@ export function createMailer(config = {}) {
     lastOutcomeReport() {
       for (let i = sent.length - 1; i >= 0; i -= 1) {
         if (sent[i]?.meta?.purpose === 'outcome-report') return sent[i];
+      }
+      return null;
+    },
+    lastFeedback() {
+      for (let i = sent.length - 1; i >= 0; i -= 1) {
+        if (sent[i]?.meta?.purpose === 'feedback') return sent[i];
       }
       return null;
     },
