@@ -100,6 +100,7 @@ describe('cms helpers', () => {
     assert.equal(normalizeSlug('admin'), '');
     assert.equal(normalizeSlug('about'), '');
     assert.equal(normalizeSlug('terms'), '');
+    assert.equal(normalizeSlug('feedback'), '');
     assert.equal(normalizeSlug('receipt'), '');
     assert.equal(normalizeSlug('proof'), '');
     assert.equal(normalizeSlug('outcomes'), '');

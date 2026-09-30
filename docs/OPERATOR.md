@@ -437,7 +437,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 
 ### Feedback (`/feedback`)
 
-Public page `/feedback` (nav and footer on the voter SPA). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `republic.json`, not written to civic L2, and not logged at info level.
+Public page `/feedback` (nav and footer on the voter SPA, and the footer on admin, back office, and the explorer). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `republic.json`, not written to civic L2, and not logged at info level.
 
 **Inbox.** The To address is the `platform_super_admin` person’s `contactEmail`, or that person’s sign-in email if no contact email is set. Set `SUPER_ADMIN_EMAIL` at deploy time (see [Platform super admin](#platform-super-admin)) to fill `contactEmail` on boot. If neither address is set, the Node **fails closed**: it logs a warning naming the missing super-admin email, returns `503 FEEDBACK_UNAVAILABLE`, and does not drop the message silently. The visitor sees “Feedback cannot be delivered right now. Please try again later.” The same `503` is returned when SES is not configured (`SES_FROM_ADDRESS` and `AWS_REGION` both required) unless `SES_DRY_RUN=1` with those two set (capture, no SES call) or the process is allowed to capture mail (`NODE_ENV=test` or `ALLOW_CAPTURE_MAILER=1`).
 
