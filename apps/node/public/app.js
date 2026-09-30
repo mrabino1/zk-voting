@@ -3,7 +3,8 @@
  * Voter home and application shell for the Republic Node SPA.
  */
 
-import { LOCALE_EVENT, applyDocumentLang } from "./i18n.js";
+import { LOCALE_EVENT } from "./i18n.js";
+import { fetchWithStandbyRetry } from "./standby-retry.js";
 import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
 import { renderRegister } from "./register.js";
@@ -121,7 +122,7 @@ export async function api(path, options = {}) {
     ...(options.body != null ? { "Content-Type": "application/json" } : {}),
     ...(options.headers || {}),
   };
-  const res = await fetch(path, {
+  const res = await fetchWithStandbyRetry(path, {
     credentials: "same-origin",
     ...options,
     headers,
@@ -1097,8 +1098,6 @@ async function loadDeskBundle() {
 async function renderRoute(route) {
   const main = document.getElementById("main");
   if (!main) return;
-  if (route.name !== "feedback") delete main.dataset.pageLang;
-  applyDocumentLang();
   main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
   try {
     const meHint = await loadMe();

@@ -1,91 +1,71 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Operator notice for /feedback. User text is escaped. This is not a vote receipt.
+// Operator notice for /feedback. Not a vote receipt. No voter identity,
+// no ballot choice, and no election record.
 
 import { escapeHtml } from './mailTemplates.mjs';
-import { FEEDBACK_CATEGORIES } from './feedback.mjs';
 
-const CATEGORY_LABELS = Object.freeze({
-  general: 'General',
-  accessibility: 'Accessibility',
-  privacy: 'Privacy',
-  defect: 'Something is broken',
-  suggestion: 'Suggestion',
-  other: 'Other',
-});
-
-export function feedbackCategoryLabel(category) {
-  return CATEGORY_LABELS[category] || 'General';
+function singleLine(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim();
 }
 
-function textOrNone(value) {
-  const s = String(value || '').trim();
-  return s || '(not provided)';
+function textBlock(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+}
+
+function htmlBlock(value) {
+  return escapeHtml(textBlock(value)).replace(/\n/g, '<br>\n');
 }
 
 /**
- * Republic-branded HTML and plain text. Every user-controlled string is
- * escaped in HTML. The subject uses the allow-listed category only.
+ * Republic-branded feedback notice. Every visitor-supplied string is escaped
+ * in HTML and stripped of control characters before it can reach a header.
+ * @param {object} input
  */
-export function renderFeedbackEmail({
-  category,
-  message,
-  name,
-  replyTo,
-  acceptedAt,
-  termsVersion,
-  termsHash,
-  markdownSha256,
-  request = {},
-} = {}) {
-  const safeCategory = FEEDBACK_CATEGORIES.includes(category) ? category : 'general';
-  const label = feedbackCategoryLabel(safeCategory);
-  const subject = `Republic feedback: ${label}`;
-  const when = String(acceptedAt || '');
-  const version = String(termsVersion || '');
-  const hash = String(termsHash || '');
-  const markdown = String(markdownSha256 || '');
-  const method = String(request.method || 'POST');
-  const path = String(request.path || '/api/feedback');
-  const userAgent = String(request.userAgent || '');
-  const acceptLanguage = String(request.acceptLanguage || '');
-  const bytes = request.contentLength != null ? String(request.contentLength) : '';
+export function renderFeedbackEmail(input) {
+  const categoryLabel = singleLine(input.categoryLabel || input.category || 'General') || 'General';
+  const name = singleLine(input.name);
+  const replyTo = singleLine(input.replyTo);
+  const message = textBlock(input.message);
+  const acceptedAt = singleLine(input.acceptance?.acceptedAt);
+  const termsVersion = singleLine(input.acceptance?.termsVersion);
+  const termsPdfSha256 = singleLine(input.acceptance?.termsPdfSha256);
+  const termsMarkdownSha256 = singleLine(input.acceptance?.termsMarkdownSha256);
+  const userAgent = singleLine(input.userAgent).slice(0, 200);
+  const acceptLanguage = singleLine(input.acceptLanguage).slice(0, 80);
+  const subject = `Republic feedback (${categoryLabel})`;
 
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
-    'Republic feedback',
-    `Category: ${label}`,
-    `Name: ${textOrNone(name)}`,
-    `Reply-to: ${textOrNone(replyTo)}`,
-    `Submitted: ${when}`,
+    'A visitor sent feedback from /feedback. This is not a vote receipt.',
+    'It does not include a voter identity, a ballot choice, or an election record.',
+    '',
+    `Category: ${categoryLabel}`,
+    `Name: ${name || '(not given)'}`,
+    `Reply-To: ${replyTo || '(not given)'}`,
     '',
     'Message:',
-    String(message || ''),
+    message,
     '',
-    'Acceptance',
-    "The sender affirmed that any and all feedback becomes the property of the project's legal owner.",
-    `acceptedAt: ${when}`,
-    `termsVersion: ${version}`,
-    `termsHash: ${hash}`,
-    `markdownSha256: ${markdown}`,
-    'hashOf: pdf-bytes',
+    'Assignment acceptance:',
+    `Accepted at: ${acceptedAt}`,
+    `Terms version: ${termsVersion}`,
+    `Terms PDF SHA-256: ${termsPdfSha256}`,
+    `Terms markdown SHA-256: ${termsMarkdownSha256}`,
+    'The sender affirmed that this feedback becomes the property of the project legal owner.',
     '',
-    'Request',
-    `method: ${method}`,
-    `path: ${path}`,
-    userAgent ? `userAgent: ${userAgent}` : '',
-    acceptLanguage ? `acceptLanguage: ${acceptLanguage}` : '',
-    bytes ? `contentLength: ${bytes}` : '',
+    'Request metadata:',
+    `User-Agent: ${userAgent || '(none)'}`,
+    `Accept-Language: ${acceptLanguage || '(none)'}`,
     '',
-    'This message is operator mail. It is not a vote receipt. It does not include a voter identity or any election data.',
-    '',
-    '— Republic',
-  ]
-    .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
-    .join('\n');
-
-  const row = (k, v) =>
-    `<tr><th align="left" style="padding:6px 12px 6px 0;font-size:14px;color:#333333;vertical-align:top;">${escapeHtml(k)}</th><td style="padding:6px 0;font-size:14px;color:#111111;">${escapeHtml(v)}</td></tr>`;
+    'No obligation to use, credit, or compensate the sender.',
+    'Civic public good. Not a commercial product. No token. No fees to voters.',
+  ].join('\n');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -106,40 +86,28 @@ export function renderFeedbackEmail({
       </tr>
       <tr>
         <td style="padding:24px;">
-          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">A person sent feedback to the operator of this host. This is not a ballot.</p>
-          <table role="presentation" cellpadding="0" cellspacing="0">
-            ${row('Category', label)}
-            ${row('Name', textOrNone(name))}
-            ${row('Reply-to', textOrNone(replyTo))}
-            ${row('Submitted', when)}
-          </table>
-          <h2 style="margin:20px 0 8px;font-size:16px;">Message</h2>
-          <pre style="margin:0;white-space:pre-wrap;font-family:ui-sans-serif,system-ui,sans-serif;font-size:15px;line-height:1.5;color:#111111;">${escapeHtml(message)}</pre>
-          <h2 style="margin:20px 0 8px;font-size:16px;">Acceptance</h2>
-          <p style="margin:0 0 8px;font-size:14px;line-height:1.45;">The sender affirmed that any and all feedback becomes the property of the project's legal owner.</p>
-          <table role="presentation" cellpadding="0" cellspacing="0">
-            ${row('acceptedAt', when)}
-            ${row('termsVersion', version)}
-            ${row('termsHash', hash)}
-            ${row('markdownSha256', markdown)}
-            ${row('hashOf', 'pdf-bytes')}
-          </table>
-          <h2 style="margin:20px 0 8px;font-size:16px;">Request</h2>
-          <table role="presentation" cellpadding="0" cellspacing="0">
-            ${row('method', method)}
-            ${row('path', path)}
-            ${userAgent ? row('userAgent', userAgent) : ''}
-            ${acceptLanguage ? row('acceptLanguage', acceptLanguage) : ''}
-            ${bytes ? row('contentLength', bytes) : ''}
-          </table>
-          <p style="margin:20px 0 0;font-size:13px;line-height:1.45;color:#444444;">This message is operator mail. It is not a vote receipt. It does not include a voter identity or any election data. Promotion and feedback mail are never written to civic L2 transactions.</p>
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">A visitor sent feedback from /feedback. This is not a vote receipt. It does not include a voter identity, a ballot choice, or an election record.</p>
+          <p style="margin:0 0 8px;font-size:14px;line-height:1.45;"><strong>Category:</strong> ${escapeHtml(categoryLabel)}</p>
+          <p style="margin:0 0 8px;font-size:14px;line-height:1.45;"><strong>Name:</strong> ${name ? escapeHtml(name) : '(not given)'}</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.45;"><strong>Reply-To:</strong> ${replyTo ? escapeHtml(replyTo) : '(not given)'}</p>
+          <p style="margin:0 0 8px;font-size:14px;font-weight:700;">Message</p>
+          <div style="margin:0 0 20px;padding:12px 14px;background:#f4f1ea;border:1px solid #c9c3b2;font-size:16px;line-height:1.5;">${htmlBlock(message)}</div>
+          <p style="margin:0 0 8px;font-size:14px;font-weight:700;">Assignment acceptance</p>
+          <p style="margin:0 0 6px;font-size:14px;line-height:1.45;">The sender affirmed that this feedback becomes the property of the project legal owner.</p>
+          <p style="margin:0 0 6px;font-size:14px;line-height:1.45;">Accepted at: ${escapeHtml(acceptedAt)}</p>
+          <p style="margin:0 0 6px;font-size:14px;line-height:1.45;">Terms version: ${escapeHtml(termsVersion)}</p>
+          <p style="margin:0 0 6px;font-size:14px;line-height:1.45;word-break:break-all;">Terms PDF SHA-256: ${escapeHtml(termsPdfSha256)}</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.45;word-break:break-all;">Terms markdown SHA-256: ${escapeHtml(termsMarkdownSha256)}</p>
+          <p style="margin:0 0 8px;font-size:14px;font-weight:700;">Request metadata</p>
+          <p style="margin:0 0 6px;font-size:13px;line-height:1.45;color:#333333;">User-Agent: ${userAgent ? escapeHtml(userAgent) : '(none)'}</p>
+          <p style="margin:0;font-size:13px;line-height:1.45;color:#333333;">Accept-Language: ${acceptLanguage ? escapeHtml(acceptLanguage) : '(none)'}</p>
         </td>
       </tr>
     </table>
-    <p style="margin:16px 4px 0;font-size:12px;line-height:1.45;color:#444444;">Civic public good. Not a commercial product. No token. No fees to voters.</p>
+    <p style="margin:16px 4px 0;font-size:12px;line-height:1.45;color:#444444;">No obligation to use, credit, or compensate the sender. Civic public good. Not a commercial product. No token. No fees to voters.</p>
   </div>
 </body>
 </html>`;
 
-  return { subject, text, html, category: safeCategory };
+  return { subject, text, html };
 }

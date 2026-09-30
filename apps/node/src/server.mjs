@@ -14,6 +14,7 @@ import { getConfig } from './config.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
+import { openNodeWriter, standbyGuard } from './writerMode.mjs';
 import { createPasskeyService } from './passkey.mjs';
 import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
@@ -39,13 +40,6 @@ import { outcomesRouter } from './routes/outcomes.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { feedbackRouter } from './routes/feedback.mjs';
-import {
-  FEEDBACK_OPERATOR_WARNING,
-  FEEDBACK_SES_WARNING,
-  feedbackDeliveryMode,
-  feedbackRefusalLog,
-  resolveOperatorInbox,
-} from './feedback.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -173,10 +167,16 @@ export async function createApp(overrides = {}) {
     ...configOverrides
   } = overrides;
   const config = getConfig(configOverrides);
+  const writer = openNodeWriter(config);
+  config.writerActive = writer.active;
+  config.writerLeaseHandle = writer.lease;
   const store = await Store.open(config);
-  config.receiptPdfSecret = await loadReceiptPdfSecret(config);
+  store.writerActive = writer.active;
+  store.lease = writer.lease;
+  config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
+  explorer.writerActive = writer.active;
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
@@ -185,18 +185,25 @@ export async function createApp(overrides = {}) {
   const mfa = createMfaService({ config, store, mailer, terms });
   const pin = createPinService({ store });
   const tokenRegistry = tokenRegistryOverride || createTokenRegistry(config);
-  const deps = { config, store, explorer, chain, l1, passkeys, mailer, mfa, terms, pin, tokenRegistry };
-
-  if (!config.quiet) {
-    const inbox = resolveOperatorInbox(store, config);
-    const delivery = feedbackDeliveryMode(config);
-    if (!inbox) console.warn(feedbackRefusalLog(FEEDBACK_OPERATOR_WARNING));
-    else if (delivery.mode === 'unavailable') console.warn(feedbackRefusalLog(FEEDBACK_SES_WARNING));
-  }
+  const deps = {
+    config,
+    store,
+    explorer,
+    chain,
+    l1,
+    passkeys,
+    mailer,
+    mfa,
+    terms,
+    pin,
+    tokenRegistry,
+    writer,
+  };
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
   app.disable('x-powered-by');
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
   app.use(
     cors({
@@ -205,7 +212,17 @@ export async function createApp(overrides = {}) {
       maxAge: 86400,
     }),
   );
+  app.use('/api/feedback', (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    const len = Number(req.headers['content-length'] || 0);
+    if (len > config.feedbackMaxBodyBytes) {
+      res.status(413).json({ error: 'Feedback is too large.', nfp: true, code: 'PAYLOAD_TOO_LARGE' });
+      return;
+    }
+    next();
+  });
   app.use(express.json({ limit: '2mb' }));
+  app.use(standbyGuard(writer));
   app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && 'body' in err) {
       res.status(400).json({ error: 'invalid JSON', nfp: true });
@@ -240,7 +257,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', adminRouter(deps));
   app.use('/api', pagesRouter(deps));
   app.use('/api', termsApiRouter(deps));
-  app.use('/api', feedbackRouter(deps));
+  app.use('/api/feedback', feedbackRouter(deps));
   app.use('/api', receiptsRouter(deps));
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
@@ -265,7 +282,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer };
 }
 
 export async function startServer(overrides = {}) {
@@ -282,13 +299,61 @@ export async function startServer(overrides = {}) {
       `Republic Node (NOT FOR PROFIT) listening on ${config.host}:${port}  chainId=${config.chainId}`,
     );
   }
+  if (created.writer?.enabled && !created.writer.active) {
+    const timer = setInterval(async () => {
+      if (!created.writer.tryPromote()) return;
+      clearInterval(timer);
+      try {
+        if (typeof created.store.reloadFromDisk === 'function') await created.store.reloadFromDisk();
+        if (typeof created.explorer.refresh === 'function') await created.explorer.refresh();
+        created.config.receiptPdfSecret = await loadReceiptPdfSecret(created.config, { mint: true });
+        created.store.writerActive = true;
+        created.explorer.writerActive = true;
+        created.config.writerActive = true;
+        await created.store.adoptSuperAdminEmail(created.config);
+        console.log(`node writer active epoch=${created.writer.epoch()}`);
+      } catch (err) {
+        console.error('node promote failed:', err);
+      }
+    }, created.writer.lease?.pollMs || 1000);
+    if (typeof timer.unref === 'function') timer.unref();
+  }
+
   return { ...created, server, port };
 }
 
 const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
 if (isMain) {
-  startServer().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+  startServer()
+    .then((created) => {
+      let stopping = false;
+      const shutdown = () => {
+        if (stopping) return;
+        stopping = true;
+        console.log('node stopping');
+        created.writer?.beginDrain();
+        const force = setTimeout(() => process.exit(0), 20_000);
+        if (typeof force.unref === 'function') force.unref();
+        created.server.close(async () => {
+          try {
+            if (created.store?.writerActive !== false) await created.store.persist();
+          } catch (err) {
+            console.warn('node flush failed:', err.message || err);
+          }
+          try {
+            created.writer?.release();
+          } catch {
+            // lease already released
+          }
+          clearTimeout(force);
+          process.exit(0);
+        });
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

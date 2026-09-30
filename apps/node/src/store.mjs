@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { resolveSuperAdminEmail } from './config.mjs';
 import { isDisclosed } from './disclosure.mjs';
 import {
   electionMatchesRef,
@@ -27,6 +28,7 @@ import {
 import {
   assertEmailRoom,
   assertPasskeyRoom,
+  emailHint,
   ensurePersonFields,
   isAuthMethodType,
   normalizeEmail,
@@ -97,7 +99,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 7,
+      version: 8,
       nextElectionId: 1,
       nodeId: randomUUID(),
     },
@@ -204,6 +206,8 @@ export class Store {
       data = emptyData();
     }
     const store = new Store(filePath, data);
+    store.writerActive = config.writerActive !== false;
+    store.lease = config.writerLeaseHandle || null;
     for (const user of store.data.users) {
       ensurePersonFields(user);
       for (const cred of user.credentials) {
@@ -233,12 +237,65 @@ export class Store {
     if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 7);
-    await store.persist();
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
+    if (store.writerActive) await store.persist();
     return store;
   }
 
+  refuseIfStandby() {
+    if (this.writerActive === false) {
+      throw new HttpError(503, 'maintenance handover', {
+        code: 'STANDBY',
+        mode: 'standby',
+        retryAfter: 2,
+      });
+    }
+  }
+
+  async reloadFromDisk() {
+    let raw;
+    try {
+      raw = await fs.readFile(this.filePath, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      throw err;
+    }
+    const data = { ...emptyData(), ...JSON.parse(raw) };
+    data.pages = Array.isArray(data.pages) ? data.pages : [];
+    data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
+    data.receipts = Array.isArray(data.receipts) ? data.receipts : [];
+    data.outcomeSubscriptions = Array.isArray(data.outcomeSubscriptions) ? data.outcomeSubscriptions : [];
+    data.outcomeReports = Array.isArray(data.outcomeReports) ? data.outcomeReports : [];
+    data.outcomeReportDeliveries = Array.isArray(data.outcomeReportDeliveries)
+      ? data.outcomeReportDeliveries
+      : [];
+    data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
+    data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
+    data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
+    data.polls = Array.isArray(data.polls) ? data.polls : [];
+    data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
+    data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
+    data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
+    data.site = { ...defaultSite(), ...(data.site || {}) };
+    data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
+    data.meta = data.meta || {};
+    data.meta.version = Math.max(Number(data.meta.version || 0), 8);
+    for (const user of data.users || []) ensurePersonFields(user);
+    this.data = data;
+    this.rebuildAllEligibility();
+  }
+
   async persist() {
+    this.refuseIfStandby();
+    if (this.lease) {
+      this.lease.assertFence();
+      this.data.meta = this.data.meta || {};
+      const diskEpoch = Number(this.data.meta.writerEpoch || 0);
+      if (diskEpoch > this.lease.epoch) {
+        throw new HttpError(503, 'stale writer fence', { code: 'STALE_FENCE', mode: 'standby' });
+      }
+      this.data.meta.writerEpoch = this.lease.epoch;
+    }
     this._write = this._write.then(async () => {
       const tmp = `${this.filePath}.${process.pid}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(this.data, null, 2));
@@ -280,6 +337,42 @@ export class Store {
         createdAt: new Date().toISOString(),
       });
     }
+    return this.applySuperAdminEmail(config);
+  }
+
+  /**
+   * Point the existing platform super admin's contactEmail at SUPER_ADMIN_EMAIL.
+   * Empty env is a no-op. The active writer overwrites on every boot so
+   * operators can rotate. Standby must not mutate the store. Does not create
+   * a user. Returns true when contactEmail changed.
+   * @param {Record<string, unknown>} [config]
+   * @returns {boolean}
+   */
+  applySuperAdminEmail(config = {}) {
+    const email = resolveSuperAdminEmail(config.superAdminEmail);
+    if (!email) return false;
+    if (config.writerActive === false || this.writerActive === false) return false;
+    const user = this.data.users.find((row) => row && row.role === 'platform_super_admin');
+    if (!user || user.contactEmail === email) return false;
+    user.contactEmail = email;
+    if (!config.quiet) {
+      console.info(
+        `[republic] platform super admin contact email set from SUPER_ADMIN_EMAIL (${emailHint(email)})`,
+      );
+    }
+    return true;
+  }
+
+  /**
+   * After this process takes the writer lease, apply SUPER_ADMIN_EMAIL and
+   * persist only when the contact email changed. Standby must not call this.
+   * @param {Record<string, unknown>} [config]
+   */
+  async adoptSuperAdminEmail(config = {}) {
+    if (this.writerActive === false || config.writerActive === false) return false;
+    const changed = this.applySuperAdminEmail(config);
+    if (changed) await this.persist();
+    return changed;
   }
 
   snapshot() {
@@ -1188,6 +1281,7 @@ export class Store {
   }
 
   async registerCommitment(electionId, identityCommitment, { userId, persist = true } = {}) {
+    this.refuseIfStandby();
     const election = this.requireElection(electionId);
     if (election.rollFrozen) {
       throw new HttpError(409, 'roll is frozen', { code: 'ROLL_FROZEN' });
@@ -1789,6 +1883,7 @@ export class Store {
   }
 
   async disqualify(electionId, { identityCommitment, reasonCode, evidenceHash, issuer }) {
+    this.refuseIfStandby();
     const election = this.requireElection(electionId);
     if (election.rollFrozen && !election.lateUpdateAllowed) {
       throw new HttpError(409, 'roll frozen; late disqualification not allowed', {
@@ -1909,6 +2004,7 @@ export class Store {
    * is 409 NULLIFIER_USED. Double voting is impossible.
    */
   async acceptVote(vote, envelope) {
+    this.refuseIfStandby();
     const existing = this.findVote(vote.electionId, vote.nullifier);
     if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
@@ -2322,6 +2418,7 @@ export class Store {
   }
 
   async setTally(id, counts, extras = {}) {
+    this.refuseIfStandby();
     const election = this.requireElection(id);
     if (election.tally) throw new HttpError(409, 'already tallied');
     election.tally = {

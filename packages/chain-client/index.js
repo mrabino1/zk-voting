@@ -251,16 +251,37 @@ function decodeUintWord(word) {
  * @param {unknown[]} params
  * @param {number} [id]
  */
+function standbyDelayMs(res, attempt) {
+  const header = res.headers && typeof res.headers.get === "function" ? res.headers.get("retry-after") : null;
+  const retryAfter = Number(header);
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(retryAfter * 1000, 5000);
+  return Math.min(400 * 2 ** attempt, 2000);
+}
+
 async function rpc(rpcUrl, method, params, id = 1) {
-  const res = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-  });
-  if (!res.ok) {
-    throw new Error(`rpc ${method}: HTTP ${res.status}`);
+  let res;
+  let body;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    });
+    if (res.status === 503 && attempt < 4) {
+      await new Promise((r) => setTimeout(r, standbyDelayMs(res, attempt)));
+      continue;
+    }
+    if (!res.ok) {
+      throw new Error(`rpc ${method}: HTTP ${res.status}`);
+    }
+    body = await res.json();
+    const message = body && body.error ? body.error.message || "" : "";
+    if (res.ok && body && body.error && /maintenance handover|standby/i.test(message) && attempt < 4) {
+      await new Promise((r) => setTimeout(r, standbyDelayMs(res, attempt)));
+      continue;
+    }
+    break;
   }
-  const body = await res.json();
   if (body.error) {
     const msg = body.error.message || JSON.stringify(body.error);
     throw new Error(`rpc ${method}: ${msg}`);

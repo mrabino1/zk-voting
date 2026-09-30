@@ -1,134 +1,176 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
+// POST /api/feedback delivers one visitor message to the platform super admin.
 
 import { Router } from 'express';
 
 import {
-  FEEDBACK_OPERATOR_WARNING,
+  FEEDBACK_CATEGORIES,
+  FEEDBACK_INBOX_WARNING,
+  FEEDBACK_MESSAGE_MAX,
+  FEEDBACK_NAME_MAX,
   FEEDBACK_SES_WARNING,
   FEEDBACK_USER_UNAVAILABLE,
-  clientAddress,
-  createFeedbackLimiter,
-  feedbackAcceptanceLog,
+  createFeedbackRateLimiter,
+  currentTermsAcceptance,
+  feedbackClientIp,
   feedbackDeliveryMode,
-  feedbackRefusalLog,
-  parseFeedbackBody,
-  publicFeedbackStatus,
-  resolveOperatorInbox,
-  stripControls,
+  feedbackNowMs,
+  parseFeedbackSubmission,
+  resolvePlatformOperatorEmail,
+  retryCopy,
 } from '../feedback.mjs';
 import { renderFeedbackEmail } from '../feedbackMail.mjs';
-import { HttpError, asyncHandler } from '../http.mjs';
+import { asyncHandler } from '../http.mjs';
 import { getTermsDocument } from '../terms.mjs';
 
+function requestMeta(req) {
+  const agent = String(req.get('user-agent') || '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, 200);
+  const language = String(req.get('accept-language') || '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, 80);
+  return { userAgent: agent, acceptLanguage: language };
+}
+
 export function feedbackRouter(deps) {
-  const { store, config, mailer } = deps;
+  const limiter = createFeedbackRateLimiter();
   const router = Router();
-  const limiter = createFeedbackLimiter({
-    windowMs: Number(config.feedbackWindowMs ?? 15 * 60 * 1000),
-    max: Number(config.feedbackMaxPerWindow ?? 5),
-    now: () => Date.now(),
-  });
-  const maxBytes = Number(config.feedbackMaxBodyBytes ?? 16 * 1024);
 
   router.get(
-    '/feedback',
-    asyncHandler(async (req, res) => {
+    '/',
+    asyncHandler(async (_req, res) => {
       const doc = getTermsDocument();
-      res.json(publicFeedbackStatus({ config, store, user: req.user, terms: doc }));
+      const inbox = resolvePlatformOperatorEmail(deps.store);
+      res.json({
+        nfp: true,
+        categories: FEEDBACK_CATEGORIES,
+        messageMax: FEEDBACK_MESSAGE_MAX,
+        nameMax: FEEDBACK_NAME_MAX,
+        minSubmitMs: deps.config.feedbackMinSubmitMs,
+        rateWindowSeconds: deps.config.feedbackRateWindowSeconds,
+        maxPerWindow: 1,
+        assignmentRequired: true,
+        inboxConfigured: Boolean(inbox),
+        termsVersion: String(doc.version),
+        termsPdfSha256: doc.pdfSha256,
+        termsMarkdownSha256: doc.markdownSha256,
+      });
     }),
   );
 
   router.post(
-    '/feedback',
+    '/',
     asyncHandler(async (req, res) => {
-      const declared = Number(req.headers['content-length'] || 0);
-      const measured = Buffer.byteLength(JSON.stringify(req.body ?? {}), 'utf8');
-      if ((declared && declared > maxBytes) || measured > maxBytes) {
-        throw new HttpError(413, 'That message is too large.', { code: 'FEEDBACK_BODY' });
-      }
-
-      const limit = limiter.check(clientAddress(req));
-      if (!limit.ok) {
-        res.set('Retry-After', String(limit.retryAfter));
-        throw new HttpError(429, 'Too many messages from this network. Try again later.', {
-          code: 'FEEDBACK_RATE_LIMIT',
-          retryAfter: limit.retryAfter,
+      const now = feedbackNowMs(deps.config);
+      const rawSize = Buffer.byteLength(JSON.stringify(req.body ?? {}), 'utf8');
+      if (rawSize > deps.config.feedbackMaxBodyBytes) {
+        res.status(413).json({
+          error: 'Feedback is too large.',
+          nfp: true,
+          code: 'PAYLOAD_TOO_LARGE',
         });
+        return;
       }
 
-      const parsed = parseFeedbackBody(req.body, config, Date.now());
+      const parsed = parseFeedbackSubmission(req.body, deps.config, now);
       if (!parsed.ok) {
-        throw new HttpError(parsed.status, parsed.error, { code: parsed.code });
-      }
-
-      const inbox = resolveOperatorInbox(store, config);
-      if (!inbox) {
-        console.warn(feedbackRefusalLog(FEEDBACK_OPERATOR_WARNING));
-        throw new HttpError(503, FEEDBACK_USER_UNAVAILABLE, {
-          code: 'FEEDBACK_NOT_CONFIGURED',
-          operatorWarning: FEEDBACK_OPERATOR_WARNING,
+        res.status(parsed.status).json({
+          error: parsed.error,
+          nfp: true,
+          code: parsed.code,
+          ...(parsed.fields?.length ? { fields: parsed.fields } : {}),
         });
+        return;
       }
 
-      const delivery = feedbackDeliveryMode(config);
-      if (delivery.mode === 'unavailable') {
-        console.warn(feedbackRefusalLog(FEEDBACK_SES_WARNING));
-        throw new HttpError(503, FEEDBACK_USER_UNAVAILABLE, {
-          code: 'FEEDBACK_SES_UNAVAILABLE',
-          operatorWarning: FEEDBACK_SES_WARNING,
+      const ip = feedbackClientIp(req, deps.config);
+      const windowMs = deps.config.feedbackRateWindowSeconds * 1000;
+      const retryAfterSeconds = limiter.retryAfterSeconds(ip, now, windowMs);
+      if (retryAfterSeconds > 0) {
+        const copy = retryCopy(retryAfterSeconds);
+        res.set('Retry-After', String(retryAfterSeconds));
+        res.status(429).json({
+          error: copy.error,
+          nfp: true,
+          code: 'RATE_LIMITED',
+          retryAfterSeconds,
+          minutes: copy.minutes,
         });
+        return;
       }
 
-      const doc = getTermsDocument();
-      const acceptedAt = new Date().toISOString();
-      const requestMeta = {
-        method: 'POST',
-        path: '/api/feedback',
-        userAgent: stripControls(req.get('user-agent') || '', { max: 180 }),
-        acceptLanguage: stripControls(req.get('accept-language') || '', { max: 80 }),
-        contentLength: measured,
-      };
+      const to = resolvePlatformOperatorEmail(deps.store);
+      if (!to) {
+        console.warn(FEEDBACK_INBOX_WARNING);
+        res.status(503).json({
+          error: FEEDBACK_USER_UNAVAILABLE,
+          nfp: true,
+          code: 'FEEDBACK_UNAVAILABLE',
+        });
+        return;
+      }
+
+      const mode = feedbackDeliveryMode(deps.config);
+      if (mode === 'unconfigured') {
+        console.warn(FEEDBACK_SES_WARNING);
+        res.status(503).json({
+          error: FEEDBACK_USER_UNAVAILABLE,
+          nfp: true,
+          code: 'FEEDBACK_UNAVAILABLE',
+        });
+        return;
+      }
+
+      const acceptance = currentTermsAcceptance(now);
+      const meta = requestMeta(req);
       const rendered = renderFeedbackEmail({
         ...parsed.value,
-        acceptedAt,
-        termsVersion: doc.version,
-        termsHash: doc.pdfSha256,
-        markdownSha256: doc.markdownSha256,
-        request: requestMeta,
+        acceptance,
+        userAgent: meta.userAgent,
+        acceptLanguage: meta.acceptLanguage,
       });
 
-      await mailer.send({
-        to: inbox.email,
-        subject: rendered.subject,
-        text: rendered.text,
-        html: rendered.html,
-        replyTo: parsed.value.replyTo || undefined,
-        meta: {
-          purpose: 'feedback',
-          category: parsed.value.category,
-          termsVersion: doc.version,
-          termsHash: doc.pdfSha256,
-          markdownSha256: doc.markdownSha256,
-          acceptedAt,
-        },
-      });
+      try {
+        await deps.mailer.send({
+          to,
+          subject: rendered.subject,
+          text: rendered.text,
+          html: rendered.html,
+          replyTo: parsed.value.replyTo || undefined,
+          meta: {
+            purpose: 'feedback',
+            delivery: mode,
+            category: parsed.value.category,
+            acceptedAt: acceptance.acceptedAt,
+            termsVersion: acceptance.termsVersion,
+            termsPdfSha256: acceptance.termsPdfSha256,
+          },
+        });
+      } catch (err) {
+        console.warn(
+          `[republic] feedback refused: SES send failed (${err?.name || 'Error'}). The message was not sent.`,
+        );
+        res.status(503).json({
+          error: FEEDBACK_USER_UNAVAILABLE,
+          nfp: true,
+          code: 'FEEDBACK_UNAVAILABLE',
+        });
+        return;
+      }
 
+      limiter.commit(ip, now);
       console.info(
-        feedbackAcceptanceLog({
-          category: parsed.value.category,
-          termsVersion: doc.version,
-          termsHash: doc.pdfSha256,
-          acceptedAt,
-        }),
+        `[republic] feedback accepted at=${acceptance.acceptedAt} termsVersion=${acceptance.termsVersion} termsPdfSha256=${acceptance.termsPdfSha256}`,
       );
-
-      res.status(201).json({
+      res.json({
         ok: true,
         nfp: true,
-        delivered: delivery.mode,
-        acceptedAt,
-        termsVersion: doc.version,
-        termsHash: doc.pdfSha256,
+        acceptedAt: acceptance.acceptedAt,
+        termsVersion: acceptance.termsVersion,
+        termsPdfSha256: acceptance.termsPdfSha256,
       });
     }),
   );

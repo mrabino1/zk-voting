@@ -84,15 +84,25 @@ export function createRpcServer(state, { host, port } = {}) {
       res.end();
       return;
     }
-    if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
-      res.writeHead(200, { 'content-type': 'application/json' });
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/health' || req.url.startsWith('/health?'))) {
+      const mode = state.acceptingWrites() ? 'active' : 'standby';
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'x-republic-mode': mode,
+      });
       res.end(
         JSON.stringify({
           ok: true,
+          ready: true,
           nfp: true,
           name: 'Republic L2',
+          role: 'sequencer',
+          mode,
+          acceptingWrites: state.acceptingWrites(),
+          epoch: typeof state.writerEpoch === 'function' ? state.writerEpoch() : 0,
           chainId: state.config.chainId,
           blockNumber: toQuantity(state.latestNumber),
+          skipEmptyBlocks: state.config.skipEmptyBlocks !== false,
           disclosure: state.disclosureView(),
         }),
       );
@@ -128,6 +138,29 @@ export function createRpcServer(state, { host, port } = {}) {
       res.end(JSON.stringify(fail(null, -32700, 'parse error')));
       return;
     }
+    const writes = (Array.isArray(body) ? body : [body]).some(
+      (item) => item && item.method === 'eth_sendRawTransaction',
+    );
+    if (writes && !state.acceptingWrites()) {
+      const id = Array.isArray(body) ? null : body.id ?? null;
+      res.writeHead(503, {
+        'content-type': 'application/json',
+        'retry-after': '2',
+        'x-republic-mode': 'standby',
+      });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: -32003,
+            message: 'maintenance handover',
+            data: { mode: 'standby', retryAfter: 2 },
+          },
+        }),
+      );
+      return;
+    }
     let result;
     if (Array.isArray(body)) {
       if (body.length > 100) {
@@ -138,7 +171,17 @@ export function createRpcServer(state, { host, port } = {}) {
     } else {
       result = dispatch(state, body);
     }
-    res.writeHead(200, { 'content-type': 'application/json' });
+    const handover =
+      result && !Array.isArray(result) && result.error && result.error.code === -32003;
+    if (handover) {
+      res.writeHead(503, {
+        'content-type': 'application/json',
+        'retry-after': '2',
+        'x-republic-mode': 'standby',
+      });
+    } else {
+      res.writeHead(200, { 'content-type': 'application/json' });
+    }
     res.end(JSON.stringify(result));
   });
 

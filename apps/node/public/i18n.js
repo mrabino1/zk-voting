@@ -121,10 +121,7 @@ export function applyDocumentLang(locale = getLocale()) {
   // pronounce that copy with the chrome language. Header and footer use t().
   const main = document.getElementById("main");
   if (main) {
-    if (main.dataset.pageLang === "locale") {
-      if (code === DEFAULT_LOCALE) main.removeAttribute("lang");
-      else main.setAttribute("lang", localeTag(code));
-    } else if (code === DEFAULT_LOCALE) main.removeAttribute("lang");
+    if (code === DEFAULT_LOCALE) main.removeAttribute("lang");
     else main.setAttribute("lang", DEFAULT_LOCALE);
   }
 }

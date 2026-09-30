@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
+import {DeployOnce} from "./DeployGuard.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
@@ -12,10 +13,11 @@ import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
 ///         `BATCH_VERIFIER` may be unset / zero until a production VK exists.
 ///         `L2_FACTORY` (or `ELECTION_FACTORY_ADDRESS`) is required so the
 ///         mirror cannot accept colliding uint256 `postResult` writes.
-contract DeployL1 is Script {
+contract DeployL1 is DeployOnce {
     error MissingL2Factory();
 
     function run() external {
+        _refuseIfAlreadyDeployed();
         vm.startBroadcast();
         address admin = msg.sender;
         address sequencer = vm.envOr("SEQUENCER", admin);

@@ -32,6 +32,22 @@ function chromePath() {
   throw new Error('Chrome is required for axe checks. Set CHROME_PATH or install google-chrome.');
 }
 
+async function launchChrome() {
+  const options = {
+    executablePath: chromePath(),
+    headless: true,
+    timeout: 90_000,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+  };
+  try {
+    return await puppeteer.launch(options);
+  } catch (err) {
+    const message = String(err?.message || err);
+    if (!message.includes('WS endpoint')) throw err;
+    return puppeteer.launch(options);
+  }
+}
+
 function listen(application) {
   return new Promise((resolve, reject) => {
     const s = application.listen(0, '127.0.0.1', () => resolve(s));
@@ -166,11 +182,7 @@ describe('WCAG 2.2 AA axe', () => {
     assert.equal(createdElection.status, 201, body?.error);
     electionId = body.election.id;
 
-    browser = await puppeteer.launch({
-      executablePath: chromePath(),
-      headless: true,
-      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    });
+    browser = await launchChrome();
   });
 
   after(async () => {

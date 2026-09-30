@@ -98,6 +98,7 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/about')).name, 'about');
     assert.equal(parseRoute(loc('/faq')).name, 'faq');
     assert.equal(parseRoute(loc('/terms')).name, 'terms');
+    assert.equal(parseRoute(loc('/feedback')).name, 'feedback');
     assert.equal(parseRoute(loc('/receipt')).name, 'receipt');
     assert.equal(parseRoute(loc('/outcomes')).name, 'outcomes');
     assert.equal(parseRoute(loc('/outcomes/verify')).name, 'outcomeVerify');
@@ -151,16 +152,16 @@ describe('audience helpers and FAQ', () => {
 
   test('nav items differ by audience', () => {
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Sign in', 'Register']);
     const voter = mainNav('registered').map((i) => i.label);
-    assert.deepEqual(voter, ['My desk', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms']);
+    assert.deepEqual(voter, ['My desk', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms', 'Feedback']);
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
     assert.ok(!pub.includes('Polls'));
     const withPolls = mainNav('public', [], { pollsEnabled: true }).map((i) => i.label);
     assert.ok(withPolls.includes('Polls'));
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Sign in', 'Register']);
   });
 
   test('officer detection matches Node roles helper', () => {

@@ -94,6 +94,8 @@ export function publicUser(user, { includeContactEmail = false } = {}) {
     termsVersion: user.termsVersion || null,
     termsAcceptedAt: user.termsAcceptedAt || null,
     termsEmailSentAt: user.termsEmailSentAt || null,
+    termsNotifiedHash: user.termsNotifiedHash || null,
+    termsNotifiedAt: user.termsNotifiedAt || null,
     hasContactEmail: Boolean(user.contactEmail),
   };
   if (includeContactEmail) out.contactEmail = user.contactEmail || '';

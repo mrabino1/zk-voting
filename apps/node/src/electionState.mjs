@@ -124,7 +124,8 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
 export async function publishDue(deps) {
   const now = deps.config.nowFn();
   const interval = deps.config.disclosureIntervalSeconds;
-  if (deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
+  const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
+  if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
     : disclosurePublicView(now, interval);

@@ -266,6 +266,8 @@ curl -fsS http://127.0.0.1:3000/health
 
 See [`.env.example`](./.env.example) and [`docs/OPERATOR.md`](./docs/OPERATOR.md). Forked hosts pin the shared factory in that same file — [Intentional forking](#intentional-forking).
 
+Coolify rolling update: old and new containers share `node-data` and `l2-data` on one host. A standby container stays healthy (`ok: true`, `"mode":"standby"`) and does not write until it holds the lease. Healthchecks must not require `mode=active`. Archive is on by default; only the lease holder prunes. L1 contracts (`SETTLEMENT_ADDRESS`, `VERIFIER_ADDRESS`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`) are deployed once — `npm run deploy:l1 -- --check` — and containers only read those addresses. Settings: [`docs/ROLLING_UPDATES.md`](./docs/ROLLING_UPDATES.md).
+
 ### Republic L2 (sequencer + prover)
 
 ```bash
@@ -274,7 +276,7 @@ npm run l2:prover           # node l2/prover/index.mjs
 ./l2/bin/start-local.sh     # both
 ```
 
-Genesis **chainId 27427**, one sequencer. The producer wakes every ~2s and, by default, seals a block only when there is a transaction, when the disclosure hour closes, or once an hour (`L2_SKIP_EMPTY_BLOCKS=1`, `L2_HEARTBEAT_SECONDS=3600`). Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC` is configured; otherwise mock proofs under `l2/data/proofs/`. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+Genesis **chainId 27427**, one sequencer. The producer wakes every ~2s and, by default, seals a block only when there is a transaction, when the disclosure hour closes, or once an hour (`L2_SKIP_EMPTY_BLOCKS=1`, `L2_HEARTBEAT_SECONDS=3600`). A second sequencer on the same data directory stays standby and does not seal that heartbeat block. Civic JSON transactions (not an Anvil EVM proxy). Settlement: L1 `RollupSettlement.submitBatch` when `L1_RPC`, `SETTLEMENT_ADDRESS`, and `L1_CHAIN_ID` are configured and the address has code; otherwise mock proofs under `l2/data/proofs/`, or fail closed if `L1_RPC` is set but the address is missing. The prover never deploys. Voters do not pay gas. [`docs/L2.md`](./docs/L2.md). After Node tally, certify the **tally hash** on Ethereum when `L1_RPC` / `L1_TALLY_MIRROR_ADDRESS` / `L1_PUBLISHER_PRIVATE_KEY` are set; unset env is a no-op. [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ```bash
 export L2_RPC_PORT=8546
@@ -358,12 +360,15 @@ RP_ID=localhost
 WEBAUTHN_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 PUBLIC_BASE_URL=
 ADMIN_HANDLE=admin
+# Platform super admin contact email. Empty = leave the stored address.
+# Invalid refuses to start. Runtime only (not baked into the image).
+SUPER_ADMIN_EMAIL=
 DISCLOSURE_INTERVAL_SECONDS=3600
 ALLOW_DEV_LOGIN=
 ALLOW_SMART_CARD_MOCK=
 ALLOW_CIVIC_ID_MOCK=
 
-# --- AWS SES (email MFA + Terms PDF). Empty = local demo, no outbound mail. ---
+# --- AWS SES (email MFA, Terms PDF, sign-in terms notice, /feedback). Empty = local demo, no outbound mail. ---
 SES_FROM_ADDRESS=
 AWS_REGION=
 AWS_ACCESS_KEY_ID=
@@ -372,6 +377,10 @@ SES_CONFIGURATION_SET=
 SES_ENDPOINT=
 SES_DRY_RUN=
 REQUIRE_EMAIL_MFA=
+FEEDBACK_RATE_WINDOW_SECONDS=3600
+FEEDBACK_MIN_SUBMIT_MS=3000
+FEEDBACK_MAX_BODY_BYTES=16384
+TRUST_PROXY=
 
 # --- civil credential connector. Empty secret = manual officer review. ---
 CREDENTIAL_PROVIDER_SECRET=
@@ -422,7 +431,9 @@ ARCHIVE_EXPLORER_SNAPSHOT=0
 | --- | --- |
 | `VOTE_FQDN` | The subdomain this body creates for voting, e.g. `vote.domain.tld`. That hostname is the voting authority (passkeys, browser origin, official links). Empty on a local demo. |
 | `RP_ID`, `WEBAUTHN_ORIGINS`, `PUBLIC_BASE_URL` | Optional once `VOTE_FQDN` is set. The Node derives the relying party, the `https://` origin, and the official base URL from that hostname. Set `RP_ID` only to pin a different public parent hostname. |
-| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA, Terms PDF mail, and `/feedback` to the platform super admin. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. `SES_DRY_RUN=1` captures mail and does not send. Feedback also needs that person's primary or contact email; if it is missing the Node refuses the note |
+| `ADMIN_HANDLE` | Handle of the seeded `platform_super_admin` when none exists. Default `admin` |
+| `SUPER_ADMIN_EMAIL` | Contact email written onto that person at process start. Empty leaves the stored address. The active writer applies it on every boot. `/feedback` delivers there |
+| `SES_FROM_ADDRESS`, `AWS_REGION` | Email MFA, Terms PDF mail (on accept, and once per member per plain-text hash on sign-in), and `/feedback` to the platform super admin. Leave AWS keys empty to use the host IAM role; otherwise set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. `SES_DRY_RUN=1` captures feedback and does not call SES. `PUBLIC_BASE_URL` is the origin of the sign-in terms link. `FEEDBACK_RATE_WINDOW_SECONDS` defaults to `3600` and cannot be shorter (one accepted note per IP per hour) |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | Pin the **shared** factory / inbox / verifier. Env wins over `/office/site`. Do not run `DeployLocal` again for a new city |
 | `RELAYER_PRIVATE_KEY` | This host’s relayer (factory create + vote relay). Never a mainnet key in git |
 | `CREDENTIAL_PROVIDER_SECRET` | Optional later DMV / eID webhook. Unset = officers review credentials by hand |

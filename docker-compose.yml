@@ -25,6 +25,7 @@ services:
     container_name: zk-voting-node
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     ports:
       - "${ZK_VOTING_PORT:-3000}:3000"
     environment:
@@ -41,6 +42,8 @@ services:
       RP_ID: ${RP_ID:-localhost}
       WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      # Runtime only. Do not bake this into the image. Empty leaves contactEmail alone.
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
       ELECTION_FACTORY_ADDRESS: ${ELECTION_FACTORY_ADDRESS:-}
       VERIFIER_ADDRESS: ${VERIFIER_ADDRESS:-}
@@ -57,6 +60,10 @@ services:
       SES_ENDPOINT: ${SES_ENDPOINT:-}
       SES_DRY_RUN: ${SES_DRY_RUN:-}
       REQUIRE_EMAIL_MFA: ${REQUIRE_EMAIL_MFA:-}
+      FEEDBACK_RATE_WINDOW_SECONDS: ${FEEDBACK_RATE_WINDOW_SECONDS:-3600}
+      FEEDBACK_MIN_SUBMIT_MS: ${FEEDBACK_MIN_SUBMIT_MS:-3000}
+      FEEDBACK_MAX_BODY_BYTES: ${FEEDBACK_MAX_BODY_BYTES:-16384}
+      TRUST_PROXY: ${TRUST_PROXY:-}
       CREDENTIAL_PROVIDER_SECRET: ${CREDENTIAL_PROVIDER_SECRET:-}
       CREDENTIAL_PROVIDER_ID: ${CREDENTIAL_PROVIDER_ID:-manual}
       RECEIPT_PDF_SECRET: ${RECEIPT_PDF_SECRET:-}
@@ -96,6 +103,7 @@ services:
     container_name: zk-voting-l2
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     command: ["node", "sequencer/index.mjs"]
     ports:
       - "${L2_RPC_PORT:-8546}:8546"
@@ -135,6 +143,7 @@ services:
     container_name: zk-voting-prover
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     command: ["node", "prover/index.mjs"]
     environment:
       L2_RPC_URL: http://l2:8546
@@ -145,6 +154,7 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
       L1_RPC: ${L1_RPC:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
       SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
       PRIVATE_KEY: ${PRIVATE_KEY:-}
     volumes:
@@ -176,6 +186,7 @@ services:
     container_name: zk-voting-archive
     restart: unless-stopped
     init: true
+    stop_grace_period: 30s
     command: ["node", "archive/cli.mjs", "daemon"]
     environment:
       L2_DATA_DIR: /data

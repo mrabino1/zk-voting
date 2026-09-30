@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { WriterLease } from '../lease/lease.mjs';
 import { loadArchiveConfig } from './config.mjs';
 import { restoreHour, runArchiveJob } from './job.mjs';
 
@@ -75,15 +76,49 @@ async function cmdRestore() {
   console.log(JSON.stringify(result, null, 2));
 }
 
+function sleepInterruptible(ms, shouldStop) {
+  const step = 200;
+  let left = ms;
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (shouldStop() || left <= 0) {
+        resolve();
+        return;
+      }
+      const slice = Math.min(step, left);
+      left -= slice;
+      setTimeout(tick, slice);
+    };
+    tick();
+  });
+}
+
 async function cmdDaemon() {
   const cfg = loadArchiveConfig();
   const intervalMs = cfg.intervalSeconds * 1000;
+  const lease = new WriterLease({ dataDir: cfg.dataDir, role: 'archive' });
+  let stop = false;
+  const requestStop = () => {
+    stop = true;
+  };
+  process.on('SIGTERM', requestStop);
+  process.on('SIGINT', requestStop);
   console.log(
     `Republic L2 archive daemon  enabled=${cfg.enabled}  interval=${cfg.intervalSeconds}s  dataDir=${cfg.dataDir}`,
   );
-  for (;;) {
+  while (!stop) {
     try {
-      const result = await runArchiveJob({ config: loadArchiveConfig() });
+      if (!lease.holds()) {
+        const got = lease.tryAcquire();
+        if (!got.acquired) {
+          console.log('archive standby; another container holds the writer lease');
+          await sleepInterruptible(lease.pollMs, () => stop);
+          continue;
+        }
+        lease.startHeartbeat();
+        console.log(`archive active epoch=${got.epoch}`);
+      }
+      const result = await runArchiveJob({ config: loadArchiveConfig(), writerLease: lease });
       if (result.skipped) {
         console.log(`archive skipped: ${result.reason}`);
       } else {
@@ -98,8 +133,11 @@ async function cmdDaemon() {
     } catch (err) {
       console.error('archive daemon tick failed:', err.message || err);
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
+    if (!stop) await sleepInterruptible(intervalMs, () => stop);
   }
+  lease.release();
+  console.log('archive stopped');
+  process.exit(0);
 }
 
 const cmd = process.argv[2] || 'archive';

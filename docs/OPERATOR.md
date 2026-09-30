@@ -107,6 +107,23 @@ The Node image installs the npm **workspaces** from the repository root (`@zk-vo
 
 Do not bake `RELAYER_PRIVATE_KEY`, prover `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY`, or paymaster keys into the image.
 
+### Coolify rolling update
+
+Old and new containers overlap. They must mount the **same** `node-data` and `l2-data` volumes on **one** host. Each stateful process takes a file lease (`l2/lease/lease.mjs`) before it writes. The new container starts **standby**: `/health` is HTTP 200 with `ok: true` and `"mode":"standby"`. It does not produce blocks, prove, prune, ingest, or mutate the store. Do not configure Coolify to require `mode=active` — that deadlocks the rollout. On SIGTERM the old container flushes, releases the lease, and exits 0 inside `stop_grace_period: 30s`. The standby polls and takes over. A crash is taken over after the lease TTL (default 8s).
+
+Skip-empty blocks stay on (`L2_SKIP_EMPTY_BLOCKS=1`). Only the sequencer lease holder runs `tickProducer`, so only one process seals the hourly chain heartbeat. Archive stays on (`ARCHIVE_ENABLED=1`). Only the archive lease holder uploads or prunes; an empty bucket warns and does not delete local blocks.
+
+| Coolify setting | Value |
+| --- | --- |
+| Strategy | Rolling update (start new, wait healthy, stop old) |
+| Node health | `http://127.0.0.1:3000/health` — success is HTTP 200 and `ok` is not false |
+| L2 health | `http://127.0.0.1:8546/health` — same success rule |
+| Grace | 30 seconds |
+| Volumes | Persistent `node-data` and `l2-data` already attached to this host. Not a new volume per container |
+| Two hosts | Not supported. File locks do not cross hosts. Stop the old container first |
+
+Clients retry HTTP 503 `maintenance handover` (`Retry-After: 2`). Full failure modes, fencing, and the one-time L1 deploy: [`ROLLING_UPDATES.md`](./ROLLING_UPDATES.md). Smoke the overlap with `docker-compose.rolling.yml` (`l2-next` on 8547, `node-next` on 3001).
+
 ### Forked jurisdiction Nodes
 
 Forking this Node is **intentional**. Paste the [copy-paste credentials](../README.md#copy-paste-credentials) block (or copy [`.env.example`](../.env.example)), set `VOTE_FQDN` to the voting subdomain (below), set SES / AWS keys (or the host IAM role), and pin `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, and `VERIFIER_ADDRESS` from the **shared** deploy. Do not run `DeployLocal` again for a new city. Env wins over `/office/site`. Root README: [Intentional forking](../README.md#intentional-forking).
@@ -204,7 +221,18 @@ npm run start        # production-style Node process
 npm test -w apps/node
 ```
 
-Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+Expect `GET /health`. Public pages: `/`, `/vote/:id` (UUID or short code), `/v/:shortCode`, `/e/:shortCode`, `/register`, `/elections/:id/info`, `/elections/:id/results`, `/outcomes`, `/outcomes/:id`, `/outcomes/verify`, `/receipt`, `/feedback`, `/admin`, `/back-office`, `/explorer`. Vanilla JS, not Vite/React. Every page footer: **NOT FOR PROFIT**.
+
+### Platform super admin
+
+On an empty store the Node seeds one `platform_super_admin`. A later boot does not create a second one. Register that handle at `/register` so the person can sign in.
+
+`SUPER_ADMIN_EMAIL` is read when the process starts. It is not a Docker build arg and it is not baked into the image. An empty value leaves `contactEmail` as it was set in the app. A non-empty value must be a valid email (the same check as sign-in). Anything else refuses to start. The active writer writes that address onto the existing super admin on every boot, so a new value rotates the inbox. A standby process does not write the store. When it takes the writer lease, it applies the env then. Info logs show a masked address, not the full one. `/feedback` delivers to that `contactEmail`.
+
+| Env | Role |
+| --- | --- |
+| `ADMIN_HANDLE` | Handle seeded as `platform_super_admin` when the store has none. Default `admin`. Does not add another user if a super admin already exists. |
+| `SUPER_ADMIN_EMAIL` | Contact email for that person. Empty: leave `contactEmail` unchanged. Set: the active writer stores it on every boot. Invalid: the process refuses to start. Runtime env only. |
 
 ### Creating elections (chain vs demo)
 
@@ -391,27 +419,10 @@ After `cutoffTime` has fully expired **and** a certified tally is posted, the No
 | `SES_FROM_ADDRESS` | From address (required to send) |
 | `AWS_REGION` (alias `SES_REGION`) | SES region |
 | `SES_CONFIGURATION_SET` | Optional SESv2 configuration set |
-| `SES_ENDPOINT` | Optional SES endpoint override (local stack). Empty uses the AWS default |
-| `SES_DRY_RUN` | `1` captures the message and does not call SES. Use this to check `/feedback` without sending |
-
-### Feedback (`/feedback`)
-
-Public page `/feedback` (footer link on the voter shell, admin, back office, and explorer). A person may send a note: optional name, optional reply-to email, a category, and a message (4,000 characters). A checkbox is required, in the browser and on `POST /api/feedback`: any and all feedback becomes the property of the project's legal owner. The acceptance timestamp, terms version, and PDF SHA-256 are written into the operator email and one info log line. The message body is not logged at info level and is not stored in `republic.json`.
-
-The message is sent with the same AWS SES client as MFA and the Terms PDF (`SES_FROM_ADDRESS`, `AWS_REGION`, optional `SES_CONFIGURATION_SET`, `SES_ENDPOINT`, `SES_DRY_RUN`). The To address is the platform super admin (the domain operator): that person's primary email, or their contact email if they have no primary. If neither is set, the Node **refuses** the request (`503`, `FEEDBACK_NOT_CONFIGURED`), logs a warning, and shows a friendly message. It does not drop the note silently. A platform operator who is signed in also sees that warning on `/feedback`.
-
-Reply-To is set only when the optional address passes the same email check as identity mail. User text is escaped in the HTML part. The mail is not a vote receipt: no voter identity and no election data.
-
-Anti-spam on `POST /api/feedback`: 5 requests per 15 minutes per connecting address, a honeypot field (`website`), a 3 second minimum time from `startedAt`, a 16 KiB JSON body cap, and control characters stripped from the fields. These limits are code defaults (`feedbackMaxPerWindow`, `feedbackWindowMs`, `feedbackMinSubmitMs`, `feedbackMaxBodyBytes`, `feedbackMaxMessageChars` on the Node config). They are not required host env.
-
-To deliver feedback in production:
-
-1. Verify the From address in SES in `AWS_REGION`.
-2. Set `SES_FROM_ADDRESS` and `AWS_REGION`. Leave `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` empty to use the host IAM role.
-3. Set a primary email or a contact email on the `platform_super_admin` person (the seeded `ADMIN_HANDLE`).
-4. Leave `SES_DRY_RUN` empty. Set it to `1` only when you want a capture and no SES call.
 
 SESv2 Simple content cannot attach files. The Node sends **raw MIME** (`multipart/mixed`) with `republic-terms.pdf`. A second accept of the same PDF hash does not resend (`already_sent_this_hash`). If SES is unset, the Node still records the accept and **captures** the message in-process (tests use `mailer.lastTermsPdf()`, same pattern as MFA OTP capture).
+
+**Terms updated (sign-in).** `plainTextSha256` is SHA-256 of the UTF-8 `/terms` plain text (the markdown body after front matter; same digest as `markdownSha256`). Each member stores `termsNotifiedHash` and `termsNotifiedAt`. On the next sign-in (dev login, or after email MFA), if that hash differs from the current plain-text hash, the same AWS SES mailer sends one message: the terms PDF attached and a link to `/terms`. It is sent once per member per hash. The hash and timestamp are written only after the send succeeds. A send failure is logged as `userId` plus `reason=send_failed` (no address, no message body, no credentials) and sign-in still succeeds; the next sign-in tries again. A member with no email is skipped and not marked notified. Opening an older `republic.json` backfills the two fields to null and raises `meta.version` to 8. No new environment variables: `SES_FROM_ADDRESS`, `AWS_REGION`, and optional `PUBLIC_BASE_URL` (the link origin).
 
 Store (private `apps/node/data/republic.json`, gitignored):
 
@@ -419,9 +430,35 @@ Store (private `apps/node/data/republic.json`, gitignored):
 termsAcceptances: [{ id, action: "accept"|"view", userId, handle, email, sessionId,
   termsVersion, pdfSha256, markdownSha256, hashOf: "pdf-bytes", emailed, emailedAt, createdAt }]
 users[].termsHash / termsVersion / termsAcceptedAt / termsEmailSentAt / termsEmailHash
+users[].termsNotifiedHash / termsNotifiedAt
 ```
 
-Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted.
+Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was current when the person accepted. Version 2 adds the feedback assignment clause. A person who accepted version 1 keeps that PDF hash; the next acceptance stores the new one.
+
+### Feedback (`/feedback`)
+
+Public page `/feedback` (nav and footer on the voter SPA, and the footer on admin, back office, and the explorer). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `republic.json`, not written to civic L2, and not logged at info level.
+
+**Inbox.** The To address is the `platform_super_admin` person’s `contactEmail`, or that person’s sign-in email if no contact email is set. Set `SUPER_ADMIN_EMAIL` at deploy time (see [Platform super admin](#platform-super-admin)) to fill `contactEmail` on boot. If neither address is set, the Node **fails closed**: it logs a warning naming the missing super-admin email, returns `503 FEEDBACK_UNAVAILABLE`, and does not drop the message silently. The visitor sees “Feedback cannot be delivered right now. Please try again later.” The same `503` is returned when SES is not configured (`SES_FROM_ADDRESS` and `AWS_REGION` both required) unless `SES_DRY_RUN=1` with those two set (capture, no SES call) or the process is allowed to capture mail (`NODE_ENV=test` or `ALLOW_CAPTURE_MAILER=1`).
+
+The visitor must tick the checkbox that feedback becomes the property of the project’s legal owner. The server rejects a missing tick with `400 ASSIGNMENT_REQUIRED`. The acceptance record (timestamp, terms version, PDF SHA-256, markdown SHA-256) is in the email and on one info log line. That log line does not include the message, the name, or the reply address.
+
+| Env | Role |
+| --- | --- |
+| `SES_FROM_ADDRESS` | From address. Required to deliver, including dry-run. |
+| `AWS_REGION` (alias `SES_REGION`) | SES region. Required with the From address. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Optional. Empty uses the host IAM role. |
+| `SES_CONFIGURATION_SET` | Optional SESv2 configuration set. |
+| `SES_ENDPOINT` | Optional SESv2 endpoint override. |
+| `SES_DRY_RUN` | `1` captures the message and does not call SES. Still requires From + region. |
+| `FEEDBACK_RATE_WINDOW_SECONDS` | Gap between accepted submissions from one IP. Default `3600`. Values below `3600` are raised to `3600` (at most one per hour). A larger value waits longer. |
+| `FEEDBACK_MIN_SUBMIT_MS` | Minimum time from form open to submit. Default `3000`. |
+| `FEEDBACK_MAX_BODY_BYTES` | Maximum POST body. Default `16384`. The message is also capped at 4,000 characters. |
+| `TRUST_PROXY` | Set to `1` when a reverse proxy is the TCP peer, so the limit uses the client address. Unset keys the limit on the socket peer. |
+
+**Rate limit.** One **accepted** submission per IP per window, in memory on that Node process (not shared across replicas, cleared on restart). The second accepted-path submit returns `429` with `Retry-After` (seconds) and “You can send another message in about N minutes”. A missing checkbox, honeypot hit, too-fast submit, oversized body, or fail-closed delivery does **not** consume the slot. Another IP is not affected.
+
+Reply-To is set only when the optional address validates. Names, the message, and request metadata are stripped of control characters. HTML in the mail is escaped. The email may include User-Agent and Accept-Language. It does not include an IP address, a cookie, a voter id, or any election field.
 
 ---
 
@@ -453,6 +490,20 @@ This is the default. The Node **still tallies**. Certification is a documented n
 | `L1_PUBLISHER_PRIVATE_KEY` (alias `L1_PRIVATE_KEY`) | yes | Key that is `admin` or `setPublisher`'d on the mirror. **Not** the L2 prover `PRIVATE_KEY`. |
 | `L1_SETTLEMENT_ADDRESS` (alias `SETTLEMENT`) | no | `RollupSettlement` — attach current L2 state root |
 | `L1_CHAIN_ID` | no | Defaults to whatever the RPC reports |
+
+Deploy the mirror, settlement, and verifier **once** (Anvil, Sepolia, or mainnet). Container start and a rolling update only read the addresses. `npm run deploy:l1 -- --check` refuses when `SETTLEMENT_ADDRESS`, `VERIFIER_ADDRESS`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `ELECTION_FACTORY_ADDRESS`, or `BALLOT_INBOX_ADDRESS` is already set, or when `deployments/<chainId>.json` (or `DEPLOYMENTS_FILE`) has `"deployed": true`. `FORCE_REDEPLOY=1` overrides that and prints a warning. Do not set it on a live election. After broadcast, `npm run deploy:l1 -- --verify` checks `eth_getCode` and prints env lines. The prover fails closed when `L1_RPC` is set but `SETTLEMENT_ADDRESS` is missing, has no code, or `L1_CHAIN_ID` does not match. Only the prover that holds the writer lease submits. Runbook: [`ROLLING_UPDATES.md`](./ROLLING_UPDATES.md).
+
+```bash
+npm run deploy:l1 -- --check
+cd smart-contracts
+L2_FACTORY="$ELECTION_FACTORY_ADDRESS" forge script script/DeployL1.s.sol \
+  --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"
+# stdout includes TALLY_MIRROR=0x… SETTLEMENT=0x… L2_FACTORY=0x…
+# DeployL1 reverts MissingL2Factory if the shared factory is not set,
+# and AlreadyDeployed if an address env var or deployment record is set.
+```
+
+The historical one-shot (same script) is below. Prefer the check above so a second run cannot land new addresses.
 
 Deploy the mirror (Anvil or Sepolia):
 

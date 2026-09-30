@@ -1,0 +1,13 @@
+{
+  "deployed": false,
+  "chainId": null,
+  "note": "Template only. The real record lives in the data volume or DEPLOYMENTS_FILE and is not committed. App containers never deploy; they read addresses from the environment.",
+  "addresses": {
+    "SETTLEMENT_ADDRESS": "",
+    "VERIFIER_ADDRESS": "",
+    "L1_TALLY_MIRROR_ADDRESS": "",
+    "L1_SETTLEMENT_ADDRESS": "",
+    "ELECTION_FACTORY_ADDRESS": "",
+    "BALLOT_INBOX_ADDRESS": ""
+  }
+}

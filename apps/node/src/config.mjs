@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
+import { normalizeEmail } from './identity.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -13,13 +14,6 @@ function csv(value) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-}
-
-function positiveInt(value, fallback) {
-  if (value === undefined || value === null || value === '') return fallback;
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  return Math.floor(n);
 }
 
 function envFlag(value, fallback) {
@@ -57,6 +51,68 @@ export function normalizeVoteFqdn(value) {
     );
   }
   return host;
+}
+
+/** Hop count for Express `trust proxy`, or false when the TCP peer is the client. */
+export function resolveTrustProxy(value) {
+  if (value === undefined || value === null || value === '') return false;
+  if (value === true) return 1;
+  if (value === false) return false;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.floor(value);
+  const s = String(value).trim().toLowerCase();
+  if (!s || ['0', 'false', 'no', 'off'].includes(s)) return false;
+  if (['1', 'true', 'yes', 'on'].includes(s)) return 1;
+  const n = Number(s);
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return false;
+}
+
+/**
+ * Seconds between accepted /feedback submissions for one IP.
+ * The floor is 3600: one per hour is the maximum rate.
+ */
+export function resolveFeedbackRateWindow(value) {
+  if (value === undefined || value === null || value === '') return 3600;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 3600;
+  return Math.max(3600, Math.floor(n));
+}
+
+export function resolveFeedbackMinSubmitMs(value) {
+  if (value === undefined || value === null || value === '') return 3000;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 3000;
+  return Math.min(60_000, Math.floor(n));
+}
+
+export function resolveFeedbackMaxBodyBytes(value) {
+  const fallback = 16 * 1024;
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1024) return fallback;
+  return Math.min(256 * 1024, Math.floor(n));
+}
+
+/**
+ * Deploy-time contact email for the seeded platform super admin.
+ * Empty (or whitespace) leaves the stored contactEmail alone.
+ * Any other value must pass `normalizeEmail` or startup fails closed.
+ * The address is read from the process environment at runtime. It is not
+ * baked into the image.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function resolveSuperAdminEmail(value) {
+  if (value === undefined || value === null) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  try {
+    return normalizeEmail(raw);
+  } catch {
+    throw new Error(
+      'SUPER_ADMIN_EMAIL is set but is not a valid email address. Refusing to start.',
+    );
+  }
 }
 
 function isDevHost(value) {
@@ -216,11 +272,6 @@ export function getConfig(overrides = {}) {
     mfaCookie: 'republic.mfa',
     mfaTtlMs: 10 * 60 * 1000,
     quiet: process.env.NODE_ENV === 'test',
-    feedbackMinSubmitMs: positiveInt(process.env.FEEDBACK_MIN_SUBMIT_MS, 3000),
-    feedbackWindowMs: positiveInt(process.env.FEEDBACK_WINDOW_MS, 15 * 60 * 1000),
-    feedbackMaxPerWindow: positiveInt(process.env.FEEDBACK_MAX_PER_WINDOW, 5),
-    feedbackMaxBodyBytes: positiveInt(process.env.FEEDBACK_MAX_BODY_BYTES, 16 * 1024),
-    feedbackMaxMessageChars: positiveInt(process.env.FEEDBACK_MAX_MESSAGE_CHARS, 4000),
     publicDir: path.join(PKG_ROOT, 'public'),
     distDir: path.join(PKG_ROOT, 'dist'),
     provingPath,
@@ -239,6 +290,24 @@ export function getConfig(overrides = {}) {
   config.rpID = authority.rpID;
   config.origins = authority.origins;
   config.publicBaseUrl = authority.publicBaseUrl;
+  config.trustProxy = resolveTrustProxy(
+    overrides.trustProxy !== undefined ? overrides.trustProxy : process.env.TRUST_PROXY,
+  );
+  config.feedbackRateWindowSeconds = resolveFeedbackRateWindow(
+    overrides.feedbackRateWindowSeconds !== undefined
+      ? overrides.feedbackRateWindowSeconds
+      : process.env.FEEDBACK_RATE_WINDOW_SECONDS,
+  );
+  config.feedbackMinSubmitMs = resolveFeedbackMinSubmitMs(
+    overrides.feedbackMinSubmitMs !== undefined
+      ? overrides.feedbackMinSubmitMs
+      : process.env.FEEDBACK_MIN_SUBMIT_MS,
+  );
+  config.feedbackMaxBodyBytes = resolveFeedbackMaxBodyBytes(
+    overrides.feedbackMaxBodyBytes !== undefined
+      ? overrides.feedbackMaxBodyBytes
+      : process.env.FEEDBACK_MAX_BODY_BYTES,
+  );
   config.votingToken = resolveVotingToken({
     address:
       overrides.votingTokenAddress !== undefined
@@ -250,6 +319,11 @@ export function getConfig(overrides = {}) {
         : process.env.VOTING_TOKEN_CHAIN_ID,
   });
   config.pollsReady = Boolean(config.pollsEnabled) && config.votingToken.configured;
+  config.superAdminEmail = resolveSuperAdminEmail(
+    Object.prototype.hasOwnProperty.call(overrides, 'superAdminEmail')
+      ? overrides.superAdminEmail
+      : process.env.SUPER_ADMIN_EMAIL,
+  );
   return config;
 }
 

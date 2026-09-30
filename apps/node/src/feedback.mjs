@@ -1,9 +1,14 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Public feedback is emailed to the platform super admin. It is not a ballot
-// and it is not stored as a personal-data record.
+// Public /feedback: validate, rate-limit, and address the platform operator.
+// The message body is not written to the JSON store and is not logged.
 
 import { normalizeEmail, userEmail } from './identity.mjs';
-import { isPlatformOperator } from './roles.mjs';
+import { getTermsDocument } from './terms.mjs';
+
+export const FEEDBACK_PATH = '/feedback';
+export const FEEDBACK_MESSAGE_MAX = 4000;
+export const FEEDBACK_NAME_MAX = 120;
+export const FEEDBACK_MAX_PER_WINDOW = 1;
 
 export const FEEDBACK_CATEGORIES = Object.freeze([
   'general',
@@ -11,205 +16,249 @@ export const FEEDBACK_CATEGORIES = Object.freeze([
   'privacy',
   'defect',
   'suggestion',
-  'other',
 ]);
 
-export const FEEDBACK_USER_UNAVAILABLE =
-  'Feedback cannot be sent right now. The host has not finished mail setup. Nothing was saved.';
+export const FEEDBACK_CATEGORY_LABELS = Object.freeze({
+  general: 'General',
+  accessibility: 'Accessibility',
+  privacy: 'Privacy',
+  defect: 'Something is broken',
+  suggestion: 'Suggestion',
+});
 
-export const FEEDBACK_OPERATOR_WARNING =
-  'Platform super admin has no email. Set the primary email or contact email on the platform_super_admin person (the domain operator). Feedback is refused until that address exists.';
+export const FEEDBACK_USER_UNAVAILABLE =
+  'Feedback cannot be delivered right now. Please try again later.';
+
+export const FEEDBACK_INBOX_WARNING =
+  '[republic] feedback refused: the platform super admin has no contact email and no sign-in email. Set one on that person so /feedback can be delivered. The message was not sent.';
 
 export const FEEDBACK_SES_WARNING =
-  'AWS SES is not configured for feedback. Set SES_FROM_ADDRESS and AWS_REGION (SES_DRY_RUN=1 captures mail without sending). Feedback was not delivered.';
+  '[republic] feedback refused: AWS SES is not configured. Set SES_FROM_ADDRESS and AWS_REGION. SES_DRY_RUN=1 with both still captures the message and does not call SES. The message was not sent.';
 
-const MAX_AGE_MS = 2 * 60 * 60 * 1000;
-const CLOCK_SKEW_MS = 5000;
-
-export function stripControls(value, { keepNewlines = false, max = 4000 } = {}) {
-  let s = String(value ?? '');
+export function stripControls(value, { keepNewlines = false } = {}) {
+  const raw = String(value ?? '');
   if (keepNewlines) {
-    s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
-    s = s.replace(/[\u2028\u2029]/g, '\n');
-  } else {
-    s = s.replace(/[\u0000-\u001F\u007F\u2028\u2029]/g, '');
+    return raw
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
   }
-  s = s.trim();
-  if (max != null && s.length > max) s = s.slice(0, max);
-  return s;
+  return raw.replace(/[\u0000-\u001F\u007F]/g, '');
 }
 
-function validEmail(value) {
-  try {
-    return normalizeEmail(value);
-  } catch {
-    return null;
+export function feedbackNowMs(config) {
+  if (config && typeof config.feedbackNowMs === 'function') {
+    const n = Number(config.feedbackNowMs());
+    if (Number.isFinite(n)) return n;
   }
+  return Date.now();
+}
+
+export function normalizeClientIp(value) {
+  let ip = stripControls(value).trim();
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  ip = ip.split(',')[0].trim();
+  return ip.slice(0, 80);
+}
+
+export function feedbackClientIp(req, config) {
+  if (config && typeof config.feedbackClientIp === 'function') {
+    const custom = normalizeClientIp(config.feedbackClientIp(req));
+    if (custom) return custom;
+  }
+  const peer = req?.ip || req?.socket?.remoteAddress || '';
+  return normalizeClientIp(peer) || 'unknown';
 }
 
 /**
- * Destination for operator mail. Prefer the seeded super admin's primary
- * email, then that person's contact email, then any other super admin.
- * Never returns a voter address.
+ * One accepted submission per IP per window. The map lives on the app
+ * instance so other visitors, and other Node processes, do not share it.
  */
-export function resolveOperatorInbox(store, config = {}) {
-  const users = Array.isArray(store?.data?.users) ? store.data.users : [];
-  const supers = users.filter((user) => user && user.role === 'platform_super_admin');
-  const preferred = String(config.adminHandle || 'admin').trim().toLowerCase();
-  const ordered = supers.slice().sort((a, b) => {
-    const ap = String(a.handle || '').trim().toLowerCase() === preferred ? 0 : 1;
-    const bp = String(b.handle || '').trim().toLowerCase() === preferred ? 0 : 1;
-    if (ap !== bp) return ap - bp;
-    return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-  });
-  for (const user of ordered) {
-    const primary = userEmail(user);
-    if (primary) return { email: primary, source: 'primary', handle: user.handle || '' };
-    const contact = validEmail(user.contactEmail);
-    if (contact) return { email: contact, source: 'contact', handle: user.handle || '' };
-  }
-  return null;
-}
-
-export function feedbackDeliveryMode(config = {}) {
-  const sesReady = Boolean(config.sesFromAddress && config.awsRegion);
-  if (config.sesDryRun) return { mode: 'dry-run', sesReady };
-  if (sesReady) return { mode: 'ses', sesReady };
-  if (config.captureEmail || config.allowCaptureMailer) return { mode: 'captured', sesReady };
-  return { mode: 'unavailable', sesReady };
-}
-
-export function createFeedbackLimiter({ windowMs = 15 * 60 * 1000, max = 5, now = () => Date.now() } = {}) {
-  const hits = new Map();
+export function createFeedbackRateLimiter() {
+  const acceptedAt = new Map();
   return {
-    check(key) {
-      const id = String(key || 'unknown');
-      const t = now();
-      const list = (hits.get(id) || []).filter((ts) => t - ts < windowMs);
-      if (list.length >= max) {
-        const retryAfter = Math.max(1, Math.ceil((list[0] + windowMs - t) / 1000));
-        hits.set(id, list);
-        return { ok: false, retryAfter };
-      }
-      list.push(t);
-      hits.set(id, list);
-      return { ok: true };
+    retryAfterSeconds(ip, nowMs, windowMs) {
+      const prev = acceptedAt.get(ip);
+      if (prev == null) return 0;
+      const elapsed = nowMs - prev;
+      if (elapsed >= windowMs) return 0;
+      return Math.max(1, Math.ceil((windowMs - elapsed) / 1000));
+    },
+    commit(ip, nowMs) {
+      acceptedAt.set(ip, nowMs);
     },
   };
 }
 
-export function clientAddress(req) {
-  const raw = req?.ip || req?.socket?.remoteAddress || '';
-  return stripControls(raw, { max: 80 }) || 'unknown';
+export function retryCopy(retryAfterSeconds) {
+  const minutes = Math.max(1, Math.ceil(Number(retryAfterSeconds) / 60));
+  const unit = minutes === 1 ? 'minute' : 'minutes';
+  return {
+    minutes,
+    error: `You can send another message in about ${minutes} ${unit}`,
+  };
 }
 
 /**
- * Validate a feedback body. Does not log and does not include the message
- * in the returned error text.
+ * Platform super admin inbox: contact email, then the sign-in email.
+ * No address means fail closed.
  */
-export function parseFeedbackBody(body, config = {}, now = Date.now()) {
-  const src = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
-  const honeypot = stripControls(src.website ?? src.company ?? '', { max: 500 });
-  if (honeypot) {
-    return { ok: false, status: 400, code: 'HONEYPOT', error: 'Feedback could not be sent.' };
+export function resolvePlatformOperatorEmail(store) {
+  const users = typeof store?.listUsers === 'function' ? store.listUsers() : [];
+  const supers = users.filter((user) => user && user.role === 'platform_super_admin');
+  for (const user of supers) {
+    const contact = String(user.contactEmail || '').trim();
+    if (contact) {
+      try {
+        return normalizeEmail(contact);
+      } catch {
+        /* fall through to the sign-in email */
+      }
+    }
+    const identity = userEmail(user);
+    if (identity) return identity;
   }
+  return null;
+}
 
-  const minMs = Number(config.feedbackMinSubmitMs ?? 3000);
-  const started = Number(src.startedAt);
-  if (!Number.isFinite(started)) {
-    return { ok: false, status: 400, code: 'FEEDBACK_TOO_FAST', error: 'Please wait a moment and try again.' };
-  }
-  const elapsed = now - started;
-  if (elapsed < minMs || started > now + CLOCK_SKEW_MS || elapsed > MAX_AGE_MS) {
-    return { ok: false, status: 400, code: 'FEEDBACK_TOO_FAST', error: 'Please wait a moment and try again.' };
-  }
+/** ses, dry-run, in-process capture, or unconfigured (fail closed). */
+export function feedbackDeliveryMode(config = {}) {
+  const sesReady = Boolean(config.sesFromAddress && config.awsRegion);
+  if (sesReady && config.sesDryRun) return 'dry-run';
+  if (sesReady) return 'ses';
+  if (config.captureEmail || config.allowCaptureMailer) return 'capture';
+  return 'unconfigured';
+}
 
-  const ownership = src.ownershipAccepted;
-  const accepted =
-    ownership === true ||
-    ownership === 1 ||
-    ['true', '1', 'on', 'yes'].includes(String(ownership || '').trim().toLowerCase());
-  if (!accepted) {
+function affirmed(value) {
+  if (value === true || value === 1) return true;
+  const s = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  return s === 'true' || s === '1' || s === 'on' || s === 'yes';
+}
+
+function fieldError(id, message) {
+  return { id, message };
+}
+
+/**
+ * Validate a feedback body. Honeypot, checkbox, and other rejections
+ * return before the caller records a rate-limit hit.
+ */
+export function parseFeedbackSubmission(body, config, nowMs) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return {
       ok: false,
       status: 400,
-      code: 'FEEDBACK_OWNERSHIP_REQUIRED',
-      error: "Tick the box affirming that feedback becomes the property of the project's legal owner.",
+      code: 'VALIDATION',
+      error: 'Feedback was not sent.',
+      fields: [],
     };
   }
 
-  const category = stripControls(src.category, { max: 40 }).toLowerCase();
+  const honeypot = stripControls(body.website).trim();
+  if (honeypot) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'HONEYPOT',
+      error: 'Feedback was not sent.',
+      fields: [],
+    };
+  }
+
+  const fields = [];
+  if (!affirmed(body.assignmentAccepted)) {
+    fields.push(
+      fieldError(
+        'feedback-assignment',
+        "You must affirm that any and all feedback you submit becomes the property of the project's legal owner.",
+      ),
+    );
+  }
+
+  const category = stripControls(body.category).trim();
   if (!FEEDBACK_CATEGORIES.includes(category)) {
-    return { ok: false, status: 400, code: 'FEEDBACK_CATEGORY', error: 'Choose a category.' };
+    fields.push(fieldError('feedback-category', 'Choose a category.'));
   }
 
-  const maxChars = Number(config.feedbackMaxMessageChars ?? 4000);
-  const messageRaw = stripControls(src.message, { keepNewlines: true, max: maxChars + 1 });
-  if (!messageRaw) {
-    return { ok: false, status: 400, code: 'FEEDBACK_MESSAGE', error: 'Enter a message.' };
-  }
-  if (messageRaw.length > maxChars) {
-    return { ok: false, status: 400, code: 'FEEDBACK_MESSAGE_LENGTH', error: 'The message is too long.' };
-  }
-
-  const name = stripControls(src.name, { max: 120 });
-  if (String(src.name || '').length > 0 && stripControls(src.name, { max: 10_000 }).length > 80) {
-    return { ok: false, status: 400, code: 'FEEDBACK_NAME', error: 'That name is too long.' };
-  }
-  const nameCapped = name.slice(0, 80);
-
-  let replyTo = '';
-  const emailRaw = stripControls(src.email ?? src.replyTo, { max: 320 });
-  if (emailRaw) {
-    replyTo = validEmail(emailRaw) || '';
-    if (!replyTo) {
-      return { ok: false, status: 400, code: 'FEEDBACK_EMAIL', error: 'That reply-to email is not valid.' };
+  let name = null;
+  if (body.name != null && typeof body.name !== 'string') {
+    fields.push(fieldError('feedback-name', 'Name is not valid.'));
+  } else {
+    name = stripControls(body.name).trim();
+    if (name.length > FEEDBACK_NAME_MAX) {
+      fields.push(fieldError('feedback-name', 'Name is too long.'));
     }
+  }
+
+  let message = '';
+  if (body.message != null && typeof body.message !== 'string') {
+    fields.push(fieldError('feedback-message', 'Enter a message.'));
+  } else {
+    message = stripControls(body.message, { keepNewlines: true }).trim();
+    if (!message) fields.push(fieldError('feedback-message', 'Enter a message.'));
+    else if ([...message].length > FEEDBACK_MESSAGE_MAX) {
+      fields.push(fieldError('feedback-message', 'Message is too long.'));
+    }
+  }
+
+  let replyTo = null;
+  const replyRaw = body.replyTo == null ? '' : body.replyTo;
+  if (replyRaw != null && String(replyRaw).trim() !== '') {
+    if (typeof replyRaw !== 'string' || /[\u0000-\u001F\u007F]/.test(replyRaw)) {
+      fields.push(fieldError('feedback-email', 'Reply-to email is not valid.'));
+    } else {
+      try {
+        replyTo = normalizeEmail(replyRaw);
+      } catch {
+        fields.push(fieldError('feedback-email', 'Reply-to email is not valid.'));
+      }
+    }
+  }
+
+  const started = Number(body.startedAt);
+  const minMs = Number(config?.feedbackMinSubmitMs ?? 3000);
+  if (!Number.isFinite(started) || started > nowMs + 5000 || nowMs - started < minMs) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'TOO_FAST',
+      error: 'Please wait a moment and submit the form again.',
+      fields: [],
+    };
+  }
+
+  if (fields.length) {
+    const assignment = fields.find((item) => item.id === 'feedback-assignment');
+    return {
+      ok: false,
+      status: 400,
+      code: assignment && fields.length === 1 ? 'ASSIGNMENT_REQUIRED' : 'VALIDATION',
+      error: assignment && fields.length === 1 ? assignment.message : 'Feedback was not sent.',
+      fields,
+    };
   }
 
   return {
     ok: true,
     value: {
-      category,
-      message: messageRaw,
-      name: nameCapped,
+      name: name || '',
       replyTo,
-      ownershipAccepted: true,
+      category,
+      categoryLabel: FEEDBACK_CATEGORY_LABELS[category],
+      message,
     },
   };
 }
 
-export function operatorMaySeeWarning(user) {
-  return isPlatformOperator(user);
-}
-
-export function publicFeedbackStatus({ config, store, user, terms }) {
-  const inbox = resolveOperatorInbox(store, config);
-  const delivery = feedbackDeliveryMode(config);
-  const deliveryConfigured = Boolean(inbox) && delivery.mode !== 'unavailable';
-  const showWarning = operatorMaySeeWarning(user);
-  let operatorWarning = null;
-  if (showWarning && !inbox) operatorWarning = FEEDBACK_OPERATOR_WARNING;
-  else if (showWarning && delivery.mode === 'unavailable') operatorWarning = FEEDBACK_SES_WARNING;
+export function currentTermsAcceptance(nowMs) {
+  const doc = getTermsDocument();
   return {
-    nfp: true,
-    path: '/feedback',
-    categories: [...FEEDBACK_CATEGORIES],
-    maxMessageChars: Number(config.feedbackMaxMessageChars ?? 4000),
-    minSubmitMs: Number(config.feedbackMinSubmitMs ?? 3000),
-    deliveryConfigured,
-    termsVersion: terms?.version || null,
-    termsHash: terms?.pdfSha256 || null,
-    operatorWarning,
+    acceptedAt: new Date(nowMs).toISOString(),
+    termsVersion: String(doc.version),
+    termsPdfSha256: doc.pdfSha256,
+    termsMarkdownSha256: doc.markdownSha256,
   };
-}
-
-/** Acceptance line for the server log. No message, name, email, or address. */
-export function feedbackAcceptanceLog(record) {
-  return `[republic] feedback acceptance category=${record.category} termsVersion=${record.termsVersion} termsHash=${record.termsHash} acceptedAt=${record.acceptedAt}`;
-}
-
-export function feedbackRefusalLog(reason) {
-  return `[republic] feedback refused: ${reason}`;
 }
