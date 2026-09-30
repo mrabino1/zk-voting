@@ -106,6 +106,8 @@ describe('audience helpers and FAQ', () => {
     assert.equal(parseRoute(loc('/signin')).name, 'signin');
     assert.equal(parseRoute(loc('/me')).name, 'desk');
     assert.equal(parseRoute(loc('/app')).name, 'desk');
+    assert.equal(parseRoute(loc('/profile')).name, 'profile');
+    assert.equal(parseRoute(loc('/verify')).name, 'emailVerify');
     assert.equal(parseRoute(loc('/office')).name, 'office');
     assert.equal(parseRoute(loc('/office/pages')).name, 'officePages');
     assert.equal(parseRoute(loc('/office/site')).name, 'officeSite');
@@ -154,7 +156,7 @@ describe('audience helpers and FAQ', () => {
     const pub = mainNav('public').map((i) => i.label);
     assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Sign in', 'Register']);
     const voter = mainNav('registered').map((i) => i.label);
-    assert.deepEqual(voter, ['My desk', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API']);
+    assert.deepEqual(voter, ['My desk', 'Profile', 'Verify email', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API']);
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
@@ -198,7 +200,7 @@ describe('audience HTTP routes and admin gates', () => {
   });
 
   test('public SPA routes render HTML', async () => {
-    for (const url of ['/', '/public', '/about', '/faq', '/terms', '/receipt', '/outcomes', '/signin', '/me', '/app', '/register']) {
+    for (const url of ['/', '/public', '/about', '/faq', '/terms', '/receipt', '/outcomes', '/signin', '/me', '/app', '/profile', '/verify', '/register']) {
       const page = await api('GET', url);
       assert.equal(page.status, 200, url);
       assert.match(page.res.headers.get('content-type') || '', /html/, url);

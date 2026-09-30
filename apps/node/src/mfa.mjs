@@ -45,14 +45,19 @@ export function sessionPayload(user) {
   };
 }
 
-export function mfaPayload(rec) {
-  return {
+export function mfaPayload(rec, { revealEmail = false } = {}) {
+  const sent = Boolean(rec.sentAt);
+  const payload = {
     ok: true,
     verified: false,
     mfaRequired: true,
     needsEmail: Boolean(rec.needsEmail) && !rec.email,
     factor: rec.factor,
     emailHint: rec.email ? emailHint(rec.email) : null,
+    bindEmail: Boolean(rec.bindEmail),
+    codeSent: sent,
+    sentAt: sent ? rec.sentAt : null,
+    expiresAt: sent ? rec.expiresAt : null,
     purpose: rec.purpose || 'mfa',
     pinReset: rec.purpose === 'pin-reset',
     nfp: true,
@@ -65,6 +70,8 @@ export function mfaPayload(rec) {
           ? 'Enter the 6-digit code sent to your email to set a new vote PIN.'
           : 'Enter the 6-digit code sent to your email.',
   };
+  if (revealEmail && rec.email) payload.email = rec.email;
+  return payload;
 }
 
 export function createMfaService({ config, store, mailer, terms }) {
@@ -331,7 +338,10 @@ export function createMfaService({ config, store, mailer, terms }) {
   function status(req) {
     const rec = pendingFromReq(req);
     if (!rec) return { ok: true, mfaRequired: false, nfp: true };
-    return mfaPayload(rec);
+    const revealEmail = Boolean(
+      req.user && rec.userId && req.user.id === rec.userId && rec.bindEmail && rec.email,
+    );
+    return mfaPayload(rec, { revealEmail });
   }
 
   return {

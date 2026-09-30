@@ -45,6 +45,8 @@ export default {
     navApi: "API bot",
     navSignIn: "Connexion",
     navDesk: "Mon bureau",
+    navProfile: "Profil",
+    navVerify: "Vérifier l’e-mail",
     navPublic: "Public",
     session: "Session",
     officeBadge: "Sans but lucratif",

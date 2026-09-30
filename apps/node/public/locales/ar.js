@@ -46,6 +46,8 @@ export default {
     navApi: "واجهة البوت",
     navSignIn: "تسجيل الدخول",
     navDesk: "مكتبي",
+    navProfile: "الملف الشخصي",
+    navVerify: "التحقق من البريد",
     navPublic: "عام",
     session: "الجلسة",
     officeBadge: "غير ربحي",

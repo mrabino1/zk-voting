@@ -45,6 +45,8 @@ export default {
     navApi: "बॉट API",
     navSignIn: "साइन इन",
     navDesk: "मेरी डेस्क",
+    navProfile: "प्रोफ़ाइल",
+    navVerify: "ईमेल सत्यापित करें",
     navPublic: "सार्वजनिक",
     session: "सत्र",
     officeBadge: "गैर-लाभकारी",

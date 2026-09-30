@@ -51,7 +51,10 @@ export function renderEmailAccounts(h, identity, { busy, onPrimary, onRemove } =
         row.primary
           ? h("span", { class: "pill-primary", text: "Primary" })
           : h("span", { class: "field-hint", text: "Additional" }),
-        row.primary
+        row.verified
+          ? h("span", { class: "pill-status status-verified", text: "Verified" })
+          : h("span", { class: "pill-status status-unverified", text: "Unverified" }),
+        row.primary || !row.verified
           ? null
           : h("button", {
               class: "btn btn-secondary",

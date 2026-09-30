@@ -378,4 +378,52 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     const raw = await readFile(path.join(tmp, 'republic.json'), 'utf8');
     assert.doesNotMatch(raw, /X88888888/);
   });
+
+  test('signed-in email bind reveals the address on status; login MFA does not', async () => {
+    const session = {};
+    const login = await api('POST', '/api/auth/dev-login', {
+      body: { handle: 'extra-mail' },
+      jar: session,
+    });
+    assert.equal(login.status, 200, login.json?.error);
+
+    const start = await api('POST', '/api/identity/email/start', {
+      body: { email: 'extra@example.com' },
+      jar: session,
+    });
+    assert.equal(start.status, 200, start.json?.error);
+    assert.equal(start.json.email, 'extra@example.com');
+    assert.equal(start.json.bindEmail, true);
+    assert.equal(start.json.codeSent, true);
+    assert.equal(start.json.verified, false);
+
+    const status = await api('GET', '/api/auth/mfa/status', { jar: session });
+    assert.equal(status.status, 200, status.json?.error);
+    assert.equal(status.json.mfaRequired, true);
+    assert.equal(status.json.email, 'extra@example.com');
+    assert.equal(status.json.bindEmail, true);
+    assert.equal(status.json.codeSent, true);
+
+    const anon = {};
+    const anonStart = await api('POST', '/api/identity/email/start', {
+      body: { email: 'anon-bind@example.com', handle: 'anon-bind', acceptedTerms: true },
+      jar: anon,
+    });
+    assert.equal(anonStart.status, 200, anonStart.json?.error);
+    assert.equal(anonStart.json.email, undefined);
+    const anonStatus = await api('GET', '/api/auth/mfa/status', { jar: anon });
+    assert.equal(anonStatus.json.email, undefined);
+    assert.equal(anonStatus.json.bindEmail, true);
+
+    const returning = {};
+    const known = await api('POST', '/api/auth/email/start', {
+      body: { email: 'alice@example.com' },
+      jar: returning,
+    });
+    assert.equal(known.status, 200, known.json?.error);
+    assert.equal(known.json.email, undefined);
+    const knownStatus = await api('GET', '/api/auth/mfa/status', { jar: returning });
+    assert.equal(knownStatus.json.email, undefined);
+    assert.equal(knownStatus.json.bindEmail, false);
+  });
 });

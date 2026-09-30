@@ -45,6 +45,8 @@ export default {
     navApi: "API bot",
     navSignIn: "Đăng nhập",
     navDesk: "Bàn của tôi",
+    navProfile: "Hồ sơ",
+    navVerify: "Xác minh email",
     navPublic: "Công khai",
     session: "Phiên",
     officeBadge: "Phi lợi nhuận",

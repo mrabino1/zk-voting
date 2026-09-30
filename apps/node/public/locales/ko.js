@@ -45,6 +45,8 @@ export default {
     navApi: "봇 API",
     navSignIn: "로그인",
     navDesk: "내 데스크",
+    navProfile: "프로필",
+    navVerify: "이메일 확인",
     navPublic: "공개",
     session: "세션",
     officeBadge: "비영리",

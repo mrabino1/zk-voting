@@ -4,7 +4,7 @@
  * History router with hash fallback for static hosting.
  * Routes: `/`, `/public`, `/about`, `/faq`, `/p/:slug`, `/signin`, `/me`, `/app`,
  * `/office`, `/office/pages`, `/office/site`,
- * `/register`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
+ * `/register`, `/profile`, `/verify`, `/vote/:id`, `/v/:shortCode`, `/e/:shortCode`,
  * `/elections`, `/elections/:id/results`, `/elections/:id/info`, `/terms`, `/feedback`, `/receipt`,
  * `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/monitor`,
  * `/polls`, `/polls/:id`, `/polls/:id/vote`, `/polls/:id/results`
@@ -43,6 +43,8 @@ export function parseRoute(loc = window.location) {
   if (path === "/feedback") return { name: "feedback", path, params: {}, query };
   if (path === "/signin") return { name: "signin", path, params: {}, query };
   if (path === "/me" || path === "/app") return { name: "desk", path, params: {}, query };
+  if (path === "/profile") return { name: "profile", path, params: {}, query };
+  if (path === "/verify") return { name: "emailVerify", path, params: {}, query };
   if (path === "/office/pages/new") return { name: "officePageNew", path, params: {}, query };
   const officePage = path.match(/^\/office\/pages\/([^/]+)$/);
   if (officePage) {

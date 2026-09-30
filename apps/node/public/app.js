@@ -14,17 +14,13 @@ import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
 import {
-  isMfaChallenge,
   registerEthAccount,
   removeBoundEmail,
   removePasskey,
   setActiveEthAddress,
   setPrimaryEmail,
-  startEmailRegister,
-  verifyMfaCode,
 } from "./identity-methods.js";
 import {
-  atEmailCap,
   atPasskeyCap,
   identityCapNote,
   renderCivicCredentials,
@@ -32,6 +28,7 @@ import {
   renderEthAccounts,
   renderPasskeyAccounts,
 } from "./identity-accounts.js";
+import { renderEmailVerifyPage, renderProfilePage } from "./person-pages.js";
 import { renderPinManager } from "./pin-pad.js";
 import { renderApiKeysSection } from "./api-keys.js";
 import {
@@ -941,71 +938,19 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
           h("h3", { text: "Emails" }),
           h("p", {
             class: "field-hint",
-            text: "Login, MFA, and Terms PDF use the primary address by default. Sign-in with a specific bound email still sends the code to that inbox.",
+            text: "Green means verified. Red means the address is not verified yet. Add an address on Profile, then enter the code on Verify email.",
           }),
           renderEmailAccounts(h, identity, {
             busy: ui.busy,
             onPrimary: (row) => run(() => setPrimaryEmail(api, { id: row.id })),
             onRemove: (row) => run(() => removeBoundEmail(api, row.id)),
           }),
-          ui.mfa
-            ? h(
-                "form",
-                {
-                  class: "stack",
-                  onSubmit: (event) => {
-                    event.preventDefault();
-                    const code = event.target.code?.value?.trim();
-                    run(async () => {
-                      const result = await verifyMfaCode(api, code);
-                      if (isMfaChallenge(result)) ui.mfa = result;
-                      else {
-                        ui.mfa = null;
-                        ui.info = "Email verified.";
-                      }
-                    });
-                  },
-                },
-                h("p", { text: `Enter the 6-digit code sent to ${ui.mfa.emailHint || "your email"}.` }),
-                h("label", { class: "field", for: "desk-mfa-code" }, "One-time code", h("input", {
-                  id: "desk-mfa-code",
-                  name: "code",
-                  class: "otp-input",
-                  inputmode: "numeric",
-                  maxlength: "6",
-                  required: true,
-                })),
-                h("div", { class: "toolbar" }, h("button", { class: "btn", type: "submit", text: "Verify code" }))
-              )
-            : atEmailCap(identity)
-              ? h("p", { class: "notice notice-warn", text: `Email cap reached (${identityCapsOfSafe(identity)}). Remove one before adding another.` })
-              : h(
-                  "form",
-                  {
-                    class: "stack",
-                    onSubmit: (event) => {
-                      event.preventDefault();
-                      const email = event.target.email?.value?.trim();
-                      run(async () => {
-                        const result = await startEmailRegister(api, { email });
-                        if (isMfaChallenge(result)) {
-                          ui.mfa = result;
-                          ui.info = result.message || "Check your email for a 6-digit code.";
-                        } else {
-                          ui.info = "Email bound.";
-                        }
-                      });
-                    },
-                  },
-                  h("label", { class: "field", for: "desk-add-email" }, "Add another email", h("input", {
-                    id: "desk-add-email",
-                    name: "email",
-                    type: "email",
-                    autocomplete: "email",
-                    required: true,
-                  })),
-                  h("div", { class: "toolbar" }, h("button", { class: "btn btn-secondary", type: "submit", text: "Email me a code" }))
-                ),
+          h(
+            "div",
+            { class: "toolbar" },
+            h("a", { class: "btn btn-secondary", href: "/profile", "data-nav": "", text: "Profile" }),
+            h("a", { class: "btn", href: "/verify", "data-nav": "", text: "Verify email" })
+          ),
           h("h3", { text: "Passkeys" }),
           renderPasskeyAccounts(h, identity, {
             busy: ui.busy,
@@ -1066,13 +1011,7 @@ function renderDeviceStatus(walletRecord, me, store, { api, onRefresh } = {}) {
   );
 }
 
-function identityCapsOfSafe(identity) {
-  const n = identity?.emailCount ?? identity?.emails?.length ?? 0;
-  const cap = identity?.caps?.emails || 5;
-  return `${n}/${cap}`;
-}
-
-const deskIdentityUi = { mfa: null, error: "", info: "", busy: false };
+const deskIdentityUi = { error: "", info: "", busy: false };
 
 function renderNotFound(main, route, me) {
   const home = homeDestination(audienceOf(me));
@@ -1145,6 +1084,20 @@ async function renderRoute(route) {
       setTitle("My desk");
       const bundle = await loadDeskBundle();
       renderDesk(main, route, bundle);
+    } else if (route.name === "profile") {
+      setTitle("Profile");
+      await renderProfilePage(main, {
+        ...context,
+        me: meHint,
+        onRefresh: () => renderRoute(route),
+      });
+    } else if (route.name === "emailVerify") {
+      setTitle("Verify email");
+      await renderEmailVerifyPage(main, {
+        ...context,
+        me: meHint,
+        onRefresh: () => renderRoute(route),
+      });
     } else if (route.name === "about") {
       renderAbout(main, context);
     } else if (route.name === "faq") {

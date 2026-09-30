@@ -45,6 +45,8 @@ export default {
     navApi: "机器人 API",
     navSignIn: "登录",
     navDesk: "我的办公桌",
+    navProfile: "个人资料",
+    navVerify: "验证邮箱",
     navPublic: "公开",
     session: "会话",
     officeBadge: "非营利",

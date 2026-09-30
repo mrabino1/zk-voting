@@ -97,7 +97,7 @@ export function identityRouter(deps) {
           bindEmail: true,
           purpose: 'mfa',
         });
-        res.json(payload);
+        res.json({ ...payload, email });
         return;
       }
       if (owner) {

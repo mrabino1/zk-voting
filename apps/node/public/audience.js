@@ -124,6 +124,8 @@ export function mainNav(audience, extraNav = [], options = {}) {
   }
   const items = [
     { href: "/me", label: t("chrome.navDesk") },
+    { href: "/profile", label: t("chrome.navProfile") },
+    { href: "/verify", label: t("chrome.navVerify") },
     { href: "/register", label: t("chrome.navRegister") },
     { href: "/elections", label: t("chrome.navResults") },
     ...polls,
@@ -148,6 +150,8 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   const href = String(item.href || "").split("?")[0];
   if (href === path) return true;
   if (href === "/me" && (routeName === "desk" || routeName === "app")) return true;
+  if (href === "/profile" && routeName === "profile") return true;
+  if (href === "/verify" && routeName === "emailVerify") return true;
   if (href === "/office" && String(routeName || "").startsWith("office")) return true;
   if (href === "/about" && routeName === "about") return true;
   if (href === "/faq" && routeName === "faq") return true;

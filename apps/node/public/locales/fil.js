@@ -45,6 +45,8 @@ export default {
     navApi: "Bot API",
     navSignIn: "Mag-sign in",
     navDesk: "Aking mesa",
+    navProfile: "Profile",
+    navVerify: "I-verify ang email",
     navPublic: "Publiko",
     session: "Sesyon",
     officeBadge: "Hindi para sa tubo",
