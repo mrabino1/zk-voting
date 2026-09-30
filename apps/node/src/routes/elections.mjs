@@ -654,6 +654,9 @@ export function electionsRouter(deps) {
     '/:id/vote',
     asyncHandler(async (req, res) => {
       const electionForGate = store.getElection(req.params.id);
+      if (electionForGate?.votingPaused) {
+        throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
+      }
       if (electionForGate && store.listActiveExternalParties(electionForGate.id).length) {
         const rawCommitment = req.body?.identityCommitment;
         if (rawCommitment == null || rawCommitment === '') {

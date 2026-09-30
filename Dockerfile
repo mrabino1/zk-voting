@@ -33,6 +33,11 @@ COPY --chown=node:node apps/node/legal ./apps/node/legal
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
 COPY --chown=node:node l2/lease ./l2/lease
+# Super-admin write:l2 runs the archive job (credentials blanked). That module
+# imports the sequencer state helper and the disclosure clock; nothing else.
+COPY --chown=node:node l2/archive ./l2/archive
+COPY --chown=node:node l2/disclosure.mjs ./l2/disclosure.mjs
+COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
 COPY --chown=node:node docker/healthcheck.mjs /healthcheck.mjs
 
 USER node
