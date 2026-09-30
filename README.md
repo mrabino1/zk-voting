@@ -1007,6 +1007,17 @@ docker compose up -d --build   # Node :3000, L2 RPC :8546
 npm run compose:up             # same
 ```
 
+### Production image boot check
+
+This repository has no SQL migrations (no `.sql` files and no migration journal). The CI job `migrations-verify` runs on pull requests and on pushes to `test/unstable` and `master`. Its migration step is a no-op that fails if a `.sql` file is added. The same job runs `npm run build`, `docker build` of the root `Dockerfile`, and a boot smoke: the image starts with empty dummy secrets and a 384MB memory cap when the daemon allows it. If that cap OOM-kills the process, the smoke retries once without a cap and says the cap was not feasible. `GET /health` must return `"ok":true` within 120 seconds. Container logs are printed when that fails.
+
+```bash
+./scripts/migrations-verify.sh                 # no-op + production build + boot smoke
+./scripts/migrations-verify.sh migrations      # no-op SQL search only
+```
+
+Needs Node 22+ and Docker. The smoke listens on `127.0.0.1:18080` so it does not take the Compose port.
+
 ### Tooling
 
 - Solidity: Foundry 1.8+, solc 0.8.24, **via-ir on** (`foundry.toml`).
