@@ -16,6 +16,8 @@
 #   npm run test:auditor       # tools/auditor
 #   npm run test:docs          # mermaid source + committed workflow PNG
 #   npm test                   # node + packages + L2 + contracts + auditor + docs
+#   ./scripts/migrations-verify.sh
+#                              # no-op SQL check, production build, image boot smoke
 #
 name: CI
 
@@ -245,3 +247,27 @@ jobs:
             echo "npm run circuits:ceremony:toy"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  migrations-verify:
+    name: migrations-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Migrations (no-op — this repository has no SQL migrations)
+        run: ./scripts/migrations-verify.sh migrations
+
+      - name: Production build
+        run: npm run build
+
+      - name: Docker build and boot smoke
+        run: ./scripts/migrations-verify.sh smoke
