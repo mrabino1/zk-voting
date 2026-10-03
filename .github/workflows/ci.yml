@@ -21,15 +21,18 @@
 #
 name: CI
 
+# CI temporarily disabled; restore the commented original triggers to re-enable.
+# CI-DISABLED original triggers: on:
+# CI-DISABLED original triggers:   push:
+# CI-DISABLED original triggers:     branches:
+# CI-DISABLED original triggers:       - test/unstable
+# CI-DISABLED original triggers:       - master
+# CI-DISABLED original triggers:   pull_request:
+# CI-DISABLED original triggers:     branches:
+# CI-DISABLED original triggers:       - test/unstable
+# CI-DISABLED original triggers:       - master
 on:
-  push:
-    branches:
-      - test/unstable
-      - master
-  pull_request:
-    branches:
-      - test/unstable
-      - master
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
