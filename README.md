@@ -4,6 +4,10 @@
 
 A monorepo for a **zero-knowledge, Ethereum-settled voting system**. Product name: **Republic**. Repo name: `zk-voting`.
 
+## Positioning
+
+[vote.makerdao.com](https://vote.makerdao.com) is the sample for this voting experience. That portal was built for MakerDAO's own governance. Republic makes the same kind of vote generic and self-hosted, like Discourse, so anybody can run their own vote. Maker executive votes are binding: when they pass, the underlying contracts execute the change. A Republic outcome is non-binding sentiment. The verifiable result is stored on chain, and passing a vote does not auto-execute anything. Operators also get more oversight and admin than that portal: an approval chain of platform and jurisdiction officers, public disqualification reason codes, and an independent auditor. Full note: [Inspiration: vote.makerdao.com](./implementation.md#inspiration-votemakerdaocom).
+
 This repository holds two tightly coupled pieces of software (and the circuits, L2, and packages that bind them):
 
 1. A **Node application**: the product surface for voters, election officials, and public observers (`apps/node`).
@@ -38,6 +42,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 
 ## Table of contents
 
+- [Positioning](#positioning)
 - [Not for profit](#not-for-profit)
 - [Purpose](#purpose)
 - [Who it is for](#who-it-is-for)
