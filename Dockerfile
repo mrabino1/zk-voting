@@ -19,6 +19,12 @@ ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data
 
+# Coolify's container health check shells out to curl, then wget.
+# bookworm-slim ships neither. The image HEALTHCHECK below uses node.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN mkdir -p /data \
     && chown node:node /data /src
 
