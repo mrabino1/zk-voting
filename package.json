@@ -55,5 +55,8 @@
   },
   "devDependencies": {
     "snarkjs": "^0.7.6"
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
   }
 }
