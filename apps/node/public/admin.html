@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="/lang-init.js"></script>
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#13294b" />
+    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1014" media="(prefers-color-scheme: dark)" />
     <meta name="robots" content="noindex" />
     <title data-i18n="chrome.titleAdmin">Platform admin · Republic</title>
     <script src="/canonical-url.js"></script>
@@ -346,13 +347,18 @@
         <select id="mail-template" name="mail-template"></select>
       </section>
 
-      <section class="panel danger-none" aria-labelledby="danger-heading">
-        <h2 id="danger-heading">Danger zone</h2>
-        <p>
-          There is none that takes fees. This software will not mint a token, charge a voter,
-          skim ETH, or open a paid tier. Gas sponsorship is paid by the jurisdiction at cost.
-        </p>
-        <p class="field-hint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
+      <section class="panel danger-zone danger-none" aria-labelledby="danger-heading">
+        <h2 id="danger-heading">Danger Zone</h2>
+        <div class="danger-row">
+          <div>
+            <p class="danger-row-title">No fee controls</p>
+            <p>
+              There is none that takes fees. This software will not mint a token, charge a voter,
+              skim ETH, or open a paid tier. Gas sponsorship is paid by the jurisdiction at cost.
+            </p>
+            <p class="field-hint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
+          </div>
+        </div>
       </section>
       </div>
     </main>

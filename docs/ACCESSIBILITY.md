@@ -18,7 +18,7 @@ Each route was checked in light and dark (`prefers-color-scheme`). A separate pa
 
 ## What was fixed
 
-**Contrast (1.4.3).** Small kickers used `--gold` (`#8a6d3b`) on cream (`#f4efe4`), about 4.23:1. They now use `--gold-text` (`#5c4818` in light, `#e6c56a` in dark). Dark mode inverts `--navy` and `--cream` but leaves `--navy-deep` dark, so banner, footer, current nav, primary button hover, and session hover text were nearly invisible. Those surfaces now use explicit light text. `prefers-contrast: more` resets tokens at the end of `styles.css` so it wins over the dark scheme.
+**Contrast (1.4.3).** Kickers use `--gold-text`, darkened in light (`#3f5c0a`) and the Infisical project yellow in dark (`#e0ed34`), both at least 4.5:1 on the canvas and on cards. Muted text is `#525355` in light and `#adaeb0` in dark so small hints clear the canvas. Status text sits on its tinted background only when that pair clears 4.5:1. Chrome (banner, sidebar, footer, buttons) uses `--ink` on the surface color in both schemes. `prefers-contrast: more` resets the tokens at the end of `styles.css`, including status backgrounds, so it wins over the dark scheme.
 
 **Names (1.3.1, 4.1.2).** Back-office aspect and ballot fields are tied to their labels with `for` / `id`. Remove controls name the thing they remove. Ranked-choice Up, Down, Add, and Remove buttons, and the “About this choice” link, include the candidate name. The sign-in email field uses `autocomplete="email"` (axe rejects `username email`).
 

@@ -53,9 +53,11 @@ const LOADING_SHELL = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Republic — zk-voting</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #111; }
-    .nfp { font-weight: 700; letter-spacing: 0.04em; }
-    .muted { color: #444; }
+    body { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #19191c; background: #f5f5f5; }
+    @media (prefers-color-scheme: dark) { body { color: #ebebeb; background: #0e1014; } .muted { color: #adaeb0; } }
+    h1 { font-weight: 500; font-size: 1.5rem; text-decoration: underline; text-underline-offset: 0.28rem; text-decoration-color: #708f13; }
+    .nfp { font-weight: 600; letter-spacing: 0.06em; font-size: 0.75rem; }
+    .muted { color: #525355; }
   </style>
 </head>
 <body>
