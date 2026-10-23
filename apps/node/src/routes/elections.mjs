@@ -366,6 +366,18 @@ export function electionsRouter(deps) {
   router.patch('/:id', requireAuth, requireElectionRole(store, 'clerk'), patchBallot);
   router.put('/:id', requireAuth, requireElectionRole(store, 'clerk'), patchBallot);
 
+  router.delete(
+    '/:id',
+    requireAuth,
+    requireElectionRole(store, 'clerk'),
+    asyncHandler(async (req, res) => {
+      const deleted = await store.deleteUnusedElection(req.params.id, {
+        confirmTitle: req.body?.confirmTitle,
+      });
+      res.json({ ok: true, nfp: true, deleted });
+    }),
+  );
+
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {

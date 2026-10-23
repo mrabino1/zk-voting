@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="/lang-init.js"></script>
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#13294b" />
+    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1014" media="(prefers-color-scheme: dark)" />
     <meta name="robots" content="noindex" />
     <title data-i18n="chrome.titleBackOffice">Back office · Republic</title>
     <script src="/canonical-url.js"></script>
@@ -245,6 +246,37 @@
           </div>
           <div class="flash" id="flash-freeze" role="status"></div>
         </form>
+
+        <section class="danger-zone" id="election-danger" aria-labelledby="election-danger-heading" hidden>
+          <h3 id="election-danger-heading">Danger Zone</h3>
+          <div class="danger-row">
+            <div>
+              <p class="danger-row-title">Delete this election</p>
+              <p class="field-hint" id="delete-election-current"></p>
+              <p class="field-hint">
+                Permanently removes an unused election. Refused after the roll is frozen, a person is
+                registered, a ballot is accepted, or a factory transaction is posted. This cannot be undone.
+              </p>
+            </div>
+            <button class="btn btn-danger" type="button" id="btn-delete-election">Delete</button>
+          </div>
+        </section>
+        <dialog class="confirm-dialog" id="delete-election-dialog" aria-labelledby="delete-election-title">
+          <form id="form-delete-election">
+            <h3 id="delete-election-title">Delete election</h3>
+            <p>
+              Type <strong id="delete-election-name"></strong> to confirm. The Node checks that title
+              against the saved election.
+            </p>
+            <label class="field-label" for="delete-election-confirm">Election title</label>
+            <input id="delete-election-confirm" name="confirmTitle" autocomplete="off" spellcheck="false" />
+            <div class="actions">
+              <button class="btn btn-secondary" type="button" id="delete-election-cancel">Cancel</button>
+              <button class="btn btn-danger" type="submit" id="delete-election-submit" disabled>Delete</button>
+            </div>
+            <div class="flash" id="flash-delete-election" role="status"></div>
+          </form>
+        </dialog>
       </section>
 
       <section class="panel" id="registrar" aria-labelledby="reg-heading">

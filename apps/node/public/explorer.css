@@ -61,35 +61,44 @@
   display: inline-block;
   font-family: var(--font-sans);
   font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  padding: 0.16rem 0.45rem;
-  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--sunken);
 }
 
 .tx-type.register {
-  background: var(--ok);
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-color: var(--ok);
 }
 
 .tx-type.vote {
-  background: var(--navy-mid);
+  color: var(--org);
+  background: var(--info-bg);
+  border-color: var(--org);
 }
 
 .tx-type.disqualify {
-  background: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger);
 }
 
 .tx-type.tally {
-  background: var(--gold);
-  color: #1a1404;
+  color: var(--gold-text);
+  background: var(--gold-pale);
+  border-color: var(--gold);
 }
 
-.tx-type.batch {
-  background: #3d4454;
-}
-
+.tx-type.batch,
 .tx-type.unknown {
-  background: var(--muted);
+  color: var(--muted);
+  background: var(--sunken);
+  border-color: var(--line);
 }
 
 .privacy-callout {

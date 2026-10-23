@@ -1295,6 +1295,53 @@ export class Store {
     return election;
   }
 
+  /**
+   * Remove an election that has never been used. Chain-posted, frozen, registered,
+   * or tallied elections stay. `confirmTitle` must match the saved title exactly.
+   */
+  async deleteUnusedElection(id, { confirmTitle } = {}) {
+    const election = this.requireElection(id);
+    const title = String(election.title || '');
+    if (String(confirmTitle ?? '') !== title) {
+      throw new HttpError(400, 'type the election title to confirm', { code: 'CONFIRM_TITLE' });
+    }
+    if (election.rollFrozen) {
+      throw new HttpError(409, 'roll is frozen; this election cannot be deleted', { code: 'ROLL_FROZEN' });
+    }
+    if (election.tally) {
+      throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
+    }
+    if (election.createTxHash || election.onChainElectionAddress) {
+      throw new HttpError(409, 'election was created on chain and cannot be deleted here', {
+        code: 'ON_CHAIN',
+      });
+    }
+    const idStr = String(election.id);
+    const tied = (rows) =>
+      Array.isArray(rows) && rows.some((row) => row && String(row.electionId) === idStr);
+    if (
+      Number(election.acceptedBallots) > 0 ||
+      Number(election.participantCount) > 0 ||
+      Number(election.eligibleCount) > 0 ||
+      tied(this.data.registrations) ||
+      tied(this.data.votes) ||
+      tied(this.data.disqualifications) ||
+      tied(this.data.registrationRequests) ||
+      tied(this.data.envelopes) ||
+      tied(this.data.receipts) ||
+      tied(this.data.identityLinks) ||
+      tied(this.data.externalParties)
+    ) {
+      throw new HttpError(409, 'election already has a roll or ballots', { code: 'NOT_EMPTY' });
+    }
+    this.data.elections = this.data.elections.filter((row) => String(row.id) !== idStr);
+    if (Array.isArray(this.data.tallyGuardians)) {
+      this.data.tallyGuardians = this.data.tallyGuardians.filter((row) => String(row.electionId) !== idStr);
+    }
+    await this.persist();
+    return { id: idStr, title };
+  }
+
   async freezeElection(id) {
     const election = this.requireElection(id);
     if (election.rollFrozen) throw new HttpError(409, 'roll already frozen');

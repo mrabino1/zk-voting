@@ -1,8 +1,8 @@
 /* Republic office extras. Civic tokens come from /styles.css — do not redefine the palette. */
 
 .office-badge {
-  border: 2px solid var(--gold);
-  color: var(--gold-pale, var(--cream));
+  border: 1px solid var(--gold);
+  color: var(--gold-text);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -93,7 +93,7 @@ textarea {
   min-height: var(--target);
   font: inherit;
   padding: 0.55rem 0.75rem;
-  border: 2px solid var(--navy);
+  border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
   border-radius: var(--radius);
@@ -177,17 +177,18 @@ textarea {
 }
 
 .data-table th {
-  background: var(--navy);
-  color: var(--cream);
+  background: var(--sunken);
+  color: var(--muted);
   font-size: 0.75rem;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   position: sticky;
   top: 0;
 }
 
 .data-table tbody tr:nth-child(even) {
-  background: var(--cream-dark);
+  background: transparent;
 }
 
 .data-table tbody tr:hover {
@@ -243,21 +244,22 @@ textarea {
 
 .local-nav a {
   text-decoration: none;
-  border: 2px solid var(--line);
-  background: var(--paper);
-  color: var(--navy);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
   padding: 0.45rem 0.75rem;
   min-height: var(--target);
   display: inline-flex;
   align-items: center;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .local-nav a:hover,
 .local-nav a.active {
-  border-color: var(--navy);
-  background: var(--navy);
-  color: var(--cream);
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+  background: color-mix(in srgb, var(--gold) 14%, var(--paper));
+  color: var(--ink);
 }
 
 .notice-list {
@@ -278,18 +280,12 @@ textarea {
 }
 
 .danger-none {
-  border: 2px dashed var(--line);
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--paper),
-    var(--paper) 10px,
-    var(--cream) 10px,
-    var(--cream) 20px
-  );
+  border: 1px solid var(--danger-solid);
+  background: color-mix(in srgb, var(--danger-solid) 8%, var(--paper));
 }
 
 .danger-none h2 {
-  color: var(--ok);
+  color: var(--danger);
   margin-top: 0;
 }
 

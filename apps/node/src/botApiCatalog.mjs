@@ -393,6 +393,13 @@ export const BOT_OPERATIONS = [
     auth: true,
     summary: 'Same edit as PATCH.',
   }),
+  O('DELETE', '/api/elections/:id', {
+    tag: 'Elections',
+    auth: true,
+    summary:
+      'Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction.',
+    body: 'confirmTitle',
+  }),
   R('/api/elections/:id/info', {
     tag: 'Elections',
     summary: 'Voter-facing questions, options, and supporting info.',
@@ -1322,24 +1329,27 @@ export function renderBotHtml() {
   <link rel="describedby" href="/api/openapi.json" type="application/json"/>
   <link rel="describedby" href="/api/llms.txt" type="text/plain"/>
   <style>
-    :root { color-scheme: light; --ink:#142033; --muted:#3d4a5c; --navy:#13294b; --paper:#f7f4ec; --line:#c9c3b2; --danger:#8a1c1c; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; line-height:1.5; color:var(--ink); background:var(--paper); }
+    :root { color-scheme: light dark; --ink:#19191c; --muted:#525355; --navy:#0063e6; --paper:#f5f5f5; --card:#ffffff; --line:#d6d6d7; --danger:#b91c1c; --gold:#3f5c0a; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink:#ebebeb; --muted:#adaeb0; --navy:#30b3ff; --paper:#0e1014; --card:#16181a; --line:#2b2c30; --danger:#ff8d82; --gold:#e0ed34; }
+    }
+    body { margin:0; font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; line-height:1.5; color:var(--ink); background:var(--paper); }
     a { color:var(--navy); }
     .skip { position:absolute; left:-999px; top:0; background:#fff; padding:0.5rem 1rem; }
     .skip:focus { left:0; }
     header, main, footer { max-width:72rem; margin:0 auto; padding:1rem 1.25rem; }
     header { padding-top:1.5rem; }
-    .kicker { font-size:0.78rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--navy); margin:0; }
-    h1 { font-size:2rem; line-height:1.2; margin:0.2rem 0 0.6rem; }
+    .kicker { font-size:0.75rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--gold); margin:0; }
+    h1 { font-size:1.5rem; font-weight:500; line-height:1.2; margin:0.2rem 0 0.6rem; text-decoration:underline; text-underline-offset:0.28rem; text-decoration-thickness:1px; text-decoration-color:color-mix(in srgb, var(--gold) 80%, transparent); }
     h2 { margin-top:2rem; }
     code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:0.92em; }
-    pre { overflow:auto; background:#fff; border:1px solid var(--line); padding:0.8rem 1rem; }
-    table { width:100%; border-collapse:collapse; background:#fff; }
+    pre { overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:0.5rem; padding:0.8rem 1rem; }
+    table { width:100%; border-collapse:collapse; background:var(--card); }
     th, td { text-align:start; vertical-align:top; padding:0.55rem 0.6rem; border-bottom:1px solid var(--line); }
-    th { background:#efeadd; }
+    th { background:var(--paper); color:var(--muted); font-size:0.75rem; letter-spacing:0.04em; text-transform:uppercase; }
     .table-wrap { overflow-x:auto; }
     .muted { color:var(--muted); }
-    .notice { background:#fff; border:1px solid var(--line); padding:0.8rem 1rem; }
+    .notice { background:var(--card); border:1px solid var(--line); border-radius:0.5rem; padding:0.8rem 1rem; }
     .danger { border-color:var(--danger); }
     nav ul { padding-left:1.2rem; }
     footer { color:var(--muted); font-size:0.92rem; }

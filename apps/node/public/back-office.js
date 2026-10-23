@@ -547,6 +547,7 @@
 
   let ballotQuestions = hydrateQuestions(DEFAULT_QUESTIONS);
   let editingElectionId = "";
+  let storedElectionTitle = "";
   let ballotLocked = false;
   let syncingJson = false;
 
@@ -808,10 +809,46 @@
     renderBuilder();
   });
 
+  function syncElectionDanger() {
+    const zone = $("election-danger");
+    if (!zone) return;
+    const title = storedElectionTitle;
+    if (!editingElectionId || !title) {
+      zone.hidden = true;
+      return;
+    }
+    zone.hidden = false;
+    const current = $("delete-election-current");
+    if (current) current.textContent = title;
+  }
+
   function setEditingElection(id, frozen) {
     editingElectionId = id ? String(id) : "";
     ballotLocked = Boolean(frozen);
     renderBuilder();
+    syncElectionDanger();
+  }
+
+  function openDeleteElectionDialog() {
+    const dialog = $("delete-election-dialog");
+    const input = $("delete-election-confirm");
+    const submit = $("delete-election-submit");
+    if (!dialog || !editingElectionId || !storedElectionTitle) return;
+    $("delete-election-name").textContent = storedElectionTitle;
+    input.value = "";
+    submit.disabled = true;
+    const flashEl = $("flash-delete-election");
+    if (flashEl) flashEl.className = "flash";
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    input.focus();
+  }
+
+  function closeDeleteElectionDialog() {
+    const dialog = $("delete-election-dialog");
+    if (!dialog) return;
+    if (typeof dialog.close === "function" && dialog.open) dialog.close();
+    else dialog.removeAttribute("open");
   }
 
   async function loadBallotIntoBuilder(id) {
@@ -829,6 +866,7 @@
       $("e-method").value = election.ballotMethod === "ranked_choice" ? "ranked_choice" : "plurality";
     }
     ballotQuestions = hydrateQuestions(election.questions || []);
+    storedElectionTitle = String(pick(election, ["title"]) || "");
     setEditingElection(election.id, election.rollFrozen || Number(election.state) >= 1);
     if (election.rollFrozen) {
       flash($("flash-election"), "warn", "Loaded frozen election " + election.id + ". Ballot metadata is read-only.");
@@ -860,6 +898,7 @@
     const id = $("e-load").value;
     if (!id) {
       ballotQuestions = hydrateQuestions(DEFAULT_QUESTIONS);
+      storedElectionTitle = "";
       setEditingElection("", false);
       flash($("flash-election"), "ok", "Cleared to a new ballot. Create election to store it.");
       return;
@@ -889,6 +928,8 @@
           ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
         },
       });
+      storedElectionTitle = $("e-title").value.trim();
+      syncElectionDanger();
       flash($("flash-election"), "ok", "Saved ballot " + editingElectionId + ". Option info is in ballotSpecHash.");
       await loadElections();
     } catch (err) {
@@ -1260,6 +1301,7 @@
       flash($("flash-election"), "ok", bits.join(" · ") + ". Freeze the roll before opening.");
       if (id) {
         $("e-load").value = String(id);
+        storedElectionTitle = $("e-title").value.trim();
         setEditingElection(id, false);
         $("link-info-preview").hidden = false;
         $("link-info-preview").href = "/elections/" + encodeURIComponent(id) + "/info";
@@ -1269,6 +1311,42 @@
       flash($("flash-election"), "err", errText(err));
     }
   });
+
+  if ($("btn-delete-election")) {
+    $("btn-delete-election").addEventListener("click", () => openDeleteElectionDialog());
+  }
+  if ($("delete-election-cancel")) {
+    $("delete-election-cancel").addEventListener("click", () => closeDeleteElectionDialog());
+  }
+  if ($("delete-election-confirm")) {
+    $("delete-election-confirm").addEventListener("input", () => {
+      const submit = $("delete-election-submit");
+      if (submit) submit.disabled = $("delete-election-confirm").value !== storedElectionTitle;
+    });
+  }
+  if ($("form-delete-election")) {
+    $("form-delete-election").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = editingElectionId;
+      const confirmTitle = $("delete-election-confirm").value;
+      if (!id || confirmTitle !== storedElectionTitle) return;
+      try {
+        await request("/api/elections/" + encodeURIComponent(id), {
+          method: "DELETE",
+          body: { confirmTitle },
+        });
+        closeDeleteElectionDialog();
+        storedElectionTitle = "";
+        ballotQuestions = hydrateQuestions(DEFAULT_QUESTIONS);
+        setEditingElection("", false);
+        if ($("e-load")) $("e-load").value = "";
+        flash($("flash-election"), "ok", "Deleted election " + id + ".");
+        await loadElections();
+      } catch (err) {
+        flash($("flash-delete-election"), "err", errText(err));
+      }
+    });
+  }
 
   $("form-freeze").addEventListener("submit", async (event) => {
     event.preventDefault();
