@@ -2,6 +2,8 @@
 
 > **Disclaimer.** This is an automated plus AI-assisted review by GrokBot. It is **not** a substitute for an audit by a professional security firm. It does not certify the code, give legal assurance, or approve the system for a binding election. Findings may be incomplete, and some severities are judgement calls. Every Critical and High finding should be independently confirmed and re-tested after a fix.
 
+> **Remediation update (2026-10-24).** The Critical through Low findings were fixed on branch `fix/smart-contract-audit-remediation`. The Informational findings were left unchanged. Each finding now has a **Status** line, and the §4 table has a Status column. Re-test evidence, the tool re-run, a re-audit of the fixes and the open items are in [§12](#12-remediation-and-re-test-2026-10-24). The original findings text below describes commit `b1cef6f7` and is unchanged.
+
 ## 1. Scope
 
 | Item | Value |
@@ -591,6 +593,8 @@ The list grows without bound. Reads are indexed (`ballotHashAt`), so there is no
 
 ## 7. Test and coverage results
 
+> Results at the audited commit. Post-remediation: `forge test` **413/413** (44 suites), including 55 audit regression tests; see §12.3.
+
 **`forge test`** (full suite, repo settings, real `git clone` of `test/unstable`): **349 passed, 0 failed, 0 skipped (349 total)** across 39 suites.
 
 - Fuzz (256 runs) and invariant suites pass. `VotingInvariant` ran 64 runs × 2,048 calls with 0 reverts, and holds `nullifierUnique`, `nullifierOnceOnlyPerElection_doubleVoteRejected` and `tallySumsIfPosted`.
@@ -603,6 +607,8 @@ The list grows without bound. Reads are indexed (`ballotHashAt`), so there is no
 **Audit PoCs** (scratch copy, not committed): 6 of 6 pass — `testPoC_WebAuthnForgeryDrainsAccount`, `testPoC_BackupSignerHijack`, `testPoC_VetoBypassWithUnboundCommitment`, `testPoC_RegistrationGasGrowth`, `testPoC_PoseidonHashGas`, `testPoC_BallotHashFieldOverflow`.
 
 ## 8. Tool triage
+
+> Results at the audited commit. For the post-remediation re-run (Slither 89 results; Aderyn 2 High / 18 Low), see §12.4.
 
 ### Slither 0.11.6 — 99 results (src only; tests, scripts and lib filtered)
 
@@ -668,3 +674,109 @@ The recommendation is to put all admin roles behind a multisig with a timelock, 
 ## 11. Disclaimer
 
 This report was produced by GrokBot using automated tools (Foundry, Slither, Aderyn) plus AI-assisted manual review of commit `b1cef6f7`. It is **not** a substitute for a professional audit firm's review. No guarantee is made that all vulnerabilities were found, and severities are judgement calls. Do not use this code for a binding public election until the Critical and High findings are fixed and the system has been independently audited, including the circuits and trusted setup.
+
+## 12. Remediation and re-test (2026-10-24)
+
+The fixes were made on branch `fix/smart-contract-audit-remediation`. The work went in severity order, Critical → High → Medium → Low, with one commit per tier. **The Informational findings (I-01 to I-06) were deliberately left unchanged.** The aim was to keep existing features and flows working. Where a full fix needs a circuit change or a trusted setup, only the contract-side part was done, and the finding is marked *Partially resolved* or *Acknowledged*. The branch also merges the latest `origin/test/unstable` (`b249755`, including #79 "bind Merkle path length to tree depth"). The merge was clean, and the full suite was re-run on the merged tree.
+
+### 12.1 Commits
+
+| Tier | Commit | Regression suite |
+|---|---|---|
+| Critical (C-01, C-02, plus L-09) | [`2b635be`](https://github.com/mrabino1/zk-voting/commit/2b635be) | `test/audit/CriticalRegressions.t.sol` (11 tests, P-256 precompile oracle stub) |
+| High (H-01 to H-06) | [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0) | `test/audit/HighRegressions.t.sol` (20 tests), plus JS tests for tally V2 and `hashBallot` |
+| Medium (M-01 to M-08) | [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165) | `test/audit/MediumRegressions.t.sol` (16 tests) |
+| Low (L-01 to L-08) | [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58) | `test/audit/LowRegressions.t.sol` (8 tests) |
+| Merge `origin/test/unstable` | [`b05da8c`](https://github.com/mrabino1/zk-voting/commit/b05da8c) | full suite re-run |
+| Re-audit cleanup | [`0132d7a`](https://github.com/mrabino1/zk-voting/commit/0132d7a) | Removes `RepublicEntryPoint.ExecuteFailed`, which the M-08 change left unused |
+
+Each regression test that is named `Exploit…` reproduces the original attack and now asserts that it is refused.
+
+### 12.2 Status summary
+
+| Severity | Total | Resolved | Partially resolved | Acknowledged | Unchanged |
+|---|---:|---:|---:|---:|---:|
+| Critical | 2 | 2 | 0 | 0 | 0 |
+| High | 6 | 2¹ | 4 | 0 | 0 |
+| Medium | 8 | 3 | 4 | 1 | 0 |
+| Low | 10 | 6 | 3 | 1 | 0 |
+| Informational | 6 | — | — | — | 6 (left as is) |
+
+¹ H-02 is resolved on the contract side. The production VK and trusted-setup ceremony are acknowledged as open.
+
+The per-finding status, with details, is in the §4 table and on each finding's **Status** line.
+
+### 12.3 Re-test evidence (merged tree)
+
+| Check | Before (`b1cef6f7`) | After (remediation branch) |
+|---|---|---|
+| `forge build` | ok | ok |
+| `forge test` | 349 passed / 0 failed (39 suites) | **413 passed / 0 failed / 0 skipped (44 suites)** |
+| Audit regression tests | — (6 PoCs in a scratch copy) | 55 (11 C + 20 H + 16 M + 8 L), all pass |
+| `packages/proof-helpers` (`npm test`) | — | 12/12 |
+| `l2` (`node --test l2/test/*.test.mjs`) | — | 64/64 |
+| `apps/node` (`npm test`) | — | 618 pass, 1 fail, 1 skipped. The failure is the existing `personal API keys › public /api docs…` docs test. It also fails without these changes and touches no file changed here. |
+| `forge coverage --ir-minimum` | not feasible (stack too deep) | still not feasible. The same `Yul exception: … 1 too deep in the stack` happens under minimal IR, so no coverage figures are reported. The 55 targeted regression tests stand in for it. |
+
+### 12.4 Tool re-run
+
+**Slither 0.11.6** (`src` only; tests, scripts and lib filtered): **89 results**, down from 99.
+
+| Change | Detail |
+|---|---|
+| `locked-ether` 1 → 0 | L-07 fixed |
+| `return-bomb` 1 → 0 | M-08 fixed (256-byte returndata cap) |
+| `calls-loop` 15 → 7 | H-03: incremental frontier tree; the rest are bounded or paged loops |
+| `missing-zero-check` 19 → 10 | M-03 and L-04 zero checks |
+| `unused-return` 3 → 2 | `_looksLikeHasher` probes removed (L-08). The remaining two are an unused `insert` index and the paged `rebuildEligibleRoot` "done" flag, both by design. |
+| `immutable-states` 12 → 9 | Some set-once fields; I-05 left as is |
+| **New:** `uninitialized-state` (High) ×1 | `DisqualificationRegistry._trees`. **False positive:** the mapping slot is initialised in place by `FrontierTree.reset(tree, …)` through a storage pointer. |
+| **New:** `events-maths` ×1 | `MockVerifier.setWitnessTreeDepth`. Test-only mock; no action. |
+| Unchanged | `timestamp`, `shadowing-local`, `reentrancy-events` / `-benign` (trusted, factory-wired modules), and the Info detectors (assembly, low-level calls, digits, complexity) |
+
+**Aderyn 0.6.8:** **2 "High", 18 "Low"**, down from 3 / 18. nSLOC is 3,434, up from 3,048.
+
+- H-2 "Locks Ether" is gone (L-07).
+- H-1 (`abi.encodePacked` in `PasskeyAccountFactory`) remains a false positive, as before.
+- H-2 "state change after external call" now lists the new paged-rebuild and settlement call sites. All of the callees are trusted, factory-wired modules or views, so this is not exploitable.
+- L-3 `ecrecover` malleability is still flagged by pattern. The code now enforces low-s and `v ∈ {27,28}` (L-09).
+- L-10 "state change without event" is left on `initialize`, `bumpParticipantCount`, the `L1TallyMirror` publisher setters, `PasskeyAccount.validateUserOp` and the test-only `MockVerifier`. These are cosmetic or covered by existing events; the L-02 scope (lifecycle and role changes) is done.
+- L-13 "unchecked return" flags internal helpers whose return values are unused by design.
+- L-16 "unused error" lists `ElectionFactory.ModulesNotSet` and `RepublicMailbox.NotAdmin`, both from before this work. `RepublicEntryPoint.ExecuteFailed`, which the fixes had made unused, was removed in `0132d7a`.
+
+### 12.5 Re-audit of the fixes
+
+These are new behaviours and risks that operators and integrators must know about. No new Critical, High or Medium issue was found.
+
+1. **EntryPoint semantics changed (M-08).** A failing UserOp no longer reverts the batch. It emits `UserOpReverted(sender, nonce, revertReason)` with the reason capped at 256 bytes and the batch continues. Relayers must read events rather than rely on tx failure.
+2. **Paymaster defaults to off.** `alwaysSponsor` is false. Deployments must call `setSponsoredTargets(ballotInbox, voterRegistry, accountFactory)`, which `DeployLocal` already does. Only `execute()` calls to those targets are sponsored.
+3. **Verifier allowlist (M-02).** Clerk-created elections need an admin-approved verifier (`setVerifierApproved`). `DeployLocal` and `DeployL2` approve the deployed verifier. Mock verifiers are refused off-anvil unless `allowMockVerifiers` is set or an explicit dev flag is passed to the deploy scripts (`REPUBLIC_ALLOW_MOCK_VERIFIER`, `BATCH_VERIFIER`, `REPUBLIC_SETTLEMENT_MOCK_MODE`, `REPUBLIC_TALLY_VERIFIER`). `TALLY_MIRROR_REQUIRE_SETTLED_ROOT` opts `DeployL1` into the M-05 settled-root pin.
+4. **ABI changes.**
+   - `VoterRegistry` and `DisqualificationRegistry` constructors are now fixed as `(hasher, factory)`.
+   - `PasskeyAccountFactory` adds `createAccountWithBackupSigner` / `getAddressWithBackupSigner`. The 4-argument functions keep their ABI.
+   - `RepublicMailbox.sendToL2` is non-payable.
+   - `TallyPublicInputs` V2 has 7 words. Provers and `proof-helpers` were updated.
+5. **Field reduction.**
+   - `ballotHash` is `keccak256(ciphertext) mod r`. The relay and the wallet were updated.
+   - Nullifier storage and views (`nullifierUsed`, `ballotHashOf`) are keyed `mod r`. The event keeps the raw value.
+   - Circuits and provers must use mod-r inputs.
+   - The dev `KeccakHasher` produces roots and commitments ≥ r, which is why commitments are not range-checked (L-06).
+6. **Paged rebuilds (H-03).** While a disqualification-triggered eligible rebuild is pending, ballots are refused. Operators must call `continueEligibleRebuild` until it returns `done`.
+7. **Dispute window (M-05).** An `L1TallyMirror` result is final only after `DISPUTE_WINDOW` (7 days), unless it is superseded. Consumers should check `isFinal`.
+8. **Implementations locked (L-01).** The `Election` and `ExternalPartyRegistry` implementation contracts can no longer be initialised directly. Clones are unaffected.
+
+### 12.6 Open items
+
+- **H-01:** a tally circuit and trusted setup that prove the V2 instance.
+- **H-02:** a production `VoteVerifier` VK ceremony.
+- **H-04:** bind the clearance commitment to the voter nullifier in the circuit.
+- **H-06:** data availability and a challenge or dispute game for rollup settlement.
+- **M-01:** a root history for late updates.
+- **M-05:** make the settled-root pin mandatory in production.
+- **M-06:** move large elections to the ZK tally.
+- **M-08:** gas accounting and rate limits.
+- **L-04, L-05:** per-election roles and cascaded officer cleanup.
+- **L-06:** a commitment range check once Poseidon is the only hasher.
+- **L-10:** on-chain deploy guard.
+- **Operational:** put the super-admin behind a multisig and timelock.
+- **I-01 to I-06:** unchanged by request.
