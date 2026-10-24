@@ -10,8 +10,8 @@ pragma solidity ^0.8.24;
 ///      `keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId))`.
 ///      The factory uint256 is unique *per factory*; the UUID is a Node alias.
 library ElectionIdentity {
-    /// @dev keccak256("republic.election.identity.v1")
-    bytes32 internal constant DOMAIN = keccak256("republic.election.identity.v1");
+    /// @dev keccak256("zk-voting.election.identity.v1")
+    bytes32 internal constant DOMAIN = keccak256("zk-voting.election.identity.v1");
 
     function certificationId(address factory, uint256 electionId, bytes32 jurisdictionId)
         internal

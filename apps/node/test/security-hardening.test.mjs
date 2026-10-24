@@ -122,7 +122,7 @@ function rawOptions(pathname, headers = {}) {
 
 describe('HTTP: redirects and CORS', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-sec-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-sec-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

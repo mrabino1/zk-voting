@@ -360,7 +360,7 @@ export function createTermsService({ store, mailer, config = {}, getDocument = n
         },
       });
     } catch {
-      console.warn(`[republic] terms-updated notice userId=${account.id} reason=send_failed`);
+      console.warn(`[zk-voting] terms-updated notice userId=${account.id} reason=send_failed`);
       return { sent: false, reason: 'send_failed', plainTextSha256: hash };
     }
 
@@ -370,7 +370,7 @@ export function createTermsService({ store, mailer, config = {}, getDocument = n
     try {
       await store.persist();
     } catch {
-      console.warn(`[republic] terms-updated notice userId=${account.id} reason=persist_failed`);
+      console.warn(`[zk-voting] terms-updated notice userId=${account.id} reason=persist_failed`);
     }
     return { sent: true, plainTextSha256: hash, termsNotifiedAt: account.termsNotifiedAt };
   }

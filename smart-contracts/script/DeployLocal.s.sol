@@ -46,20 +46,20 @@ struct ZkVotingStack {
 
 /// @notice Anvil / L2 helpers. `DeployLocal` and `DeployL2` inherit this.
 /// @dev Unit tests never call this script. Default is MockVerifier + keccak-dev-v1.
-///      Integration: `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`)
+///      Integration: `ZK_VOTING_PROVING_PATH=1` (or `ZK_VOTING_USE_MOCK_VERIFIER=0`)
 ///      deploys PoseidonHasher and a non-mock verifier. Without
-///      `REPUBLIC_VOTE_VERIFIER`, that is `VoteVerifier` with a zero VK (fail closed).
-///      Set `REPUBLIC_VOTE_VERIFIER` to a snarkjs-exported verifier to wrap it in
+///      `ZK_VOTING_VOTE_VERIFIER`, that is `VoteVerifier` with a zero VK (fail closed).
+///      Set `ZK_VOTING_VOTE_VERIFIER` to a snarkjs-exported verifier to wrap it in
 ///      `Groth16VerifierAdapter`. That key is still untrusted until a ceremony.
 abstract contract ZkVotingStackScript is DeployOnce {
     /// @dev Audit H-02: a mock (accept-all) verifier may only be deployed on
-    ///      anvil (31337) or with the explicit dev flag REPUBLIC_ALLOW_MOCK_VERIFIER=1.
+    ///      anvil (31337) or with the explicit dev flag ZK_VOTING_ALLOW_MOCK_VERIFIER=1.
     error MockVerifierNotAllowed(uint256 chainId);
 
     uint256 internal constant ANVIL_CHAIN_ID = 31337;
 
     function _mockVerifierAllowed() internal view returns (bool) {
-        return block.chainid == ANVIL_CHAIN_ID || _envTruthy("REPUBLIC_ALLOW_MOCK_VERIFIER");
+        return block.chainid == ANVIL_CHAIN_ID || _envTruthy("ZK_VOTING_ALLOW_MOCK_VERIFIER");
     }
 
     function _log(string memory name, address addr) internal view {
@@ -86,22 +86,22 @@ abstract contract ZkVotingStackScript is DeployOnce {
         return _isTruthy(vm.envOr(name, string("")));
     }
 
-    /// @dev Default true. `REPUBLIC_PROVING_PATH=1` or `REPUBLIC_USE_MOCK_VERIFIER=0` → VoteVerifier.
+    /// @dev Default true. `ZK_VOTING_PROVING_PATH=1` or `ZK_VOTING_USE_MOCK_VERIFIER=0` → VoteVerifier.
     function _useMockVerifier() internal view returns (bool) {
-        if (_envTruthy("REPUBLIC_PROVING_PATH")) return false;
-        string memory mock = vm.envOr("REPUBLIC_USE_MOCK_VERIFIER", string("1"));
+        if (_envTruthy("ZK_VOTING_PROVING_PATH")) return false;
+        string memory mock = vm.envOr("ZK_VOTING_USE_MOCK_VERIFIER", string("1"));
         if (_isFalsy(mock)) return false;
         return true;
     }
 
     function _schemeIsStandIn(string memory scheme) internal pure returns (bool) {
         bytes32 h = keccak256(bytes(scheme));
-        return h == keccak256("republic.hash.standin-v0") || h == keccak256("standin-v0") || h == keccak256("standin");
+        return h == keccak256("zk-voting.hash.standin-v0") || h == keccak256("standin-v0") || h == keccak256("standin");
     }
 
     function _schemeIsPoseidon(string memory scheme) internal pure returns (bool) {
         bytes32 h = keccak256(bytes(scheme));
-        return h == keccak256("republic.hash.poseidon-bn254-x5-t3-v1") || h == keccak256("poseidon")
+        return h == keccak256("zk-voting.hash.poseidon-bn254-x5-t3-v1") || h == keccak256("poseidon")
             || h == keccak256("poseidon-bn254-x5-t3-v1");
     }
 
@@ -129,9 +129,9 @@ abstract contract ZkVotingStackScript is DeployOnce {
         if (useMock && !_mockVerifierAllowed()) revert MockVerifierNotAllowed(block.chainid);
         s.mockVerifier = useMock;
 
-        string memory schemeEnv = vm.envOr("REPUBLIC_HASH_SCHEME", string(""));
+        string memory schemeEnv = vm.envOr("ZK_VOTING_HASH_SCHEME", string(""));
         if (bytes(schemeEnv).length == 0) {
-            s.hashScheme = useMock ? "republic.hash.keccak-dev-v1" : "republic.hash.poseidon-bn254-x5-t3-v1";
+            s.hashScheme = useMock ? "zk-voting.hash.keccak-dev-v1" : "zk-voting.hash.poseidon-bn254-x5-t3-v1";
         } else {
             s.hashScheme = schemeEnv;
         }
@@ -150,7 +150,7 @@ abstract contract ZkVotingStackScript is DeployOnce {
             mock.setAccept(true);
             s.verifier = IGroth16Verifier(address(mock));
         } else {
-            address exported = vm.envOr("REPUBLIC_VOTE_VERIFIER", address(0));
+            address exported = vm.envOr("ZK_VOTING_VOTE_VERIFIER", address(0));
             if (exported != address(0)) {
                 // Caller deployed the snarkjs verifier. Still not a ceremony.
                 s.verifier = IGroth16Verifier(address(new Groth16VerifierAdapter(exported, 5)));
@@ -173,8 +173,8 @@ abstract contract ZkVotingStackScript is DeployOnce {
         s.inbox = new BallotInbox(address(s.factory));
         s.tally = new Tally(address(s.factory));
         // Audit H-01: the tally has its own verifier. Mock path: the same dev
-        // mock. Otherwise REPUBLIC_TALLY_VERIFIER, else unset (tally fails closed).
-        address tallyVerifier = useMock ? address(s.verifier) : vm.envOr("REPUBLIC_TALLY_VERIFIER", address(0));
+        // mock. Otherwise ZK_VOTING_TALLY_VERIFIER, else unset (tally fails closed).
+        address tallyVerifier = useMock ? address(s.verifier) : vm.envOr("ZK_VOTING_TALLY_VERIFIER", address(0));
         if (tallyVerifier != address(0)) s.tally.setTallyProofVerifier(tallyVerifier);
         s.factory
             .setModules(

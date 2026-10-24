@@ -9,7 +9,7 @@ import path from 'node:path';
 import { keccak256, stringToHex } from 'viem';
 
 import {
-  disclosurePublicView,
+  publicDisclosureView,
   hourBucket,
   isDelayedPublicType,
   isDisclosed,
@@ -320,7 +320,7 @@ export class Explorer {
     }
 
     const rows = fromOutcomes.length ? fromOutcomes : fromBlock;
-    const l2Delayed = src.source === 'republic-l2';
+    const l2Delayed = src.source === 'zk-voting-l2';
     const blockTs = block?.timestamp != null ? Number(block.timestamp) : now;
 
     for (const row of rows) {
@@ -457,7 +457,7 @@ export class Explorer {
   }
 
   publicDisclosure(now, intervalSeconds) {
-    return disclosurePublicView(now, intervalSeconds, {
+    return publicDisclosureView(now, intervalSeconds, {
       acceptedBallotsDisclosed: this.countPublishedVoteTxs(),
     });
   }

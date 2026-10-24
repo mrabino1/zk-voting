@@ -175,14 +175,14 @@ export function getConfig(overrides = {}) {
     { isTest },
   );
 
-  const provingPath = envFlag(overrides.provingPath ?? process.env.REPUBLIC_PROVING_PATH, false);
+  const provingPath = envFlag(overrides.provingPath ?? process.env.ZK_VOTING_PROVING_PATH, false);
   const useMockVerifier = provingPath
     ? false
-    : envFlag(overrides.useMockVerifier ?? process.env.REPUBLIC_USE_MOCK_VERIFIER, true);
+    : envFlag(overrides.useMockVerifier ?? process.env.ZK_VOTING_USE_MOCK_VERIFIER, true);
   const hashScheme =
     overrides.hashScheme ||
-    process.env.REPUBLIC_HASH_SCHEME ||
-    (provingPath ? 'republic.hash.poseidon-bn254-x5-t3-v1' : 'republic.hash.keccak-dev-v1');
+    process.env.ZK_VOTING_HASH_SCHEME ||
+    (provingPath ? 'zk-voting.hash.poseidon-bn254-x5-t3-v1' : 'zk-voting.hash.keccak-dev-v1');
 
   const config = {
     nfp: true,
@@ -267,9 +267,9 @@ export function getConfig(overrides = {}) {
     receiptPdfSecret: String(overrides.receiptPdfSecret ?? process.env.RECEIPT_PDF_SECRET ?? '').trim(),
     publicBaseUrl: authority.publicBaseUrl,
     mailWebhookUrl: String(overrides.mailWebhookUrl ?? process.env.MAIL_WEBHOOK_URL ?? '').trim(),
-    sessionCookie: 'republic.sid',
+    sessionCookie: 'zk-voting.sid',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
-    mfaCookie: 'republic.mfa',
+    mfaCookie: 'zk-voting.mfa',
     mfaTtlMs: 10 * 60 * 1000,
     quiet: process.env.NODE_ENV === 'test',
     publicDir: path.join(PKG_ROOT, 'public'),

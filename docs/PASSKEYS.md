@@ -10,7 +10,7 @@ ZK-Voting voters do not handle seed phrases. A **WebAuthn** credential on the de
 The ballot is unlinkable from the smart-account address. L2 gas is **sponsored** (paymaster). This document is the implementation note for that construction; the package map
 is [`ARCHITECTURE.md`](./ARCHITECTURE.md). **Implemented today** in
 `apps/node/public/passkey-wallet.js`: WebAuthn + PRF wrap of a 32-byte seed in
-IndexedDB. `getAddress()` returns `republic-local-address` (SHA-256 of the seed).
+IndexedDB. `getAddress()` returns `zk-voting-local-address` (SHA-256 of the seed).
 Production Ethereum addresses (keccak256 of the uncompressed secp256k1 pubkey)
 are **Future** in that helper — it does not ship a curve implementation.
 
@@ -83,8 +83,8 @@ Circom `Hasher()` and the demo SPA commitment are both Poseidon(2). The nullifie
 
 Use **domain-separated salts** so account HKDF and identity HKDF cannot be swapped:
 
-- `saltAccount`  = `HKDF-Extract` info `"republic:account:v1"` + `credentialId` + chain id
-- `saltIdentity` = `"republic:identity:v1"` + `credentialId` + `jurisdictionId`
+- `saltAccount`  = `HKDF-Extract` info `"zk-voting:account:v1"` + `credentialId` + chain id
+- `saltIdentity` = `"zk-voting:identity:v1"` + `credentialId` + `jurisdictionId`
 
 Do not reuse the Ethereum private key as `identityTrapdoor`. That would make every on-chain account signature a potential identity leak.
 
@@ -95,13 +95,13 @@ The browser wallet implements those two domains. After create, it **re-evals** P
 Exact HKDF-SHA-256 (WebCrypto; equivalent to HKDF-Extract then Expand, L = 32):
 
 ```text
-saltAccount  = HKDF(ikm = credentialId, salt = "republic:account:v1",  info = decimal chain id)
-saltIdentity = HKDF(ikm = credentialId, salt = "republic:identity:v1", info = jurisdictionId)
+saltAccount  = HKDF(ikm = credentialId, salt = "zk-voting:account:v1",  info = decimal chain id)
+saltIdentity = HKDF(ikm = credentialId, salt = "zk-voting:identity:v1", info = jurisdictionId)
 
 prf.eval({ first: saltAccount, second: saltIdentity })
 
-account wrap key = HKDF(ikm = prf.first,  salt = "republic:account:v1",  info = "republic-secp256k1-wrap")
-(trapdoor || nullifierSecret) = HKDF(ikm = prf.second, salt = "republic:identity:v1", info = "trapdoor+nullifier", L = 64)
+account wrap key = HKDF(ikm = prf.first,  salt = "zk-voting:account:v1",  info = "zk-voting-secp256k1-wrap")
+(trapdoor || nullifierSecret) = HKDF(ikm = prf.second, salt = "zk-voting:identity:v1", info = "trapdoor+nullifier", L = 64)
 ```
 
 If the authenticator returns `first` but not `second`, the wallet runs a **second assertion** with `eval.first = saltIdentity`. It will not fold identity into the account seed.
@@ -110,14 +110,14 @@ If the authenticator returns `first` but not `second`, the wallet runs a **secon
 
 #### IndexedDB record version 3 (Poseidon leaf)
 
-Wallet store `republic-wallet` schema is **version 2**. Record field `version` is `3`, `identityScheme` is `prf-hkdf-poseidon-v3`.
+Wallet store `zk-voting-wallet` schema is **version 2**. Record field `version` is `3`, `identityScheme` is `prf-hkdf-poseidon-v3`.
 
 v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) cannot be unwrapped under the domain salts. v2 records stored `keccak256(trapdoor || nullifierSecret)`, which is not the circuit leaf. The SPA treats both as stale and asks the voter to **reset the device wallet** and create a new passkey. The identity commitment changes; any prior demo roll row will not match.
 
 #### Intentional demo deviations that remain
 
 - The demo SPA commitment is **Poseidon(trapdoor, nullifierSecret)** (`poseidonCommitmentHex`), the same leaf as `circuits/identity.circom`. 32-byte HKDF outputs are reduced mod the bn254 scalar field. Foundry `IdentityCommitment.toLeaf` is still keccak for unit-test trees. Do not insert a keccak leaf into a Poseidon tree.
-- Account “address” is still `SHA-256(seed)[0:20]` (`republic-local-address`), not secp256k1/keccak.
+- Account “address” is still `SHA-256(seed)[0:20]` (`zk-voting-local-address`), not secp256k1/keccak.
 - UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
 - When PRF is missing, account wrap and identity still use **two** HKDF domains of the credential id (not the same bytes). That path is weaker than authenticator PRF and is demo-only.
 - Node HTTP still stores credential ids only; it does not see PRF output or trapdoors.

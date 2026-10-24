@@ -88,7 +88,7 @@ export function hourBucket(eventTs, intervalSeconds) {
  * Public metadata only. Never include a pending-per-election count.
  * `acceptedBallotsDisclosed` is the last closed-hour snapshot (already public).
  */
-export function disclosurePublicView(now, intervalSeconds, extras = {}) {
+export function publicDisclosureView(now, intervalSeconds, extras = {}) {
   const interval = Number(intervalSeconds) || 0;
   const ts = Number(now);
   const last = interval > 0 ? publishedThrough(ts, interval) : ts;

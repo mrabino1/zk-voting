@@ -184,6 +184,6 @@ Rate limits are kept in memory per Node process. Verification of a large circuit
 ## Relation to other tools
 
 - **CLI** ([`CEREMONY.md`](./CEREMONY.md)): same phase 2, run by hand. It accepts a beacon of 1 to 255 bytes and requires 2 contributions. The web ceremony uses the hash of a committed, finalized Ethereum mainnet block (32 bytes) and defaults to 3.
-- **Nuursha** (a sibling project) contributed the shape: refuse to finalize below a minimum count, require a public beacon fixed after the last contribution, run `zkey verify`, and publish per-contribution hashes. Differences: Nuursha has no UI, requires at least 3 contributions, takes a 64-hex beacon, downloads the ptau in its Makefile, and loads snarkjs from a CDN. Here the Node never fetches circuit or ptau files (its only outbound call is the read-only beacon lookup), and snarkjs is served locally.
+- **Finalize rules**: refuse to finalize below a minimum count, require a public beacon fixed after the last contribution, run `zkey verify`, and publish per-contribution hashes. The Node never fetches circuit or ptau files (its only outbound call is the read-only beacon lookup), and snarkjs is served locally.
 
 The toy circuit in `apps/node/test/fixtures/ceremony` is for tests only. Its phase-1 file was made with published entropy and is not trusted.

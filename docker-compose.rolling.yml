@@ -30,7 +30,7 @@ services:
       L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
     volumes:
       - l2-data:/data
@@ -41,7 +41,7 @@ services:
       retries: 12
       start_period: 15s
     networks:
-      - republic
+      - zk-voting
 
   node-next:
     image: zk-voting-node:${ZK_VOTING_IMAGE_TAG:-local}
@@ -84,12 +84,12 @@ services:
       retries: 12
       start_period: 25s
     networks:
-      - republic
+      - zk-voting
 
 volumes:
   node-data:
   l2-data:
 
 networks:
-  republic:
+  zk-voting:
     driver: bridge

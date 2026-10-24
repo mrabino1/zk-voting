@@ -291,7 +291,7 @@ Git workflow
 
 Data / chain (JSON store, no SQL database)
   5, data, --data-status
-                  republic.json counts
+                  zk-voting.json counts
   6, connectivity
                   Node / L2 / CHAIN_RPC / L1_RPC reachability
   7, users, --list-users

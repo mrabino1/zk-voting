@@ -15,7 +15,7 @@ import {
 import { createViemTokenSource } from '../../apps/node/src/tokenSource.mjs';
 import { evaluateWeightedPoll } from '../../apps/node/src/weightedTally.mjs';
 
-export const POLL_AUDITOR_SCHEMA = 'republic.auditor.poll.v1';
+export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 
 function dec(value) {
   return BigInt(value).toString();

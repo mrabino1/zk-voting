@@ -20,7 +20,7 @@ import {
   scalarToHex,
 } from './p256.mjs';
 
-const DOMAIN = 'republic.guardian.chaum-pedersen.v1';
+const DOMAIN = 'zk-voting.guardian.chaum-pedersen.v1';
 
 function hashBytes(parts) {
   const hash = createHash('sha256');

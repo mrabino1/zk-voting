@@ -65,7 +65,7 @@ function listen(application) {
 
 describe('personal API keys', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-api-keys-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-api-keys-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -127,7 +127,7 @@ describe('personal API keys', () => {
     assert.equal(listed.json.apiKeys[0].prefix, secret.slice(0, 12));
     assert.equal(listed.json.apiKeys[0].secret, undefined);
 
-    const disk = await readFile(path.join(tmp, 'republic.json'), 'utf8');
+    const disk = await readFile(path.join(tmp, 'zk-voting.json'), 'utf8');
     assert.doesNotMatch(disk, new RegExp(secret));
     assert.match(disk, /secretHash/);
 

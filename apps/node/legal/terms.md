@@ -67,9 +67,9 @@ A separate public monitor at `/outcomes` lists every election before, during, an
 
 ## 8. Privacy, cookies, and data the Node stores
 
-The Node JSON store (`republic.json`) may hold handles, hashed authenticators, session ids, election records, and terms-acceptance fingerprints. It must not hold legal names, dates of birth, or street addresses on chain. License and passport numbers are hashed, not stored.
+The Node JSON store (`zk-voting.json`) may hold handles, hashed authenticators, session ids, election records, and terms-acceptance fingerprints. It must not hold legal names, dates of birth, or street addresses on chain. License and passport numbers are hashed, not stored.
 
-Session cookies (`republic.sid`, `republic.mfa`) are first-party, HttpOnly, and needed to keep you signed in and to complete email MFA. Blocking them prevents sign-in.
+Session cookies (`zk-voting.sid`, `zk-voting.mfa`) are first-party, HttpOnly, and needed to keep you signed in and to complete email MFA. Blocking them prevents sign-in.
 
 Transactional email (MFA codes, a PDF of these Terms on acceptance, optional hash-only vote receipts, and feedback sent to the site operator from `/feedback`) is sent with AWS SES when `SES_FROM_ADDRESS` and `AWS_REGION` are set. Do not reply to those messages; the From address may be unmonitored. Feedback mail goes to the platform super admin, not onto the roll and not onto civic L2.
 

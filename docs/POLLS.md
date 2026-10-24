@@ -49,7 +49,7 @@ Weights are uint256 base units: `bigint` in memory, decimal strings in JSON. Plu
 
 ## Auditor
 
-`republic.auditor.poll.v1` is a separate pack from the civic `republic.auditor.v1`. `tools/auditor verify --offline` checks signatures, one address, choices, the math, `resultHash`, and `ballotsRoot`. With `--rpc` it re-derives every final weight. See [`AUDITOR.md`](./AUDITOR.md).
+`zk-voting.auditor.poll.v1` is a separate pack from the civic `zk-voting.auditor.v1`. `tools/auditor verify --offline` checks signatures, one address, choices, the math, `resultHash`, and `ballotsRoot`. With `--rpc` it re-derives every final weight. See [`AUDITOR.md`](./AUDITOR.md).
 
 ## L1 mirror (follow-up)
 

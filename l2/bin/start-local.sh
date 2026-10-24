@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # NOT FOR PROFIT — civic public good, not a commercial sequencer.
-# Start Republic L2 sequencer + prover with plain Node. No Docker.
+# Start ZK-Voting L2 sequencer + prover with plain Node. No Docker.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +12,7 @@ export DEV_MOCK_PROOF="${DEV_MOCK_PROOF:-true}"
 export L2_RPC_HOST="${L2_RPC_HOST:-127.0.0.1}"
 export L2_RPC_PORT="${L2_RPC_PORT:-8546}"
 
-echo "NOT FOR PROFIT — Republic L2 (our sequencer, our prover). Not a commercial product."
+echo "NOT FOR PROFIT — ZK-Voting L2 (our sequencer, our prover). Not a commercial product."
 echo "chainId=27427  rpc=http://${L2_RPC_HOST}:${L2_RPC_PORT}  DEV_MOCK_PROOF=${DEV_MOCK_PROOF}"
 
 node "$DIR/sequencer/index.mjs" &

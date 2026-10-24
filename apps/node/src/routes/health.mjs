@@ -4,7 +4,7 @@ import { brandName } from '../branding.mjs';
 import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
-import { disclosurePublicView } from '../disclosure.mjs';
+import { publicDisclosureView } from '../disclosure.mjs';
 import { AUTH_METHOD_TYPES, identityCaps } from '../identity.mjs';
 import { PIN_MAX_LEN, PIN_MIN_LEN } from '../pin.mjs';
 import { credentialProviderPublic } from '../credentials.mjs';
@@ -21,7 +21,7 @@ export function healthRouter(deps) {
       : undefined;
     const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
     const mode = deps.writer?.mode?.() || 'active';
-    res.set('x-republic-mode', mode);
+    res.set('x-zk-voting-mode', mode);
     res.json({
       ok: true,
       ready: true,
@@ -38,7 +38,7 @@ export function healthRouter(deps) {
       electionFactoryAddress: contracts.factory || '',
       chainConfigured: deps.chain.isConfigured(),
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
-      disclosure: disclosurePublicView(now, interval, { acceptedBallotsDisclosed }),
+      disclosure: publicDisclosureView(now, interval, { acceptedBallotsDisclosed }),
     });
   });
   return router;
@@ -92,7 +92,7 @@ export function configRouter(deps) {
           voteReady: deps.chain.isReady(),
           note: chainConfigured
             ? 'POST /api/elections calls the one shared ElectionFactory. Fork the Node UI; do not deploy a new factory per jurisdiction. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
-            : 'CHAIN_RPC unset. POST /api/elections writes republic.json only (demo). Pin the shared factory on /office/site when you connect a chain.',
+            : 'CHAIN_RPC unset. POST /api/elections writes zk-voting.json only (demo). Pin the shared factory on /office/site when you connect a chain.',
         },
         addresses: {
           factory: contracts.factory || null,
@@ -105,7 +105,7 @@ export function configRouter(deps) {
           receiptsProveChoice: false,
         },
         receipts: {
-          schema: 'republic.receipt.v1',
+          schema: 'zk-voting.receipt.v1',
           proveChoice: false,
           email: true,
           emailVendor: 'ses',
@@ -118,14 +118,14 @@ export function configRouter(deps) {
           note: 'After a ballot is accepted, the voter may email a hash-only receipt (body + locked PDF). The PDF uses Standard Security so it cannot be edited. Paste the proof or drop the PDF at /receipt to confirm it counted and was not modified. Never lists a candidate or option. Public turnout is an hourly snapshot.',
         },
         outcomes: {
-          schema: 'republic.outcomes.v1',
+          schema: 'zk-voting.outcomes.v1',
           portal: '/outcomes',
           verifyPath: '/outcomes',
           phases: ['before', 'during', 'after'],
           proveChoice: false,
           unofficialCounts: false,
           officialReport: {
-            schema: 'republic.outcome-report.v1',
+            schema: 'zk-voting.outcome-report.v1',
             pdfProtected: true,
             pdfModify: false,
             pdfEncryption: 'standard-r3-rc4-128',
@@ -143,7 +143,7 @@ export function configRouter(deps) {
         },
         l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
         l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
-        disclosure: disclosurePublicView(now, deps.config.disclosureIntervalSeconds, {
+        disclosure: publicDisclosureView(now, deps.config.disclosureIntervalSeconds, {
           acceptedBallotsDisclosed: deps.store?.publishedAcceptedBallotsAll
             ? deps.store.publishedAcceptedBallotsAll(now, deps.config.disclosureIntervalSeconds)
             : undefined,
@@ -184,8 +184,8 @@ export function configRouter(deps) {
           ceremony: 'not-done',
           mockVerifierDefault: deps.config.useMockVerifier !== false,
           provingPath: Boolean(deps.config.provingPath),
-          hashScheme: deps.config.hashScheme || 'republic.hash.keccak-dev-v1',
-          circuitHashScheme: 'republic.hash.poseidon-bn254-x5-t3-v1',
+          hashScheme: deps.config.hashScheme || 'zk-voting.hash.keccak-dev-v1',
+          circuitHashScheme: 'zk-voting.hash.poseidon-bn254-x5-t3-v1',
           poseidonWired: true,
           groth16: 'untrusted-local-fixture-or-missing-keys',
           note: 'Poseidon(2) matches the vote circuit, proof-helpers, PoseidonHasher, and demo passkey commitments (prf-hkdf-poseidon-v3). Unit tests still use MockVerifier. The committed Groth16 check is an untrusted local setup, not a ceremony. The Node Merkle tree stays keccak-dev-v1.',

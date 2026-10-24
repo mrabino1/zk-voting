@@ -26,7 +26,7 @@ forge test --via-ir
 Unit tests use `MockVerifier`. `UntrustedGroth16Test` verifies a real untrusted Vote(4) proof (not accept-all). Non-mock deploy:
 
 ```bash
-REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+ZK_VOTING_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
 ## Gas economics

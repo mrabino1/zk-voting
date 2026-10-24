@@ -31,7 +31,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         publisherB = makeAddr("publisherB");
         attacker = makeAddr("attacker");
         jurisdictionA = Fixtures.DEFAULT_JURISDICTION;
-        jurisdictionB = keccak256("republic-foreign-jurisdiction");
+        jurisdictionB = keccak256("zk-voting-foreign-jurisdiction");
         vm.prank(admin);
         jurisdictions.createJurisdiction(jurisdictionB, attacker, "Foreign");
         vm.prank(admin);
@@ -308,7 +308,7 @@ contract ElectionIdentitySeparationTest is Deployer {
     }
 
     function testCertificationIdDomainMatchesLiteral() public pure {
-        assertEq(ElectionIdentity.DOMAIN, keccak256("republic.election.identity.v1"));
+        assertEq(ElectionIdentity.DOMAIN, keccak256("zk-voting.election.identity.v1"));
         address fac = address(0x1111111111111111111111111111111111111111);
         bytes32 got = ElectionIdentity.certificationId(fac, 7, keccak256("demo"));
         assertEq(got, keccak256(abi.encode(ElectionIdentity.DOMAIN, fac, uint256(7), keccak256("demo"))));

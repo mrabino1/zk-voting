@@ -259,7 +259,7 @@ export default {
     copiedCommitment: "تم نسخ identity commitment.",
     localAddress: "العنوان المحلي في {brand}",
     prfWrap:
-      "تغليف PRF: مادة الحساب تستخدم الملح republic:account:v1؛ وtrapdoor ZK يستخدم الملح republic:identity:v1. ليستا البايتات نفسها.",
+      "تغليف PRF: مادة الحساب تستخدم الملح zk-voting:account:v1؛ وtrapdoor ZK يستخدم الملح zk-voting:identity:v1. ليستا البايتات نفسها.",
     createFirst: "أنشئ passkey لاشتقاق الـ commitment. الـ trapdoor لا يظهر على هذه الشاشة أبدًا.",
     activeEthTitle: "عنوان Ethereum النشط",
     noActive:
@@ -515,9 +515,9 @@ export default {
     webAuthnUnavailable:
       "يتطلب {brand} passkey جهاز (WebAuthn) بمفتاح مقيم وتحقق من المستخدم. استخدم متصفحًا حديثًا (Safari 16+، Chrome 108+، Firefox 122+، Edge) على جهاز بمصادق منصة. لا تُعرض عبارة بذر أبدًا.",
     productionNote:
-      "يستخدم الإنتاج keccak256(uncompressed secp256k1 public key) ثم يأخذ آخر 20 بايت (Ethereum). لا تستطيع هذه التجربة الضرب على secp256k1 دون مكتبة منحنى، لذلك يعيد getAddress() القيمة SHA-256(seed)[0:20] المعنونة republic-local-address.",
+      "يستخدم الإنتاج keccak256(uncompressed secp256k1 public key) ثم يأخذ آخر 20 بايت (Ethereum). لا تستطيع هذه التجربة الضرب على secp256k1 دون مكتبة منحنى، لذلك يعيد getAddress() القيمة SHA-256(seed)[0:20] المعنونة zk-voting-local-address.",
     staleWrap:
-      "هذا المتصفح لديه تغليف passkey v1 (IndexedDB republic-wallet). اشتق v1 الـ trapdoor ZK من البذرة نفسها لمفتاح الحساب، وهو أضعف من docs/PASSKEYS.md. لا تستطيع التجربة ترحيل ذلك التغليف مكانه: استخدم v1 ملح PRF عشوائيًا ونطاق HKDF واحدًا، لذا لا تستطيع أملاح الحساب/الهوية الجديدة فكّه. أعد ضبط محفظة الجهاز وأنشئ passkey جديدة. سيتغير العنوان المحلي وidentity commitment؛ ولن تطابق أي قيد قائمة تجريبي سابق.",
+      "هذا المتصفح لديه تغليف passkey v1 (IndexedDB zk-voting-wallet). اشتق v1 الـ trapdoor ZK من البذرة نفسها لمفتاح الحساب، وهو أضعف من docs/PASSKEYS.md. لا تستطيع التجربة ترحيل ذلك التغليف مكانه: استخدم v1 ملح PRF عشوائيًا ونطاق HKDF واحدًا، لذا لا تستطيع أملاح الحساب/الهوية الجديدة فكّه. أعد ضبط محفظة الجهاز وأنشئ passkey جديدة. سيتغير العنوان المحلي وidentity commitment؛ ولن تطابق أي قيد قائمة تجريبي سابق.",
     noEthWallet:
       "لا توجد محفظة Ethereum في هذا المتصفح. استخدم passkey، أو ثبّت محفظة تدعم personal_sign.",
     noWeb3Wallet: "لا توجد محفظة Web3 في هذا المتصفح. ثبّت محفظة أو استخدم passkey / بطاقة ذكية.",
@@ -670,7 +670,7 @@ export default {
     clerkHint:
       "أنشئ انتخابات ثم جمّد القائمة قبل فتح الصناديق. <code>maxParticipants = 0</code> يعني غير محدود. اختر التعددية (الافتراضي) أو الاختيار المرتّب (IRV).",
     chainNote:
-      "إذا كان لهذا Node <code>CHAIN_RPC</code>، فإن إنشاء الانتخابات يستدعي أيضًا <code>ElectionFactory.createElection</code> ويخزّن معرّف uint256 على السلسلة بجانب UUID. تُعرض إخفاقات المصنع هنا ولا يُحفظ شيء محليًا. بدون <code>CHAIN_RPC</code> يكتب هذا النموذج <code>republic.json</code> فقط (تجربة) وما زال يُصدر <code>onChainElectionId</code> تجريبيًا للدائرة.",
+      "إذا كان لهذا Node <code>CHAIN_RPC</code>، فإن إنشاء الانتخابات يستدعي أيضًا <code>ElectionFactory.createElection</code> ويخزّن معرّف uint256 على السلسلة بجانب UUID. تُعرض إخفاقات المصنع هنا ولا يُحفظ شيء محليًا. بدون <code>CHAIN_RPC</code> يكتب هذا النموذج <code>zk-voting.json</code> فقط (تجربة) وما زال يُصدر <code>onChainElectionId</code> تجريبيًا للدائرة.",
     jurisdiction: "الولاية",
     titleField: "العنوان",
     metadataUri: "URI للبيانات الوصفية",

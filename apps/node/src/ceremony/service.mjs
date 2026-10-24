@@ -10,7 +10,7 @@
 // exports the final zkey, verification key, and Solidity verifier for a
 // human to review. Nothing here deploys or edits contracts.
 //
-// Storage follows the Store pattern: metadata lives in republic.json
+// Storage follows the Store pattern: metadata lives in zk-voting.json
 // (`ceremonies`, written through store.persist, which honours the writer lease
 // and standby guard). Binary files live under CEREMONY_DIR
 // (default DATA_DIR/ceremonies/<id>/), using the same file names as
@@ -56,7 +56,7 @@ export const RECEIPT_SCHEMA = 'zk-voting.groth16.phase2.receipt.v1';
 export const EXPORT_SCHEMA = 'zk-voting.groth16.phase2.export.v1';
 export const CHAIN_GENESIS = '0'.repeat(64);
 
-/** Nuursha's circuit-finalize requires 3; the CLI floor is 2. */
+/** Default minimum is 3 contributions; the CLI floor is 2. */
 export const DEFAULT_MIN_CONTRIBUTIONS = 3;
 export const MIN_CONTRIBUTIONS_FLOOR = 2;
 export const DEFAULT_TURN_MINUTES = 30;

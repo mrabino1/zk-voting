@@ -1,12 +1,12 @@
 // NOT FOR PROFIT — civic public good, not a commercial sequencer.
-// Republic L2 chain state, civic mempool, and keccak256 (Ethereum).
+// ZK-Voting L2 chain state, civic mempool, and keccak256 (Ethereum).
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  disclosurePublicView,
+  publicDisclosureView,
   isDisclosed,
   isHeldVoteType,
   publishedThrough,
@@ -356,7 +356,7 @@ export function loadConfig(root = L2_ROOT) {
     bundler,
     genesisStateRoot: normalizeHex(genesis.genesisStateRoot || ZERO_HASH, 32),
     contracts: file.contracts || {},
-    republicNodeUrl: (process.env.REPUBLIC_NODE_URL || file.republicNodeUrl || '').replace(
+    zkVotingNodeUrl: (process.env.ZK_VOTING_NODE_URL || file.zkVotingNodeUrl || '').replace(
       /\/$/,
       '',
     ),
@@ -365,7 +365,7 @@ export function loadConfig(root = L2_ROOT) {
     settlementAddress: process.env.SETTLEMENT_ADDRESS || file.settlementAddress || '',
     privateKey: process.env.PRIVATE_KEY || '',
     devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof !== false),
-    voteProvingPath: parseBool(process.env.REPUBLIC_PROVING_PATH, false),
+    voteProvingPath: parseBool(process.env.ZK_VOTING_PROVING_PATH, false),
     l2RpcUrl:
       process.env.L2_RPC_URL ||
       `http://${process.env.L2_RPC_HOST || file.rpcHost || '127.0.0.1'}:${
@@ -511,7 +511,7 @@ export class ChainState {
   }
 
   disclosureView() {
-    return disclosurePublicView(this.now(), this.config.disclosureIntervalSeconds);
+    return publicDisclosureView(this.now(), this.config.disclosureIntervalSeconds);
   }
 
   blockPath(number) {
@@ -1114,7 +1114,7 @@ export class ChainState {
   }
 
   async postExplorer(block) {
-    const base = this.config.republicNodeUrl;
+    const base = this.config.zkVotingNodeUrl;
     if (!base) return;
     const outcomes = {
       register: [],
@@ -1134,7 +1134,7 @@ export class ChainState {
       if (outcomes[pub.type]) outcomes[pub.type].push(pub);
     }
     const body = {
-      source: 'republic-l2',
+      source: 'zk-voting-l2',
       notForProfit: true,
       chainId: this.config.chainId,
       block: this.rpcBlock(block, true),
@@ -1142,7 +1142,7 @@ export class ChainState {
     };
     const headers = { 'content-type': 'application/json' };
     if (this.config.explorerIngestSecret) {
-      headers['x-republic-ingest-secret'] = this.config.explorerIngestSecret;
+      headers['x-zk-voting-ingest-secret'] = this.config.explorerIngestSecret;
     }
     let wait = 400;
     let res;

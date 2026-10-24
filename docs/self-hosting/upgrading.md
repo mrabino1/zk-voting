@@ -49,6 +49,45 @@ There are no SQL migrations and nothing to run by hand.
 
 Because upgrades are additive, an older build can usually read a file written by a newer one. Still, restore the backup when you [roll back](./rollback.md) across many versions.
 
+## Breaking: legacy name removed (reset test data; rename env vars)
+
+Earlier builds used the legacy product name in identifiers. This release removes it everywhere and uses `zk-voting` / `ZK_VOTING_*` / `ZkVoting*`. It is a **clean break**: there is no fallback that reads the old names, and there is no data migration.
+
+**Reset test data.** Hash-scheme ids, the election-id domain, PRF key-derivation salts, receipt and outcome-report schemas, and token-poll signing data all changed. Election ids, jurisdiction-derived ids, passkey-wrapped account keys and receipts made by an older build do not verify under this one. Back up, then start from empty volumes (or delete the old data file) and redeploy the contracts. Do not upgrade a host that holds a binding election.
+
+**Rename every environment variable** that started with the old prefix to the `ZK_VOTING_` prefix. An old variable is now ignored, so the Node falls back to the default value.
+
+| Old | New |
+| --- | --- |
+| `<old>_NODE_URL` | `ZK_VOTING_NODE_URL` |
+| `<old>_RPC_URL` | `ZK_VOTING_RPC_URL` |
+| `<old>_L2_RPC_URL` | `ZK_VOTING_L2_RPC_URL` |
+| `<old>_CHAIN_ID` | `ZK_VOTING_CHAIN_ID` |
+| `<old>_L2_CHAIN_ID` | `ZK_VOTING_L2_CHAIN_ID` |
+| `<old>_API_KEY` | `ZK_VOTING_API_KEY` |
+| `<old>_STORE_FILE` | `ZK_VOTING_STORE_FILE` |
+| `<old>_ELECTION_NAMESPACE` | `ZK_VOTING_ELECTION_NAMESPACE` |
+| `<old>_HASH_SCHEME` | `ZK_VOTING_HASH_SCHEME` |
+| `<old>_PROVING_PATH` | `ZK_VOTING_PROVING_PATH` |
+| `<old>_USE_MOCK_VERIFIER` | `ZK_VOTING_USE_MOCK_VERIFIER` |
+| `<old>_ALLOW_MOCK_VERIFIER` | `ZK_VOTING_ALLOW_MOCK_VERIFIER` |
+| `<old>_SETTLEMENT_MOCK_MODE` | `ZK_VOTING_SETTLEMENT_MOCK_MODE` |
+| `<old>_VOTE_VERIFIER` | `ZK_VOTING_VOTE_VERIFIER` |
+| `<old>_TALLY_VERIFIER` | `ZK_VOTING_TALLY_VERIFIER` |
+| `<old>_PTAU_POWER` | `ZK_VOTING_PTAU_POWER` |
+| `<old>_SMOKE_PTAU_POWER` | `ZK_VOTING_SMOKE_PTAU_POWER` |
+| `<old>_CEREMONY_ENTROPY` | `ZK_VOTING_CEREMONY_ENTROPY` |
+
+**Other renames you may see:**
+- The data file is now `zk-voting.json`.
+- The Compose network is now `zk-voting`.
+- Cookies are now `zk-voting.sid` and `zk-voting.mfa`, so everyone signs in again.
+- HTTP headers are now `X-ZK-Voting-*`. This includes the ingest secret, the provider secret, the API key, the minimum level and the mode headers.
+- Receipt blocks now start with `BEGIN ZK-VOTING VOTE RECEIPT`.
+- Contracts are now `ZkVotingEntryPoint`, `ZkVotingPaymaster` and `ZkVotingMailbox`.
+
+Update any reverse-proxy rules, scripts or bots that set these headers or env vars.
+
 ## After you upgrade
 
 - `/health` returns `"ok": true` and `docker compose ps` shows `healthy`.

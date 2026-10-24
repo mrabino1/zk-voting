@@ -41,7 +41,7 @@ function flag(name) {
 }
 
 function usage() {
-  return `Republic L2 hourly archive (attic). Sequencer hot path stays local.
+  return `ZK-Voting L2 hourly archive (attic). Sequencer hot path stays local.
 
 Usage:
   node l2/archive/cli.mjs archive
@@ -104,7 +104,7 @@ async function cmdDaemon() {
   process.on('SIGTERM', requestStop);
   process.on('SIGINT', requestStop);
   console.log(
-    `Republic L2 archive daemon  enabled=${cfg.enabled}  interval=${cfg.intervalSeconds}s  dataDir=${cfg.dataDir}`,
+    `ZK-Voting L2 archive daemon  enabled=${cfg.enabled}  interval=${cfg.intervalSeconds}s  dataDir=${cfg.dataDir}`,
   );
   while (!stop) {
     try {

@@ -11,14 +11,14 @@ pragma solidity ^0.8.24;
 ///      - `STANDIN_V0` remains for legacy vectors only. The circuit does not use it.
 library HashScheme {
     /// @notice Circom stand-in: `out = a + b + a*b` over Fr. NOT collision-resistant.
-    bytes32 internal constant STANDIN_V0 = keccak256("republic.hash.standin-v0");
+    bytes32 internal constant STANDIN_V0 = keccak256("zk-voting.hash.standin-v0");
 
     /// @notice EVM-test keccak256(left || right). Matches `KeccakHasher`.
-    bytes32 internal constant KECCAK_DEV_V1 = keccak256("republic.hash.keccak-dev-v1");
+    bytes32 internal constant KECCAK_DEV_V1 = keccak256("zk-voting.hash.keccak-dev-v1");
 
     /// @notice Vote-circuit hasher. Wired in Circom, JS, and `PoseidonHasher`.
     ///         A matching hash is not a trusted setup.
-    bytes32 internal constant POSEIDON_BN254_X5_T3_V1 = keccak256("republic.hash.poseidon-bn254-x5-t3-v1");
+    bytes32 internal constant POSEIDON_BN254_X5_T3_V1 = keccak256("zk-voting.hash.poseidon-bn254-x5-t3-v1");
 
     /// @notice bn254 scalar field (Fr). Circom / Groth16 public inputs live here.
     uint256 internal constant SNARK_SCALAR_FIELD =

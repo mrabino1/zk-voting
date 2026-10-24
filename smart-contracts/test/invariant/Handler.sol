@@ -21,7 +21,7 @@ import {Ghost} from "./Ghost.sol";
 ///         try/catch so a revert does not abort the invariant run.
 ///         Actors are pranked; Foundry's random msg.sender is ignored.
 contract Handler is Deployer, Ghost {
-    bytes32 public constant JURISDICTION = keccak256("republic-fuzz-jurisdiction");
+    bytes32 public constant JURISDICTION = keccak256("zk-voting-fuzz-jurisdiction");
 
     uint256[2] internal _a;
     uint256[2][2] internal _b;
@@ -347,7 +347,7 @@ contract Handler is Deployer, Ghost {
     {
         p = Fixtures.build(
             "ZK-Voting invariant election",
-            "ipfs://republic-invariant",
+            "ipfs://zk-voting-invariant",
             start,
             cutoff,
             cap,

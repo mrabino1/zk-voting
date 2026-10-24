@@ -40,7 +40,7 @@ describe('website i18n', () => {
       'hi',
     ]);
     assert.deepEqual(RTL_LOCALES, ['ar']);
-    assert.equal(STORAGE_KEY, 'republic_lang');
+    assert.equal(STORAGE_KEY, 'zk_voting_lang');
     assert.equal(getLocale(), 'en');
     assert.equal(localeTag(), 'en');
     assert.equal(t('chrome.navElections'), 'Elections');

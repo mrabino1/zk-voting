@@ -59,7 +59,7 @@ contract CriticalRegressionsTest is Deployer {
 
     function _clientData(bytes32 challenge) internal view returns (string memory) {
         return string.concat(
-            '{"type":"webauthn.get","challenge":"', harness.b64(challenge), '","origin":"https://republic.example"}'
+            '{"type":"webauthn.get","challenge":"', harness.b64(challenge), '","origin":"https://zk-voting.example"}'
         );
     }
 
@@ -165,7 +165,7 @@ contract CriticalRegressionsTest is Deployer {
     function testC01_Base64UrlVectors() public view {
         assertEq(harness.b64(bytes32(0)), "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
         assertEq(harness.b64(bytes32(type(uint256).max)), "__________________________________________8");
-        assertEq(harness.b64(sha256("republic")), "oc2UxKnA-jaN0raC-7mHjwMUcZ3rNoVJPq3nldg4jbQ");
+        assertEq(harness.b64(sha256("zk-voting")), "AS4Sbrzl24x6gr_3DbF2vIDVeWhYihMRrPqJTQn9MoM");
     }
 
     function testC01_EndToEndPasskeyUserOp() public {

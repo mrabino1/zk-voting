@@ -109,7 +109,7 @@ describe('receipt proof helpers', () => {
       token: 'tok_example_token_value_32bytes____',
       acceptedAt: HOUR_START + 90,
     });
-    assert.match(text, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.match(text, /BEGIN ZK-VOTING VOTE RECEIPT/);
     const parsed = parseReceiptProof(text);
     assert.equal(parsed.schema, RECEIPT_SCHEMA);
     assert.equal(parsed.electionId, 'el-1');
@@ -174,7 +174,7 @@ describe('receipt proof helpers', () => {
 
 describe('email receipt, PDF, and verify portal', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-receipt-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-receipt-'));
     clock = HOUR_START + 90;
     const created = await createApp({
       dataDir: tmp,
@@ -270,7 +270,7 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.match(receipt.pdfSha256, /^[0-9a-f]{64}$/);
     assert.equal(receipt.pdfProtected, true);
     assert.equal(receipt.pdfModify, false);
-    assert.match(receipt.proofText, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.match(receipt.proofText, /BEGIN ZK-VOTING VOTE RECEIPT/);
     assert.equal(leakChoice(receipt).join(','), '');
     assert.equal(voted.json.vote.choice, undefined);
 
@@ -290,8 +290,8 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.ok(captured);
     assert.equal(captured.to, 'voter@example.org');
     assert.match(captured.subject, /not your choices/i);
-    assert.match(captured.text, /BEGIN REPUBLIC VOTE RECEIPT/);
-    assert.match(captured.html, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.match(captured.text, /BEGIN ZK-VOTING VOTE RECEIPT/);
+    assert.match(captured.html, /BEGIN ZK-VOTING VOTE RECEIPT/);
     assert.equal(captured.attachments.length, 1);
     assert.equal(captured.attachments[0].contentType, 'application/pdf');
     assert.equal(captured.attachments[0].sha256, emailed.json.pdfSha256);
@@ -385,7 +385,7 @@ describe('instant disclosure still hides choice on receipts', () => {
   let localMailer;
 
   before(async () => {
-    localTmp = await mkdtemp(path.join(os.tmpdir(), 'republic-receipt-0-'));
+    localTmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-receipt-0-'));
     const created = await createApp({
       dataDir: localTmp,
       allowDevLogin: true,

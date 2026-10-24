@@ -10,7 +10,7 @@ import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
 /// @notice Proof-binding, window boundaries, fail-closed proof, and vote-after-tally.
-/// @dev Ported from nuursha claim edges: wrong public inputs, empty/short payload,
+/// @dev Edge cases: wrong public inputs, empty/short payload,
 ///      failed proof must not consume the unique key, warp(t-1)/t/t+1.
 contract BallotInboxBindingTest is Deployer {
     uint256 internal electionId;

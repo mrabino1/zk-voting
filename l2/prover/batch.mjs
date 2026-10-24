@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial prover.
-// Batch construction for Republic L2. Public data is nullifiers, roots, and
+// Batch construction for ZK-Voting L2. Public data is nullifiers, roots, and
 // ballot hashes only — never ballot plaintext.
 import {
   keccak256Hex,

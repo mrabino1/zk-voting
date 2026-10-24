@@ -1,8 +1,8 @@
-# Republic (zk-voting)
+# ZK-Voting
 
 > NOT FOR PROFIT — civic public good. Not a commercial product.
 
-This repository is a zero-knowledge voting monorepo (product name Republic). Read it in this order when answering questions or calling the Node API.
+This repository is a zero-knowledge voting monorepo (product name ZK-Voting). Read it in this order when answering questions or calling the Node API.
 
 ## Bot API
 
@@ -24,7 +24,7 @@ A person creates API keys on the signed-in profile `/me`.
 
 ## Product map
 
-- `README.md` — what Republic is for and how to run it
+- `README.md` — what ZK-Voting is for and how to run it
 - `docs/ARCHITECTURE.md` — packages and interfaces
 - `docs/BOT_API.md` — every bot route
 - `docs/IDENTITY.md` — person, emails, passkeys, vote PIN

@@ -5,22 +5,22 @@
  *
  * - WebAuthn resident key + userVerification required.
  * - Two PRF / HKDF domains (docs/PASSKEYS.md): account key ≠ trapdoor/nullifierSecret.
- *   prf.eval(saltAccount)  → HKDF("republic:account:v1")  → AES-GCM wrap of secp256k1 seed
- *   prf.eval(saltIdentity) → HKDF("republic:identity:v1") → (identityTrapdoor, nullifierSecret)
- * - saltAccount  = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:account:v1", binding=chain id)
- * - saltIdentity = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:identity:v1", binding=jurisdictionId)
+ *   prf.eval(saltAccount)  → HKDF("zk-voting:account:v1")  → AES-GCM wrap of secp256k1 seed
+ *   prf.eval(saltIdentity) → HKDF("zk-voting:identity:v1") → (identityTrapdoor, nullifierSecret)
+ * - saltAccount  = HKDF-SHA-256(ikm=credentialId, salt/info domain "zk-voting:account:v1", binding=chain id)
+ * - saltIdentity = HKDF-SHA-256(ikm=credentialId, salt/info domain "zk-voting:identity:v1", binding=jurisdictionId)
  * - Authenticators that return only one PRF eval are prompted a second time with saltIdentity.
  *   ZK-Voting will not derive the trapdoor from the account seed or account PRF output.
  * - The seed stands in for a secp256k1 private key. This file does not ship a
  *   curve implementation, so it cannot emit an uncompressed public key.
  * - getAddress() therefore returns `0x` + first 20 bytes of SHA-256(seed) and
- *   labels the scheme `republic-local-address`.
+ *   labels the scheme `zk-voting-local-address`.
  * - Production (Ethereum) addresses are keccak256(uncompressed secp256k1 pubkey)[12:32].
  *   A compact keccak256 remains for ballot hashes. The identity commitment is Poseidon.
  * - NEVER render a seed phrase. The seed never leaves RAM except as AES-GCM ciphertext
  *   in IndexedDB. signUserOp() unwraps, HMAC-signs, then zeroes the seed.
  *
- * IndexedDB `republic-wallet` schema version 2. Record `version` 3 stores a Poseidon
+ * IndexedDB `zk-voting-wallet` schema version 2. Record `version` 3 stores a Poseidon
  * identity commitment (`prf-hkdf-poseidon-v3`). v1 wraps derived the ZK identity from
  * the account seed. v2 stored keccak256(trapdoor || nullifierSecret). Neither matches
  * the vote circuit. Reset the demo wallet and create a new passkey.
@@ -29,15 +29,15 @@
 import { brandName } from "./brand.js";
 import { POSEIDON_HASH_SCHEME, poseidonCommitmentHex } from "./poseidon.js";
 import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
-const DB_NAME = "republic-wallet";
+const DB_NAME = "zk-voting-wallet";
 const DB_VERSION = 2;
 const STORE = "wallet";
 const RECORD_KEY = "primary";
 
 /** @see docs/PASSKEYS.md domain-separated salts */
-export const ACCOUNT_PRF_DOMAIN = "republic:account:v1";
-export const IDENTITY_PRF_DOMAIN = "republic:identity:v1";
-export const ACCOUNT_HKDF_INFO = "republic-secp256k1-wrap";
+export const ACCOUNT_PRF_DOMAIN = "zk-voting:account:v1";
+export const IDENTITY_PRF_DOMAIN = "zk-voting:identity:v1";
+export const ACCOUNT_HKDF_INFO = "zk-voting-secp256k1-wrap";
 export const IDENTITY_HKDF_INFO = "trapdoor+nullifier";
 export const WALLET_RECORD_VERSION = 3;
 export const IDENTITY_SCHEME = "prf-hkdf-poseidon-v3";
@@ -45,16 +45,16 @@ export const DEFAULT_CHAIN_ID = 27427;
 export const DEFAULT_JURISDICTION_ID = "demo";
 
 const WRAP_INFO = ACCOUNT_HKDF_INFO;
-const FALLBACK_INFO = "republic-prf-fallback-v1";
-const FALLBACK_IDENTITY_INFO = "republic-prf-fallback-identity-v1";
-const PRF_ENABLE_INFO = "republic:prf-enable:v1";
+const FALLBACK_INFO = "zk-voting-prf-fallback-v1";
+const FALLBACK_IDENTITY_INFO = "zk-voting-prf-fallback-identity-v1";
+const PRF_ENABLE_INFO = "zk-voting:prf-enable:v1";
 
 export const STALE_WALLET_MESSAGE =
-  "This browser has a v1 passkey wrap or a pre-Poseidon identity commitment (IndexedDB republic-wallet). v1 derived the ZK trapdoor from the same seed as the account key. v2 hashed the leaf with keccak256. The demo leaf is now Poseidon(trapdoor, nullifierSecret), the same hash as the vote circuit. Reset the device wallet and create a new passkey. The identity commitment will change; any prior demo roll entry will not match.";
+  "This browser has a v1 passkey wrap or a pre-Poseidon identity commitment (IndexedDB zk-voting-wallet). v1 derived the ZK trapdoor from the same seed as the account key. v2 hashed the leaf with keccak256. The demo leaf is now Poseidon(trapdoor, nullifierSecret), the same hash as the vote circuit. Reset the device wallet and create a new passkey. The identity commitment will change; any prior demo roll entry will not match.";
 
-export const ADDRESS_SCHEME = "republic-local-address";
+export const ADDRESS_SCHEME = "zk-voting-local-address";
 export const PRODUCTION_ADDRESS_NOTE =
-  "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled republic-local-address.";
+  "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled zk-voting-local-address.";
 
 const textEncoder = new TextEncoder();
 
@@ -406,8 +406,8 @@ export async function hkdfSha256Bits(ikm, { salt = new Uint8Array(), info = new 
 /**
  * 32-byte WebAuthn PRF eval salt (docs/PASSKEYS.md).
  *
- *   saltAccount  = HKDF-SHA-256(ikm=credentialId, salt="republic:account:v1",  info=chainId)
- *   saltIdentity = HKDF-SHA-256(ikm=credentialId, salt="republic:identity:v1", info=jurisdictionId)
+ *   saltAccount  = HKDF-SHA-256(ikm=credentialId, salt="zk-voting:account:v1",  info=chainId)
+ *   saltIdentity = HKDF-SHA-256(ikm=credentialId, salt="zk-voting:identity:v1", info=jurisdictionId)
  *
  * HKDF-Extract uses the domain string as salt; HKDF-Expand uses the binding as info
  * so the two domains cannot be swapped and chain id cannot be confused with jurisdiction id.
@@ -734,8 +734,8 @@ export async function createCredential(serverOptions = {}) {
 
   const credential = await enqueueWebAuthn(() => navigator.credentials.create({ publicKey }));
   if (!credential) throw new Error("Passkey creation was cancelled.");
-  credential._republicPrfEvalFirst = evalFirst;
-  if (evalSecond) credential._republicPrfEvalSecond = evalSecond;
+  credential._zkVotingPrfEvalFirst = evalFirst;
+  if (evalSecond) credential._zkVotingPrfEvalSecond = evalSecond;
   return credential;
 }
 
@@ -1036,7 +1036,7 @@ export async function hasWallet() {
 
 /**
  * Address of the passkey-held account.
- * Demo: 0x + SHA-256(seed)[0:20], scheme republic-local-address.
+ * Demo: 0x + SHA-256(seed)[0:20], scheme zk-voting-local-address.
  * Production: keccak256(uncompressed secp256k1 pubkey)[12:32].
  */
 export async function getAddress() {
@@ -1264,7 +1264,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
             name: "HKDF",
             hash: "SHA-256",
             salt: electionKey,
-            info: textEncoder.encode("republic-ballot-elgamal-standin"),
+            info: textEncoder.encode("zk-voting-ballot-elgamal-standin"),
           },
           ikm,
           { name: "AES-GCM", length: 256 },
@@ -1282,7 +1282,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
     }
     const userOpMaterial = keccak256(
       concatBytes(
-        textEncoder.encode("republic.userop.v1"),
+        textEncoder.encode("zk-voting.userop.v1"),
         coerceBytes(rec.address),
         electionKey,
         ballotHash ? hexToBytes(ballotHash) : new Uint8Array(32)

@@ -34,7 +34,7 @@ describe('node rolling handover', () => {
   });
 
   test('standby health is ready, mutations return 503, then promotion writes once', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-node-lease-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-node-lease-'));
     temps.push(tmp);
     const first = await createApp({
       dataDir: tmp,
@@ -71,7 +71,7 @@ describe('node rolling handover', () => {
     assert.equal(standbyBody.ok, true);
     assert.equal(standbyBody.ready, true);
     assert.equal(standbyBody.mode, 'standby');
-    assert.equal(standbyHealth.headers.get('x-republic-mode'), 'standby');
+    assert.equal(standbyHealth.headers.get('x-zk-voting-mode'), 'standby');
 
     const denied = await fetch(standbyBase + '/api/auth/login', {
       method: 'POST',
@@ -96,13 +96,13 @@ describe('node rolling handover', () => {
         },
       ],
     };
-    const imported = await first.explorer.ingest({ block, source: 'republic-l2' }, 10, 0);
+    const imported = await first.explorer.ingest({ block, source: 'zk-voting-l2' }, 10, 0);
     assert.equal(imported.duplicate, false);
-    const again = await first.explorer.ingest({ block, source: 'republic-l2' }, 10, 0);
+    const again = await first.explorer.ingest({ block, source: 'zk-voting-l2' }, 10, 0);
     assert.equal(again.duplicate, true);
     assert.equal(again.imported, 0);
     await assert.rejects(
-      () => second.explorer.ingest({ block, source: 'republic-l2' }, 10, 0),
+      () => second.explorer.ingest({ block, source: 'zk-voting-l2' }, 10, 0),
       /maintenance handover/,
     );
 

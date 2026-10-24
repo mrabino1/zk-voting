@@ -102,12 +102,12 @@ describe("hash schemes", () => {
     assert.equal(provingPathEnabled({}), false);
     assert.equal(useMockVerifier({}), true);
     assert.equal(resolveHashScheme({}), HASH_SCHEMES.KECCAK_DEV_V1);
-    assert.equal(provingPathEnabled({ REPUBLIC_PROVING_PATH: "1" }), true);
-    assert.equal(useMockVerifier({ REPUBLIC_PROVING_PATH: "1" }), false);
-    assert.equal(resolveHashScheme({ REPUBLIC_PROVING_PATH: "1" }), HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1);
-    assert.equal(useMockVerifier({ REPUBLIC_USE_MOCK_VERIFIER: "0" }), false);
+    assert.equal(provingPathEnabled({ ZK_VOTING_PROVING_PATH: "1" }), true);
+    assert.equal(useMockVerifier({ ZK_VOTING_PROVING_PATH: "1" }), false);
+    assert.equal(resolveHashScheme({ ZK_VOTING_PROVING_PATH: "1" }), HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1);
+    assert.equal(useMockVerifier({ ZK_VOTING_USE_MOCK_VERIFIER: "0" }), false);
     assert.equal(
-      resolveHashScheme({ REPUBLIC_HASH_SCHEME: "standin-v0" }),
+      resolveHashScheme({ ZK_VOTING_HASH_SCHEME: "standin-v0" }),
       HASH_SCHEMES.STANDIN_V0,
     );
   });

@@ -20,8 +20,8 @@ import pt from "./locales/pt.js";
 import hi from "./locales/hi.js";
 
 export const DEFAULT_LOCALE = "en";
-export const STORAGE_KEY = "republic_lang";
-export const LOCALE_EVENT = "republic:locale";
+export const STORAGE_KEY = "zk_voting_lang";
+export const LOCALE_EVENT = "zk-voting:locale";
 
 /** BCP-47 tags written to html[lang] and Intl.DateTimeFormat. */
 export const HTML_LANG = {
@@ -600,7 +600,7 @@ export function resetLocaleForTests(locale = DEFAULT_LOCALE) {
   currentLocale = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
 }
 
-export const RepublicI18n = {
+export const ZkVotingI18n = {
   SUPPORTED_LOCALES,
   RTL_LOCALES,
   HTML_LANG,
@@ -622,7 +622,7 @@ export const RepublicI18n = {
 };
 
 if (typeof window !== "undefined") {
-  window.RepublicI18n = RepublicI18n;
+  window.ZkVotingI18n = ZkVotingI18n;
   applyDocumentLang(currentLocale);
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") {

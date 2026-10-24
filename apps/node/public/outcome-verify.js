@@ -177,7 +177,7 @@ export async function renderOutcomeVerify(main, ctx) {
           "Locked official PDF",
           h("span", {
             class: "field-hint",
-            text: "Drop republic-official-outcome.pdf. The Node hashes the exact bytes. A modified file will not match.",
+            text: "Drop zk-voting-official-outcome.pdf. The Node hashes the exact bytes. A modified file will not match.",
           }),
           h("input", {
             id: "outcome-pdf-file",

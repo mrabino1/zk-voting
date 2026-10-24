@@ -25,8 +25,8 @@ const REQUIRED_PHRASES = [
   'hourly disclosure',
   'tally',
   'results',
-  'republic node',
-  'republic l2',
+  'zk-voting node',
+  'zk-voting l2',
   'ethereum l1',
   'identity is not the ballot',
 ];

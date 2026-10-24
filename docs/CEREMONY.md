@@ -38,7 +38,7 @@ Groth16 needs a structured reference string.
 
 - The script overwrites `ceremony`, `trusted`, `attestation`, and `publicCeremony` on every save. Hand-editing them to claim a ceremony makes `verify` fail.
 - `--trusted`, `--ceremony-done`, and `--claim-ceremony` are refused.
-- Private entropy is read from `REPUBLIC_CEREMONY_ENTROPY` and is not written into the transcript, the sidecar, or the log line. `--entropy` on the command line is refused for that reason.
+- Private entropy is read from `ZK_VOTING_CEREMONY_ENTROPY` and is not written into the transcript, the sidecar, or the log line. `--entropy` on the command line is refused for that reason.
 - A drill may pass `--published-entropy`. The transcript then stores that string so it is obvious the toxic waste is known. The CI toy does this. A published-entropy transcript is not a ceremony.
 - `beacon` does not download Bitcoin, drand, or any other public source. It records `source: "coordinator-supplied"`. A hash you chose yourself is not a random beacon.
 - Phase 1 is labeled `untrusted-local` unless the coordinator passes `--phase1 external` and a `--phase1-note` naming the public file. External phase 1 still does not complete phase 2.
@@ -67,7 +67,7 @@ Record the git commit and the sha256 of the `.r1cs` (the transcript stores that 
 
 Use a public phase-1 file that has already been prepared for phase 2 (`snarkjs powersoftau prepare phase2`), at a power large enough for this `.r1cs`. Record the URL and the file hash in `--phase1-note`.
 
-Do not feed phase 2 with the powers-of-tau from `npm run circuits:setup` or `npm run circuits:smoke`. Those contributions use the published string `republic-local-untrusted-dev-only-not-a-ceremony`.
+Do not feed phase 2 with the powers-of-tau from `npm run circuits:setup` or `npm run circuits:smoke`. Those contributions use the published string `zk-voting-local-untrusted-dev-only-not-a-ceremony`.
 
 ```bash
 node circuits/scripts/ceremony.mjs init \
@@ -165,8 +165,8 @@ Confirm `ceremony` is `not-done`. Confirm your view of the latest contribution h
 3. Generate entropy locally (at least 32 characters; use a long draw from a CSPRNG). Put it in the environment so it is not an argument to the script:
 
 ```bash
-read -s REPUBLIC_CEREMONY_ENTROPY
-export REPUBLIC_CEREMONY_ENTROPY
+read -s ZK_VOTING_CEREMONY_ENTROPY
+export ZK_VOTING_CEREMONY_ENTROPY
 ```
 
 4. Contribute. Either update a directory you hold:
@@ -188,7 +188,7 @@ node circuits/scripts/ceremony.mjs contribute \
 
 The script prints a 64-byte contribution hash. The standalone form also writes `zkey_next.zkey.contribution.json` with that hash and **without** your entropy.
 
-5. Send the new zkey to the coordinator over a public channel. Do not send `REPUBLIC_CEREMONY_ENTROPY`. Unset it (`unset REPUBLIC_CEREMONY_ENTROPY`) and delete any file you used to hold it.
+5. Send the new zkey to the coordinator over a public channel. Do not send `ZK_VOTING_CEREMONY_ENTROPY`. Unset it (`unset ZK_VOTING_CEREMONY_ENTROPY`) and delete any file you used to hold it.
 6. Wait until the coordinator publishes a transcript that includes your hash. Compare it to the hash you printed. If they accepted someone else's fork of the same parent zkey, contribute again on the new tip. Your previous zkey cannot be appended out of order.
 
 You do not run `beacon` or `export`.

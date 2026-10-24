@@ -61,7 +61,7 @@ Never commit `.env`, and never bake secrets into an image.
 | `L2_BATCH_SIZE`, `L2_SKIP_EMPTY_BLOCKS`, `L2_HEARTBEAT_SECONDS` | `4`, `1`, `3600` | Sequencer tuning. |
 | `DEV_MOCK_PROOF` | `true` | Mock proofs for the demo L2. |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Hourly public vote disclosure. `0` publishes immediately (demo only). |
-| `REPUBLIC_NODE_URL` | `http://node:3000` | Where L2 services reach the Node. The name is kept for compatibility. |
+| `ZK_VOTING_NODE_URL` | `http://node:3000` | Where L2 services reach the Node. The name is kept for compatibility. |
 | `L1_RPC`, `L1_CHAIN_ID`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `SETTLEMENT_ADDRESS` | empty | Optional Ethereum L1 certification. Empty is a no-op. |
 
 ## Archive (S3 / R2)

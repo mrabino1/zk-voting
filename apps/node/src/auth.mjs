@@ -18,7 +18,7 @@ export function attachAuth(store, config) {
   return function authMiddleware(req, _res, next) {
     const cookies = parseCookies(req.headers.cookie);
     const sid = cookies[config.sessionCookie];
-    const mfaName = config.mfaCookie || 'republic.mfa';
+    const mfaName = config.mfaCookie || 'zk-voting.mfa';
     req.sessionId = sid || null;
     req.session = sid ? store.getSession(sid) : null;
     req.mfaNonce = cookies[mfaName] || null;

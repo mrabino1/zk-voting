@@ -17,7 +17,7 @@ function superAdmin(store) {
 }
 
 async function tempDir() {
-  return mkdtemp(path.join(os.tmpdir(), 'republic-super-email-'));
+  return mkdtemp(path.join(os.tmpdir(), 'zk-voting-super-email-'));
 }
 
 describe('SUPER_ADMIN_EMAIL', { concurrency: false }, () => {
@@ -150,7 +150,7 @@ describe('SUPER_ADMIN_EMAIL', { concurrency: false }, () => {
     const dir = await tempDir();
     dirs.push(dir);
     await assert.rejects(() => Store.open({ dataDir: dir, superAdminEmail: bad, quiet: true }), /SUPER_ADMIN_EMAIL/);
-    await assert.rejects(readFile(path.join(dir, 'republic.json'), 'utf8'), (err) => err.code === 'ENOENT');
+    await assert.rejects(readFile(path.join(dir, 'zk-voting.json'), 'utf8'), (err) => err.code === 'ENOENT');
 
     const seeded = await Store.open({
       dataDir: dir,
@@ -221,7 +221,7 @@ describe('SUPER_ADMIN_EMAIL', { concurrency: false }, () => {
     try {
       assert.equal(first.writer.mode(), 'active');
       assert.equal(superAdmin(first.store).contactEmail, 'writer@example.gov');
-      const before = await readFile(path.join(dir, 'republic.json'), 'utf8');
+      const before = await readFile(path.join(dir, 'zk-voting.json'), 'utf8');
 
       const second = await createApp({
         dataDir: dir,
@@ -236,13 +236,13 @@ describe('SUPER_ADMIN_EMAIL', { concurrency: false }, () => {
         assert.equal(second.store.writerActive, false);
         assert.equal(superAdmin(second.store).contactEmail, 'writer@example.gov');
         assert.equal(second.store.listUsers().length, 1);
-        const after = await readFile(path.join(dir, 'republic.json'), 'utf8');
+        const after = await readFile(path.join(dir, 'zk-voting.json'), 'utf8');
         assert.equal(after, before);
 
         const refused = await second.store.adoptSuperAdminEmail(second.config);
         assert.equal(refused, false);
         assert.equal(superAdmin(second.store).contactEmail, 'writer@example.gov');
-        assert.equal(await readFile(path.join(dir, 'republic.json'), 'utf8'), before);
+        assert.equal(await readFile(path.join(dir, 'zk-voting.json'), 'utf8'), before);
 
         first.writer.release();
         assert.equal(second.writer.tryPromote(), true);
@@ -253,7 +253,7 @@ describe('SUPER_ADMIN_EMAIL', { concurrency: false }, () => {
         assert.equal(changed, true);
         assert.equal(superAdmin(second.store).contactEmail, 'standby@example.gov');
         assert.equal(second.store.listUsers().length, 1);
-        const disk = JSON.parse(await readFile(path.join(dir, 'republic.json'), 'utf8'));
+        const disk = JSON.parse(await readFile(path.join(dir, 'zk-voting.json'), 'utf8'));
         const stored = disk.users.filter((user) => user.role === 'platform_super_admin');
         assert.equal(stored.length, 1);
         assert.equal(stored[0].contactEmail, 'standby@example.gov');

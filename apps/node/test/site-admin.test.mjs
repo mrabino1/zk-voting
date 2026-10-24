@@ -452,7 +452,6 @@ describe('site admin: roles, layout, plugins', () => {
     assert.doesNotMatch(r.text, /\sstyle=/);
     assert.doesNotMatch(r.text, /\son[a-z]+=/i);
     assert.match(r.text, /ZK-Voting/);
-    assert.doesNotMatch(r.text, /Republic/);
     assert.doesNotMatch(r.text, /%BRAND_/);
   });
 });

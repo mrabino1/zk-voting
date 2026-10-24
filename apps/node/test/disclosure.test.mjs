@@ -84,7 +84,7 @@ function leakKeys(value, acc = []) {
 describe('hourly polling-place unlinkability', () => {
   before(async () => {
     clock = HOUR_START + 23 * 60;
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-hourly-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-hourly-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -307,7 +307,7 @@ describe('disclosure hour-boundary vote', () => {
 
   before(async () => {
     clock = HOUR_START;
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-boundary-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-boundary-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 
 import {
   DEFAULT_DISCLOSURE_INTERVAL_SECONDS,
-  disclosurePublicView,
+  publicDisclosureView,
   formatCountdown,
   hourBucket,
   isDisclosed,
@@ -68,7 +68,7 @@ describe('hourly disclosure math', () => {
   });
 
   test('public view never includes a pending count', () => {
-    const view = disclosurePublicView(1_700_000_000, HOUR);
+    const view = publicDisclosureView(1_700_000_000, HOUR);
     assert.equal(view.policy, 'hourly-polling-place-unlinkability');
     assert.equal(view.lastClosedHourAt, lastClosedHourAt(1_700_000_000, HOUR));
     assert.equal(view.lastPublishedAt, view.lastClosedHourAt);

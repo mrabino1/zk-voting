@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "已复制身份承诺。",
     localAddress: "{brand} 本地地址",
     prfWrap:
-      "PRF 封装：账户材料使用盐 republic:account:v1；ZK trapdoor 使用盐 republic:identity:v1。它们不是同一组字节。",
+      "PRF 封装：账户材料使用盐 zk-voting:account:v1；ZK trapdoor 使用盐 zk-voting:identity:v1。它们不是同一组字节。",
     createFirst: "先创建 passkey 以派生承诺。trapdoor 绝不会出现在此屏幕上。",
     activeEthTitle: "活动 Ethereum 地址",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand} 需要带常驻密钥和用户核验的设备 passkey（WebAuthn）。请在带平台认证器的设备上使用较新的浏览器（Safari 16+、Chrome 108+、Firefox 122+、Edge）。绝不会显示助记词。",
     productionNote:
-      "生产环境使用 keccak256（未压缩 secp256k1 公钥），然后取最后 20 字节（Ethereum）。此演示在没有曲线库时无法在 secp256k1 上做乘法，因此 getAddress() 返回标记为 republic-local-address 的 SHA-256(seed)[0:20]。",
+      "生产环境使用 keccak256（未压缩 secp256k1 公钥），然后取最后 20 字节（Ethereum）。此演示在没有曲线库时无法在 secp256k1 上做乘法，因此 getAddress() 返回标记为 zk-voting-local-address 的 SHA-256(seed)[0:20]。",
     staleWrap:
-      "此浏览器有 v1 passkey 封装（IndexedDB republic-wallet）。v1 从与账户密钥相同的种子派生 ZK trapdoor，弱于 docs/PASSKEYS.md。演示无法就地迁移该封装：v1 使用随机 PRF 盐和单一 HKDF 域，因此新的账户/身份盐无法解开它。请重置设备钱包并创建新的 passkey。本地地址和身份承诺会改变；先前的演示名册条目将不匹配。",
+      "此浏览器有 v1 passkey 封装（IndexedDB zk-voting-wallet）。v1 从与账户密钥相同的种子派生 ZK trapdoor，弱于 docs/PASSKEYS.md。演示无法就地迁移该封装：v1 使用随机 PRF 盐和单一 HKDF 域，因此新的账户/身份盐无法解开它。请重置设备钱包并创建新的 passkey。本地地址和身份承诺会改变；先前的演示名册条目将不匹配。",
     noEthWallet:
       "此浏览器没有 Ethereum 钱包。请使用 passkey，或安装支持 personal_sign 的钱包。",
     noWeb3Wallet: "此浏览器没有 Web3 钱包。请安装钱包或使用 passkey / 智能卡。",
@@ -670,7 +670,7 @@ export default {
     clerkHint:
       "创建选举，然后在投票开始前冻结名册。<code>maxParticipants = 0</code> 表示不限人数。选择相对多数（默认）或排序选择（IRV）。",
     chainNote:
-      "如果此 Node 设置了 <code>CHAIN_RPC</code>，创建选举还会调用 <code>ElectionFactory.createElection</code>，并将链上 uint256 id 与 UUID 一起存储。工厂失败会显示在此，且不会在本地保存。没有 <code>CHAIN_RPC</code> 时，此表单只写入 <code>republic.json</code>（演示），仍会为电路铸造演示 <code>onChainElectionId</code>。",
+      "如果此 Node 设置了 <code>CHAIN_RPC</code>，创建选举还会调用 <code>ElectionFactory.createElection</code>，并将链上 uint256 id 与 UUID 一起存储。工厂失败会显示在此，且不会在本地保存。没有 <code>CHAIN_RPC</code> 时，此表单只写入 <code>zk-voting.json</code>（演示），仍会为电路铸造演示 <code>onChainElectionId</code>。",
     jurisdiction: "管辖区",
     titleField: "标题",
     metadataUri: "元数据 URI",

@@ -2,10 +2,10 @@ pragma circom 2.0.0;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 //
-// HASH_SCHEME: republic.hash.standin-v0
+// HASH_SCHEME: zk-voting.hash.standin-v0
 //
 // LEGACY. Not included by identity.circom. The selected Hasher is
-// hasher/poseidon.circom (republic.hash.poseidon-bn254-x5-t3-v1).
+// hasher/poseidon.circom (zk-voting.hash.poseidon-bn254-x5-t3-v1).
 // This bilinear mix is NOT collision-resistant. hash(x, 0) == x.
 // Kept so old vectors and StandInHasher tests still have a formula.
 // Do not compile a ceremony against this file.

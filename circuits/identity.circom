@@ -2,7 +2,7 @@ pragma circom 2.0.0;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 //
-// Identity primitives for Republic / zk-voting.
+// Identity primitives for ZK-Voting.
 //
 // PRODUCTION HASHER: Poseidon is preferred for identity commitments,
 // Merkle trees, and nullifiers. It is cheap in-circuit, matches the
@@ -10,8 +10,8 @@ pragma circom 2.0.0;
 // what Semaphore / MACI-style voting circuits use.
 //
 // HASH_SCHEME (selected include):
-//   republic.hash.poseidon-bn254-x5-t3-v1 — hasher/poseidon.circom (selected)
-//   republic.hash.standin-v0 — hasher/standin.circom (legacy, not included)
+//   zk-voting.hash.poseidon-bn254-x5-t3-v1 — hasher/poseidon.circom (selected)
+//   zk-voting.hash.standin-v0 — hasher/standin.circom (legacy, not included)
 // See circuits/HASH_SCHEME.md. Do not include both.
 include "./hasher/poseidon.circom";
 

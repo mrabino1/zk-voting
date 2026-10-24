@@ -92,7 +92,7 @@ describe('civic id hash', () => {
 
 describe('email MFA, SES capture, civic id, smart-card login', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-mfa-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-mfa-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -115,7 +115,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     });
     assert.equal(login.status, 200, login.json?.error);
     assert.equal(login.json.mfaRequired, false);
-    assert.ok(adminJar['republic.sid']);
+    assert.ok(adminJar['zk-voting.sid']);
   });
 
   after(async () => {
@@ -144,7 +144,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     });
     assert.equal(status, 200, json?.error);
     assert.equal(json.mfaRequired, false);
-    assert.ok(local['republic.sid']);
+    assert.ok(local['zk-voting.sid']);
   });
 
   test('email register + OTP creates a session; unknown email login is 404', async () => {
@@ -161,8 +161,8 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     assert.equal(start.status, 200, start.json?.error);
     assert.equal(start.json.mfaRequired, true);
     assert.equal(start.json.needsEmail, false);
-    assert.ok(jar['republic.mfa']);
-    assert.ok(!jar['republic.sid'] || jar['republic.sid'] === '');
+    assert.ok(jar['zk-voting.mfa']);
+    assert.ok(!jar['zk-voting.sid'] || jar['zk-voting.sid'] === '');
 
     const bad = await api('POST', '/api/auth/mfa/verify', {
       body: { code: '000000' },
@@ -179,7 +179,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     assert.equal(verify.json.mfaRequired, false);
     assert.equal(verify.json.user.handle, 'mail-alice');
     assert.ok(verify.json.identity.authMethods.some((m) => m.type === 'email'));
-    assert.ok(jar['republic.sid']);
+    assert.ok(jar['zk-voting.sid']);
 
     const me = await api('GET', '/api/me', { jar });
     assert.equal(me.json.user.handle, 'mail-alice');
@@ -215,7 +215,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     assert.equal(bound.status, 200, bound.json?.error);
     assert.equal(bound.json.mfaRequired, true);
     assert.equal(bound.json.needsEmail, true);
-    assert.ok(walletJar['republic.mfa']);
+    assert.ok(walletJar['zk-voting.mfa']);
 
     const emailed = await api('POST', '/api/auth/mfa/email', {
       body: { email: 'wallet@example.com' },
@@ -327,7 +327,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     assert.equal(civic.fingerprint, undefined);
     assert.equal(civic.documentNumber, undefined);
 
-    const raw = await readFile(path.join(tmp, 'republic.json'), 'utf8');
+    const raw = await readFile(path.join(tmp, 'zk-voting.json'), 'utf8');
     assert.doesNotMatch(raw, /D123-4567-SECRET/);
     assert.doesNotMatch(raw, /documentNumber/);
     const expected = civicIdHash({
@@ -375,7 +375,7 @@ describe('email MFA, SES capture, civic id, smart-card login', () => {
     assert.equal(added.status, 201, added.json?.error);
     const civic = added.json.identity.authMethods.find((m) => m.kind === 'passport');
     assert.equal(civic.issuer, 'US');
-    const raw = await readFile(path.join(tmp, 'republic.json'), 'utf8');
+    const raw = await readFile(path.join(tmp, 'zk-voting.json'), 'utf8');
     assert.doesNotMatch(raw, /X88888888/);
   });
 

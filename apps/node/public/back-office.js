@@ -2052,7 +2052,7 @@
   defaultTimes();
   wireBuilder();
   renderBuilder();
-  window.addEventListener("republic:session", async () => {
+  window.addEventListener("zk-voting:session", async () => {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications()]);
   });

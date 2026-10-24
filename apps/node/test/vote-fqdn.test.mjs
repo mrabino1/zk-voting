@@ -99,7 +99,7 @@ describe('VOTE_FQDN', () => {
   });
 
   test('GET /api/config and /health publish the voting hostname', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-vote-fqdn-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-vote-fqdn-'));
     const created = await createApp({
       dataDir: tmp,
       voteFqdn: 'vote.domain.tld',

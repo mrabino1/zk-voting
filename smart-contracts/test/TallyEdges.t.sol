@@ -10,7 +10,7 @@ import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
 /// @notice Tally empty-input, fail-closed proof, unknown election, exact cutoff.
-/// @dev Ported from nuursha empty-array / failed-proof state consistency / warp boundary.
+/// @dev Edge cases: empty array, failed-proof state consistency, warp boundary.
 contract TallyEdgesTest is Deployer {
     uint256[2] internal a;
     uint256[2][2] internal b;

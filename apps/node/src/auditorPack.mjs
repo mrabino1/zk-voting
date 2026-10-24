@@ -6,8 +6,8 @@ import { brandName } from './branding.mjs';
 import { electionState, presentElection } from './electionState.mjs';
 import { publicVoteRecord } from './store.mjs';
 
-export const AUDITOR_SCHEMA = 'republic.auditor.v1';
-export const POLL_AUDITOR_SCHEMA = 'republic.auditor.poll.v1';
+export const AUDITOR_SCHEMA = 'zk-voting.auditor.v1';
+export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 
 /**
  * Build a JSON bundle an independent verifier can check without the Node
@@ -68,7 +68,7 @@ export function assemblePollAuditorPack({ pollView, params, pollParamsHash, clos
     binding: false,
     signal: 'Signal only · non-binding · NOT FOR PROFIT',
     product: brandName(),
-    republicChainId: 27427,
+    zkVotingChainId: 27427,
     poll: pollView,
     params,
     pollParamsHash: pollParamsHash || null,

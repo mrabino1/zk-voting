@@ -10,7 +10,7 @@ This software may be run **at cost** by a government, county clerk, union, coope
 
 ## What you are operating
 
-1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/republic.json`). **No SQLite.**
+1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/zk-voting.json`). **No SQLite.**
 2. **`smart-contracts/`** — Solidity 0.8.24, Foundry (`via_ir = true`). Factory, registries, inbox, `Tally.sol`, passkey account, L1 `RollupSettlement`.
 3. **`l2/`** — ZK-Voting **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
 4. **`circuits/`** — circom vote / tally. Foundry unit tests use `MockVerifier`. Proving path is **in progress** (`npm run circuits:status`). Local setup is untrusted until Poseidon + a ceremony exist.
@@ -23,7 +23,7 @@ The Node is allowed to be down. Chain records (L2, and L1 if you mirrored the ta
 
 | Line | Branch | Meaning |
 | --- | --- | --- |
-| Development / staging | `test/unstable` | Default. Experimental elections, MockVerifier (unit tests), optional `REPUBLIC_PROVING_PATH=1`, civic JSON L2 (`:8546`), optional Foundry Anvil (`:8545`) for Solidity. |
+| Development / staging | `test/unstable` | Default. Experimental elections, MockVerifier (unit tests), optional `ZK_VOTING_PROVING_PATH=1`, civic JSON L2 (`:8546`), optional Foundry Anvil (`:8545`) for Solidity. |
 | Production | `master` | Only builds a jurisdiction may treat as binding. |
 
 `system_actions.sh deploy-dev` pulls **`test/unstable`**. `deploy-prod` pulls **`master`** and **asks for confirmation** (unless you pass `--yes`, which you should not wire to an unattended cron for a live election).
@@ -47,7 +47,7 @@ From the repository root. Numbers **1–4** are the git flow: feature branches l
 ./system_actions.sh 4            # merge test/unstable → master (type MERGE)
 
 # Data / chain (no Postgres — JSON store only)
-./system_actions.sh 5            # republic.json counts
+./system_actions.sh 5            # zk-voting.json counts
 ./system_actions.sh 6            # Node / L2 / CHAIN_RPC / L1_RPC reachability
 ./system_actions.sh 7            # local Node users (handle + role)
 
@@ -199,7 +199,7 @@ forge test --match-path test/invariant/*
 
 From repo root: `npm run test:contracts`, `npm run test:fuzz`, `npm run test:invariant`, `npm run test:proof-helpers`.
 
-Proving path (optional tools): `npm run circuits:status`. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md). `REPUBLIC_PROVING_PATH=1` on `DeployLocal` deploys `VoteVerifier` without mock fallback.
+Proving path (optional tools): `npm run circuits:status`. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md). `ZK_VOTING_PROVING_PATH=1` on `DeployLocal` deploys `VoteVerifier` without mock fallback.
 
 ### Independent auditor (no Node private DB)
 
@@ -240,7 +240,7 @@ Clerk **Create election** in `/back-office` is `POST /api/elections`.
 
 | Node env | What happens |
 | --- | --- |
-| `CHAIN_RPC` **unset** | JSON-only demo. Writes `apps/node/data/republic.json`. No factory call. |
+| `CHAIN_RPC` **unset** | JSON-only demo. Writes `apps/node/data/zk-voting.json`. No factory call. |
 | `CHAIN_RPC` **set** | The API also calls `ElectionFactory.createElection` through viem (`simulateContract` + `writeContract`), matching `@zk-voting/chain-client` and `CreateElection.s.sol`. Failures return **502/503** with a message the clerk UI shows. Nothing is saved locally if the factory reverts. |
 
 Required when the chain is configured: `CHAIN_RPC`, `ELECTION_FACTORY_ADDRESS` (or `FACTORY`), `RELAYER_PRIVATE_KEY`, `VERIFIER_ADDRESS` (or `VERIFIER` from `DeployLocal`). Officer roles (clerk / registrar / disqualification / tally) default to the relayer address, matching `CreateElection.s.sol` using `msg.sender`, unless the POST body or `CLERK_ADDRESS` / `REGISTRAR_ADDRESS` / … is set.
@@ -308,9 +308,9 @@ Cron (host already exporting archive env, or a root `.env` the CLI will read):
 0 * * * * cd /opt/zk-voting && ./system_actions.sh archive
 ```
 
-Node `DATA_DIR` (`republic.json`, working explorer) stays local. See [`voting_cost_estimate.md`](../voting_cost_estimate.md).
+Node `DATA_DIR` (`zk-voting.json`, working explorer) stays local. See [`voting_cost_estimate.md`](../voting_cost_estimate.md).
 
-The archive job is a **sidecar**. A failed hour (hash mismatch, PUT/GET error, timeout, `ENOSPC` in the attic job, lock held) **does not stop the sequencer**. If the VPS is so full that the sequencer cannot write `blocks/N.json` or Node cannot write `republic.json`, that is a **separate** hot-path `ENOSPC` alert — free disk or configure the attic. Overlapping crons share `L2_DATA_DIR/archive/archive.lock`; the second run exits non-zero and does not prune.
+The archive job is a **sidecar**. A failed hour (hash mismatch, PUT/GET error, timeout, `ENOSPC` in the attic job, lock held) **does not stop the sequencer**. If the VPS is so full that the sequencer cannot write `blocks/N.json` or Node cannot write `zk-voting.json`, that is a **separate** hot-path `ENOSPC` alert — free disk or configure the attic. Overlapping crons share `L2_DATA_DIR/archive/archive.lock`; the second run exits non-zero and does not prune.
 
 #### Attic failure matrix
 
@@ -354,7 +354,7 @@ A voter’s `POST /api/elections/:id/register` is **pending** until a registrar 
 
 Smart cards and driver’s licenses / passports (up to **5** live of each) are listed at `GET /api/office/credentials`. Officers revoke an expired civil registration with `POST /api/persons/:id/methods/:methodId/revoke`. Login on a revoked or expired credential is `403 CREDENTIAL_REVOKED` / `CREDENTIAL_EXPIRED`.
 
-A later DMV / AAMVA / national-eID connector can `POST /api/integrations/credentials/status` with `CREDENTIAL_PROVIDER_SECRET` (header `x-republic-provider-secret` or `Authorization: Bearer`). Unset secret → `501 CREDENTIAL_PROVIDER_MANUAL`. Review is **manual** until that secret is set. [`docs/IDENTITY.md`](./IDENTITY.md).
+A later DMV / AAMVA / national-eID connector can `POST /api/integrations/credentials/status` with `CREDENTIAL_PROVIDER_SECRET` (header `x-zk-voting-provider-secret` or `Authorization: Bearer`). Unset secret → `501 CREDENTIAL_PROVIDER_MANUAL`. Review is **manual** until that secret is set. [`docs/IDENTITY.md`](./IDENTITY.md).
 
 | Env | Role |
 | --- | --- |
@@ -369,7 +369,7 @@ Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). Firs
 
 1. `POST /api/auth/email/start` `{ email }`
 2. SES delivers the OTP
-3. `POST /api/auth/mfa/verify` `{ code }` — set `republic.sid`
+3. `POST /api/auth/mfa/verify` `{ code }` — set `zk-voting.sid`
 
 **Passkey**
 
@@ -420,11 +420,11 @@ After `cutoffTime` has fully expired **and** a certified tally is posted, the No
 | `AWS_REGION` (alias `SES_REGION`) | SES region |
 | `SES_CONFIGURATION_SET` | Optional SESv2 configuration set |
 
-SESv2 Simple content cannot attach files. The Node sends **raw MIME** (`multipart/mixed`) with `republic-terms.pdf`. A second accept of the same PDF hash does not resend (`already_sent_this_hash`). If SES is unset, the Node still records the accept and **captures** the message in-process (tests use `mailer.lastTermsPdf()`, same pattern as MFA OTP capture).
+SESv2 Simple content cannot attach files. The Node sends **raw MIME** (`multipart/mixed`) with `zk-voting-terms.pdf`. A second accept of the same PDF hash does not resend (`already_sent_this_hash`). If SES is unset, the Node still records the accept and **captures** the message in-process (tests use `mailer.lastTermsPdf()`, same pattern as MFA OTP capture).
 
-**Terms updated (sign-in).** `plainTextSha256` is SHA-256 of the UTF-8 `/terms` plain text (the markdown body after front matter; same digest as `markdownSha256`). Each member stores `termsNotifiedHash` and `termsNotifiedAt`. On the next sign-in (dev login, or after email MFA), if that hash differs from the current plain-text hash, the same AWS SES mailer sends one message: the terms PDF attached and a link to `/terms`. It is sent once per member per hash. The hash and timestamp are written only after the send succeeds. A send failure is logged as `userId` plus `reason=send_failed` (no address, no message body, no credentials) and sign-in still succeeds; the next sign-in tries again. A member with no email is skipped and not marked notified. Opening an older `republic.json` backfills the two fields to null and raises `meta.version` to 8. No new environment variables: `SES_FROM_ADDRESS`, `AWS_REGION`, and optional `PUBLIC_BASE_URL` (the link origin).
+**Terms updated (sign-in).** `plainTextSha256` is SHA-256 of the UTF-8 `/terms` plain text (the markdown body after front matter; same digest as `markdownSha256`). Each member stores `termsNotifiedHash` and `termsNotifiedAt`. On the next sign-in (dev login, or after email MFA), if that hash differs from the current plain-text hash, the same AWS SES mailer sends one message: the terms PDF attached and a link to `/terms`. It is sent once per member per hash. The hash and timestamp are written only after the send succeeds. A send failure is logged as `userId` plus `reason=send_failed` (no address, no message body, no credentials) and sign-in still succeeds; the next sign-in tries again. A member with no email is skipped and not marked notified. Opening an older `zk-voting.json` backfills the two fields to null and raises `meta.version` to 8. No new environment variables: `SES_FROM_ADDRESS`, `AWS_REGION`, and optional `PUBLIC_BASE_URL` (the link origin).
 
-Store (private `apps/node/data/republic.json`, gitignored):
+Store (private `apps/node/data/zk-voting.json`, gitignored):
 
 ```
 termsAcceptances: [{ id, action: "accept"|"view", userId, handle, email, sessionId,
@@ -437,7 +437,7 @@ Changing `legal/terms.md` changes both hashes. Prior rows keep the hash that was
 
 ### Feedback (`/feedback`)
 
-Public page `/feedback` (nav and footer on the voter SPA, and the footer on admin, back office, and the explorer). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `republic.json`, not written to civic L2, and not logged at info level.
+Public page `/feedback` (nav and footer on the voter SPA, and the footer on admin, back office, and the explorer). `POST /api/feedback` emails the platform super admin through the same AWS SES mailer as MFA and the Terms PDF. The message is not a vote receipt. It is not written to `zk-voting.json`, not written to civic L2, and not logged at info level.
 
 **Inbox.** The To address is the `platform_super_admin` person’s `contactEmail`, or that person’s sign-in email if no contact email is set. Set `SUPER_ADMIN_EMAIL` at deploy time (see [Platform super admin](#platform-super-admin)) to fill `contactEmail` on boot. If neither address is set, the Node **fails closed**: it logs a warning naming the missing super-admin email, returns `503 FEEDBACK_UNAVAILABLE`, and does not drop the message silently. The visitor sees “Feedback cannot be delivered right now. Please try again later.” The same `503` is returned when SES is not configured (`SES_FROM_ADDRESS` and `AWS_REGION` both required) unless `SES_DRY_RUN=1` with those two set (capture, no SES call) or the process is allowed to capture mail (`NODE_ENV=test` or `ALLOW_CAPTURE_MAILER=1`).
 
@@ -468,7 +468,7 @@ Reply-To is set only when the optional address validates. Names, the message, an
 - `.env` is gitignored. Copy-paste the host file from the root README [Copy-paste credentials](../README.md#copy-paste-credentials). Do not paste production RPC URLs with credentials into issues.
 - `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
-- After roll freeze, do not “fix” a tally in `republic.json`. If the chain rejects a proof, the UI reports failure.
+- After roll freeze, do not “fix” a tally in `zk-voting.json`. If the chain rejects a proof, the UI reports failure.
 - `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. Decrypting takes `t` verified partials after cutoff. Guardians use `node apps/node/scripts/guardian.mjs`. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). Homomorphic aggregation and a mixnet are **not selected**. The ceremony is NON-PRODUCTION. Do not use it for a binding election.
 
 ## L1 certification (tally hash on Ethereum)

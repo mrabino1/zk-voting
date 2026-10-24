@@ -9,7 +9,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { isDisclosed, nextPublishAt, hourBucket, disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
+import { isDisclosed, nextPublishAt, hourBucket, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { HttpError } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { emailHint, normalizeEmail, userEmail } from './identity.mjs';
@@ -23,10 +23,10 @@ import {
 import { publicVoteRecord } from './store.mjs';
 import { sha256Hex } from './terms.mjs';
 
-export const RECEIPT_SCHEMA = 'republic.receipt.v1';
-export const RECEIPT_PDF_FILENAME = 'republic-vote-receipt.pdf';
-export const RECEIPT_BEGIN = '-----BEGIN REPUBLIC VOTE RECEIPT-----';
-export const RECEIPT_END = '-----END REPUBLIC VOTE RECEIPT-----';
+export const RECEIPT_SCHEMA = 'zk-voting.receipt.v1';
+export const RECEIPT_PDF_FILENAME = 'zk-voting-vote-receipt.pdf';
+export const RECEIPT_BEGIN = '-----BEGIN ZK-VOTING VOTE RECEIPT-----';
+export const RECEIPT_END = '-----END ZK-VOTING VOTE RECEIPT-----';
 
 const CHOICE_KEYS = new Set([
   'choice',
@@ -222,7 +222,7 @@ export function parseReceiptProof(raw, extras = {}) {
         throw new HttpError(400, 'receipt proof JSON is invalid', { code: 'RECEIPT_PROOF' });
       }
       parsed = normalizeProofFields(obj.receipt || obj);
-    } else if (/BEGIN REPUBLIC VOTE RECEIPT/.test(text)) {
+    } else if (/BEGIN ZK-VOTING VOTE RECEIPT/.test(text)) {
       const fields = {};
       for (const line of text.split(/\r?\n/)) {
         const m = line.match(/^([A-Za-z][A-Za-z0-9_]*):\s*(.*)$/);
@@ -508,7 +508,7 @@ export function publicReceiptMetrics(election, deps, { now, interval, view } = {
   const votes = election ? deps.store.listVotes(election.id) : deps.store.data.votes || [];
   const hours = disclosedHourBuckets(votes, ts, secs);
   const acceptedBallotsDisclosed = hours.reduce((n, row) => n + row.ballots, 0);
-  const base = view || disclosurePublicView(ts, secs);
+  const base = view || publicDisclosureView(ts, secs);
   const disclosure = withDisclosedCount(base, acceptedBallotsDisclosed);
   return stripReceiptChoice({
     nfp: true,
@@ -731,7 +731,7 @@ export function mintHolderToken() {
 /** Hash-only token-poll receipt. No choice, no userId. */
 export function buildPollReceipt(ballot) {
   return {
-    schema: 'republic.receipt.poll.v1',
+    schema: 'zk-voting.receipt.poll.v1',
     nfp: true,
     binding: false,
     signal: 'Signal only · non-binding · NOT FOR PROFIT',

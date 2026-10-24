@@ -1,7 +1,7 @@
 {
-  "comment": "NOT FOR PROFIT — civic public good, not a commercial sequencer. Republic L2 genesis. Sequencer and paymaster addresses are placeholders until a jurisdiction issues operator keys.",
+  "comment": "NOT FOR PROFIT — civic public good, not a commercial sequencer. ZK-Voting L2 genesis. Sequencer and paymaster addresses are placeholders until a jurisdiction issues operator keys.",
   "nfp": "NOT FOR PROFIT",
-  "name": "Republic L2",
+  "name": "ZK-Voting L2",
   "chainId": 27427,
   "blockTime": 2,
   "period": 2,

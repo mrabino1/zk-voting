@@ -13,7 +13,7 @@ function proofFromQuery(query) {
 
 function storedProof() {
   try {
-    return sessionStorage.getItem("republic.receipt.proof") || "";
+    return sessionStorage.getItem("zk-voting.receipt.proof") || "";
   } catch {
     return "";
   }
@@ -21,7 +21,7 @@ function storedProof() {
 
 function rememberProof(text) {
   try {
-    if (text) sessionStorage.setItem("republic.receipt.proof", text);
+    if (text) sessionStorage.setItem("zk-voting.receipt.proof", text);
   } catch {
     /* ignore quota */
   }
@@ -284,7 +284,7 @@ export async function renderReceiptPortal(main, ctx) {
           "Receipt proof",
           h("span", {
             class: "field-hint",
-            text: "Copy the block that starts with BEGIN REPUBLIC VOTE RECEIPT, or drop the emailed PDF. Do not paste a screenshot of your marked ballot.",
+            text: "Copy the block that starts with BEGIN ZK-VOTING VOTE RECEIPT, or drop the emailed PDF. Do not paste a screenshot of your marked ballot.",
           })
         ),
         h("textarea", {
@@ -305,7 +305,7 @@ export async function renderReceiptPortal(main, ctx) {
           "Locked PDF (optional)",
           h("span", {
             class: "field-hint",
-            text: "Drop the emailed republic-vote-receipt.pdf. The Node hashes the exact bytes. A modified file will not match.",
+            text: "Drop the emailed zk-voting-vote-receipt.pdf. The Node hashes the exact bytes. A modified file will not match.",
           }),
           h("input", {
             id: "receipt-pdf-file",

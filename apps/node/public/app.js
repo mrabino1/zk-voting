@@ -52,7 +52,7 @@ import {
   renderOfficeSite,
 } from "./cms.js";
 
-const VOTER_STORE_KEY = "republic.voter.v1";
+const VOTER_STORE_KEY = "zk-voting.voter.v1";
 
 const STATE_LABELS = {
   0: "Created",

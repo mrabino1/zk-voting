@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Identity commitment를 복사했습니다.",
     localAddress: "{brand} 로컬 주소",
     prfWrap:
-      "PRF wrap: 계정 자료는 솔트 republic:account:v1을 쓰고 ZK trapdoor는 솔트 republic:identity:v1을 씁니다. 같은 바이트가 아닙니다.",
+      "PRF wrap: 계정 자료는 솔트 zk-voting:account:v1을 쓰고 ZK trapdoor는 솔트 zk-voting:identity:v1을 씁니다. 같은 바이트가 아닙니다.",
     createFirst: "commitment를 파생하려면 passkey를 만드세요. trapdoor는 이 화면에 절대 나타나지 않습니다.",
     activeEthTitle: "활성 Ethereum 주소",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand}은 상주 키와 사용자 검증이 있는 기기 passkey(WebAuthn)가 필요합니다. 플랫폼 인증기가 있는 기기에서 최신 브라우저(Safari 16+, Chrome 108+, Firefox 122+, Edge)를 사용하세요. 시드 구절은 절대 표시되지 않습니다.",
     productionNote:
-      "프로덕션은 keccak256(압축되지 않은 secp256k1 공개키)를 사용한 뒤 마지막 20바이트(Ethereum)를 취합니다. 이 데모는 곡선 라이브러리 없이 secp256k1에서 곱할 수 없어 getAddress()가 republic-local-address로 표시된 SHA-256(seed)[0:20]을 반환합니다.",
+      "프로덕션은 keccak256(압축되지 않은 secp256k1 공개키)를 사용한 뒤 마지막 20바이트(Ethereum)를 취합니다. 이 데모는 곡선 라이브러리 없이 secp256k1에서 곱할 수 없어 getAddress()가 zk-voting-local-address로 표시된 SHA-256(seed)[0:20]을 반환합니다.",
     staleWrap:
-      "이 브라우저에는 v1 passkey wrap(IndexedDB republic-wallet)이 있습니다. v1은 계정 키와 같은 시드에서 ZK trapdoor를 파생하여 docs/PASSKEYS.md보다 약합니다. 데모는 그 wrap을 제자리에서 이전할 수 없습니다. v1은 무작위 PRF 솔트와 단일 HKDF 도메인을 썼으므로 새 계정/신원 솔트가 풀 수 없습니다. 기기 지갑을 재설정하고 새 passkey를 만드세요. 로컬 주소와 identity commitment가 바뀌며 이전 데모 명부 항목은 일치하지 않습니다.",
+      "이 브라우저에는 v1 passkey wrap(IndexedDB zk-voting-wallet)이 있습니다. v1은 계정 키와 같은 시드에서 ZK trapdoor를 파생하여 docs/PASSKEYS.md보다 약합니다. 데모는 그 wrap을 제자리에서 이전할 수 없습니다. v1은 무작위 PRF 솔트와 단일 HKDF 도메인을 썼으므로 새 계정/신원 솔트가 풀 수 없습니다. 기기 지갑을 재설정하고 새 passkey를 만드세요. 로컬 주소와 identity commitment가 바뀌며 이전 데모 명부 항목은 일치하지 않습니다.",
     noEthWallet:
       "이 브라우저에 Ethereum 지갑이 없습니다. passkey를 쓰거나 personal_sign을 지원하는 지갑을 설치하세요.",
     noWeb3Wallet: "이 브라우저에 Web3 지갑이 없습니다. 지갑을 설치하거나 passkey / 스마트카드를 사용하세요.",
@@ -669,7 +669,7 @@ export default {
     clerkHint:
       "선거를 만든 뒤 투표가 열리기 전에 명부를 동결하세요. <code>maxParticipants = 0</code>은 무제한입니다. 상대다수(기본) 또는 순위 선택(IRV)을 고르세요.",
     chainNote:
-      "이 Node에 <code>CHAIN_RPC</code>가 있으면 선거 만들기가 <code>ElectionFactory.createElection</code>도 호출하고 온체인 uint256 id를 UUID 옆에 저장합니다. 팩토리 실패는 여기에 표시되며 로컬에 저장되지 않습니다. <code>CHAIN_RPC</code>가 없으면 이 양식은 <code>republic.json</code>만 쓰고(데모) 회로용 데모 <code>onChainElectionId</code>를 여전히 만듭니다.",
+      "이 Node에 <code>CHAIN_RPC</code>가 있으면 선거 만들기가 <code>ElectionFactory.createElection</code>도 호출하고 온체인 uint256 id를 UUID 옆에 저장합니다. 팩토리 실패는 여기에 표시되며 로컬에 저장되지 않습니다. <code>CHAIN_RPC</code>가 없으면 이 양식은 <code>zk-voting.json</code>만 쓰고(데모) 회로용 데모 <code>onChainElectionId</code>를 여전히 만듭니다.",
     jurisdiction: "관할",
     titleField: "제목",
     metadataUri: "메타데이터 URI",

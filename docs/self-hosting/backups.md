@@ -6,7 +6,7 @@ All state lives in two Docker volumes. There is no database server to dump.
 
 | Volume | Contains | Loss means |
 | --- | --- | --- |
-| `node-data` | `republic.json` (people, rolls, elections, receipts, officers), `receipt-pdf.secret`, lease files | Voters and officers must start over. |
+| `node-data` | `zk-voting.json` (people, rolls, elections, receipts, officers), `receipt-pdf.secret`, lease files | Voters and officers must start over. |
 | `l2-data` | Sealed L2 blocks, proofs, mempool, archive state | Chain history on this host. Restorable from the S3/R2 archive if enabled. |
 
 Compose prefixes volume names with the project name, for example `zk-voting_node-data`. List them with `docker volume ls`.
@@ -25,10 +25,10 @@ done
 docker compose start l2 prover archive node
 ```
 
-For a backup without downtime, copy `republic.json` from the running container. It is replaced atomically on every save, so a single copy is always a complete file:
+For a backup without downtime, copy `zk-voting.json` from the running container. It is replaced atomically on every save, so a single copy is always a complete file:
 
 ```bash
-docker compose cp node:/data/republic.json backups/republic-$(date +%Y%m%d-%H%M%S).json
+docker compose cp node:/data/zk-voting.json backups/zk-voting-$(date +%Y%m%d-%H%M%S).json
 ```
 
 ## Where to keep backups
@@ -49,4 +49,4 @@ docker run --rm -v zk-voting_l2-data:/v -v "$PWD/backups":/b alpine \
 docker compose up -d
 ```
 
-Restore both volumes from the same point in time. After roll freeze, never edit `republic.json` by hand to "fix" a tally.
+Restore both volumes from the same point in time. After roll freeze, never edit `zk-voting.json` by hand to "fix" a tally.

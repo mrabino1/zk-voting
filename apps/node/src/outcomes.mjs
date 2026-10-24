@@ -18,7 +18,7 @@ import { buildResults } from './results.mjs';
 import { verifyAuditorBundle } from '../../../tools/auditor/verify.mjs';
 import { OUTCOME_VERIFY_PATH } from './outcomeReports.mjs';
 
-export const OUTCOMES_SCHEMA = 'republic.outcomes.v1';
+export const OUTCOMES_SCHEMA = 'zk-voting.outcomes.v1';
 
 export const PHASE_BEFORE = 'before';
 export const PHASE_DURING = 'during';

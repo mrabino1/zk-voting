@@ -10,7 +10,7 @@ import { FAQ_ENTRIES, faqAnswerText } from "./faq.js";
 import { logout, mountSignInPanel } from "./signin.js";
 
 const DEMO_NOTE =
-  `This Node is a working demo on the test/unstable line. Local tests still use MockVerifier. Poseidon(2) matches the vote circuit and the passkey commitment, but the dev Groth16 key is UNTRUSTED — no ceremony. The passkey helper may show republic-local-address. Tally that opens ballots uses Feldman t-of-n guardians (NON-PRODUCTION); homomorphic versus mixnet aggregation is not decided. ${brandName()} is not claiming this deploy is court-ready.`;
+  `This Node is a working demo on the test/unstable line. Local tests still use MockVerifier. Poseidon(2) matches the vote circuit and the passkey commitment, but the dev Groth16 key is UNTRUSTED — no ceremony. The passkey helper may show zk-voting-local-address. Tally that opens ballots uses Feldman t-of-n guardians (NON-PRODUCTION); homomorphic versus mixnet aggregation is not decided. ${brandName()} is not claiming this deploy is court-ready.`;
 
 function mount(node, ...children) {
   node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
@@ -280,7 +280,7 @@ export function renderAbout(main, ctx) {
         : h(
             "p",
             { class: "lede" },
-            `${brandName()} exists to protect and preserve a republic driven by democracy. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in.`
+            `${brandName()} exists to protect and preserve a democratic republic. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in.`
           ),
       ctaRow(h, audience)
     ),

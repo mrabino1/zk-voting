@@ -151,7 +151,7 @@ export function feedbackRouter(deps) {
         });
       } catch (err) {
         console.warn(
-          `[republic] feedback refused: SES send failed (${err?.name || 'Error'}). The message was not sent.`,
+          `[zk-voting] feedback refused: SES send failed (${err?.name || 'Error'}). The message was not sent.`,
         );
         res.status(503).json({
           error: FEEDBACK_USER_UNAVAILABLE,
@@ -163,7 +163,7 @@ export function feedbackRouter(deps) {
 
       limiter.commit(ip, now);
       console.info(
-        `[republic] feedback accepted at=${acceptance.acceptedAt} termsVersion=${acceptance.termsVersion} termsPdfSha256=${acceptance.termsPdfSha256}`,
+        `[zk-voting] feedback accepted at=${acceptance.acceptedAt} termsVersion=${acceptance.termsVersion} termsPdfSha256=${acceptance.termsPdfSha256}`,
       );
       res.json({
         ok: true,

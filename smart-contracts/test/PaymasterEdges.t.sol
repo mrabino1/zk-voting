@@ -16,7 +16,7 @@ contract RejectEther {
 }
 
 /// @notice Paymaster withdraw, EntryPoint gate, receive, and dest allowlist edges.
-/// @dev Ported from nuursha recover/push: zero recipient, unauthorized, fail-closed pay.
+/// @dev Edge cases: zero recipient, unauthorized, fail-closed pay.
 contract PaymasterEdgesTest is Deployer {
     address internal stranger;
 

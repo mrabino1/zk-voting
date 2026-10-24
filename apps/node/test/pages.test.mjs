@@ -206,7 +206,7 @@ describe('cms helpers', () => {
 
 describe('pages HTTP CMS and clean URLs', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-pages-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-pages-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -433,7 +433,7 @@ describe('pages HTTP CMS and clean URLs', () => {
     const pin = await api('PATCH', '/api/office/site', {
       jar: adminJar,
       body: {
-        title: 'Northbridge Republic',
+        title: 'Northbridge ZK-Voting',
         tagline: 'Fork the Node, keep the factory.',
         contracts: { factory: '0x3333333333333333333333333333333333333333' },
       },
@@ -445,7 +445,7 @@ describe('pages HTTP CMS and clean URLs', () => {
     assert.equal(cfg.json.electionFactoryAddress.toLowerCase(), '0x3333333333333333333333333333333333333333');
     assert.equal(cfg.json.addresses.factory.toLowerCase(), '0x3333333333333333333333333333333333333333');
     const site = await api('GET', '/api/site');
-    assert.equal(site.json.title, 'Northbridge Republic');
+    assert.equal(site.json.title, 'Northbridge ZK-Voting');
   });
 
   test('home overlay publishes and office editor HTML is served at a clean URL', async () => {

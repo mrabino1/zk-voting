@@ -92,7 +92,7 @@ export function termsPdfRouter(deps) {
   const { terms } = deps;
   const router = Router();
   router.get(
-    ['/terms.pdf', '/legal/zk-voting-terms.pdf', '/legal/republic-terms.pdf'],
+    ['/terms.pdf', '/legal/zk-voting-terms.pdf', '/legal/zk-voting-terms.pdf'],
     asyncHandler(async (_req, res) => {
       const doc = terms.document();
       res.setHeader('Content-Type', 'application/pdf');

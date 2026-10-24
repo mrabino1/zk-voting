@@ -201,7 +201,7 @@ export class Store {
 
   static async open(config) {
     await fs.mkdir(config.dataDir, { recursive: true });
-    const filePath = path.join(config.dataDir, 'republic.json');
+    const filePath = path.join(config.dataDir, 'zk-voting.json');
     let data;
     try {
       const raw = await fs.readFile(filePath, 'utf8');
@@ -391,7 +391,7 @@ export class Store {
     user.contactEmail = email;
     if (!config.quiet) {
       console.info(
-        `[republic] platform super admin contact email set from SUPER_ADMIN_EMAIL (${emailHint(email)})`,
+        `[zk-voting] platform super admin contact email set from SUPER_ADMIN_EMAIL (${emailHint(email)})`,
       );
     }
     return true;

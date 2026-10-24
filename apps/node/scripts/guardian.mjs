@@ -42,7 +42,7 @@ async function writeJson(file, value) {
 }
 
 function usage() {
-  return `Republic guardian CLI (NOT FOR PROFIT, NON-PRODUCTION)
+  return `ZK-Voting guardian CLI (NOT FOR PROFIT, NON-PRODUCTION)
 
   init --index N --out guardian.json [--id name] [--label text]
   deal --secret guardian.json --threshold T --roster roster.json --out deal.json

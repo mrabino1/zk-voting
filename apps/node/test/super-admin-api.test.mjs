@@ -183,7 +183,7 @@ describe('platform super-admin API', { concurrency: false }, () => {
 
   before(async () => {
     resetLogBuffer();
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-sa-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-sa-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -265,7 +265,7 @@ describe('platform super-admin API', { concurrency: false }, () => {
     assert.match(created.json.token, /^zksa_[0-9a-f]{16}_[A-Za-z0-9_-]{43}$/);
     broad = created.json.token;
     const parsed = parseSuperAdminToken(broad);
-    const raw = await readFile(path.join(tmp, 'republic.json'), 'utf8');
+    const raw = await readFile(path.join(tmp, 'zk-voting.json'), 'utf8');
     assert.equal(raw.includes(broad), false);
     assert.equal(raw.includes(parsed.secret), false);
     assert.equal(raw.includes(PEPPER), false);
@@ -542,7 +542,7 @@ describe('platform super-admin API', { concurrency: false }, () => {
 
     const jar = {};
     await api('POST', '/api/auth/dev-login', { jar, body: { handle: 'voter-one' } });
-    assert.ok(jar['republic.sid']);
+    assert.ok(jar['zk-voting.sid']);
     const dropped = await api('POST', '/api/_sa/v1/users/voter-one/sessions/revoke', {
       headers: { authorization: `Bearer ${broad}` },
       body: {},
@@ -694,7 +694,7 @@ describe('super-admin standby writer', { concurrency: false }, () => {
   });
 
   test('standby serves a keyed read, does not write, and still 404s auth failures', async () => {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'republic-sa-lease-'));
+    dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-sa-lease-'));
     active = await createApp({
       dataDir: dir,
       allowDevLogin: true,
@@ -734,7 +734,7 @@ describe('super-admin standby writer', { concurrency: false }, () => {
     });
     assert.equal(minted.status, 201, minted.text);
     const token = minted.json.token;
-    const before = JSON.parse(await readFile(path.join(dir, 'republic.json'), 'utf8'));
+    const before = JSON.parse(await readFile(path.join(dir, 'zk-voting.json'), 'utf8'));
     const auditBefore = (before.superAdminAudit || []).length;
     const health = await standbyApi('GET', '/api/_sa/v1/health', {
       headers: { authorization: `Bearer ${token}` },
@@ -750,7 +750,7 @@ describe('super-admin standby writer', { concurrency: false }, () => {
     const missing = await standbyApi('POST', '/api/_sa/v1/config', { body: { logLevel: 'debug' } });
     assert.equal(missing.status, 404);
     assert.deepEqual(missing.json, { error: 'not found', nfp: true });
-    const afterRead = JSON.parse(await readFile(path.join(dir, 'republic.json'), 'utf8'));
+    const afterRead = JSON.parse(await readFile(path.join(dir, 'zk-voting.json'), 'utf8'));
     assert.equal((afterRead.superAdminAudit || []).length, auditBefore);
     const keyRow = afterRead.superAdminKeys.find((row) => row.id === minted.json.key.id);
     assert.equal(keyRow.lastUsedAt, null);

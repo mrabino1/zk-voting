@@ -2,9 +2,9 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-Republic uses one HashLeftRight shape (`IHasher.hashLeftRight(uint256,uint256)` / Circom `Hasher()`).
+ZK-Voting uses one HashLeftRight shape (`IHasher.hashLeftRight(uint256,uint256)` / Circom `Hasher()`).
 
-**The vote circuit hasher is Poseidon(2)** (`republic.hash.poseidon-bn254-x5-t3-v1`): bn254, S-box x^5, state width t=3, the circomlib parameter set. The same permutation is implemented in:
+**The vote circuit hasher is Poseidon(2)** (`zk-voting.hash.poseidon-bn254-x5-t3-v1`): bn254, S-box x^5, state width t=3, the circomlib parameter set. The same permutation is implemented in:
 
 | Place | Code |
 | --- | --- |
@@ -23,9 +23,9 @@ Phase-2 ceremony scripts (`npm run circuits:ceremony`, runbook [`docs/CEREMONY.m
 
 | Id | Where | Status |
 | --- | --- | --- |
-| `republic.hash.poseidon-bn254-x5-t3-v1` | Vote circuit, proof-helpers, `PoseidonHasher`, browser `poseidon.js` | **Wired.** Not a ceremony. |
-| `republic.hash.keccak-dev-v1` | Foundry unit-test trees, Node Merkle (including the disqualification chain shape) | Default when `REPUBLIC_PROVING_PATH` is off. Do not mix these leaves into a Poseidon proof. The demo passkey leaf is Poseidon. |
-| `republic.hash.standin-v0` | `StandInHasher`, `standInHashLeftRight`, `hasher/standin.circom` | **Legacy.** Not included by the circuit. `hash(x, 0) == x`. |
+| `zk-voting.hash.poseidon-bn254-x5-t3-v1` | Vote circuit, proof-helpers, `PoseidonHasher`, browser `poseidon.js` | **Wired.** Not a ceremony. |
+| `zk-voting.hash.keccak-dev-v1` | Foundry unit-test trees, Node Merkle (including the disqualification chain shape) | Default when `ZK_VOTING_PROVING_PATH` is off. Do not mix these leaves into a Poseidon proof. The demo passkey leaf is Poseidon. |
+| `zk-voting.hash.standin-v0` | `StandInHasher`, `standInHashLeftRight`, `hasher/standin.circom` | **Legacy.** Not included by the circuit. `hash(x, 0) == x`. |
 
 `schemeId()` on the Solidity hashers is `keccak256` of the id string.
 
@@ -33,10 +33,10 @@ Phase-2 ceremony scripts (`npm run circuits:ceremony`, runbook [`docs/CEREMONY.m
 
 `MockVerifier.acceptAll` is the Foundry unit-test and demo deploy default. It is not the proving path.
 
-`REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`) deploys `PoseidonHasher` and a verifier with **no** mock fallback:
+`ZK_VOTING_PROVING_PATH=1` (or `ZK_VOTING_USE_MOCK_VERIFIER=0`) deploys `PoseidonHasher` and a verifier with **no** mock fallback:
 
-- no `REPUBLIC_VOTE_VERIFIER`: `VoteVerifier` with a **zero** verifying key. Dummy proofs revert `VerifierNotConfigured`.
-- `REPUBLIC_VOTE_VERIFIER=<exported verifier>`: `Groth16VerifierAdapter` around that contract. Still untrusted until a ceremony, and the circuit depth must match the election (`Vote(20)` vs the Vote(4) smoke fixture).
+- no `ZK_VOTING_VOTE_VERIFIER`: `VoteVerifier` with a **zero** verifying key. Dummy proofs revert `VerifierNotConfigured`.
+- `ZK_VOTING_VOTE_VERIFIER=<exported verifier>`: `Groth16VerifierAdapter` around that contract. Still untrusted until a ceremony, and the circuit depth must match the election (`Vote(20)` vs the Vote(4) smoke fixture).
 
 The committed checks are **Vote(4)** (smoke) and **Vote(20)** (dev election depth). Both verifying keys are **UNTRUSTED** — the setup entropy is public and no ceremony has been held:
 
@@ -54,7 +54,7 @@ npm run circuits:setup    # UNTRUSTED Vote(20) proving key (circuits/build/vote_
 npm run circuits:prove    # verifies it and refreshes vote20_* + UntrustedVote20Verifier.sol
 ```
 
-Full election circuit (heavier; default `REPUBLIC_PTAU_POWER=16`):
+Full election circuit (heavier; default `ZK_VOTING_PTAU_POWER=16`):
 
 ```bash
 npm run circuits:status
@@ -64,7 +64,7 @@ npm run circuits:export     # circuits/build/*_Groth16Verifier.sol — does not 
 npm run circuits:prove
 ```
 
-`npm run circuits:test` always checks the Poseidon vector and verifies the committed fixture. It runs the full Vote(20) setup only when `REPUBLIC_PROVING_PATH=1`.
+`npm run circuits:test` always checks the Poseidon vector and verifies the committed fixture. It runs the full Vote(20) setup only when `ZK_VOTING_PROVING_PATH=1`.
 
 Foundry also verifies the committed smoke proof against the exported Solidity verifier (`UntrustedGroth16Test`). That test fails with `GROTH16_KEYS_MISSING` if the fixture files are absent. It does not call `MockVerifier`.
 
@@ -72,11 +72,11 @@ Foundry also verifies the committed smoke proof against the exported Solidity ve
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `REPUBLIC_PROVING_PATH` | unset / `0` | `1` / `true`: non-mock deploy, hash scheme Poseidon. Unit tests ignore this except the documented fail-closed check. |
-| `REPUBLIC_USE_MOCK_VERIFIER` | `1` | `0` / `false`: same as proving path for deploy scripts. |
-| `REPUBLIC_HASH_SCHEME` | keccak-dev-v1, or Poseidon when proving path is on | Override (`poseidon`, `keccak-dev-v1`, `standin-v0`). |
-| `REPUBLIC_VOTE_VERIFIER` | unset | Address of a snarkjs verifier to wrap when the proving path is on. |
-| `REPUBLIC_PTAU_POWER` | `16` | Local untrusted powers-of-tau for Vote(20). |
-| `REPUBLIC_SMOKE_PTAU_POWER` | `14` | Enough for the Vote(4) smoke circuit (non-membership adds a 254-bit compare; ~12k constraints). |
+| `ZK_VOTING_PROVING_PATH` | unset / `0` | `1` / `true`: non-mock deploy, hash scheme Poseidon. Unit tests ignore this except the documented fail-closed check. |
+| `ZK_VOTING_USE_MOCK_VERIFIER` | `1` | `0` / `false`: same as proving path for deploy scripts. |
+| `ZK_VOTING_HASH_SCHEME` | keccak-dev-v1, or Poseidon when proving path is on | Override (`poseidon`, `keccak-dev-v1`, `standin-v0`). |
+| `ZK_VOTING_VOTE_VERIFIER` | unset | Address of a snarkjs verifier to wrap when the proving path is on. |
+| `ZK_VOTING_PTAU_POWER` | `16` | Local untrusted powers-of-tau for Vote(20). |
+| `ZK_VOTING_SMOKE_PTAU_POWER` | `14` | Enough for the Vote(4) smoke circuit (non-membership adds a 254-bit compare; ~12k constraints). |
 
 snarkjs JSON proofs (`pi_a` / `pi_b` / `pi_c`) need the G2 limb swap before Solidity. `snarkjsProofToSolidity` does that. Proofs already shaped as `{a,b,c}` are left alone.

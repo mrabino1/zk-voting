@@ -72,7 +72,7 @@ export function isHeldVoteType(type) {
   return name === 'vote' || name === 'poll_vote';
 }
 
-export function disclosurePublicView(now, intervalSeconds, extras = {}) {
+export function publicDisclosureView(now, intervalSeconds, extras = {}) {
   const interval = Number(intervalSeconds) || 0;
   const ts = Number(now);
   const last = interval > 0 ? publishedThrough(ts, interval) : ts;

@@ -99,7 +99,7 @@ template Tally(nBallots, nOptions) {
     signal electionIdSq;
     electionIdSq <== electionId * electionId;
 
-    // nOptions fits in 8 bits for Republic v1 (questionCount is uint8;
+    // nOptions fits in 8 bits for ZK-Voting v1 (questionCount is uint8;
     // per-question option lists are small). Indices are still field elements.
     var pad = nOptions;
 

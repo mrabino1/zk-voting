@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial sequencer.
-// JSON-RPC subset for Republic L2.
+// JSON-RPC subset for ZK-Voting L2.
 import http from 'node:http';
 import { toQuantity } from '../sequencer/state.mjs';
 
@@ -88,14 +88,14 @@ export function createRpcServer(state, { host, port } = {}) {
       const mode = state.acceptingWrites() ? 'active' : 'standby';
       res.writeHead(200, {
         'content-type': 'application/json',
-        'x-republic-mode': mode,
+        'x-zk-voting-mode': mode,
       });
       res.end(
         JSON.stringify({
           ok: true,
           ready: true,
           nfp: true,
-          name: 'Republic L2',
+          name: 'ZK-Voting L2',
           role: 'sequencer',
           mode,
           acceptingWrites: state.acceptingWrites(),
@@ -146,7 +146,7 @@ export function createRpcServer(state, { host, port } = {}) {
       res.writeHead(503, {
         'content-type': 'application/json',
         'retry-after': '2',
-        'x-republic-mode': 'standby',
+        'x-zk-voting-mode': 'standby',
       });
       res.end(
         JSON.stringify({
@@ -177,7 +177,7 @@ export function createRpcServer(state, { host, port } = {}) {
       res.writeHead(503, {
         'content-type': 'application/json',
         'retry-after': '2',
-        'x-republic-mode': 'standby',
+        'x-zk-voting-mode': 'standby',
       });
     } else {
       res.writeHead(200, { 'content-type': 'application/json' });

@@ -126,7 +126,7 @@ describe('approval chain and external vote parties', () => {
     await new Promise((resolve) => oracle.listen(0, '127.0.0.1', resolve));
     oracleUrl = `http://127.0.0.1:${oracle.address().port}/check`;
 
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-parties-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-parties-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

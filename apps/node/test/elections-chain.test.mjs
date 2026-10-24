@@ -22,6 +22,7 @@ import { HttpError } from '../src/http.mjs';
 import { createApp } from '../src/server.mjs';
 import { isUuid } from '../src/electionIds.mjs';
 
+// Anvil's public dev account #0 key (test-only; holds nothing).
 const ANVIL_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const FACTORY = '0x1111111111111111111111111111111111111111';
 const CLONE = '0x2222222222222222222222222222222222222222';
@@ -59,7 +60,7 @@ function listen(application) {
 }
 
 async function boot(opts = {}) {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-chain-'));
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-chain-'));
   const created = await createApp({
     dataDir: tmp,
     allowDevLogin: true,
@@ -293,7 +294,7 @@ describe('POST /api/elections with mocked factory', () => {
     assert.equal(listed.json.elections[0].onChainElectionId, '42');
   });
 
-  test('factory failure returns 502 and does not write republic.json', async () => {
+  test('factory failure returns 502 and does not write zk-voting.json', async () => {
     const chain = mockChain({
       create: async () => {
         throw new HttpError(502, 'ElectionFactory createElection failed: revert MissingRole', {

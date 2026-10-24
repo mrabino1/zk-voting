@@ -30,10 +30,10 @@ export const FEEDBACK_USER_UNAVAILABLE =
   'Feedback cannot be delivered right now. Please try again later.';
 
 export const FEEDBACK_INBOX_WARNING =
-  '[republic] feedback refused: the platform super admin has no contact email and no sign-in email. Set one on that person so /feedback can be delivered. The message was not sent.';
+  '[zk-voting] feedback refused: the platform super admin has no contact email and no sign-in email. Set one on that person so /feedback can be delivered. The message was not sent.';
 
 export const FEEDBACK_SES_WARNING =
-  '[republic] feedback refused: AWS SES is not configured. Set SES_FROM_ADDRESS and AWS_REGION. SES_DRY_RUN=1 with both still captures the message and does not call SES. The message was not sent.';
+  '[zk-voting] feedback refused: AWS SES is not configured. Set SES_FROM_ADDRESS and AWS_REGION. SES_DRY_RUN=1 with both still captures the message and does not call SES. The message was not sent.';
 
 export function stripControls(value, { keepNewlines = false } = {}) {
   const raw = String(value ?? '');

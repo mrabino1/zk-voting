@@ -388,7 +388,7 @@ export function civicIdHash({ kind, issuer, documentNumber }) {
   if (!isCivicIdKind(k)) throw new HttpError(400, 'invalid civic id kind');
   const issuerN = normalizeIssuer(issuer);
   const doc = normalizeDocumentNumber(documentNumber);
-  return keccak256(toHex(Buffer.from(`republic:civic_id:v1|${k}|${issuerN}|${doc}`, 'utf8')));
+  return keccak256(toHex(Buffer.from(`zk-voting:civic_id:v1|${k}|${issuerN}|${doc}`, 'utf8')));
 }
 
 export function civicIdLabel(kind) {
@@ -554,7 +554,7 @@ export function buildWeb3BindMessage({ address, nonce, chainId, origin }) {
   return [
     `${brandName()} wants you to uniquely identify this Ethereum address to your person.`,
     '',
-    `URI: ${origin || 'republic'}`,
+    `URI: ${origin || 'zk-voting'}`,
     'Version: 1',
     `Chain ID: ${chainId}`,
     `Nonce: ${nonce}`,
@@ -570,7 +570,7 @@ export function buildWeb3LoginMessage({ address, nonce, chainId, origin }) {
   return [
     `${brandName()} wants you to sign in with this Ethereum wallet.`,
     '',
-    `URI: ${origin || 'republic'}`,
+    `URI: ${origin || 'zk-voting'}`,
     'Version: 1',
     `Chain ID: ${chainId}`,
     `Nonce: ${nonce}`,

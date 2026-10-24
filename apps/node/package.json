@@ -2,7 +2,7 @@
   "name": "zk-voting-node",
   "version": "0.1.0",
   "private": true,
-  "description": "NOT FOR PROFIT — Republic Node (JSON API + static page host) for zk-voting.",
+  "description": "NOT FOR PROFIT — ZK-Voting Node (JSON API + static page host) for zk-voting.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "engines": {
@@ -15,7 +15,7 @@
     "test:a11y": "NODE_ENV=test node --test test/a11y.test.mjs",
     "certify:l1": "node scripts/certify-l1.mjs",
     "guardian": "node scripts/guardian.mjs",
-    "build": "node -e \"console.log('NOT FOR PROFIT — Republic Node serves public/ and dist/; the SPA is built separately.')\""
+    "build": "node -e \"console.log('NOT FOR PROFIT — ZK-Voting Node serves public/ and dist/; the SPA is built separately.')\""
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.864.0",

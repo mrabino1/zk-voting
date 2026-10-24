@@ -21,7 +21,7 @@ import {
   forgotVotePin,
 } from "./identity-methods.js";
 
-export const SESSION_EVENT = "republic:session";
+export const SESSION_EVENT = "zk-voting:session";
 
 export async function fetchJson(path, options = {}) {
   const headers = {

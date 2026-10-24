@@ -443,7 +443,7 @@
     }
   });
 
-  window.addEventListener("republic:session", () => {
+  window.addEventListener("zk-voting:session", () => {
     Promise.all([loadMe(), loadUsers(), loadJurisdictions()]);
   });
 

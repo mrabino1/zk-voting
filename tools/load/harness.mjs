@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Local load harness for the Republic Node. Starts a Node on 127.0.0.1,
+// Local load harness for the ZK-Voting Node. Starts a Node on 127.0.0.1,
 // drives registration, vote, hourly disclosure, and tally, and writes only
 // figures this process measured.
 
@@ -250,7 +250,7 @@ function stopProfile(session) {
 }
 
 async function runScale(n, opts) {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), `republic-load-${n}-`));
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), `zk-voting-load-${n}-`));
   const clock = { offsetSec: 0 };
   const nowFn = () => Math.floor(Date.now() / 1000) + clock.offsetSec;
   const loop = monitorEventLoopDelay({ resolution: 20 });
@@ -433,14 +433,14 @@ async function runScale(n, opts) {
     const issued = started.store.listActiveOutcomeSubscribers?.(electionId);
     result.tally.subscribers = Array.isArray(issued) ? issued.length : null;
 
-    const republicFile = path.join(dataDir, 'republic.json');
+    const zkVotingFile = path.join(dataDir, 'zk-voting.json');
     const chainFile = started.config.l2ChainFile || path.join(dataDir, 'l2-chain.json');
     result.files = {
-      republicJsonBytes: await fileSize(republicFile),
+      zkVotingJsonBytes: await fileSize(zkVotingFile),
       l2ChainJsonBytes: await fileSize(chainFile),
     };
     try {
-      result.snapshotMicrobench = await snapshotMicrobench(republicFile);
+      result.snapshotMicrobench = await snapshotMicrobench(zkVotingFile);
     } catch (err) {
       result.notes.push(`snapshot microbench failed: ${err.message}`);
     }
@@ -530,7 +530,7 @@ async function run(opts) {
 function printHelp() {
   console.log(`Usage: node tools/load/harness.mjs [options]
 
-Starts a local Republic Node and measures registration, vote submission,
+Starts a local ZK-Voting Node and measures registration, vote submission,
 hourly disclosure, and tally at each population in --scales.
 
   --scales 50,100,200,400     Populations (fresh data dir each)

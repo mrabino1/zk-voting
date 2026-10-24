@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Incremental Merkle tree. Default HASH_SCHEME is republic.hash.keccak-dev-v1
+// Incremental Merkle tree. Default HASH_SCHEME is zk-voting.hash.keccak-dev-v1
 // (keccak256 left||right), matching Solidity KeccakHasher used by Foundry tests.
 // Vote-circuit proofs use Poseidon via @zk-voting/proof-helpers. This tree stays keccak-dev-v1.
 // The disqualification root is the same indexed chain as the circuit (sentinel 0,

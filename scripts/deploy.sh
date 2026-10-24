@@ -171,15 +171,13 @@ if [[ "$FORCE" -eq 1 ]]; then
 fi
 
 # --- dev / proving flags ----------------------------------------------------
-# Set these as ZK_VOTING_* (env or .env). The forge scripts in this tree still
-# read the older prefix, so each one is also passed under that name for this
-# forge run. Drop the bridge once the forge scripts read ZK_VOTING_* directly.
-LEGACY_FLAG_PREFIX="REPUBLIC_"
+# Set these as ZK_VOTING_* (env or .env). The forge scripts read ZK_VOTING_*
+# directly; each one that is set is passed through to this forge run.
 for flag in ALLOW_MOCK_VERIFIER USE_MOCK_VERIFIER PROVING_PATH HASH_SCHEME \
   VOTE_VERIFIER TALLY_VERIFIER SETTLEMENT_MOCK_MODE; do
   zk="ZK_VOTING_$flag"
   if [[ -n "${!zk:-}" ]]; then
-    FORGE_ENV+=("$zk=${!zk}" "$LEGACY_FLAG_PREFIX$flag=${!zk}")
+    FORGE_ENV+=("$zk=${!zk}")
   fi
 done
 

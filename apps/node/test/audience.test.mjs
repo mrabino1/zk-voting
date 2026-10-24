@@ -179,7 +179,7 @@ describe('audience helpers and FAQ', () => {
 
 describe('audience HTTP routes and admin gates', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-audience-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-audience-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

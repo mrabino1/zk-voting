@@ -65,7 +65,7 @@ function walk(value, visit) {
 
 describe('option metadata info API', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-info-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-info-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

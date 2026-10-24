@@ -43,7 +43,7 @@ describe('L2 skip empty blocks', () => {
   });
 
   async function openState(patch = {}) {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-skip-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-skip-'));
     temps.push(tmp);
     const clock = { t: patch.t ?? HOUR_START + 10 * 60 };
     const config = loadConfig();
@@ -52,7 +52,7 @@ describe('L2 skip empty blocks', () => {
     config.skipEmptyBlocks = patch.skipEmptyBlocks ?? true;
     config.heartbeatSeconds = patch.heartbeatSeconds ?? HOUR;
     config.nowFn = () => clock.t;
-    config.republicNodeUrl = '';
+    config.zkVotingNodeUrl = '';
     const state = ChainState.open(config);
     return { state, clock, tmp };
   }

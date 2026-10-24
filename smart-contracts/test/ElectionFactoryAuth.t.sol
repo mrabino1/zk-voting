@@ -12,7 +12,7 @@ import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
 /// @notice Factory validation, role transfer lockout, and clone initialize-once.
-/// @dev Ported from nuursha factory/ownable edges: zero address, old-owner dead,
+/// @dev Factory/ownable edge cases: zero address, old-owner dead,
 ///      already-initialized clone, inclusive bounds, unauthorized create.
 contract ElectionFactoryAuthTest is Deployer {
     address internal stranger;

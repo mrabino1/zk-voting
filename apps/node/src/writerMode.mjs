@@ -88,7 +88,7 @@ export function standbyGuard(writer) {
       return;
     }
     res.set('Retry-After', '2');
-    res.set('x-republic-mode', 'standby');
+    res.set('x-zk-voting-mode', 'standby');
     res.status(503).json({
       ok: false,
       error: 'maintenance handover',

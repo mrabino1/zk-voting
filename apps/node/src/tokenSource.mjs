@@ -340,7 +340,7 @@ export function createMemoryTokenChain({
       logs.push({ ...log, block: number });
     }
     openLogs.length = 0;
-    const hash = keccak256(stringToHex(`republic-mock-block:${number}:${ts}`));
+    const hash = keccak256(stringToHex(`zk-voting-mock-block:${number}:${ts}`));
     const block = { number, hash, timestamp: ts, finalized: Boolean(finalized) };
     blocks.push(block);
     return block;
