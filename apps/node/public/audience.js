@@ -72,6 +72,10 @@ export function canonicalPublicPath(pathname) {
     search = raw.slice(qAt);
     raw = raw.slice(0, qAt);
   }
+  // Collapse a leading run of slashes or backslashes to one "/". Browsers read
+  // "//host" and "/\\host" as another origin, so a redirect built from this
+  // path must never start that way.
+  raw = raw.replace(/^[\/\\]+/, "/");
   raw = raw.replace(/\.html$/i, "");
   if (!raw || raw === "/index") raw = "/";
   else raw = raw.replace(/\/+$/, "") || "/";
@@ -88,6 +92,9 @@ export function safeNextPath(value) {
   }
   if (!path.startsWith("/") || path.startsWith("//") || /[a-z]+:/i.test(path)) return null;
   if (path.includes("\\")) return null;
+  // Browsers strip tabs and newlines from URLs, so "/\t/evil.example" would
+  // navigate to "//evil.example". Reject every control character.
+  if (/[\u0000-\u001f\u007f]/.test(path)) return null;
   return canonicalPublicPath(path);
 }
 

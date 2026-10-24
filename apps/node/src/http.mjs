@@ -1,5 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import { isUnsafeObjectKey } from './safeKeys.mjs';
+
 export class HttpError extends Error {
   /**
    * @param {number} status
@@ -28,7 +30,7 @@ export function parseCookies(header) {
     if (i === -1) continue;
     const k = part.slice(0, i).trim();
     const v = part.slice(i + 1).trim();
-    if (!k) continue;
+    if (!k || isUnsafeObjectKey(k)) continue;
     try {
       out[k] = decodeURIComponent(v);
     } catch {
@@ -133,7 +135,7 @@ export function stripBallotPii(value) {
   if (!value || typeof value !== 'object') return value;
   const out = {};
   for (const [k, v] of Object.entries(value)) {
-    if (BANNED_PRIVACY_KEYS.has(k)) continue;
+    if (BANNED_PRIVACY_KEYS.has(k) || isUnsafeObjectKey(k)) continue;
     out[k] = k === 'encryptedBallot' ? v : stripBallotPii(v);
   }
   return out;

@@ -13,6 +13,7 @@ import { keccak256, toHex } from 'viem';
 import proofHelpers from '@zk-voting/proof-helpers';
 
 import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
+import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
@@ -332,7 +333,7 @@ export function relayTokenPollBallot(body) {
   }
   const out = {};
   for (const [key, value] of Object.entries(body)) {
-    if (POLL_BALLOT_BANNED.has(key)) continue;
+    if (POLL_BALLOT_BANNED.has(key) || isUnsafeObjectKey(key)) continue;
     out[key] = value;
   }
   return out;
