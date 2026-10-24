@@ -30,6 +30,12 @@ The same pages are served by every running Node at `/docs`, so operators can rea
 | [Rollback](./rollback.md) | An upgrade went wrong and you need the previous build back. |
 | [Rolling updates](./rolling-updates.md) | You want zero-downtime deploys (old and new containers overlap). |
 
+## Community
+
+| Page | Use it when |
+| --- | --- |
+| [Community forum (optional Discourse)](./discourse.md) | You want constituents to discuss polls and elections on an open-source forum next to the Node. |
+
 ## What runs
 
 | Service | Image | Role |

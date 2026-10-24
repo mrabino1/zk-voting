@@ -40,6 +40,32 @@ The same guides are served by every node at **`/docs`** and live in [`docs/self-
 
 Day-two operations, keys, and incident handling: [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
+## Community discussion (optional Discourse)
+
+A vote tells you *what* people want. A conversation tells you *why*. We encourage every operator to run an open-source [Discourse](https://www.discourse.org) forum ([source](https://github.com/discourse/discourse)) next to zk-voting so constituents can discuss polls and elections with each other. It is **optional**: zk-voting works the same without it, and nothing in the app depends on it.
+
+**Why**
+
+- **Deliberation before a vote:** read the question, ask what it means, hear the arguments before the poll opens.
+- **Reflection after a vote:** the tally shows the result; the forum shows the reasons and the next question.
+- **Transparency:** one public place for ballot text, timelines, eligibility rules, and published results.
+- **Q&A with candidates and organizers:** officers, candidates, and the independent auditor answer in public.
+
+**How**
+
+- Self-host Discourse with its [official Docker install](https://github.com/discourse/discourse_docker) (`./discourse-setup` on a Linux host), or on [Coolify](https://coolify.io) or another open-source host on Linux (Dokploy, CapRover, plain Docker).
+- Give it its own subdomain, for example `community.<your-domain>` next to `vote.<your-domain>`. **HTTPS only.**
+- Single sign-on through [DiscourseConnect](https://meta.discourse.org/t/setup-discourseconnect-official-single-sign-on-for-discourse-sso/13045) pointing at the app is a **future, optional** idea. It is **not implemented** today; forum accounts are created on the forum.
+- Suggested categories: **Announcements** (read-only), **one category per election or poll**, and **Feedback** on the voting site itself.
+
+**Rules that protect the ballot**
+
+- Nobody is ever required to say how they voted, and organizers must never ask.
+- A forum identity is separate from the anonymous ballot. **Forum accounts must never be linked to ballots, receipts, nullifiers, or voting credentials**, by the operator or anyone else.
+- Remove vote-buying offers, coercion, and demands for proof of how someone voted.
+
+Full guide: [Community forum (optional Discourse)](./docs/self-hosting/discourse.md), also served at `/docs/discourse`. Install guides for the app itself: [`docs/self-hosting/`](./docs/self-hosting/README.md).
+
 ## Positioning
 
 [vote.makerdao.com](https://vote.makerdao.com) is the sample for this voting experience. That portal was built for MakerDAO's own governance. zk-voting makes the same kind of vote generic and self-hosted, like Discourse, so anybody can run their own vote. Maker executive votes are binding: when they pass, the underlying contracts execute the change. A zk-voting outcome is non-binding sentiment. The verifiable result is stored on chain, and passing a vote does not auto-execute anything. Operators also get more oversight and admin than that portal: an approval chain of platform and jurisdiction officers, public disqualification reason codes, and an independent auditor. Full note: [Inspiration: vote.makerdao.com](./implementation.md#inspiration-votemakerdaocom).
@@ -80,6 +106,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 
 - [Quickstart](#quickstart)
 - [Self-hosting docs](#self-hosting-docs)
+- [Community discussion (optional Discourse)](#community-discussion-optional-discourse)
 - [Positioning](#positioning)
 - [Not for profit](#not-for-profit)
 - [Purpose](#purpose)
