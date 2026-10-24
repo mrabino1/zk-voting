@@ -10,6 +10,7 @@ import path from 'node:path';
 
 import { isDisclosed, nextPublishAt, hourBucket, disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
 import { HttpError } from './http.mjs';
+import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { emailHint, normalizeEmail, userEmail } from './identity.mjs';
 import { toBytes32 } from './merkle.mjs';
 import {
@@ -161,7 +162,7 @@ export function stripReceiptChoice(value) {
   if (!value || typeof value !== 'object') return value;
   const out = {};
   for (const [k, v] of Object.entries(value)) {
-    if (CHOICE_KEYS.has(String(k).toLowerCase())) continue;
+    if (CHOICE_KEYS.has(String(k).toLowerCase()) || isUnsafeObjectKey(k)) continue;
     out[k] = stripReceiptChoice(v);
   }
   return out;

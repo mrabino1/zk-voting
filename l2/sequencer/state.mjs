@@ -236,12 +236,17 @@ export function topicWord(value) {
   }
 }
 
+// Copying `__proto__` (or `constructor` / `prototype`) from parsed JSON onto
+// `out` would swap its prototype and let forbidden keys ride along as
+// inherited properties.
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function stripForbidden(value) {
   if (Array.isArray(value)) return value.map(stripForbidden);
   if (value && typeof value === 'object') {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      if (FORBIDDEN_KEYS.has(String(k).toLowerCase())) continue;
+      if (FORBIDDEN_KEYS.has(String(k).toLowerCase()) || UNSAFE_OBJECT_KEYS.has(k)) continue;
       out[k] = stripForbidden(v);
     }
     return out;

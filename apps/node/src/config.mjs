@@ -1,5 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -345,7 +346,64 @@ export function getConfig(overrides = {}) {
     overrides.archiveEnabled !== undefined ? overrides.archiveEnabled : process.env.ARCHIVE_ENABLED,
     true,
   );
+  applySiteAdminConfig(config, overrides);
   return config;
+}
+
+/** Repository root (apps/node/../..). Bundled plugins live in `<repo>/plugins`. */
+export const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
+
+function pick(overrides, key, envValue) {
+  return Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : envValue;
+}
+
+function positiveInt(value, fallback, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+}
+
+/**
+ * Site admin: layout and plugins. Safe defaults: zip upload OFF, 1 MiB zip cap,
+ * a fresh sign-in (10 min) required to install.
+ */
+function applySiteAdminConfig(config, overrides) {
+  config.pluginsAllowUpload = envFlag(pick(overrides, 'pluginsAllowUpload', process.env.PLUGINS_ALLOW_UPLOAD), false);
+  config.pluginsBundledDir = String(
+    pick(overrides, 'pluginsBundledDir', process.env.PLUGINS_DIR) || path.join(REPO_ROOT, 'plugins'),
+  );
+  config.pluginsUploadDir = String(
+    pick(overrides, 'pluginsUploadDir', process.env.PLUGINS_UPLOAD_DIR) || path.join(config.dataDir, 'plugins'),
+  );
+  config.pluginMaxZipBytes = positiveInt(
+    pick(overrides, 'pluginMaxZipBytes', process.env.PLUGIN_MAX_ZIP_BYTES),
+    1024 * 1024,
+    16 * 1024 * 1024,
+  );
+  config.pluginReauthMs = positiveInt(
+    pick(overrides, 'pluginReauthMs', process.env.PLUGIN_REAUTH_MS),
+    10 * 60 * 1000,
+    60 * 60 * 1000,
+  );
+  config.layoutFile = String(
+    pick(overrides, 'layoutFile', process.env.LAYOUT_FILE) || path.join(PKG_ROOT, 'site', 'layout.json'),
+  );
+  config.layoutOverrideModule = String(
+    pick(overrides, 'layoutOverrideModule', process.env.LAYOUT_OVERRIDE_MODULE) ||
+      path.join(PKG_ROOT, 'site', 'layout.override.mjs'),
+  );
+  config.appVersion = String(pick(overrides, 'appVersion', '') || readPackageVersion());
+}
+
+let packageVersion = '';
+function readPackageVersion() {
+  if (packageVersion) return packageVersion;
+  try {
+    packageVersion = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version || '0.0.0';
+  } catch {
+    packageVersion = '0.0.0';
+  }
+  return packageVersion;
 }
 
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];

@@ -1,0 +1,20 @@
+{
+  "name": "announcement-banner",
+  "displayName": "Announcement banner",
+  "version": "1.0.0",
+  "description": "Example UI plugin: shows a dismissible site-wide announcement in the banner slot. Holders of edit_layout change the message on its Site admin page.",
+  "author": "zk-voting maintainers",
+  "license": "MIT",
+  "type": "both",
+  "minAppVersion": "0.1.0",
+  "permissions": ["client", "routes", "storage", "admin_pages", "menu"],
+  "entrypoints": {
+    "server": "server/index.mjs",
+    "client": "client.mjs",
+    "styles": "banner.css"
+  },
+  "hooks": ["routes", "adminPages", "menu"],
+  "slots": ["banner", "site-admin.page"],
+  "adminPages": [{ "id": "settings", "title": "Announcement banner", "capability": "edit_layout" }],
+  "menu": [{ "label": "Announcement", "page": "settings" }]
+}

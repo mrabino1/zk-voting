@@ -116,7 +116,8 @@ async function applySession(page, cookie) {
 async function audit(page, url, { cookie, scheme = 'light' } = {}) {
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: scheme }]);
   await applySession(page, cookie);
-  // Ceremony pages send a strict CSP (no inline scripts); axe is injected inline.
+  // Ceremony pages and /site-admin send a strict CSP (script-src 'self');
+  // axe is injected inline, so bypass CSP for the audit.
   await page.setBypassCSP(true);
   await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
   await settle(page);
@@ -251,6 +252,10 @@ describe('WCAG 2.2 AA axe', () => {
     ['back office', '/back-office', 'admin'],
     ['admin hub', '/office', 'admin'],
     ['explorer', '/explorer', 'admin'],
+    ['site admin roles', '/site-admin/roles', 'admin'],
+    ['site admin layout', '/site-admin/layout', 'admin'],
+    ['site admin plugins', '/site-admin/plugins', 'admin'],
+    ['site admin audit', '/site-admin/audit', 'admin'],
     ['self-hosting docs', '/docs'],
     ['self-hosting docs page', '/docs/tailscale'],
     ['self-hosting docs config', '/docs/configuration'],

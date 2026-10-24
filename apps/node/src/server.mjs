@@ -9,6 +9,7 @@ import cors from 'cors';
 import express from 'express';
 
 import { attachAuth, enforceApiKeyAccess } from './auth.mjs';
+import { corsOptionsDelegate } from './corsPolicy.mjs';
 import { installConsoleCapture, recordLog, setLogLevel } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
@@ -48,6 +49,9 @@ import { feedbackRouter } from './routes/feedback.mjs';
 import { ceremonyAdminRouter, ceremonyPublicRouter } from './routes/ceremony.mjs';
 import { createCeremonyService } from './ceremony/service.mjs';
 import { ceremonyCsp, ceremonyHtmlFile, snarkjsVendorRoute } from './ceremony/web.mjs';
+import { layoutPublicRouter, siteAdminRouter } from './routes/siteAdmin.mjs';
+import { createLayoutService } from './layout.mjs';
+import { createPluginManager } from './plugins/manager.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -81,6 +85,7 @@ function htmlCandidate(config, pathname) {
   else if (clean === '/explorer' || clean.startsWith('/explorer/')) file = 'explorer.html';
   else if (clean === '/admin' || clean.startsWith('/admin/')) file = 'admin.html';
   else if (clean === '/back-office' || clean.startsWith('/back-office/')) file = 'back-office.html';
+  else if (clean === '/site-admin' || clean.startsWith('/site-admin/')) file = 'site-admin.html';
   else if (clean === '/docs' || clean.startsWith('/docs/')) file = 'docs.html';
   return [
     path.join(config.distDir, file),
@@ -90,7 +95,36 @@ function htmlCandidate(config, pathname) {
   ];
 }
 
-const OFFICE_PAGE_RE = /^\/(admin|back-office|office)(\/|$)/i;
+const OFFICE_PAGE_RE = /^\/(admin|back-office|office|site-admin)(\/|$)/i;
+
+/**
+ * Strict CSP for the site-admin page and plugin pages: external scripts and
+ * styles from this origin only, no inline script, no eval. (Other pages have
+ * no CSP today; see docs/plugins/README.md "Open decisions".)
+ */
+export const SITE_ADMIN_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+function siteAdminCsp() {
+  return function siteAdminCspMiddleware(req, res, next) {
+    if (/^\/site-admin(\/|$)/i.test(req.path || '')) {
+      res.set('Content-Security-Policy', SITE_ADMIN_CSP);
+      res.set('X-Frame-Options', 'DENY');
+      res.set('Referrer-Policy', 'same-origin');
+    }
+    next();
+  };
+}
 
 /** Public URLs are /admin not /admin.html. Files on disk stay *.html. */
 export function cleanHtmlUrls() {
@@ -231,19 +265,17 @@ export async function createApp(overrides = {}) {
     store,
     ...(typeof config.ceremonyNowMs === 'function' ? { now: config.ceremonyNowMs } : {}),
   });
+  const layoutService = await createLayoutService({ store, config });
+  const plugins = await createPluginManager({ store, config, layout: layoutService });
+  deps.layoutService = layoutService;
+  deps.plugins = plugins;
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
   app.disable('x-powered-by');
   if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
-  app.use(
-    cors({
-      origin: true,
-      credentials: true,
-      maxAge: 86400,
-    }),
-  );
+  app.use(cors(corsOptionsDelegate(config)));
   app.use('/api/feedback', (req, res, next) => {
     if (req.method !== 'POST') return next();
     const len = Number(req.headers['content-length'] || 0);
@@ -306,6 +338,9 @@ export async function createApp(overrides = {}) {
   app.use('/api', outcomesRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', botDocsRouter());
+  app.use('/api/site-admin', siteAdminRouter(deps));
+  app.use('/api', layoutPublicRouter(deps));
+  app.use('/api/plugins/:name', plugins.routeDispatcher());
   app.use(repoLlmsRouter());
   app.use(selfHostingDocsRouter());
   app.get('/vendor/snarkjs.min.js', snarkjsVendorRoute());
@@ -313,6 +348,8 @@ export async function createApp(overrides = {}) {
     res.status(404).json({ error: 'not found', nfp: true });
   });
 
+  app.get('/plugins-assets/:name/*', plugins.assetHandler());
+  app.use(siteAdminCsp());
   app.use(electionShortLinks(store));
   app.use(cleanHtmlUrls());
   app.use(officePageGuard());
@@ -329,7 +366,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer, ceremonies: deps.ceremonies };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer, plugins, ceremonies: deps.ceremonies };
 }
 
 export async function startServer(overrides = {}) {
@@ -358,6 +395,7 @@ export async function startServer(overrides = {}) {
         created.explorer.writerActive = true;
         created.config.writerActive = true;
         await created.store.adoptSuperAdminEmail(created.config);
+        if (typeof created.plugins?.onPromoted === 'function') await created.plugins.onPromoted();
         console.log(`node writer active epoch=${created.writer.epoch()}`);
       } catch (err) {
         console.error('node promote failed:', err);
