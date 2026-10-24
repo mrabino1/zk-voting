@@ -172,9 +172,16 @@ function turnPanel(c, user) {
     return section;
   }
   if (!user) {
+    const pending = pendingInvite(c.id);
     add(
-      el("p", {}, "Sign in to join the queue. Your account handle is never shown publicly; you pick a public name when it is your turn."),
-      el("p", {}, el("a", { class: "btn", href: `/signin?next=${encodeURIComponent(window.location.pathname)}` }, "Sign in to take part"))
+      el(
+        "p",
+        {},
+        pending
+          ? "Sign in to accept your invite. It binds to the account you sign in with."
+          : "This ceremony is invite only. If you were invited, sign in with that account to join the queue. Your account handle is never shown publicly; you pick a public name when it is your turn."
+      ),
+      el("p", {}, el("a", { class: "btn", href: `/signin?next=${encodeURIComponent(window.location.pathname)}` }, pending ? "Sign in to accept the invite" : "Sign in"))
     );
     return section;
   }
@@ -184,8 +191,15 @@ function turnPanel(c, user) {
     if (saved) add(el("p", {}, el("button", { class: "btn btn-secondary", type: "button", onClick: () => saveJson(`zk-voting-receipt-${c.id}-${saved.index}.json`, saved) }, "Download your receipt again")));
     return section;
   }
-  if (!me?.listed) {
-    add(el("p", {}, "This ceremony takes contributions from an invited list only, and your account is not on it."));
+  if (!me?.invited) {
+    add(
+      el(
+        "div",
+        { class: "notice notice-warn", id: "not-invited", role: "status" },
+        el("p", {}, el("strong", {}, "Invite only. "), "Only accounts the coordinator invited can join the queue or upload, and this account is not invited."),
+        el("p", {}, "If you received an invite link, open it while signed in to this account. Otherwise ask the ceremony coordinator for an invite. You can still follow along and verify the transcript.")
+      )
+    );
     return section;
   }
   if (!me.queued) {
@@ -426,7 +440,7 @@ async function renderDetail(id) {
         ["Constraints", c.circuit?.constraints != null ? String(c.circuit.constraints) : "—"],
         ["Contributions", `${c.contributions.length} (at least ${c.minContributions} needed)`],
         ["In queue", String(c.queueLength)],
-        ["Who can join", c.participationMode === "list" ? "Invited list" : "Any signed-in account"],
+        ["Who can join", `Invited accounts only (${c.invitedCount ?? 0} invited)`],
         ["Beacon", beaconText(c.beacon)],
       ]),
       el("p", {}, el("a", { href: `/ceremony/${encodeURIComponent(c.id)}/transcript` }, "Open the full transcript and verify it"))
@@ -443,8 +457,9 @@ async function renderDetail(id) {
 export function beaconText(beacon) {
   const p = beacon?.precommit;
   if (!p) return "Not committed yet. It must be fixed before the window closes.";
-  if (p.source === "drand") return `drand ${p.chain} round ${p.round}${p.roundTime ? ` (published ${fmtTime(new Date(p.roundTime * 1000).toISOString())})` : ""}`;
-  return `${p.network} block ${p.height} hash`;
+  const applied = beacon?.applied;
+  if (applied) return `Ethereum mainnet block ${applied.blockNumber} hash ${applied.blockHash}`;
+  return `Hash of Ethereum mainnet block ${p.blockNumber} (a future block when committed; applied once finalized)`;
 }
 
 function schedulePoll(c) {
@@ -475,9 +490,58 @@ async function refresh() {
   }
 }
 
+// ---------- invite links ----------
+// Links look like /ceremony/<id>#invite=<token>. The fragment never reaches the
+// server or any Referer header; it is moved to sessionStorage (this tab only)
+// so it survives a sign-in redirect, then sent once to the accept endpoint.
+
+const inviteKey = (id) => `zk-ceremony-invite:${id}`;
+
+function pendingInvite(id) {
+  try {
+    return sessionStorage.getItem(inviteKey(id));
+  } catch {
+    return null;
+  }
+}
+
+function captureInviteFromHash(id) {
+  const m = window.location.hash.match(/^#invite=([A-Za-z0-9_-]{20,100})$/);
+  if (!m) return;
+  try {
+    sessionStorage.setItem(inviteKey(id), m[1]);
+  } catch {
+    /* private mode: keep it in memory only */
+    memoryInvite = m[1];
+  }
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+}
+
+let memoryInvite = null;
+
+async function redeemInvite(id) {
+  const token = pendingInvite(id) || memoryInvite;
+  if (!token || !user) return;
+  try {
+    await api(`/api/ceremonies/${encodeURIComponent(id)}/invites/accept`, { method: "POST", json: { token } });
+    announce(flash, "Invite accepted. You can join the queue.", "ok");
+  } catch (err) {
+    announce(flash, errorText(err), "error");
+  } finally {
+    memoryInvite = null;
+    try {
+      sessionStorage.removeItem(inviteKey(id));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 async function boot() {
   currentId = ceremonyIdFromPath();
+  if (currentId) captureInviteFromHash(currentId);
   user = await loadMe();
+  if (currentId) await redeemInvite(currentId);
   await refresh();
 }
 

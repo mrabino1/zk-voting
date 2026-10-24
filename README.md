@@ -747,11 +747,11 @@ The Node runs phase 2 in the browser:
 
 | Page | Who | What |
 | --- | --- | --- |
-| `/admin/ceremony` | Platform super admin | Pin inputs (`.r1cs`, Hermez `.ptau`), create, open/close, queue, commit a drand or block-hash beacon, finalize, export, audit log |
-| `/ceremony/<id>` | Signed-in participants | Join the queue; contribute with snarkjs in a Web Worker. Randomness never leaves the tab. Receipt download. |
+| `/admin/ceremony` | Platform super admin | Pin inputs (`.r1cs`, Hermez `.ptau`), create, invite list, open/close, queue, commit a future Ethereum mainnet block as the beacon, finalize, export, audit log |
+| `/ceremony/<id>` | Invited accounts only | Join the queue; contribute with snarkjs in a Web Worker. Randomness never leaves the tab. Receipt download. |
 | `/ceremony/<id>/transcript` | Anyone | Hash-chained transcript, **Verify whole chain** in the browser, and the `snarkjs zkey verify` commands |
 
-The server verifies every upload against the previous key before accepting it, keeps an append-only hash-chained transcript and audit log, rate-limits joins and uploads, and never fetches anything. Exports stay in the data directory marked `trusted: false`; nothing is deployed or copied into `smart-contracts/`. Ceremony pages carry their own strict CSP.
+The server verifies every upload against the previous key before accepting it, keeps an append-only hash-chained transcript and audit log, rate-limits joins and uploads, and never fetches circuit or ptau files. **Participation is invite only**: the coordinator adds accounts by handle or sends single-use email invite links, and the server refuses everyone else; the public transcript shows invitees only by pseudonymous id. **The beacon is decided: the hash of a future Ethereum mainnet block**, committed at least 32 blocks ahead and read only after it is finalized, read-only from `CEREMONY_ETH_RPC_URL` (unset: finalize fails closed). The block number and hash go in the transcript so anyone can check them. Exports stay in the data directory marked `trusted: false`; nothing is deployed or copied into `smart-contracts/`. Ceremony pages carry their own strict CSP.
 
 Design, threat model, beacon, and verification: [`docs/ceremony-web.md`](./docs/ceremony-web.md). Operator guide: [`docs/self-hosting/ceremony.md`](./docs/self-hosting/ceremony.md). Offline CLI runbook: [`docs/CEREMONY.md`](./docs/CEREMONY.md).
 

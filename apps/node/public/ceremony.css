@@ -122,3 +122,7 @@ code.hash {
 .ceremony-card .meta-list dd {
   margin: 0;
 }
+
+.invite-link {
+  word-break: break-all;
+}

@@ -290,6 +290,13 @@ export function getConfig(overrides = {}) {
     ceremonyInputDir: process.env.CEREMONY_INPUT_DIR || '',
     ceremonyMaxZkeyBytes: megabytes(process.env.CEREMONY_MAX_ZKEY_MB, 1024),
     ceremonyMaxInputBytes: megabytes(process.env.CEREMONY_MAX_INPUT_MB, 2048),
+    // Beacon = a future Ethereum mainnet block hash, read from this read-only
+    // JSON-RPC (comma-separate several to require agreement). Unset fails closed.
+    ceremonyEthRpcUrls: String(process.env.CEREMONY_ETH_RPC_URL || '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean),
+    ceremonyBeaconMinBlocksAhead: strictPositiveInt(process.env.CEREMONY_BEACON_MIN_BLOCKS_AHEAD, 32),
     ...overrides,
   };
   // `VOTE_FQDN` wins over a localhost template even when overrides spread last.
@@ -407,6 +414,13 @@ function readPackageVersion() {
 }
 
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
+
+function strictPositiveInt(value, fallback) {
+  if (value === undefined || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`expected a positive integer, got ${value}`);
+  return n;
+}
 
 function megabytes(value, fallbackMb) {
   const n = Number(value);

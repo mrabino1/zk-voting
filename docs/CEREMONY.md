@@ -109,7 +109,7 @@ Collect at least two contributions before the beacon. A real ceremony wants many
 
 ### 4. Precommit the beacon, then apply it
 
-Before the last contribution is accepted, publish the randomness source you will use and the exact encoding (for example a future Bitcoin block header hash, or a drand round). Do not choose the hash after you have seen the last contribution.
+Before the last contribution is accepted, publish the randomness source you will use and the exact encoding (the web ceremony uses the hash of a future, finalized Ethereum mainnet block; use the same here). Do not choose the hash after you have seen the last contribution.
 
 When that value is public, pass the bytes yourself. This repository does not fetch them.
 
@@ -119,7 +119,7 @@ node circuits/scripts/ceremony.mjs beacon \
   --hash <even-length hex, 1..255 bytes> \
   --iterations 10 \
   --name "Final Beacon" \
-  --note "Bitcoin block <height>, header hash, checked by <who>"
+  --note "Ethereum mainnet block <number>, block hash, checked by <who>"
 ```
 
 snarkjs requires the iteration exponent to be an integer from 10 to 63. `10` means `2^10` hash iterations.

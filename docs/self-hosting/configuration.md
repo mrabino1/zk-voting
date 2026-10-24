@@ -91,6 +91,8 @@ Only used if you run a Groth16 ceremony. See [Groth16 ceremony](./ceremony.md).
 | `CEREMONY_INPUT_DIR` | `$DATA_DIR/ceremony-inputs` | `.r1cs` and `.ptau` files the coordinator can pick. |
 | `CEREMONY_MAX_ZKEY_MB` | `1024` | Largest contribution upload. |
 | `CEREMONY_MAX_INPUT_MB` | `2048` | Largest input uploaded through the coordinator page. |
+| `CEREMONY_ETH_RPC_URL` | unset | Ethereum **mainnet** JSON-RPC URL(s) for the beacon block hash, comma-separated (all must agree). `https://` only, except `http://localhost`. Read-only. Unset: beacon commit and finalize fail closed. Secret: often holds an API key; never logged. |
+| `CEREMONY_BEACON_MIN_BLOCKS_AHEAD` | `32` | The committed beacon block must be at least this many blocks past the head at commit time. |
 
 ## Tailscale sidecar
 

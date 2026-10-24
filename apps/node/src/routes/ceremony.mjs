@@ -1,7 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Phase-2 trusted-setup ceremony API. See docs/ceremony-web.md.
 //
-//   /api/ceremonies/...        public read, signed-in participants join and upload
+//   /api/ceremonies/...        public read; invited participants join and upload
 //   /api/ceremony-admin/...    coordinator (platform super admin only)
 //
 // API keys never reach these routes: enforceApiKeyAccess only lets keys call
@@ -12,7 +12,7 @@ import express from 'express';
 import { requireAuth, requireSuperAdmin } from '../auth.mjs';
 import { HttpError, asyncHandler } from '../http.mjs';
 import { HERMEZ_PTAU } from '../ceremony/ptau.mjs';
-import { BLOCK_NETWORKS, DRAND_CHAINS, DEFAULT_BEACON_ITERATIONS } from '../ceremony/beacon.mjs';
+import { BEACON_NETWORK, BEACON_SOURCE, DEFAULT_BEACON_ITERATIONS } from '../ceremony/beacon.mjs';
 import { MAX_ATTESTATION_CHARS } from '../ceremony/service.mjs';
 import { normalizeIp } from '../superAdmin/net.mjs';
 
@@ -161,6 +161,17 @@ export function ceremonyPublicRouter({ ceremonies, limits = {} }) {
     }),
   );
 
+  // Redeem a single-use email invite for the signed-in account.
+  router.post(
+    '/:id/invites/accept',
+    requireAuth,
+    limited(joinLimiter, 'join'),
+    asyncHandler(async (req, res) => {
+      const c = await ceremonies.acceptInvite(req.params.id, req.body?.token, req.user);
+      res.json({ ceremony: ceremonies.publicView(c, req.user), nfp: true });
+    }),
+  );
+
   router.delete(
     '/:id/queue',
     requireAuth,
@@ -208,11 +219,42 @@ export function ceremonyAdminRouter({ ceremonies }) {
         maxInputBytes: ceremonies.maxInputBytes,
         maxZkeyBytes: ceremonies.maxZkeyBytes,
         ptauPresets: HERMEZ_PTAU,
-        drandChains: DRAND_CHAINS,
-        blockNetworks: BLOCK_NETWORKS,
+        beacon: {
+          source: BEACON_SOURCE,
+          network: BEACON_NETWORK,
+          minBlocksAhead: ceremonies.minBlocksAhead,
+          rpcConfigured: Boolean(ceremonies.eth?.configured),
+        },
         defaultBeaconIterations: DEFAULT_BEACON_ITERATIONS,
         nfp: true,
       });
+    }),
+  );
+
+  // Current Ethereum head and finalized block, read from CEREMONY_ETH_RPC_URL.
+  router.get(
+    '/beacon/chain',
+    asyncHandler(async (_req, res) => {
+      const eth = ceremonies.eth;
+      if (!eth?.configured) {
+        throw new HttpError(503, 'no Ethereum RPC is configured. Set CEREMONY_ETH_RPC_URL.', {
+          code: 'CEREMONY_ETH_RPC_UNSET',
+        });
+      }
+      try {
+        const [headBlock, finalizedBlock] = await Promise.all([eth.headBlock(), eth.finalizedBlock()]);
+        res.setHeader('Cache-Control', 'no-store');
+        res.json({
+          network: BEACON_NETWORK,
+          headBlock,
+          finalizedBlock,
+          minBlocksAhead: ceremonies.minBlocksAhead,
+          earliestCommit: headBlock + ceremonies.minBlocksAhead,
+          nfp: true,
+        });
+      } catch (err) {
+        throw new HttpError(502, err.message, { code: err.code || 'CEREMONY_ETH_RPC' });
+      }
     }),
   );
 
@@ -258,6 +300,26 @@ export function ceremonyAdminRouter({ ceremonies }) {
   router.post(
     '/ceremonies/:id/participants',
     action((req) => ceremonies.setParticipation(req.params.id, req.body || {}, req.user)),
+  );
+  // Invite list: { handle | handles } invites existing accounts; { email } issues
+  // a single-use link whose token is returned once and stored only as a hash.
+  router.post(
+    '/ceremonies/:id/invites',
+    asyncHandler(async (req, res) => {
+      const out = await ceremonies.addInvites(req.params.id, req.body || {}, req.user);
+      const view = ceremonies.adminView(out.ceremony);
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(201).json({
+        ceremony: view,
+        invites: out.invites.map((i) => view.invites.find((v) => v.id === i.id)),
+        ...(out.token ? { token: out.token, invitePath: out.invitePath } : {}),
+        nfp: true,
+      });
+    }),
+  );
+  router.delete(
+    '/ceremonies/:id/invites/:inviteId',
+    action((req) => ceremonies.removeInvite(req.params.id, req.params.inviteId, req.user)),
   );
   router.post(
     '/ceremonies/:id/queue/remove',
