@@ -105,8 +105,11 @@ services:
     init: true
     stop_grace_period: 30s
     command: ["node", "sequencer/index.mjs"]
+    # The sequencer JSON-RPC accepts eth_sendRawTransaction with no auth, and
+    # the node reaches it on the compose network (http://l2:8546). Publish it
+    # on the host loopback only; set L2_RPC_BIND=0.0.0.0 to expose it on purpose.
     ports:
-      - "${L2_RPC_PORT:-8546}:8546"
+      - "${L2_RPC_BIND:-127.0.0.1}:${L2_RPC_PORT:-8546}:8546"
     environment:
       L2_RPC_HOST: "0.0.0.0"
       L2_RPC_PORT: "8546"

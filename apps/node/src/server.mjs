@@ -9,6 +9,7 @@ import cors from 'cors';
 import express from 'express';
 
 import { attachAuth, enforceApiKeyAccess } from './auth.mjs';
+import { corsOptionsDelegate } from './corsPolicy.mjs';
 import { installConsoleCapture, recordLog, setLogLevel } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
@@ -264,13 +265,7 @@ export async function createApp(overrides = {}) {
   app.disable('x-powered-by');
   if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
-  app.use(
-    cors({
-      origin: true,
-      credentials: true,
-      maxAge: 86400,
-    }),
-  );
+  app.use(cors(corsOptionsDelegate(config)));
   app.use('/api/feedback', (req, res, next) => {
     if (req.method !== 'POST') return next();
     const len = Number(req.headers['content-length'] || 0);
