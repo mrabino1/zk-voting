@@ -105,14 +105,20 @@ library EligibleSet {
     }
 
     /// @notice Vote-circuit inclusion check: replay the path and compare to `root`.
+    /// @dev `depth` is the tree depth (16–32) the root was built at. The path
+    ///      must be exactly `depth` levels, as in the fixed-depth circuit. A
+    ///      shorter path would let an internal node (or, with an empty path,
+    ///      the root itself) pass as a leaf.
     function verifyInclusion(
         uint256 leaf,
         uint256[] memory pathElements,
         uint8[] memory pathIndices,
         uint256 root,
+        uint8 depth,
         IHasher hasher
     ) internal pure returns (bool) {
-        if (pathElements.length != pathIndices.length) return false;
+        if (depth < 16 || depth > 32) return false;
+        if (pathElements.length != depth || pathIndices.length != depth) return false;
         uint256 h = leaf;
         for (uint256 i = 0; i < pathElements.length; ++i) {
             uint8 s = pathIndices[i];
