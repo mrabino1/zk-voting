@@ -70,18 +70,9 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
     constructor(address hasher_, address factory_) {
         if (hasher_ == address(0) || factory_ == address(0)) revert ZeroAddress();
-        // Deployer helpers try (factory, hasher) first; the exclusive spec is
-        // (hasher, factory). Detect IHasher so either order wires correctly.
-        if (_looksLikeHasher(hasher_) && !_looksLikeHasher(factory_)) {
-            hasher = IHasher(hasher_);
-            factory = IElectionFactory(factory_);
-        } else if (_looksLikeHasher(factory_) && !_looksLikeHasher(hasher_)) {
-            hasher = IHasher(factory_);
-            factory = IElectionFactory(hasher_);
-        } else {
-            hasher = IHasher(hasher_);
-            factory = IElectionFactory(factory_);
-        }
+        // Audit L-08: fixed argument order (hasher, factory). No guessing.
+        hasher = IHasher(hasher_);
+        factory = IElectionFactory(factory_);
     }
 
     /// @inheritdoc IDisqualificationRegistry
@@ -154,14 +145,6 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     /// @inheritdoc IDisqualificationRegistry
     function reasonCodeOf(uint256 electionId, uint256 identityCommitment) external view returns (uint16) {
         return _reasonCodeOf[electionId][identityCommitment];
-    }
-
-    function _looksLikeHasher(address candidate) internal view returns (bool) {
-        try IHasher(candidate).hashLeftRight(0, 0) returns (uint256) {
-            return true;
-        } catch {
-            return false;
-        }
     }
 
     function _election(uint256 electionId) internal view returns (IElection election) {

@@ -166,7 +166,9 @@ abstract contract RepublicStackScript is DeployOnce {
         if (useMock && block.chainid != ANVIL_CHAIN_ID) s.factory.setAllowMockVerifiers(true);
         s.jurisdictions = new JurisdictionRegistry(admin);
         s.factory.setJurisdictionRegistry(address(s.jurisdictions));
-        s.voterRegistry = new VoterRegistry(address(s.factory), address(s.hasher));
+        // Audit M-02: non-admin clerks may only use admin-approved verifiers.
+        s.factory.setVerifierApproved(address(s.verifier), true);
+        s.voterRegistry = new VoterRegistry(address(s.hasher), address(s.factory));
         s.disqualificationRegistry = new DisqualificationRegistry(address(s.hasher), address(s.factory));
         s.inbox = new BallotInbox(address(s.factory));
         s.tally = new Tally(address(s.factory));

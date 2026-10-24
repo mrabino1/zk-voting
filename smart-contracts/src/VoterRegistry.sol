@@ -46,6 +46,8 @@ contract VoterRegistry is IVoterRegistry {
     event EligibleRebuildStarted(uint256 indexed electionId, uint256 rollSize);
     event EligibleRebuildProgress(uint256 indexed electionId, uint256 cursor, uint256 rollSize);
     event EligibleRootPublished(uint256 indexed electionId, bytes32 eligibleRoot, uint256 eligibleCount);
+    event RoleGranted(bytes32 indexed role, address indexed account);
+    event RoleRevoked(bytes32 indexed role, address indexed account);
 
     /// @notice Roll entries processed per rebuild page.
     uint256 public constant REBUILD_BATCH = 64;
@@ -69,24 +71,26 @@ contract VoterRegistry is IVoterRegistry {
     mapping(uint256 => Rebuild) private _rebuilds;
     mapping(bytes32 => mapping(address => bool)) public roles;
 
-    constructor(address a, address b) {
-        if (a == address(0) || b == address(0)) revert ZeroAddress();
-        // DeployLocal uses (factory, hasher). Tests use (hasher, factory).
-        if (_looksLikeHasher(a) && !_looksLikeHasher(b)) {
-            hasher = IHasher(a);
-            factory = IElectionFactory(b);
-        } else if (_looksLikeHasher(b) && !_looksLikeHasher(a)) {
-            hasher = IHasher(b);
-            factory = IElectionFactory(a);
-        } else {
-            hasher = IHasher(a);
-            factory = IElectionFactory(b);
-        }
+    /// @dev Audit L-08: fixed argument order (hasher, factory), same as
+    ///      DisqualificationRegistry. No runtime guessing.
+    constructor(address hasher_, address factory_) {
+        if (hasher_ == address(0) || factory_ == address(0)) revert ZeroAddress();
+        hasher = IHasher(hasher_);
+        factory = IElectionFactory(factory_);
     }
 
     function grantRole(bytes32 role, address account) external {
         if (msg.sender != _admin()) revert NotRegistrar();
+        if (account == address(0)) revert ZeroAddress();
         roles[role][account] = true;
+        emit RoleGranted(role, account);
+    }
+
+    /// @notice Audit L-05: roles are revocable.
+    function revokeRole(bytes32 role, address account) external {
+        if (msg.sender != _admin()) revert NotRegistrar();
+        roles[role][account] = false;
+        emit RoleRevoked(role, account);
     }
 
     /// @inheritdoc IVoterRegistry
@@ -256,13 +260,5 @@ contract VoterRegistry is IVoterRegistry {
         (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("admin()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
-    }
-
-    function _looksLikeHasher(address candidate) internal view returns (bool) {
-        try IHasher(candidate).hashLeftRight(0, 0) returns (uint256) {
-            return true;
-        } catch {
-            return false;
-        }
     }
 }

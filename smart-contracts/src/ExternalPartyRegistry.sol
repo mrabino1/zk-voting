@@ -56,6 +56,11 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     mapping(uint256 => mapping(uint256 => uint16)) private _reasonBy;
     mapping(uint256 => mapping(uint256 => uint64)) private _attestationExpires;
 
+    /// @dev Audit L-01: lock the implementation; clones initialize once.
+    constructor() {
+        _initialized = true;
+    }
+
     modifier onlyStaff() {
         if (!factory.isElectionStaff(electionId, msg.sender)) revert NotStaff();
         _;
@@ -63,9 +68,9 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
 
     /// @notice Called once by ElectionFactory after EIP-1167 clone.
     function initialize(uint256 electionId_, address factory_) external {
-        if (_initialized) revert AlreadyInitialized();
         if (factory_ == address(0)) revert ZeroAddress();
         if (electionId_ == 0) revert NotFactory();
+        if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         electionId = electionId_;
         factory = IElectionFactory(factory_);

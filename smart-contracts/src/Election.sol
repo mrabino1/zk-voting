@@ -21,6 +21,8 @@ contract Election is IElection {
     /// @notice Audit M-01: every root change is public; `afterStart` marks
     ///         a mid-election (late) update observers should scrutinise.
     event RootsUpdated(bytes32 eligibleRoot, bytes32 disqualificationRoot, bool afterStart);
+    /// @notice Audit L-02: roll freeze is part of the public audit trail.
+    event RollFrozen(uint256 indexed electionId, address indexed clerk);
 
     uint256 public electionId;
     address public factory;
@@ -39,6 +41,12 @@ contract Election is IElection {
     ElectionParams private _params;
     bool private _initialized;
 
+    /// @dev Audit L-01: lock the implementation; EIP-1167 clones have their
+    ///      own storage and stay initializable exactly once.
+    constructor() {
+        _initialized = true;
+    }
+
     modifier onlyFactory() {
         if (msg.sender != factory) revert NotFactory();
         _;
@@ -53,8 +61,8 @@ contract Election is IElection {
         address disqualificationRegistry_,
         address inbox_
     ) external {
-        if (_initialized) revert AlreadyInitialized();
         if (factory_ == address(0)) revert ZeroAddress();
+        if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         electionId = electionId_;
         factory = factory_;
@@ -73,6 +81,7 @@ contract Election is IElection {
     function freezeRoll() external {
         if (msg.sender != _params.clerk) revert NotClerk();
         rollFrozen = true;
+        emit RollFrozen(electionId, msg.sender);
     }
 
     /// @inheritdoc IElection

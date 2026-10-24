@@ -14,6 +14,7 @@ contract JurisdictionRegistry {
     error NotAdmin();
     error UnknownJurisdiction();
     error LastClerk();
+    error JurisdictionExists();
 
     event JurisdictionCreated(bytes32 indexed jurisdictionId, address clerk, string name);
     event ClerkSet(bytes32 indexed jurisdictionId, address clerk);
@@ -21,6 +22,8 @@ contract JurisdictionRegistry {
     event ClerkRevoked(bytes32 indexed jurisdictionId, address clerk);
     event OfficerGranted(bytes32 indexed jurisdictionId, address officer);
     event OfficerRevoked(bytes32 indexed jurisdictionId, address officer);
+    event RoleGranted(bytes32 indexed role, address indexed account);
+    event RoleRevoked(bytes32 indexed role, address indexed account);
 
     address public admin;
     mapping(bytes32 => address) public clerkOf;
@@ -43,6 +46,8 @@ contract JurisdictionRegistry {
     function createJurisdiction(bytes32 jurisdictionId, address clerk, string calldata name) external onlyAdmin {
         if (jurisdictionId == bytes32(0)) revert ZeroId();
         if (clerk == address(0)) revert ZeroAddress();
+        // Audit L-04: never silently overwrite a live jurisdiction (use setClerk).
+        if (clerkOf[jurisdictionId] != address(0)) revert JurisdictionExists();
         clerkOf[jurisdictionId] = clerk;
         nameOf[jurisdictionId] = name;
         clerks[jurisdictionId][clerk] = true;
@@ -55,6 +60,8 @@ contract JurisdictionRegistry {
         if (clerk == address(0)) revert ZeroAddress();
         address previous = clerkOf[jurisdictionId];
         if (previous != clerk) {
+            // By design the replaced clerk keeps officer rights (existing
+            // behaviour); admin / new clerk removes them with revokeOfficer.
             clerks[jurisdictionId][previous] = false;
             emit ClerkRevoked(jurisdictionId, previous);
         }
@@ -105,6 +112,14 @@ contract JurisdictionRegistry {
     }
 
     function grantRole(bytes32 role, address account) external onlyAdmin {
+        if (account == address(0)) revert ZeroAddress();
         roles[role][account] = true;
+        emit RoleGranted(role, account);
+    }
+
+    /// @notice Audit L-04: roles are revocable.
+    function revokeRole(bytes32 role, address account) external onlyAdmin {
+        roles[role][account] = false;
+        emit RoleRevoked(role, account);
     }
 }

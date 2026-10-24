@@ -78,7 +78,7 @@ contract BallotInbox is IBallotInbox {
         bytes calldata encryptedBallot
     ) external {
         if (encryptedBallot.length == 0) revert EmptyBallot();
-        if (publicInputs.length < 5) revert InvalidPublicInputs();
+        if (publicInputs.length != 5) revert InvalidPublicInputs();
 
         IElection election = _getElection(electionId);
         _requireNoActiveGates(electionId);
@@ -90,7 +90,8 @@ contract BallotInbox is IBallotInbox {
 
         uint256 nullifier = publicInputs[2];
         bytes32 ballotHash = bytes32(publicInputs[3]);
-        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        // Audit L-06: key by the field element so n and n + r cannot both land.
+        if (_nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD]) revert NullifierUsed();
         _recordAcceptance(electionId, nullifier, ballotHash);
     }
 
@@ -106,7 +107,7 @@ contract BallotInbox is IBallotInbox {
         uint256[] calldata mustAttestIds
     ) external {
         if (encryptedBallot.length == 0) revert EmptyBallot();
-        if (publicInputs.length < 5) revert InvalidPublicInputs();
+        if (publicInputs.length != 5) revert InvalidPublicInputs();
 
         IElection election = _getElection(electionId);
         _requireExternalClearance(election, electionId, identityCommitment, mustAttestIds);
@@ -118,13 +119,14 @@ contract BallotInbox is IBallotInbox {
 
         uint256 nullifier = publicInputs[2];
         bytes32 ballotHash = bytes32(publicInputs[3]);
-        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        // Audit L-06: key by the field element so n and n + r cannot both land.
+        if (_nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD]) revert NullifierUsed();
         _recordAcceptance(electionId, nullifier, ballotHash);
     }
 
     /// @inheritdoc IBallotInbox
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool) {
-        return _nullifierUsed[electionId][nullifier];
+        return _nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD];
     }
 
     /// @inheritdoc IBallotInbox
@@ -134,7 +136,7 @@ contract BallotInbox is IBallotInbox {
 
     /// @inheritdoc IBallotInbox
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32) {
-        return _ballotHashOf[electionId][nullifier];
+        return _ballotHashOf[electionId][nullifier % SNARK_SCALAR_FIELD];
     }
 
     /// @inheritdoc IBallotInbox
@@ -240,8 +242,9 @@ contract BallotInbox is IBallotInbox {
     }
 
     function _recordAcceptance(uint256 electionId, uint256 nullifier, bytes32 ballotHash) internal {
-        _nullifierUsed[electionId][nullifier] = true;
-        _ballotHashOf[electionId][nullifier] = ballotHash;
+        uint256 key = nullifier % SNARK_SCALAR_FIELD;
+        _nullifierUsed[electionId][key] = true;
+        _ballotHashOf[electionId][key] = ballotHash;
         _ballotHashList[electionId].push(ballotHash);
         _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
         unchecked {
