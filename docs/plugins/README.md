@@ -124,11 +124,11 @@ them. They need a browser session.
 
 | Slot | Where |
 | --- | --- |
-| `banner` | top of every public/office page, before the header |
-| `header` | just after the header |
-| `home` | top of `<main>` on `/` only |
-| `sidebar` | aside inside `<main>` |
-| `footer` | just before the footer |
+| `banner` | full-width strip at the top of every public/office page (under the ribbon) |
+| `header` | full-width strip after the banner region |
+| `home` | top of `<main>` on `/` only (kept there across route renders) |
+| `sidebar` | aside at the end of the side navigation |
+| `footer` | top of the site footer |
 | `site-admin.page` | the plugin's own admin pages (`ctx.page` = page id) |
 | `site-admin.dashboard` | Site admin overview |
 
