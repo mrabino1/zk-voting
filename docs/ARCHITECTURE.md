@@ -495,7 +495,7 @@ precomputed, `IHasher.hashLeftRight(uint256, uint256)`.
 `src/account/PasskeyAccount.sol` — ERC-4337-style account whose owner is a
 P-256 / WebAuthn public key. Signature is a WebAuthn assertion.
 
-`src/account/PasskeyAccountFactory.sol` — `createAccount(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt)`.
+`src/account/PasskeyAccountFactory.sol` — `createAccount(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt)` (WebAuthn only), or `createAccountWithBackupSigner(credIdHash, pubX, pubY, ethBackupSigner, salt)` for an immutable secp256k1 backup key. WebAuthn assertions must carry `challenge = base64url(userOpHash)`, `type = webauthn.get` and the UP flag, and require the P-256 precompile at `0x100` (no fallback).
 
 `src/account/RepublicPaymaster.sol` — sponsors UserOps that call
 `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`.
