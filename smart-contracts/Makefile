@@ -1,8 +1,8 @@
 # zk-voting smart contracts — Foundry Makefile
 # NOT FOR PROFIT — civic public good. Not a commercial product.
 #
-# Modeled on the nuursha-nft-erc20-whitelabel Makefile: install, build,
-# unit/fuzz/invariant test split, local deploy, format, and help.
+# Targets: install, build, unit/fuzz/invariant test split, local deploy,
+# format, and help.
 
 .ONESHELL:
 
@@ -98,7 +98,7 @@ doc:
 	forge doc
 	@echo "Documentation generated!"
 
-# Unit / integration only — skip fuzz + invariant (same split as nuursha).
+# Unit / integration only — skip fuzz + invariant.
 test:
 	@echo "Running unit and integration tests (excluding fuzz and invariant)..."
 	forge test --via-ir --no-match-path "test/{fuzz,invariant}/**"

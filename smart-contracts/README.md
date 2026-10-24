@@ -31,13 +31,13 @@ REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://1
 
 ## Gas economics
 
-Spot ETH and gas, then compiled bytecode versus EIP-170 (24,576 bytes) and EIP-3860 (49,152 bytes):
+Live gas price and ETH/USD, compiled bytecode versus EIP-170 (24,576 bytes) and EIP-3860 (49,152 bytes), deploy gas, and per-call gas from the test suite:
 
 ```bash
-forge build --via-ir
-./script/get-gas-economics.sh
+forge build
+L1_RPC=<your Ethereum JSON-RPC> ../scripts/get-gas-economics.sh --measure
 ```
 
-From the repository root: `./scripts/get-gas-economics.sh`. Add `--gas-report` to append a Foundry gas snapshot for the inbox, factory, registries, tally, rollup settlement, the L1 tally mirror, and the paymaster. Nuursha NFT mint and claim tables are not part of this script.
+`./script/get-gas-economics.sh` forwards to the root script. Options, environment variables, and sample output: [`../scripts/README.md`](../scripts/README.md).
 
 Solidity 0.8.24. License AGPL-3.0-or-later. See `/NOT_FOR_PROFIT.md`.
