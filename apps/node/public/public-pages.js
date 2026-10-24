@@ -280,7 +280,7 @@ export function renderAbout(main, ctx) {
         : h(
             "p",
             { class: "lede" },
-            `${brandName()} exists to protect and preserve a representative democracy. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in.`
+            `${brandName()} exists to protect and preserve a democratic republic. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in.`
           ),
       ctaRow(h, audience)
     ),

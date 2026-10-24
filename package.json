@@ -2,7 +2,7 @@
   "name": "zk-voting",
   "private": true,
   "version": "0.1.0",
-  "description": "NOT FOR PROFIT — zero-knowledge civic voting for representative democracy.",
+  "description": "NOT FOR PROFIT — zero-knowledge civic voting for a democratic republic.",
   "license": "AGPL-3.0-or-later",
   "workspaces": [
     "apps/node",

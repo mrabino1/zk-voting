@@ -93,7 +93,7 @@ How to read this README:
 
 ## Not for profit
 
-This software is **not a commercial product**. It exists to protect and preserve a representative democracy: the people vote for representatives, and those representatives vote. A city, county, state, nation, union, cooperative, or (if a jurisdiction demanded it) a shareholder meeting should be able to run a binding election with **public verifiability** and **private ballots**.
+This software is **not a commercial product**. It exists to protect and preserve a democratic republic: the people vote for representatives, and those representatives vote. A city, county, state, nation, union, cooperative, or (if a jurisdiction demanded it) a shareholder meeting should be able to run a binding election with **public verifiability** and **private ballots**.
 
 - There is **no token**. There is **no paid tier**. There is **no vendor lock-in**.
 - Nobody is to make money off this repository. Jurisdictions may run it **at cost** (hosts, paymaster gas, paper notice).
