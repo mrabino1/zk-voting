@@ -10,11 +10,14 @@ import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
 
 /// @notice Ethereum (or Sepolia) settlement: rollup, tally mirror, mailbox.
-///         `BATCH_VERIFIER` may be unset / zero until a production VK exists.
+///         `BATCH_VERIFIER` is required (audit H-06). Only with the explicit
+///         dev flag `REPUBLIC_SETTLEMENT_MOCK_MODE=1` and no verifier is the
+///         settlement deployed in `mockMode` (proofs not checked).
 ///         `L2_FACTORY` (or `ELECTION_FACTORY_ADDRESS`) is required so the
 ///         mirror cannot accept colliding uint256 `postResult` writes.
 contract DeployL1 is DeployOnce {
     error MissingL2Factory();
+    error MissingBatchVerifier();
 
     function run() external {
         _refuseIfAlreadyDeployed();
@@ -24,7 +27,11 @@ contract DeployL1 is DeployOnce {
         address prover = vm.envOr("PROVER", admin);
         address batchVerifier = vm.envOr("BATCH_VERIFIER", address(0));
 
-        RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, false);
+        bool mockSettlement = vm.envOr("REPUBLIC_SETTLEMENT_MOCK_MODE", false);
+        if (batchVerifier == address(0) && !mockSettlement) revert MissingBatchVerifier();
+        bool mockMode = batchVerifier == address(0) && mockSettlement;
+        if (mockMode) console2.log("WARNING: RollupSettlement in mockMode (REPUBLIC_SETTLEMENT_MOCK_MODE=1); batches are NOT verified");
+        RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, mockMode);
         RepublicMailbox mailbox = new RepublicMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
         address l2Factory = _factory();

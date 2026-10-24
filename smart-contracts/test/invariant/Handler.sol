@@ -260,7 +260,7 @@ contract Handler is Deployer, Ghost {
             IElection(el).eligibleRoot(),
             IElection(el).disqualificationRoot(),
             nullifier,
-            uint256(keccak256(ballot)),
+            uint256(keccak256(ballot)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617,
             electionId
         );
         vm.prank(relayer);
@@ -293,7 +293,7 @@ contract Handler is Deployer, Ghost {
             IElection(el).eligibleRoot(),
             IElection(el).disqualificationRoot(),
             nullifier,
-            uint256(keccak256(ballot)),
+            uint256(keccak256(ballot)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617,
             electionId
         );
         vm.prank(relayer);

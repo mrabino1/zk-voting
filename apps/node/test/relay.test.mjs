@@ -217,3 +217,17 @@ describe('vote public inputs (5-signal)', () => {
     assert.equal(parsed.root, undefined);
   });
 });
+
+describe('hashBallot field reduction (audit H-05)', () => {
+  test('ballot hash is keccak(ciphertext) mod r, always < r', async () => {
+    const { keccak256 } = await import('viem');
+    const { SNARK_SCALAR_FIELD } = await import('../src/relay.mjs');
+    for (let i = 0; i < 64; i++) {
+      const ct = `0x${i.toString(16).padStart(2, '0').repeat(48)}`;
+      const h = BigInt(hashBallot(ct));
+      assert.ok(h < SNARK_SCALAR_FIELD);
+      assert.equal(h, BigInt(keccak256(ct)) % SNARK_SCALAR_FIELD);
+      assert.equal(hashBallot(ct).length, 66);
+    }
+  });
+});

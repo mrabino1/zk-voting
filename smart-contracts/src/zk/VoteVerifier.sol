@@ -123,6 +123,13 @@ contract VoteVerifier is IGroth16Verifier {
         return verifyingKeyHash != bytes32(0);
     }
 
+    /// @notice True while the VK is unconfigured and proofs are delegated to a
+    ///         mock. `ElectionFactory` refuses such a verifier unless mock
+    ///         verifiers are explicitly allowed (audit H-02).
+    function isMock() external view returns (bool) {
+        return !hasKey() && mockVerifier != address(0);
+    }
+
     function alpha() external view returns (uint256 x, uint256 y) {
         return (_alpha.x, _alpha.y);
     }

@@ -77,8 +77,17 @@ function toEncryptedHex(encryptedBallot) {
   throw new HttpError(400, 'encryptedBallot required');
 }
 
+/** BN254 scalar field modulus r (Groth16 public inputs must be < r). */
+export const SNARK_SCALAR_FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Ballot hash bound as vote public input 3: `uint256(keccak256(ciphertext)) % r`.
+ * Matches `BallotInbox.ballotHashOfCiphertext` (audit H-05).
+ */
 export function hashBallot(encryptedBallot) {
-  return keccak256(toEncryptedHex(encryptedBallot));
+  const h = BigInt(keccak256(toEncryptedHex(encryptedBallot)));
+  return toHex(h % SNARK_SCALAR_FIELD, { size: 32 });
 }
 
 export function parseVoteBody(body, electionOrId, roots = {}) {

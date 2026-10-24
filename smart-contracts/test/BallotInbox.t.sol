@@ -265,7 +265,7 @@ contract BallotInboxTest is Deployer {
         bytes memory second = abi.encodePacked(first, "changed-mind");
         submitVoteWithBallot(electionId, election, nullifier, first);
         assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(first));
+        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, second);
@@ -275,6 +275,6 @@ contract BallotInboxTest is Deployer {
 
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertEq(inbox.acceptedBallots(electionId), 1, "second ballot must not mint a second voter");
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(first), "first accepted hash is final");
+        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)), "first accepted hash is final");
     }
 }

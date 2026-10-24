@@ -30,6 +30,9 @@ contract ElectionFactory is IElectionFactory {
     error InvalidJurisdiction();
     error NotJurisdictionClerk();
     error UnknownElection();
+    error MockVerifierNotAllowed();
+
+    event AllowMockVerifiersSet(bool allowed);
 
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;
@@ -42,6 +45,11 @@ contract ElectionFactory is IElectionFactory {
     address public ballotInbox;
     address public tallyVerifier;
     address public jurisdictionRegistry;
+
+    /// @notice Audit H-02: elections whose verifier reports `isMock() == true`
+    ///         are refused unless this is set. Defaults to true only on anvil
+    ///         (chain id 31337); elsewhere a super admin must opt in explicitly.
+    bool public allowMockVerifiers;
 
     uint256 public electionCount;
     mapping(uint256 => address) private _elections;
@@ -71,6 +79,13 @@ contract ElectionFactory is IElectionFactory {
         roles[Roles.PLATFORM_SUPER_ADMIN_ROLE][admin_] = true;
         roles[Roles.PLATFORM_ADMIN_ROLE][admin_] = true;
         roles[Roles.ADMIN_ROLE][admin_] = true;
+        allowMockVerifiers = block.chainid == 31337;
+    }
+
+    /// @notice Dev / test only: allow mock verifiers on this chain.
+    function setAllowMockVerifiers(bool allowed) external onlySuperAdmin {
+        allowMockVerifiers = allowed;
+        emit AllowMockVerifiersSet(allowed);
     }
 
     function setImplementation(address implementation_) external onlyAdmin {
@@ -168,6 +183,7 @@ contract ElectionFactory is IElectionFactory {
     /// @inheritdoc IElectionFactory
     function createElection(ElectionParams calldata params) external returns (uint256 electionId, address election) {
         _validate(params);
+        if (!allowMockVerifiers && _reportsMock(params.verifier)) revert MockVerifierNotAllowed();
         if (!_canCreate(params)) {
             if (jurisdictionRegistry != address(0)) revert NotJurisdictionClerk();
             revert MissingRole();
@@ -227,6 +243,11 @@ contract ElectionFactory is IElectionFactory {
         if (msg.sender == params.clerk) return true;
         if (roles[Roles.CLERK_ROLE][msg.sender]) return true;
         return false;
+    }
+
+    function _reportsMock(address verifier) internal view returns (bool) {
+        (bool ok, bytes memory ret) = verifier.staticcall(abi.encodeWithSignature("isMock()"));
+        return ok && ret.length >= 32 && abi.decode(ret, (bool));
     }
 
     function _isSuperAdmin(address account) internal view returns (bool) {

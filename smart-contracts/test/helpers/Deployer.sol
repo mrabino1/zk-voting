@@ -113,6 +113,9 @@ contract Deployer is Test {
         disqualification = new DisqualificationRegistry(address(hasher), address(factory));
         inbox = new BallotInbox(address(factory));
         tally = new Tally(address(factory));
+        // Audit H-01: tally proofs use a dedicated verifier (here the same dev mock).
+        vm.prank(admin);
+        tally.setTallyProofVerifier(address(verifier));
 
         // mockMode=true for local tests. batchVerifier may be the MockVerifier.
         {

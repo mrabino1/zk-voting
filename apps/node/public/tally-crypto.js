@@ -27,7 +27,7 @@ export const TALLY_SCHEME_OPENS_BALLOTS = "opens_ballots";
 export const TALLY_CRYPTO_SCHEME = "p256-ecies-aesgcm-v1";
 export const TALLY_ENVELOPE_MAGIC = new Uint8Array([0x52, 0x54, 0x76, 0x31]); // RTv1
 export const TALLY_HKDF_INFO = "republic-tally-ecies-p256-v1";
-export const TALLY_INSTANCE_VERSION = 1;
+export const TALLY_INSTANCE_VERSION = 2; // TallyPublicInputs.VERSION (TALLY_SOL_V2)
 
 export const DEMO_KEY_WARNING =
   "NON-PRODUCTION single P-256 key used only to exercise this envelope format. Election tallies do not use it. A binding election needs the Feldman guardian ceremony, and even that ceremony is not a production Groth16 tally.";

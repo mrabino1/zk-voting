@@ -52,6 +52,16 @@ struct RepublicStack {
 ///      Set `REPUBLIC_VOTE_VERIFIER` to a snarkjs-exported verifier to wrap it in
 ///      `Groth16VerifierAdapter`. That key is still untrusted until a ceremony.
 abstract contract RepublicStackScript is DeployOnce {
+    /// @dev Audit H-02: a mock (accept-all) verifier may only be deployed on
+    ///      anvil (31337) or with the explicit dev flag REPUBLIC_ALLOW_MOCK_VERIFIER=1.
+    error MockVerifierNotAllowed(uint256 chainId);
+
+    uint256 internal constant ANVIL_CHAIN_ID = 31337;
+
+    function _mockVerifierAllowed() internal view returns (bool) {
+        return block.chainid == ANVIL_CHAIN_ID || _envTruthy("REPUBLIC_ALLOW_MOCK_VERIFIER");
+    }
+
     function _log(string memory name, address addr) internal view {
         console2.log(string.concat(name, "=", vm.toString(addr)));
     }
@@ -116,6 +126,7 @@ abstract contract RepublicStackScript is DeployOnce {
     /// @dev Factory first, then modules that take `factory`, then `setModules`.
     function _deployElectionStack(address admin) internal returns (RepublicStack memory s) {
         bool useMock = _useMockVerifier();
+        if (useMock && !_mockVerifierAllowed()) revert MockVerifierNotAllowed(block.chainid);
         s.mockVerifier = useMock;
 
         string memory schemeEnv = vm.envOr("REPUBLIC_HASH_SCHEME", string(""));
@@ -151,12 +162,18 @@ abstract contract RepublicStackScript is DeployOnce {
 
         // address(0) implementation: factory deploys Election internally.
         s.factory = new ElectionFactory(admin, address(0));
+        // Explicit dev flag only (anvil allows mocks by default in the factory).
+        if (useMock && block.chainid != ANVIL_CHAIN_ID) s.factory.setAllowMockVerifiers(true);
         s.jurisdictions = new JurisdictionRegistry(admin);
         s.factory.setJurisdictionRegistry(address(s.jurisdictions));
         s.voterRegistry = new VoterRegistry(address(s.factory), address(s.hasher));
         s.disqualificationRegistry = new DisqualificationRegistry(address(s.hasher), address(s.factory));
         s.inbox = new BallotInbox(address(s.factory));
         s.tally = new Tally(address(s.factory));
+        // Audit H-01: the tally has its own verifier. Mock path: the same dev
+        // mock. Otherwise REPUBLIC_TALLY_VERIFIER, else unset (tally fails closed).
+        address tallyVerifier = useMock ? address(s.verifier) : vm.envOr("REPUBLIC_TALLY_VERIFIER", address(0));
+        if (tallyVerifier != address(0)) s.tally.setTallyProofVerifier(tallyVerifier);
         s.factory
             .setModules(
                 address(s.voterRegistry), address(s.disqualificationRegistry), address(s.inbox), address(s.tally)
