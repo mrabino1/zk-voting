@@ -44,7 +44,6 @@ contract RepublicEntryPoint {
     error InvalidNonce();
     error ValidationFailed();
     error PaymasterRejected();
-    error ExecuteFailed();
 
     event UserOpHandled(address indexed sender, uint256 nonce, address paymaster);
     /// @notice Audit M-08: an op whose execution reverted. Validation already
