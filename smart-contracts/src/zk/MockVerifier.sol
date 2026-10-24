@@ -32,6 +32,7 @@ contract MockVerifier is IGroth16Verifier {
     error NotOwner();
     error InvalidInputLength();
     error WitnessLengthMismatch();
+    error InvalidWitnessDepth();
 
     address public immutable owner;
     bool public acceptAll = true;
@@ -41,6 +42,11 @@ contract MockVerifier is IGroth16Verifier {
 
     /// @notice Hasher for the optional inclusion hook. Keccak in Foundry tests.
     IHasher public inclusionHasher;
+
+    /// @notice Tree depth (16–32) armed witnesses are checked at. Paths of any
+    ///         other length are rejected, as in the fixed-depth vote circuit.
+    ///         Zero (unset) means armed witnesses cannot be armed and fail.
+    uint8 public witnessTreeDepth;
 
     struct InclusionWitness {
         bool armed;
@@ -84,6 +90,11 @@ contract MockVerifier is IGroth16Verifier {
         inclusionHasher = IHasher(hasher_);
     }
 
+    function setWitnessTreeDepth(uint8 depth) external onlyOwner {
+        if (depth < 16 || depth > 32) revert InvalidWitnessDepth();
+        witnessTreeDepth = depth;
+    }
+
     /// @notice Arm the vote-circuit inclusion witness checked for this nullifier.
     function armInclusionWitness(
         uint256 nullifier,
@@ -92,6 +103,7 @@ contract MockVerifier is IGroth16Verifier {
         uint8[] calldata pathIndices
     ) external onlyOwner {
         if (pathElements.length != pathIndices.length) revert WitnessLengthMismatch();
+        if (witnessTreeDepth == 0 || pathElements.length != witnessTreeDepth) revert InvalidWitnessDepth();
         InclusionWitness storage w = _inclusionByNullifier[nullifier];
         w.armed = true;
         w.leaf = leaf;
@@ -122,6 +134,7 @@ contract MockVerifier is IGroth16Verifier {
         uint8[] calldata pathIndices
     ) external onlyOwner {
         if (pathElements.length != pathIndices.length) revert WitnessLengthMismatch();
+        if (witnessTreeDepth == 0 || pathElements.length != witnessTreeDepth) revert InvalidWitnessDepth();
         NonMembershipWitness storage w = _nonMembershipByNullifier[nullifier];
         w.armed = true;
         w.leaf = leaf;
@@ -153,18 +166,25 @@ contract MockVerifier is IGroth16Verifier {
         if (input.length == 5 && _inclusionByNullifier[input[2]].armed) {
             if (address(inclusionHasher) == address(0)) return false;
             InclusionWitness storage w = _inclusionByNullifier[input[2]];
-            if (!EligibleSet.verifyInclusion(w.leaf, w.pathElements, w.pathIndices, input[0], inclusionHasher)) {
+            if (!EligibleSet.verifyInclusion(
+                    w.leaf, w.pathElements, w.pathIndices, input[0], witnessTreeDepth, inclusionHasher
+                )) {
                 return false;
             }
         }
         if (input.length == 5 && _nonMembershipByNullifier[input[2]].armed) {
             if (address(inclusionHasher) == address(0)) return false;
             NonMembershipWitness storage gap = _nonMembershipByNullifier[input[2]];
-            if (
-                !DisqualificationSet.verifyNonMembership(
-                    gap.leaf, gap.low, gap.next, gap.pathElements, gap.pathIndices, input[1], inclusionHasher
-                )
-            ) {
+            if (!DisqualificationSet.verifyNonMembership(
+                    gap.leaf,
+                    gap.low,
+                    gap.next,
+                    gap.pathElements,
+                    gap.pathIndices,
+                    input[1],
+                    witnessTreeDepth,
+                    inclusionHasher
+                )) {
                 return false;
             }
         }

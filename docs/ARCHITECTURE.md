@@ -899,6 +899,9 @@ same gap.
 `armNonMembershipWitness` checks the gap under `publicInputs[1]`. After a
 coded disqualification the disqualified witness returns false and
 `submitVote` reverts `InvalidProof`. Unarmed proofs still follow `acceptAll`.
+Both witnesses must be exactly `witnessTreeDepth` levels long (set with
+`setWitnessTreeDepth`, 16–32), as in the fixed-depth circuit. A shorter path
+would let an internal node pass as a leaf or chain link.
 
 ### Remaining ZK gap
 
