@@ -19,10 +19,12 @@ ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data
 
-# Coolify's container health check shells out to curl, then wget.
-# bookworm-slim ships neither. The image HEALTHCHECK below uses node.
+# Coolify's dashboard HTTP probe runs inside this container as
+# `curl ... || wget ...` and replaces the image HEALTHCHECK unless
+# Coolify has already recorded that instruction. bookworm-slim ships
+# neither binary. The HEALTHCHECK below is Node and does not need them.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl wget \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /data \
@@ -44,11 +46,11 @@ COPY --chown=node:node l2/lease ./l2/lease
 COPY --chown=node:node l2/archive ./l2/archive
 COPY --chown=node:node l2/disclosure.mjs ./l2/disclosure.mjs
 COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
-COPY --chown=node:node docker/healthcheck.mjs /healthcheck.mjs
 
 USER node
 WORKDIR /src/apps/node
 EXPOSE 3000
+# GET /health on PORT (default 3000). HTTP 200 is success for active and standby.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=8 \
-    CMD ["node", "/healthcheck.mjs", "http://127.0.0.1:3000/health"]
+    CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 CMD ["node", "src/server.mjs"]

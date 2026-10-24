@@ -35,7 +35,7 @@ services:
     volumes:
       - l2-data:/data
     healthcheck:
-      test: ["CMD", "node", "/healthcheck.mjs", "http://127.0.0.1:8546/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.L2_RPC_PORT||8546)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -78,7 +78,7 @@ services:
     volumes:
       - node-data:/data
     healthcheck:
-      test: ["CMD", "node", "/healthcheck.mjs", "http://127.0.0.1:3000/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
