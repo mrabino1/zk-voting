@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Brazilian Portuguese).
+ * NOT FOR PROFIT — ZK-Voting website copy (Brazilian Portuguese).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "SEM FINS LUCRATIVOS — bem público cívico. Não é um produto comercial. Sem token. Sem taxas para eleitores.",
     nfpBannerExplorer:
       "SEM FINS LUCRATIVOS — bem público cívico. Não é um produto comercial. Sem token. Sem anúncios.",
-    brandHome: "Início da Republic",
+    brandHome: "Início da {brand}",
     brandSub: "Escritório de eleições cívicas",
     brandSubExplorer: "Explorador de blocos L2",
     navVoter: "Eleitor",
@@ -51,30 +51,30 @@ export default {
     navPublic: "Público",
     session: "Sessão",
     officeBadge: "Sem fins lucrativos",
-    loading: "Carregando Republic…",
-    footerNfp: "SEM FINS LUCRATIVOS — A Republic é um bem público cívico. Não é um produto comercial.",
+    loading: "Carregando {brand}…",
+    footerNfp: "SEM FINS LUCRATIVOS — A {brand} é um bem público cívico. Não é um produto comercial.",
     footerMeta:
-      "Nome do produto: Republic. Eleitores não pagam gas. A escolha nunca é impressa em um recibo. Identity commitments de produção usam Poseidon; esta demo do Node pode exibir só um hex keccak256 do commitment (nunca um trapdoor nem uma frase-semente).",
+      "Nome do produto: {brand}. Eleitores não pagam gas. A escolha nunca é impressa em um recibo. Identity commitments de produção usam Poseidon; esta demo do Node pode exibir só um hex keccak256 do commitment (nunca um trapdoor nem uma frase-semente).",
     footerOfficials: "Oficiais:",
     footerBackOffice: "escritório interno",
     footerExplorer: "explorador de blocos",
     footerAdmin: "admin",
-    footerAdminMeta: "Nome do produto: Republic. Sem token. Sem anúncios.",
+    footerAdminMeta: "Nome do produto: {brand}. Sem token. Sem anúncios.",
     footerL2: "Explorador L2",
-    footerBackOfficeMeta: "Nome do produto: Republic. A escolha nunca é impressa aqui.",
-    footerExplorerMeta: "Explorador L2 da Republic. O texto claro da cédula não é um campo desta cadeia.",
+    footerBackOfficeMeta: "Nome do produto: {brand}. A escolha nunca é impressa aqui.",
+    footerExplorerMeta: "Explorador L2 da {brand}. O texto claro da cédula não é um campo desta cadeia.",
     footerResults: "Resultados da eleição",
     noscript:
-      "A Republic precisa de JavaScript para falar com a passkey do seu dispositivo (WebAuthn). Ative o JavaScript e recarregue, ou use um site de votação acessível operado pelo seu escrivão.",
+      "A {brand} precisa de JavaScript para falar com a passkey do seu dispositivo (WebAuthn). Ative o JavaScript e recarregue, ou use um site de votação acessível operado pelo seu escrivão.",
     metaDescription:
-      "A Republic é um sistema de votação cívica sem fins lucrativos. Identifique-se com uma passkey, uma carteira Web3 ou um documento digital em cartão inteligente e então emita uma cédula privada e publicamente verificável.",
-    titleHome: "Republic — eleições cívicas",
-    titleAdmin: "Administração da plataforma · Republic",
-    titleCeremony: "Cerimônia de configuração confiável · Republic",
-    titleCeremonyTranscript: "Transcrição da cerimônia · Republic",
-    titleCeremonyAdmin: "Coordenação da cerimônia · Republic",
-    titleBackOffice: "Escritório interno · Republic",
-    titleExplorer: "Explorador L2 da Republic",
+      "A {brand} é um sistema de votação cívica sem fins lucrativos. Identifique-se com uma passkey, uma carteira Web3 ou um documento digital em cartão inteligente e então emita uma cédula privada e publicamente verificável.",
+    titleHome: "{brand} — eleições cívicas",
+    titleAdmin: "Administração da plataforma · {brand}",
+    titleCeremony: "Cerimônia de configuração confiável · {brand}",
+    titleCeremonyTranscript: "Transcrição da cerimônia · {brand}",
+    titleCeremonyAdmin: "Coordenação da cerimônia · {brand}",
+    titleBackOffice: "Escritório interno · {brand}",
+    titleExplorer: "Explorador L2 da {brand}",
     titleBallot: "Cédula",
     titleRegister: "Cadastro",
     titleResults: "Resultados",
@@ -154,7 +154,7 @@ export default {
   home: {
     kicker: "Início do eleitor",
     title: "Eleições neste Node",
-    lede: "Este é o balcão do eleitor da Republic: cadastre-se com uma passkey do dispositivo, confira se está na lista e marque uma cédula enquanto a votação estiver aberta. A Republic não é um produto comercial.",
+    lede: "Este é o balcão do eleitor da {brand}: cadastre-se com uma passkey do dispositivo, confira se está na lista e marque uma cédula enquanto a votação estiver aberta. A {brand} não é um produto comercial.",
     openCount: "{count} eleições estão aceitando cédulas agora.",
     openCount_one: "{count} eleição está aceitando cédulas agora.",
     walletPresent: "Carteira passkey neste dispositivo. Commitment {commitment}…",
@@ -231,7 +231,7 @@ export default {
     stepCommitRest: " a uma lista eleitoral — nunca um nome, nunca a carteira como folha.",
     web3Title: "Carteira Web3",
     web3Body:
-      "Assine uma mensagem de vínculo da Republic. O endereço é só seu. Ele pode ser verificado internamente mesmo se outro endereço for o ativo.",
+      "Assine uma mensagem de vínculo da {brand}. O endereço é só seu. Ele pode ser verificado internamente mesmo se outro endereço for o ativo.",
     bindWallet: "Vincular carteira Web3",
     cardTitle: "ID digital em cartão inteligente",
     cardBody:
@@ -256,7 +256,7 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "Copiar commitment",
     copiedCommitment: "Identity commitment copiado.",
-    localAddress: "Endereço local da Republic",
+    localAddress: "Endereço local da {brand}",
     prfWrap:
       "Wrap PRF: o material da conta usa o sal republic:account:v1; o trapdoor ZK usa o sal republic:identity:v1. Não são os mesmos bytes.",
     createFirst: "Crie uma passkey para derivar o commitment. O trapdoor nunca aparece nesta tela.",
@@ -357,7 +357,7 @@ export default {
     staleWrap:
       "Este dispositivo tem um wrap passkey v1 que derivava a identidade de voto da semente da conta. Redefina na página de cadastro e crie uma nova passkey antes de votar.",
     noPasskey:
-      "Este dispositivo ainda não tem uma passkey Republic. Cadastre-se primeiro e depois volte à cédula.",
+      "Este dispositivo ainda não tem uma passkey {brand}. Cadastre-se primeiro e depois volte à cédula.",
     goRegister: "Ir para o cadastro",
     pollsClosed:
       "A votação está encerrada nesta eleição. Você pode revisar as perguntas; o Node não aceitará uma nova cédula.",
@@ -512,7 +512,7 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "A Republic exige uma passkey de dispositivo (WebAuthn) com chave residente e verificação de usuário. Use um navegador atual (Safari 16+, Chrome 108+, Firefox 122+, Edge) em um dispositivo com autenticador de plataforma. Nenhuma frase-semente é mostrada.",
+      "A {brand} exige uma passkey de dispositivo (WebAuthn) com chave residente e verificação de usuário. Use um navegador atual (Safari 16+, Chrome 108+, Firefox 122+, Edge) em um dispositivo com autenticador de plataforma. Nenhuma frase-semente é mostrada.",
     productionNote:
       "A produção usa keccak256(chave pública secp256k1 não comprimida) e depois pega os últimos 20 bytes (Ethereum). Esta demo não consegue multiplicar em secp256k1 sem uma biblioteca de curva, então getAddress() devolve SHA-256(seed)[0:20] rotulado republic-local-address.",
     staleWrap:
@@ -867,7 +867,7 @@ export default {
     pluralityTag: "{type} · pluralidade",
   },
   explorer: {
-    kicker: "Republic L2 · cadeia 27427",
+    kicker: "{brand} L2 · cadeia 27427",
     title: "Explorador de blocos",
     lede: "Registro público de cada bloco: cadastros (só commitments), cédulas aceitas (nullifier + hash da cédula — nunca a escolha), desqualificações, apurações e lotes de rollup. Provas de voto aparecem só depois que a hora que as continha se encerra, para que uma pessoa que sai de um local de votação não possa ser associada a um tique ao vivo da jurisdição. O instantâneo abaixo é a última hora UTC encerrada: contagem de cédulas divulgadas, quando essa hora terminou e a contagem regressiva até a próxima atualização. A escolha nunca é mostrada aqui. Sem anúncios. Sem tokens.",
     searchLabel: "Buscar o livro-razão",
@@ -878,7 +878,7 @@ export default {
     breadcrumb: "Trilha",
     privacyTitle: "Privacidade da cédula",
     privacyBody:
-      "Esta transação prova elegibilidade e unicidade. O explorador mostra o nullifier e o hash da cédula. O texto claro da escolha não é um campo na Republic L2 e nunca é renderizado aqui. Linhas de voto aparecem só depois que a hora que as continha se encerrou, para que sair de um local de votação não possa ser associado a um tique ao vivo da jurisdição.",
+      "Esta transação prova elegibilidade e unicidade. O explorador mostra o nullifier e o hash da cédula. O texto claro da escolha não é um campo na {brand} L2 e nunca é renderizado aqui. Linhas de voto aparecem só depois que a hora que as continha se encerrou, para que sair de um local de votação não possa ser associado a um tique ao vivo da jurisdição.",
     noTx: "Nenhuma transação nesta visão.",
     type: "Tipo",
     txnHash: "Hash da txn",
@@ -1041,7 +1041,7 @@ export default {
   feedback: {
     title: "Comentários",
     kicker: "Contato",
-    lede: "Diga ao operador deste site Republic o que deveria mudar. Isto não é uma cédula. Não inclua um voto, um número de documento nem uma frase-semente.",
+    lede: "Diga ao operador deste site {brand} o que deveria mudar. Isto não é uma cédula. Não inclua um voto, um número de documento nem uma frase-semente.",
     nameLabel: "Nome (opcional)",
     emailLabel: "E-mail para resposta (opcional)",
     emailHint: "Usado apenas como endereço Reply-To na mensagem ao operador. Deixe em branco para não enviar um endereço de resposta.",

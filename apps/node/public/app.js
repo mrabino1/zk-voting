@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Voter home and application shell for the Republic Node SPA.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
+ * Voter home and application shell for the ZK-Voting Node SPA.
  */
 
+import { brandName } from "./brand.js";
 import { LOCALE_EVENT } from "./i18n.js";
 import { fetchWithStandbyRetry } from "./standby-retry.js";
 import { startRouter, navigate, currentRoute } from "./router.js";
@@ -423,7 +424,7 @@ export function announce(message) {
 }
 
 export function setTitle(page) {
-  document.title = page ? `${page} — Republic` : "Republic — civic elections";
+  document.title = page && page !== brandName() ? `${page} — ${brandName()}` : `${brandName()} — civic elections`;
 }
 
 export function reasonLabel(code) {
@@ -670,7 +671,7 @@ function renderDesk(main, route, bundle) {
       h(
         "p",
         { class: "lede" },
-        "This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. Republic is not a commercial product."
+        `This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. ${brandName()} is not a commercial product.`
       ),
       h(
         "div",

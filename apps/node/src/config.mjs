@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { brandName } from './branding.mjs';
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
 import { normalizeEmail } from './identity.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
@@ -186,14 +187,12 @@ export function getConfig(overrides = {}) {
   const config = {
     nfp: true,
     app: 'zk-voting',
-    product: 'Republic',
     pkgRoot: PKG_ROOT,
     port,
     host: String(overrides.host ?? process.env.HOST ?? '0.0.0.0'),
     chainId: Number(process.env.CHAIN_ID || 27427),
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
-    rpName: 'Republic',
     rpID: authority.rpID,
     voteFqdn: authority.voteFqdn,
     origins: authority.origins,
@@ -299,6 +298,13 @@ export function getConfig(overrides = {}) {
     ceremonyBeaconMinBlocksAhead: strictPositiveInt(process.env.CEREMONY_BEACON_MIN_BLOCKS_AHEAD, 32),
     ...overrides,
   };
+  // Display name (site admin > BRAND_NAME > "ZK-Voting"); live, so a rename in
+  // site admin reaches mail, PDFs and the WebAuthn rpName without a restart.
+  for (const key of ['product', 'rpName']) {
+    if (overrides[key] === undefined) {
+      Object.defineProperty(config, key, { get: brandName, enumerable: true, configurable: true });
+    }
+  }
   // `VOTE_FQDN` wins over a localhost template even when overrides spread last.
   config.voteFqdn = authority.voteFqdn;
   config.rpID = authority.rpID;

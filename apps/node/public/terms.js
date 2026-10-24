@@ -1,7 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public /terms page: canonical copy, SHA-256 of PDF bytes, accept + email PDF.
  */
+
+import { brandName } from "./brand.js";
 
 function blockNodes(h, block, i) {
   if (!block) return null;
@@ -44,7 +46,7 @@ export async function renderTerms(main, ctx) {
           "div",
           { class: "page-head" },
           h("p", { class: "kicker", text: "Legal" }),
-          h("h1", { text: data?.title || "Republic Terms of Use" }),
+          h("h1", { text: data?.title || `${brandName()} Terms of Use` }),
           h(
             "p",
             { class: "lede" },

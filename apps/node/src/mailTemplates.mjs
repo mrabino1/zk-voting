@@ -2,6 +2,7 @@
 // Role-promotion mail is a Node operator notice. It is never a vote receipt
 // and must never be written onto civic L2 transactions.
 
+import { brandName } from './branding.mjs';
 import { ROLE_LABELS } from './roles.mjs';
 
 export const PROMOTION_ROLES = Object.freeze([
@@ -122,7 +123,7 @@ export function samplePromotionVars(role, extras = {}) {
     grantedByHandle: extras.grantedByHandle || (sample ? 'admin' : ''),
     publicBaseUrl: baseUrl,
     officeUrl: extras.officeUrl || `${baseUrl}${copy.ctaPath}`,
-    product: 'Republic',
+    product: brandName(),
     year: String(extras.year || new Date().getUTCFullYear()),
   };
 }
@@ -182,7 +183,7 @@ function buildHtml({ copy, vars }) {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>${escapeHtml(copy.headline)} · Republic</title>
+  <title>${escapeHtml(copy.headline)} · ${escapeHtml(brandName())}</title>
 </head>
 <body style="margin:0;padding:0;background:#e8e4d9;color:#111111;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;">
   <div style="max-width:640px;margin:0 auto;padding:24px 12px 40px;">
@@ -190,7 +191,7 @@ function buildHtml({ copy, vars }) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid:#c9c3b2;border-radius:4px;">
       <tr>
         <td style="background:#13294b;color:#f4f1ea;padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;">Republic</p>
+          <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;">${escapeHtml(brandName())}</p>
           <h1 style="margin:0;font-size:22px;line-height:1.3;">${escapeHtml(copy.headline)}</h1>
         </td>
       </tr>
@@ -239,7 +240,7 @@ export function describeTemplate(role) {
     headline: copy.headline,
     ctaPath: copy.ctaPath,
     ctaLabel: copy.ctaLabel,
-    subject: `${copy.headline} · Republic`,
+    subject: `${copy.headline} · ${brandName()}`,
   };
 }
 
@@ -258,7 +259,7 @@ export function renderPromotionEmail(role, varsInput = {}) {
     templateId: templateIdForRole(role),
     role,
     label: ROLE_LABELS[role] || role,
-    subject: `${copy.headline} · Republic`,
+    subject: `${copy.headline} · ${brandName()}`,
     text: buildText({ copy, vars }),
     html: buildHtml({ copy, vars }),
     notificationTitle: notice.title,

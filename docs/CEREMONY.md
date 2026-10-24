@@ -16,7 +16,7 @@ License: AGPL-3.0-or-later.
 
 Groth16 needs a structured reference string.
 
-1. **Phase 1** is powers-of-tau. It is circuit-independent. Republic does not run that ceremony in this repository. A coordinator points phase 2 at a phase-2-prepared `.ptau` file.
+1. **Phase 1** is powers-of-tau. It is circuit-independent. ZK-Voting does not run that ceremony in this repository. A coordinator points phase 2 at a phase-2-prepared `.ptau` file.
 2. **Phase 2** is circuit-specific. `groth16 setup` binds one `.r1cs` to that `.ptau` and produces `zkey_0000.zkey`. That file still contains phase-2 toxic waste. Each later participant re-randomizes it. A final **beacon** contribution uses public randomness so the last human participant does not know the finished key either.
 
 `circuits/scripts/ceremony.mjs` (wrapper: `circuits/scripts/ceremony.sh`) runs only phase 2:
@@ -213,7 +213,7 @@ That command:
 
 The entropy strings contain `not-a-ceremony` and are stored in the transcript because they are published. Delete that directory when you are done; it is gitignored via `circuits/build/`.
 
-A green CI job means the scripts can build and check a multi-contributor transcript. It does not mean Republic has a trusted setup.
+A green CI job means the scripts can build and check a multi-contributor transcript. It does not mean ZK-Voting has a trusted setup.
 
 ---
 

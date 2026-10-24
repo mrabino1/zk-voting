@@ -1,7 +1,7 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  *
- * Passkey-held wallet for Republic.
+ * Passkey-held wallet for ZK-Voting.
  *
  * - WebAuthn resident key + userVerification required.
  * - Two PRF / HKDF domains (docs/PASSKEYS.md): account key ≠ trapdoor/nullifierSecret.
@@ -10,7 +10,7 @@
  * - saltAccount  = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:account:v1", binding=chain id)
  * - saltIdentity = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:identity:v1", binding=jurisdictionId)
  * - Authenticators that return only one PRF eval are prompted a second time with saltIdentity.
- *   Republic will not derive the trapdoor from the account seed or account PRF output.
+ *   ZK-Voting will not derive the trapdoor from the account seed or account PRF output.
  * - The seed stands in for a secp256k1 private key. This file does not ship a
  *   curve implementation, so it cannot emit an uncompressed public key.
  * - getAddress() therefore returns `0x` + first 20 bytes of SHA-256(seed) and
@@ -26,6 +26,7 @@
  * the vote circuit. Reset the demo wallet and create a new passkey.
  */
 
+import { brandName } from "./brand.js";
 import { POSEIDON_HASH_SCHEME, poseidonCommitmentHex } from "./poseidon.js";
 import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
 const DB_NAME = "republic-wallet";
@@ -677,7 +678,7 @@ export async function createCredential(serverOptions = {}) {
   const challenge = pk.challenge ? coerceBytes(pk.challenge) : randomChallenge();
   const userId = pk.user?.id ? coerceBytes(pk.user.id) : random32();
   const rpId = pk.rp?.id || (typeof location !== "undefined" ? location.hostname : undefined);
-  const rpName = pk.rp?.name || "Republic";
+  const rpName = pk.rp?.name || brandName();
   const userName = pk.user?.name || serverOptions.displayName || "voter";
   const displayName = pk.user?.displayName || userName;
 
@@ -846,7 +847,7 @@ async function provisionFromCredential(credential, { displayName, chainId, juris
 
     if (prfAccount && !prfIdentity) {
       throw new Error(
-        "This authenticator returned an account PRF output but not an identity-domain PRF output. Republic will not derive the trapdoor from the account key."
+        `This authenticator returned an account PRF output but not an identity-domain PRF output. ${brandName()} will not derive the trapdoor from the account key.`
       );
     }
 
@@ -941,7 +942,7 @@ async function unwrapWalletMaterial({ needIdentity = false } = {}) {
       if (needIdentity) {
         if (!prfIdentity) {
           throw new Error(
-            "This authenticator did not return a PRF output for the identity domain. Republic will not derive the trapdoor from the account key."
+            `This authenticator did not return a PRF output for the identity domain. ${brandName()} will not derive the trapdoor from the account key.`
           );
         }
         identity = await deriveIdentitySecrets(prfIdentity);
@@ -1305,5 +1306,5 @@ export async function resetWallet() {
 }
 
 export function webAuthnUnavailableMessage() {
-  return "Republic requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.";
+  return `${brandName()} requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.`;
 }

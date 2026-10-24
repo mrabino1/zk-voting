@@ -1,8 +1,10 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public portal: paste a vote receipt to confirm it counted. Hourly turnout
  * metrics only — never a candidate or option.
  */
+
+import { brandName } from "./brand.js";
 
 function proofFromQuery(query) {
   const raw = query?.get?.("proof") || query?.get?.("receipt") || "";
@@ -222,7 +224,7 @@ export async function renderReceiptPortal(main, ctx) {
       { class: "receipt", "aria-labelledby": "verify-result-heading" },
       h("h2", { id: "verify-result-heading", text: r.counted ? "This ballot counted" : "Not found" }),
       h("p", {
-        text: r.note || "A Republic receipt lists hashes only. It cannot prove which option was marked.",
+        text: r.note || `A ${brandName()} receipt lists hashes only. It cannot prove which option was marked.`,
       }),
       h(
         "ul",
@@ -268,7 +270,7 @@ export async function renderReceiptPortal(main, ctx) {
         h("h1", { text: "Check a vote receipt" }),
         h("p", {
           class: "lede",
-          text: "Paste the proof from your emailed receipt or the ballot screen, or drop the locked PDF. Republic will tell you whether that ballot was accepted and whether the PDF still matches the issued bytes. This page never shows a candidate or an option.",
+          text: `Paste the proof from your emailed receipt or the ballot screen, or drop the locked PDF. ${brandName()} will tell you whether that ballot was accepted and whether the PDF still matches the issued bytes. This page never shows a candidate or an option.`,
         })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,

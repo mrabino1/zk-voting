@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Hindi, Devanagari).
+ * NOT FOR PROFIT — ZK-Voting website copy (Hindi, Devanagari).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "गैर-लाभकारी — नागरिक सार्वजनिक हित। वाणिज्यिक उत्पाद नहीं। कोई टोकन नहीं। मतदाताओं से कोई शुल्क नहीं।",
     nfpBannerExplorer:
       "गैर-लाभकारी — नागरिक सार्वजनिक हित। वाणिज्यिक उत्पाद नहीं। कोई टोकन नहीं। कोई विज्ञापन नहीं।",
-    brandHome: "Republic होम",
+    brandHome: "{brand} होम",
     brandSub: "नागरिक चुनाव कार्यालय",
     brandSubExplorer: "L2 ब्लॉक एक्सप्लोरर",
     navVoter: "मतदाता",
@@ -51,30 +51,30 @@ export default {
     navPublic: "सार्वजनिक",
     session: "सत्र",
     officeBadge: "गैर-लाभकारी",
-    loading: "Republic लोड हो रहा है…",
-    footerNfp: "गैर-लाभकारी — Republic एक नागरिक सार्वजनिक हित है। वाणिज्यिक उत्पाद नहीं।",
+    loading: "{brand} लोड हो रहा है…",
+    footerNfp: "गैर-लाभकारी — {brand} एक नागरिक सार्वजनिक हित है। वाणिज्यिक उत्पाद नहीं।",
     footerMeta:
-      "उत्पाद का नाम Republic। मतदाता गैस नहीं देते। चुनाव रसीद पर कभी नहीं छपता। उत्पादन identity commitments Poseidon उपयोग करते हैं; यह Node डेमो केवल keccak256 commitment hex दिखा सकता है (trapdoor या सीड वाक्यांश कभी नहीं)।",
+      "उत्पाद का नाम {brand}। मतदाता गैस नहीं देते। चुनाव रसीद पर कभी नहीं छपता। उत्पादन identity commitments Poseidon उपयोग करते हैं; यह Node डेमो केवल keccak256 commitment hex दिखा सकता है (trapdoor या सीड वाक्यांश कभी नहीं)।",
     footerOfficials: "अधिकारी:",
     footerBackOffice: "बैक ऑफिस",
     footerExplorer: "ब्लॉक एक्सप्लोरर",
     footerAdmin: "प्रशासन",
-    footerAdminMeta: "उत्पाद का नाम Republic। कोई टोकन नहीं। कोई विज्ञापन नहीं।",
+    footerAdminMeta: "उत्पाद का नाम {brand}। कोई टोकन नहीं। कोई विज्ञापन नहीं।",
     footerL2: "L2 एक्सप्लोरर",
-    footerBackOfficeMeta: "उत्पाद का नाम Republic। चुनाव यहाँ कभी नहीं छपता।",
-    footerExplorerMeta: "Republic L2 एक्सप्लोरर। मतपत्र का सादा पाठ इस श्रृंखला पर कोई फ़ील्ड नहीं है।",
+    footerBackOfficeMeta: "उत्पाद का नाम {brand}। चुनाव यहाँ कभी नहीं छपता।",
+    footerExplorerMeta: "{brand} L2 एक्सप्लोरर। मतपत्र का सादा पाठ इस श्रृंखला पर कोई फ़ील्ड नहीं है।",
     footerResults: "चुनाव परिणाम",
     noscript:
-      "Republic को आपके उपकरण की passkey (WebAuthn) से बात करने के लिए JavaScript चाहिए। JavaScript चालू करें और पुनः लोड करें, या अपने क्लर्क द्वारा संचालित सुलभ मतदान साइट का उपयोग करें।",
+      "{brand} को आपके उपकरण की passkey (WebAuthn) से बात करने के लिए JavaScript चाहिए। JavaScript चालू करें और पुनः लोड करें, या अपने क्लर्क द्वारा संचालित सुलभ मतदान साइट का उपयोग करें।",
     metaDescription:
-      "Republic एक गैर-लाभकारी नागरिक मतदान प्रणाली है। passkey, Web3 वॉलेट, या स्मार्ट-कार्ड डिजिटल पहचान से अपनी पहचान करें, फिर निजी, सार्वजनिक रूप से सत्यापन योग्य मतपत्र डालें।",
-    titleHome: "Republic — नागरिक चुनाव",
-    titleAdmin: "प्लेटफ़ॉर्म प्रशासन · Republic",
-    titleCeremony: "विश्वसनीय सेटअप समारोह · Republic",
-    titleCeremonyTranscript: "समारोह प्रतिलेख · Republic",
-    titleCeremonyAdmin: "समारोह समन्वय · Republic",
-    titleBackOffice: "बैक ऑफिस · Republic",
-    titleExplorer: "Republic L2 एक्सप्लोरर",
+      "{brand} एक गैर-लाभकारी नागरिक मतदान प्रणाली है। passkey, Web3 वॉलेट, या स्मार्ट-कार्ड डिजिटल पहचान से अपनी पहचान करें, फिर निजी, सार्वजनिक रूप से सत्यापन योग्य मतपत्र डालें।",
+    titleHome: "{brand} — नागरिक चुनाव",
+    titleAdmin: "प्लेटफ़ॉर्म प्रशासन · {brand}",
+    titleCeremony: "विश्वसनीय सेटअप समारोह · {brand}",
+    titleCeremonyTranscript: "समारोह प्रतिलेख · {brand}",
+    titleCeremonyAdmin: "समारोह समन्वय · {brand}",
+    titleBackOffice: "बैक ऑफिस · {brand}",
+    titleExplorer: "{brand} L2 एक्सप्लोरर",
     titleBallot: "मतपत्र",
     titleRegister: "पंजीकरण",
     titleResults: "परिणाम",
@@ -154,7 +154,7 @@ export default {
   home: {
     kicker: "मतदाता होम",
     title: "इस Node पर चुनाव",
-    lede: "यह Republic का मतदाता डेस्क है: उपकरण passkey से पंजीकरण करें, जाँचें कि आप सूची पर हैं या नहीं, और मतदान खुला होने पर मतपत्र भरें। Republic वाणिज्यिक उत्पाद नहीं है।",
+    lede: "यह {brand} का मतदाता डेस्क है: उपकरण passkey से पंजीकरण करें, जाँचें कि आप सूची पर हैं या नहीं, और मतदान खुला होने पर मतपत्र भरें। {brand} वाणिज्यिक उत्पाद नहीं है।",
     openCount: "{count} चुनाव अभी मतपत्र स्वीकार कर रहे हैं।",
     openCount_one: "{count} चुनाव अभी मतपत्र स्वीकार कर रहा है।",
     walletPresent: "इस उपकरण पर passkey वॉलेट। Commitment {commitment}…",
@@ -231,7 +231,7 @@ export default {
     stepCommitRest: " चुनाव सूची में — नाम नहीं, पत्ती के रूप में वॉलेट नहीं।",
     web3Title: "Web3 वॉलेट",
     web3Body:
-      "Republic बंधन संदेश पर हस्ताक्षर करें। पता केवल आपका है। दूसरे पते के सक्रिय होने पर भी इसे आंतरिक रूप से सत्यापित किया जा सकता है।",
+      "{brand} बंधन संदेश पर हस्ताक्षर करें। पता केवल आपका है। दूसरे पते के सक्रिय होने पर भी इसे आंतरिक रूप से सत्यापित किया जा सकता है।",
     bindWallet: "Web3 वॉलेट बाँधें",
     cardTitle: "स्मार्ट कार्ड डिजिटल पहचान",
     cardBody:
@@ -256,7 +256,7 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "commitment कॉपी करें",
     copiedCommitment: "Identity commitment कॉपी हो गया।",
-    localAddress: "Republic स्थानीय पता",
+    localAddress: "{brand} स्थानीय पता",
     prfWrap:
       "PRF रैप: खाता सामग्री नमक republic:account:v1 उपयोग करती है; ZK trapdoor नमक republic:identity:v1 उपयोग करता है। वे एक ही बाइट नहीं हैं।",
     createFirst: "commitment निकालने के लिए passkey बनाएँ। trapdoor इस स्क्रीन पर कभी नहीं दिखता।",
@@ -357,7 +357,7 @@ export default {
     staleWrap:
       "इस उपकरण पर v1 passkey रैप है जिसने मत पहचान खाता सीड से निकाली। मतदान से पहले पंजीकरण पृष्ठ पर रीसेट करें और नई passkey बनाएँ।",
     noPasskey:
-      "इस उपकरण पर अभी Republic passkey नहीं है। पहले पंजीकरण करें, फिर मतपत्र पर लौटें।",
+      "इस उपकरण पर अभी {brand} passkey नहीं है। पहले पंजीकरण करें, फिर मतपत्र पर लौटें।",
     goRegister: "पंजीकरण पर जाएँ",
     pollsClosed:
       "इस चुनाव के लिए मतदान बंद है। आप प्रश्न देख सकते हैं; Node नया मतपत्र स्वीकार नहीं करेगा।",
@@ -512,7 +512,7 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Republic को resident कुंजी और उपयोगकर्ता सत्यापन वाली उपकरण passkey (WebAuthn) चाहिए। प्लेटफ़ॉर्म प्रमाणक वाले उपकरण पर वर्तमान ब्राउज़र (Safari 16+, Chrome 108+, Firefox 122+, Edge) उपयोग करें। सीड वाक्यांश कभी नहीं दिखाया जाता।",
+      "{brand} को resident कुंजी और उपयोगकर्ता सत्यापन वाली उपकरण passkey (WebAuthn) चाहिए। प्लेटफ़ॉर्म प्रमाणक वाले उपकरण पर वर्तमान ब्राउज़र (Safari 16+, Chrome 108+, Firefox 122+, Edge) उपयोग करें। सीड वाक्यांश कभी नहीं दिखाया जाता।",
     productionNote:
       "उत्पादन keccak256(uncompressed secp256k1 public key) उपयोग करता है, फिर अंतिम 20 बाइट लेता है (Ethereum)। यह डेमो बिना कर्व लाइब्रेरी के secp256k1 पर गुणा नहीं कर सकता, इसलिए getAddress() SHA-256(seed)[0:20] लौटाता है जिसे republic-local-address कहा गया है।",
     staleWrap:
@@ -868,7 +868,7 @@ export default {
     pluralityTag: "{type} · बहुलता",
   },
   explorer: {
-    kicker: "Republic L2 · श्रृंखला 27427",
+    kicker: "{brand} L2 · श्रृंखला 27427",
     title: "ब्लॉक एक्सप्लोरर",
     lede: "हर ब्लॉक का सार्वजनिक अभिलेख: पंजीकरण (केवल commitments), स्वीकृत मतपत्र (nullifier + ballot hash — विकल्प कभी नहीं), अयोग्यताएँ, गणनाएँ, और रोलअप बैच। वोट प्रमाण केवल उस घंटे के बंद होने के बाद दिखाई देते हैं जिसमें वे थे, ताकि मतदान कार्यालय छोड़ते व्यक्ति को जीवित क्षेत्र गिनती से न जोड़ा जा सके। नीचे झलक अंतिम बंद UTC घंटा है: प्रकट मतपत्र संख्या, वह घंटा कब समाप्त हुआ, और अगले अद्यतन तक उलटी गिनती। विकल्प यहाँ कभी नहीं दिखाया जाता। कोई विज्ञापन नहीं। कोई टोकन नहीं।",
     searchLabel: "लेजर खोजें",
@@ -879,7 +879,7 @@ export default {
     breadcrumb: "ब्रेडक्रंब",
     privacyTitle: "मतपत्र गोपनीयता",
     privacyBody:
-      "यह लेनदेन पात्रता और अद्वितीयता सिद्ध करता है। एक्सप्लोरर nullifier और ballot hash दिखाता है। विकल्प का सादा पाठ Republic L2 पर फ़ील्ड नहीं है और यहाँ कभी नहीं रेंडर होता। वोट पंक्तियाँ केवल उस घंटे के बंद होने के बाद दिखाई देती हैं जिसमें वे थीं, ताकि मतदान कार्यालय छोड़ना जीवित क्षेत्र वृद्धि से न जुड़ सके।",
+      "यह लेनदेन पात्रता और अद्वितीयता सिद्ध करता है। एक्सप्लोरर nullifier और ballot hash दिखाता है। विकल्प का सादा पाठ {brand} L2 पर फ़ील्ड नहीं है और यहाँ कभी नहीं रेंडर होता। वोट पंक्तियाँ केवल उस घंटे के बंद होने के बाद दिखाई देती हैं जिसमें वे थीं, ताकि मतदान कार्यालय छोड़ना जीवित क्षेत्र वृद्धि से न जुड़ सके।",
     noTx: "इस दृश्य में कोई लेनदेन नहीं।",
     type: "प्रकार",
     txnHash: "Txn हैश",
@@ -1043,7 +1043,7 @@ export default {
   feedback: {
     title: "प्रतिक्रिया",
     kicker: "संपर्क",
-    lede: "इस Republic साइट के संचालक को बताएँ कि क्या बदलना चाहिए। यह मतपत्र नहीं है। मत, दस्तावेज़ संख्या, या सीड वाक्यांश न लिखें।",
+    lede: "इस {brand} साइट के संचालक को बताएँ कि क्या बदलना चाहिए। यह मतपत्र नहीं है। मत, दस्तावेज़ संख्या, या सीड वाक्यांश न लिखें।",
     nameLabel: "नाम (वैकल्पिक)",
     emailLabel: "उत्तर का ईमेल (वैकल्पिक)",
     emailHint: "केवल संचालक को भेजे संदेश के Reply-To पते के रूप में उपयोग होता है। उत्तर पता न भेजने के लिए खाली छोड़ें।",

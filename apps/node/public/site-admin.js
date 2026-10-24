@@ -4,6 +4,7 @@
 // innerHTML with data). Every action is re-checked server-side.
 
 import { applyLayout, fetchLayout, renderSlot } from '/plugin-runtime.js';
+import { brandName } from '/brand.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#sa-view');
@@ -165,25 +166,40 @@ async function renderLayout() {
   const draft = structuredClone(data.saved);
   const { schema } = data;
 
-  const productName = h('input', {
-    type: 'text',
-    id: 'sa-product-name',
-    maxlength: '60',
-    value: draft.branding?.productName || 'zk-voting',
-    disabled: !can('manage_branding'),
-    'aria-describedby': 'sa-product-hint',
-  });
+  const defaults = data.brandingDefaults || { name: 'ZK-Voting', shortName: 'ZK-Voting', tagline: '' };
+  const canBrand = can('manage_branding');
+  const brandInput = (id, field, max, fallback) =>
+    h('input', {
+      type: 'text',
+      id,
+      maxlength: String(max),
+      value: draft.branding?.[field] || '',
+      placeholder: fallback,
+      disabled: !canBrand,
+      'aria-describedby': 'sa-product-hint',
+    });
+  const productName = brandInput('sa-product-name', 'productName', 60, defaults.name);
+  const shortName = brandInput('sa-short-name', 'shortName', 24, defaults.shortName);
+  const tagline = brandInput('sa-tagline', 'tagline', 160, defaults.tagline);
+  // An empty short name follows the product name, so show what it will resolve to.
+  const syncShortPlaceholder = () => {
+    shortName.placeholder = productName.value.trim() || defaults.shortName;
+  };
+  productName.addEventListener('input', syncShortPlaceholder);
+  syncShortPlaceholder();
   const branding = h(
     'section',
     { class: 'sa-card', 'aria-labelledby': 'sa-brand-h' },
     h('h2', { id: 'sa-brand-h', text: 'Branding' }),
     h('div', { class: 'sa-field' }, h('label', { for: 'sa-product-name', text: 'Product name' }), productName),
+    h('div', { class: 'sa-field' }, h('label', { for: 'sa-short-name', text: 'Short name' }), shortName),
+    h('div', { class: 'sa-field' }, h('label', { for: 'sa-tagline', text: 'Tagline' }), tagline),
     h('p', {
       id: 'sa-product-hint',
       class: 'sa-hint',
-      text: can('manage_branding')
-        ? 'Defaults to “zk-voting”. Shown in page chrome and plugin screens once saved.'
-        : 'Only a super admin or admin can rename the product (default “zk-voting”).',
+      text: canBrand
+        ? `Leave a field empty to use the default (“${defaults.name}”). The name appears in page titles, headers, footers, emails and PDFs. Plain text only.`
+        : `Only a super admin or admin can rename the product (now “${data.effective?.branding?.productName || defaults.name}”).`,
     }),
   );
 
@@ -298,7 +314,11 @@ async function renderLayout() {
     out.nav.items = out.nav.items.map((it, i) => ({ ...it, order: i + 1 }));
     out.theme = { light: {}, dark: {} };
     for (const [mode, id, input] of themeInputs) if (input.value.trim()) out.theme[mode][id] = input.value.trim();
-    out.branding = { productName: productName.value.trim() || 'zk-voting' };
+    out.branding = {
+      productName: productName.value.trim(),
+      shortName: shortName.value.trim(),
+      tagline: tagline.value.trim(),
+    };
     return out;
   }
   const actions = h(
@@ -314,7 +334,7 @@ async function renderLayout() {
       }
     } }),
     h('button', { type: 'button', class: 'btn btn-secondary', text: 'Reset to defaults', onclick: async () => {
-      if (!(await confirmDialog('Reset layout?', [h('p', { text: 'Saved navigation, widgets, theme and branding go back to defaults (product name “zk-voting”).' })], 'Reset'))) return;
+      if (!(await confirmDialog('Reset layout?', [h('p', { text: `Saved navigation, widgets, theme and branding go back to defaults (product name “${defaults.name}”).` })], 'Reset'))) return;
       try {
         await call('POST', '/api/site-admin/layout/reset', {});
         say('Layout reset.');
@@ -537,7 +557,7 @@ async function route() {
   } catch (err) {
     say(err.message, true);
   }
-  document.title = `${titleEl.textContent} · Site admin · ${document.querySelector('[data-product-name]')?.textContent || 'zk-voting'}`;
+  document.title = `${titleEl.textContent} · Site admin · ${document.querySelector('[data-product-name]')?.textContent || brandName()}`;
 }
 
 document.addEventListener('click', (e) => {

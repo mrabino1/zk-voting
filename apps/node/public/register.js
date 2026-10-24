@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Passkey registration + identity commitment display (commitment hex only).
  */
 
+import { brandName } from "./brand.js";
 import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, removeBoundEmail, removePasskey, setActiveEthAddress, setPrimaryEmail, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
 import { renderPinManager } from "./pin-pad.js";
 import { atEmailCap, atPasskeyCap, identityCapNote, renderCivicCredentials, renderEmailAccounts, renderEthAccounts, renderPasskeyAccounts } from "./identity-accounts.js";
@@ -324,7 +325,7 @@ export async function renderRegister(main, ctx) {
             h(
               "p",
               {
-                text: "Sign a Republic binding message. The address is uniquely yours. After the signature, email MFA still runs.",
+                text: `Sign a ${brandName()} binding message. The address is uniquely yours. After the signature, email MFA still runs.`,
               }
             ),
             h(
@@ -482,7 +483,7 @@ export async function renderRegister(main, ctx) {
                   }
                 )
               ),
-              h("p", { class: "field-label", text: "Republic local address" }),
+              h("p", { class: "field-label", text: `${brandName()} local address` }),
               h("div", { class: "hex", text: `${rec.address}  ·  ${rec.addressScheme}` }),
               h("p", { class: "field-hint", text: rec.productionAddressNote }),
               rec.staleWrap

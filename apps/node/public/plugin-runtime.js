@@ -9,7 +9,7 @@
 //   }
 
 const REGION_SLOTS = ['banner', 'header', 'sidebar', 'home', 'footer'];
-const DEFAULT_PRODUCT_NAME = 'zk-voting';
+const DEFAULT_PRODUCT_NAME = 'ZK-Voting';
 let cached = null;
 
 export async function fetchLayout() {
@@ -266,11 +266,9 @@ function applyNav(layout) {
 
 function applyBranding(layout) {
   const name = layout.branding?.productName || DEFAULT_PRODUCT_NAME;
-  for (const el of document.querySelectorAll('[data-product-name]')) el.textContent = name;
-  // Existing page chrome keeps its built-in name until an admin renames the product.
-  if (name !== DEFAULT_PRODUCT_NAME) {
-    for (const el of document.querySelectorAll('.brand-name')) el.textContent = name;
-  }
+  // The server already renders the name into each page; this keeps the chrome
+  // right if the layout changes while the page is open.
+  for (const el of document.querySelectorAll('[data-product-name], .brand-name')) el.textContent = name;
 }
 
 function applyTheme() {

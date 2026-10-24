@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Website locale (English default). Optional locales follow ACS home-language
  * rank in the United States after English: Spanish, Chinese, Tagalog, Vietnamese,
  * Arabic, French, Korean, Portuguese, Hindi. Fallback is English. Persist only
@@ -7,6 +7,7 @@
  * operator documentation stay English.
  */
 
+import { brandName, escapeBrandHtml } from "./brand.js";
 import en from "./locales/en.js";
 import es from "./locales/es.js";
 import zh from "./locales/zh.js";
@@ -109,7 +110,8 @@ export function t(key, vars) {
     template = lookup(CATALOGS[locale], key) || lookup(CATALOGS.en, key);
   }
   if (template == null) return key;
-  return interpolate(template, vars);
+  // `{brand}` is the product name from site admin; callers may override it.
+  return interpolate(template, { brand: brandName(), ...(vars || {}) });
 }
 
 export function applyDocumentLang(locale = getLocale()) {
@@ -146,7 +148,7 @@ export function applyStatic(root) {
   scope.querySelectorAll("[data-i18n-html]").forEach((el) => {
     const key = el.getAttribute("data-i18n-html");
     if (!key) return;
-    el.innerHTML = t(key);
+    el.innerHTML = t(key, { brand: escapeBrandHtml(brandName()) });
   });
   for (const [dataAttr, attr] of ATTR_MAP) {
     scope.querySelectorAll(`[${dataAttr}]`).forEach((el) => {

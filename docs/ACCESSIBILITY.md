@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See `/NOT_FOR_PROFIT.md`.
 
-Product name: **Republic**. This note covers the Node SPA and the admin, back-office, and explorer shells in `apps/node/public/`.
+Product name: **ZK-Voting** by default (renameable in site admin). This note covers the Node SPA and the admin, back-office, and explorer shells in `apps/node/public/`.
 
 Audit date: 2026-09-27. Standard: **WCAG 2.2 Level AA**. Automated engine: **axe-core 4.10.3** (tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`) in headless Chrome via `puppeteer-core`.
 

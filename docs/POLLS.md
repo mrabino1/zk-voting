@@ -1,6 +1,6 @@
 # Token polls (ERC-20 weighted signal)
 
-**NOT FOR PROFIT** — civic public good, not a commercial product. AGPL-3.0-or-later. Republic issues **no token**. This feature **reads** a third-party ERC-20 balance as vote weight. It does not create, sell, or wrap a token. Results are **signal only** and **non-binding**. They trigger no on-chain action.
+**NOT FOR PROFIT** — civic public good, not a commercial product. AGPL-3.0-or-later. ZK-Voting issues **no token**. This feature **reads** a third-party ERC-20 balance as vote weight. It does not create, sell, or wrap a token. Results are **signal only** and **non-binding**. They trigger no on-chain action.
 
 Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes, no poll nav entry, and the civic L2 rejects `poll_params`, `poll_vote`, and `poll_tally`.
 
@@ -10,11 +10,11 @@ Every poll reads one host token: `VOTING_TOKEN_ADDRESS` on `VOTING_TOKEN_CHAIN_I
 
 This follows the MakerDAO **governance polling** shape: one fixed window, one question, plurality or ranked-choice IRV. It is not the continuous executive / “hat” model. There is no token lock, no spell, and no execution.
 
-Republic is stricter than a single snapshot. **Final weight is the minimum end-of-block `balanceOf` from the vote block through the close block.** Tokens that leave reduce the vote, down to removal at zero. Tokens that arrive after the vote never raise it. `closeBlock` is the last token-chain block whose timestamp is before `cutoffTime`.
+ZK-Voting is stricter than a single snapshot. **Final weight is the minimum end-of-block `balanceOf` from the vote block through the close block.** Tokens that leave reduce the vote, down to removal at zero. Tokens that arrive after the vote never raise it. `closeBlock` is the last token-chain block whose timestamp is before `cutoffTime`.
 
 ## Holding is the only credential
 
-A token poll has **no** Republic account, passkey, PIN, registration roll, eligible root, nullifier, or disqualification check. The voter signs an EIP-712 `TokenPollBallot` with the address that holds the tokens (ERC-1271 for a contract wallet). That signature proves control of the address. It is not identity verification.
+A token poll has **no** ZK-Voting account, passkey, PIN, registration roll, eligible root, nullifier, or disqualification check. The voter signs an EIP-712 `TokenPollBallot` with the address that holds the tokens (ERC-1271 for a contract wallet). That signature proves control of the address. It is not identity verification.
 
 One ballot per address. It cannot be changed. Every poll includes an Abstain option. Quorum and pass threshold default to none. Phase 1 privacy is `public_weighted` only. Approval voting is phase 2.
 
@@ -39,7 +39,7 @@ Address-hiding weighted voting conflicts with hold-through-close, because the ta
 
 ## Where the token lives
 
-Republic L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Tests use an in-memory ERC-20 on a local chain id, not a public testnet and not a live RPC.
+ZK-Voting L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Tests use an in-memory ERC-20 on a local chain id, not a public testnet and not a live RPC.
 
 ## Math
 

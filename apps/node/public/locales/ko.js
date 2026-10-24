@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Korean).
+ * NOT FOR PROFIT — ZK-Voting website copy (Korean).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "비영리 — 시민 공공재. 상업 제품이 아닙니다. 토큰 없음. 유권자에게 수수료 없음.",
     nfpBannerExplorer:
       "비영리 — 시민 공공재. 상업 제품이 아닙니다. 토큰 없음. 광고 없음.",
-    brandHome: "Republic 홈",
+    brandHome: "{brand} 홈",
     brandSub: "시민 선거 사무소",
     brandSubExplorer: "L2 블록 탐색기",
     navVoter: "유권자",
@@ -51,30 +51,30 @@ export default {
     navPublic: "공개",
     session: "세션",
     officeBadge: "비영리",
-    loading: "Republic을 불러오는 중…",
-    footerNfp: "비영리 — Republic은 시민 공공재입니다. 상업 제품이 아닙니다.",
+    loading: "{brand}을 불러오는 중…",
+    footerNfp: "비영리 — {brand}은 시민 공공재입니다. 상업 제품이 아닙니다.",
     footerMeta:
-      "제품 이름 Republic. 유권자는 gas를 내지 않습니다. 선택은 영수증에 인쇄되지 않습니다. 프로덕션 identity commitment는 Poseidon을 사용합니다. 이 Node 데모는 keccak256 commitment hex만 표시할 수 있습니다(trapdoor나 시드 구절은 절대 아님).",
+      "제품 이름 {brand}. 유권자는 gas를 내지 않습니다. 선택은 영수증에 인쇄되지 않습니다. 프로덕션 identity commitment는 Poseidon을 사용합니다. 이 Node 데모는 keccak256 commitment hex만 표시할 수 있습니다(trapdoor나 시드 구절은 절대 아님).",
     footerOfficials: "담당자:",
     footerBackOffice: "내부 사무소",
     footerExplorer: "블록 탐색기",
     footerAdmin: "admin",
-    footerAdminMeta: "제품 이름 Republic. 토큰 없음. 광고 없음.",
+    footerAdminMeta: "제품 이름 {brand}. 토큰 없음. 광고 없음.",
     footerL2: "L2 탐색기",
-    footerBackOfficeMeta: "제품 이름 Republic. 선택은 여기에 인쇄되지 않습니다.",
-    footerExplorerMeta: "Republic L2 탐색기. 투표용지 평문은 이 체인의 필드가 아닙니다.",
+    footerBackOfficeMeta: "제품 이름 {brand}. 선택은 여기에 인쇄되지 않습니다.",
+    footerExplorerMeta: "{brand} L2 탐색기. 투표용지 평문은 이 체인의 필드가 아닙니다.",
     footerResults: "선거 결과",
     noscript:
-      "Republic은 기기 passkey(WebAuthn)와 대화하려면 JavaScript가 필요합니다. JavaScript를 켜고 다시 로드하거나, 서기가 운영하는 접근 가능한 투표 사이트를 사용하세요.",
+      "{brand}은 기기 passkey(WebAuthn)와 대화하려면 JavaScript가 필요합니다. JavaScript를 켜고 다시 로드하거나, 서기가 운영하는 접근 가능한 투표 사이트를 사용하세요.",
     metaDescription:
-      "Republic은 비영리 시민 투표 시스템입니다. passkey, Web3 지갑 또는 스마트카드 디지털 ID로 본인을 확인한 뒤 비공개이며 공개적으로 검증 가능한 투표용지를 제출하세요.",
-    titleHome: "Republic — 시민 선거",
-    titleAdmin: "플랫폼 관리 · Republic",
-    titleCeremony: "신뢰 설정 세리머니 · Republic",
-    titleCeremonyTranscript: "세리머니 기록 · Republic",
-    titleCeremonyAdmin: "세리머니 관리 · Republic",
-    titleBackOffice: "내부 사무소 · Republic",
-    titleExplorer: "Republic L2 탐색기",
+      "{brand}은 비영리 시민 투표 시스템입니다. passkey, Web3 지갑 또는 스마트카드 디지털 ID로 본인을 확인한 뒤 비공개이며 공개적으로 검증 가능한 투표용지를 제출하세요.",
+    titleHome: "{brand} — 시민 선거",
+    titleAdmin: "플랫폼 관리 · {brand}",
+    titleCeremony: "신뢰 설정 세리머니 · {brand}",
+    titleCeremonyTranscript: "세리머니 기록 · {brand}",
+    titleCeremonyAdmin: "세리머니 관리 · {brand}",
+    titleBackOffice: "내부 사무소 · {brand}",
+    titleExplorer: "{brand} L2 탐색기",
     titleBallot: "투표용지",
     titleRegister: "등록",
     titleResults: "결과",
@@ -154,7 +154,7 @@ export default {
   home: {
     kicker: "유권자 홈",
     title: "이 Node의 선거",
-    lede: "이곳은 Republic 유권자 창구입니다. 기기 passkey로 등록하고, 명부에 있는지 확인하며, 투표가 열린 동안 투표용지를 표시하세요. Republic은 상업 제품이 아닙니다.",
+    lede: "이곳은 {brand} 유권자 창구입니다. 기기 passkey로 등록하고, 명부에 있는지 확인하며, 투표가 열린 동안 투표용지를 표시하세요. {brand}은 상업 제품이 아닙니다.",
     openCount: "현재 {count}개 선거가 투표용지를 받고 있습니다.",
     openCount_one: "현재 {count}개 선거가 투표용지를 받고 있습니다.",
     walletPresent: "이 기기에 passkey 지갑이 있습니다. Commitment {commitment}…",
@@ -231,7 +231,7 @@ export default {
     stepCommitRest: " 을 선거 명부에 — 이름은 절대 안 되며 지갑을 리프로 쓰지 않습니다.",
     web3Title: "Web3 지갑",
     web3Body:
-      "Republic 연결 메시지에 서명하세요. 그 주소는 고유하게 당신 것입니다. 다른 주소가 활성이어도 내부에서 검증할 수 있습니다.",
+      "{brand} 연결 메시지에 서명하세요. 그 주소는 고유하게 당신 것입니다. 다른 주소가 활성이어도 내부에서 검증할 수 있습니다.",
     bindWallet: "Web3 지갑 연결",
     cardTitle: "스마트카드 디지털 ID",
     cardBody:
@@ -256,7 +256,7 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "commitment 복사",
     copiedCommitment: "Identity commitment를 복사했습니다.",
-    localAddress: "Republic 로컬 주소",
+    localAddress: "{brand} 로컬 주소",
     prfWrap:
       "PRF wrap: 계정 자료는 솔트 republic:account:v1을 쓰고 ZK trapdoor는 솔트 republic:identity:v1을 씁니다. 같은 바이트가 아닙니다.",
     createFirst: "commitment를 파생하려면 passkey를 만드세요. trapdoor는 이 화면에 절대 나타나지 않습니다.",
@@ -357,7 +357,7 @@ export default {
     staleWrap:
       "이 기기에는 계정 시드에서 투표 신원을 파생한 v1 passkey wrap이 있습니다. 등록 페이지에서 재설정하고 투표 전에 새 passkey를 만드세요.",
     noPasskey:
-      "이 기기에 아직 Republic passkey가 없습니다. 먼저 등록한 뒤 투표용지로 돌아오세요.",
+      "이 기기에 아직 {brand} passkey가 없습니다. 먼저 등록한 뒤 투표용지로 돌아오세요.",
     goRegister: "등록으로 이동",
     pollsClosed:
       "이 선거의 투표가 종료되었습니다. 문항은 볼 수 있으며 Node는 새 투표용지를 받지 않습니다.",
@@ -512,7 +512,7 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Republic은 상주 키와 사용자 검증이 있는 기기 passkey(WebAuthn)가 필요합니다. 플랫폼 인증기가 있는 기기에서 최신 브라우저(Safari 16+, Chrome 108+, Firefox 122+, Edge)를 사용하세요. 시드 구절은 절대 표시되지 않습니다.",
+      "{brand}은 상주 키와 사용자 검증이 있는 기기 passkey(WebAuthn)가 필요합니다. 플랫폼 인증기가 있는 기기에서 최신 브라우저(Safari 16+, Chrome 108+, Firefox 122+, Edge)를 사용하세요. 시드 구절은 절대 표시되지 않습니다.",
     productionNote:
       "프로덕션은 keccak256(압축되지 않은 secp256k1 공개키)를 사용한 뒤 마지막 20바이트(Ethereum)를 취합니다. 이 데모는 곡선 라이브러리 없이 secp256k1에서 곱할 수 없어 getAddress()가 republic-local-address로 표시된 SHA-256(seed)[0:20]을 반환합니다.",
     staleWrap:
@@ -867,7 +867,7 @@ export default {
     pluralityTag: "{type} · 상대다수",
   },
   explorer: {
-    kicker: "Republic L2 · 체인 27427",
+    kicker: "{brand} L2 · 체인 27427",
     title: "블록 탐색기",
     lede: "모든 블록의 공개 기록: 등록(commitment만), 접수된 투표용지(nullifier + 투표용지 해시 — 선택은 절대 아님), 자격 박탈, 집계, 롤업 배치. 투표 증명은 그것이 담긴 시간이 끝난 뒤에만 나타나므로 투표소를 떠나는 사람은 실시간 관할 틱과 대응될 수 없습니다. 아래 스냅샷은 직전 종료된 UTC 시간입니다: 공개된 투표용지 수, 그 시간이 끝난 때, 다음 업데이트까지 카운트다운. 선택은 여기에 절대 표시되지 않습니다. 광고 없음. 토큰 없음.",
     searchLabel: "원장 검색",
@@ -878,7 +878,7 @@ export default {
     breadcrumb: "탐색 경로",
     privacyTitle: "투표용지 프라이버시",
     privacyBody:
-      "이 트랜잭션은 자격과 고유성을 증명합니다. 탐색기는 nullifier와 투표용지 해시를 보여 줍니다. 선택 평문은 Republic L2의 필드가 아니며 여기에 렌더되지 않습니다. 투표 행은 그것이 담긴 시간이 끝난 뒤에만 나타나므로 투표소를 나가는 것이 실시간 관할 틱과 대응될 수 없습니다.",
+      "이 트랜잭션은 자격과 고유성을 증명합니다. 탐색기는 nullifier와 투표용지 해시를 보여 줍니다. 선택 평문은 {brand} L2의 필드가 아니며 여기에 렌더되지 않습니다. 투표 행은 그것이 담긴 시간이 끝난 뒤에만 나타나므로 투표소를 나가는 것이 실시간 관할 틱과 대응될 수 없습니다.",
     noTx: "이 보기에 트랜잭션이 없습니다.",
     type: "유형",
     txnHash: "Txn 해시",
@@ -1041,7 +1041,7 @@ export default {
   feedback: {
     title: "의견",
     kicker: "연락",
-    lede: "이 Republic 사이트의 운영자에게 바꿀 점을 알려 주세요. 이것은 투표용지가 아닙니다. 선택, 문서 번호, 시드 구문을 적지 마세요.",
+    lede: "이 {brand} 사이트의 운영자에게 바꿀 점을 알려 주세요. 이것은 투표용지가 아닙니다. 선택, 문서 번호, 시드 구문을 적지 마세요.",
     nameLabel: "이름 (선택)",
     emailLabel: "답장 이메일 (선택)",
     emailHint: "운영자에게 보내는 메일의 Reply-To 주소로만 쓰입니다. 비워 두면 답장 주소를 보내지 않습니다.",

@@ -12,7 +12,7 @@ import {
   normalizeRoleInput,
   roleChangeError,
 } from '../src/capabilities.mjs';
-import { DEFAULT_PRODUCT_NAME, defaultLayout, layoutForAudience, mergeLayout, safeHref, themeCss, validateLayout } from '../src/layout.mjs';
+import { DEFAULT_PRODUCT_NAME, defaultLayout, layoutForAudience, mergeLayout, resolveBranding, safeHref, themeCss, validateLayout } from '../src/layout.mjs';
 import { ManifestError, packageChecksum, sha256Hex, validateManifest, validatePackage } from '../src/plugins/manifest.mjs';
 import { readZip, safeEntryPath, stripCommonRoot, writeZip, ZipError } from '../src/plugins/zip.mjs';
 
@@ -73,10 +73,24 @@ describe('roleChangeError', () => {
 });
 
 describe('layout', () => {
-  test('defaults include branding zk-voting', () => {
-    assert.equal(DEFAULT_PRODUCT_NAME, 'zk-voting');
-    assert.equal(defaultLayout().branding.productName, 'zk-voting');
-    assert.equal(validateLayout({}).branding.productName, 'zk-voting');
+  test('defaults: ZK-Voting, unset branding inherits', () => {
+    assert.equal(DEFAULT_PRODUCT_NAME, 'ZK-Voting');
+    assert.equal(defaultLayout().branding.productName, '');
+    assert.equal(validateLayout({}).branding.productName, '');
+    assert.equal(resolveBranding(validateLayout({}).branding).productName, 'ZK-Voting');
+  });
+  test('legacy saved defaults (zk-voting, Republic) count as not renamed', () => {
+    assert.equal(validateLayout({ branding: { productName: 'zk-voting' } }).branding.productName, '');
+    assert.equal(validateLayout({ branding: { productName: 'Republic' } }).branding.productName, '');
+  });
+  test('short name and tagline are plain text with limits', () => {
+    const b = validateLayout({ branding: { shortName: ' ZKV ', tagline: 'Vote privately.' } }).branding;
+    assert.equal(b.shortName, 'ZKV');
+    assert.equal(b.tagline, 'Vote privately.');
+    assert.throws(() => validateLayout({ branding: { shortName: 'x'.repeat(25) } }));
+    assert.throws(() => validateLayout({ branding: { tagline: 'a "quoted" {brand}' } }));
+    const renamed = resolveBranding(validateLayout({ branding: { productName: 'Civic' } }).branding);
+    assert.equal(renamed.shortName, 'Civic');
   });
   test('product name is plain text, max 60', () => {
     assert.equal(validateLayout({ branding: { productName: ' My Vote ' } }).branding.productName, 'My Vote');

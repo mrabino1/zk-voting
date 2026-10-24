@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Modern Standard Arabic).
+ * NOT FOR PROFIT — ZK-Voting website copy (Modern Standard Arabic).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  * RTL is applied via html[dir=rtl]; this file is the string catalog.
  */
@@ -25,7 +25,7 @@ export default {
       "غير ربحي — منفعة عامة مدنية. ليس منتجًا تجاريًا. لا رمز. لا رسوم على الناخبين.",
     nfpBannerExplorer:
       "غير ربحي — منفعة عامة مدنية. ليس منتجًا تجاريًا. لا رمز. لا إعلانات.",
-    brandHome: "صفحة Republic الرئيسية",
+    brandHome: "صفحة {brand} الرئيسية",
     brandSub: "مكتب الانتخابات المدنية",
     brandSubExplorer: "مستكشف كتل L2",
     navVoter: "الناخب",
@@ -52,30 +52,30 @@ export default {
     navPublic: "عام",
     session: "الجلسة",
     officeBadge: "غير ربحي",
-    loading: "جارٍ تحميل Republic…",
-    footerNfp: "غير ربحي — Republic منفعة عامة مدنية. ليس منتجًا تجاريًا.",
+    loading: "جارٍ تحميل {brand}…",
+    footerNfp: "غير ربحي — {brand} منفعة عامة مدنية. ليس منتجًا تجاريًا.",
     footerMeta:
-      "اسم المنتج Republic. الناخبون لا يدفعون الغاز. الاختيار لا يُطبع أبدًا على إيصال. identity commitments في الإنتاج تستخدم Poseidon؛ قد تعرض هذه التجربة على Node تمثيل keccak256 hex للـ commitment فقط (وليس trapdoor ولا عبارة بذر).",
+      "اسم المنتج {brand}. الناخبون لا يدفعون الغاز. الاختيار لا يُطبع أبدًا على إيصال. identity commitments في الإنتاج تستخدم Poseidon؛ قد تعرض هذه التجربة على Node تمثيل keccak256 hex للـ commitment فقط (وليس trapdoor ولا عبارة بذر).",
     footerOfficials: "المسؤولون:",
     footerBackOffice: "المكتب الداخلي",
     footerExplorer: "مستكشف الكتل",
     footerAdmin: "الإدارة",
-    footerAdminMeta: "اسم المنتج Republic. لا رمز. لا إعلانات.",
+    footerAdminMeta: "اسم المنتج {brand}. لا رمز. لا إعلانات.",
     footerL2: "مستكشف L2",
-    footerBackOfficeMeta: "اسم المنتج Republic. الاختيار لا يُطبع هنا أبدًا.",
-    footerExplorerMeta: "مستكشف Republic L2. نص ورقة الاقتراع ليس حقلًا على هذه السلسلة.",
+    footerBackOfficeMeta: "اسم المنتج {brand}. الاختيار لا يُطبع هنا أبدًا.",
+    footerExplorerMeta: "مستكشف {brand} L2. نص ورقة الاقتراع ليس حقلًا على هذه السلسلة.",
     footerResults: "نتائج الانتخابات",
     noscript:
-      "يحتاج Republic إلى JavaScript للتواصل مع passkey الجهاز (WebAuthn). فعّل JavaScript ثم أعد التحميل، أو استخدم موقع اقتراع ميسر يديره كاتب الانتخابات.",
+      "يحتاج {brand} إلى JavaScript للتواصل مع passkey الجهاز (WebAuthn). فعّل JavaScript ثم أعد التحميل، أو استخدم موقع اقتراع ميسر يديره كاتب الانتخابات.",
     metaDescription:
-      "Republic نظام تصويت مدني غير ربحي. عرّف عن نفسك بـ passkey أو محفظة Web3 أو هوية رقمية على بطاقة ذكية، ثم أدلِ بورقة اقتراع خاصة وقابلة للتحقق علنًا.",
-    titleHome: "Republic — انتخابات مدنية",
-    titleAdmin: "إدارة المنصة · Republic",
-    titleCeremony: "مراسم الإعداد الموثوق · Republic",
-    titleCeremonyTranscript: "سجل المراسم · Republic",
-    titleCeremonyAdmin: "تنسيق المراسم · Republic",
-    titleBackOffice: "المكتب الداخلي · Republic",
-    titleExplorer: "مستكشف Republic L2",
+      "{brand} نظام تصويت مدني غير ربحي. عرّف عن نفسك بـ passkey أو محفظة Web3 أو هوية رقمية على بطاقة ذكية، ثم أدلِ بورقة اقتراع خاصة وقابلة للتحقق علنًا.",
+    titleHome: "{brand} — انتخابات مدنية",
+    titleAdmin: "إدارة المنصة · {brand}",
+    titleCeremony: "مراسم الإعداد الموثوق · {brand}",
+    titleCeremonyTranscript: "سجل المراسم · {brand}",
+    titleCeremonyAdmin: "تنسيق المراسم · {brand}",
+    titleBackOffice: "المكتب الداخلي · {brand}",
+    titleExplorer: "مستكشف {brand} L2",
     titleBallot: "ورقة الاقتراع",
     titleRegister: "التسجيل",
     titleResults: "النتائج",
@@ -155,7 +155,7 @@ export default {
   home: {
     kicker: "صفحة الناخب",
     title: "الانتخابات على هذا Node",
-    lede: "هذا مكتب الناخب في Republic: سجّل بـ passkey الجهاز، وتحقق مما إذا كنت على القائمة، وعبّئ ورقة اقتراع أثناء فتح صناديق الاقتراع. Republic ليس منتجًا تجاريًا.",
+    lede: "هذا مكتب الناخب في {brand}: سجّل بـ passkey الجهاز، وتحقق مما إذا كنت على القائمة، وعبّئ ورقة اقتراع أثناء فتح صناديق الاقتراع. {brand} ليس منتجًا تجاريًا.",
     openCount: "{count} انتخابات تقبل أوراق الاقتراع حاليًا.",
     openCount_one: "انتخابات واحدة تقبل أوراق الاقتراع حاليًا.",
     walletPresent: "محفظة passkey على هذا الجهاز. Commitment {commitment}…",
@@ -232,7 +232,7 @@ export default {
     stepCommitRest: " إلى قائمة انتخابات — ليس اسمًا، وليس المحفظة كورقة.",
     web3Title: "محفظة Web3",
     web3Body:
-      "وقّع رسالة ربط Republic. العنوان لك وحدك. يمكن التحقق منه داخليًا حتى لو كان عنوان آخر هو النشط.",
+      "وقّع رسالة ربط {brand}. العنوان لك وحدك. يمكن التحقق منه داخليًا حتى لو كان عنوان آخر هو النشط.",
     bindWallet: "ربط محفظة Web3",
     cardTitle: "هوية رقمية على بطاقة ذكية",
     cardBody:
@@ -257,7 +257,7 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "نسخ الـ commitment",
     copiedCommitment: "تم نسخ identity commitment.",
-    localAddress: "العنوان المحلي في Republic",
+    localAddress: "العنوان المحلي في {brand}",
     prfWrap:
       "تغليف PRF: مادة الحساب تستخدم الملح republic:account:v1؛ وtrapdoor ZK يستخدم الملح republic:identity:v1. ليستا البايتات نفسها.",
     createFirst: "أنشئ passkey لاشتقاق الـ commitment. الـ trapdoor لا يظهر على هذه الشاشة أبدًا.",
@@ -358,7 +358,7 @@ export default {
     staleWrap:
       "هذا الجهاز لديه تغليف passkey v1 اشتق هوية التصويت من بذرة الحساب. أعد ضبطه في صفحة التسجيل وأنشئ passkey جديدة قبل التصويت.",
     noPasskey:
-      "هذا الجهاز ليس لديه passkey من Republic بعد. سجّل أولًا ثم عد إلى ورقة الاقتراع.",
+      "هذا الجهاز ليس لديه passkey من {brand} بعد. سجّل أولًا ثم عد إلى ورقة الاقتراع.",
     goRegister: "الذهاب إلى التسجيل",
     pollsClosed:
       "أُغلقت صناديق الاقتراع لهذه الانتخابات. يمكنك مراجعة الأسئلة؛ لن يقبل Node ورقة اقتراع جديدة.",
@@ -513,7 +513,7 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "يتطلب Republic passkey جهاز (WebAuthn) بمفتاح مقيم وتحقق من المستخدم. استخدم متصفحًا حديثًا (Safari 16+، Chrome 108+، Firefox 122+، Edge) على جهاز بمصادق منصة. لا تُعرض عبارة بذر أبدًا.",
+      "يتطلب {brand} passkey جهاز (WebAuthn) بمفتاح مقيم وتحقق من المستخدم. استخدم متصفحًا حديثًا (Safari 16+، Chrome 108+، Firefox 122+، Edge) على جهاز بمصادق منصة. لا تُعرض عبارة بذر أبدًا.",
     productionNote:
       "يستخدم الإنتاج keccak256(uncompressed secp256k1 public key) ثم يأخذ آخر 20 بايت (Ethereum). لا تستطيع هذه التجربة الضرب على secp256k1 دون مكتبة منحنى، لذلك يعيد getAddress() القيمة SHA-256(seed)[0:20] المعنونة republic-local-address.",
     staleWrap:
@@ -869,7 +869,7 @@ export default {
     pluralityTag: "{type} · تعددية",
   },
   explorer: {
-    kicker: "Republic L2 · السلسلة 27427",
+    kicker: "{brand} L2 · السلسلة 27427",
     title: "مستكشف الكتل",
     lede: "سجل عام لكل كتلة: التسجيلات (commitments فقط)، أوراق الاقتراع المقبولة (nullifier + ballot hash — وليس الاختيار أبدًا)، إسقاطات الأهلية، الفرز، ودفعات التجميع. تظهر براهين التصويت فقط بعد إغلاق الساعة التي احتوتها، حتى لا يُطابق شخص يغادر مكتب الاقتراع عدّاد دائرة حي. اللقطة أدناه هي آخر ساعة UTC مغلقة: عدد الأوراق المكشوفة، ومتى انتهت تلك الساعة، والعدّ التنازلي للتحديث التالي. الاختيار لا يُعرض هنا أبدًا. لا إعلانات. لا رموز.",
     searchLabel: "البحث في السجل",
@@ -880,7 +880,7 @@ export default {
     breadcrumb: "مسار التنقل",
     privacyTitle: "خصوصية ورقة الاقتراع",
     privacyBody:
-      "تثبت هذه المعاملة الأهلية والتفرّد. يعرض المستكشف الـ nullifier وballot hash. نص الاختيار ليس حقلًا على Republic L2 ولا يُعرض هنا أبدًا. تظهر صفوف التصويت فقط بعد إغلاق الساعة التي احتوتها، حتى لا يُطابق مغادرة مكتب الاقتراع زيادة دائرة حيّة.",
+      "تثبت هذه المعاملة الأهلية والتفرّد. يعرض المستكشف الـ nullifier وballot hash. نص الاختيار ليس حقلًا على {brand} L2 ولا يُعرض هنا أبدًا. تظهر صفوف التصويت فقط بعد إغلاق الساعة التي احتوتها، حتى لا يُطابق مغادرة مكتب الاقتراع زيادة دائرة حيّة.",
     noTx: "لا معاملات في هذا العرض.",
     type: "النوع",
     txnHash: "تجزئة المعاملة",
@@ -1044,7 +1044,7 @@ export default {
   feedback: {
     title: "ملاحظات",
     kicker: "تواصل",
-    lede: "أخبر مشغّل موقع Republic هذا بما ينبغي تغييره. هذه ليست ورقة اقتراع. لا تُدرج خيار تصويت أو رقم وثيقة أو عبارة استرداد.",
+    lede: "أخبر مشغّل موقع {brand} هذا بما ينبغي تغييره. هذه ليست ورقة اقتراع. لا تُدرج خيار تصويت أو رقم وثيقة أو عبارة استرداد.",
     nameLabel: "الاسم (اختياري)",
     emailLabel: "بريد للرد (اختياري)",
     emailHint: "يُستخدم فقط عنوان Reply-To في الرسالة إلى المشغّل. اتركه فارغًا إن لم ترد إرسال عنوان للرد.",

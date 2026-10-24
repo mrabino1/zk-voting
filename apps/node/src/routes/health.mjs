@@ -1,5 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import { brandName } from '../branding.mjs';
 import { Router } from 'express';
 
 import { asyncHandler } from '../http.mjs';
@@ -56,7 +57,7 @@ export function configRouter(deps) {
       res.json({
         nfp: true,
         app: 'zk-voting',
-        product: 'Republic',
+        product: brandName(),
         rpName: deps.config.rpName,
         rpID: deps.config.rpID,
         vote: {

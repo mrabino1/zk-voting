@@ -1,7 +1,7 @@
 # NOT FOR PROFIT
 
 **This is not a commercial sequencer, not a token, and not a business.**
-Republic L2 exists so a city, county, state, nation, or any body that must
+ZK-Voting L2 exists so a city, county, state, nation, or any body that must
 run a binding election can settle **our own application-specific ZK rollup**
 on Ethereum. Jurisdictions run it **at cost**. Nobody is to make money off
 this directory.
@@ -10,7 +10,7 @@ this directory.
 
 ## What “our L2” and “our prover” means
 
-Republic is inspired by [Lighter](https://lighter.xyz): an application-specific
+ZK-Voting is inspired by [Lighter](https://lighter.xyz): an application-specific
 ZK rollup that **proves operations** and **settles those proofs on Ethereum**.
 We do **not** rent a commercial sequencer. We do **not** issue a gas token.
 

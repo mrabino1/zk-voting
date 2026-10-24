@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-How to host Republic / zk-voting: the Node process, Foundry contracts, Republic L2 (chainId **27427**), and the split between **`test/unstable`** and **`master`**.
+How to host ZK-Voting: the Node process, Foundry contracts, ZK-Voting L2 (chainId **27427**), and the split between **`test/unstable`** and **`master`**.
 
 This software may be run **at cost** by a government, county clerk, union, cooperative, or volunteer. It must not be sold as SaaS, wrapped in a token, or used to skim voter or jurisdiction funds. The paymaster sponsors L2 gas; voters are not a revenue line. Dollar and GB ranges: [`/voting_cost_estimate.md`](../voting_cost_estimate.md).
 
@@ -12,7 +12,7 @@ This software may be run **at cost** by a government, county clerk, union, coope
 
 1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/republic.json`). **No SQLite.**
 2. **`smart-contracts/`** — Solidity 0.8.24, Foundry (`via_ir = true`). Factory, registries, inbox, `Tally.sol`, passkey account, L1 `RollupSettlement`.
-3. **`l2/`** — Republic **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
+3. **`l2/`** — ZK-Voting **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
 4. **`circuits/`** — circom vote / tally. Foundry unit tests use `MockVerifier`. Proving path is **in progress** (`npm run circuits:status`). Local setup is untrusted until Poseidon + a ceremony exist.
 
 The Node is allowed to be down. Chain records (L2, and L1 if you mirrored the tally) must still be enough for an independent verifier.
@@ -73,13 +73,13 @@ Restart order: **pm2** → **systemd** unit → **docker compose**. If none are 
 
 Deploy refuses a **dirty worktree**. Commit or stash first.
 
-Root [`.dockerignore`](../.dockerignore) applies to every image built from this repo (Node, Republic L2, Foundry deploy). It keeps `.git`, `node_modules`, `.env` / keys, Foundry `out/` `cache/` `broadcast/`, `apps/node/data`, `l2/data`, and Circom trusted-setup files (`.ptau`, `.zkey`) out of the build context. Mount voter data and proving keys as volumes; do not `COPY` them into the image.
+Root [`.dockerignore`](../.dockerignore) applies to every image built from this repo (Node, ZK-Voting L2, Foundry deploy). It keeps `.git`, `node_modules`, `.env` / keys, Foundry `out/` `cache/` `broadcast/`, `apps/node/data`, `l2/data`, and Circom trusted-setup files (`.ptau`, `.zkey`) out of the build context. Mount voter data and proving keys as volumes; do not `COPY` them into the image.
 
 ---
 
 ## Docker Compose
 
-Root [`docker-compose.yml`](../docker-compose.yml) is the host path `system_actions.sh` already looks for. One command builds the Node (API + SPA) and Republic L2 (sequencer + prover), the same shape as a typical frontend Compose file: images from this tree, published ports, health checks, named volumes, `restart: unless-stopped`.
+Root [`docker-compose.yml`](../docker-compose.yml) is the host path `system_actions.sh` already looks for. One command builds the Node (API + SPA) and ZK-Voting L2 (sequencer + prover), the same shape as a typical frontend Compose file: images from this tree, published ports, health checks, named volumes, `restart: unless-stopped`.
 
 ```bash
 cp .env.example .env          # or paste README § Copy-paste credentials into .env
@@ -94,7 +94,7 @@ docker compose down           # or: npm run compose:down
 
 | Service | Image | Host port | Role |
 | --- | --- | --- | --- |
-| `node` | `Dockerfile` | `${ZK_VOTING_PORT:-3000}` | Republic Node — voter / admin SPA + JSON API |
+| `node` | `Dockerfile` | `${ZK_VOTING_PORT:-3000}` | ZK-Voting Node — voter / admin SPA + JSON API |
 | `l2` | `l2/Dockerfile` | `${L2_RPC_PORT:-8546}` | Sequencer JSON-RPC (`GET /health`, `eth_chainId`) |
 | `prover` | same as `l2` | none | Batch prover; writes proofs on the `l2-data` volume |
 | `archive` | same as `l2` | none | Hourly L2 attic to S3/R2. Default on. Empty bucket and no `file://` sink warns and does not prune. `ARCHIVE_ENABLED=0` turns it off |
@@ -259,7 +259,7 @@ FACTORY=0x… START=… CUTOFF=… TITLE='County general' \
 
 Prefer the back office when you want the Node record and the factory clone created in one step.
 
-### Republic L2
+### ZK-Voting L2
 
 ```bash
 npm run l2:sequencer   # civic JSON-RPC on :8546
@@ -378,7 +378,7 @@ Returning users sign in on `/`, `/admin`, and `/back-office` (same chrome). Firs
 3. `POST /api/auth/passkey/login/finish` — verify assertion, then email MFA when required.
 4. The credential id already maps to a Person. Roles are unchanged (`voter`, `clerk`, `platform_admin`, …).
 
-Republic implements this with `@simplewebauthn/server`, Express, and the JSON store: challenge, assertion, then an HttpOnly session.
+ZK-Voting implements this with `@simplewebauthn/server`, Express, and the JSON store: challenge, assertion, then an HttpOnly session.
 
 **Ethereum wallet**
 
@@ -485,7 +485,7 @@ This is the default. The Node **still tallies**. Certification is a documented n
 
 | Variable | Required to post | Purpose |
 | --- | --- | --- |
-| `L1_RPC` (alias `L1_RPC_URL`) | yes | Ethereum JSON-RPC (Sepolia / Anvil). Not Republic L2. |
+| `L1_RPC` (alias `L1_RPC_URL`) | yes | Ethereum JSON-RPC (Sepolia / Anvil). Not ZK-Voting L2. |
 | `L1_TALLY_MIRROR_ADDRESS` (alias `TALLY_MIRROR`) | yes | `L1TallyMirror` from `DeployL1.s.sol` / `DeployLocal.s.sol` |
 | `L1_PUBLISHER_PRIVATE_KEY` (alias `L1_PRIVATE_KEY`) | yes | Key that is `admin` or `setPublisher`'d on the mirror. **Not** the L2 prover `PRIVATE_KEY`. |
 | `L1_SETTLEMENT_ADDRESS` (alias `SETTLEMENT`) | no | `RollupSettlement` — attach current L2 state root |

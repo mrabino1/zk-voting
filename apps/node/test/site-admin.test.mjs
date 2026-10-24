@@ -185,7 +185,7 @@ describe('site admin: roles, layout, plugins', () => {
     const pub = await api('GET', '/api/layout');
     assert.equal(pub.json.layout.nav.items[0].label, 'Help');
     assert.equal(pub.json.layout.regions.banner[0].body, 'Hello voters');
-    assert.equal(pub.json.layout.branding.productName, 'zk-voting');
+    assert.equal(pub.json.layout.branding.productName, 'ZK-Voting');
     const css = await api('GET', '/api/layout/theme.css');
     assert.match(css.text, /--focus:\s*#1d4ed8/);
   });
@@ -203,9 +203,9 @@ describe('site admin: roles, layout, plugins', () => {
     assert.equal(css.status, 400);
   });
 
-  test('product name defaults to zk-voting and super admin can rename it', async () => {
+  test('product name defaults to ZK-Voting and super admin can rename it', async () => {
     const before = await api('GET', '/api/layout');
-    assert.equal(before.json.layout.branding.productName, 'zk-voting');
+    assert.equal(before.json.layout.branding.productName, 'ZK-Voting');
     const r = await api('PUT', '/api/site-admin/layout', {
       jar: jars.super,
       body: { layout: { ...before.json.layout, branding: { productName: 'County Votes' } } },
@@ -221,7 +221,7 @@ describe('site admin: roles, layout, plugins', () => {
     assert.equal((await api('GET', '/api/layout')).json.layout.branding.productName, 'County Votes');
     const reset = await api('POST', '/api/site-admin/layout/reset', { jar: jars.super, body: {} });
     assert.equal(reset.status, 200);
-    assert.equal((await api('GET', '/api/layout')).json.layout.branding.productName, 'zk-voting');
+    assert.equal((await api('GET', '/api/layout')).json.layout.branding.productName, 'ZK-Voting');
   });
 
   test('admin cannot create or demote super admins; last super admin is protected', async () => {
@@ -451,7 +451,8 @@ describe('site admin: roles, layout, plugins', () => {
     assert.doesNotMatch(r.text, /<script>(?!<\/script>)/);
     assert.doesNotMatch(r.text, /\sstyle=/);
     assert.doesNotMatch(r.text, /\son[a-z]+=/i);
-    assert.match(r.text, /zk-voting/);
+    assert.match(r.text, /ZK-Voting/);
     assert.doesNotMatch(r.text, /Republic/);
+    assert.doesNotMatch(r.text, /%BRAND_/);
   });
 });

@@ -1,4 +1,4 @@
-# Expected cost to operate Republic
+# Expected cost to operate ZK-Voting
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. Jurisdictions run this **at cost** (hosts, L1 gas, paper notice). There is no token, no paid tier, and no voter fee. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
 
@@ -307,7 +307,7 @@ Glacier / IA / R2 lifecycle can be cheaper for cold election archives; retrieval
 
 ### What “live” means here (**repo fact**)
 
-Republic **does not** show a live precinct tick. Vote proofs and public turnout publish **once an hour** after that hour closes (`DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests). A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish **once an hour** after that hour closes (`DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests). A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 | Surface | During the poll | After certified tally |
 | --- | --- | --- |

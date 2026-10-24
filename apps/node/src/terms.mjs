@@ -3,6 +3,7 @@
 // exact PDF bytes (the hash stored on accept: SHA-256 of the emailed PDF).
 // Markdown SHA-256 is published too.
 
+import { DEFAULT_BRAND_NAME, brandName } from './branding.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,7 +15,7 @@ import { buildDeterministicPdf } from './pdf.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TERMS_MARKDOWN_PATH = path.join(PKG_ROOT, 'legal', 'terms.md');
-export const TERMS_PDF_FILENAME = 'republic-terms.pdf';
+export const TERMS_PDF_FILENAME = 'zk-voting-terms.pdf';
 
 /** Terms hash is 64 hex chars — SHA-256 of the PDF bytes. */
 export const TERMS_HASH_ALGO = 'sha256';
@@ -138,7 +139,7 @@ export function loadTermsDocument({ filePath = TERMS_MARKDOWN_PATH } = {}) {
   const { meta, body } = parseFrontMatter(raw);
   const markdown = body.replace(/\s+$/, '') + '\n';
   const markdownBytes = Buffer.from(markdown, 'utf8');
-  const title = meta.title || 'Republic Terms of Use';
+  const title = meta.title || `${brandName()} Terms of Use`;
   const lastUpdated = meta.lastUpdated || '2026-09-19';
   const version = String(meta.version || '1');
   const filename = meta.filename || TERMS_PDF_FILENAME;
@@ -146,6 +147,8 @@ export function loadTermsDocument({ filePath = TERMS_MARKDOWN_PATH } = {}) {
     title,
     lines: markdownToPdfLines(markdown, { skipTitle: title }),
     created: lastUpdated,
+    // Fixed so the accepted-terms PDF hash does not change when the site is renamed.
+    author: DEFAULT_BRAND_NAME,
   });
   const plainTextSha256 = sha256Hex(markdownBytes);
   return {
@@ -200,11 +203,11 @@ export function publicTermsView(doc = getTermsDocument()) {
 }
 
 export function termsEmailBodies(doc) {
-  const subject = 'Republic Terms of Use (PDF copy)';
+  const subject = `${brandName()} Terms of Use (PDF copy)`;
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
-    `A PDF of the Republic Terms of Use you accepted is attached (${doc.filename}).`,
+    `A PDF of the ${brandName()} Terms of Use you accepted is attached (${doc.filename}).`,
     '',
     `PDF SHA-256: ${doc.pdfSha256}`,
     `Markdown SHA-256: ${doc.markdownSha256}`,
@@ -217,7 +220,7 @@ export function termsEmailBodies(doc) {
   const html = `<!DOCTYPE html>
 <html lang="en"><body style="font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5;color:#111">
 <p class="nfp" style="font-weight:700;letter-spacing:0.04em">NOT FOR PROFIT</p>
-<p>A PDF of the Republic Terms of Use you accepted is attached (<code>${doc.filename}</code>).</p>
+<p>A PDF of the ${escapeHtml(brandName())} Terms of Use you accepted is attached (<code>${doc.filename}</code>).</p>
 <p>PDF SHA-256 (stored fingerprint):</p>
 <p style="font-family:ui-monospace,monospace;font-size:0.85rem;word-break:break-all">${doc.pdfSha256}</p>
 <p>Markdown SHA-256: <code>${doc.markdownSha256}</code></p>
@@ -246,11 +249,11 @@ export function termsPageUrls(config = {}) {
  * Sent once per member per plain-text hash.
  */
 export function termsUpdatedEmailBodies(doc, { pageUrl = '/terms', pdfUrl = '/terms.pdf' } = {}) {
-  const subject = 'Republic Terms of Use were updated';
+  const subject = `${brandName()} Terms of Use were updated`;
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
-    'The Republic Terms of Use were updated. The current terms are attached as a PDF.',
+    `The ${brandName()} Terms of Use were updated. The current terms are attached as a PDF.`,
     '',
     `Read them: ${pageUrl}`,
     `PDF: ${pdfUrl}`,
@@ -264,7 +267,7 @@ export function termsUpdatedEmailBodies(doc, { pageUrl = '/terms', pdfUrl = '/te
   const html = `<!DOCTYPE html>
 <html lang="en"><body style="font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5;color:#111">
 <p class="nfp" style="font-weight:700;letter-spacing:0.04em">NOT FOR PROFIT</p>
-<p>The Republic Terms of Use were updated. The current terms are attached as a PDF.</p>
+<p>The ${escapeHtml(brandName())} Terms of Use were updated. The current terms are attached as a PDF.</p>
 <p><a href="${escapeHtml(pageUrl)}">Read the Terms of Use</a></p>
 <p>PDF SHA-256: <code>${escapeHtml(doc.pdfSha256)}</code></p>
 <p>Plain-text SHA-256: <code>${escapeHtml(doc.plainTextSha256)}</code></p>

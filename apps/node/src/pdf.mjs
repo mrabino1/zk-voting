@@ -5,6 +5,7 @@
 // empty user password (anyone can open/read/print/copy), owner password
 // derived per receipt, permission flags that forbid modify/assemble.
 
+import { brandName } from './branding.mjs';
 import { createHash } from 'node:crypto';
 
 import { qrPdfOperators } from './qr.mjs';
@@ -83,7 +84,7 @@ function pdfDate(isoDay) {
 }
 
 function paginate(title, lines) {
-  const wrapped = [{ size: TITLE_SIZE, text: String(title || 'Republic Terms of Use') }, { size: FONT_SIZE, text: '' }];
+  const wrapped = [{ size: TITLE_SIZE, text: String(title || `${brandName()} Terms of Use`) }, { size: FONT_SIZE, text: '' }];
   for (const line of lines) {
     for (const chunk of wrapPdfLine(line, PDF_MAX_CHARS)) {
       wrapped.push({ size: FONT_SIZE, text: chunk });
@@ -104,7 +105,7 @@ function paginate(title, lines) {
     yUsed += h;
   }
   if (current.length) pages.push(current);
-  if (!pages.length) pages.push([{ size: FONT_SIZE, text: String(title || 'Republic') }]);
+  if (!pages.length) pages.push([{ size: FONT_SIZE, text: String(title || brandName()) }]);
   return pages;
 }
 
@@ -349,7 +350,18 @@ function authenticityContentStream(authenticity) {
  * }} input
  * @returns {Buffer}
  */
-export function buildDeterministicPdf({ title, lines, created = '2026-09-19', protect = null, authenticity = null }) {
+/**
+ * `author` names the product in the PDF info dictionary. It defaults to the live
+ * brand; pass a fixed value when the PDF bytes must hash the same across renames.
+ */
+export function buildDeterministicPdf({
+  title,
+  lines,
+  created = '2026-09-19',
+  protect = null,
+  authenticity = null,
+  author = brandName(),
+}) {
   const pageRows = paginate(title, lines);
   const hasAuth = Boolean(authenticity && (authenticity.modules || (authenticity.lines && authenticity.lines.length)));
   const catalogId = 1;
@@ -403,11 +415,11 @@ export function buildDeterministicPdf({ title, lines, created = '2026-09-19', pr
   bodies[fontId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
   if (locked) {
     bodies[infoId] =
-      `<< /Title ${encryptedPdfString(fileKey, infoId, title)} /Author ${encryptedPdfString(fileKey, infoId, 'Republic')} /Creator ${encryptedPdfString(fileKey, infoId, 'Republic Node')} /Producer ${encryptedPdfString(fileKey, infoId, 'Republic Node NOT FOR PROFIT')} /CreationDate ${encryptedPdfString(fileKey, infoId, pdfDate(created))} /ModDate ${encryptedPdfString(fileKey, infoId, pdfDate(created))} >>`;
+      `<< /Title ${encryptedPdfString(fileKey, infoId, title)} /Author ${encryptedPdfString(fileKey, infoId, author)} /Creator ${encryptedPdfString(fileKey, infoId, `${author} node`)} /Producer ${encryptedPdfString(fileKey, infoId, `${author} node NOT FOR PROFIT`)} /CreationDate ${encryptedPdfString(fileKey, infoId, pdfDate(created))} /ModDate ${encryptedPdfString(fileKey, infoId, pdfDate(created))} >>`;
     bodies[encryptId] = encryptBody;
   } else {
     bodies[infoId] =
-      `<< /Title (${pdfEscape(title)}) /Author (Republic) /Creator (Republic Node) /Producer (Republic Node NOT FOR PROFIT) /CreationDate (${pdfDate(created)}) /ModDate (${pdfDate(created)}) >>`;
+      `<< /Title (${pdfEscape(title)}) /Author (${pdfEscape(author)}) /Creator (${pdfEscape(author)} node) /Producer (${pdfEscape(author)} node NOT FOR PROFIT) /CreationDate (${pdfDate(created)}) /ModDate (${pdfDate(created)}) >>`;
   }
 
   for (let i = 0; i < pageCount; i += 1) {

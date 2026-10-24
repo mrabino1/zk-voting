@@ -315,7 +315,7 @@ describe('terms notice on sign-in', () => {
     const stamped = login.json.user.termsNotifiedAt;
     const mine = updatedMessages(mailer).filter((row) => row.to === 'new-member@example.com');
     assert.equal(mine.length, 1);
-    assert.equal(mine[0].subject, 'Republic Terms of Use were updated');
+    assert.equal(mine[0].subject, 'ZK-Voting Terms of Use were updated');
     assert.match(mine[0].text, /https:\/\/vote\.example\.test\/terms/);
     assert.match(mine[0].text, new RegExp(doc.plainTextSha256));
     assert.equal(mine[0].attachments.length, 1);

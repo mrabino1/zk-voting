@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (English, default).
+ * NOT FOR PROFIT — ZK-Voting website copy (English, default).
  * Operator docs and Solidity stay English; only the Node UI is localized.
  */
 
@@ -24,7 +24,7 @@ export default {
       "NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.",
     nfpBannerExplorer:
       "NOT FOR PROFIT — civic public good. Not a commercial product. No token. No ads.",
-    brandHome: "Republic home",
+    brandHome: "{brand} home",
     brandSub: "Office of civic elections",
     brandSubExplorer: "L2 block explorer",
     navVoter: "Voter",
@@ -51,30 +51,30 @@ export default {
     navPublic: "Public",
     session: "Session",
     officeBadge: "Not for profit",
-    loading: "Loading Republic…",
-    footerNfp: "NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.",
+    loading: "Loading {brand}…",
+    footerNfp: "NOT FOR PROFIT — {brand} is a civic public good. Not a commercial product.",
     footerMeta:
-      "Product name Republic. Voters do not pay gas. Choice is never printed on a receipt. Production identity commitments use Poseidon; this Node demo may display a keccak256 commitment hex only (never a trapdoor or seed phrase).",
+      "Product name {brand}. Voters do not pay gas. Choice is never printed on a receipt. Production identity commitments use Poseidon; this Node demo may display a keccak256 commitment hex only (never a trapdoor or seed phrase).",
     footerOfficials: "Officials:",
     footerBackOffice: "back office",
     footerExplorer: "block explorer",
     footerAdmin: "admin",
-    footerAdminMeta: "Product name Republic. No token. No ads.",
+    footerAdminMeta: "Product name {brand}. No token. No ads.",
     footerL2: "L2 explorer",
-    footerBackOfficeMeta: "Product name Republic. Choice is never printed here.",
-    footerExplorerMeta: "Republic L2 explorer. Ballot plaintext is not a field on this chain.",
+    footerBackOfficeMeta: "Product name {brand}. Choice is never printed here.",
+    footerExplorerMeta: "{brand} L2 explorer. Ballot plaintext is not a field on this chain.",
     footerResults: "Election results",
     noscript:
-      "Republic needs JavaScript to talk to your device passkey (WebAuthn). Enable JavaScript and reload, or use an accessible poll site operated by your clerk.",
+      "{brand} needs JavaScript to talk to your device passkey (WebAuthn). Enable JavaScript and reload, or use an accessible poll site operated by your clerk.",
     metaDescription:
-      "Republic is a not-for-profit civic voting system. Identify yourself with a passkey, Web3 wallet, or smart-card digital ID, then cast a private, publicly verifiable ballot.",
-    titleHome: "Republic — civic elections",
-    titleAdmin: "Platform admin · Republic",
-    titleCeremony: "Trusted-setup ceremony · Republic",
-    titleCeremonyTranscript: "Ceremony transcript · Republic",
-    titleCeremonyAdmin: "Ceremony coordinator · Republic",
-    titleBackOffice: "Back office · Republic",
-    titleExplorer: "Republic L2 explorer",
+      "{brand} is a not-for-profit civic voting system. Identify yourself with a passkey, Web3 wallet, or smart-card digital ID, then cast a private, publicly verifiable ballot.",
+    titleHome: "{brand} — civic elections",
+    titleAdmin: "Platform admin · {brand}",
+    titleCeremony: "Trusted-setup ceremony · {brand}",
+    titleCeremonyTranscript: "Ceremony transcript · {brand}",
+    titleCeremonyAdmin: "Ceremony coordinator · {brand}",
+    titleBackOffice: "Back office · {brand}",
+    titleExplorer: "{brand} L2 explorer",
     titleBallot: "Ballot",
     titleRegister: "Register",
     titleResults: "Results",
@@ -154,7 +154,7 @@ export default {
   home: {
     kicker: "Voter home",
     title: "Elections on this Node",
-    lede: "This is the voter desk for Republic: register with a device passkey, check whether you are on the roll, and mark a ballot while polls are open. Republic is not a commercial product.",
+    lede: "This is the voter desk for {brand}: register with a device passkey, check whether you are on the roll, and mark a ballot while polls are open. {brand} is not a commercial product.",
     openCount: "{count} elections currently accepting ballots.",
     openCount_one: "{count} election currently accepting ballots.",
     walletPresent: "Passkey wallet on this device. Commitment {commitment}…",
@@ -231,7 +231,7 @@ export default {
     stepCommitRest: " to an election roll — never a name, never the wallet as the leaf.",
     web3Title: "Web3 wallet",
     web3Body:
-      "Sign a Republic binding message. The address is uniquely yours. It can be verified internally even if another address is the active one.",
+      "Sign a {brand} binding message. The address is uniquely yours. It can be verified internally even if another address is the active one.",
     bindWallet: "Bind Web3 wallet",
     cardTitle: "Smart card digital ID",
     cardBody:
@@ -256,7 +256,7 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "Copy commitment",
     copiedCommitment: "Identity commitment copied.",
-    localAddress: "Republic local address",
+    localAddress: "{brand} local address",
     prfWrap:
       "PRF wrap: account material uses salt republic:account:v1; the ZK trapdoor uses salt republic:identity:v1. They are not the same bytes.",
     createFirst: "Create a passkey to derive the commitment. The trapdoor never appears on this screen.",
@@ -357,7 +357,7 @@ export default {
     staleWrap:
       "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting.",
     noPasskey:
-      "This device does not have a Republic passkey yet. Register first, then return to the ballot.",
+      "This device does not have a {brand} passkey yet. Register first, then return to the ballot.",
     goRegister: "Go to registration",
     pollsClosed:
       "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot.",
@@ -512,7 +512,7 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Republic requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.",
+      "{brand} requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.",
     productionNote:
       "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled republic-local-address.",
     staleWrap:
@@ -872,7 +872,7 @@ export default {
     pluralityTag: "{type} · plurality",
   },
   explorer: {
-    kicker: "Republic L2 · chain 27427",
+    kicker: "{brand} L2 · chain 27427",
     title: "Block explorer",
     lede: "Public record of every block: registrations (commitments only), accepted ballots (nullifier + ballot hash — never the choice), disqualifications, external-party vetoes, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes, so a person leaving a voting office cannot be matched to a live jurisdiction tick. The snapshot below is the last closed UTC hour: disclosed ballot count, when that hour ended, and the countdown to the next update. Choice is never shown here. No ads. No tokens.",
     searchLabel: "Search the ledger",
@@ -883,7 +883,7 @@ export default {
     breadcrumb: "Breadcrumb",
     privacyTitle: "Ballot privacy",
     privacyBody:
-      "This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash. Choice plaintext is not a field on Republic L2 and is never rendered here. Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.",
+      "This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash. Choice plaintext is not a field on {brand} L2 and is never rendered here. Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.",
     noTx: "No transactions in this view.",
     type: "Type",
     txnHash: "Txn hash",
@@ -1047,7 +1047,7 @@ export default {
   feedback: {
     title: "Feedback",
     kicker: "Contact",
-    lede: "Tell the operator of this Republic site what should change. This is not a ballot. Do not include a vote choice, a document number, or a seed phrase.",
+    lede: "Tell the operator of this {brand} site what should change. This is not a ballot. Do not include a vote choice, a document number, or a seed phrase.",
     nameLabel: "Name (optional)",
     emailLabel: "Reply-to email (optional)",
     emailHint: "Used only as the Reply-To address on the message to the operator. Leave blank to send no reply address.",

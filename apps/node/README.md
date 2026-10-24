@@ -1,9 +1,9 @@
 # NOT FOR PROFIT
 
-**Republic** Node — civic public good, not a commercial product.
+**ZK-Voting** Node — civic public good, not a commercial product.
 
-This package is the long-lived Node process for **zk-voting**
-(product name Republic): JSON HTTP API, WebAuthn passkeys, email / Web3 /
+This package is the long-lived Node process for **ZK-Voting**
+(product name ZK-Voting by default): JSON HTTP API, WebAuthn passkeys, email / Web3 /
 smart-card / license-passport person identity with AWS SES email MFA, a gasless
 vote relayer, an L2 block-explorer backend, and a
 static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
@@ -122,7 +122,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
 | `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
-| `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
+| `CHAIN_ID` | `27427` | ZK-Voting L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, clerk `POST /api/elections` calls `ElectionFactory.createElection` and `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem. Unset = JSON-only demo. |
 | `ELECTION_FACTORY_ADDRESS` | _empty_ | Shared factory for every forked Node (`FACTORY` alias). Env wins over `/office/site`. Required when `CHAIN_RPC` is set unless the site pin is set. |
 | `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
@@ -159,7 +159,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
 | `REPUBLIC_HASH_SCHEME` | `keccak-dev-v1` (Poseidon if `REPUBLIC_PROVING_PATH=1`) | HashLeftRight advertised in config. The vote circuit is Poseidon. See `/circuits/HASH_SCHEME.md` |
 
-Passkey rpName is always **Republic**.
+Passkey rpName is the current product name (site admin > Branding, else `BRAND_NAME`, else **ZK-Voting**).
 
 Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **smart-card reader**, **license/passport**, and passkey. A person may bind **up to 5 emails** (exactly one primary) and **up to 5 passkeys**. Register a person first (`/register`). Manage them on `/me`. Every path completes with an email one-time code when SES MFA is on (primary inbox by default). Caps are code constants — no extra env vars. Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
 

@@ -228,7 +228,7 @@ function mod(n) {
 /** @param {Array<string|number|bigint>} inputs exactly 2 field elements */
 export function poseidon(inputs) {
   if (!Array.isArray(inputs) || inputs.length !== 2) {
-    throw new Error("poseidon: Republic Poseidon(2) expects exactly 2 inputs");
+    throw new Error("poseidon: Poseidon(2) expects exactly 2 inputs");
   }
   const state = [0n, mod(inputs[0]), mod(inputs[1])];
   const total = N_ROUNDS_F + N_ROUNDS_P;

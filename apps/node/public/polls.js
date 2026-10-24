@@ -1,7 +1,7 @@
 /**
  * NOT FOR PROFIT — civic public good, not a commercial product.
  * ERC-20 weighted signal polls. Holding the token is the only credential.
- * No Republic account, passkey, PIN, or identity bind.
+ * No ZK-Voting account, passkey, PIN, or identity bind.
  */
 
 import { t } from "./i18n.js";

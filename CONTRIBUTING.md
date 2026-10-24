@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
 
-Republic / zk-voting is a public-interest election stack: private ballots, public eligibility and disqualification **process**, Ethereum settlement. There is no token, no paid tier, and no vendor lock-in. If a patch adds fees, skimmable ETH (beyond gas sponsorship), or commercialization copy, it will be rejected.
+ZK-Voting is a public-interest election stack: private ballots, public eligibility and disqualification **process**, Ethereum settlement. There is no token, no paid tier, and no vendor lock-in. If a patch adds fees, skimmable ETH (beyond gas sponsorship), or commercialization copy, it will be rejected.
 
 ## Branches
 

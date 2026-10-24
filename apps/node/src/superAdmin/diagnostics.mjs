@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
+import { brandName } from '../branding.mjs';
 import { electionState, STATE_NAMES } from '../electionState.mjs';
 import { countPasskeys, emailHint } from '../identity.mjs';
 import { readArchiveIndex } from '../../../../l2/archive/job.mjs';
@@ -77,7 +78,7 @@ export function configDiag(deps) {
   return {
     nfp: true,
     app: config.app || 'zk-voting',
-    product: config.product || 'Republic',
+    product: config.product || brandName(),
     port: config.port,
     host: config.host,
     chainId: config.chainId,

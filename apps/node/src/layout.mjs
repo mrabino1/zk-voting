@@ -12,11 +12,29 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+import {
+  BRAND_NAME_MAX,
+  BRAND_SHORT_NAME_MAX,
+  BRAND_TAGLINE_MAX,
+  DEFAULT_BRAND_NAME,
+  LEGACY_DEFAULT_NAMES,
+  brandDefaults,
+  isSafeBrandText,
+} from './branding.mjs';
 import { HttpError } from './http.mjs';
 
 export const LAYOUT_VERSION = 1;
-/** Product name until a super admin or admin renames it (Appearance > Branding). */
-export const DEFAULT_PRODUCT_NAME = 'zk-voting';
+/**
+ * Product name until a super admin or admin renames it (Appearance > Branding).
+ * BRAND_NAME in the environment replaces this default; see branding.mjs.
+ */
+export const DEFAULT_PRODUCT_NAME = DEFAULT_BRAND_NAME;
+/** Branding fields a layout may set. Empty string = inherit (env / built-in default). */
+export const BRANDING_FIELDS = Object.freeze({
+  productName: BRAND_NAME_MAX,
+  shortName: BRAND_SHORT_NAME_MAX,
+  tagline: BRAND_TAGLINE_MAX,
+});
 export const REGIONS = Object.freeze(['banner', 'header', 'sidebar', 'home', 'footer']);
 export const AUDIENCES = Object.freeze(['all', 'signed_in', 'signed_out', 'officer', 'admin']);
 export const WIDGET_TYPES = Object.freeze(['notice', 'links', 'plugin']);
@@ -57,7 +75,35 @@ export function defaultLayout() {
     },
     regions: Object.fromEntries(REGIONS.map((r) => [r, []])),
     theme: { light: {}, dark: {} },
-    branding: { productName: DEFAULT_PRODUCT_NAME },
+    // Empty strings mean "not renamed": the env / built-in default applies.
+    branding: { productName: '', shortName: '', tagline: '' },
+  };
+}
+
+export function brandingLayer(input) {
+  const out = { productName: '', shortName: '', tagline: '' };
+  for (const [field, max] of Object.entries(BRANDING_FIELDS)) {
+    const value = text(input?.[field], max, field === 'productName' ? 'product name' : field);
+    if (!isSafeBrandText(value, max)) {
+      throw new HttpError(400, `${field === 'productName' ? 'product name' : field} has unsupported characters`, {
+        code: 'LAYOUT_INVALID',
+        field,
+      });
+    }
+    out[field] = value;
+  }
+  // Earlier releases always saved the built-in default; treat it as "not renamed".
+  if (LEGACY_DEFAULT_NAMES.includes(out.productName)) out.productName = '';
+  return out;
+}
+
+/** Fill empty branding fields from the env / built-in defaults. */
+export function resolveBranding(branding, defaults = brandDefaults()) {
+  const productName = branding?.productName || defaults.name;
+  return {
+    productName,
+    shortName: branding?.shortName || (branding?.productName ? productName : defaults.shortName),
+    tagline: branding?.tagline || defaults.tagline,
   };
 }
 
@@ -190,11 +236,7 @@ export function validateLayout(input) {
     if (!REGIONS.includes(key)) throw new HttpError(400, `unknown region ${key.slice(0, 40)}`, { code: 'LAYOUT_INVALID' });
   }
   base.theme = theme(input.theme || {});
-  const productName = text(input.branding?.productName, 60, 'product name');
-  if (productName && /[<>{}]/.test(productName)) {
-    throw new HttpError(400, 'product name has unsupported characters', { code: 'LAYOUT_INVALID', field: 'productName' });
-  }
-  base.branding = { productName: productName || DEFAULT_PRODUCT_NAME };
+  base.branding = brandingLayer(input.branding || {});
   return base;
 }
 
@@ -210,8 +252,13 @@ export function mergeLayout(base, layer) {
       }
     }
   }
-  if (layer.branding?.productName && layer.branding.productName !== DEFAULT_PRODUCT_NAME) {
-    out.branding = { productName: layer.branding.productName };
+  if (layer.branding) {
+    const next = { ...(out.branding || {}) };
+    for (const field of Object.keys(BRANDING_FIELDS)) {
+      const v = layer.branding[field];
+      if (v && !(field === 'productName' && LEGACY_DEFAULT_NAMES.includes(v))) next[field] = v;
+    }
+    out.branding = next;
   }
   if (layer.theme) {
     out.theme = {
@@ -294,6 +341,7 @@ export async function createLayoutService({ store, config }) {
         console.warn(`[layout] ${label} filter rejected: ${err.message}`);
       }
     }
+    layout.branding = resolveBranding(layout.branding, brandDefaults());
     return { layout, sources };
   }
 
@@ -337,7 +385,7 @@ export function themeCss(layout) {
       .join('\n');
   const light = block(layout.theme?.light);
   const dark = block(layout.theme?.dark);
-  let css = '/* ZK Voting theme tokens (generated from the site layout). */\n';
+  let css = '/* Theme tokens (generated from the site layout). */\n';
   if (light) css += `:root {\n${light}\n}\n`;
   if (dark) css += `@media (prefers-color-scheme: dark) {\n  :root {\n${dark.replace(/^/gm, '  ')}\n  }\n}\n`;
   return css;

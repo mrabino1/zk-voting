@@ -190,7 +190,7 @@ describe('passkey and email caps (primary email)', () => {
       passkeyHooks: {
         generateRegistrationOptions: async (opts) => ({
           challenge: `chal-${opts.userName}-${Date.now()}`,
-          rp: { name: 'Republic', id: 'localhost' },
+          rp: { name: 'ZK-Voting', id: 'localhost' },
           user: { name: opts.userName },
           authenticatorSelection: { residentKey: 'required' },
           excludeCredentials: opts.excludeCredentials || [],
