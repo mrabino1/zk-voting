@@ -10,6 +10,11 @@ export const ROLES = [
   'platform_admin',
   'platform_super_admin',
   'observer',
+  // Site roles (capability based, see capabilities.mjs and docs/roles.md).
+  'designer',
+  'election_manager',
+  'auditor',
+  'moderator',
 ];
 
 export const ROLE_LABELS = Object.freeze({
@@ -22,6 +27,10 @@ export const ROLE_LABELS = Object.freeze({
   platform_admin: 'Platform admin',
   platform_super_admin: 'Platform super admin',
   observer: 'Observer',
+  designer: 'Designer (layout editor)',
+  election_manager: 'Election manager',
+  auditor: 'Auditor',
+  moderator: 'Moderator',
 });
 
 /** Officer roles that are granted per jurisdiction. platform_admin is global. */

@@ -1,0 +1,25 @@
+/* NOT FOR PROFIT — announcement-banner example plugin. Uses theme tokens only. */
+.ab-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+}
+.ab-banner .ab-text { margin: 0; flex: 1; max-width: var(--measure, 70ch); }
+.ab-banner.ab-warning { border-left: 6px solid #8a5a00; }
+.ab-banner.ab-success { border-left: 6px solid #1f6f3a; }
+.ab-banner.ab-info { border-left: 6px solid var(--project, #1d4ed8); }
+.ab-close {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  font-size: 1.25rem;
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  cursor: pointer;
+}
+.ab-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }

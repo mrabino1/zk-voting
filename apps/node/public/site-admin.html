@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" data-layout-runtime="manual">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <title>Site admin · zk-voting</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+    <link rel="stylesheet" href="/site-admin.css" />
+  </head>
+  <body>
+    <!-- NOT FOR PROFIT — civic public good. Not a commercial product. -->
+    <!-- Strict CSP page: no inline script or style. Logic lives in /site-admin.js. -->
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <span class="brand-text">
+            <span class="brand-name" data-product-name>zk-voting</span>
+            <span class="brand-sub">Site admin</span>
+          </span>
+        </a>
+        <nav class="nav-main sa-nav" aria-label="Site admin">
+          <ul id="sa-nav">
+            <li><a href="/site-admin/roles" data-view="roles">Roles &amp; users</a></li>
+            <li><a href="/site-admin/layout" data-view="layout">Layout</a></li>
+            <li><a href="/site-admin/plugins" data-view="plugins">Plugins</a></li>
+            <li><a href="/site-admin/audit" data-view="audit">Audit</a></li>
+          </ul>
+        </nav>
+        <div class="session-chrome" id="sa-session"></div>
+      </div>
+    </header>
+    <main id="main" class="site-main sa-main" tabindex="-1">
+      <h1 id="sa-title">Site admin</h1>
+      <p id="sa-status" class="sa-status" role="status" aria-live="polite"></p>
+      <div id="sa-view">
+        <p>Loading…</p>
+      </div>
+    </main>
+    <dialog id="sa-dialog" class="sa-dialog" aria-labelledby="sa-dialog-title">
+      <form method="dialog" id="sa-dialog-form">
+        <h2 id="sa-dialog-title">Confirm</h2>
+        <div id="sa-dialog-body"></div>
+        <div class="sa-actions">
+          <button type="submit" value="cancel" class="btn btn-secondary">Cancel</button>
+          <button type="submit" value="ok" class="btn btn-primary" id="sa-dialog-ok">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+    <footer class="site-footer">
+      <p class="footer-meta"><span data-product-name>zk-voting</span> · Site admin · AGPL-3.0-or-later</p>
+    </footer>
+    <script type="module" src="/site-admin.js"></script>
+  </body>
+</html>

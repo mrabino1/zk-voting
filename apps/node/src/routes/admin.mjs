@@ -7,6 +7,7 @@ import { requireAuth, requireRole, requireSuperAdmin, publicUser } from '../auth
 import { REASON_CODES } from '../reasonCodes.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
 import { uuidParam } from '../recordIds.mjs';
+import { appendSiteAudit } from '../siteAudit.mjs';
 import { APPROVAL_CHAIN, isPlatformOperator, isSuperAdmin, OFFICER_ROLES, ROLES } from '../roles.mjs';
 
 function publicJurisdiction(row) {
@@ -213,6 +214,8 @@ export function adminRouter(deps) {
     requireAuth,
     requireSuperAdmin,
     asyncHandler(async (req, res) => {
+      const priorRole =
+        store.resolveOfficerUser({ userId: req.body?.userId, handle: req.body?.handle })?.role || null;
       const approved = await store.approveAdmin({
         userId: req.body?.userId,
         handle: req.body?.handle,
@@ -225,6 +228,18 @@ export function adminRouter(deps) {
         skipReason: approved.created ? null : 'already_granted',
         grantedByHandle: req.user.handle,
       });
+      if (approved.created) {
+        await appendSiteAudit(store, {
+          actor: req.user,
+          area: 'roles',
+          action: 'role.change',
+          method: req.method,
+          path: req.originalUrl.split('?')[0],
+          result: 201,
+          before: { userId: approved.user.id, handle: approved.user.handle, role: priorRole },
+          after: { userId: approved.user.id, handle: approved.user.handle, role: approved.user.role },
+        });
+      }
       res.status(201).json({ ok: true, nfp: true, user: publicUser(approved.user), mail });
     }),
   );
@@ -237,6 +252,15 @@ export function adminRouter(deps) {
       const user = await store.revokeAdmin({
         userId: req.body?.userId || req.query?.userId,
         handle: req.body?.handle || req.query?.handle,
+      });
+      await appendSiteAudit(store, {
+        actor: req.user,
+        area: 'roles',
+        action: 'role.change',
+        method: req.method,
+        path: req.originalUrl.split('?')[0],
+        before: { userId: user.id, handle: user.handle, role: 'platform_admin' },
+        after: { userId: user.id, handle: user.handle, role: user.role },
       });
       res.json({ ok: true, nfp: true, user: publicUser(user) });
     }),
@@ -273,6 +297,24 @@ export function adminRouter(deps) {
       }
       const before = target.role;
       const user = await store.updateUserRole(req.params.id, role);
+      if (before !== user.role) {
+        await appendSiteAudit(store, {
+          actor: req.user,
+          area: 'roles',
+          action: 'role.change',
+          method: req.method,
+          path: req.originalUrl.split('?')[0],
+          before: { userId: user.id, handle: user.handle, role: before },
+          after: { userId: user.id, handle: user.handle, role: user.role },
+        });
+        await deps.plugins?.emit('user.role_changed', {
+          userId: user.id,
+          handle: user.handle,
+          from: before,
+          to: user.role,
+          by: req.user.handle,
+        });
+      }
       const promoted = before !== user.role && user.role !== 'voter' && user.role !== 'observer';
       const mail = promoted
         ? await deliverRolePromotion(deps, {
