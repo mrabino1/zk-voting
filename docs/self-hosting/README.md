@@ -30,6 +30,12 @@ The same pages are served by every running Node at `/docs`, so operators can rea
 | [Rollback](./rollback.md) | An upgrade went wrong and you need the previous build back. |
 | [Rolling updates](./rolling-updates.md) | You want zero-downtime deploys (old and new containers overlap). |
 
+## Trusted setup
+
+| Page | Use it when |
+| --- | --- |
+| [Groth16 ceremony](./ceremony.md) | You coordinate the phase-2 trusted-setup ceremony for the production circuits. |
+
 ## Community
 
 | Page | Use it when |

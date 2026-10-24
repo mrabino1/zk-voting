@@ -25,6 +25,12 @@
       ]
     },
     {
+      "title": "Trusted setup",
+      "pages": [
+        { "slug": "ceremony", "title": "Groth16 ceremony" }
+      ]
+    },
+    {
       "title": "Community",
       "pages": [
         { "slug": "discourse", "title": "Community forum (Discourse)" }

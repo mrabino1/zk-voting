@@ -284,6 +284,12 @@ export function getConfig(overrides = {}) {
         : envFlag(process.env.POLLS_ENABLED, false),
     pollMaxOptions: Number(process.env.POLL_MAX_OPTIONS || 32),
     tokenRpcs: tokenRpcMap(),
+    // Phase-2 trusted-setup ceremony (docs/ceremony-web.md). Empty dirs mean
+    // DATA_DIR/ceremonies and DATA_DIR/ceremony-inputs.
+    ceremonyDir: process.env.CEREMONY_DIR || '',
+    ceremonyInputDir: process.env.CEREMONY_INPUT_DIR || '',
+    ceremonyMaxZkeyBytes: megabytes(process.env.CEREMONY_MAX_ZKEY_MB, 1024),
+    ceremonyMaxInputBytes: megabytes(process.env.CEREMONY_MAX_INPUT_MB, 2048),
     ...overrides,
   };
   // `VOTE_FQDN` wins over a localhost template even when overrides spread last.
@@ -401,6 +407,12 @@ function readPackageVersion() {
 }
 
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
+
+function megabytes(value, fallbackMb) {
+  const n = Number(value);
+  const mb = Number.isFinite(n) && n > 0 ? n : fallbackMb;
+  return Math.floor(mb * 1024 * 1024);
+}
 
 function resolveStepUpMs(value) {
   if (value === undefined || value === null || value === '') return 15 * 60 * 1000;

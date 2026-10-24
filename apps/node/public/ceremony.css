@@ -1,0 +1,124 @@
+/* NOT FOR PROFIT — civic public good, not a commercial product.
+ * zk-voting trusted-setup pages. Loaded only by ceremony pages. */
+
+.entropy-pad {
+  display: grid;
+  place-items: center;
+  min-height: 10rem;
+  padding: 1rem;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-card);
+  background: var(--sunken);
+  color: var(--muted);
+  text-align: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.entropy-pad:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-style: solid;
+}
+
+.entropy-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entropy-meter progress,
+#contrib-progress,
+#verify-progress {
+  width: min(100%, 24rem);
+  height: 0.75rem;
+  accent-color: var(--project);
+}
+
+.hash-full {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.cli-block {
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--sunken);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.cli-block:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.verify-log {
+  max-height: 16rem;
+}
+
+.contrib-list {
+  display: grid;
+  gap: 1rem;
+  padding-left: 1.25rem;
+}
+
+.contrib-list h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.attestation {
+  white-space: pre-wrap;
+}
+
+.ceremony-card h3 code {
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+.ptau-list,
+.audit-list {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.audit-list {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.mono,
+code.hash {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.link-rows {
+  display: grid;
+  gap: 0.35rem;
+  padding-left: 1.25rem;
+}
+
+.btn.btn-inline {
+  min-height: 2rem;
+  padding: 0.2rem 0.6rem;
+}
+
+.ceremony-card + .ceremony-card {
+  margin-top: 1rem;
+}
+
+.ceremony-card .meta-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+}
+
+.ceremony-card .meta-list dd {
+  margin: 0;
+}
