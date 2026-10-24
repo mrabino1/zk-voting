@@ -18,7 +18,7 @@ Create and revoke from the profile while the browser session is signed in:
 ```http
 POST /api/me/api-keys
 Content-Type: application/json
-Cookie: republic.sid=…
+Cookie: zk-voting.sid=…
 
 { "name": "assistant", "level": "read", "expiresIn": "30d" }
 ```
@@ -47,7 +47,7 @@ These path values are not record counts: `questionId` and `optionId` are ballot 
 
 ```bash
 curl -sS \
-  -H "Authorization: Bearer $REPUBLIC_API_KEY" \
+  -H "Authorization: Bearer $ZK_VOTING_API_KEY" \
   -H "Accept: application/json" \
   "$ORIGIN/api/me"
 ```
@@ -249,7 +249,7 @@ Machine-readable copies:
 - `GET /api/explorer/nullifiers/:value` (key read). Whether a nullifier was accepted. The nullifier does not reveal the choice or the person.
 - `GET /api/explorer/search` (key read). Search blocks, transactions, and elections.
 - `GET /api/explorer/elections/:id` (key read). Explorer view of one election.
-- `POST /api/explorer/ingest` (key officer). Operator ingest of civic L2 events. Send the host ingest secret in X-Republic-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.
+- `POST /api/explorer/ingest` (key officer). Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.
 ### Polls
 
 - `GET /api/polls` (key read). Token polls when POLLS_ENABLED is on. Polls are signal, not binding elections. Omitted from the Node when the flag is off.

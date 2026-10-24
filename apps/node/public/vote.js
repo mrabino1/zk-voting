@@ -865,14 +865,14 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
   const proof =
     receipt.proofText ||
     [
-      "-----BEGIN REPUBLIC VOTE RECEIPT-----",
-      "schema: republic.receipt.v1",
+      "-----BEGIN ZK-VOTING VOTE RECEIPT-----",
+      "schema: zk-voting.receipt.v1",
       election?.id ? `electionId: ${election.id}` : null,
       receipt.nullifier ? `nullifier: ${receipt.nullifier}` : null,
       receipt.ballotHash ? `ballotHash: ${receipt.ballotHash}` : null,
       receipt.userOpHash ? `userOpHash: ${receipt.userOpHash}` : null,
       receipt.token ? `token: ${receipt.token}` : null,
-      "-----END REPUBLIC VOTE RECEIPT-----",
+      "-----END ZK-VOTING VOTE RECEIPT-----",
     ]
       .filter(Boolean)
       .join("\n");
@@ -938,7 +938,7 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "republic-vote-receipt.pdf";
+      a.download = "zk-voting-vote-receipt.pdf";
       a.click();
       URL.revokeObjectURL(url);
       const sha = res.headers.get("x-pdf-sha256");

@@ -39,21 +39,21 @@ describe('L2 token poll txs', () => {
   let off;
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-polls-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-polls-'));
     clock = HOUR_START + 10 * 60;
     const config = loadConfig();
     config.dataDir = tmp;
     config.disclosureIntervalSeconds = HOUR;
     config.nowFn = () => clock;
-    config.republicNodeUrl = '';
+    config.zkVotingNodeUrl = '';
     config.pollsEnabled = true;
     state = ChainState.open(config);
 
-    const offDir = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-polls-off-'));
+    const offDir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-polls-off-'));
     const offConfig = loadConfig();
     offConfig.dataDir = offDir;
     offConfig.pollsEnabled = false;
-    offConfig.republicNodeUrl = '';
+    offConfig.zkVotingNodeUrl = '';
     off = ChainState.open(offConfig);
   });
 

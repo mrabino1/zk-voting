@@ -60,7 +60,7 @@ export async function startPollNode({
   votingTokenAddress,
   votingTokenChainId,
 } = {}) {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-poll-'));
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-poll-'));
   const chain = createMemoryTokenChain({ chainId: 31337 });
   const registry = createTokenRegistry();
   registry.inject(chain.chainId, chain);

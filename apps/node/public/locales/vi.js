@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Đã sao chép cam kết danh tính.",
     localAddress: "Địa chỉ cục bộ {brand}",
     prfWrap:
-      "Wrap PRF: vật liệu tài khoản dùng muối republic:account:v1; ZK trapdoor dùng muối republic:identity:v1. Chúng không cùng các byte.",
+      "Wrap PRF: vật liệu tài khoản dùng muối zk-voting:account:v1; ZK trapdoor dùng muối zk-voting:identity:v1. Chúng không cùng các byte.",
     createFirst: "Tạo passkey để suy cam kết. Trapdoor không bao giờ hiện trên màn hình này.",
     activeEthTitle: "Địa chỉ Ethereum đang hoạt động",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand} cần passkey thiết bị (WebAuthn) với khóa thường trú và xác minh người dùng. Dùng trình duyệt hiện tại (Safari 16+, Chrome 108+, Firefox 122+, Edge) trên thiết bị có trình xác thực nền tảng. Cụm từ khôi phục không bao giờ được hiện.",
     productionNote:
-      "Sản xuất dùng keccak256(khóa công khai secp256k1 chưa nén), rồi lấy 20 byte cuối (Ethereum). Bản demo này không nhân được trên secp256k1 nếu không có thư viện đường cong, nên getAddress() trả SHA-256(seed)[0:20] gắn nhãn republic-local-address.",
+      "Sản xuất dùng keccak256(khóa công khai secp256k1 chưa nén), rồi lấy 20 byte cuối (Ethereum). Bản demo này không nhân được trên secp256k1 nếu không có thư viện đường cong, nên getAddress() trả SHA-256(seed)[0:20] gắn nhãn zk-voting-local-address.",
     staleWrap:
-      "Trình duyệt này có wrap passkey v1 (IndexedDB republic-wallet). v1 suy ZK trapdoor từ cùng hạt giống với khóa tài khoản, yếu hơn docs/PASSKEYS.md. Bản demo không thể chuyển wrap đó tại chỗ: v1 dùng muối PRF ngẫu nhiên và một miền HKDF, nên muối tài khoản/danh tính mới không mở được. Đặt lại ví thiết bị và tạo passkey mới. Địa chỉ cục bộ và cam kết danh tính sẽ đổi; mục danh sách demo trước sẽ không khớp.",
+      "Trình duyệt này có wrap passkey v1 (IndexedDB zk-voting-wallet). v1 suy ZK trapdoor từ cùng hạt giống với khóa tài khoản, yếu hơn docs/PASSKEYS.md. Bản demo không thể chuyển wrap đó tại chỗ: v1 dùng muối PRF ngẫu nhiên và một miền HKDF, nên muối tài khoản/danh tính mới không mở được. Đặt lại ví thiết bị và tạo passkey mới. Địa chỉ cục bộ và cam kết danh tính sẽ đổi; mục danh sách demo trước sẽ không khớp.",
     noEthWallet:
       "Không có ví Ethereum trong trình duyệt này. Dùng passkey, hoặc cài ví hỗ trợ personal_sign.",
     noWeb3Wallet: "Không có ví Web3 trong trình duyệt này. Cài ví hoặc dùng passkey / thẻ thông minh.",
@@ -669,7 +669,7 @@ export default {
     clerkHint:
       "Tạo cuộc bầu cử, rồi đóng băng danh sách trước khi mở bỏ phiếu. <code>maxParticipants = 0</code> nghĩa là không giới hạn. Chọn đa số tương đối (mặc định) hoặc xếp hạng (IRV).",
     chainNote:
-      "Nếu Node này đã đặt <code>CHAIN_RPC</code>, Tạo cuộc bầu cử cũng gọi <code>ElectionFactory.createElection</code> và lưu id uint256 trên chuỗi cạnh UUID. Lỗi nhà máy hiện ở đây và không lưu cục bộ. Không có <code>CHAIN_RPC</code> thì biểu mẫu này chỉ ghi <code>republic.json</code> (demo) và vẫn đúc <code>onChainElectionId</code> demo cho mạch.",
+      "Nếu Node này đã đặt <code>CHAIN_RPC</code>, Tạo cuộc bầu cử cũng gọi <code>ElectionFactory.createElection</code> và lưu id uint256 trên chuỗi cạnh UUID. Lỗi nhà máy hiện ở đây và không lưu cục bộ. Không có <code>CHAIN_RPC</code> thì biểu mẫu này chỉ ghi <code>zk-voting.json</code> (demo) và vẫn đúc <code>onChainElectionId</code> demo cho mạch.",
     jurisdiction: "Khu vực tài phán",
     titleField: "Tiêu đề",
     metadataUri: "URI siêu dữ liệu",

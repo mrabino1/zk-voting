@@ -26,7 +26,7 @@ forge test --via-ir
 Unit tests use `MockVerifier`. `UntrustedGroth16Test` verifies a real untrusted Vote(4) proof (not accept-all). Non-mock deploy:
 
 ```bash
-REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+ZK_VOTING_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
 ## Gas economics
@@ -38,6 +38,6 @@ forge build --via-ir
 ./script/get-gas-economics.sh
 ```
 
-From the repository root: `./scripts/get-gas-economics.sh`. Add `--gas-report` to append a Foundry gas snapshot for the inbox, factory, registries, tally, rollup settlement, the L1 tally mirror, and the paymaster. Nuursha NFT mint and claim tables are not part of this script.
+From the repository root: `./scripts/get-gas-economics.sh`. Add `--gas-report` to append a Foundry gas snapshot for the inbox, factory, registries, tally, rollup settlement, the L1 tally mirror, and the paymaster. There are no NFT mint or claim tables.
 
 Solidity 0.8.24. License AGPL-3.0-or-later. See `/NOT_FOR_PROFIT.md`.

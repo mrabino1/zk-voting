@@ -97,7 +97,7 @@ async function grant(jurisdictionId, handle, role) {
 
 describe('per-jurisdiction officer roles', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-roles-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-roles-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

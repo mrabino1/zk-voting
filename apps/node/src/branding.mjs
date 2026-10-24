@@ -10,7 +10,7 @@
 //
 // Branding is display text only. Storage keys, cookie names, headers, env var
 // names, schema ids, EIP-712 domains, hash domain tags and smart-contract names
-// keep their legacy "republic" identifiers and never read from here.
+// use fixed zk-voting identifiers and never read from here.
 
 export const DEFAULT_BRAND_NAME = 'ZK-Voting';
 export const DEFAULT_BRAND_TAGLINE = 'Private, publicly verifiable civic voting.';
@@ -22,7 +22,7 @@ export const BRAND_TAGLINE_MAX = 160;
  * Names that earlier releases wrote into saved layouts / site rows as the
  * built-in default. They mean "not renamed", so the current default applies.
  */
-export const LEGACY_DEFAULT_NAMES = Object.freeze(['zk-voting', 'Republic']);
+export const LEGACY_DEFAULT_NAMES = Object.freeze(['zk-voting', 'ZK-Voting']);
 
 const UNSAFE_RE = /[<>{}"`\\]/;
 

@@ -93,7 +93,7 @@ const RANKED_QUESTIONS = [
 
 describe('Ranked-choice ballots and IRV tally', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-irv-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-irv-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

@@ -61,7 +61,7 @@ export function clearSessionCookie(res, config) {
 
 export function setMfaCookie(res, config, nonce) {
   const maxAge = Math.floor((config.mfaTtlMs || 10 * 60 * 1000) / 1000);
-  const name = config.mfaCookie || 'republic.mfa';
+  const name = config.mfaCookie || 'zk-voting.mfa';
   const parts = [
     `${name}=${encodeURIComponent(nonce)}`,
     'HttpOnly',
@@ -73,7 +73,7 @@ export function setMfaCookie(res, config, nonce) {
 }
 
 export function clearMfaCookie(res, config) {
-  const name = config.mfaCookie || 'republic.mfa';
+  const name = config.mfaCookie || 'zk-voting.mfa';
   res.append('Set-Cookie', `${name}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`);
 }
 
@@ -81,7 +81,7 @@ export function errorHandler(err, req, res, _next) {
   const status = Number(err.status || err.statusCode || 500);
   if (status === 503) {
     res.set('Retry-After', String(err.extra?.retryAfter || 2));
-    res.set('x-republic-mode', err.extra?.mode || 'standby');
+    res.set('x-zk-voting-mode', err.extra?.mode || 'standby');
   }
   const hideInternals = status >= 500 && !(err instanceof HttpError);
   if (status >= 500 && !req.app?.locals?.quiet) {

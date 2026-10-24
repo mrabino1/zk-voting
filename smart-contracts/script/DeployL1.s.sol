@@ -11,7 +11,7 @@ import {ZkVotingMailbox} from "../src/l2/ZkVotingMailbox.sol";
 
 /// @notice Ethereum (or Sepolia) settlement: rollup, tally mirror, mailbox.
 ///         `BATCH_VERIFIER` is required (audit H-06). Only with the explicit
-///         dev flag `REPUBLIC_SETTLEMENT_MOCK_MODE=1` and no verifier is the
+///         dev flag `ZK_VOTING_SETTLEMENT_MOCK_MODE=1` and no verifier is the
 ///         settlement deployed in `mockMode` (proofs not checked).
 ///         `L2_FACTORY` (or `ELECTION_FACTORY_ADDRESS`) is required so the
 ///         mirror cannot accept colliding uint256 `postResult` writes.
@@ -29,10 +29,10 @@ contract DeployL1 is DeployOnce {
         address prover = vm.envOr("PROVER", admin);
         address batchVerifier = vm.envOr("BATCH_VERIFIER", address(0));
 
-        bool mockSettlement = vm.envOr("REPUBLIC_SETTLEMENT_MOCK_MODE", false);
+        bool mockSettlement = vm.envOr("ZK_VOTING_SETTLEMENT_MOCK_MODE", false);
         if (batchVerifier == address(0) && !mockSettlement) revert MissingBatchVerifier();
         bool mockMode = batchVerifier == address(0) && mockSettlement;
-        if (mockMode) console2.log("WARNING: RollupSettlement in mockMode (REPUBLIC_SETTLEMENT_MOCK_MODE=1); batches are NOT verified");
+        if (mockMode) console2.log("WARNING: RollupSettlement in mockMode (ZK_VOTING_SETTLEMENT_MOCK_MODE=1); batches are NOT verified");
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, mockMode);
         ZkVotingMailbox mailbox = new ZkVotingMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));

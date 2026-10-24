@@ -90,8 +90,8 @@ function safeReplyTo(value) {
 }
 
 export function buildRawMime({ from, to, subject, text, html, attachments = [], replyTo } = {}) {
-  const mixed = `RepublicMixed_${randomBytes(12).toString('hex')}`;
-  const alt = `RepublicAlt_${randomBytes(12).toString('hex')}`;
+  const mixed = `ZkVotingMixed_${randomBytes(12).toString('hex')}`;
+  const alt = `ZkVotingAlt_${randomBytes(12).toString('hex')}`;
   const reply = safeReplyTo(replyTo);
   const lines = [
     `From: ${headerSafe(from)}`,

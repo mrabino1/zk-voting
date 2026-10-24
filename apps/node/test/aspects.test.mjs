@@ -101,7 +101,7 @@ const ASPECTS = [
 
 describe('multi-question ballots (aspects)', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-aspects-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-aspects-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

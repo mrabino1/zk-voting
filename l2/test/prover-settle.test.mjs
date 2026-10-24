@@ -24,7 +24,7 @@ describe('prover settlement guard', () => {
   });
 
   async function dir() {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-prover-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-prover-'));
     temps.push(tmp);
     return tmp;
   }

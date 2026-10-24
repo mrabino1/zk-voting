@@ -20,12 +20,12 @@ describe('L2 external party civic txs', () => {
   let state;
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-parties-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-parties-'));
     const config = loadConfig();
     config.dataDir = tmp;
     config.disclosureIntervalSeconds = 3600;
     config.nowFn = () => 1_700_000_000;
-    config.republicNodeUrl = '';
+    config.zkVotingNodeUrl = '';
     state = ChainState.open(config);
   });
 

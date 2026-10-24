@@ -52,7 +52,7 @@ function parseCounts(raw) {
 async function loadFromStore(electionId) {
   const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const dataDir = process.env.DATA_DIR || path.join(pkgRoot, 'data');
-  const file = path.join(dataDir, 'republic.json');
+  const file = path.join(dataDir, 'zk-voting.json');
   const raw = JSON.parse(await fs.readFile(file, 'utf8'));
   const election = (raw.elections || []).find(
     (e) => String(e.id) === String(electionId) || electionMatchesRef(e, electionId),
@@ -64,7 +64,7 @@ async function loadFromStore(electionId) {
 
 async function main() {
   if (hasFlag('--help') || hasFlag('-h')) {
-    console.log(`Republic L1 tally certification (NOT FOR PROFIT)
+    console.log(`ZK-Voting L1 tally certification (NOT FOR PROFIT)
 
 After POST /api/elections/:id/tally, copy keccak256(abi.encodePacked(counts))
 to L1TallyMirror.postResult when L1 env is set. Unset env → no-op (exit 0).

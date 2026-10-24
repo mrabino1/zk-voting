@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // NOT FOR PROFIT — civic public good, not a commercial prover.
-// Watches Republic L2 blocks, batches them, and settles proofs to L1
+// Watches ZK-Voting L2 blocks, batches them, and settles proofs to L1
 // RollupSettlement — or writes mock proofs locally.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -142,7 +142,7 @@ async function tick(cursor, lease) {
 async function main() {
   assertProverDoesNotDeploy();
   console.log(
-    'Republic L2 prover  NOT FOR PROFIT  rpc=' +
+    'ZK-Voting L2 prover  NOT FOR PROFIT  rpc=' +
       config.l2RpcUrl +
       '  batchSize=' +
       config.batchSize +

@@ -144,7 +144,7 @@ describe('passkey register requires auth for claimed handles', () => {
       jar: ownerJar,
     });
     assert.equal(login.status, 200, login.json?.error);
-    assert.ok(ownerJar['republic.sid']);
+    assert.ok(ownerJar['zk-voting.sid']);
 
     const other = await api('POST', '/api/auth/dev-login', {
       body: { handle: 'other', role: 'voter' },
@@ -198,8 +198,8 @@ describe('passkey register requires auth for claimed handles', () => {
       finish.json?.code === 'AUTH_REQUIRED' || finish.json?.code === 'HANDLE_MISMATCH',
       finish.text,
     );
-    assert.equal(attackJar['republic.sid'], undefined);
-    assert.ok(!setCookieNames(finish.res).includes('republic.sid'));
+    assert.equal(attackJar['zk-voting.sid'], undefined);
+    assert.ok(!setCookieNames(finish.res).includes('zk-voting.sid'));
 
     const after = store.getUserByHandle('owner');
     assert.equal(after.credentials.length, before.credentials.length);
@@ -262,7 +262,7 @@ describe('passkey register requires auth for claimed handles', () => {
     assert.ok(created);
     assert.ok(created.credentials.some((c) => c.id === 'newbie-cred'));
     // First registration may establish a session when MFA is off.
-    assert.ok(jar['republic.sid'] || finish.json?.ok || finish.json?.verified);
+    assert.ok(jar['zk-voting.sid'] || finish.json?.ok || finish.json?.verified);
   });
 
   test('unclaimed ADMIN_HANDLE seed can still be claimed without a session', async () => {
@@ -312,7 +312,7 @@ describe('passkey register requires auth for claimed handles', () => {
       },
     });
     assert.ok(finish.status >= 400, finish.text);
-    assert.equal(jar['republic.sid'], undefined);
+    assert.equal(jar['zk-voting.sid'], undefined);
     assert.equal(store.getUserByHandle('victim').credentials.length, beforeCount);
     assert.ok(!store.getUserByHandle('victim').credentials.some((c) => c.id === 'evil-cred'));
   });

@@ -14,7 +14,7 @@
   "heartbeatSeconds": 3600,
   "l1Rpc": "",
   "settlementAddress": "",
-  "republicNodeUrl": "",
+  "zkVotingNodeUrl": "",
   "contracts": {
     "voterRegistry": "0x0000000000000000000000000000000000001001",
     "ballotInbox": "0x0000000000000000000000000000000000001002",

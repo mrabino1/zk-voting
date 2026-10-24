@@ -96,7 +96,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   l2:
     build:
@@ -120,7 +120,7 @@ services:
       L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
     volumes:
       - l2-data:/data
@@ -136,7 +136,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   prover:
     build:
@@ -155,7 +155,7 @@ services:
       L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       L1_RPC: ${L1_RPC:-}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
       SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
@@ -174,7 +174,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   # Hourly L2 attic. Default ARCHIVE_ENABLED=1. With no bucket and no
   # file:// sink the daemon warns and does not touch sequencer files.
@@ -220,7 +220,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   # Tailscale sidecar (open-source client, BSD-3-Clause). Userspace mode:
   # no NET_ADMIN and no /dev/net/tun. State persists on tailscale-state so
@@ -276,7 +276,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
 volumes:
   node-data:
@@ -284,5 +284,5 @@ volumes:
   tailscale-state:
 
 networks:
-  republic:
+  zk-voting:
     driver: bridge

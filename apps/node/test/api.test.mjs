@@ -74,9 +74,9 @@ function walk(value, visit) {
   for (const child of Object.values(value)) walk(child, visit);
 }
 
-describe('Republic Node API', () => {
+describe('ZK-Voting Node API', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-node-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-node-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -118,7 +118,7 @@ describe('Republic Node API', () => {
     assert.equal(json.proving.mockVerifierDefault, true);
     assert.equal(json.proving.provingPath, false);
     assert.equal(json.proving.poseidonWired, true);
-    assert.equal(json.proving.circuitHashScheme, 'republic.hash.poseidon-bn254-x5-t3-v1');
+    assert.equal(json.proving.circuitHashScheme, 'zk-voting.hash.poseidon-bn254-x5-t3-v1');
     assert.match(json.proving.hashScheme, /keccak-dev-v1/);
   });
 
@@ -169,7 +169,7 @@ describe('Republic Node API', () => {
     });
     assert.equal(status, 200);
     assert.equal(json.user.role, 'platform_super_admin');
-    assert.ok(adminJar['republic.sid']);
+    assert.ok(adminJar['zk-voting.sid']);
     const me = await api('GET', '/api/me', { jar: adminJar });
     assert.equal(me.json.user.handle, 'admin');
   });
@@ -336,7 +336,7 @@ describe('Republic Node API', () => {
       assert.equal(env.choice, undefined);
       assert.ok(env.encryptedBallot);
     }
-    const raw = JSON.parse(await readFile(path.join(tmp, 'republic.json'), 'utf8'));
+    const raw = JSON.parse(await readFile(path.join(tmp, 'zk-voting.json'), 'utf8'));
     let leaks = 0;
     walk(raw, (obj) => {
       const keys = Object.keys(obj);

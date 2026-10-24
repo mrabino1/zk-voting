@@ -156,8 +156,8 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `PUBLIC_BASE_URL` | `https://$VOTE_FQDN` when that is set, else first WebAuthn origin | Origin printed in official-outcome QR codes (`/o/<reportId>`) |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
-| `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
-| `REPUBLIC_HASH_SCHEME` | `keccak-dev-v1` (Poseidon if `REPUBLIC_PROVING_PATH=1`) | HashLeftRight advertised in config. The vote circuit is Poseidon. See `/circuits/HASH_SCHEME.md` |
+| `ZK_VOTING_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
+| `ZK_VOTING_HASH_SCHEME` | `keccak-dev-v1` (Poseidon if `ZK_VOTING_PROVING_PATH=1`) | HashLeftRight advertised in config. The vote circuit is Poseidon. See `/circuits/HASH_SCHEME.md` |
 
 Passkey rpName is the current product name (site admin > Branding, else `BRAND_NAME`, else **ZK-Voting**).
 
@@ -276,7 +276,7 @@ PATCH /api/admin/outcome-report-template
 POST /api/admin/outcome-report-template/preview
 ```
 
-Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `republic.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).
+Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `zk-voting.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).
 
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools (any origin can read the API, but
@@ -288,7 +288,7 @@ When `CHAIN_RPC` is set, `POST /api/elections` must also succeed on
 `ElectionFactory` (same params as `smart-contracts/script/CreateElection.s.sol`).
 The Node keeps a UUID public id and stores `onChainElectionId` /
 `onChainElectionAddress` / `createTxHash` on the election record. A factory
-revert returns **502/503** to the clerk and does **not** write `republic.json`.
+revert returns **502/503** to the clerk and does **not** write `zk-voting.json`.
 
 Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
 `POST /tally` still records counts. `l1Certification.status` is `skipped`.
@@ -328,7 +328,7 @@ one it finds.
 ## Data
 
 ```
-apps/node/data/republic.json    users, elections, votes, envelopes, termsAcceptances (gitignored)
+apps/node/data/zk-voting.json    users, elections, votes, envelopes, termsAcceptances (gitignored)
 apps/node/data/l2-chain.json    append-only blocks/txs for /explorer
 apps/node/legal/terms.md        canonical Terms of Use (PDF + hashes derived at boot)
 ```

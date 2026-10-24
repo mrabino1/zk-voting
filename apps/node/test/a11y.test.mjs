@@ -143,7 +143,7 @@ async function audit(page, url, { cookie, scheme = 'light' } = {}) {
 
 describe('WCAG 2.2 AA axe', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-a11y-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-a11y-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

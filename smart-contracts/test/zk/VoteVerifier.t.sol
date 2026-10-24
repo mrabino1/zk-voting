@@ -82,7 +82,7 @@ contract VoteVerifierTest is Test {
     function testProvingPathEnvIsDocumentedAndFailClosed() public {
         // Always asserts the non-mock contract behaviour. The env flag is for
         // DeployLocal / integration; unit tests must still pass with MockVerifier.
-        string memory flag = vm.envOr("REPUBLIC_PROVING_PATH", string("0"));
+        string memory flag = vm.envOr("ZK_VOTING_PROVING_PATH", string("0"));
         bytes32 h = keccak256(bytes(flag));
         bool proving = h == keccak256("1") || h == keccak256("true");
         VoteVerifier v = new VoteVerifier(address(0));

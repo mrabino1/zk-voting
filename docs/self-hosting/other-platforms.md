@@ -31,7 +31,7 @@ Notes:
    cat > docker-compose.override.yml <<'YAML'
    services:
      node:
-       networks: [republic, captain-overlay-network]
+       networks: [zk-voting, captain-overlay-network]
    networks:
      captain-overlay-network:
        external: true

@@ -52,19 +52,19 @@ on 27427 is **Future**.
 | Node UI | Vanilla JS + HTML/CSS in `apps/node/public/`. Express serves `public/` (and `dist/` if present). **No Vite. No React.** |
 | Node API | Express 4, Node 22, `apps/node/src/*.mjs`. Personal API keys (`Authorization: Bearer rk_…`) call the published bot catalog. |
 | Bot docs | `GET /api` (HTML), `GET /api/openapi.json`, `GET /api/llms.txt`, repo `docs/BOT_API.md` and `llms.txt`. |
-| Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
+| Node store | JSON files: `apps/node/data/zk-voting.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
 | ZK-Voting L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
 | Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |
 | Circuits | Circom 2: `vote.circom` (Vote 20), `tally.circom`, `identity.circom`. Hasher is Poseidon(2). Ceremony is not done. |
 | Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
 | Explorer | Node `/explorer` over `l2-chain.json`, filled by Node writes and `POST /api/explorer/ingest`. |
 | Ballot types | Node UI/API: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED` (IRV on the Node path). |
-| Passkey helper | `public/passkey-wallet.js`: WebAuthn + PRF wrap. Demo address is `republic-local-address` (SHA-256 of seed). Production secp256k1 Ethereum addresses are **Future** in that helper (it does not ship a curve implementation). |
+| Passkey helper | `public/passkey-wallet.js`: WebAuthn + PRF wrap. Demo address is `zk-voting-local-address` (SHA-256 of seed). Production secp256k1 Ethereum addresses are **Future** in that helper (it does not ship a curve implementation). |
 
 Two local paths, both real:
 
 1. **Demo civic path (default):** Node JSON store + ZK-Voting L2 JSON sequencer (`:8546`) + explorer ingest. No EVM required.
-2. **Contract path (optional):** set `CHAIN_RPC` + `BALLOT_INBOX_ADDRESS` + `RELAYER_PRIVATE_KEY` so the Node relays `BallotInbox.submitVote` through viem to an EVM (typically Anvil on `:8545`). `@zk-voting/chain-client` still defaults `REPUBLIC_RPC_URL` to `http://127.0.0.1:8545` (Anvil), not the civic sequencer.
+2. **Contract path (optional):** set `CHAIN_RPC` + `BALLOT_INBOX_ADDRESS` + `RELAYER_PRIVATE_KEY` so the Node relays `BallotInbox.submitVote` through viem to an EVM (typically Anvil on `:8545`). `@zk-voting/chain-client` still defaults `ZK_VOTING_RPC_URL` to `http://127.0.0.1:8545` (Anvil), not the civic sequencer.
 
 ---
 
@@ -88,7 +88,7 @@ passkey (WebAuthn, device-bound)
 ```
 
 **Today’s browser helper** follows that shape but labels the derived account
-`republic-local-address` until a secp256k1 library is wired. Production
+`zk-voting-local-address` until a secp256k1 library is wired. Production
 Ethereum address derivation remains keccak256 of the uncompressed pubkey.
 
 When they vote:
@@ -146,7 +146,7 @@ timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
   and local instant demo may set `0`.
 
-Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`republic.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
+Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`zk-voting.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
 ### Person (unique) vs one active Ethereum address
 
@@ -433,7 +433,7 @@ function verifyProof(
 
 `MockVerifier` (tests / local L2 default): owner can `setAccept(bool)`.
 `VoteVerifier` is the generated/production verifier (zero VK until a ceremony;
-delegates to `mockVerifier` only while unconfigured). `REPUBLIC_PROVING_PATH=1`
+delegates to `mockVerifier` only while unconfigured). `ZK_VOTING_PROVING_PATH=1`
 deploys `VoteVerifier` with no mock fallback. `Groth16VerifierAdapter` wraps a
 snarkjs-exported verifier (`circuits/build/`) onto `IGroth16Verifier`.
 Unconfigured key still checks input length and pairing-shaped points.
@@ -645,7 +645,7 @@ is the local Foundry path.
 **in progress**. Local `npm run circuits:setup` is UNTRUSTED. Phase-2
 contribute / verify / beacon / export tooling is `docs/CEREMONY.md`. Running
 it does not complete a ceremony. Until a real ceremony, MockVerifier is the
-Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`
+Foundry unit-test path. `ZK_VOTING_PROVING_PATH=1`
 is the fail-closed integration flag.
 
 ---
@@ -690,7 +690,7 @@ Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator
 are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
 `platform_admin` is a global override and may act in every jurisdiction.
 
-**Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
+**Store:** JSON file `apps/node/data/zk-voting.json` (gitignored). Native
 addons such as `better-sqlite3` are **not** used. A jurisdiction owns
 its elections.
 
@@ -827,7 +827,7 @@ Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 
 Product rule: **`eligible = registered ∩ ¬currently-disqualified`**, in
 registration order. Node freeze roots and `Election.eligibleRoot` use that
-same incremental tree (depth from the election, `republic.hash.keccak-dev-v1`
+same incremental tree (depth from the election, `zk-voting.hash.keccak-dev-v1`
 on the Node and in Foundry).
 
 | Path | What publishes the eligible root |
@@ -983,7 +983,7 @@ generic EVM logs.
 - `npm test -w apps/node` for API tests (`NODE_ENV=test node --test`).
 - `npm run test:l2` for civic sequencer tests.
 - `npm run test:auditor` for the independent verifier (no Node DB).
-- Optional: `npm run circuits:test` (Groth16 only if circom+snarkjs are installed, or if `REPUBLIC_PROVING_PATH=1`).
+- Optional: `npm run circuits:test` (Groth16 only if circom+snarkjs are installed, or if `ZK_VOTING_PROVING_PATH=1`).
 
 ---
 

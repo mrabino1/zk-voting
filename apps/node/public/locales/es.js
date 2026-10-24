@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Compromiso de identidad copiado.",
     localAddress: "Dirección local de {brand}",
     prfWrap:
-      "Envoltorio PRF: el material de la cuenta usa la sal republic:account:v1; el trapdoor ZK usa la sal republic:identity:v1. No son los mismos bytes.",
+      "Envoltorio PRF: el material de la cuenta usa la sal zk-voting:account:v1; el trapdoor ZK usa la sal zk-voting:identity:v1. No son los mismos bytes.",
     createFirst: "Cree una passkey para derivar el compromiso. El trapdoor nunca aparece en esta pantalla.",
     activeEthTitle: "Dirección Ethereum activa",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand} requiere una passkey del dispositivo (WebAuthn) con clave residente y verificación de usuario. Use un navegador actual (Safari 16+, Chrome 108+, Firefox 122+, Edge) en un dispositivo con autenticador de plataforma. Nunca se muestra una frase semilla.",
     productionNote:
-      "La producción usa keccak256(clave pública secp256k1 sin comprimir) y toma los últimos 20 bytes (Ethereum). Esta demostración no puede multiplicar en secp256k1 sin una biblioteca de curva, así que getAddress() devuelve SHA-256(semilla)[0:20] etiquetado republic-local-address.",
+      "La producción usa keccak256(clave pública secp256k1 sin comprimir) y toma los últimos 20 bytes (Ethereum). Esta demostración no puede multiplicar en secp256k1 sin una biblioteca de curva, así que getAddress() devuelve SHA-256(semilla)[0:20] etiquetado zk-voting-local-address.",
     staleWrap:
-      "Este navegador tiene un envoltorio passkey v1 (IndexedDB republic-wallet). v1 derivó el trapdoor ZK de la misma semilla que la clave de la cuenta, más débil que docs/PASSKEYS.md. La demostración no puede migrar ese envoltorio en el sitio: v1 usó una sal PRF aleatoria y un solo dominio HKDF, así que las sales nuevas de cuenta/identidad no pueden desenvolerlo. Restablezca la cartera del dispositivo y cree una passkey nueva. La dirección local y el compromiso de identidad cambiarán; cualquier entrada previa del padrón de demostración no coincidirá.",
+      "Este navegador tiene un envoltorio passkey v1 (IndexedDB zk-voting-wallet). v1 derivó el trapdoor ZK de la misma semilla que la clave de la cuenta, más débil que docs/PASSKEYS.md. La demostración no puede migrar ese envoltorio en el sitio: v1 usó una sal PRF aleatoria y un solo dominio HKDF, así que las sales nuevas de cuenta/identidad no pueden desenvolerlo. Restablezca la cartera del dispositivo y cree una passkey nueva. La dirección local y el compromiso de identidad cambiarán; cualquier entrada previa del padrón de demostración no coincidirá.",
     noEthWallet:
       "No hay cartera Ethereum en este navegador. Use una passkey o instale una cartera que admita personal_sign.",
     noWeb3Wallet: "No hay cartera Web3 en este navegador. Instale una cartera o use una passkey / tarjeta inteligente.",
@@ -671,7 +671,7 @@ export default {
     clerkHint:
       "Cree una elección y luego congele el padrón antes de abrir las urnas. <code>maxParticipants = 0</code> significa ilimitado. Elija pluralidad (predeterminado) o voto preferencial (IRV).",
     chainNote:
-      "Si este Node tiene <code>CHAIN_RPC</code>, Crear elección también llama a <code>ElectionFactory.createElection</code> y guarda el id uint256 en cadena junto al UUID. Los fallos de la fábrica se muestran aquí y no se guarda nada en local. Sin <code>CHAIN_RPC</code> este formulario escribe solo <code>republic.json</code> (demostración) y aún acuña un <code>onChainElectionId</code> de demostración para el circuito.",
+      "Si este Node tiene <code>CHAIN_RPC</code>, Crear elección también llama a <code>ElectionFactory.createElection</code> y guarda el id uint256 en cadena junto al UUID. Los fallos de la fábrica se muestran aquí y no se guarda nada en local. Sin <code>CHAIN_RPC</code> este formulario escribe solo <code>zk-voting.json</code> (demostración) y aún acuña un <code>onChainElectionId</code> de demostración para el circuito.",
     jurisdiction: "Jurisdicción",
     titleField: "Título",
     metadataUri: "URI de metadatos",

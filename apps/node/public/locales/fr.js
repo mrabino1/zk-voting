@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Identity commitment copié.",
     localAddress: "Adresse locale {brand}",
     prfWrap:
-      "Wrap PRF : le matériel de compte utilise le sel republic:account:v1 ; le trapdoor ZK utilise le sel republic:identity:v1. Ce ne sont pas les mêmes octets.",
+      "Wrap PRF : le matériel de compte utilise le sel zk-voting:account:v1 ; le trapdoor ZK utilise le sel zk-voting:identity:v1. Ce ne sont pas les mêmes octets.",
     createFirst: "Créez une passkey pour dériver le commitment. Le trapdoor n’apparaît jamais sur cet écran.",
     activeEthTitle: "Adresse Ethereum active",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand} exige une passkey d’appareil (WebAuthn) avec une clé résidente et une vérification utilisateur. Utilisez un navigateur actuel (Safari 16+, Chrome 108+, Firefox 122+, Edge) sur un appareil avec un authentificateur de plateforme. Aucune phrase secrète n’est jamais affichée.",
     productionNote:
-      "La production utilise keccak256(clé publique secp256k1 non compressée), puis prend les 20 derniers octets (Ethereum). Cette démo ne peut pas multiplier sur secp256k1 sans bibliothèque de courbe, donc getAddress() renvoie SHA-256(seed)[0:20] étiqueté republic-local-address.",
+      "La production utilise keccak256(clé publique secp256k1 non compressée), puis prend les 20 derniers octets (Ethereum). Cette démo ne peut pas multiplier sur secp256k1 sans bibliothèque de courbe, donc getAddress() renvoie SHA-256(seed)[0:20] étiqueté zk-voting-local-address.",
     staleWrap:
-      "Ce navigateur a un wrap passkey v1 (IndexedDB republic-wallet). v1 dérivait le trapdoor ZK de la même graine que la clé de compte, ce qui est plus faible que docs/PASSKEYS.md. La démo ne peut pas migrer ce wrap sur place : v1 utilisait un sel PRF aléatoire et un seul domaine HKDF, donc les nouveaux sels compte/identité ne peuvent pas le déballer. Réinitialisez le portefeuille de l’appareil et créez une nouvelle passkey. L’adresse locale et l’identity commitment changeront ; toute entrée de liste de démo antérieure ne correspondra plus.",
+      "Ce navigateur a un wrap passkey v1 (IndexedDB zk-voting-wallet). v1 dérivait le trapdoor ZK de la même graine que la clé de compte, ce qui est plus faible que docs/PASSKEYS.md. La démo ne peut pas migrer ce wrap sur place : v1 utilisait un sel PRF aléatoire et un seul domaine HKDF, donc les nouveaux sels compte/identité ne peuvent pas le déballer. Réinitialisez le portefeuille de l’appareil et créez une nouvelle passkey. L’adresse locale et l’identity commitment changeront ; toute entrée de liste de démo antérieure ne correspondra plus.",
     noEthWallet:
       "Aucun portefeuille Ethereum dans ce navigateur. Utilisez une passkey, ou installez un portefeuille qui prend en charge personal_sign.",
     noWeb3Wallet: "Aucun portefeuille Web3 dans ce navigateur. Installez un portefeuille ou utilisez une passkey / carte à puce.",
@@ -669,7 +669,7 @@ export default {
     clerkHint:
       "Créez une élection, puis gelez la liste avant l’ouverture du scrutin. <code>maxParticipants = 0</code> signifie illimité. Choisissez la pluralité (par défaut) ou le vote préférentiel (IRV).",
     chainNote:
-      "Si ce Node a <code>CHAIN_RPC</code> défini, Créer une élection appelle aussi <code>ElectionFactory.createElection</code> et stocke l’id uint256 on-chain à côté de l’UUID. Les échecs d’usine s’affichent ici et rien n’est enregistré localement. Sans <code>CHAIN_RPC</code>, ce formulaire n’écrit que <code>republic.json</code> (démo) et frappe encore un <code>onChainElectionId</code> de démo pour le circuit.",
+      "Si ce Node a <code>CHAIN_RPC</code> défini, Créer une élection appelle aussi <code>ElectionFactory.createElection</code> et stocke l’id uint256 on-chain à côté de l’UUID. Les échecs d’usine s’affichent ici et rien n’est enregistré localement. Sans <code>CHAIN_RPC</code>, ce formulaire n’écrit que <code>zk-voting.json</code> (démo) et frappe encore un <code>onChainElectionId</code> de démo pour le circuit.",
     jurisdiction: "Juridiction",
     titleField: "Titre",
     metadataUri: "URI de métadonnées",

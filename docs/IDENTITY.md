@@ -45,7 +45,7 @@ Signing a Web3 challenge with a wallet that is **already a web3 auth method** lo
 1. First factor succeeds (email address, Ethereum signature, smart-card mock/attest, civic-id hash, or passkey).
 2. If the person has no email yet, the client collects one (`POST /api/auth/mfa/email`).
 3. The Node emails a 6-digit code via **SESv2** (`SES_FROM_ADDRESS` + `AWS_REGION`, default AWS credential chain).
-4. `POST /api/auth/mfa/verify` `{ code }` sets the session cookie. The pending MFA cookie is `republic.mfa` (10 minutes, 5 attempts).
+4. `POST /api/auth/mfa/verify` `{ code }` sets the session cookie. The pending MFA cookie is `zk-voting.mfa` (10 minutes, 5 attempts).
 
 When `SES_FROM_ADDRESS` and `AWS_REGION` are set, `requireEmailMfa` is on for production. Tests default it off (capture mailer still drives the **email** first-factor path, which always uses OTP). `REQUIRE_EMAIL_MFA=1` forces MFA in tests.
 
@@ -112,7 +112,7 @@ Kiosk or clerk desk. Fingerprint is a hex digest or keccak256 of a PEM. Live X.5
 
 ### Driver’s license or passport (`civic_id`)
 
-Socially certified photo ID. Hash only: `keccak256(utf8("republic:civic_id:v1|{kind}|{issuer}|{number}"))`.
+Socially certified photo ID. Hash only: `keccak256(utf8("zk-voting:civic_id:v1|{kind}|{issuer}|{number}"))`.
 
 - Kinds: `drivers_license` | `passport`.
 - Self-service mock: `{ mock: true }` when `ALLOW_CIVIC_ID_MOCK=1` (or smart-card mock / tests).
@@ -213,4 +213,4 @@ Passkey begin/finish stay under `/api/auth/passkey/*`. Wallet **login** is `/api
 
 ## Privacy
 
-Public ballot rows remain `{ nullifier, ballotHash, electionId, relayer }`. No `userId`, no choice, no identity commitment, no active ETH address on the vote. Hourly disclosure is unchanged ([`ARCHITECTURE.md`](./ARCHITECTURE.md)). Civic document numbers never appear in `republic.json`. Commander brief: [`how_voters_privacy_is_protected.md`](../how_voters_privacy_is_protected.md).
+Public ballot rows remain `{ nullifier, ballotHash, electionId, relayer }`. No `userId`, no choice, no identity commitment, no active ETH address on the vote. Hourly disclosure is unchanged ([`ARCHITECTURE.md`](./ARCHITECTURE.md)). Civic document numbers never appear in `zk-voting.json`. Commander brief: [`how_voters_privacy_is_protected.md`](../how_voters_privacy_is_protected.md).

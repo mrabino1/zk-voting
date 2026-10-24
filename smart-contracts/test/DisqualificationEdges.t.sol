@@ -9,7 +9,7 @@ import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
 /// @notice Disqualification auth, unique-key, late-update, and isolation edges.
-/// @dev Ported from nuursha already-used / pause-vs-suspend / per-instance halt.
+/// @dev Edge cases: already-used, pause-vs-suspend, per-instance halt.
 contract DisqualificationEdgesTest is Deployer {
     uint256 internal electionId;
     address internal election;

@@ -28,10 +28,10 @@ export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Name-based namespace for Republic public election ids (UUID v5).
+ * Name-based namespace for ZK-Voting public election ids (UUID v5).
  * Independent of the on-chain DOMAIN used for L1 certificationId.
  */
-export const REPUBLIC_ELECTION_NAMESPACE = '7c3a1f10-9e2b-5c4d-8a71-0b9d4e6f2a11';
+export const ZK_VOTING_ELECTION_NAMESPACE = '7c3a1f10-9e2b-5c4d-8a71-0b9d4e6f2a11';
 
 /**
  * Crockford-ish lowercase alphabet (no 0/o/1/i/l) so short links stay
@@ -99,7 +99,7 @@ export function scopedPublicIdName(scope = {}) {
 }
 
 export function mintScopedPublicId(scope = {}) {
-  return uuidV5(REPUBLIC_ELECTION_NAMESPACE, scopedPublicIdName(scope));
+  return uuidV5(ZK_VOTING_ELECTION_NAMESPACE, scopedPublicIdName(scope));
 }
 
 export function publicIdMatchesScope(uuid, scope = {}) {

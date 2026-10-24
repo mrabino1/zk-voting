@@ -26,7 +26,7 @@ export const TALLY_SCHEME_OPENS_BALLOTS = "opens_ballots";
 
 export const TALLY_CRYPTO_SCHEME = "p256-ecies-aesgcm-v1";
 export const TALLY_ENVELOPE_MAGIC = new Uint8Array([0x52, 0x54, 0x76, 0x31]); // RTv1
-export const TALLY_HKDF_INFO = "republic-tally-ecies-p256-v1";
+export const TALLY_HKDF_INFO = "zk-voting-tally-ecies-p256-v1";
 export const TALLY_INSTANCE_VERSION = 2; // TallyPublicInputs.VERSION (TALLY_SOL_V2)
 
 export const DEMO_KEY_WARNING =
@@ -165,7 +165,7 @@ async function aesFromShared(sharedBits) {
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: utf8Bytes("republic.tally.salt.v1"),
+      salt: utf8Bytes("zk-voting.tally.salt.v1"),
       info: utf8Bytes(TALLY_HKDF_INFO),
     },
     ikm,

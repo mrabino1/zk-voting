@@ -86,7 +86,7 @@ function nowSec() {
 
 describe('election UUID + short code', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-eid-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-eid-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -470,7 +470,7 @@ describe('explorer ingest secret', () => {
   let ingestBase;
 
   before(async () => {
-    ingestTmp = await mkdtemp(path.join(os.tmpdir(), 'republic-ingest-'));
+    ingestTmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-ingest-'));
     const created = await createApp({
       dataDir: ingestTmp,
       allowDevLogin: true,
@@ -496,7 +496,7 @@ describe('explorer ingest secret', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        source: 'republic-l2',
+        source: 'zk-voting-l2',
         outcomes: { tally: [{ electionId: '1', counts: [9, 9] }] },
       }),
     });
@@ -508,10 +508,10 @@ describe('explorer ingest secret', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-republic-ingest-secret': 'test-ingest-secret',
+        'x-zk-voting-ingest-secret': 'test-ingest-secret',
       },
       body: JSON.stringify({
-        source: 'republic-l2',
+        source: 'zk-voting-l2',
         outcomes: { register: [{ identityCommitment: '0xabc' }] },
       }),
     });

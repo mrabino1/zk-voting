@@ -144,7 +144,7 @@ contract FactoryFuzz is Deployer {
             tallyOperator,
             address(verifier),
             questions,
-            keccak256("republic-fuzz-jurisdiction")
+            keccak256("zk-voting-fuzz-jurisdiction")
         );
     }
 

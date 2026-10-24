@@ -126,7 +126,7 @@ describe('role-promotion mail API', () => {
     await new Promise((resolve) => webhook.listen(0, '127.0.0.1', resolve));
     webhookUrl = `http://127.0.0.1:${webhook.address().port}/mail`;
 
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-mail-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-mail-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

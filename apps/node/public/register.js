@@ -495,7 +495,7 @@ export async function renderRegister(main, ctx) {
                     }
                   )
                 : rec.prfSupported
-                ? h("p", { text: "PRF wrap: account material uses salt republic:account:v1; the ZK trapdoor uses salt republic:identity:v1. They are not the same bytes." })
+                ? h("p", { text: "PRF wrap: account material uses salt zk-voting:account:v1; the ZK trapdoor uses salt zk-voting:identity:v1. They are not the same bytes." })
                 : h(
                     "p",
                     {

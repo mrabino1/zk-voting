@@ -9,7 +9,7 @@ import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
 /// @notice Party zero-address, attestation expiry, duplicates, and isolation.
-/// @dev Ported from nuursha campaign pause/suspend + unique-key + deadline edges.
+/// @dev Edge cases: pause/suspend, unique-key, and deadline.
 contract ExternalPartyEdgesTest is Deployer {
     ExternalPartyRegistry internal parties;
     uint256 internal electionId;

@@ -307,7 +307,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 435352,
+          "zkVotingJsonBytes": 435352,
           "l2ChainJsonBytes": 155690
         },
         "notes": [],
@@ -603,7 +603,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 841200,
+          "zkVotingJsonBytes": 841200,
           "l2ChainJsonBytes": 307990
         },
         "notes": [],
@@ -899,7 +899,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 1653549,
+          "zkVotingJsonBytes": 1653549,
           "l2ChainJsonBytes": 612590
         },
         "notes": [],
@@ -1195,7 +1195,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 3276681,
+          "zkVotingJsonBytes": 3276681,
           "l2ChainJsonBytes": 1221790
         },
         "notes": [],
@@ -1671,7 +1671,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 435152,
+          "zkVotingJsonBytes": 435152,
           "l2ChainJsonBytes": 155690
         },
         "notes": [],
@@ -1967,7 +1967,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 841936,
+          "zkVotingJsonBytes": 841936,
           "l2ChainJsonBytes": 307990
         },
         "notes": [],
@@ -2263,7 +2263,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 1653469,
+          "zkVotingJsonBytes": 1653469,
           "l2ChainJsonBytes": 612590
         },
         "notes": [],
@@ -2559,7 +2559,7 @@
           "error": null
         },
         "files": {
-          "republicJsonBytes": 3276481,
+          "zkVotingJsonBytes": 3276481,
           "l2ChainJsonBytes": 1221790
         },
         "notes": [],

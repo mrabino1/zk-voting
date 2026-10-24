@@ -10,7 +10,7 @@ A missing, invalid, expired, or revoked key, an IP allowlist miss, a missing sco
 
 Key create, list, get, revoke, and rotate accept only a signed-in `platform_super_admin` cookie session.
 
-- Cookie: `republic.sid` (HttpOnly, SameSite=Lax), issued by the normal sign-in paths.
+- Cookie: `zk-voting.sid` (HttpOnly, SameSite=Lax), issued by the normal sign-in paths.
 - CSRF: `GET /api/_sa/v1/session` returns `csrfToken`. State-changing key routes, and key list/get, require header `x-csrf-token` equal to that value. A cross-site `Sec-Fetch-Site` is rejected. An `Origin` header, when present, must be one of the configured origins.
 - Step-up: the session's `stepUpAt` (set at sign-in) must be inside `SUPER_ADMIN_STEP_UP_MS` (default 15 minutes, minimum 60 seconds). `POST /api/_sa/v1/step-up` with the CSRF header refreshes it. This is the same session a super admin already holds; it does not accept a key.
 
@@ -105,7 +105,7 @@ Every write accepts `dryRun=1` (query or body). Dry-run returns the projected af
 
 Every call, including auth failures, appends a hash-chained row: timestamp, key id or session handle, method, path, scope, result code, source IP, user agent, request id, and for writes a before/after summary. The hash is SHA-256 of the previous hash plus a canonical JSON body. `GET /audit/verify` walks the chain and reports tampering.
 
-Only the active writer appends to that chain or updates `lastUsedAt`, and it does so before the HTTP response. A standby process does not mutate `republic.json`. It keeps a process-local side log (`standbyLocalCount` on `GET /audit`) that is not part of the verifiable chain and is discarded when the process exits. Key authentication on standby re-reads the key row from disk, so a revoke by the writer is visible on the next request without a standby write. Authorized writes on standby return HTTP 503 `STANDBY` with `Retry-After: 2`. Auth failures on standby stay HTTP 404.
+Only the active writer appends to that chain or updates `lastUsedAt`, and it does so before the HTTP response. A standby process does not mutate `zk-voting.json`. It keeps a process-local side log (`standbyLocalCount` on `GET /audit`) that is not part of the verifiable chain and is discarded when the process exits. Key authentication on standby re-reads the key row from disk, so a revoke by the writer is visible on the next request without a standby write. Authorized writes on standby return HTTP 503 `STANDBY` with `Retry-After: 2`. Auth failures on standby stay HTTP 404.
 
 ## Hard exclusions
 

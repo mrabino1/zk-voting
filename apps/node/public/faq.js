@@ -176,7 +176,7 @@ export const FAQ_ENTRIES = [
     q: "What are the security limits on this branch? Is MockVerifier still used?",
     a: [
       "Yes — be precise. Local Foundry unit tests still use MockVerifier. Poseidon(2) is the vote hasher, the proof helpers, PoseidonHasher, and the passkey commitment on this screen. A committed Groth16 check verifies an untrusted local Vote(4) proof and an untrusted Vote(20) dev proof. Those keys are not a ceremony.",
-      "Passkey demo addresses may be republic-local-address, not production secp256k1. Tally that opens ballots uses a Feldman t-of-n guardian key (NON-PRODUCTION). Homomorphic aggregation versus a mixnet is not decided. Do not treat MockVerifier, a local circuits:setup zkey, or this guardian ceremony as production cryptography. This is not court-ready.",
+      "Passkey demo addresses may be zk-voting-local-address, not production secp256k1. Tally that opens ballots uses a Feldman t-of-n guardian key (NON-PRODUCTION). Homomorphic aggregation versus a mixnet is not decided. Do not treat MockVerifier, a local circuits:setup zkey, or this guardian ceremony as production cryptography. This is not court-ready.",
     ],
   },
   {
@@ -328,7 +328,7 @@ export const FAQ_ENTRIES = [
     q: "What is SHA-256 tracking on /terms?",
     a: [
       "The public Terms of Use live at /terms. The canonical source is markdown in the Node package. The Node generates a deterministic PDF from that source and emails that PDF when you accept (AWS SES, same From address as MFA). The fingerprint stored on your person is SHA-256 of the exact PDF bytes — 64 hex characters. Markdown SHA-256 is published next to it so you can see both.",
-      "Accepting at register, or the accept control while signed in, writes who, when, which version, both hashes, and whether the PDF was emailed (termsAcceptances in republic.json). Viewing /terms while signed in records a view of the current hash for that session. Changing the markdown changes both hashes.",
+      "Accepting at register, or the accept control while signed in, writes who, when, which version, both hashes, and whether the PDF was emailed (termsAcceptances in zk-voting.json). Viewing /terms while signed in records a view of the current hash for that session. Changing the markdown changes both hashes.",
     ],
   },
 ];

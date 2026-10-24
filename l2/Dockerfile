@@ -1,5 +1,5 @@
 # NOT FOR PROFIT — civic public good, not a commercial sequencer.
-# Republic L2 sequencer + prover. Same image, different compose command.
+# ZK-Voting L2 sequencer + prover. Same image, different compose command.
 # Build from the repository root so the root .dockerignore applies.
 
 FROM node:22-bookworm-slim

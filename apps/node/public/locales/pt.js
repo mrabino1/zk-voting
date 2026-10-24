@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Identity commitment copiado.",
     localAddress: "Endereço local da {brand}",
     prfWrap:
-      "Wrap PRF: o material da conta usa o sal republic:account:v1; o trapdoor ZK usa o sal republic:identity:v1. Não são os mesmos bytes.",
+      "Wrap PRF: o material da conta usa o sal zk-voting:account:v1; o trapdoor ZK usa o sal zk-voting:identity:v1. Não são os mesmos bytes.",
     createFirst: "Crie uma passkey para derivar o commitment. O trapdoor nunca aparece nesta tela.",
     activeEthTitle: "Endereço Ethereum ativo",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "A {brand} exige uma passkey de dispositivo (WebAuthn) com chave residente e verificação de usuário. Use um navegador atual (Safari 16+, Chrome 108+, Firefox 122+, Edge) em um dispositivo com autenticador de plataforma. Nenhuma frase-semente é mostrada.",
     productionNote:
-      "A produção usa keccak256(chave pública secp256k1 não comprimida) e depois pega os últimos 20 bytes (Ethereum). Esta demo não consegue multiplicar em secp256k1 sem uma biblioteca de curva, então getAddress() devolve SHA-256(seed)[0:20] rotulado republic-local-address.",
+      "A produção usa keccak256(chave pública secp256k1 não comprimida) e depois pega os últimos 20 bytes (Ethereum). Esta demo não consegue multiplicar em secp256k1 sem uma biblioteca de curva, então getAddress() devolve SHA-256(seed)[0:20] rotulado zk-voting-local-address.",
     staleWrap:
-      "Este navegador tem um wrap passkey v1 (IndexedDB republic-wallet). O v1 derivava o trapdoor ZK da mesma semente da chave da conta, o que é mais fraco que docs/PASSKEYS.md. A demo não pode migrar esse wrap no lugar: o v1 usava um sal PRF aleatório e um único domínio HKDF, então os novos sais de conta/identidade não o desembrulham. Redefina a carteira do dispositivo e crie uma nova passkey. O endereço local e o identity commitment mudarão; qualquer entrada anterior da lista de demo não coincidirá.",
+      "Este navegador tem um wrap passkey v1 (IndexedDB zk-voting-wallet). O v1 derivava o trapdoor ZK da mesma semente da chave da conta, o que é mais fraco que docs/PASSKEYS.md. A demo não pode migrar esse wrap no lugar: o v1 usava um sal PRF aleatório e um único domínio HKDF, então os novos sais de conta/identidade não o desembrulham. Redefina a carteira do dispositivo e crie uma nova passkey. O endereço local e o identity commitment mudarão; qualquer entrada anterior da lista de demo não coincidirá.",
     noEthWallet:
       "Nenhuma carteira Ethereum neste navegador. Use uma passkey ou instale uma carteira que suporte personal_sign.",
     noWeb3Wallet: "Nenhuma carteira Web3 neste navegador. Instale uma carteira ou use uma passkey / cartão inteligente.",
@@ -669,7 +669,7 @@ export default {
     clerkHint:
       "Crie uma eleição e depois congele a lista antes de a votação abrir. <code>maxParticipants = 0</code> significa ilimitado. Escolha pluralidade (padrão) ou voto ranqueado (IRV).",
     chainNote:
-      "Se este Node tiver <code>CHAIN_RPC</code> definido, Criar eleição também chama <code>ElectionFactory.createElection</code> e guarda o id uint256 on-chain ao lado do UUID. Falhas da fábrica aparecem aqui e nada é salvo localmente. Sem <code>CHAIN_RPC</code> este formulário só escreve <code>republic.json</code> (demo) e ainda cunha um <code>onChainElectionId</code> de demo para o circuito.",
+      "Se este Node tiver <code>CHAIN_RPC</code> definido, Criar eleição também chama <code>ElectionFactory.createElection</code> e guarda o id uint256 on-chain ao lado do UUID. Falhas da fábrica aparecem aqui e nada é salvo localmente. Sem <code>CHAIN_RPC</code> este formulário só escreve <code>zk-voting.json</code> (demo) e ainda cunha um <code>onChainElectionId</code> de demo para o circuito.",
     jurisdiction: "Jurisdição",
     titleField: "Título",
     metadataUri: "URI de metadados",

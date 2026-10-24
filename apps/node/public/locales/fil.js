@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Nakopya ang identity commitment.",
     localAddress: "Local address ng {brand}",
     prfWrap:
-      "PRF wrap: gumagamit ang account material ng salt republic:account:v1; gumagamit ang ZK trapdoor ng salt republic:identity:v1. Hindi sila magkaparehong bytes.",
+      "PRF wrap: gumagamit ang account material ng salt zk-voting:account:v1; gumagamit ang ZK trapdoor ng salt zk-voting:identity:v1. Hindi sila magkaparehong bytes.",
     createFirst: "Gumawa ng passkey para mahango ang commitment. Hindi kailanman lumalabas ang trapdoor sa screen na ito.",
     activeEthTitle: "Aktibong Ethereum address",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "Kailangan ng {brand} ng passkey ng device (WebAuthn) na may resident key at user verification. Gumamit ng kasalukuyang browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) sa device na may platform authenticator. Hindi kailanman ipinapakita ang seed phrase.",
     productionNote:
-      "Gumagamit ang produksyon ng keccak256(uncompressed secp256k1 public key), pagkatapos ay kinukuha ang huling 20 bytes (Ethereum). Hindi makakapag-multiply ang demo na ito sa secp256k1 nang walang curve library, kaya nagbabalik ang getAddress() ng SHA-256(seed)[0:20] na may label na republic-local-address.",
+      "Gumagamit ang produksyon ng keccak256(uncompressed secp256k1 public key), pagkatapos ay kinukuha ang huling 20 bytes (Ethereum). Hindi makakapag-multiply ang demo na ito sa secp256k1 nang walang curve library, kaya nagbabalik ang getAddress() ng SHA-256(seed)[0:20] na may label na zk-voting-local-address.",
     staleWrap:
-      "May v1 passkey wrap ang browser na ito (IndexedDB republic-wallet). Hinango ng v1 ang ZK trapdoor mula sa parehong seed ng account key, na mas mahina kaysa docs/PASSKEYS.md. Hindi maaaring i-migrate ng demo ang wrap na iyon sa lugar: gumamit ang v1 ng random PRF salt at iisang HKDF domain, kaya hindi ito mabubuksan ng mga bagong account/identity salt. I-reset ang wallet ng device at gumawa ng bagong passkey. Magbabago ang local address at identity commitment; hindi tutugma ang anumang naunang demo roll entry.",
+      "May v1 passkey wrap ang browser na ito (IndexedDB zk-voting-wallet). Hinango ng v1 ang ZK trapdoor mula sa parehong seed ng account key, na mas mahina kaysa docs/PASSKEYS.md. Hindi maaaring i-migrate ng demo ang wrap na iyon sa lugar: gumamit ang v1 ng random PRF salt at iisang HKDF domain, kaya hindi ito mabubuksan ng mga bagong account/identity salt. I-reset ang wallet ng device at gumawa ng bagong passkey. Magbabago ang local address at identity commitment; hindi tutugma ang anumang naunang demo roll entry.",
     noEthWallet:
       "Walang Ethereum wallet sa browser na ito. Gumamit ng passkey, o mag-install ng wallet na sumusuporta sa personal_sign.",
     noWeb3Wallet: "Walang Web3 wallet sa browser na ito. Mag-install ng wallet o gumamit ng passkey / smart card.",
@@ -669,7 +669,7 @@ export default {
     clerkHint:
       "Gumawa ng halalan, pagkatapos ay i-freeze ang talaan bago magbukas ang botohan. Ang <code>maxParticipants = 0</code> ay walang limitasyon. Pumili ng plurality (default) o ranked choice (IRV).",
     chainNote:
-      "Kung naka-set ang <code>CHAIN_RPC</code> sa Node na ito, tumatawag din ang Create election sa <code>ElectionFactory.createElection</code> at iniimbak ang on-chain uint256 id sa tabi ng UUID. Ipinapakita rito ang mga pagkabigo ng factory at walang nase-save sa lokal. Kung walang <code>CHAIN_RPC</code>, nagsusulat lang ang form na ito sa <code>republic.json</code> (demo) at gumagawa pa rin ng demo <code>onChainElectionId</code> para sa circuit.",
+      "Kung naka-set ang <code>CHAIN_RPC</code> sa Node na ito, tumatawag din ang Create election sa <code>ElectionFactory.createElection</code> at iniimbak ang on-chain uint256 id sa tabi ng UUID. Ipinapakita rito ang mga pagkabigo ng factory at walang nase-save sa lokal. Kung walang <code>CHAIN_RPC</code>, nagsusulat lang ang form na ito sa <code>zk-voting.json</code> (demo) at gumagawa pa rin ng demo <code>onChainElectionId</code> para sa circuit.",
     jurisdiction: "Hurisdiksyon",
     titleField: "Pamagat",
     metadataUri: "Metadata URI",

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Versioned HashLeftRight schemes for Republic proving path.
+ * @fileoverview Versioned HashLeftRight schemes for ZK-Voting proving path.
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
@@ -16,9 +16,9 @@
 "use strict";
 
 const HASH_SCHEMES = Object.freeze({
-  STANDIN_V0: "republic.hash.standin-v0",
-  KECCAK_DEV_V1: "republic.hash.keccak-dev-v1",
-  POSEIDON_BN254_X5_T3_V1: "republic.hash.poseidon-bn254-x5-t3-v1",
+  STANDIN_V0: "zk-voting.hash.standin-v0",
+  KECCAK_DEV_V1: "zk-voting.hash.keccak-dev-v1",
+  POSEIDON_BN254_X5_T3_V1: "zk-voting.hash.poseidon-bn254-x5-t3-v1",
 });
 
 const HASH_SCHEME_STATUS = Object.freeze({
@@ -49,12 +49,12 @@ function parseEnvFlag(value, defaultValue) {
 }
 
 function provingPathEnabled(env = process.env) {
-  return parseEnvFlag(env.REPUBLIC_PROVING_PATH, false);
+  return parseEnvFlag(env.ZK_VOTING_PROVING_PATH, false);
 }
 
 function useMockVerifier(env = process.env) {
   if (provingPathEnabled(env)) return false;
-  return parseEnvFlag(env.REPUBLIC_USE_MOCK_VERIFIER, true);
+  return parseEnvFlag(env.ZK_VOTING_USE_MOCK_VERIFIER, true);
 }
 
 function normalizeHashScheme(name) {
@@ -67,7 +67,7 @@ function normalizeHashScheme(name) {
 }
 
 function resolveHashScheme(env = process.env) {
-  if (env.REPUBLIC_HASH_SCHEME) return normalizeHashScheme(env.REPUBLIC_HASH_SCHEME);
+  if (env.ZK_VOTING_HASH_SCHEME) return normalizeHashScheme(env.ZK_VOTING_HASH_SCHEME);
   if (provingPathEnabled(env)) return HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
   return HASH_SCHEMES.KECCAK_DEV_V1;
 }

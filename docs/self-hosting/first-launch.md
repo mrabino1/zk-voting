@@ -6,7 +6,7 @@ On the very first boot, with an empty `node-data` volume, the Node prepares itse
 
 ## What happens on an empty volume
 
-1. The Node creates `$DATA_DIR/republic.json` (the data store) and writes a random node id.
+1. The Node creates `$DATA_DIR/zk-voting.json` (the data store) and writes a random node id.
 2. It seeds **one platform administrator** with the handle from `ADMIN_HANDLE` (default `admin`). That account has no passkey yet. A later boot never creates a second administrator.
 3. If `SUPER_ADMIN_EMAIL` is set, it is stored as that administrator's contact address. `/feedback` messages go there.
 4. It seeds a **Demo jurisdiction** so the officer pages have something to show.

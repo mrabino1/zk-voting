@@ -1,5 +1,5 @@
 /**
- * @fileoverview Shared JSDoc types and constants for Republic / zk-voting.
+ * @fileoverview Shared JSDoc types and constants for ZK-Voting.
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
@@ -13,8 +13,8 @@
 
 const AUTH_METHOD_TYPES = Object.freeze(["email", "passkey", "web3", "smart_card", "civic_id"]);
 
-/** Republic L2 chain id (see docs/L2.md). */
-const REPUBLIC_CHAIN_ID = 27427;
+/** ZK-Voting L2 chain id (see docs/L2.md). */
+const ZK_VOTING_CHAIN_ID = 27427;
 
 const BallotMethod = Object.freeze({
   PLURALITY: "plurality",
@@ -271,7 +271,7 @@ const REASON_CODE_LABELS = Object.freeze({
  */
 
 /**
- * One Republic L2 block as the explorer shows it. Transaction origins
+ * One ZK-Voting L2 block as the explorer shows it. Transaction origins
  * are typically the bundler, not the voter.
  *
  * @typedef {Object} Block
@@ -281,7 +281,7 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {number|bigint} timestamp Unix seconds.
  * @property {string} stateRoot Post-state root.
  * @property {string} [receiptsRoot] Optional receipts trie root.
- * @property {number} chainId Always `27427` on Republic L2.
+ * @property {number} chainId Always `27427` on ZK-Voting L2.
  * @property {string} sequencer Sequencer address that proposed the block.
  * @property {BlockTx[]} transactions Ordered txs / UserOps included.
  * @property {BlockOutcome[]} outcomes Derived events the explorer indexes:
@@ -320,7 +320,7 @@ const REASON_CODE_LABELS = Object.freeze({
  * @property {string} name Display name (city, county, nation, union, …).
  * @property {string} [metadataURI] Public policy / reason-catalog document.
  * @property {string} [chainId] Decimal string of the execution chain
- *   (`27427` for Republic L2, `1` for Ethereum mainnet).
+ *   (`27427` for ZK-Voting L2, `1` for Ethereum mainnet).
  * @property {string} [factory] ElectionFactory address on that chain.
  * @property {string[]} [reasonCatalog] Enabled reason code labels. Protocol
  *   default is the README catalog; jurisdictions may disable codes, not
@@ -360,7 +360,7 @@ function electionStateLabel(state) {
 }
 
 module.exports = {
-  REPUBLIC_CHAIN_ID,
+  ZK_VOTING_CHAIN_ID,
   ETHEREUM_MAINNET_CHAIN_ID,
   ElectionState,
   ReasonCode,

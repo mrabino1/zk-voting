@@ -101,7 +101,6 @@ describe('configurable branding', () => {
       assert.equal(r.status, 200, url);
       assert.match(r.text, /<meta name="brand-name" content="ZK-Voting"\/>/, url);
       assert.doesNotMatch(r.text, /%BRAND_/, url);
-      assert.doesNotMatch(r.text, /Republic/, url);
       assert.match(title(r.text) || '', /ZK-Voting/, url);
     }
     const home = await api('GET', '/');

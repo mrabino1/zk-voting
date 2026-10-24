@@ -175,7 +175,7 @@ describe('official outcome PDF HTTP', () => {
   }
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-outcome-pdf-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-outcome-pdf-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

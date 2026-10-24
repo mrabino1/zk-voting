@@ -47,7 +47,7 @@ async function signAndCast(fx, poll, account, choices) {
   assert.equal(typed.status, 200, typed.text);
   const message = {
     ...typed.json.typedData.message,
-    republicChainId: BigInt(typed.json.typedData.message.republicChainId),
+    zkVotingChainId: BigInt(typed.json.typedData.message.zkVotingChainId),
     issuedAt: BigInt(typed.json.typedData.message.issuedAt),
   };
   const signature = await account.signTypedData({

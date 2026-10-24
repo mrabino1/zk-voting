@@ -3,7 +3,7 @@
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
- * HASH_SCHEME: republic.hash.poseidon-bn254-x5-t3-v1
+ * HASH_SCHEME: zk-voting.hash.poseidon-bn254-x5-t3-v1
  *
  * Same permutation as iden3 circomlib `Poseidon(2)`: state width t=3,
  * x^5 S-box, 8 full rounds, 57 partial rounds. Constants are the
@@ -34,13 +34,13 @@ function pow5(a) {
 }
 
 /**
- * Poseidon hash of 1..16 field elements. Republic HashLeftRight uses 2.
+ * Poseidon hash of 1..16 field elements. ZK-Voting HashLeftRight uses 2.
  * @param {Array<string|number|bigint>} inputs
  * @returns {bigint}
  */
 function poseidon(inputs) {
   if (!Array.isArray(inputs) || inputs.length !== 2) {
-    throw new Error("poseidon: Republic Poseidon(2) expects exactly 2 inputs");
+    throw new Error("poseidon: ZK-Voting Poseidon(2) expects exactly 2 inputs");
   }
   const state = [0n, mod(inputs[0]), mod(inputs[1])];
   const total = N_ROUNDS_F + N_ROUNDS_P;
@@ -69,7 +69,7 @@ function poseidon(inputs) {
 }
 
 /**
- * HashLeftRight for republic.hash.poseidon-bn254-x5-t3-v1.
+ * HashLeftRight for zk-voting.hash.poseidon-bn254-x5-t3-v1.
  * @param {string|number|bigint} left
  * @param {string|number|bigint} right
  * @returns {bigint}

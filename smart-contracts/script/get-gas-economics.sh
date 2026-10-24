@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # zk-voting gas economics.
 #
-# Ported from nuursha-nft-erc20-whitelabel scripts/get-gas-economics.sh and
-# adapted to ZK-Voting deployables under smart-contracts/src:
+# Gas and deploy-cost estimates for the ZK-Voting deployables under
+# smart-contracts/src:
 #   1. ETH/USD from CoinGecko (Coinbase spot if CoinGecko is down)
 #   2. Gas gwei from the local node http://edps4:8545, then fallbacks
 #   3. Compiled bytecode in out/ vs EIP-170 (24576) and EIP-3860 (49152)
 #   4. A USD view of those sizes, plus documented L1 ranges
 #
-# Nuursha NFT mint, claim, and ERC-20 gas tables are not used. This repo has
+# There are no NFT mint, claim, or ERC-20 gas tables. This repo has
 # no token and no voter fee. Usage ranges are the order-of-magnitude scenarios
 # in voting_cost_estimate.md, not Foundry measurements. Pass --gas-report for
 # a forge snapshot of the key calls.
@@ -258,7 +258,7 @@ def fmt_usd(v):
     return f"${v:,.4f}"
 
 print("ZK-Voting gas economics (zk-voting)")
-print("Port of nuursha scripts/get-gas-economics.sh, adapted to ZK-Voting deployables.")
+print("Gas and deploy-cost estimates for the ZK-Voting deployables.")
 print(f"OUT_DIR: {out_dir}")
 print()
 print("Market")
@@ -342,7 +342,7 @@ print("  " + "-" * 54)
 for name, runtime, init, floor in rows:
     print(f"  {name:<28} {floor:12,d} {fmt_usd(usd(floor)):>12}")
 print()
-print("Usage (Nuursha NFT / claim / ERC-20 tables omitted)")
+print("Usage (no NFT / claim / ERC-20 tables)")
 print("  ZK-Voting has no token and no voter fee. Voters do not pay L1 or L2 gas")
 print("  on the civic path. The ranges below are order-of-magnitude scenarios from")
 print("  voting_cost_estimate.md. This repo does not ship a measured submitBatch snapshot")

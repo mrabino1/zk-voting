@@ -17,7 +17,7 @@ function ingestSecretsEqual(expected, provided) {
 }
 
 function ingestSecretFromRequest(req) {
-  const header = req.get('x-republic-ingest-secret');
+  const header = req.get('x-zk-voting-ingest-secret');
   if (header) return String(header).trim();
   const auth = String(req.get('authorization') || '');
   const m = auth.match(/^Bearer\s+(.+)$/i);

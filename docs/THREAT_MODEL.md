@@ -34,7 +34,7 @@ problem**, not a UUID problem.
 
 ```
 certificationId = keccak256(abi.encode(
-  keccak256("republic.election.identity.v1"),
+  keccak256("zk-voting.election.identity.v1"),
   factory,          // shared ElectionFactory
   electionId,       // factory uint256
   jurisdictionId    // Election.params, not a client string

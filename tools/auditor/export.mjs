@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Export a public auditor bundle from Node HTTP or from chain JSON-RPC.
-// Does not open apps/node/data/republic.json.
+// Does not open apps/node/data/zk-voting.json.
 
 import { createRequire } from 'node:module';
 import { verifyAuditorBundle, AUDITOR_SCHEMA } from './verify.mjs';
@@ -60,7 +60,7 @@ function decodeIndexedUint(topicWord) {
 }
 
 /**
- * Fetch GET /api/elections/:id/artifacts from a Republic Node (public HTTP).
+ * Fetch GET /api/elections/:id/artifacts from a ZK-Voting Node (public HTTP).
  */
 export async function exportFromNode(baseUrl, electionId) {
   const url = `${String(baseUrl).replace(/\/+$/, '')}/api/elections/${encodeURIComponent(electionId)}/artifacts`;
@@ -141,7 +141,7 @@ export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock =
   const bundle = {
     schema: AUDITOR_SCHEMA,
     nfp: true,
-    product: 'Republic',
+    product: 'ZK-Voting',
     source: 'chain',
     chainId: Number(await rpc(rpcUrl, 'eth_chainId', []).then((hex) => Number(hex)).catch(() => 0)),
     electionId: String(electionId),

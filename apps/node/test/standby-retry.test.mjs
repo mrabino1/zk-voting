@@ -23,7 +23,7 @@ describe('standby fetch retry', () => {
             get: (name) => {
               const key = String(name || '').toLowerCase();
               if (key === 'retry-after') return '0.01';
-              if (key === 'x-republic-mode') return 'standby';
+              if (key === 'x-zk-voting-mode') return 'standby';
               return null;
             },
           },

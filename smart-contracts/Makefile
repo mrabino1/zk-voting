@@ -1,8 +1,8 @@
 # zk-voting smart contracts — Foundry Makefile
 # NOT FOR PROFIT — civic public good. Not a commercial product.
 #
-# Modeled on the nuursha-nft-erc20-whitelabel Makefile: install, build,
-# unit/fuzz/invariant test split, local deploy, format, and help.
+# Targets: install, build, unit/fuzz/invariant test split, local deploy,
+# format, and help.
 
 .ONESHELL:
 
@@ -13,8 +13,9 @@
 	snapshot snapshot-diff security console update full pre-commit help
 
 RPC_URL ?= http://127.0.0.1:8545
-ANVIL_KEY ?= 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-PRIVATE_KEY ?= $(ANVIL_KEY)
+# PRIVATE_KEY comes from the environment only; there is no default here.
+# deploy-local falls back to Anvil's public dev key (local-only, chain 31337)
+# inside script/anvil_deploy.sh. Other deploy targets require PRIVATE_KEY.
 VERBOSITY ?= -vv
 
 # Default target
@@ -66,8 +67,8 @@ help:
 	@echo "  mt=<test>           - Test name for test-match"
 	@echo "  m=<module>          - Subdir under test/ for test-module"
 	@echo "  RPC_URL=...         - RPC (default: http://127.0.0.1:8545)"
-	@echo "  PRIVATE_KEY=...     - Deployer key (default: Anvil account #0)"
-	@echo "  REPUBLIC_PROVING_PATH=1 - Deploy VoteVerifier instead of MockVerifier"
+	@echo "  PRIVATE_KEY=...     - Deployer key from env (required except deploy-local on Anvil)"
+	@echo "  ZK_VOTING_PROVING_PATH=1 - Deploy VoteVerifier instead of MockVerifier"
 
 install:
 	@echo "Installing Solidity dependencies..."
@@ -98,7 +99,7 @@ doc:
 	forge doc
 	@echo "Documentation generated!"
 
-# Unit / integration only — skip fuzz + invariant (same split as nuursha).
+# Unit / integration only — skip fuzz + invariant .
 test:
 	@echo "Running unit and integration tests (excluding fuzz and invariant)..."
 	forge test --via-ir --no-match-path "test/{fuzz,invariant}/**"
@@ -187,22 +188,24 @@ anvil:
 
 deploy-local:
 	@echo "Deploying ZK-Voting stack to local Anvil (MockVerifier by default)..."
-	@echo "Set REPUBLIC_PROVING_PATH=1 to deploy VoteVerifier instead."
+	@echo "Set ZK_VOTING_PROVING_PATH=1 to deploy VoteVerifier instead."
 	@bash script/anvil_deploy.sh
 
 deploy-l2:
+	@[ -n "$$PRIVATE_KEY" ] || { echo "Set PRIVATE_KEY in the environment." >&2; exit 1; }
 	@echo "Deploying election stack to L2 (RPC_URL=$(RPC_URL))..."
 	forge script script/DeployL2.s.sol:DeployL2 \
 		--rpc-url "$(RPC_URL)" \
-		--private-key "$(PRIVATE_KEY)" \
+		--private-key "$$PRIVATE_KEY" \
 		--broadcast \
 		-vvv
 
 deploy-l1:
+	@[ -n "$$PRIVATE_KEY" ] || { echo "Set PRIVATE_KEY in the environment." >&2; exit 1; }
 	@echo "Deploying L1 settlement / tally mirror / mailbox (RPC_URL=$(RPC_URL))..."
 	forge script script/DeployL1.s.sol:DeployL1 \
 		--rpc-url "$(RPC_URL)" \
-		--private-key "$(PRIVATE_KEY)" \
+		--private-key "$$PRIVATE_KEY" \
 		--broadcast \
 		-vvv
 
@@ -211,11 +214,12 @@ create-election:
 		echo "Usage: make create-election FACTORY=0x... START=<unix> CUTOFF=<unix> TITLE='Name'"; \
 		exit 1; \
 	fi
+	@[ -n "$$PRIVATE_KEY" ] || { echo "Set PRIVATE_KEY in the environment." >&2; exit 1; }
 	@echo "Creating election on $(FACTORY)..."
 	FACTORY="$(FACTORY)" START="$(START)" CUTOFF="$(CUTOFF)" TITLE="$(TITLE)" \
 		forge script script/CreateElection.s.sol:CreateElection \
 		--rpc-url "$(RPC_URL)" \
-		--private-key "$(PRIVATE_KEY)" \
+		--private-key "$$PRIVATE_KEY" \
 		--broadcast \
 		-vvv
 

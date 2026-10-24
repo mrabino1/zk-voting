@@ -46,7 +46,7 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 
 | Item | Value | Source |
 | --- | --- | --- |
-| chainId | **27427** | [`l2/genesis.json`](./l2/genesis.json), [`packages/types`](./packages/types/index.js) `REPUBLIC_CHAIN_ID` |
+| chainId | **27427** | [`l2/genesis.json`](./l2/genesis.json), [`packages/types`](./packages/types/index.js) `ZK_VOTING_CHAIN_ID` |
 | Block period | Producer wakes every **2 seconds**, 1 sequencer. Default `L2_SKIP_EMPTY_BLOCKS=1` seals only when there is a tx, when the disclosure hour closes, or once per `L2_HEARTBEAT_SECONDS` (3600) | `genesis.json` `blockTime` / `period`; [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `shouldProduceBlock`; [`docs/L2.md`](./docs/L2.md) |
 | Processes | Node 22 sequencer (`l2/sequencer/index.mjs`) + prover (`l2/prover/index.mjs`) | [`l2/Dockerfile`](./l2/Dockerfile), [`docker-compose.yml`](./docker-compose.yml) |
 | RPC | JSON-RPC subset **:8546** | [`docs/L2.md`](./docs/L2.md) |
@@ -77,9 +77,9 @@ There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resource
 | Workload | CPU | RAM | Why |
 | --- | --- | --- | --- |
 | Local demo / town clerk, mock proofs | 2 vCPU | 4 GB | Three Node 22 processes; JSON store in RAM; mock prover is keccak/JSON, not a GPU SNARK. |
-| County election-window, tens of thousands of voters | 4 vCPU | 8–16 GB | Same processes; `republic.json` + explorer + hourly vote flush; Merkle trees keep **all leaves** in the JSON store. |
+| County election-window, tens of thousands of voters | 4 vCPU | 8–16 GB | Same processes; `zk-voting.json` + explorer + hourly vote flush; Merkle trees keep **all leaves** in the JSON store. |
 | Always-on L2 for **months** (default skip) | 2–4 vCPU | grows with **tx** blocks, not empty ticks | Sequencer holds the blocks it has sealed. Idle is ~24 blocks/day. `L2_SKIP_EMPTY_BLOCKS=0` restores the 2s empty-block flood (§2). |
-| Real Groth16 **vote** proofs in Node (`REPUBLIC_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Poseidon `Vote(4)` smoke is about **1966 non-linear** constraints. Poseidon `Vote(20)` is not benchmarked here. Ceremony is not done. |
+| Real Groth16 **vote** proofs in Node (`ZK_VOTING_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Poseidon `Vote(4)` smoke is about **1966 non-linear** constraints. Poseidon `Vote(20)` is not benchmarked here. Ceremony is not done. |
 
 `master` must not ship mock rollup proofs ([`docs/L2.md`](./docs/L2.md)). Budget a real prover when that lands; today’s default is mock.
 
@@ -103,7 +103,7 @@ You pay the VPS. This repository does not bill a platform fee.
 
 | Volume / path | Env | Contents |
 | --- | --- | --- |
-| Node `DATA_DIR` default `apps/node/data`; **Compose `/data`** | `DATA_DIR=/data` | `republic.json` (users, elections, votes, envelopes, terms, CMS), `l2-chain.json` (explorer), `receipt-pdf.secret` | [`apps/node/src/config.mjs`](./apps/node/src/config.mjs), [`Dockerfile`](./Dockerfile), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| Node `DATA_DIR` default `apps/node/data`; **Compose `/data`** | `DATA_DIR=/data` | `zk-voting.json` (users, elections, votes, envelopes, terms, CMS), `l2-chain.json` (explorer), `receipt-pdf.secret` | [`apps/node/src/config.mjs`](./apps/node/src/config.mjs), [`Dockerfile`](./Dockerfile), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 | L2 `L2_DATA_DIR` default `l2/data`; **Compose `/data`** | `L2_DATA_DIR=/data` | Hot window: `blocks/N.json`, `head.json`, `mempool.json`, `sealed.json`, `proofs/batch-N.json`, `archive/index.json`. `ARCHIVE_ENABLED` defaults to 1. Sealed hours older than `ARCHIVE_HOT_WINDOW_HOURS` (default 2) offload only when a bucket or `file://` sink is set. No store: warn, do not prune. | [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs), [`l2/archive/job.mjs`](./l2/archive/job.mjs), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
 | Compose volumes | `node-data:/data`, `l2-data:/data` | **Two** named volumes. Both appear as `/data` **inside** their containers. | [`docker-compose.yml`](./docker-compose.yml) |
 | Image build | `.dockerignore` excludes `apps/node/data`, `l2/data`, `.ptau`, `.zkey` | Mount data and proving keys; do not `COPY` them | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
@@ -116,7 +116,7 @@ You pay the VPS. This repository does not bill a platform fee.
 
 | If you deploy… | Mount |
 | --- | --- |
-| **Node image only** | Persistent volume → container **`/data`**. That is `republic.json` + `l2-chain.json`. Redeploys without this mount **wipe the roll.** |
+| **Node image only** | Persistent volume → container **`/data`**. That is `zk-voting.json` + `l2-chain.json`. Redeploys without this mount **wipe the roll.** |
 | **Compose** (`node` + `l2` + `prover`) | **Two** volumes. Node `/data` ≠ L2 `/data`. Do not point both services at one empty dir and expect isolation — Compose already uses two named volumes. |
 | Proving keys / ptau | Separate mount. Not in the image. |
 
@@ -134,9 +134,9 @@ Default (`L2_SKIP_EMPTY_BLOCKS=1`, heartbeat 3600): an idle producer writes abou
 | --- | --- | --- | --- | --- | --- |
 | L2 `blocks/` | One file per sealed block | **< 5 MB** | **~1 MB** (~24 × 1.4 KB × 30) plus any real txs | **~1.5–2.5 GB/month** (~60 MB/day × 30) | vote txs dominate; empty flood does not |
 | L2 `proofs/` | One pretty JSON per 4-block batch | small | ~6 batches/day when idle | **~0.3–0.8 GB/month** | one batch per 4 sealed blocks |
-| `republic.json` | Full pretty rewrite; eligible tree **stores every leaf** (~70 B/leaf compact; vote row ~0.2 KB) | **< 50 MB** | grows with people, not with empty L2 | same | **~0.2–1 GB** order of magnitude if identity + envelope + CMS sit on the person |
+| `zk-voting.json` | Full pretty rewrite; eligible tree **stores every leaf** (~70 B/leaf compact; vote row ~0.2 KB) | **< 50 MB** | grows with people, not with empty L2 | same | **~0.2–1 GB** order of magnitude if identity + envelope + CMS sit on the person |
 | `l2-chain.json` | Explorer. Empty L2 blocks **are not** appended (ingest only civic rows) | **< 50 MB** | modest unless you ingest every vote | same | **~0.1–0.5 GB** for tens of thousands of disclosed votes |
-| Node `/data` | `republic.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | same | **50–200 GB** gives headroom |
+| Node `/data` | `zk-voting.json` + `l2-chain.json` | **20–80 GB** volume is plenty | same | same | **50–200 GB** gives headroom |
 | Compose L2 `/data` | blocks + proofs | **20–80 GB** is plenty | same, unless skip is off | **plan 50–200 GB** if always-on for months with skip off | election-window: **20–80 GB** is usually enough |
 
 **Practical disk takeaway:** with the default skip, idle L2 disk is a heartbeat an hour, not an empty-block flood. Node `/data` is dominated by **people and ballots**. Size them separately. The attic is on by default, but it **does not delete** until a bucket or `file://` sink is configured and each hour has been uploaded and hash-verified. With a store, the VPS keeps the hot window; S3/R2 holds gzipped hours.
@@ -244,7 +244,7 @@ Tally mirror is cheap even on mainnet because it is **once per election**.
 
 | Layer | What breaks first | Practical size (**estimate**) |
 | --- | --- | --- |
-| Node JSON store | Whole `republic.json` pretty-printed on **every** persist; eligible tree keeps **all leaves** in that file | **Thousands–low tens of thousands** of people is the comfortable band on one Node 22 process. **~100k** is already a large pretty JSON rewrite per vote. **~1M** is the Merkle depth-20 *theory*, not a tested Node path. |
+| Node JSON store | Whole `zk-voting.json` pretty-printed on **every** persist; eligible tree keeps **all leaves** in that file | **Thousands–low tens of thousands** of people is the comfortable band on one Node 22 process. **~100k** is already a large pretty JSON rewrite per vote. **~1M** is the Merkle depth-20 *theory*, not a tested Node path. |
 | Sequencer RAM | Loads **all** historical blocks | Election-window: fine. Always-on months: RAM tracks ~1.4 KB × block count (JS objects larger). |
 | Hourly disclosure | Up to 4096 txs / 2s block after the hour closes | **50k votes in one hour** ≈ 13 blocks ≈ **~30 s** to unseal. **1M in one hour** ≈ 244 blocks ≈ **~8 min**. Throughput is OK; the JSON store is not. |
 | Explorer | `l2-chain.json` full rewrite; public APIs on the **same** Node | Same order as voter count, not empty L2. |

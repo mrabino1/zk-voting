@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-Circom 2 circuits for Republic / zk-voting. The vote hasher is **Poseidon(2)** (`republic.hash.poseidon-bn254-x5-t3-v1`), the circomlib bn254 parameter set, vendored as t=3 constants (not a full circomlib checkout). Hash versions: [`HASH_SCHEME.md`](./HASH_SCHEME.md).
+Circom 2 circuits for ZK-Voting. The vote hasher is **Poseidon(2)** (`zk-voting.hash.poseidon-bn254-x5-t3-v1`), the circomlib bn254 parameter set, vendored as t=3 constants (not a full circomlib checkout). Hash versions: [`HASH_SCHEME.md`](./HASH_SCHEME.md).
 
 **Proving path status: in progress.** Poseidon matches Circom, JS, the browser helper, and `PoseidonHasher`. A committed **untrusted** Vote(4) Groth16 fixture can be verified. There is **no** published ceremony. `MockVerifier` remains the Foundry unit-test default. Do not use the local keys for a binding election.
 
@@ -121,12 +121,12 @@ circom tally.circom --r1cs --wasm --sym -o build
 # Power 16 is the Vote(20) default. The Vote(4) smoke fixture uses power 14.
 snarkjs powersoftau new bn128 16 build/pot16_0000.ptau -v
 snarkjs powersoftau contribute build/pot16_0000.ptau build/pot16_0001.ptau \
-  --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony -v
+  --name=zk-voting-local-untrusted -e=zk-voting-local-untrusted-dev-only-not-a-ceremony -v
 snarkjs powersoftau prepare phase2 build/pot16_0001.ptau build/pot16_final.ptau -v
 
 snarkjs groth16 setup build/vote.r1cs build/pot16_final.ptau build/vote_0000.zkey
 snarkjs zkey contribute build/vote_0000.zkey build/vote_final.zkey \
-  --name=republic-local-untrusted -e=republic-local-untrusted-dev-only-not-a-ceremony
+  --name=zk-voting-local-untrusted -e=zk-voting-local-untrusted-dev-only-not-a-ceremony
 snarkjs zkey export verificationkey build/vote_final.zkey build/vote_verification_key.json
 snarkjs zkey export solidityverifier build/vote_final.zkey build/vote_Groth16Verifier.sol
 ```
@@ -137,7 +137,7 @@ Ceremony status: **not done.** Phase-2 tooling (contribute, verify, beacon, expo
 
 - **Foundry unit tests** use `MockVerifier` (`acceptAll = true`) and `KeccakHasher`.
 - **`UntrustedGroth16Test`** verifies the committed Vote(4) proof with the exported verifier. Missing files revert `GROTH16_KEYS_MISSING`.
-- **Local proving-path deploy:** `REPUBLIC_PROVING_PATH=1` (or `REPUBLIC_USE_MOCK_VERIFIER=0`) deploys `PoseidonHasher` and `VoteVerifier` **without** a mock fallback. Dummy proofs fail. Set `REPUBLIC_VOTE_VERIFIER` to wrap an exported verifier. That key is still untrusted, and Vote(4) does not match election depth 20.
+- **Local proving-path deploy:** `ZK_VOTING_PROVING_PATH=1` (or `ZK_VOTING_USE_MOCK_VERIFIER=0`) deploys `PoseidonHasher` and `VoteVerifier` **without** a mock fallback. Dummy proofs fail. Set `ZK_VOTING_VOTE_VERIFIER` to wrap an exported verifier. That key is still untrusted, and Vote(4) does not match election depth 20.
 
 Witness inputs for `vote` (JSON for snarkjs) look like:
 

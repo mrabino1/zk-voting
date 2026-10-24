@@ -27,7 +27,7 @@
 ```
 
 - `mode` is `active` for the process that holds the writer lease and `standby` for a second process waiting to take over during a rolling update. **Both are healthy.** A standby serves reads and answers writes with HTTP 503 and `Retry-After: 2`.
-- The response header `x-republic-mode` carries the same value.
+- The response header `x-zk-voting-mode` carries the same value.
 
 ## Built-in probes
 

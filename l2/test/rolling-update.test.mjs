@@ -43,7 +43,7 @@ describe('L2 rolling-update lease', () => {
   });
 
   async function openPair(patch = {}) {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-lease-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-lease-'));
     temps.push(tmp);
     const clock = { t: patch.t ?? HOUR_START + 10 };
     const base = loadConfig();
@@ -52,7 +52,7 @@ describe('L2 rolling-update lease', () => {
     base.heartbeatSeconds = patch.heartbeatSeconds ?? 3600;
     base.disclosureIntervalSeconds = patch.disclosureIntervalSeconds ?? 3600;
     base.nowFn = () => clock.t;
-    base.republicNodeUrl = '';
+    base.zkVotingNodeUrl = '';
     base.leaseTtlMs = patch.leaseTtlMs ?? 8_000;
     const active = ChainState.open({ ...base, leaseOwnerId: 'sequencer-active' });
     const standby = ChainState.open({ ...base, leaseOwnerId: 'sequencer-standby' });
@@ -193,7 +193,7 @@ describe('L2 rolling-update lease', () => {
   });
 
   test('archive default-on claims the lease and a second job does not prune', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-archive-lease-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-archive-lease-'));
     temps.push(tmp);
     fs.mkdirSync(path.join(tmp, 'blocks'), { recursive: true });
     fs.writeFileSync(path.join(tmp, 'blocks', '0.json'), '{}\n');
@@ -215,7 +215,7 @@ describe('L2 rolling-update lease', () => {
   });
 
   test('SIGTERM handover: the standby sequencer becomes active and exits 0', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-sigterm-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-sigterm-'));
     temps.push(tmp);
     const portA = await freePort();
     const portB = await freePort();
@@ -247,7 +247,7 @@ function startSequencer(dataDir, port) {
       L2_RPC_PORT: String(port),
       L2_SKIP_EMPTY_BLOCKS: '1',
       L2_HEARTBEAT_SECONDS: '3600',
-      REPUBLIC_NODE_URL: '',
+      ZK_VOTING_NODE_URL: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

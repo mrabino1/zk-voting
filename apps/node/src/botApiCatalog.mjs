@@ -835,7 +835,7 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/explorer/ingest', {
     tag: 'Explorer',
     summary:
-      `Operator ingest of civic L2 events. Send the host ingest secret in X-Republic-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.`,
+      `Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.`,
   }),
 
   R('/api/polls', {
@@ -1049,8 +1049,8 @@ export function renderOpenApi() {
       ]
         .filter(Boolean)
         .join(' '),
-      'x-republic-min-level': entry.minLevel,
-      'x-republic-api-key': entry.apiKey,
+      'x-zk-voting-min-level': entry.minLevel,
+      'x-zk-voting-api-key': entry.apiKey,
       responses: {
         200: { description: 'JSON body. nfp is true.' },
         201: { description: 'Created. JSON body. nfp is true.' },
@@ -1137,7 +1137,7 @@ function guideBody() {
   lines.push('```http');
   lines.push('POST /api/me/api-keys');
   lines.push('Content-Type: application/json');
-  lines.push('Cookie: republic.sid=…');
+  lines.push('Cookie: zk-voting.sid=…');
   lines.push('');
   lines.push('{ "name": "assistant", "level": "read", "expiresIn": "30d" }');
   lines.push('```');
@@ -1178,7 +1178,7 @@ function guideBody() {
   lines.push('');
   lines.push('```bash');
   lines.push('curl -sS \\');
-  lines.push('  -H "Authorization: Bearer $REPUBLIC_API_KEY" \\');
+  lines.push('  -H "Authorization: Bearer $ZK_VOTING_API_KEY" \\');
   lines.push('  -H "Accept: application/json" \\');
   lines.push('  "$ORIGIN/api/me"');
   lines.push('```');
@@ -1375,7 +1375,7 @@ X-Api-Key: rk_…</code></pre>
       <p>Path parameters named <code>id</code>, <code>partyId</code>, <code>requestId</code>, <code>methodId</code>, and <code>electionId</code> are UUIDs. A sequential integer is rejected with <code>400</code> and <code>ID_NOT_UUID</code>, so the path does not reveal how many people or records exist. The on-chain election id stays inside the election object for the circuit. Short links <code>/v/{code}</code> and <code>/e/{code}</code> redirect to <code>/vote/{uuid}</code> and are not accepted as <code>/api/elections/:id</code>.</p>
       <p>Ballot labels (<code>questionId</code>, <code>optionId</code>), guardian slots (<code>:index</code>), mail template names, and page slugs are not record counts. A new jurisdiction is assigned a UUID.</p>
       <pre><code>curl -sS \\
-  -H "Authorization: Bearer $REPUBLIC_API_KEY" \\
+  -H "Authorization: Bearer $ZK_VOTING_API_KEY" \\
   -H "Accept: application/json" \\
   "$ORIGIN/api/me"</code></pre>
     </section>

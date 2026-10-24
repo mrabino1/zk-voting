@@ -39,7 +39,7 @@ async function talliedPack() {
   );
   const message = {
     ...typed.json.typedData.message,
-    republicChainId: BigInt(typed.json.typedData.message.republicChainId),
+    zkVotingChainId: BigInt(typed.json.typedData.message.zkVotingChainId),
     issuedAt: BigInt(typed.json.typedData.message.issuedAt),
   };
   const sig = await a.signTypedData({
@@ -107,7 +107,7 @@ describe('token poll auditor', () => {
     const badDup = await verifyPollBundle(dup, { offline: true });
     assert.equal(badDup.ok, false);
 
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-poll-auditor-'));
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-poll-auditor-'));
     const file = path.join(dir, 'pack.json');
     await writeFile(file, JSON.stringify(bundle));
     const cli = spawnSync(process.execPath, ['tools/auditor/cli.mjs', 'verify', '--file', file, '--offline'], {

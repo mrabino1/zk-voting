@@ -115,7 +115,7 @@ describe('vote PIN helpers', () => {
 
 describe('vote PIN HTTP', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-pin-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-pin-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

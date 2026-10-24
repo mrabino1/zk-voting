@@ -8,7 +8,7 @@ import {Test} from "forge-std/Test.sol";
 import {ZkVotingMailbox} from "../src/l2/ZkVotingMailbox.sol";
 
 /// @notice Mailbox empty-input, time-boundary, and one-shot force-include edges.
-/// @dev Ported from nuursha empty-array / warp(t-1)/t/t+1 / already-used keys.
+/// @dev Edge cases: empty array, warp(t-1)/t/t+1, already-used keys.
 contract ZkVotingMailboxTest is Test {
     ZkVotingMailbox internal mailbox;
     address internal admin;

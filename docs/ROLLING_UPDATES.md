@@ -7,7 +7,7 @@ NOT FOR PROFIT. This is the handover used when Coolify (or any other runner) sta
 | Overlap | What goes wrong | What this repo does |
 | --- | --- | --- |
 | Two sequencers | Two block producers, forked block numbers, or a second empty heartbeat block | Sequencer lease. Standby `tickProducer` returns before `shouldProduceBlock` |
-| Two Node writers | Torn `republic.json`, duplicate votes or registrations | Node lease. Mutations return HTTP 503 |
+| Two Node writers | Torn `zk-voting.json`, duplicate votes or registrations | Node lease. Mutations return HTTP 503 |
 | Two provers | `submitBatch` sent twice for one `batchIndex` | Prover lease, plus cursor / on-disk record / L1 `batchCount` checked before send |
 | Two archive jobs | The same hour pruned twice, or pruned before upload | Archive lease, then the existing archive lock. Default-on with no bucket does not prune |
 | Two explorer ingests | The same L2 block appended twice | Dedupe by block hash |
@@ -61,7 +61,7 @@ Do not require `mode=active` in the healthcheck. Both modes are success.
 {"ok":true,"ready":true,"mode":"active","acceptingWrites":true,"epoch":1}
 ```
 
-`mode` is `active` or `standby`. The header is `x-republic-mode`. Node: `GET /health` on port 3000. Sequencer: `GET /health` on port 8546.
+`mode` is `active` or `standby`. The header is `x-zk-voting-mode`. Node: `GET /health` on port 3000. Sequencer: `GET /health` on port 8546.
 
 Clients (`apps/node/public/standby-retry.js`, the classic pages, and `@zk-voting/chain-client`) retry HTTP 503 and a JSON-RPC `maintenance handover` a few times, honoring `Retry-After` (capped at 5s). The voter sees a short pause.
 

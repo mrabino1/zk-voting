@@ -121,7 +121,7 @@ test("export cannot land on the production verifier or the committed fixture", (
     () => assertExportDir(path.join(REPO, "circuits/fixtures/untrusted")),
     /circuits\/fixtures/,
   );
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "republic-ceremony-export-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "zk-voting-ceremony-export-"));
   assert.equal(assertExportDir(tmp), path.resolve(tmp));
 });
 
@@ -148,7 +148,7 @@ test("toy multi-contributor transcript verifies and stays untrusted", { timeout:
   assert.equal(transcript.contributions.length, 3);
   assert.deepEqual(
     transcript.contributions.map((entry) => entry.name),
-    ["republic-toy-1", "republic-toy-2", "republic-toy-3"],
+    ["zk-voting-toy-1", "zk-voting-toy-2", "zk-voting-toy-3"],
   );
   for (const entry of transcript.contributions) {
     assert.equal(entry.entropyPolicy, "published");

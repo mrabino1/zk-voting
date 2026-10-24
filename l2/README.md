@@ -76,9 +76,9 @@ transaction hashes (empty block → keccak of the empty byte string). Node’s
 OpenSSL build may not expose `keccak256`; the sequencer includes the Ethereum
 sponge and self-tests it.
 
-Blocks are written under `l2/data/`. If `REPUBLIC_NODE_URL` is set, each
-block is also `POST`ed to `{REPUBLIC_NODE_URL}/api/explorer/ingest` with
-`x-republic-ingest-secret: $EXPLORER_INGEST_SECRET`. The Node refuses ingest
+Blocks are written under `l2/data/`. If `ZK_VOTING_NODE_URL` is set, each
+block is also `POST`ed to `{ZK_VOTING_NODE_URL}/api/explorer/ingest` with
+`x-zk-voting-ingest-secret: $EXPLORER_INGEST_SECRET`. The Node refuses ingest
 in production when that secret is unset. Ingest failures are logged and
 **do not** halt the chain. The producer tick is still ~2s (`L2_BLOCK_TIME_MS`).
 With `L2_SKIP_EMPTY_BLOCKS=1` (default) it seals a block only when the mempool
@@ -142,8 +142,8 @@ npm run l2:archive          # on by default; warns and does not delete without a
 | `L2_RPC_PORT` | `8546` | RPC port |
 | `L2_BATCH_SIZE` | `4` | blocks per proof batch |
 | `DEV_MOCK_PROOF` | `true` | placeholder Groth16-shaped **rollup batch** proof |
-| `REPUBLIC_PROVING_PATH` | `false` | Vote-circuit proving path (distinct from rollup `DEV_MOCK_PROOF`). See `/circuits/HASH_SCHEME.md`. |
-| `REPUBLIC_NODE_URL` | unset | Node app base URL for explorer ingest |
+| `ZK_VOTING_PROVING_PATH` | `false` | Vote-circuit proving path (distinct from rollup `DEV_MOCK_PROOF`). See `/circuits/HASH_SCHEME.md`. |
+| `ZK_VOTING_NODE_URL` | unset | Node app base URL for explorer ingest |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Vote txs stay sealed until this many seconds’ bucket closes. `0` publishes immediately (local demo / tests). Unchanged by the empty-block skip. |
 | `L2_SKIP_EMPTY_BLOCKS` | `1` | `1` seals only when there is a tx, the disclosure hour closes, or the heartbeat elapses. `0` seals every period, including empty blocks. |
 | `L2_HEARTBEAT_SECONDS` | `3600` | One empty block when this long has passed since the head timestamp and nothing else is ready. `0` disables the heartbeat (hour close and txs still seal). |

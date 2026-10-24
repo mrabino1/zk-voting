@@ -79,9 +79,9 @@ describe('layout', () => {
     assert.equal(validateLayout({}).branding.productName, '');
     assert.equal(resolveBranding(validateLayout({}).branding).productName, 'ZK-Voting');
   });
-  test('legacy saved defaults (zk-voting, Republic) count as not renamed', () => {
+  test('saved default names (zk-voting, ZK-Voting) count as not renamed', () => {
     assert.equal(validateLayout({ branding: { productName: 'zk-voting' } }).branding.productName, '');
-    assert.equal(validateLayout({ branding: { productName: 'Republic' } }).branding.productName, '');
+    assert.equal(validateLayout({ branding: { productName: 'ZK-Voting' } }).branding.productName, '');
   });
   test('short name and tagline are plain text with limits', () => {
     const b = validateLayout({ branding: { shortName: ' ZKV ', tagline: 'Vote privately.' } }).branding;

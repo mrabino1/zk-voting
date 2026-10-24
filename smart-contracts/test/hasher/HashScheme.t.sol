@@ -33,9 +33,9 @@ contract TreeHarness {
 /// @notice Versioned hasher: keccak for unit tests, stand-in aligned with Circom.
 contract HashSchemeTest is Test {
     function testSchemeIdsAreStableKeccakOfNames() public pure {
-        assertEq(HashScheme.STANDIN_V0, keccak256("republic.hash.standin-v0"));
-        assertEq(HashScheme.KECCAK_DEV_V1, keccak256("republic.hash.keccak-dev-v1"));
-        assertEq(HashScheme.POSEIDON_BN254_X5_T3_V1, keccak256("republic.hash.poseidon-bn254-x5-t3-v1"));
+        assertEq(HashScheme.STANDIN_V0, keccak256("zk-voting.hash.standin-v0"));
+        assertEq(HashScheme.KECCAK_DEV_V1, keccak256("zk-voting.hash.keccak-dev-v1"));
+        assertEq(HashScheme.POSEIDON_BN254_X5_T3_V1, keccak256("zk-voting.hash.poseidon-bn254-x5-t3-v1"));
         assertTrue(HashScheme.isStandIn(HashScheme.STANDIN_V0));
         assertTrue(HashScheme.isKeccakDev(HashScheme.KECCAK_DEV_V1));
         assertTrue(HashScheme.isProductionPoseidon(HashScheme.POSEIDON_BN254_X5_T3_V1));

@@ -525,7 +525,7 @@ describe('ceremony lifecycle on the toy circuit', () => {
 
   test('files endpoint only serves whitelisted names', async () => {
     assert.equal((await call('GET', `/api/ceremonies/${id}/files/zkey_0002.zkey`)).status, 200);
-    assert.equal((await call('GET', `/api/ceremonies/${id}/files/..%2F..%2Frepublic.json`)).status, 404);
+    assert.equal((await call('GET', `/api/ceremonies/${id}/files/..%2F..%2Fzk-voting.json`)).status, 404);
     assert.equal((await call('GET', `/api/ceremonies/${id}/files/zkey_0009.zkey`)).status, 404);
     assert.equal((await call('GET', `/api/ceremonies/${id}/export/export.json`)).status, 404);
   });

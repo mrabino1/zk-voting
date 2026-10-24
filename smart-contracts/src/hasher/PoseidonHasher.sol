@@ -9,7 +9,7 @@ import {HashScheme} from "./HashScheme.sol";
 import {PoseidonT3} from "./PoseidonT3.sol";
 
 /// @title PoseidonHasher
-/// @notice `republic.hash.poseidon-bn254-x5-t3-v1`. Matches the vote circuit Hasher().
+/// @notice `zk-voting.hash.poseidon-bn254-x5-t3-v1`. Matches the vote circuit Hasher().
 /// @dev Wiring this hasher does not install a Groth16 verifying key and is not a ceremony.
 ///      Foundry unit tests keep KeccakHasher. Do not mix schemes in one tree.
 contract PoseidonHasher is IHasher, IHashScheme {

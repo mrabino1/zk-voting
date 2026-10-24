@@ -36,7 +36,7 @@ export function outcomeReportsRouter(deps) {
         : deps.store.listOutcomeReports();
       res.json({
         nfp: true,
-        schema: 'republic.outcome-report.v1',
+        schema: 'zk-voting.outcome-report.v1',
         reports: rows.map((row) =>
           presentOutcomeReport(row, {
             electionTitle: deps.store.getElection(row.electionId)?.title,
@@ -129,7 +129,7 @@ export function outcomeReportsRouter(deps) {
         template: req.body || {},
       });
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="republic-outcome-preview.pdf"`);
+      res.setHeader('Content-Disposition', `inline; filename="zk-voting-outcome-preview.pdf"`);
       res.setHeader('X-Pdf-SHA256', artifact.pdfSha256);
       res.setHeader('X-Pdf-Protected', 'true');
       res.setHeader('X-Pdf-Modify', 'false');

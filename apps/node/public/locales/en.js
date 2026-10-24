@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Identity commitment copied.",
     localAddress: "{brand} local address",
     prfWrap:
-      "PRF wrap: account material uses salt republic:account:v1; the ZK trapdoor uses salt republic:identity:v1. They are not the same bytes.",
+      "PRF wrap: account material uses salt zk-voting:account:v1; the ZK trapdoor uses salt zk-voting:identity:v1. They are not the same bytes.",
     createFirst: "Create a passkey to derive the commitment. The trapdoor never appears on this screen.",
     activeEthTitle: "Active Ethereum address",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand} requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.",
     productionNote:
-      "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled republic-local-address.",
+      "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled zk-voting-local-address.",
     staleWrap:
-      "This browser has a v1 passkey wrap (IndexedDB republic-wallet). v1 derived the ZK trapdoor from the same seed as the account key, which is weaker than docs/PASSKEYS.md. The demo cannot migrate that wrap in place: v1 used a random PRF salt and a single HKDF domain, so the new account/identity salts cannot unwrap it. Reset the device wallet and create a new passkey. The local address and identity commitment will change; any prior demo roll entry will not match.",
+      "This browser has a v1 passkey wrap (IndexedDB zk-voting-wallet). v1 derived the ZK trapdoor from the same seed as the account key, which is weaker than docs/PASSKEYS.md. The demo cannot migrate that wrap in place: v1 used a random PRF salt and a single HKDF domain, so the new account/identity salts cannot unwrap it. Reset the device wallet and create a new passkey. The local address and identity commitment will change; any prior demo roll entry will not match.",
     noEthWallet:
       "No Ethereum wallet in this browser. Use a passkey, or install a wallet that supports personal_sign.",
     noWeb3Wallet: "No Web3 wallet in this browser. Install a wallet or use a passkey / smart card.",
@@ -671,7 +671,7 @@ export default {
     clerkHint:
       "Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited. Choose plurality (default) or ranked choice (IRV).",
     chainNote:
-      "If this Node has <code>CHAIN_RPC</code> set, Create election also calls <code>ElectionFactory.createElection</code> and stores the on-chain uint256 id next to the UUID. Factory failures are shown here and nothing is saved locally. Without <code>CHAIN_RPC</code> this form writes <code>republic.json</code> only (demo) and still mints a demo <code>onChainElectionId</code> for the circuit.",
+      "If this Node has <code>CHAIN_RPC</code> set, Create election also calls <code>ElectionFactory.createElection</code> and stores the on-chain uint256 id next to the UUID. Factory failures are shown here and nothing is saved locally. Without <code>CHAIN_RPC</code> this form writes <code>zk-voting.json</code> only (demo) and still mints a demo <code>onChainElectionId</code> for the circuit.",
     jurisdiction: "Jurisdiction",
     titleField: "Title",
     metadataUri: "Metadata URI",

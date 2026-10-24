@@ -33,7 +33,7 @@ describe('one-time L1 deploy guard', () => {
   });
 
   test('refuses when a deployment record exists', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-deploy-'));
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-deploy-'));
     temps.push(tmp);
     const file = path.join(tmp, '1.json');
     writeDeploymentRecord(file, {

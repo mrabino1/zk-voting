@@ -258,7 +258,7 @@ export default {
     copiedCommitment: "Identity commitment कॉपी हो गया।",
     localAddress: "{brand} स्थानीय पता",
     prfWrap:
-      "PRF रैप: खाता सामग्री नमक republic:account:v1 उपयोग करती है; ZK trapdoor नमक republic:identity:v1 उपयोग करता है। वे एक ही बाइट नहीं हैं।",
+      "PRF रैप: खाता सामग्री नमक zk-voting:account:v1 उपयोग करती है; ZK trapdoor नमक zk-voting:identity:v1 उपयोग करता है। वे एक ही बाइट नहीं हैं।",
     createFirst: "commitment निकालने के लिए passkey बनाएँ। trapdoor इस स्क्रीन पर कभी नहीं दिखता।",
     activeEthTitle: "सक्रिय Ethereum पता",
     noActive:
@@ -514,9 +514,9 @@ export default {
     webAuthnUnavailable:
       "{brand} को resident कुंजी और उपयोगकर्ता सत्यापन वाली उपकरण passkey (WebAuthn) चाहिए। प्लेटफ़ॉर्म प्रमाणक वाले उपकरण पर वर्तमान ब्राउज़र (Safari 16+, Chrome 108+, Firefox 122+, Edge) उपयोग करें। सीड वाक्यांश कभी नहीं दिखाया जाता।",
     productionNote:
-      "उत्पादन keccak256(uncompressed secp256k1 public key) उपयोग करता है, फिर अंतिम 20 बाइट लेता है (Ethereum)। यह डेमो बिना कर्व लाइब्रेरी के secp256k1 पर गुणा नहीं कर सकता, इसलिए getAddress() SHA-256(seed)[0:20] लौटाता है जिसे republic-local-address कहा गया है।",
+      "उत्पादन keccak256(uncompressed secp256k1 public key) उपयोग करता है, फिर अंतिम 20 बाइट लेता है (Ethereum)। यह डेमो बिना कर्व लाइब्रेरी के secp256k1 पर गुणा नहीं कर सकता, इसलिए getAddress() SHA-256(seed)[0:20] लौटाता है जिसे zk-voting-local-address कहा गया है।",
     staleWrap:
-      "इस ब्राउज़र में v1 passkey रैप है (IndexedDB republic-wallet)। v1 ने ZK trapdoor उसी सीड से निकाला जिससे खाता कुंजी, जो docs/PASSKEYS.md से कमज़ोर है। डेमो उस रैप को जगह पर स्थानांतरित नहीं कर सकता: v1 ने यादृच्छिक PRF नमक और एक HKDF डोमेन उपयोग किया, इसलिए नए खाता/पहचान नमक उसे खोल नहीं सकते। उपकरण वॉलेट रीसेट करें और नई passkey बनाएँ। स्थानीय पता और identity commitment बदलेंगे; कोई पिछली डेमो सूची प्रविष्टि मेल नहीं खाएगी।",
+      "इस ब्राउज़र में v1 passkey रैप है (IndexedDB zk-voting-wallet)। v1 ने ZK trapdoor उसी सीड से निकाला जिससे खाता कुंजी, जो docs/PASSKEYS.md से कमज़ोर है। डेमो उस रैप को जगह पर स्थानांतरित नहीं कर सकता: v1 ने यादृच्छिक PRF नमक और एक HKDF डोमेन उपयोग किया, इसलिए नए खाता/पहचान नमक उसे खोल नहीं सकते। उपकरण वॉलेट रीसेट करें और नई passkey बनाएँ। स्थानीय पता और identity commitment बदलेंगे; कोई पिछली डेमो सूची प्रविष्टि मेल नहीं खाएगी।",
     noEthWallet:
       "इस ब्राउज़र में Ethereum वॉलेट नहीं। passkey उपयोग करें, या personal_sign समर्थित वॉलेट स्थापित करें।",
     noWeb3Wallet: "इस ब्राउज़र में Web3 वॉलेट नहीं। वॉलेट स्थापित करें या passkey / स्मार्ट कार्ड उपयोग करें।",
@@ -669,7 +669,7 @@ export default {
     clerkHint:
       "चुनाव बनाएँ, फिर मतदान खुलने से पहले सूची जमा करें। <code>maxParticipants = 0</code> का अर्थ असीमित। बहुलता (डिफ़ॉल्ट) या क्रमबद्ध विकल्प (IRV) चुनें।",
     chainNote:
-      "यदि इस Node पर <code>CHAIN_RPC</code> सेट है, चुनाव बनाएँ <code>ElectionFactory.createElection</code> भी कॉल करता है और UUID के साथ श्रृंखला uint256 id संग्रहीत करता है। फ़ैक्टरी विफलताएँ यहाँ दिखाई जाती हैं और कुछ स्थानीय रूप से नहीं सहेजा जाता। बिना <code>CHAIN_RPC</code> यह फ़ॉर्म केवल <code>republic.json</code> लिखता है (डेमो) और सर्किट के लिए अभी भी डेमो <code>onChainElectionId</code> बनाता है।",
+      "यदि इस Node पर <code>CHAIN_RPC</code> सेट है, चुनाव बनाएँ <code>ElectionFactory.createElection</code> भी कॉल करता है और UUID के साथ श्रृंखला uint256 id संग्रहीत करता है। फ़ैक्टरी विफलताएँ यहाँ दिखाई जाती हैं और कुछ स्थानीय रूप से नहीं सहेजा जाता। बिना <code>CHAIN_RPC</code> यह फ़ॉर्म केवल <code>zk-voting.json</code> लिखता है (डेमो) और सर्किट के लिए अभी भी डेमो <code>onChainElectionId</code> बनाता है।",
     jurisdiction: "क्षेत्र",
     titleField: "शीर्षक",
     metadataUri: "Metadata URI",

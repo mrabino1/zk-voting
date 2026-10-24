@@ -31,13 +31,13 @@ describe('L2 sealed vote disclosure', () => {
   let state;
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-hourly-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-hourly-'));
     clock = HOUR_START + 10 * 60;
     const config = loadConfig();
     config.dataDir = tmp;
     config.disclosureIntervalSeconds = HOUR;
     config.nowFn = () => clock;
-    config.republicNodeUrl = '';
+    config.zkVotingNodeUrl = '';
     state = ChainState.open(config);
   });
 

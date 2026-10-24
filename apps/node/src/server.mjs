@@ -343,7 +343,7 @@ export async function createApp(overrides = {}) {
     app.use((req, res, next) => {
       const t = Date.now();
       res.on('finish', () => {
-        const line = `[republic] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - t}ms`;
+        const line = `[zk-voting] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - t}ms`;
         recordLog('info', line, [config.superAdminEmail, config.superAdminApiPepper]);
         if (config.logLevel === 'error' || config.logLevel === 'warn') return;
         console.log(line);

@@ -11,7 +11,7 @@ import {EligibleSet} from "../tree/EligibleSet.sol";
 /// @title MockVerifier
 /// @notice Test / local-L2 Groth16 stand-in. Owner toggles `acceptAll`.
 /// @dev Foundry unit tests always use this contract. Non-mock integration uses
-///      `REPUBLIC_PROVING_PATH=1` (DeployLocal deploys `VoteVerifier` with no mock).
+///      `ZK_VOTING_PROVING_PATH=1` (DeployLocal deploys `VoteVerifier` with no mock).
 /// @dev Public inputs convention (vote circuit, see `circuits/vote.circom`):
 ///      input[0] = eligibleRoot
 ///      input[1] = disqualificationRoot

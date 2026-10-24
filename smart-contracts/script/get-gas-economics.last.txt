@@ -1,5 +1,5 @@
 ZK-Voting gas economics (zk-voting)
-Port of nuursha scripts/get-gas-economics.sh, adapted to ZK-Voting deployables.
+Gas and deploy-cost estimates for the ZK-Voting deployables.
 OUT_DIR: /workspace/smart-contracts/out
 
 Market
@@ -69,7 +69,7 @@ Deployment schedule floor (not a forge measurement)
   ZkVotingMailbox                   537,028      $0.2027
   L1TallyMirror                     940,812      $0.3551
 
-Usage (Nuursha NFT / claim / ERC-20 tables omitted)
+Usage (no NFT / claim / ERC-20 tables)
   ZK-Voting has no token and no voter fee. Voters do not pay L1 or L2 gas
   on the civic path. The ranges below are order-of-magnitude scenarios from
   voting_cost_estimate.md. This repo does not ship a measured submitBatch snapshot

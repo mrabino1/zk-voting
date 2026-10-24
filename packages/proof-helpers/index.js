@@ -1,5 +1,5 @@
 /**
- * @fileoverview Proof helpers for Republic vote / tally Groth16 public inputs.
+ * @fileoverview Proof helpers for ZK-Voting vote / tally Groth16 public inputs.
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
@@ -413,7 +413,7 @@ function functionSelector(signature) {
 }
 
 /**
- * HashLeftRight for `republic.hash.keccak-dev-v1`.
+ * HashLeftRight for `zk-voting.hash.keccak-dev-v1`.
  * Concatenate two 32-byte words and keccak256. Solidity `KeccakHasher`
  * does the same. Production trees use Poseidon via `IHasher`.
  *
@@ -437,7 +437,7 @@ const merkle = createMerkleHelpers({
 
 /**
  * Scheme-dispatch HashLeftRight. Default is keccak-dev-v1 so existing tests
- * keep their roots. The vote circuit uses `republic.hash.poseidon-bn254-x5-t3-v1`.
+ * keep their roots. The vote circuit uses `zk-voting.hash.poseidon-bn254-x5-t3-v1`.
  *
  * @param {string|bigint} left
  * @param {string|bigint} right

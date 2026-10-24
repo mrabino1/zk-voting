@@ -3,8 +3,7 @@
 //
 // Phase 1 is circuit-independent. zk-voting reuses the public Hermez / PSE
 // perpetual powers-of-tau (prepared for phase 2) instead of running its own
-// phase 1, the same choice as the Nuursha circuits (Makefile `circuit-ptau`,
-// powersOfTau28_hez_final_16.ptau). Hashes are the blake2b-512 values
+// phase 1 (for example powersOfTau28_hez_final_16.ptau). Hashes are the blake2b-512 values
 // published in the snarkjs README. The server never downloads these files.
 // The operator places one in the ceremony input directory (or uploads it) and
 // the server checks the pinned hash before the ceremony can start.

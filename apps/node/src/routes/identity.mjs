@@ -645,7 +645,7 @@ export function identityRouter(deps) {
         );
       }
       const provided = String(
-        req.headers['x-republic-provider-secret'] ||
+        req.headers['x-zk-voting-provider-secret'] ||
           String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''),
       );
       if (!providerSecretsEqual(secret, provided)) {
