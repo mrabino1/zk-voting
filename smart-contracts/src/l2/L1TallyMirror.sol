@@ -8,6 +8,10 @@ import {ElectionParams} from "../interfaces/ElectionParams.sol";
 import {IElection} from "../interfaces/IElection.sol";
 import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
 
+interface ISettledRoots {
+    function isSettledRoot(bytes32 root) external view returns (bool);
+}
+
 /// @title L1TallyMirror
 /// @notice Court-grade copy of an L2 tally hash. Individual ballots are not posted.
 /// @dev L1 slots are `(factory, electionId, jurisdictionId)`, not a public UUID
@@ -28,6 +32,10 @@ contract L1TallyMirror {
     error BallotSpecMismatch();
     error UseIdentityPost();
     error FactoryAlreadyPinned();
+    error SettlementAlreadySet();
+    error UnsettledStateRoot();
+    error NotPosted();
+    error DisputeWindowClosed();
 
     struct Certification {
         address factory;
@@ -67,7 +75,26 @@ contract L1TallyMirror {
         bytes32 l2StateRoot
     );
 
+    /// @notice Audit M-05: window in which the admin may supersede a posted
+    ///         certification. After it, the certification is final.
+    uint256 public constant DISPUTE_WINDOW = 7 days;
+
+    event SettlementSet(address indexed settlement);
+    event CertificationSuperseded(
+        bytes32 indexed certificationId,
+        bytes32 previousResultHash,
+        bytes32 resultHash,
+        uint256 totalBallots,
+        bytes32 l2StateRoot,
+        bytes32 reasonHash
+    );
+
     address public admin;
+    /// @notice Optional `RollupSettlement`. When set, every post must cite an
+    ///         L2 state root that settlement has accepted (audit M-05).
+    address public settlement;
+    /// @notice Block time each identity certification was (last) written.
+    mapping(bytes32 => uint256) public postedAt;
     address public related;
     /// @notice Pinned shared ElectionFactory. Zero = not pinned (legacy / tests).
     address public l2Factory;
@@ -108,6 +135,45 @@ contract L1TallyMirror {
         l2Factory = factory_;
     }
 
+    /// @notice Audit M-05: pin the rollup settlement contract (set once).
+    function setSettlement(address settlement_) external {
+        if (msg.sender != admin) revert NotAuthorized();
+        if (settlement_ == address(0)) revert ZeroAddress();
+        if (settlement != address(0)) revert SettlementAlreadySet();
+        settlement = settlement_;
+        emit SettlementSet(settlement_);
+    }
+
+    /// @notice Audit M-05: governance correction inside the dispute window.
+    ///         Admin only; the old hash, new values and a reason hash (e.g. of
+    ///         the court order or incident report) are logged. The window is
+    ///         not restarted, so a certification cannot be kept open forever.
+    function supersedeCertifiedResult(
+        bytes32 certificationId,
+        bytes32 resultHash,
+        uint256 totalBallots,
+        bytes32 l2StateRoot,
+        bytes32 reasonHash
+    ) external {
+        if (msg.sender != admin) revert NotAuthorized();
+        if (resultHash == bytes32(0)) revert ZeroResultHash();
+        CertifiedResult storage c = certificationOf[certificationId];
+        if (c.resultHash == bytes32(0)) revert NotPosted();
+        if (block.timestamp >= postedAt[certificationId] + DISPUTE_WINDOW) revert DisputeWindowClosed();
+        _requireSettled(l2StateRoot);
+        bytes32 previous = c.resultHash;
+        c.resultHash = resultHash;
+        c.totalBallots = totalBallots;
+        c.l2StateRoot = l2StateRoot;
+        emit CertificationSuperseded(certificationId, previous, resultHash, totalBallots, l2StateRoot, reasonHash);
+    }
+
+    /// @notice True once a certification exists and its dispute window ended.
+    function isFinal(bytes32 certificationId) external view returns (bool) {
+        if (certificationOf[certificationId].resultHash == bytes32(0)) return false;
+        return block.timestamp >= postedAt[certificationId] + DISPUTE_WINDOW;
+    }
+
     /// @notice Legacy uint256 slot. Prefer `postCertifiedResult` so two factories
     ///         (or two jurisdictions) with the same `electionId` do not collide.
     ///         When `l2Factory` is pinned this path is closed: a publisher must
@@ -117,6 +183,7 @@ contract L1TallyMirror {
         if (!publishers[msg.sender] && msg.sender != admin) revert NotAuthorized();
         if (resultHashOf[electionId] != bytes32(0)) revert AlreadyPosted();
         if (resultHash == bytes32(0)) revert ZeroResultHash();
+        _requireSettled(l2StateRoot);
         resultHashOf[electionId] = resultHash;
         totalBallotsOf[electionId] = totalBallots;
         claimedStateRoot[electionId] = l2StateRoot;
@@ -135,6 +202,7 @@ contract L1TallyMirror {
                 publicIdHash: bytes32(0),
                 ballotSpecHash: bytes32(0)
             });
+            postedAt[id] = block.timestamp;
         }
     }
 
@@ -145,6 +213,7 @@ contract L1TallyMirror {
         if (cert.factory == address(0)) revert ZeroFactory();
         if (cert.jurisdictionId == bytes32(0)) revert ZeroJurisdiction();
         if (l2Factory != address(0) && cert.factory != l2Factory) revert WrongFactory();
+        _requireSettled(cert.l2StateRoot);
 
         address election = cert.election;
         address tallyOperator;
@@ -180,6 +249,7 @@ contract L1TallyMirror {
             publicIdHash: cert.publicIdHash,
             ballotSpecHash: cert.ballotSpecHash
         });
+        postedAt[id] = block.timestamp;
         if (cert.publicIdHash != bytes32(0)) {
             _certsByPublicId[cert.publicIdHash].push(id);
         }
@@ -229,6 +299,12 @@ contract L1TallyMirror {
         if (tallyOperator != address(0) && msg.sender == tallyOperator) return true;
         if (l2Factory == address(0) && publishers[msg.sender]) return true;
         return false;
+    }
+
+    function _requireSettled(bytes32 l2StateRoot) internal view {
+        address s = settlement;
+        if (s == address(0)) return;
+        if (!ISettledRoots(s).isSettledRoot(l2StateRoot)) revert UnsettledStateRoot();
     }
 
     function _canReadFactory(address factory) internal view returns (bool) {

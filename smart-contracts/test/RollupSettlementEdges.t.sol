@@ -76,12 +76,21 @@ contract RollupSettlementEdgesTest is Deployer {
         assertEq(live.batchCount(), 0);
     }
 
-    function testGrantRoleIsAuthCheckOnly() public {
+    function testGrantRoleRotatesSequencerAndProverOnly() public {
         vm.prank(makeAddr("stranger"));
         vm.expectRevert(RollupSettlement.NotAuthorized.selector);
         settlement.grantRole(bytes32(0), makeAddr("x"));
         vm.prank(admin);
+        vm.expectRevert(RollupSettlement.UnsupportedRole.selector);
         settlement.grantRole(bytes32(0), makeAddr("x"));
+        bytes32 seqRole = settlement.SEQUENCER_ROLE();
+        bytes32 proverRole = settlement.PROVER_ROLE();
+        vm.prank(admin);
+        settlement.grantRole(seqRole, makeAddr("seq2"));
+        assertEq(settlement.sequencer(), makeAddr("seq2"));
+        vm.prank(admin);
+        settlement.grantRole(proverRole, makeAddr("prover2"));
+        assertEq(settlement.prover(), makeAddr("prover2"));
     }
 
     function testGetBatchStoresSubmittedFields() public {

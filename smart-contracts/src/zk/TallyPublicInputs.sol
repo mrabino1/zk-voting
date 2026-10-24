@@ -13,36 +13,47 @@ pragma solidity ^0.8.24;
 ///   [2..5] counts[0..3]
 ///   [6] acceptedCount
 ///
-/// Solidity mock instance (`TALLY_SOL_MOCK_V1`, this library):
-///   [0] TALLY_INSTANCE_VERSION (1)
+/// Solidity instance (`TALLY_SOL_V2`, this library). Every word is a BN254
+/// scalar-field element: hash words are reduced `mod r` (audit H-01 / H-05).
+///   [0] TALLY_INSTANCE_VERSION (2)
 ///   [1] electionId
 ///   [2] acceptedCount
-///   [3] countsHash     = keccak256(abi.encodePacked(counts))
-///   [4] ballotRoot     = inbox hash-chain of accepted ballot hashes (0 if SUM_ONLY)
-///   [5] openingsHash   = keccak256(abi.encodePacked(openings)) (0 if SUM_ONLY)
+///   [3] countsHash     = keccak256(abi.encodePacked(counts))           mod r
+///   [4] ballotRoot     = inbox hash-chain of accepted ballot hashes     mod r
+///                        (bound for BOTH schemes since V2)
+///   [5] openingsHash   = keccak256(abi.encodePacked(openings))          mod r (0 if SUM_ONLY)
+///   [6] tallyKeyHash   = keccak256(abi.encodePacked(tallyPubKeyX, Y))   mod r
 ///
-/// Circom fixes `nOptions` at compile time and exposes `counts[]` in the clear.
-/// Solidity supports a variable-length vector via `countsHash`, plus the
-/// opened-ballot bind (`ballotRoot`, `openingsHash`). A production verifier
-/// generated from the circuit must not be wired to `Tally.sol` until a
-/// translating wrapper exists. Local tests keep `MockVerifier`.
+/// V1 (`TALLY_SOL_MOCK_V1`, 6 words, raw keccak words, ballotRoot = 0 under
+/// SUM_ONLY) is retired. Circom fixes `nOptions` at compile time and exposes
+/// `counts[]` in the clear; Solidity supports a variable-length vector via
+/// `countsHash`. A production tally verifier must be generated from a circuit
+/// that exposes exactly this instance (or wrapped by a translating adapter)
+/// and installed with `Tally.setTallyProofVerifier`.
 library TallyPublicInputs {
-    uint256 internal constant VERSION = 1;
+    uint256 internal constant VERSION = 2;
+    uint256 internal constant WORDS = 7;
 
-    function mockInstance(
+    /// @notice BN254 scalar field modulus r.
+    uint256 internal constant SNARK_SCALAR_FIELD =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+
+    function instance(
         uint256 electionId,
         uint256 acceptedCount,
         bytes32 countsHash,
         bytes32 ballotRoot,
-        bytes32 openingsHash
+        bytes32 openingsHash,
+        bytes32 tallyKeyHash
     ) internal pure returns (uint256[] memory input) {
-        input = new uint256[](6);
+        input = new uint256[](WORDS);
         input[0] = VERSION;
-        input[1] = electionId;
-        input[2] = acceptedCount;
-        input[3] = uint256(countsHash);
-        input[4] = uint256(ballotRoot);
-        input[5] = uint256(openingsHash);
+        input[1] = electionId % SNARK_SCALAR_FIELD;
+        input[2] = acceptedCount % SNARK_SCALAR_FIELD;
+        input[3] = uint256(countsHash) % SNARK_SCALAR_FIELD;
+        input[4] = uint256(ballotRoot) % SNARK_SCALAR_FIELD;
+        input[5] = uint256(openingsHash) % SNARK_SCALAR_FIELD;
+        input[6] = uint256(tallyKeyHash) % SNARK_SCALAR_FIELD;
     }
 
     function countsHashOf(uint256[] memory counts) internal pure returns (bytes32) {
@@ -52,5 +63,9 @@ library TallyPublicInputs {
     function openingsHashOf(uint256[] calldata openings) internal pure returns (bytes32) {
         if (openings.length == 0) return bytes32(0);
         return keccak256(abi.encodePacked(openings));
+    }
+
+    function tallyKeyHashOf(bytes32 pubX, bytes32 pubY) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(pubX, pubY));
     }
 }

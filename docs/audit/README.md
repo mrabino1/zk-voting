@@ -8,7 +8,7 @@ This folder holds security reviews of the zk-voting codebase. Reports are groupe
 
 | Date | Commit | Reviewer | Report | Summary |
 |---|---|---|---|---|
-| 2026-10-24 | `b1cef6f7` | GrokBot (automated + AI-assisted) | [2026-10-24-SmartContract-Audit-GrokBot.md](smart-contracts/2026-10-24-SmartContract-Audit-GrokBot.md) | 2 Critical, 6 High, 8 Medium, 10 Low, 6 Info |
+| 2026-10-24 | `b1cef6f7` | GrokBot (automated + AI-assisted) | [2026-10-24-SmartContract-Audit-GrokBot.md](smart-contracts/2026-10-24-SmartContract-Audit-GrokBot.md) | 2 Critical, 6 High, 8 Medium, 10 Low, 6 Info. **Remediated** on `fix/smart-contract-audit-remediation` (see §12): 13 Resolved, 11 Partially resolved, 2 Acknowledged; Info unchanged. |
 
 ## Adding a report
 

@@ -78,6 +78,13 @@ contract MockVerifier is IGroth16Verifier {
         _;
     }
 
+    /// @notice Audit H-02: deploy scripts, `ElectionFactory` and `Tally` refuse a
+    ///         verifier that reports `true` here unless mock verifiers are
+    ///         explicitly allowed (anvil / dev flag).
+    function isMock() external pure returns (bool) {
+        return true;
+    }
+
     function setAccept(bool accept) external onlyOwner {
         acceptAll = accept;
     }

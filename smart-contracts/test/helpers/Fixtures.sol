@@ -137,7 +137,7 @@ library Fixtures {
     }
 
     function ballotHash(bytes memory encrypted) internal pure returns (uint256) {
-        return uint256(keccak256(encrypted));
+        return uint256(keccak256(encrypted)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     }
 
     /// @dev Circuit / proof-helpers order: [root, disqRoot, nullifier, ballotHash, electionId]

@@ -193,15 +193,19 @@ contract TallyTest is Deployer {
         tally.submitTally(id, counts, a, b, c);
     }
 
-    function testMockInstanceHasSixWordsVersionOne() public pure {
-        uint256[] memory input = TallyPublicInputs.mockInstance(7, 3, bytes32(uint256(11)), bytes32(uint256(22)), bytes32(uint256(33)));
-        assertEq(input.length, 6);
+    function testInstanceHasSevenWordsVersionTwo() public pure {
+        uint256[] memory input = TallyPublicInputs.instance(
+            7, 3, bytes32(uint256(11)), bytes32(uint256(22)), bytes32(uint256(33)), bytes32(uint256(44))
+        );
+        assertEq(input.length, 7);
         assertEq(input[0], TallyPublicInputs.VERSION);
+        assertEq(input[0], 2);
         assertEq(input[1], 7);
         assertEq(input[2], 3);
         assertEq(input[3], 11);
         assertEq(input[4], 22);
         assertEq(input[5], 33);
+        assertEq(input[6], 44);
     }
 
     function testBallotRootChainsAcceptedHashes() public {

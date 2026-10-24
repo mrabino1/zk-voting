@@ -2,6 +2,8 @@
 
 > **Disclaimer.** This is an automated plus AI-assisted review by GrokBot. It is **not** a substitute for an audit by a professional security firm. It does not certify the code, give legal assurance, or approve the system for a binding election. Findings may be incomplete, and some severities are judgement calls. Every Critical and High finding should be independently confirmed and re-tested after a fix.
 
+> **Remediation update (2026-10-24).** The Critical through Low findings were fixed on branch `fix/smart-contract-audit-remediation`. The Informational findings were left unchanged. Each finding now has a **Status** line, and the §4 table has a Status column. Re-test evidence, the tool re-run, a re-audit of the fixes and the open items are in [§12](#12-remediation-and-re-test-2026-10-24). The original findings text below describes commit `b1cef6f7` and is unchanged.
+
 ## 1. Scope
 
 | Item | Value |
@@ -86,40 +88,40 @@ Many of the proving-path gaps are acknowledged as "in progress" in the README. T
 | Informational | 6 |
 | **Total** | **32** |
 
-| ID | Title | Severity |
-|---|---|---|
-| C-01 | `WebAuthn.verify` accepts any signature and ignores `userOpHash` | Critical |
-| C-02 | Any secp256k1 key can claim `ethBackupSigner` and take over a `PasskeyAccount` | Critical |
-| H-01 | On-chain tally is not cryptographically bound (wrong verifier and instance) | High |
-| H-02 | Deploy scripts (incl. `DeployL2`) default to accept-all `MockVerifier`; `VoteVerifier` can never verify | High |
-| H-03 | O(n) gas per registration (O(n²) total) bricks large rolls; "unlimited" is not achievable | High |
-| H-04 | External-party gates use an unbound, caller-supplied `identityCommitment` (bypass and deanonymization) | High |
-| H-05 | `ballotHash = keccak256(ciphertext)` exceeds the BN254 field for ~82% of ballots | High |
-| H-06 | `RollupSettlement` verifies nothing as deployed; no way to set a verifier | High |
-| M-01 | Roots can change mid-vote (late disqualification, no root history) | Medium |
-| M-02 | Election creator chooses any verifier; permissionless creation when no jurisdiction registry is set | Medium |
-| M-03 | Factory admin powers: silent module rewiring, irrevocable roles, no events | Medium |
-| M-04 | `BallotInbox._requireNotTallied` fails open | Medium |
-| M-05 | `L1TallyMirror`: first post wins, unverified against L2, no correction path | Medium |
-| M-06 | `OPENS_BALLOTS` tally is bounded by block gas (~40–50k ballots) | Medium |
-| M-07 | External parties can be added, toggled or rewired mid-election; stale rejections persist | Medium |
-| M-08 | Paymaster `alwaysSponsor = true` by default; EntryPoint has no gas accounting | Medium |
-| L-01 | Unprotected `initialize` on implementation contracts | Low |
-| L-02 | Missing events on state-changing admin or lifecycle functions | Low |
-| L-03 | `publicInputs.length < 5` accepts extra inputs; redundant ballot-hash comparison | Low |
-| L-04 | `JurisdictionRegistry` role hygiene (overwrite, stale officers, no revoke) | Low |
-| L-05 | `VoterRegistry` / `PersonRegistry` global roles with no revoke | Low |
-| L-06 | Commitments and nullifiers are not range-checked against the scalar field | Low |
-| L-07 | `RepublicMailbox` locks ETH; `forceInclude` is event-only | Low |
-| L-08 | Constructor argument order guessed by `_looksLikeHasher` heuristic | Low |
-| L-09 | `PasskeyAccount` secp256k1 path: malleable `s`, double hash interpretation | Low |
-| L-10 | `DeployGuard` is an off-chain guard only | Low |
-| I-01 | No ERC-20 token-poll snapshot logic exists (N/A) | Info |
-| I-02 | `PersonRegistry` publicly links addresses to person ids | Info |
-| I-03 | Unbounded `_ballotHashList` | Info |
-| I-04 | Client nullifier derivation (keccak) differs from circuit (Poseidon) | Info |
-| I-05 | Static-analysis hygiene (immutables, unused constant, floating pragma, return-bomb) | Info |
-| I-06 | Docs consistency notes | Info |
+| ID | Title | Severity | Status (2026-10-24 remediation) |
+|---|---|---|---|
+| C-01 | `WebAuthn.verify` accepts any signature and ignores `userOpHash` | Critical | Resolved |
+| C-02 | Any secp256k1 key can claim `ethBackupSigner` and take over a `PasskeyAccount` | Critical | Resolved |
+| H-01 | On-chain tally is not cryptographically bound (wrong verifier and instance) | High | Partially resolved |
+| H-02 | Deploy scripts (incl. `DeployL2`) default to accept-all `MockVerifier`; `VoteVerifier` can never verify | High | Resolved (contract side); VK ceremony Acknowledged |
+| H-03 | O(n) gas per registration (O(n²) total) bricks large rolls; "unlimited" is not achievable | High | Partially resolved |
+| H-04 | External-party gates use an unbound, caller-supplied `identityCommitment` (bypass and deanonymization) | High | Partially resolved |
+| H-05 | `ballotHash = keccak256(ciphertext)` exceeds the BN254 field for ~82% of ballots | High | Resolved |
+| H-06 | `RollupSettlement` verifies nothing as deployed; no way to set a verifier | High | Partially resolved |
+| M-01 | Roots can change mid-vote (late disqualification, no root history) | Medium | Partially resolved |
+| M-02 | Election creator chooses any verifier; permissionless creation when no jurisdiction registry is set | Medium | Resolved |
+| M-03 | Factory admin powers: silent module rewiring, irrevocable roles, no events | Medium | Resolved (multisig and timelock recommended operationally) |
+| M-04 | `BallotInbox._requireNotTallied` fails open | Medium | Resolved |
+| M-05 | `L1TallyMirror`: first post wins, unverified against L2, no correction path | Medium | Partially resolved |
+| M-06 | `OPENS_BALLOTS` tally is bounded by block gas (~40–50k ballots) | Medium | Acknowledged |
+| M-07 | External parties can be added, toggled or rewired mid-election; stale rejections persist | Medium | Partially resolved |
+| M-08 | Paymaster `alwaysSponsor = true` by default; EntryPoint has no gas accounting | Medium | Partially resolved |
+| L-01 | Unprotected `initialize` on implementation contracts | Low | Resolved |
+| L-02 | Missing events on state-changing admin or lifecycle functions | Low | Resolved |
+| L-03 | `publicInputs.length < 5` accepts extra inputs; redundant ballot-hash comparison | Low | Resolved |
+| L-04 | `JurisdictionRegistry` role hygiene (overwrite, stale officers, no revoke) | Low | Partially resolved |
+| L-05 | `VoterRegistry` / `PersonRegistry` global roles with no revoke | Low | Partially resolved |
+| L-06 | Commitments and nullifiers are not range-checked against the scalar field | Low | Partially resolved |
+| L-07 | `RepublicMailbox` locks ETH; `forceInclude` is event-only | Low | Resolved (forceInclude advisory) |
+| L-08 | Constructor argument order guessed by `_looksLikeHasher` heuristic | Low | Resolved |
+| L-09 | `PasskeyAccount` secp256k1 path: malleable `s`, double hash interpretation | Low | Resolved |
+| L-10 | `DeployGuard` is an off-chain guard only | Low | Acknowledged |
+| I-01 | No ERC-20 token-poll snapshot logic exists (N/A) | Info | Unchanged (Informational) |
+| I-02 | `PersonRegistry` publicly links addresses to person ids | Info | Unchanged (Informational) |
+| I-03 | Unbounded `_ballotHashList` | Info | Unchanged (Informational) |
+| I-04 | Client nullifier derivation (keccak) differs from circuit (Poseidon) | Info | Unchanged (Informational) |
+| I-05 | Static-analysis hygiene (immutables, unused constant, floating pragma, return-bomb) | Info | Unchanged (Informational) |
+| I-06 | Docs consistency notes | Info | Unchanged (Informational) |
 
 ---
 
@@ -129,6 +131,7 @@ Many of the proving-path gaps are acknowledged as "in progress" in the README. T
 
 - **Severity:** Critical
 - **Location:** [`src/account/WebAuthn.sol:28-45`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/WebAuthn.sol#L28-L45), [`src/account/WebAuthn.sol:75-94`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/WebAuthn.sol#L75-L94), [`src/account/PasskeyAccount.sol:101-108`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/PasskeyAccount.sol#L101-L108)
+- **Status:** **Resolved** — [`2b635be`](https://github.com/mrabino1/zk-voting/commit/2b635be). `WebAuthn.verify` now requires `type=webauthn.get`, a base64url challenge equal to `userOpHash`, the UP flag, `0<r,s<n`, and an exact 32-byte P-256 precompile result of `1`. The structural fallback is removed, so it fails closed. Regression: `test/audit/CriticalRegressions.t.sol`.
 
 **Description.** `verify` first tries the RIP-7212 precompile. If that fails, it returns `rs[0] != 0 && pubX != 0` as a "fallback for chains without RIP-7212". The fallback is unconditional. It fires when the precompile is absent (the staticcall to an empty account succeeds with zero output), and *also* when the precompile is present and rejects the signature. `rs[0] != 0` is already required at line 36, so for any account with `pubX != 0` the function returns `true` for any input.
 
@@ -161,6 +164,7 @@ function testPoC_WebAuthnForgeryDrainsAccount() public {
 
 - **Severity:** Critical
 - **Location:** [`src/account/PasskeyAccount.sol:110-135`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/PasskeyAccount.sol#L110-L135) (notably lines 130–133)
+- **Status:** **Resolved** — [`2b635be`](https://github.com/mrabino1/zk-voting/commit/2b635be). `ethBackupSigner` is immutable and fixed at deployment (`createAccountWithBackupSigner` / `getAddressWithBackupSigner`). There is no first-use (TOFU) binding. The 4-argument `createAccount` / `getAddress` keep their ABI and have no backup signer. Regression: `CriticalRegressions.t.sol`.
 
 **Description.** Any 65-byte signature takes the secp256k1 path. If `ethBackupSigner == address(0)`, the recovered address is stored as the backup signer and the signature is accepted. The NatSpec says "Production civic accounts leave this at zero", which is exactly the vulnerable state.
 
@@ -190,6 +194,7 @@ function testPoC_BackupSignerHijack() public {
 
 - **Severity:** High
 - **Location:** [`src/Tally.sol:56-87`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Tally.sol#L56-L87), [`src/Tally.sol:90-129`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Tally.sol#L90-L129), [`src/Tally.sol:151-166`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Tally.sol#L151-L166), [`src/zk/TallyPublicInputs.sol:1-30`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/zk/TallyPublicInputs.sol#L1-L30), [`src/zk/Groth16VerifierAdapter.sol:24`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/zk/Groth16VerifierAdapter.sol#L24)
+- **Status:** **Partially resolved** — [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). `Tally` uses a dedicated, set-once tally verifier. `TallyPublicInputs` V2 has 7 words, all reduced mod r, and binds `ballotRoot` and `tallyKeyHash`. JS `proof-helpers` and `tally-crypto` were updated to match. **Open:** a tally circuit that proves this instance, plus its trusted setup.
 
 **Description.** `submitTally` and `submitOpenedTally` verify against `p.verifier`, the election's *vote* verifier. They pass a 6-word `TALLY_SOL_MOCK_V1` instance, which `TallyPublicInputs` itself says does not match `circuits/tally.circom`.
 
@@ -214,6 +219,7 @@ The README acknowledges the encoding mismatch (`README.md` "Not the same encodin
 
 - **Severity:** High
 - **Location:** [`script/DeployLocal.s.sol:79-85`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/script/DeployLocal.s.sol#L79-L85), [`script/DeployLocal.s.sol:136-140`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/script/DeployLocal.s.sol#L136-L140), [`script/DeployL2.s.sol:1-26`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/script/DeployL2.s.sol#L1-L26), [`src/zk/MockVerifier.sol:37`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/zk/MockVerifier.sol#L37), [`src/zk/MockVerifier.sol:143-153`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/zk/MockVerifier.sol#L143-L153), [`src/zk/VoteVerifier.sol:69-123`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/zk/VoteVerifier.sol#L69-L123)
+- **Status:** **Resolved (contract side); VK ceremony Acknowledged** — [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). `ElectionFactory` refuses verifiers that report `isMock()` off a local chain unless `allowMockVerifiers` is set. Deploy scripts need explicit dev flags (`REPUBLIC_ALLOW_MOCK_VERIFIER`, `BATCH_VERIFIER`, `REPUBLIC_SETTLEMENT_MOCK_MODE`, `REPUBLIC_TALLY_VERIFIER`). **Open:** a production VK and trusted-setup ceremony for `VoteVerifier`.
 
 **Description.**
 - `_useMockVerifier()` returns `true` unless `REPUBLIC_PROVING_PATH=1` or `REPUBLIC_USE_MOCK_VERIFIER=0`. `DeployL2` inherits `DeployLocal`.
@@ -231,6 +237,7 @@ The README acknowledges the encoding mismatch (`README.md` "Not the same encodin
 
 - **Severity:** High
 - **Location:** [`src/VoterRegistry.sol:68-96`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L68-L96), [`src/VoterRegistry.sol:135-171`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L135-L171), [`src/tree/EligibleSet.sol:1-112`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/tree/EligibleSet.sol#L1-L112), [`src/DisqualificationRegistry.sol:187-226`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/DisqualificationRegistry.sol#L187-L226)
+- **Status:** **Partially resolved** — [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). The eligible set uses an incremental frontier tree, so registration is O(depth). The disqualification rebuild is paged, and ballots are refused while a rebuild is pending. **Open:** a disqualification set at very large scale still needs paged operator transactions.
 
 **Description.** Every `register` calls `_publishEligibleRoot`. That collects all leaves, makes two external `isDisqualified` calls per voter, and recomputes the whole eligible tree (`EligibleSet.rootOf`). `DisqualificationRegistry._publishChain` does the same, plus an O(k²) insertion sort, plus another `rebuildEligibleRoot`.
 
@@ -258,6 +265,7 @@ The README acknowledges the encoding mismatch (`README.md` "Not the same encodin
 
 - **Severity:** High
 - **Location:** [`src/BallotInbox.sol:84-109`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L84-L109), [`src/BallotInbox.sol:163-171`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L163-L171), [`src/ExternalPartyRegistry.sol:201-229`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ExternalPartyRegistry.sol#L201-L229)
+- **Status:** **Partially resolved** — [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). The clearance `identityCommitment` must be a leaf of the frozen eligible set. **Open:** the vote circuit must bind the commitment to the voter’s nullifier. Until then, a caller can present *another* eligible voter’s cleared commitment.
 
 **Description.** `submitVoteWithClearance` takes `identityCommitment` as a plain argument and passes it to `assertCastAllowed`. The commitment is not among the Groth16 public inputs, and nothing ties it to the nullifier or the eligible leaf being proven.
 
@@ -279,6 +287,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** High (liveness of the real proving path)
 - **Location:** [`src/BallotInbox.sol:184-202`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L184-L202), [`src/l2/RollupSettlement.sol:89-96`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/RollupSettlement.sol#L89-L96)
+- **Status:** **Resolved** — [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). `ballotHash = keccak256(ciphertext) mod r` in the contract, the relay (`hashBallot`) and the passkey wallet. The redundant comparison is removed. Regression: `HighRegressions.t.sol`.
 
 **Description.** `_requireBoundInstance` requires `publicInputs[3] == uint256(keccak256(encryptedBallot))`. `circuits/vote.circom` declares `ballotHash` as a public *field* signal, and snarkjs-generated verifiers reject any public input ≥ r. The browser client (`apps/node/public/passkey-wallet.js`) uses the raw keccak and never reduces it or retries.
 
@@ -294,6 +303,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** High
 - **Location:** [`src/l2/RollupSettlement.sol:39-53`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/RollupSettlement.sol#L39-L53), [`src/l2/RollupSettlement.sol:76-109`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/RollupSettlement.sol#L76-L109), [`script/DeployL1.s.sol:27`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/script/DeployL1.s.sol#L27)
+- **Status:** **Partially resolved** — [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). `RollupSettlement` requires a verifier, uses mod-r batch inputs and has a working `grantRole`. Mock mode needs `REPUBLIC_SETTLEMENT_MOCK_MODE`. **Open:** data availability and a challenge window.
 
 **Description.**
 - `DeployL1` constructs `RollupSettlement(admin, sequencer, prover, batchVerifier, false)` with `batchVerifier` defaulting to zero. The check `if (!mockMode && batchVerifier != address(0))` then skips proof verification.
@@ -312,6 +322,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/DisqualificationRegistry.sol:129-133`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/DisqualificationRegistry.sol#L129-L133), [`src/DisqualificationRegistry.sol:170-172`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/DisqualificationRegistry.sol#L170-L172), [`src/Election.sol:75-79`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Election.sol#L75-L79), [`src/BallotInbox.sol:190-195`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L190-L195)
+- **Status:** **Partially resolved** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). `setLateUpdateAllowed(true)` is only possible before the start, and it emits `LateUpdateAllowedSet`. Root changes emit `RootsUpdated`. **Open:** there is no on-chain root history, so proofs against an older root are not accepted after an allowed late update.
 
 **Description.** The clerk can set `lateUpdateAllowed`. The officer can then disqualify or revoke during `OPEN`, which republishes both roots. `BallotInbox` accepts only the *current* roots, and there is no root history.
 
@@ -328,6 +339,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/ElectionFactory.sol:169-192`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ElectionFactory.sol#L169-L192), [`src/ElectionFactory.sol:219-230`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ElectionFactory.sol#L219-L230)
+- **Status:** **Resolved** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). Non-admin creators must use a verifier approved with `setVerifierApproved` (super-admin only). Self-service creation without a jurisdiction registry is refused. `DeployLocal` approves the deployed verifier ([`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58)).
 
 **Description.**
 - `params.verifier` is caller-supplied and unvalidated.
@@ -344,6 +356,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium (centralization)
 - **Location:** [`src/ElectionFactory.sol:76-114`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ElectionFactory.sol#L76-L114), [`src/ElectionFactory.sol:129-135`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ElectionFactory.sol#L129-L135)
+- **Status:** **Resolved (multisig and timelock recommended operationally)** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). Modules are set once and emit events. `revokeRole` added. Admin transfer is two-step. The super role cannot be granted.
 
 **Description.**
 - `setModules` / `wireModules` are duplicates. They can repoint `inbox` / `tally` / registries at any time, have no zero checks and emit no events.
@@ -364,6 +377,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/BallotInbox.sol:136-144`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L136-L144)
+- **Status:** **Resolved** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). `_requireNotTallied` now fails closed if the tally-status call reverts.
 
 **Description.** If the `tallyVerifier()` call fails, returns short data, returns zero, or `isTallied` reverts, the check silently passes.
 
@@ -375,6 +389,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/l2/L1TallyMirror.sol:115-120`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/L1TallyMirror.sol#L115-L120), [`src/l2/L1TallyMirror.sol:143-200`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/L1TallyMirror.sol#L143-L200), [`src/l2/L1TallyMirror.sol:226-236`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/L1TallyMirror.sol#L226-L236)
+- **Status:** **Partially resolved** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). Added `setSettlement` and an optional settled-root pin (`TALLY_MIRROR_REQUIRE_SETTLED_ROOT`), a 7-day `DISPUTE_WINDOW` with `supersedeCertifiedResult`, and `isFinal`. **Open:** the pin is opt-in, and the `code.length` heuristic is kept.
 
 **Description.**
 - `postResult` / `postCertifiedResult` are write-once (`AlreadyPosted`).
@@ -393,6 +408,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/Tally.sol:90-129`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Tally.sol#L90-L129), [`src/Tally.sol:175-190`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Tally.sol#L175-L190)
+- **Status:** **Acknowledged** — No code change. `OPENS_BALLOTS` stays bounded by block gas. Use a ZK tally (H-01) for large elections.
 
 **Description.** `submitOpenedTally` takes `openings[]` of length `acceptedBallots`, hashes it, and builds a histogram in memory in one transaction.
 
@@ -404,6 +420,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/ExternalPartyRegistry.sol:75-125`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ExternalPartyRegistry.sol#L75-L125), [`src/ExternalPartyRegistry.sol:127-156`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ExternalPartyRegistry.sol#L127-L156), [`src/BallotInbox.sol:156-161`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L156-L161)
+- **Status:** **Partially resolved** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). Election staff can `clearRejection` for a paused or removed party. **Open:** parties can still be added or toggled mid-election, by design.
 
 **Description.**
 - Staff can `addParty`, `setPartyActive` or `setPartyOperator` at any time, including during `OPEN`. Adding any active party makes plain `submitVote` revert (`ClearanceRequired`), and adding a `MUST_ATTEST` party makes attestations mandatory mid-vote.
@@ -418,6 +435,7 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 
 - **Severity:** Medium
 - **Location:** [`src/account/RepublicPaymaster.sol:29`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/RepublicPaymaster.sol#L29), [`src/account/RepublicPaymaster.sol:88-90`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/RepublicPaymaster.sol#L88-L90), [`src/account/RepublicEntryPoint.sol:71-129`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/RepublicEntryPoint.sol#L71-L129)
+- **Status:** **Partially resolved** — [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). The paymaster defaults to off, and sponsorship is strict (`execute()` only, with sponsored targets). `RepublicEntryPoint` isolates each op, emits `UserOpReverted`, and caps returndata at 256 bytes. **Open:** gas accounting and rate limits.
 
 **Description.**
 - With the default, any UserOp to any target is "sponsored".
@@ -437,24 +455,28 @@ For `MUST_ATTEST`, prove membership in an attested-set root in-circuit.
 ### L-01 — Unprotected `initialize` on implementation contracts
 
 - **Location:** [`src/Election.sol:44-62`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Election.sol#L44-L62), [`src/ExternalPartyRegistry.sol:65-74`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ExternalPartyRegistry.sol#L65-L74)
+- **Status:** **Resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58). The constructors lock the `Election` and `ExternalPartyRegistry` implementations.
 
 The implementations can be initialized by anyone. Clones are unaffected and there is no `delegatecall` or `selfdestruct`, so impact is low, but explorers may show a confusing "election". Lock the implementation in its constructor.
 
 ### L-02 — Missing events on state-changing admin or lifecycle functions
 
 - **Location:** [`src/Election.sol:69-79`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/Election.sol#L69-L79), [`src/ElectionFactory.sol:76-114`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/ElectionFactory.sol#L76-L114), [`src/VoterRegistry.sol:62-66`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L62-L66), [`src/DisqualificationRegistry.sol:129-133`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/DisqualificationRegistry.sol#L129-L133)
+- **Status:** **Resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58) and [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165). Added `RollFrozen`, `RoleGranted` / `RoleRevoked` across registries, and factory and module events.
 
 `freezeRoll`, `setRoots`, `setLateUpdateAllowed`, module setters and `grantRole` emit nothing. These are core audit-trail events for an election. Add them.
 
 ### L-03 — `publicInputs.length < 5` accepts extra inputs; redundant ballot-hash comparison
 
 - **Location:** [`src/BallotInbox.sol:67`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L67), [`src/BallotInbox.sol:95`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L95), [`src/BallotInbox.sol:199`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L199)
+- **Status:** **Resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58) and [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0). Exactly 5 public inputs are required. The redundant comparison is removed.
 
 Use `!= 5`. The two operands of the `&&` at line 199 are the same comparison, so drop one.
 
 ### L-04 — `JurisdictionRegistry` role hygiene
 
 - **Location:** [`src/JurisdictionRegistry.sol:43-60`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/JurisdictionRegistry.sol#L43-L60), [`src/JurisdictionRegistry.sol:77-97`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/JurisdictionRegistry.sol#L77-L97), [`src/JurisdictionRegistry.sol:107`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/JurisdictionRegistry.sol#L107)
+- **Status:** **Partially resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58). `createJurisdiction` refuses an existing id (`JurisdictionExists`). Added `revokeRole` and role events, and `grantRole` rejects zero. The officer list is still not cascaded on `setClerk` / `revokeClerk`. This is deliberate and pinned by the existing tests; use `revokeOfficer`.
 
 - `createJurisdiction` silently overwrites an existing id, and the old clerk keeps clerk rights.
 - `setClerk` and `revokeClerk` do not clear officers the clerk granted.
@@ -465,36 +487,42 @@ Revert on existing id; cascade or explicitly manage officer lists; add revoke.
 ### L-05 — `VoterRegistry` / `PersonRegistry` global roles with no revoke
 
 - **Location:** [`src/VoterRegistry.sol:62-66`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L62-L66), [`src/VoterRegistry.sol:193-204`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L193-L204), [`src/PersonRegistry.sol:42-50`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/PersonRegistry.sol#L42-L50)
+- **Status:** **Partially resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58). `revokeRole` and events added to `VoterRegistry` / `PersonRegistry`. Roles remain global, not per election.
 
 `REGISTRAR_ROLE` is global across all elections, and the admin is implicitly a registrar for every election. There is no revoke and no event. Scope roles per election and add revocation.
 
 ### L-06 — Commitments and nullifiers are not range-checked against the scalar field
 
 - **Location:** [`src/VoterRegistry.sol:68-84`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L68-L84), [`src/DisqualificationRegistry.sol:87-106`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/DisqualificationRegistry.sol#L87-L106), [`src/BallotInbox.sol:77-79`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/BallotInbox.sol#L77-L79)
+- **Status:** **Partially resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58). `BallotInbox` keys nullifiers `mod r`, so `n` and `n+r` cannot both vote. **Open:** commitments are not range-checked, because the dev `KeccakHasher` flow produces values ≥ r.
 
 A commitment ≥ r (or ≥ 2²⁵² where the circuit uses `LessThan`) can be registered but never proven. Nullifier aliasing (`n` vs `n + r`) is prevented only by the real verifier's field check. Under `MockVerifier` both values are accepted as distinct. Require `< r` at registration and in the inbox.
 
 ### L-07 — `RepublicMailbox` locks ETH; `forceInclude` is event-only
 
 - **Location:** [`src/l2/RepublicMailbox.sol:41-45`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/RepublicMailbox.sol#L41-L45), [`src/l2/RepublicMailbox.sol:60-66`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/l2/RepublicMailbox.sol#L60-L66)
+- **Status:** **Resolved (forceInclude advisory)** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58). `sendToL2` is non-payable. `forceInclude` is documented as advisory, with no settlement enforcement.
 
 `sendToL2` is `payable` with no withdraw or bridge credit (also flagged by Slither and Aderyn). `forceInclude` has no on-chain enforcement. Make it non-payable or credit the value; document `forceInclude` as advisory or enforce it in settlement.
 
 ### L-08 — Constructor argument order guessed by `_looksLikeHasher`
 
 - **Location:** [`src/VoterRegistry.sol:206-212`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/VoterRegistry.sol#L206-L212), [`src/DisqualificationRegistry.sol:150-156`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/DisqualificationRegistry.sol#L150-L156)
+- **Status:** **Resolved** — [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58). Constructor order is fixed to `(hasher, factory)`, and `_looksLikeHasher` is removed. `DeployLocal` is updated.
 
 The constructors probe `hashLeftRight(0,0)` to decide which argument is the hasher. A factory exposing a compatible selector, or a reverting hasher, would mis-wire the contract. Use a fixed argument order.
 
 ### L-09 — `PasskeyAccount` secp256k1 path: malleable `s`, double hash interpretation
 
 - **Location:** [`src/account/PasskeyAccount.sol:119-127`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/src/account/PasskeyAccount.sol#L119-L127)
+- **Status:** **Resolved** — [`2b635be`](https://github.com/mrabino1/zk-voting/commit/2b635be). Low-s is enforced, `v ∈ {27,28}`, and the raw `userOpHash` is the only interpretation.
 
 There is no low-`s` check. Both the raw `userOpHash` and the EIP-191-wrapped hash are accepted. The nonce prevents replay, so impact is low beyond C-02. Use OpenZeppelin `ECDSA.recover` with one format.
 
 ### L-10 — `DeployGuard` is an off-chain guard only
 
 - **Location:** [`script/DeployGuard.sol:14-45`](https://github.com/mrabino1/zk-voting/blob/b1cef6f7273226d023e82e66878d9a80be6a0e39/smart-contracts/script/DeployGuard.sol#L14-L45)
+- **Status:** **Acknowledged** — No change. `DeployGuard` stays an off-chain guard. The on-chain mock refusal from H-02 now covers the main risk.
 
 The deploy-once protection relies on environment variables and a JSON record, and `FORCE_REDEPLOY=1` bypasses it. There is no on-chain singleton registry, so a second "official" stack can be deployed and the chain of record split. Record canonical addresses on-chain (e.g. in `L1TallyMirror`) and have off-chain tools verify them.
 
@@ -565,6 +593,8 @@ The list grows without bound. Reads are indexed (`ballotHashAt`), so there is no
 
 ## 7. Test and coverage results
 
+> Results at the audited commit. Post-remediation: `forge test` **413/413** (44 suites), including 55 audit regression tests; see §12.3.
+
 **`forge test`** (full suite, repo settings, real `git clone` of `test/unstable`): **349 passed, 0 failed, 0 skipped (349 total)** across 39 suites.
 
 - Fuzz (256 runs) and invariant suites pass. `VotingInvariant` ran 64 runs × 2,048 calls with 0 reverts, and holds `nullifierUnique`, `nullifierOnceOnlyPerElection_doubleVoteRejected` and `tallySumsIfPosted`.
@@ -577,6 +607,8 @@ The list grows without bound. Reads are indexed (`ballotHashAt`), so there is no
 **Audit PoCs** (scratch copy, not committed): 6 of 6 pass — `testPoC_WebAuthnForgeryDrainsAccount`, `testPoC_BackupSignerHijack`, `testPoC_VetoBypassWithUnboundCommitment`, `testPoC_RegistrationGasGrowth`, `testPoC_PoseidonHashGas`, `testPoC_BallotHashFieldOverflow`.
 
 ## 8. Tool triage
+
+> Results at the audited commit. For the post-remediation re-run (Slither 89 results; Aderyn 2 High / 18 Low), see §12.4.
 
 ### Slither 0.11.6 — 99 results (src only; tests, scripts and lib filtered)
 
@@ -642,3 +674,109 @@ The recommendation is to put all admin roles behind a multisig with a timelock, 
 ## 11. Disclaimer
 
 This report was produced by GrokBot using automated tools (Foundry, Slither, Aderyn) plus AI-assisted manual review of commit `b1cef6f7`. It is **not** a substitute for a professional audit firm's review. No guarantee is made that all vulnerabilities were found, and severities are judgement calls. Do not use this code for a binding public election until the Critical and High findings are fixed and the system has been independently audited, including the circuits and trusted setup.
+
+## 12. Remediation and re-test (2026-10-24)
+
+The fixes were made on branch `fix/smart-contract-audit-remediation`. The work went in severity order, Critical → High → Medium → Low, with one commit per tier. **The Informational findings (I-01 to I-06) were deliberately left unchanged.** The aim was to keep existing features and flows working. Where a full fix needs a circuit change or a trusted setup, only the contract-side part was done, and the finding is marked *Partially resolved* or *Acknowledged*. The branch also merges the latest `origin/test/unstable` (`b249755`, including #79 "bind Merkle path length to tree depth", and then `75b1cad`, #81 branding, which has no contract changes). Both merges were clean, and the full suite was re-run on the merged tree.
+
+### 12.1 Commits
+
+| Tier | Commit | Regression suite |
+|---|---|---|
+| Critical (C-01, C-02, plus L-09) | [`2b635be`](https://github.com/mrabino1/zk-voting/commit/2b635be) | `test/audit/CriticalRegressions.t.sol` (11 tests, P-256 precompile oracle stub) |
+| High (H-01 to H-06) | [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0) | `test/audit/HighRegressions.t.sol` (20 tests), plus JS tests for tally V2 and `hashBallot` |
+| Medium (M-01 to M-08) | [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165) | `test/audit/MediumRegressions.t.sol` (16 tests) |
+| Low (L-01 to L-08) | [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58) | `test/audit/LowRegressions.t.sol` (8 tests) |
+| Merge `origin/test/unstable` | [`b05da8c`](https://github.com/mrabino1/zk-voting/commit/b05da8c), then a merge of `75b1cad` | full suite re-run |
+| Re-audit cleanup | [`0132d7a`](https://github.com/mrabino1/zk-voting/commit/0132d7a) | Removes `RepublicEntryPoint.ExecuteFailed`, which the M-08 change left unused |
+
+Each regression test that is named `Exploit…` reproduces the original attack and now asserts that it is refused.
+
+### 12.2 Status summary
+
+| Severity | Total | Resolved | Partially resolved | Acknowledged | Unchanged |
+|---|---:|---:|---:|---:|---:|
+| Critical | 2 | 2 | 0 | 0 | 0 |
+| High | 6 | 2¹ | 4 | 0 | 0 |
+| Medium | 8 | 3 | 4 | 1 | 0 |
+| Low | 10 | 6 | 3 | 1 | 0 |
+| Informational | 6 | — | — | — | 6 (left as is) |
+
+¹ H-02 is resolved on the contract side. The production VK and trusted-setup ceremony are acknowledged as open.
+
+The per-finding status, with details, is in the §4 table and on each finding's **Status** line.
+
+### 12.3 Re-test evidence (merged tree)
+
+| Check | Before (`b1cef6f7`) | After (remediation branch) |
+|---|---|---|
+| `forge build` | ok | ok |
+| `forge test` | 349 passed / 0 failed (39 suites) | **413 passed / 0 failed / 0 skipped (44 suites)** |
+| Audit regression tests | — (6 PoCs in a scratch copy) | 55 (11 C + 20 H + 16 M + 8 L), all pass |
+| `packages/proof-helpers` (`npm test`) | — | 12/12 |
+| `l2` (`node --test l2/test/*.test.mjs`) | — | 64/64 |
+| `apps/node` (`npm test`) | — | 627 pass, 1 fail, 1 skipped. The failure is the existing `personal API keys › public /api docs…` docs test. It also fails without these changes and touches no file changed here. |
+| `forge coverage --ir-minimum` | not feasible (stack too deep) | still not feasible. The same `Yul exception: … 1 too deep in the stack` happens under minimal IR, so no coverage figures are reported. The 55 targeted regression tests stand in for it. |
+
+### 12.4 Tool re-run
+
+**Slither 0.11.6** (`src` only; tests, scripts and lib filtered): **89 results**, down from 99.
+
+| Change | Detail |
+|---|---|
+| `locked-ether` 1 → 0 | L-07 fixed |
+| `return-bomb` 1 → 0 | M-08 fixed (256-byte returndata cap) |
+| `calls-loop` 15 → 7 | H-03: incremental frontier tree; the rest are bounded or paged loops |
+| `missing-zero-check` 19 → 10 | M-03 and L-04 zero checks |
+| `unused-return` 3 → 2 | `_looksLikeHasher` probes removed (L-08). The remaining two are an unused `insert` index and the paged `rebuildEligibleRoot` "done" flag, both by design. |
+| `immutable-states` 12 → 9 | Some set-once fields; I-05 left as is |
+| **New:** `uninitialized-state` (High) ×1 | `DisqualificationRegistry._trees`. **False positive:** the mapping slot is initialised in place by `FrontierTree.reset(tree, …)` through a storage pointer. |
+| **New:** `events-maths` ×1 | `MockVerifier.setWitnessTreeDepth`. Test-only mock; no action. |
+| Unchanged | `timestamp`, `shadowing-local`, `reentrancy-events` / `-benign` (trusted, factory-wired modules), and the Info detectors (assembly, low-level calls, digits, complexity) |
+
+**Aderyn 0.6.8:** **2 "High", 18 "Low"**, down from 3 / 18. nSLOC is 3,434, up from 3,048.
+
+- H-2 "Locks Ether" is gone (L-07).
+- H-1 (`abi.encodePacked` in `PasskeyAccountFactory`) remains a false positive, as before.
+- H-2 "state change after external call" now lists the new paged-rebuild and settlement call sites. All of the callees are trusted, factory-wired modules or views, so this is not exploitable.
+- L-3 `ecrecover` malleability is still flagged by pattern. The code now enforces low-s and `v ∈ {27,28}` (L-09).
+- L-10 "state change without event" is left on `initialize`, `bumpParticipantCount`, the `L1TallyMirror` publisher setters, `PasskeyAccount.validateUserOp` and the test-only `MockVerifier`. These are cosmetic or covered by existing events; the L-02 scope (lifecycle and role changes) is done.
+- L-13 "unchecked return" flags internal helpers whose return values are unused by design.
+- L-16 "unused error" lists `ElectionFactory.ModulesNotSet` and `RepublicMailbox.NotAdmin`, both from before this work. `RepublicEntryPoint.ExecuteFailed`, which the fixes had made unused, was removed in `0132d7a`.
+
+### 12.5 Re-audit of the fixes
+
+These are new behaviours and risks that operators and integrators must know about. No new Critical, High or Medium issue was found.
+
+1. **EntryPoint semantics changed (M-08).** A failing UserOp no longer reverts the batch. It emits `UserOpReverted(sender, nonce, revertReason)` with the reason capped at 256 bytes and the batch continues. Relayers must read events rather than rely on tx failure.
+2. **Paymaster defaults to off.** `alwaysSponsor` is false. Deployments must call `setSponsoredTargets(ballotInbox, voterRegistry, accountFactory)`, which `DeployLocal` already does. Only `execute()` calls to those targets are sponsored.
+3. **Verifier allowlist (M-02).** Clerk-created elections need an admin-approved verifier (`setVerifierApproved`). `DeployLocal` and `DeployL2` approve the deployed verifier. Mock verifiers are refused off-anvil unless `allowMockVerifiers` is set or an explicit dev flag is passed to the deploy scripts (`REPUBLIC_ALLOW_MOCK_VERIFIER`, `BATCH_VERIFIER`, `REPUBLIC_SETTLEMENT_MOCK_MODE`, `REPUBLIC_TALLY_VERIFIER`). `TALLY_MIRROR_REQUIRE_SETTLED_ROOT` opts `DeployL1` into the M-05 settled-root pin.
+4. **ABI changes.**
+   - `VoterRegistry` and `DisqualificationRegistry` constructors are now fixed as `(hasher, factory)`.
+   - `PasskeyAccountFactory` adds `createAccountWithBackupSigner` / `getAddressWithBackupSigner`. The 4-argument functions keep their ABI.
+   - `RepublicMailbox.sendToL2` is non-payable.
+   - `TallyPublicInputs` V2 has 7 words. Provers and `proof-helpers` were updated.
+5. **Field reduction.**
+   - `ballotHash` is `keccak256(ciphertext) mod r`. The relay and the wallet were updated.
+   - Nullifier storage and views (`nullifierUsed`, `ballotHashOf`) are keyed `mod r`. The event keeps the raw value.
+   - Circuits and provers must use mod-r inputs.
+   - The dev `KeccakHasher` produces roots and commitments ≥ r, which is why commitments are not range-checked (L-06).
+6. **Paged rebuilds (H-03).** While a disqualification-triggered eligible rebuild is pending, ballots are refused. Operators must call `continueEligibleRebuild` until it returns `done`.
+7. **Dispute window (M-05).** An `L1TallyMirror` result is final only after `DISPUTE_WINDOW` (7 days), unless it is superseded. Consumers should check `isFinal`.
+8. **Implementations locked (L-01).** The `Election` and `ExternalPartyRegistry` implementation contracts can no longer be initialised directly. Clones are unaffected.
+
+### 12.6 Open items
+
+- **H-01:** a tally circuit and trusted setup that prove the V2 instance.
+- **H-02:** a production `VoteVerifier` VK ceremony.
+- **H-04:** bind the clearance commitment to the voter nullifier in the circuit.
+- **H-06:** data availability and a challenge or dispute game for rollup settlement.
+- **M-01:** a root history for late updates.
+- **M-05:** make the settled-root pin mandatory in production.
+- **M-06:** move large elections to the ZK tally.
+- **M-08:** gas accounting and rate limits.
+- **L-04, L-05:** per-election roles and cascaded officer cleanup.
+- **L-06:** a commitment range check once Poseidon is the only hasher.
+- **L-10:** on-chain deploy guard.
+- **Operational:** put the super-admin behind a multisig and timelock.
+- **I-01 to I-06:** unchanged by request.

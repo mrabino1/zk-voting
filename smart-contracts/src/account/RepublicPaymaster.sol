@@ -26,7 +26,13 @@ contract RepublicPaymaster is IRepublicPaymaster {
 
     /// @notice When true (default), every UserOp through this paymaster is
     ///         sponsored. Republic L2 is gasless for voters by policy.
-    bool public alwaysSponsor = true;
+    /// @notice Audit M-08: off by default. Deployments sponsor only the civic
+    ///         targets (inbox, voter registry, account factory) unless an
+    ///         admin opts into blanket sponsorship.
+    bool public alwaysSponsor;
+
+    /// @dev `execute(address,uint256,bytes)` on PasskeyAccount.
+    bytes4 internal constant EXECUTE_SELECTOR = bytes4(keccak256("execute(address,uint256,bytes)"));
 
     address public ballotInbox;
     address public voterRegistry;
@@ -91,12 +97,19 @@ contract RepublicPaymaster is IRepublicPaymaster {
         revert NotSponsored();
     }
 
+    /// @dev Audit M-08: a factory `initCode` no longer sponsors whatever
+    ///      `callData` rides along; the call itself must be a zero-value
+    ///      `execute` into a civic target (or empty, deploy-only).
     function _isSponsored(UserOp calldata op) internal view returns (bool) {
         if (op.initCode.length >= 20) {
             address factory = address(bytes20(op.initCode[:20]));
-            if (accountFactory != address(0) && factory == accountFactory) return true;
+            if (accountFactory == address(0) || factory != accountFactory) return false;
+            if (op.callData.length == 0) return true;
         }
 
+        if (op.callData.length < 68) return false;
+        if (bytes4(op.callData[:4]) != EXECUTE_SELECTOR) return false;
+        if (uint256(bytes32(op.callData[36:68])) != 0) return false;
         address dest = _executeDest(op.callData);
         if (dest == address(0)) return false;
         if (ballotInbox != address(0) && dest == ballotInbox) return true;

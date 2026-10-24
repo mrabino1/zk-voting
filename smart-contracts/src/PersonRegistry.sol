@@ -24,6 +24,8 @@ contract PersonRegistry {
 
     event AddressVerified(bytes32 indexed personId, address indexed account);
     event ActiveAddressSet(bytes32 indexed personId, address indexed account, address previous);
+    event RoleGranted(bytes32 indexed role, address indexed account);
+    event RoleRevoked(bytes32 indexed role, address indexed account);
 
     address public immutable admin;
     mapping(bytes32 => mapping(address => bool)) public verified;
@@ -43,6 +45,14 @@ contract PersonRegistry {
         if (msg.sender != admin) revert NotAdmin();
         if (account == address(0)) revert ZeroAddress();
         roles[role][account] = true;
+        emit RoleGranted(role, account);
+    }
+
+    /// @notice Audit L-05: roles are revocable.
+    function revokeRole(bytes32 role, address account) external {
+        if (msg.sender != admin) revert NotAdmin();
+        roles[role][account] = false;
+        emit RoleRevoked(role, account);
     }
 
     /// @notice Internally verify that `account` belongs to `personId`.

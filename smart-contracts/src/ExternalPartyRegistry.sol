@@ -56,6 +56,11 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     mapping(uint256 => mapping(uint256 => uint16)) private _reasonBy;
     mapping(uint256 => mapping(uint256 => uint64)) private _attestationExpires;
 
+    /// @dev Audit L-01: lock the implementation; clones initialize once.
+    constructor() {
+        _initialized = true;
+    }
+
     modifier onlyStaff() {
         if (!factory.isElectionStaff(electionId, msg.sender)) revert NotStaff();
         _;
@@ -63,9 +68,9 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
 
     /// @notice Called once by ElectionFactory after EIP-1167 clone.
     function initialize(uint256 electionId_, address factory_) external {
-        if (_initialized) revert AlreadyInitialized();
         if (factory_ == address(0)) revert ZeroAddress();
         if (electionId_ == 0) revert NotFactory();
+        if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         electionId = electionId_;
         factory = IElectionFactory(factory_);
@@ -143,7 +148,12 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     /// @inheritdoc IExternalPartyRegistry
     function clearRejection(uint256 partyIndex, uint256 identityCommitment, bytes32 evidenceHash) external {
         if (identityCommitment == 0) revert ZeroCommitment();
-        _requireOperator(partyIndex);
+        // Audit M-07: election staff may also clear (e.g. after an appeal, or
+        // when the rejecting party was paused and its operator is gone).
+        Party storage party = _party(partyIndex);
+        if (msg.sender != party.operator && !factory.isElectionStaff(electionId, msg.sender)) {
+            revert NotPartyOperator();
+        }
         if (!_rejectedBy[identityCommitment][partyIndex]) revert NotRejected();
 
         _rejectedBy[identityCommitment][partyIndex] = false;

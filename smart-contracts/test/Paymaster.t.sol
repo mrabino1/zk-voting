@@ -34,7 +34,7 @@ contract PaymasterTest is Deployer {
         voter = vm.addr(voterPk);
         vm.deal(voter, 5 ether);
 
-        account = accountFactory.createAccount(keccak256("cred-paymaster"), 1, 2, bytes32(uint256(7)));
+        account = accountFactory.createAccountWithBackupSigner(keccak256("cred-paymaster"), 1, 2, voter, bytes32(uint256(7)));
         vm.label(account, "passkeyAccount");
         vm.label(voter, "voterEoa");
     }

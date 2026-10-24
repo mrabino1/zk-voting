@@ -39,7 +39,7 @@ contract CoercionResistanceTest is Deployer {
         inbox.submitVote(electionId, a, b, c, inputs, later);
 
         assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(first));
+        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
 
         vm.warp(IElection(election).params().cutoffTime);
         uint256[] memory counts = new uint256[](1);
@@ -59,7 +59,7 @@ contract CoercionResistanceTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(BallotInbox.OutsideVotingWindow.selector);
         inbox.submitVote(electionId, a, b, c, inputs, late);
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(first));
+        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
         assertEq(inbox.acceptedBallots(electionId), 1);
     }
 
@@ -68,7 +68,7 @@ contract CoercionResistanceTest is Deployer {
         submitVoteWithBallot(electionId, election, nullifier, enc);
         // On-chain public state is nullifier + ballotHash. There is no option id.
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertEq(inbox.ballotHashOf(electionId, nullifier), keccak256(enc));
+        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(enc)));
         assertEq(inbox.acceptedBallots(electionId), 1);
     }
 }

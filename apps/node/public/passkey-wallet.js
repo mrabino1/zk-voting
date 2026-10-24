@@ -277,6 +277,19 @@ export function keccak256Hex(input) {
   return "0x" + bytesToHex(keccak256(input));
 }
 
+/** BN254 scalar field modulus r. */
+export const SNARK_SCALAR_FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Vote public input 3: `uint256(keccak256(ciphertext)) % r`, as 0x-bytes32.
+ * Matches `BallotInbox.ballotHashOfCiphertext` (audit H-05).
+ */
+export function ballotHashHex(ciphertextBytes) {
+  const h = BigInt(keccak256Hex(ciphertextBytes)) % SNARK_SCALAR_FIELD;
+  return "0x" + h.toString(16).padStart(64, "0");
+}
+
 /* -------------------------------------------------------------------------- */
 /* IndexedDB                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -1242,7 +1255,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
         if (choiceIndex != null) packed = packChoices([Number(choiceIndex)]);
         else packed = coerceBytes(ballotBytes);
         encryptedBallot = await encryptToTallyPub(tallyPubKey, packed);
-        ballotHash = keccak256Hex(hexToBytes(encryptedBallot));
+        ballotHash = ballotHashHex(hexToBytes(encryptedBallot));
       } else {
         const packed = coerceBytes(ballotBytes);
         const ikm = await importHkdfIkm(seed);
@@ -1264,7 +1277,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
         );
         const blob = concatBytes(iv, ciphertext);
         encryptedBallot = "0x" + bytesToHex(blob);
-        ballotHash = keccak256Hex(blob);
+        ballotHash = ballotHashHex(blob);
       }
     }
     const userOpMaterial = keccak256(

@@ -107,9 +107,23 @@ contract ElectionIdentitySeparationTest is Deployer {
         assertEq(IElection(el).params().jurisdictionId, jurisdictionA);
     }
 
-    function testWithoutRegistrySelfDeclaredClerkStillCreates() public {
+    /// @dev Audit M-02: without a registry, self-declared clerks no longer
+    ///      create; an admin-granted CLERK_ROLE plus an approved verifier does.
+    function testWithoutRegistrySelfDeclaredClerkNeedsRoleAndApprovedVerifier() public {
         ElectionFactory naked = new ElectionFactory(admin, address(0));
         ElectionParams memory p = defaultParams();
+        vm.prank(p.clerk);
+        vm.expectRevert(ElectionFactory.MissingRole.selector);
+        naked.createElection(p);
+
+        vm.prank(admin);
+        naked.grantRole(Roles.CLERK_ROLE, p.clerk);
+        vm.prank(p.clerk);
+        vm.expectRevert(ElectionFactory.VerifierNotApproved.selector);
+        naked.createElection(p);
+
+        vm.prank(admin);
+        naked.setVerifierApproved(p.verifier, true);
         vm.prank(p.clerk);
         (uint256 id, address el) = naked.createElection(p);
         assertEq(id, 1);

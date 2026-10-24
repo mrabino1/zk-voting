@@ -68,11 +68,13 @@ contract RepublicMailboxTest is Test {
         assertEq(mailbox.toL1Nonce(), 1);
     }
 
-    function testSendToL2IsPayableAndKeepsValue() public {
+    /// @dev Audit L-07: value can no longer be locked in the mailbox.
+    function testSendToL2RejectsValue() public {
         vm.deal(sender, 1 ether);
         vm.prank(sender);
-        mailbox.sendToL2{value: 1 ether}(hex"01");
-        assertEq(address(mailbox).balance, 1 ether);
+        (bool ok,) = address(mailbox).call{value: 1 ether}(abi.encodeCall(RepublicMailbox.sendToL2, (hex"01")));
+        assertFalse(ok);
+        assertEq(address(mailbox).balance, 0);
     }
 
     function testForceIncludeMissingNonceReverts() public {
