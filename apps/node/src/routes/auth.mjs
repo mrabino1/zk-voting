@@ -7,6 +7,7 @@ import { destroySession, publicUser, requireAuth } from '../auth.mjs';
 import {
   createIdentityChallenges,
   fingerprintFromCertificate,
+  isClaimedPerson,
   normalizeEmail,
   normalizeEthAddress,
   normalizeFingerprint,
@@ -36,13 +37,35 @@ export function authRouter(deps) {
     '/passkey/register/begin',
     asyncHandler(async (req, res) => {
       const handle = req.body?.handle || req.body?.displayName || req.user?.handle;
-      if (!req.user) {
-        const existing = handle ? store.getUserByHandle(handle) : null;
-        if (!existing) requireAcceptedTerms(req.body || {});
+      const existing = handle ? store.getUserByHandle(handle) : null;
+      if (existing && isClaimedPerson(existing)) {
+        if (!req.user) {
+          throw new HttpError(401, 'authentication required to add a passkey', {
+            code: 'AUTH_REQUIRED',
+          });
+        }
+        if (req.user.id !== existing.id) {
+          throw new HttpError(403, 'passkey registration is for a different account', {
+            code: 'HANDLE_MISMATCH',
+          });
+        }
+      } else if (existing && req.user && req.user.id !== existing.id) {
+        throw new HttpError(403, 'passkey registration is for a different account', {
+          code: 'HANDLE_MISMATCH',
+        });
+      } else if (!req.user && !existing) {
+        requireAcceptedTerms(req.body || {});
       }
+      // Unclaimed seed (e.g. ADMIN_HANDLE): first claim keeps prior terms rules.
+      // Claimed → session user only. Unclaimed seed → that row. Else → new handle.
+      const targetUser = req.user
+        ? req.user
+        : existing && !isClaimedPerson(existing)
+          ? existing
+          : null;
       const options = await passkeys.beginRegister({
-        user: req.user || (handle ? store.getUserByHandle(handle) : null),
-        handle,
+        user: targetUser,
+        handle: targetUser?.handle || handle,
         acceptedTerms: req.body?.acceptedTerms,
       });
       res.json({ ...options, publicKey: options, rpName: config.rpName, nfp: true });

@@ -294,6 +294,23 @@ export function assertEmailRoom(user, addingEmail) {
   }
 }
 
+/**
+ * A person is "claimed" once they hold any sign-in factor. The seeded
+ * ADMIN_HANDLE row starts with empty credentials/authMethods so the first
+ * unauthenticated registration can still claim it; that bootstrap race is
+ * tracked separately (setup-token). Adding a passkey to a claimed person
+ * always requires a session for that same account.
+ */
+export function isClaimedPerson(user) {
+  if (!user) return false;
+  if (countPasskeys(user) > 0) return true;
+  if ((user.authMethods || []).length > 0) return true;
+  if ((user.ethAccounts || []).length > 0) return true;
+  if (user.email) return true;
+  if (user.activeEthAddress) return true;
+  return false;
+}
+
 export function assertPasskeyRoom(user) {
   if (!user) return;
   const count = countPasskeys(user);
