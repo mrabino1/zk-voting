@@ -24,6 +24,10 @@ const root = document.getElementById("admin-root");
 const flash = document.getElementById("admin-flash");
 const gate = document.getElementById("ceremony-gate");
 let options = null;
+let chain = null; // { headBlock, finalizedBlock, earliestCommit } or { error }
+// The one-time email invite link. The server keeps only its hash, so it is
+// shown until dismissed and never fetched again.
+let freshInvite = null;
 let uid = 0;
 const nextId = (p) => `${p}-${++uid}`;
 
@@ -156,7 +160,6 @@ function createPanel() {
   const pin = el("input", { name: "ptauHash", class: "mono", maxlength: "128", autocomplete: "off", spellcheck: "false" });
   const min = el("input", { name: "minContributions", type: "number", min: "2", max: "1000", value: "3", required: true });
   const turn = el("input", { name: "turnMinutes", type: "number", min: "1", max: "1440", value: "30", required: true });
-  const mode = select("mode", [["open", "Any signed-in account"], ["list", "Only the handles listed below"]], "open");
   const handles = el("textarea", { name: "handles", rows: "3" });
   ptau.addEventListener("change", () => {
     const m = ptau.value.match(/_(\d{1,2})\.ptau$/);
@@ -176,7 +179,7 @@ function createPanel() {
           r1csSha256: r1csPin.value.trim(),
           ptau: ptau.value,
           minContributions: Number(min.value),
-          participation: { mode: mode.value, handles: handles.value, turnMinutes: Number(turn.value) },
+          participation: { mode: "invite", handles: handles.value, turnMinutes: Number(turn.value) },
         };
         if (preset.value) body.ptauPower = Number(preset.value);
         if (pin.value.trim()) body.ptauHash = pin.value.trim();
@@ -200,9 +203,8 @@ function createPanel() {
       field("Hermez preset", preset, "Pins the published BLAKE2b-512 hash for that power."),
       field("Phase-1 hash pin", pin, "64 hex (SHA-256) or 128 hex (BLAKE2b-512). Required unless a preset is chosen."),
       field("Minimum contributions", min, "At least 2. Default 3."),
-      field("Who can contribute", mode),
       field("Turn length (minutes)", turn, "A participant who does not upload in time loses their place."),
-      field("Invited handles", handles, "Comma or space separated. Used only when the list option is chosen. Never shown publicly.")
+      field("Invite accounts (optional)", handles, "Existing account handles, comma or space separated. Contribution is invite only; add more or invite by email later. Never shown publicly.")
     ),
     el("div", { class: "cta-row" }, el("button", { class: "btn", type: "submit", disabled: !r1csFiles.length || !ptauFiles.length }, "Create ceremony")),
     status
@@ -212,79 +214,214 @@ function createPanel() {
 
 // ---------- ceremony card ----------
 
-function drandRoundFor(chain, date) {
-  const c = options.drandChains[chain];
-  const t = Math.ceil(date.getTime() / 1000);
-  return Math.max(1, Math.ceil((t - c.genesisTime) / c.period) + 1);
+function chainLine() {
+  if (!options.beacon.rpcConfigured) {
+    return el(
+      "p",
+      { class: "notice notice-error" },
+      "No Ethereum RPC is configured, so the beacon cannot be committed or read. Set ",
+      el("code", { class: "mono" }, "CEREMONY_ETH_RPC_URL"),
+      " to a read-only mainnet endpoint and restart."
+    );
+  }
+  if (!chain || chain.error) return el("p", { class: "notice notice-error" }, `Could not read Ethereum mainnet: ${chain?.error || "no answer"}`);
+  return el(
+    "p",
+    { class: "field-hint" },
+    `Ethereum mainnet head ${chain.headBlock.toLocaleString("en-US")}, finalized ${chain.finalizedBlock.toLocaleString("en-US")}.`
+  );
 }
 
 function beaconForm(c) {
-  const source = select("source", [["drand", "drand (recommended)"], ["block-hash", "Block hash"]], "drand");
-  const chain = select("chain", Object.keys(options.drandChains).map((k) => [k, k === "quicknet" ? "quicknet (3 s rounds)" : "default (30 s rounds)"]), "quicknet");
-  const when = el("input", { type: "datetime-local", name: "when" });
-  const round = el("input", { type: "number", name: "round", min: "1" });
-  const network = select("network", options.blockNetworks.map((n) => [n, n]), options.blockNetworks[0]);
-  const height = el("input", { type: "number", name: "height", min: "1" });
-  const drandBox = el("div", { class: "form-grid" }, field("drand chain", chain), field("Not before", when, "Pick a time after you plan to close. The round is filled in."), field("Round", round));
-  const blockBox = el("div", { class: "form-grid", hidden: true }, field("Network", network), field("Block height", height, "A future block. Its hash becomes the beacon."));
-  const sync = () => {
-    drandBox.hidden = source.value !== "drand";
-    blockBox.hidden = source.value === "drand";
-  };
-  source.addEventListener("change", sync);
-  const fillRound = () => {
-    if (when.value) round.value = String(drandRoundFor(chain.value, new Date(when.value)));
-  };
-  when.addEventListener("change", fillRound);
-  chain.addEventListener("change", fillRound);
+  const min = options.beacon.minBlocksAhead;
+  const earliest = chain && !chain.error ? chain.earliestCommit : null;
+  const block = el("input", { type: "number", name: "blockNumber", min: earliest ? String(earliest) : "1", value: earliest ? String(earliest) : "", required: true });
   return el(
     "form",
     {
       class: "stack",
       onSubmit: async (e) => {
         e.preventDefault();
-        const body = source.value === "drand" ? { source: "drand", chain: chain.value, round: Number(round.value) } : { source: "block-hash", network: network.value, height: Number(height.value) };
+        const body = { source: "ethereum-block", network: "ethereum-mainnet", blockNumber: Number(block.value) };
         await run(() => api(`/api/ceremony-admin/ceremonies/${c.id}/beacon/precommit`, { method: "POST", json: body }), "Beacon committed.");
       },
     },
     el("h4", {}, "Commit the beacon"),
-    el("p", { class: "field-hint" }, "Fix the public randomness before closing, so no contributor can know or steer it. It can be changed until you close."),
-    field("Source", source),
-    drandBox,
-    blockBox,
-    el("div", { class: "cta-row" }, el("button", { class: "btn btn-secondary", type: "submit" }, c.beacon?.precommit ? "Replace beacon" : "Commit beacon"))
+    el(
+      "p",
+      { class: "field-hint" },
+      `The beacon is the hash of a future Ethereum mainnet block, at least ${min} blocks (about ${Math.round((min * 12) / 60)} minutes) past the current head. Pick one after you plan to close; it can be changed until you close, and close is refused once the block exists.`
+    ),
+    chainLine(),
+    field("Ethereum mainnet block number", block, earliest ? `Earliest allowed now: ${earliest.toLocaleString("en-US")}.` : "The server checks it against the current head."),
+    el(
+      "div",
+      { class: "cta-row" },
+      el("button", { class: "btn btn-secondary", type: "submit", disabled: !options.beacon.rpcConfigured }, c.beacon?.precommit ? "Replace beacon" : "Commit beacon")
+    )
   );
 }
 
 function finalizeForm(c) {
   const pre = c.beacon.precommit;
-  const value = el("input", { name: "beaconValue", class: "mono", required: true, maxlength: "66", autocomplete: "off", spellcheck: "false" });
   const iters = el("input", { name: "iterations", type: "number", min: "1", max: "63", value: String(options.defaultBeaconIterations) });
-  const ready = !pre.roundTime || pre.roundTime * 1000 <= Date.now();
+  const known = chain && !chain.error;
+  const ready = known && chain.finalizedBlock >= pre.blockNumber;
+  const wait = known
+    ? chain.headBlock < pre.blockNumber
+      ? `Block ${pre.blockNumber} is not mined yet (head ${chain.headBlock}).`
+      : ready
+        ? `Block ${pre.blockNumber} is finalized. The server reads its hash from the RPC.`
+        : `Block ${pre.blockNumber} is mined but not finalized yet (finalized ${chain.finalizedBlock}). Finality takes about 13 minutes.`
+    : "The Ethereum RPC could not be read, so finalizing is refused.";
   return el(
     "form",
     {
       class: "stack",
       onSubmit: async (e) => {
         e.preventDefault();
-        announce(flash, "Applying the beacon and exporting. This can take minutes…");
+        announce(flash, "Reading the finalized block hash, applying the beacon and exporting. This can take minutes…");
         await run(async () => {
-          const out = await api(`/api/ceremony-admin/ceremonies/${c.id}/finalize`, { method: "POST", json: { beaconValue: value.value.trim(), iterations: Number(iters.value) } });
+          const out = await api(`/api/ceremony-admin/ceremonies/${c.id}/finalize`, { method: "POST", json: { iterations: Number(iters.value) } });
           const job = await waitForJob(out.job.id, { intervalMs: 2000 });
           if (job.status !== "done") throw new Error(job.error || "finalize failed");
         }, "Finalized. The exports are ready for review.");
       },
     },
     el("h4", {}, "Apply the beacon and export"),
-    el(
-      "p",
-      {},
-      ready ? "Look up the committed value: " : `The committed round is published at ${fmtTime(new Date(pre.roundTime * 1000).toISOString())}. Come back then: `,
-      el("a", { href: pre.lookupUrl, rel: "noopener noreferrer" }, pre.lookupUrl)
-    ),
-    field("Beacon value", value, pre.source === "drand" ? "The round's randomness field (64 hex)." : "The block hash (64 hex)."),
+    el("p", {}, wait, " Check it yourself: ", el("a", { href: pre.lookupUrl, rel: "noopener noreferrer" }, pre.lookupUrl)),
     field("Iterations (2^n hashes)", iters),
-    el("div", { class: "cta-row" }, el("button", { class: "btn", type: "submit", disabled: !ready }, "Finalize"))
+    el("div", { class: "cta-row" }, el("button", { class: "btn", type: "submit", disabled: !known }, "Finalize")),
+    known && !ready ? el("p", { class: "field-hint" }, "The server refuses to finalize until the block is finalized.") : null
+  );
+}
+
+function inviteRowLabel(inv) {
+  return inv.kind === "email" ? inv.email : inv.handle;
+}
+
+function invitesPanel(c) {
+  const editable = !["finalizing", "finalized", "error"].includes(c.status);
+  const who = el("input", { name: "invitee", autocomplete: "off", spellcheck: "false", required: true, maxlength: "254" });
+  const status = el("p", { role: "status", "aria-live": "polite" });
+  const form = el(
+    "form",
+    {
+      class: "stack",
+      onSubmit: async (e) => {
+        e.preventDefault();
+        const v = who.value.trim();
+        const json = v.includes("@") ? { email: v } : { handle: v };
+        await run(async () => {
+          const out = await api(`/api/ceremony-admin/ceremonies/${c.id}/invites`, { method: "POST", json });
+          if (out.invitePath) freshInvite = { ceremonyId: c.id, email: v, url: `${window.location.origin}${out.invitePath}` };
+          return out;
+        }, json.email ? `Invite link created for ${v}. Copy it now; it is shown only once.` : `Invited ${v}.`);
+      },
+    },
+    field(
+      "Invite an account handle or an email address",
+      who,
+      "A handle invites that existing account at once. An email address creates a single-use link (valid 14 days) for you to send; it binds to whichever account opens it."
+    ),
+    el("div", { class: "cta-row" }, el("button", { class: "btn btn-secondary", type: "submit" }, "Add invite")),
+    status
+  );
+  const link =
+    freshInvite && freshInvite.ceremonyId === c.id
+      ? el(
+          "div",
+          { class: "notice notice-ok", role: "region", "aria-label": "New invite link" },
+          el("p", {}, `Single-use invite link for ${freshInvite.email}. Send it privately. It is shown only once; the server keeps only a hash.`),
+          el("p", {}, el("code", { class: "mono invite-link" }, freshInvite.url)),
+          el(
+            "div",
+            { class: "cta-row" },
+            el(
+              "button",
+              {
+                class: "btn btn-secondary btn-inline",
+                type: "button",
+                onClick: async () => {
+                  try {
+                    await navigator.clipboard.writeText(freshInvite.url);
+                    announce(flash, "Invite link copied.", "ok");
+                  } catch {
+                    announce(flash, "Copy failed. Select the link and copy it by hand.", "error");
+                  }
+                },
+              },
+              "Copy link"
+            ),
+            el(
+              "button",
+              {
+                class: "btn btn-secondary btn-inline",
+                type: "button",
+                onClick: () => {
+                  freshInvite = null;
+                  render();
+                },
+              },
+              "Done"
+            )
+          )
+        )
+      : null;
+  const rows = c.invites || [];
+  const statusText = (inv) =>
+    inv.status === "active" ? "Invited" : inv.status === "pending" ? (Date.parse(inv.expiresAt) <= Date.now() ? "Link expired" : `Link sent, expires ${fmtTime(inv.expiresAt)}`) : `Revoked ${fmtTime(inv.revokedAt)}`;
+  const table = rows.length
+    ? el(
+        "div",
+        { class: "table-wrap" },
+        el(
+          "table",
+          { class: "data-table" },
+          el("caption", {}, `Invite list (${rows.filter((i) => i.status === "active").length} active)`),
+          el("thead", {}, el("tr", {}, ...["Invitee", "Via", "Status", "Public id", ""].map((h) => el("th", { scope: "col" }, h)))),
+          el(
+            "tbody",
+            {},
+            ...rows.map((inv) =>
+              el(
+                "tr",
+                {},
+                el("th", { scope: "row" }, inviteRowLabel(inv) || "—", inv.kind === "email" && inv.handle ? ` → ${inv.handle}` : ""),
+                el("td", {}, inv.kind === "email" ? "Email link" : "Account"),
+                el("td", {}, statusText(inv)),
+                el("td", {}, el("code", { class: "mono" }, inv.id)),
+                el(
+                  "td",
+                  {},
+                  inv.status === "revoked" || !editable
+                    ? ""
+                    : el(
+                        "button",
+                        {
+                          class: "btn btn-secondary btn-inline",
+                          type: "button",
+                          "aria-label": `Revoke the invite for ${inviteRowLabel(inv)}`,
+                          onClick: () =>
+                            run(() => api(`/api/ceremony-admin/ceremonies/${c.id}/invites/${inv.id}`, { method: "DELETE" }), `Revoked the invite for ${inviteRowLabel(inv)}.`),
+                        },
+                        "Revoke"
+                      )
+                )
+              )
+            )
+          )
+        )
+      )
+    : el("p", { class: "empty" }, "Nobody is invited yet. Only invited accounts can join the queue or upload.");
+  return el(
+    "div",
+    { class: "stack invites" },
+    el("h4", {}, "Invites"),
+    el("p", { class: "field-hint" }, "Invite only. The public pages and transcript show only the pseudonymous public id, never handles or email addresses."),
+    link,
+    table,
+    editable ? form : null
   );
 }
 
@@ -367,14 +504,15 @@ function ceremonyCard(c) {
       el("dt", {}, "Contributions"),
       el("dd", {}, `${c.contributions.length} (minimum ${c.minContributions})`),
       el("dt", {}, "Participation"),
-      el("dd", {}, c.participation.mode === "list" ? `List of ${c.participation.handles.length}` : "Any signed-in account", `, ${c.participation.turnMinutes}-minute turns`),
+      el("dd", {}, `Invite only (${(c.invites || []).filter((i) => i.status === "active").length} invited), ${c.participation.turnMinutes}-minute turns`),
       el("dt", {}, "Beacon"),
-      el("dd", {}, pre ? (pre.source === "drand" ? `drand ${pre.chain} round ${pre.round}` : `${pre.network} block ${pre.height}`) : "Not committed"),
+      el("dd", {}, pre ? `Ethereum mainnet block ${pre.blockNumber}` : "Not committed"),
       el("dt", {}, "Audit chain"),
       el("dd", {}, c.auditChain?.ok ? `Intact (${c.audit.length} entries)` : "BROKEN")
     ),
     actions.length ? el("div", { class: "cta-row" }, ...actions) : null,
     queue,
+    invitesPanel(c),
     c.status === "open" || c.status === "draft" ? beaconForm(c) : null,
     c.status === "closed" && pre ? finalizeForm(c) : null,
     c.exported
@@ -419,6 +557,14 @@ async function render() {
     return;
   }
   const { ceremonies } = await api("/api/ceremony-admin/ceremonies");
+  chain = null;
+  if (options.beacon.rpcConfigured && ceremonies.some((c) => ["draft", "open", "closed"].includes(c.status))) {
+    try {
+      chain = await api("/api/ceremony-admin/beacon/chain");
+    } catch (err) {
+      chain = { error: errorText(err) };
+    }
+  }
   const focusId = document.activeElement?.id;
   fill(root, 
     el(

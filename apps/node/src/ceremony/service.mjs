@@ -32,7 +32,15 @@ import * as snarkjs from 'snarkjs';
 
 import { HttpError } from '../http.mjs';
 import { canonicalJson } from '../superAdmin/audit.mjs';
-import { DEFAULT_BEACON_ITERATIONS, parseBeaconValue, parsePrecommit } from './beacon.mjs';
+import {
+  BEACON_SOURCE,
+  DEFAULT_BEACON_ITERATIONS,
+  DEFAULT_MIN_BLOCKS_AHEAD,
+  beaconName,
+  parseBeaconValue,
+  parsePrecommit,
+} from './beacon.mjs';
+import { EthRpcError, createEthRpc } from './eth.mjs';
 import { hashAlgorithmFor, hashFile, ptauPreset } from './ptau.mjs';
 import {
   assertBeaconParams,
@@ -54,12 +62,19 @@ export const MIN_CONTRIBUTIONS_FLOOR = 2;
 export const DEFAULT_TURN_MINUTES = 30;
 export const MAX_ATTESTATION_CHARS = 4000;
 export const MAX_ALLOWLIST = 500;
+export const MAX_INVITES = 2000;
+export const DEFAULT_INVITE_DAYS = 14;
+export const MAX_INVITE_DAYS = 90;
+/** Invite-only is the only participation mode (decision 2026-10-24). */
+export const PARTICIPATION_MODE = 'invite';
 /** A contribution adds a few hundred bytes. Anything bigger is not one. */
 export const MAX_CONTRIBUTION_GROWTH = 64 * 1024;
 
 const CIRCUIT_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const INPUT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}\.(r1cs|ptau)$/;
 const HANDLE_RE = /^[^\s,<>"'`]{1,64}$/;
+const EMAIL_RE = /^[^\s@<>"'`,;]{1,64}@[^\s@<>"'`,;]{1,190}\.[^\s@<>"'`,;]{2,63}$/;
+const INVITE_ID_RE = /^inv_[0-9a-f]{12}$/;
 const STATUSES = ['initializing', 'draft', 'open', 'closed', 'finalizing', 'finalized', 'error'];
 
 const require = createRequire(import.meta.url);
@@ -171,13 +186,47 @@ export async function streamToFile(req, dest, maxBytes) {
   return { bytes, sha256: hash.digest('hex') };
 }
 
-export function createCeremonyService({ config, store, now = () => Date.now() }) {
+/** Invite fields the coordinator may see. Never the token hash. */
+function inviteAdminRow(inv) {
+  return {
+    id: inv.id,
+    kind: inv.kind,
+    status: inv.status,
+    handle: inv.handle || null,
+    email: inv.email || null,
+    createdAt: inv.createdAt,
+    expiresAt: inv.expiresAt || null,
+    acceptedAt: inv.acceptedAt || null,
+    revokedAt: inv.revokedAt || null,
+  };
+}
+
+function rpcHttpError(err) {
+  if (err instanceof EthRpcError) {
+    const status = err.code === 'CEREMONY_ETH_RPC_UNSET' ? 503 : err.code === 'CEREMONY_BEACON_FUTURE' ? 409 : 502;
+    return new HttpError(status, err.message, { code: err.code });
+  }
+  return err;
+}
+
+export function createCeremonyService({ config, store, now = () => Date.now(), ethRpc = null, lookupUser = null }) {
   const rootDir = path.resolve(config.ceremonyDir || path.join(config.dataDir, 'ceremonies'));
   const inputDir = path.resolve(config.ceremonyInputDir || path.join(config.dataDir, 'ceremony-inputs'));
   const maxZkeyBytes = Number(config.ceremonyMaxZkeyBytes) || 1024 * 1024 * 1024;
   const maxInputBytes = Number(config.ceremonyMaxInputBytes) || 2 * 1024 * 1024 * 1024;
   const jobs = new Map();
   const queues = new Map();
+  const eth = ethRpc || config.ceremonyEthRpc || createEthRpc({ urls: config.ceremonyEthRpcUrls || [] });
+  const minBlocksAhead = Math.max(1, Number(config.ceremonyBeaconMinBlocksAhead) || DEFAULT_MIN_BLOCKS_AHEAD);
+  const userByHandle = lookupUser || ((h) => (typeof store.getUserByHandle === 'function' ? store.getUserByHandle(h) : null));
+
+  async function readEth(fn) {
+    try {
+      return await fn();
+    } catch (err) {
+      throw rpcHttpError(err);
+    }
+  }
 
   if (!Array.isArray(store.data.ceremonies)) store.data.ceremonies = [];
 
@@ -352,25 +401,104 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     return file;
   }
 
+  /** Only the turn length is configurable; contribution is always invite-only. */
   function parseParticipation(body, fallback = {}) {
-    const mode = body?.mode === 'list' ? 'list' : body?.mode === 'open' ? 'open' : fallback.mode || 'open';
-    const raw = Array.isArray(body?.handles)
-      ? body.handles
-      : typeof body?.handles === 'string'
-        ? body.handles.split(/[\s,]+/)
-        : fallback.handles || [];
-    const handles = [...new Set(raw.map(normalizeHandle).filter(Boolean))];
-    if (handles.length > MAX_ALLOWLIST) throw badRequest(`at most ${MAX_ALLOWLIST} participants`);
-    for (const h of handles) {
-      if (!HANDLE_RE.test(h)) throw badRequest(`not a handle: ${h}`);
+    if (body?.mode !== undefined && body.mode !== PARTICIPATION_MODE) {
+      throw badRequest('ceremony contribution is invite-only; manage the invite list instead', 'CEREMONY_INVITE_ONLY_MODE');
     }
-    if (mode === 'list' && handles.length === 0) throw badRequest('a participant list needs at least one handle');
     const turnMinutes =
       body?.turnMinutes !== undefined ? Number(body.turnMinutes) : fallback.turnMinutes ?? DEFAULT_TURN_MINUTES;
     if (!Number.isInteger(turnMinutes) || turnMinutes < 1 || turnMinutes > 24 * 60) {
       throw badRequest('turn length must be 1 to 1440 minutes');
     }
-    return { mode, handles, turnMinutes };
+    return { mode: PARTICIPATION_MODE, turnMinutes };
+  }
+
+  function splitHandles(raw) {
+    const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/[\s,]+/) : [];
+    const handles = [...new Set(list.map(normalizeHandle).filter(Boolean))];
+    if (handles.length > MAX_ALLOWLIST) throw badRequest(`at most ${MAX_ALLOWLIST} handles at once`);
+    for (const h of handles) if (!HANDLE_RE.test(h)) throw badRequest(`not a handle: ${h}`);
+    return handles;
+  }
+
+  function invitesOf(c) {
+    if (!Array.isArray(c.invites)) c.invites = [];
+    return c.invites;
+  }
+
+  /** The server-side gate for join and upload. */
+  function isInvited(c, user) {
+    if (!user) return false;
+    return invitesOf(c).some((inv) => inv.status === 'active' && inv.userId === user.id);
+  }
+
+  function inviteOnly() {
+    return new HttpError(
+      403,
+      'This ceremony is invite only. Ask the ceremony coordinator for an invite.',
+      { code: 'CEREMONY_INVITE_ONLY' },
+    );
+  }
+
+  function newInviteId(c) {
+    for (;;) {
+      const id = `inv_${randomBytes(6).toString('hex')}`;
+      if (!invitesOf(c).some((i) => i.id === id)) return id;
+    }
+  }
+
+  function addAccountInvite(c, handle, actor) {
+    const account = userByHandle(handle);
+    if (!account) throw new HttpError(404, `no account with the handle ${handle}`, { code: 'CEREMONY_INVITE_NO_USER' });
+    if (invitesOf(c).some((i) => i.status === 'active' && i.userId === account.id)) {
+      throw conflict(`${handle} is already invited`, 'CEREMONY_INVITE_EXISTS');
+    }
+    if (invitesOf(c).length >= MAX_INVITES) throw conflict(`at most ${MAX_INVITES} invites per ceremony`);
+    const inv = {
+      id: newInviteId(c),
+      kind: 'account',
+      status: 'active',
+      userId: account.id,
+      handle: normalizeHandle(account.handle),
+      createdAt: iso(),
+      createdBy: actor?.userId || null,
+    };
+    invitesOf(c).push(inv);
+    audit(c, 'invite_added', actor, { inviteId: inv.id, kind: inv.kind });
+    return inv;
+  }
+
+  function addEmailInvite(c, rawEmail, days, actor) {
+    const email = String(rawEmail || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || email.length > 254) throw badRequest('not an email address');
+    const now0 = now();
+    if (
+      invitesOf(c).some(
+        (i) => i.kind === 'email' && i.email === email && i.status === 'pending' && Date.parse(i.expiresAt) > now0,
+      )
+    ) {
+      throw conflict('that address already has an unused invite. Revoke it to issue a new one.', 'CEREMONY_INVITE_EXISTS');
+    }
+    if (invitesOf(c).length >= MAX_INVITES) throw conflict(`at most ${MAX_INVITES} invites per ceremony`);
+    const life = days === undefined || days === '' || days === null ? DEFAULT_INVITE_DAYS : Number(days);
+    if (!Number.isInteger(life) || life < 1 || life > MAX_INVITE_DAYS) {
+      throw badRequest(`invite lifetime must be 1 to ${MAX_INVITE_DAYS} days`);
+    }
+    const token = randomBytes(32).toString('base64url');
+    const inv = {
+      id: newInviteId(c),
+      kind: 'email',
+      status: 'pending',
+      email,
+      tokenSha256: sha256Hex(token),
+      createdAt: iso(),
+      expiresAt: new Date(now0 + life * 24 * 60 * 60 * 1000).toISOString(),
+      createdBy: actor?.userId || null,
+    };
+    invitesOf(c).push(inv);
+    audit(c, 'invite_added', actor, { inviteId: inv.id, kind: inv.kind, expiresAt: inv.expiresAt });
+    return { inv, token };
   }
 
   async function create(body, user) {
@@ -403,6 +531,10 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       throw badRequest('pin the ptau hash: 64 hex (sha256) or 128 hex (blake2b-512, as published in the snarkjs README)');
     }
     const participation = parseParticipation(body?.participation || {});
+    const initialHandles = splitHandles(body?.participation?.handles ?? body?.invite?.handles);
+    for (const h of initialHandles) {
+      if (!userByHandle(h)) throw new HttpError(404, `no account with the handle ${h}`, { code: 'CEREMONY_INVITE_NO_USER' });
+    }
 
     const gotPtau = await hashFile(ptauSrc, algorithm);
     if (gotPtau !== pinned) {
@@ -448,6 +580,7 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       contributions: [],
       queue: [],
       contributors: [],
+      invites: [],
       beacon: { precommit: null, history: [], applied: null },
       final: null,
       exported: null,
@@ -464,8 +597,9 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       ptauPinned: pinned,
       ptauAlgorithm: algorithm,
       minContributions,
-      participation: { mode: participation.mode, count: participation.handles.length },
+      participation: { mode: participation.mode, turnMinutes: participation.turnMinutes },
     });
+    for (const h of initialHandles) addAccountInvite(c, h, actorOf(user));
     await persist();
 
     const job = enqueue(id, 'initialize', async () => {
@@ -534,16 +668,24 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     }
     const pre = c.beacon.precommit;
     if (!pre) throw conflict('commit to a future beacon before closing the window', 'CEREMONY_NO_BEACON');
-    if (pre.roundTime && pre.roundTime * 1000 <= now()) {
+    if (pre.source !== BEACON_SOURCE) {
+      throw conflict('commit to a future Ethereum mainnet block before closing', 'CEREMONY_BEACON_UNSUPPORTED');
+    }
+    const headBlock = await readEth(() => eth.headBlock());
+    if (headBlock >= pre.blockNumber) {
       throw conflict(
-        'the committed drand round is already public. Commit to a later round, then close.',
+        `the committed block ${pre.blockNumber} already exists (head ${headBlock}), so its hash is public. Commit to a later block, then close.`,
         'CEREMONY_BEACON_PAST',
       );
     }
+    // The RPC read awaited; re-check state before changing it.
+    if (c.status !== 'open') throw conflict(`cannot close a ${c.status} ceremony`);
+    if (c.queue.some((q) => q.uploading)) throw conflict('a contribution is being verified. Try again shortly.');
+    if (c.beacon.precommit !== pre) throw conflict('the beacon commitment changed. Try again.');
     c.status = 'closed';
     c.closedAt = iso();
     c.queue = [];
-    audit(c, 'closed', actorOf(user), { contributions: c.contributions.length });
+    audit(c, 'closed', actorOf(user), { contributions: c.contributions.length, headBlock });
     await persist();
     return c;
   }
@@ -554,15 +696,7 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     if (['finalizing', 'finalized'].includes(c.status)) throw conflict(`ceremony is ${c.status}`);
     const next = parseParticipation(body, c.participation);
     c.participation = next;
-    if (next.mode === 'list') {
-      const allowed = new Set(next.handles);
-      c.queue = c.queue.filter((q) => q.uploading || allowed.has(q.handle));
-    }
-    audit(c, 'participation_set', actorOf(user), {
-      mode: next.mode,
-      handles: next.handles,
-      turnMinutes: next.turnMinutes,
-    });
+    audit(c, 'participation_set', actorOf(user), { mode: next.mode, turnMinutes: next.turnMinutes });
     advanceQueue(c);
     await persist();
     return c;
@@ -574,9 +708,10 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     if (!['draft', 'open'].includes(c.status)) {
       throw conflict('the beacon can only be committed while the ceremony is draft or open');
     }
+    const headBlock = await readEth(() => eth.headBlock());
     let pre;
     try {
-      pre = parsePrecommit(body, Math.floor(now() / 1000));
+      pre = parsePrecommit(body, { headBlock, minBlocksAhead });
     } catch (err) {
       throw badRequest(err.message, 'CEREMONY_BEACON_INVALID');
     }
@@ -588,14 +723,98 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     return c;
   }
 
+  async function addInvites(id, body, user) {
+    store.refuseIfStandby();
+    const c = find(id);
+    if (['finalizing', 'finalized', 'error'].includes(c.status)) throw conflict(`ceremony is ${c.status}`);
+    const actor = actorOf(user);
+    const hasEmail = body?.email !== undefined && body?.email !== '';
+    const handles = splitHandles(body?.handles ?? body?.handle);
+    if (hasEmail && handles.length) throw badRequest('invite by handle or by email, not both');
+    if (hasEmail) {
+      const { inv, token } = addEmailInvite(c, body.email, body.expiresInDays, actor);
+      await persist();
+      return {
+        ceremony: c,
+        invites: [inv],
+        token,
+        // A URL fragment never reaches the server, proxies, or Referer headers.
+        invitePath: `/ceremony/${encodeURIComponent(c.id)}#invite=${token}`,
+      };
+    }
+    if (!handles.length) throw badRequest('give an account handle or an email address');
+    for (const h of handles) {
+      if (!userByHandle(h)) throw new HttpError(404, `no account with the handle ${h}`, { code: 'CEREMONY_INVITE_NO_USER' });
+    }
+    const added = handles.map((h) => addAccountInvite(c, h, actor));
+    await persist();
+    return { ceremony: c, invites: added };
+  }
+
+  async function removeInvite(id, inviteId, user) {
+    store.refuseIfStandby();
+    const c = find(id);
+    const clean = String(inviteId || '');
+    if (!INVITE_ID_RE.test(clean)) throw badRequest('not an invite id');
+    const inv = invitesOf(c).find((i) => i.id === clean);
+    if (!inv) throw new HttpError(404, 'invite not found', { code: 'CEREMONY_INVITE_NOT_FOUND' });
+    if (inv.status === 'revoked') throw conflict('that invite is already revoked', 'CEREMONY_INVITE_REVOKED');
+    const wasStatus = inv.status;
+    inv.status = 'revoked';
+    inv.revokedAt = iso();
+    delete inv.tokenSha256;
+    let droppedFromQueue = false;
+    if (inv.userId) {
+      const i = c.queue.findIndex((q) => q.userId === inv.userId && !q.uploading);
+      if (i !== -1) {
+        c.queue.splice(i, 1);
+        droppedFromQueue = true;
+      }
+    }
+    audit(c, 'invite_removed', actorOf(user), { inviteId: inv.id, kind: inv.kind, was: wasStatus, droppedFromQueue });
+    advanceQueue(c);
+    await persist();
+    return c;
+  }
+
+  /** Redeem a single-use email invite token for the signed-in account. */
+  async function acceptInvite(id, token, user) {
+    store.refuseIfStandby();
+    const c = find(id);
+    const raw = String(token || '');
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(raw)) {
+      throw new HttpError(403, 'that invite link is not valid', { code: 'CEREMONY_INVITE_INVALID' });
+    }
+    if (['finalizing', 'finalized', 'error'].includes(c.status)) throw conflict(`ceremony is ${c.status}`);
+    const digest = sha256Hex(raw);
+    const inv = invitesOf(c).find((i) => i.kind === 'email' && i.tokenSha256 === digest);
+    if (!inv || inv.status !== 'pending') {
+      throw new HttpError(403, 'that invite link is not valid, was revoked, or was already used', {
+        code: 'CEREMONY_INVITE_INVALID',
+      });
+    }
+    if (Date.parse(inv.expiresAt) <= now()) {
+      throw new HttpError(403, 'that invite link has expired. Ask the coordinator for a new one.', {
+        code: 'CEREMONY_INVITE_EXPIRED',
+      });
+    }
+    if (isInvited(c, user)) throw conflict('your account is already invited to this ceremony', 'CEREMONY_INVITE_EXISTS');
+    inv.status = 'active';
+    inv.userId = user.id;
+    inv.handle = normalizeHandle(user.handle);
+    inv.acceptedAt = iso();
+    delete inv.tokenSha256;
+    audit(c, 'invite_accepted', actorOf(user), { inviteId: inv.id });
+    await persist();
+    return c;
+  }
+
   async function join(id, user) {
     store.refuseIfStandby();
     const c = find(id);
     if (c.status !== 'open') throw conflict('the contribution window is not open', 'CEREMONY_NOT_OPEN');
     const handle = normalizeHandle(user.handle);
-    if (c.participation.mode === 'list' && !c.participation.handles.includes(handle)) {
-      throw new HttpError(403, 'you are not on the participant list for this ceremony', { code: 'CEREMONY_NOT_LISTED' });
-    }
+    if (!isInvited(c, user)) throw inviteOnly();
     if (c.contributors.includes(user.id)) {
       throw conflict('you already contributed to this ceremony', 'CEREMONY_ALREADY_CONTRIBUTED');
     }
@@ -641,6 +860,7 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     store.refuseIfStandby();
     const c = find(id);
     advanceQueue(c);
+    if (!isInvited(c, user)) throw inviteOnly();
     if (c.status !== 'open') throw conflict('the contribution window is not open', 'CEREMONY_NOT_OPEN');
     const head = c.queue[0];
     if (!head || head.userId !== user.id) {
@@ -712,6 +932,7 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
 
   async function verifyAndAppend(c, user, { incoming, name, attestation, expectedIndex, uploaded }) {
     if (c.status !== 'open') throw new Error('the window closed before verification finished');
+    if (!isInvited(c, user)) throw new Error('the invite was revoked before verification finished');
     if (tipIndex(c) + 1 !== expectedIndex) throw new Error('the chain moved during verification');
     const { contributions: found, circuitHash } = await verifyChain(c, incoming);
     if (c.initial?.circuitHash && circuitHash && circuitHash !== c.initial.circuitHash) {
@@ -785,13 +1006,31 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     if (c.status !== 'closed') throw conflict('close the contribution window before finalizing');
     const pre = c.beacon.precommit;
     if (!pre) throw conflict('no beacon was committed', 'CEREMONY_NO_BEACON');
-    if (pre.roundTime && pre.roundTime * 1000 > now()) {
-      throw conflict('the committed drand round is not published yet', 'CEREMONY_BEACON_FUTURE');
+    if (pre.source !== BEACON_SOURCE) throw conflict('the committed beacon is not an Ethereum block', 'CEREMONY_BEACON_UNSUPPORTED');
+    if (c.contributions.length < c.minContributions) throw conflict('too few contributions', 'CEREMONY_TOO_FEW');
+    // Fail closed: no RPC, an unreached block, or an unfinalized block all refuse.
+    const headBlock = await readEth(() => eth.headBlock());
+    if (headBlock < pre.blockNumber) {
+      throw conflict(
+        `block ${pre.blockNumber} is not mined yet (head ${headBlock}). Finalize after it is finalized, about 13 minutes later.`,
+        'CEREMONY_BEACON_FUTURE',
+      );
     }
+    const finalizedBlock = await readEth(() => eth.finalizedBlock());
+    if (finalizedBlock < pre.blockNumber) {
+      throw conflict(
+        `block ${pre.blockNumber} is mined but not finalized yet (finalized ${finalizedBlock}). Try again shortly.`,
+        'CEREMONY_BEACON_NOT_FINALIZED',
+      );
+    }
+    const block = await readEth(() => eth.block(pre.blockNumber));
     let value;
     let params;
     try {
-      value = parseBeaconValue(body?.beaconValue);
+      value = parseBeaconValue(block.hash);
+      if (body?.beaconValue !== undefined && body.beaconValue !== '' && parseBeaconValue(body.beaconValue) !== value) {
+        throw new Error(`the pasted value does not match the hash of block ${pre.blockNumber} read from the RPC`);
+      }
       params = assertBeaconParams(
         value,
         body?.iterations === undefined || body?.iterations === '' ? DEFAULT_BEACON_ITERATIONS : body.iterations,
@@ -799,9 +1038,14 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     } catch (err) {
       throw badRequest(err.message, 'CEREMONY_BEACON_INVALID');
     }
-    if (c.contributions.length < c.minContributions) throw conflict('too few contributions', 'CEREMONY_TOO_FEW');
+    if (c.status !== 'closed') throw conflict('the ceremony is already being finalized');
     c.status = 'finalizing';
-    audit(c, 'finalize_started', actorOf(user), { beaconValue: params.hash, iterations: params.iterations });
+    audit(c, 'finalize_started', actorOf(user), {
+      blockNumber: pre.blockNumber,
+      blockHash: block.hash,
+      finalizedBlock,
+      iterations: params.iterations,
+    });
     await persist();
     const job = enqueue(c.id, 'finalize', async () => {
       try {
@@ -809,8 +1053,8 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
         const dest = path.join(dir, 'zkey_final.zkey');
         await fsp.rm(dest, { force: true });
         const cap = captureLogger();
-        const beaconName = `zk-voting beacon ${pre.source === 'drand' ? `drand ${pre.chain} #${pre.round}` : `${pre.network} #${pre.height}`}`;
-        await snarkjs.zKey.beacon(tipFile(c), dest, beaconName, params.hash, params.iterations, cap.logger);
+        const name = beaconName(pre);
+        await snarkjs.zKey.beacon(tipFile(c), dest, name, params.hash, params.iterations, cap.logger);
         if (!fs.existsSync(dest)) throw new Error('snarkjs zkey beacon did not write zkey_final.zkey');
         const { contributions: found } = await verifyChain(c, dest);
         if (found.length !== c.contributions.length + 1) throw new Error('final zkey must add exactly the beacon');
@@ -824,11 +1068,21 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
           throw new Error('final zkey beacon does not match the committed value');
         }
         c.beacon.applied = {
+          source: BEACON_SOURCE,
+          network: pre.network,
+          chainId: pre.chainId,
+          blockNumber: pre.blockNumber,
+          blockHash: block.hash,
+          parentHash: block.parentHash,
+          blockTimestamp: block.timestamp,
+          finalizedBlockAtRead: finalizedBlock,
+          rpcEndpoints: eth.endpointCount ?? null,
           value: params.hash,
           iterations: params.iterations,
-          name: beaconName,
+          name,
           contributionHash: b.hash,
           appliedAt: iso(),
+          lookupUrl: pre.lookupUrl,
           precommit: pre,
         };
         c.final = {
@@ -915,6 +1169,13 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       trusted: false,
       review: c.status === 'finalized' ? 'pending-human-review' : 'in-progress',
       minContributions: c.minContributions,
+      participation: {
+        mode: 'invite-only',
+        // Pseudonymous invite ids only: no handles, emails, or account ids.
+        invitees: invitesOf(c)
+          .filter((i) => i.status !== 'pending' || Date.parse(i.expiresAt) > now())
+          .map((i) => ({ id: i.id, status: i.status })),
+      },
       createdAt: c.createdAt,
       openedAt: c.openedAt,
       closedAt: c.closedAt,
@@ -935,6 +1196,9 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       security:
         'Secure if at least one participant was honest and destroyed their entropy (toxic waste). ' +
         'The beacon only rules out a last-contributor bias; it adds no secrecy.',
+      beaconCheck:
+        'beacon.applied.blockHash must equal the hash of Ethereum mainnet block beacon.applied.blockNumber ' +
+        '(any explorer or node: eth_getBlockByNumber). beacon.applied.value is that hash without 0x.',
     };
   }
 
@@ -960,7 +1224,8 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       closedAt: c.closedAt,
       finalizedAt: c.finalizedAt,
       minContributions: c.minContributions,
-      participationMode: c.participation.mode,
+      participationMode: PARTICIPATION_MODE,
+      invitedCount: invitesOf(c).filter((i) => i.status === 'active').length,
       turnMinutes: c.participation.turnMinutes,
       circuit: c.circuit,
       ptau: c.ptau,
@@ -982,8 +1247,7 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
               me === 0 && head.turnStartedAt ? new Date(Date.parse(head.turnStartedAt) + turnMs(c)).toISOString() : null,
             verifying: me !== -1 && Boolean(c.queue[me].uploading),
             contributed: c.contributors.includes(user.id),
-            listed:
-              c.participation.mode === 'open' || c.participation.handles.includes(normalizeHandle(user.handle)),
+            invited: isInvited(c, user),
           }
         : null,
     };
@@ -995,6 +1259,7 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
       error: c.error,
       createdBy: c.createdBy,
       participation: c.participation,
+      invites: invitesOf(c).map(inviteAdminRow),
       queue: c.queue.map((q, i) => ({
         position: i + 1,
         handle: q.handle,
@@ -1035,6 +1300,10 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     open,
     close,
     setParticipation,
+    addInvites,
+    removeInvite,
+    acceptInvite,
+    isInvited,
     precommitBeacon,
     join,
     leave,
@@ -1048,6 +1317,8 @@ export function createCeremonyService({ config, store, now = () => Date.now() })
     adminView,
     publicFile,
     verifyChain,
+    eth,
+    minBlocksAhead,
     statuses: STATUSES,
   };
 }

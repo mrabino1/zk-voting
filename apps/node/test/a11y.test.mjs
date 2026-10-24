@@ -73,6 +73,7 @@ let base;
 let browser;
 let electionId;
 let ceremonyId;
+let inviteeCookie;
 let adminCookie;
 let voterCookie;
 
@@ -151,11 +152,20 @@ describe('WCAG 2.2 AA axe', () => {
       port: 0,
       disclosureIntervalSeconds: 0,
       ceremonyInputDir: path.join(tmp, 'ceremony-inputs'),
+      // Stand-in for CEREMONY_ETH_RPC_URL so the coordinator page shows chain state.
+      ceremonyEthRpc: {
+        configured: true,
+        endpointCount: 1,
+        headBlock: async () => 21_000_000,
+        finalizedBlock: async () => 20_999_936,
+        block: async (n) => ({ number: n, hash: `0x${'ab'.repeat(32)}`, parentHash: null, timestamp: 0 }),
+      },
     });
     server = await listen(created.app);
     base = `http://127.0.0.1:${server.address().port}`;
     adminCookie = await login('admin');
     voterCookie = await login('voter-a11y', 'voter');
+    inviteeCookie = await login('invitee-a11y', 'voter');
     const now = Math.floor(Date.now() / 1000);
     const createdElection = await fetch(`${base}/api/elections`, {
       method: 'POST',
@@ -203,6 +213,7 @@ describe('WCAG 2.2 AA axe', () => {
         ptau: 'toy_phase2.ptau',
         ptauHash: 'cbc0a81821de303eed70e924bc621192118d372dd7b310b36922eef277f01a08',
         minContributions: 2,
+        participation: { handles: 'invitee-a11y' },
       }),
     });
     const cerBody = await cer.json();
@@ -218,6 +229,18 @@ describe('WCAG 2.2 AA axe', () => {
     ceremonyId = cerBody.ceremony.id;
     const opened = await fetch(`${base}/api/ceremony-admin/ceremonies/${ceremonyId}/open`, { method: 'POST', headers: adminHeaders, body: '{}' });
     assert.equal(opened.status, 200);
+    const emailInvite = await fetch(`${base}/api/ceremony-admin/ceremonies/${ceremonyId}/invites`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({ email: 'invitee@example.org' }),
+    });
+    assert.equal(emailInvite.status, 201);
+    const committed = await fetch(`${base}/api/ceremony-admin/ceremonies/${ceremonyId}/beacon/precommit`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({ blockNumber: 21_000_100 }),
+    });
+    assert.equal(committed.status, 200);
 
     browser = await launchChrome();
   });
@@ -260,7 +283,8 @@ describe('WCAG 2.2 AA axe', () => {
     ['self-hosting docs page', '/docs/tailscale'],
     ['self-hosting docs config', '/docs/configuration'],
     ['ceremony list', '/ceremony'],
-    ['ceremony detail', null, 'voter'],
+    ['ceremony detail (not invited)', null, 'voter'],
+    ['ceremony detail (invited)', null, 'invitee'],
     ['ceremony transcript', null],
     ['ceremony coordinator', '/admin/ceremony', 'admin'],
   ];
@@ -276,10 +300,11 @@ describe('WCAG 2.2 AA axe', () => {
             {
               ballot: `/vote/${electionId}`,
               results: `/elections/${electionId}/results`,
-              'ceremony detail': `/ceremony/${ceremonyId}`,
+              'ceremony detail (not invited)': `/ceremony/${ceremonyId}`,
+              'ceremony detail (invited)': `/ceremony/${ceremonyId}`,
               'ceremony transcript': `/ceremony/${ceremonyId}/transcript`,
             }[name];
-          const cookie = who === 'admin' ? adminCookie : who === 'voter' ? voterCookie : null;
+          const cookie = who === 'admin' ? adminCookie : who === 'voter' ? voterCookie : who === 'invitee' ? inviteeCookie : null;
           await audit(page, `${base}${pathName}`, { cookie, scheme });
         } finally {
           await page.close();

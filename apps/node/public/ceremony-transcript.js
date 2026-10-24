@@ -122,6 +122,8 @@ function render(tr, id) {
         const b = found.find((f) => f.beacon);
         if (!b) throw new Error("the final key has no beacon contribution");
         if (tr.beacon?.applied && b.beacon.hash !== tr.beacon.applied.value) throw new Error("beacon value differs from the transcript");
+        const bh = tr.beacon?.applied?.blockHash;
+        if (bh && bh.toLowerCase().replace(/^0x/, "") !== tr.beacon.applied.value) throw new Error("beacon value is not the recorded block hash");
       }
       progress.value = 100;
       say(
@@ -206,14 +208,38 @@ function render(tr, id) {
       "section",
       { class: "panel", "aria-labelledby": "beacon-h" },
       el("h2", { id: "beacon-h" }, "Random beacon"),
-      el("p", {}, "The beacon source is fixed before the window closes, so no contributor can steer the final key."),
+      el(
+        "p",
+        {},
+        "The beacon is the hash of an Ethereum mainnet block chosen before the window closed, while that block did not exist yet, so no contributor could know or steer it. It is applied only after the block is finalized."
+      ),
       dl([
-        ["Committed", pre ? (pre.source === "drand" ? `drand ${pre.chain} round ${pre.round}` : `${pre.network} block ${pre.height}`) : "Not yet"],
+        ["Committed block", pre ? `Ethereum mainnet block ${pre.blockNumber}` : "Not yet"],
+        ["Head when committed", pre?.headAtCommit != null ? `${pre.headAtCommit} (at least ${pre.minBlocksAhead} blocks ahead)` : "—"],
         ["Committed at", fmtTime(pre?.committedAt)],
         ["Look it up", pre?.lookupUrl ? el("a", { href: pre.lookupUrl, rel: "noopener noreferrer" }, pre.lookupUrl) : "—"],
+        ["Block hash", applied?.blockHash ? full(applied.blockHash, "Block hash") : "Not yet"],
         ["Applied value", applied ? full(applied.value, "Beacon value") : "Not yet"],
         ["Iterations (2^n)", applied ? String(applied.iterations) : "—"],
-      ])
+      ]),
+      el(
+        "p",
+        { class: "field-hint" },
+        "Check it independently: open the block on any explorer, or ask any mainnet node with eth_getBlockByNumber, and compare its hash with the block hash above. The applied value is that hash without 0x."
+      )
+    ),
+    el(
+      "section",
+      { class: "panel", "aria-labelledby": "who-h" },
+      el("h2", { id: "who-h" }, "Participation"),
+      el(
+        "p",
+        {},
+        `Invite only. ${(tr.participation?.invitees || []).filter((i) => i.status === "active").length} active invites, listed by pseudonymous id. Handles and email addresses are never published.`
+      ),
+      tr.participation?.invitees?.length
+        ? el("p", { class: "mono" }, tr.participation.invitees.map((i) => `${i.id} (${i.status})`).join(", "))
+        : null
     ),
     tr.exported
       ? el(
