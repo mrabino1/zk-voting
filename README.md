@@ -38,7 +38,35 @@ The same guides are served by every node at **`/docs`** and live in [`docs/self-
 | [First launch](./docs/self-hosting/first-launch.md) | |
 | [Health checks](./docs/self-hosting/health-checks.md) | |
 
+Trusted setup: [Groth16 ceremony](./docs/self-hosting/ceremony.md) (served at `/docs/ceremony`).
+
 Day-two operations, keys, and incident handling: [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+
+## Community discussion (optional Discourse)
+
+A vote tells you *what* people want. A conversation tells you *why*. We encourage every operator to run an open-source [Discourse](https://www.discourse.org) forum ([source](https://github.com/discourse/discourse)) next to zk-voting so constituents can discuss polls and elections with each other. It is **optional**: zk-voting works the same without it, and nothing in the app depends on it.
+
+**Why**
+
+- **Deliberation before a vote:** read the question, ask what it means, hear the arguments before the poll opens.
+- **Reflection after a vote:** the tally shows the result; the forum shows the reasons and the next question.
+- **Transparency:** one public place for ballot text, timelines, eligibility rules, and published results.
+- **Q&A with candidates and organizers:** officers, candidates, and the independent auditor answer in public.
+
+**How**
+
+- Self-host Discourse with its [official Docker install](https://github.com/discourse/discourse_docker) (`./discourse-setup` on a Linux host), or on [Coolify](https://coolify.io) or another open-source host on Linux (Dokploy, CapRover, plain Docker).
+- Give it its own subdomain, for example `community.<your-domain>` next to `vote.<your-domain>`. **HTTPS only.**
+- Single sign-on through [DiscourseConnect](https://meta.discourse.org/t/setup-discourseconnect-official-single-sign-on-for-discourse-sso/13045) pointing at the app is a **future, optional** idea. It is **not implemented** today; forum accounts are created on the forum.
+- Suggested categories: **Announcements** (read-only), **one category per election or poll**, and **Feedback** on the voting site itself.
+
+**Rules that protect the ballot**
+
+- Nobody is ever required to say how they voted, and organizers must never ask.
+- A forum identity is separate from the anonymous ballot. **Forum accounts must never be linked to ballots, receipts, nullifiers, or voting credentials**, by the operator or anyone else.
+- Remove vote-buying offers, coercion, and demands for proof of how someone voted.
+
+Full guide: [Community forum (optional Discourse)](./docs/self-hosting/discourse.md), also served at `/docs/discourse`. Install guides for the app itself: [`docs/self-hosting/`](./docs/self-hosting/README.md).
 
 ## Positioning
 
@@ -80,6 +108,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 
 - [Quickstart](#quickstart)
 - [Self-hosting docs](#self-hosting-docs)
+- [Community discussion (optional Discourse)](#community-discussion-optional-discourse)
 - [Positioning](#positioning)
 - [Not for profit](#not-for-profit)
 - [Purpose](#purpose)
@@ -95,6 +124,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
 - [Circuits](#circuits)
+- [Trusted-setup ceremony](#trusted-setup-ceremony)
 - [Shared packages](#shared-packages)
 - [Chains: Ethereum L1, zk-voting L2, and Lighter](#chains-ethereum-l1-zk-voting-l2-and-lighter)
 - [Registration](#registration)
@@ -177,6 +207,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/republic.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
 | `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry `via_ir = true`: factory, registries, inbox, `Tally.sol`, account, L2 settlement) |
 | Circuits (`circuits/`) | In-tree. Vote hasher is Poseidon(2). Groth16 fixture is an **untrusted** Vote(4) proof. Ceremony **not done**. Unit tests still use MockVerifier. |
+| Trusted-setup ceremony | **Tooling in-tree, ceremony not run.** Browser ceremony on the Node (`/admin/ceremony`, `/ceremony`, public transcript with whole-chain verify) and the CLI runbook. Exports stay `trusted: false`. [`docs/ceremony-web.md`](./docs/ceremony-web.md) |
 | Proving path | **In progress** — `npm run circuits:status` / `compile` / `setup` / `export` / `prove`. Untrusted local ptau only. `MockVerifier` still default for `forge test`. |
 | Shared packages | `@zk-voting/types`, `proof-helpers`, `chain-client` |
 | zk-voting L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
@@ -705,6 +736,24 @@ Circom 2. The vote `Hasher()` is **Poseidon(2)** (`republic.hash.poseidon-bn254-
 | `circuits/identity.circom` | Commitment and nullifier primitives |
 
 Compile notes, snarkjs, **exact proving-path commands**, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md), [`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
+
+---
+
+## Trusted-setup ceremony
+
+**Yes, zk-voting needs one before a binding election.** Groth16 keys are only as trustworthy as their setup: whoever knows all of the setup's secret randomness can forge ballot or tally proofs that verify. Phase 1 (powers of tau) is reused from the public Hermez ceremony. **Phase 2 is circuit-specific** and must be run once per production circuit: `Vote(20)` and `Tally(8, 4)`. It is safe if at least one contributor was honest and discarded their randomness. **It has not been run**; current keys are untrusted.
+
+The Node runs phase 2 in the browser:
+
+| Page | Who | What |
+| --- | --- | --- |
+| `/admin/ceremony` | Platform super admin | Pin inputs (`.r1cs`, Hermez `.ptau`), create, invite list, open/close, queue, commit a future Ethereum mainnet block as the beacon, finalize, export, audit log |
+| `/ceremony/<id>` | Invited accounts only | Join the queue; contribute with snarkjs in a Web Worker. Randomness never leaves the tab. Receipt download. |
+| `/ceremony/<id>/transcript` | Anyone | Hash-chained transcript, **Verify whole chain** in the browser, and the `snarkjs zkey verify` commands |
+
+The server verifies every upload against the previous key before accepting it, keeps an append-only hash-chained transcript and audit log, rate-limits joins and uploads, and never fetches circuit or ptau files. **Participation is invite only**: the coordinator adds accounts by handle or sends single-use email invite links, and the server refuses everyone else; the public transcript shows invitees only by pseudonymous id. **The beacon is decided: the hash of a future Ethereum mainnet block**, committed at least 32 blocks ahead and read only after it is finalized, read-only from `CEREMONY_ETH_RPC_URL` (unset: finalize fails closed). The block number and hash go in the transcript so anyone can check them. Exports stay in the data directory marked `trusted: false`; nothing is deployed or copied into `smart-contracts/`. Ceremony pages carry their own strict CSP.
+
+Design, threat model, beacon, and verification: [`docs/ceremony-web.md`](./docs/ceremony-web.md). Operator guide: [`docs/self-hosting/ceremony.md`](./docs/self-hosting/ceremony.md). Offline CLI runbook: [`docs/CEREMONY.md`](./docs/CEREMONY.md).
 
 ---
 

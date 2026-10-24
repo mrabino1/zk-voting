@@ -109,7 +109,7 @@ services:
     stop_grace_period: 30s
     command: ["node", "sequencer/index.mjs"]
     ports:
-      - "127.0.0.1:${L2_RPC_PORT:-8546}:8546"
+      - "${L2_RPC_BIND:-127.0.0.1}:${L2_RPC_PORT:-8546}:8546"
     environment:
       L2_RPC_HOST: "0.0.0.0"
       L2_RPC_PORT: "8546"

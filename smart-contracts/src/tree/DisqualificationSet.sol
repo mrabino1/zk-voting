@@ -76,6 +76,10 @@ library DisqualificationSet {
     }
 
     /// @notice Vote-circuit non-membership check against `disqRoot`.
+    /// @dev `depth` is the chain tree depth. The link inclusion path must be
+    ///      exactly that long (see `EligibleSet.verifyInclusion`), otherwise an
+    ///      internal node `Hash(a, b)` could stand in for a chain link and a
+    ///      disqualified commitment between `a` and `b` would pass.
     function verifyNonMembership(
         uint256 leaf,
         uint256 low,
@@ -83,11 +87,12 @@ library DisqualificationSet {
         uint256[] memory pathElements,
         uint8[] memory pathIndices,
         uint256 disqRoot,
+        uint8 depth,
         IHasher hasher
     ) internal pure returns (bool) {
         if (!(low < leaf)) return false;
         if (!(next == 0 || leaf < next)) return false;
         uint256 chainLeaf = hasher.hashLeftRight(low, next);
-        return EligibleSet.verifyInclusion(chainLeaf, pathElements, pathIndices, disqRoot, hasher);
+        return EligibleSet.verifyInclusion(chainLeaf, pathElements, pathIndices, disqRoot, depth, hasher);
     }
 }

@@ -2,8 +2,6 @@
 // Bind email / web3 wallet / smart-card / civic ID / passkey to one person.
 // Many internally verified ETH addresses; exactly one active.
 
-import { timingSafeEqual } from 'node:crypto';
-
 import { Router } from 'express';
 import { keccak256, stringToHex } from 'viem';
 
@@ -34,12 +32,10 @@ import {
   verifyWeb3Bind,
 } from '../identity.mjs';
 import { requireAcceptedTerms } from '../terms.mjs';
+import { secretsEqual } from '../secureCompare.mjs';
 
 function providerSecretsEqual(expected, provided) {
-  const a = Buffer.from(String(expected || ''));
-  const b = Buffer.from(String(provided || ''));
-  if (!a.length || a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  return secretsEqual(expected, provided);
 }
 
 export function identityRouter(deps) {

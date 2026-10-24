@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Router } from 'express';
 
-import { timingSafeEqual } from 'node:crypto';
+import { secretsEqual } from '../secureCompare.mjs';
 
 import { isSuperAdmin } from '../roles.mjs';
 import { HttpError, asyncHandler } from '../http.mjs';
@@ -80,10 +80,7 @@ function bearerToken(req) {
 }
 
 function tokensEqual(a, b) {
-  const left = Buffer.from(String(a || ''));
-  const right = Buffer.from(String(b || ''));
-  if (!left.length || left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
+  return secretsEqual(a, b);
 }
 
 function csrfOk(req) {

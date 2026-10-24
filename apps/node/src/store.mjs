@@ -21,6 +21,7 @@ import {
 } from './apiKeys.mjs';
 import { resolveSuperAdminEmail } from './config.mjs';
 import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
+import { ensureSiteAdminCollections } from './siteAudit.mjs';
 import { isDisclosed } from './disclosure.mjs';
 import {
   electionMatchesRef,
@@ -113,7 +114,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 8,
+      version: 9,
       nextElectionId: 1,
       nodeId: randomUUID(),
     },
@@ -147,6 +148,8 @@ function emptyData() {
     apiKeys: [],
     superAdminKeys: [],
     superAdminAudit: [],
+    // Phase-2 trusted-setup ceremonies (src/ceremony/service.mjs).
+    ceremonies: [],
     runtime: {},
   };
 }
@@ -217,6 +220,7 @@ export class Store {
       data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
       data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
       data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
+    data.ceremonies = Array.isArray(data.ceremonies) ? data.ceremonies : [];
       data.site = { ...defaultSite(), ...(data.site || {}) };
       data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     } catch (err) {
@@ -255,10 +259,13 @@ export class Store {
     if (!Array.isArray(store.data.pollResults)) store.data.pollResults = [];
     if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
     if (!Array.isArray(store.data.apiKeys)) store.data.apiKeys = [];
+    if (!Array.isArray(store.data.ceremonies)) store.data.ceremonies = [];
     ensureSuperAdminCollections(store.data);
+    // v9: site admin (capability roles audit, layout, plugin registry).
+    ensureSiteAdminCollections(store.data);
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 9);
     if (store.writerActive) await store.persist();
     return store;
   }
@@ -297,12 +304,14 @@ export class Store {
     data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
     data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
     data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
+    data.ceremonies = Array.isArray(data.ceremonies) ? data.ceremonies : [];
       data.apiKeys = Array.isArray(data.apiKeys) ? data.apiKeys : [];
       ensureSuperAdminCollections(data);
+      ensureSiteAdminCollections(data);
       data.site = { ...defaultSite(), ...(data.site || {}) };
     data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
     data.meta = data.meta || {};
-    data.meta.version = Math.max(Number(data.meta.version || 0), 8);
+    data.meta.version = Math.max(Number(data.meta.version || 0), 9);
     for (const user of data.users || []) ensurePersonFields(user);
     this.data = data;
     this.ensureJurisdictionIds();

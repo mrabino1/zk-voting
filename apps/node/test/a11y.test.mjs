@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,6 +72,8 @@ let server;
 let base;
 let browser;
 let electionId;
+let ceremonyId;
+let inviteeCookie;
 let adminCookie;
 let voterCookie;
 
@@ -115,6 +117,9 @@ async function applySession(page, cookie) {
 async function audit(page, url, { cookie, scheme = 'light' } = {}) {
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: scheme }]);
   await applySession(page, cookie);
+  // Ceremony pages and /site-admin send a strict CSP (script-src 'self');
+  // axe is injected inline, so bypass CSP for the audit.
+  await page.setBypassCSP(true);
   await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
   await settle(page);
   await page.addScriptTag({ path: axePath });
@@ -146,11 +151,21 @@ describe('WCAG 2.2 AA axe', () => {
       quiet: true,
       port: 0,
       disclosureIntervalSeconds: 0,
+      ceremonyInputDir: path.join(tmp, 'ceremony-inputs'),
+      // Stand-in for CEREMONY_ETH_RPC_URL so the coordinator page shows chain state.
+      ceremonyEthRpc: {
+        configured: true,
+        endpointCount: 1,
+        headBlock: async () => 21_000_000,
+        finalizedBlock: async () => 20_999_936,
+        block: async (n) => ({ number: n, hash: `0x${'ab'.repeat(32)}`, parentHash: null, timestamp: 0 }),
+      },
     });
     server = await listen(created.app);
     base = `http://127.0.0.1:${server.address().port}`;
     adminCookie = await login('admin');
     voterCookie = await login('voter-a11y', 'voter');
+    inviteeCookie = await login('invitee-a11y', 'voter');
     const now = Math.floor(Date.now() / 1000);
     const createdElection = await fetch(`${base}/api/elections`, {
       method: 'POST',
@@ -182,11 +197,57 @@ describe('WCAG 2.2 AA axe', () => {
     assert.equal(createdElection.status, 201, body?.error);
     electionId = body.election.id;
 
+    // Seed one open ceremony from the toy fixture (published entropy, never trusted).
+    const fixtures = path.join(path.dirname(new URL(import.meta.url).pathname), 'fixtures', 'ceremony');
+    await mkdir(path.join(tmp, 'ceremony-inputs'), { recursive: true });
+    await copyFile(path.join(fixtures, 'toy.r1cs'), path.join(tmp, 'ceremony-inputs', 'toy.r1cs'));
+    await copyFile(path.join(fixtures, 'toy_phase2.ptau'), path.join(tmp, 'ceremony-inputs', 'toy_phase2.ptau'));
+    const adminHeaders = { 'content-type': 'application/json', cookie: `${adminCookie.name}=${adminCookie.value}` };
+    const cer = await fetch(`${base}/api/ceremony-admin/ceremonies`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({
+        circuitName: 'toy',
+        label: 'Accessibility toy ceremony',
+        r1cs: 'toy.r1cs',
+        ptau: 'toy_phase2.ptau',
+        ptauHash: 'cbc0a81821de303eed70e924bc621192118d372dd7b310b36922eef277f01a08',
+        minContributions: 2,
+        participation: { handles: 'invitee-a11y' },
+      }),
+    });
+    const cerBody = await cer.json();
+    assert.equal(cer.status, 202, cerBody?.error);
+    for (let i = 0; i < 200; i++) {
+      const j = await (await fetch(`${base}/api/ceremonies/jobs/${cerBody.job.id}`, { headers: adminHeaders })).json();
+      if (j.job.status !== 'running') {
+        assert.equal(j.job.status, 'done', j.job.error);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    ceremonyId = cerBody.ceremony.id;
+    const opened = await fetch(`${base}/api/ceremony-admin/ceremonies/${ceremonyId}/open`, { method: 'POST', headers: adminHeaders, body: '{}' });
+    assert.equal(opened.status, 200);
+    const emailInvite = await fetch(`${base}/api/ceremony-admin/ceremonies/${ceremonyId}/invites`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({ email: 'invitee@example.org' }),
+    });
+    assert.equal(emailInvite.status, 201);
+    const committed = await fetch(`${base}/api/ceremony-admin/ceremonies/${ceremonyId}/beacon/precommit`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({ blockNumber: 21_000_100 }),
+    });
+    assert.equal(committed.status, 200);
+
     browser = await launchChrome();
   });
 
   after(async () => {
     if (browser) await browser.close();
+    globalThis.curve_bn128?.terminate?.();
     if (server) {
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
@@ -214,9 +275,18 @@ describe('WCAG 2.2 AA axe', () => {
     ['back office', '/back-office', 'admin'],
     ['admin hub', '/office', 'admin'],
     ['explorer', '/explorer', 'admin'],
+    ['site admin roles', '/site-admin/roles', 'admin'],
+    ['site admin layout', '/site-admin/layout', 'admin'],
+    ['site admin plugins', '/site-admin/plugins', 'admin'],
+    ['site admin audit', '/site-admin/audit', 'admin'],
     ['self-hosting docs', '/docs'],
     ['self-hosting docs page', '/docs/tailscale'],
     ['self-hosting docs config', '/docs/configuration'],
+    ['ceremony list', '/ceremony'],
+    ['ceremony detail (not invited)', null, 'voter'],
+    ['ceremony detail (invited)', null, 'invitee'],
+    ['ceremony transcript', null],
+    ['ceremony coordinator', '/admin/ceremony', 'admin'],
   ];
 
   for (const scheme of ['light', 'dark']) {
@@ -227,8 +297,14 @@ describe('WCAG 2.2 AA axe', () => {
           await page.setViewport({ width: 1280, height: 900 });
           const pathName =
             pathname ||
-            (name === 'ballot' ? `/vote/${electionId}` : `/elections/${electionId}/results`);
-          const cookie = who === 'admin' ? adminCookie : who === 'voter' ? voterCookie : null;
+            {
+              ballot: `/vote/${electionId}`,
+              results: `/elections/${electionId}/results`,
+              'ceremony detail (not invited)': `/ceremony/${ceremonyId}`,
+              'ceremony detail (invited)': `/ceremony/${ceremonyId}`,
+              'ceremony transcript': `/ceremony/${ceremonyId}/transcript`,
+            }[name];
+          const cookie = who === 'admin' ? adminCookie : who === 'voter' ? voterCookie : who === 'invitee' ? inviteeCookie : null;
           await audit(page, `${base}${pathName}`, { cookie, scheme });
         } finally {
           await page.close();
