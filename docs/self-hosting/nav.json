@@ -23,6 +23,12 @@
         { "slug": "rollback", "title": "Rollback" },
         { "slug": "rolling-updates", "title": "Rolling updates" }
       ]
+    },
+    {
+      "title": "Community",
+      "pages": [
+        { "slug": "discourse", "title": "Community forum (Discourse)" }
+      ]
     }
   ]
 }
