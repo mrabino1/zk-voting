@@ -44,6 +44,7 @@ export default {
     navTerms: "الشروط",
     navFeedback: "ملاحظات",
     navApi: "واجهة البوت",
+    navDocs: "الوثائق",
     navSignIn: "تسجيل الدخول",
     navDesk: "مكتبي",
     navProfile: "الملف الشخصي",

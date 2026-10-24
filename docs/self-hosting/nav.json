@@ -1,0 +1,28 @@
+{
+  "title": "Self-hosting",
+  "sections": [
+    {
+      "title": "Install",
+      "pages": [
+        { "slug": "README", "title": "Overview" },
+        { "slug": "requirements", "title": "Requirements" },
+        { "slug": "docker-compose", "title": "Docker Compose quickstart" },
+        { "slug": "coolify", "title": "Coolify" },
+        { "slug": "other-platforms", "title": "Dokploy, CapRover, plain Compose" },
+        { "slug": "tailscale", "title": "Tailscale sidecar" },
+        { "slug": "configuration", "title": "Configuration reference" },
+        { "slug": "first-launch", "title": "First launch" },
+        { "slug": "health-checks", "title": "Health checks" }
+      ]
+    },
+    {
+      "title": "Upgrade",
+      "pages": [
+        { "slug": "upgrading", "title": "Upgrading" },
+        { "slug": "backups", "title": "Backups" },
+        { "slug": "rollback", "title": "Rollback" },
+        { "slug": "rolling-updates", "title": "Rolling updates" }
+      ]
+    }
+  ]
+}

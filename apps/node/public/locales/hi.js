@@ -43,6 +43,7 @@ export default {
     navTerms: "शर्तें",
     navFeedback: "प्रतिक्रिया",
     navApi: "बॉट API",
+    navDocs: "दस्तावेज़",
     navSignIn: "साइन इन",
     navDesk: "मेरी डेस्क",
     navProfile: "प्रोफ़ाइल",

@@ -14,7 +14,7 @@ const root = join(here, '..', '..');
 const sourcePath = join(here, 'election-workflow.mmd');
 const pngPath = join(root, 'docs', 'images', 'election-workflow.png');
 const readmePath = join(root, 'README.md');
-const privacyPath = join(root, 'how_voters_privacy_is_protected.md');
+const privacyPath = join(root, 'docs', 'how_voters_privacy_is_protected.md');
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const REQUIRED_PHRASES = [
   'register',

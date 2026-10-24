@@ -1,0 +1,246 @@
+/* NOT FOR PROFIT — zk-voting is a civic public good. Not a commercial product.
+   Self-hosting docs layout: sidebar, article, "On this page". Uses the theme
+   tokens from styles.css so light and dark follow the rest of the app. */
+
+.docs-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr) 13rem;
+  gap: 2rem;
+  min-width: 0;
+  width: 100%;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.docs-sidebar,
+.docs-toc {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1.5rem 0 2rem;
+  font-size: 0.92rem;
+}
+
+.docs-sidebar-title,
+.docs-toc-title {
+  margin: 0 0 0.75rem;
+  font-weight: 700;
+}
+
+.docs-sidebar-title a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.docs-sidebar .docs-group {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.docs-sidebar ul,
+.docs-toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.docs-sidebar a {
+  display: block;
+  padding: 0.4rem 0.65rem;
+  border-inline-start: 2px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+  min-height: 2rem;
+}
+
+.docs-sidebar a:hover {
+  background: var(--sidebar-accent);
+}
+
+.docs-sidebar a[aria-current="page"] {
+  border-inline-start-color: var(--project);
+  background: var(--sidebar-accent);
+  font-weight: 600;
+}
+
+.docs-toc a {
+  display: block;
+  padding: 0.25rem 0;
+  color: var(--muted);
+}
+
+.docs-toc a:hover {
+  color: var(--fg);
+}
+
+.docs-main {
+  max-width: none;
+  padding-inline: 0;
+}
+
+@media (min-width: 960px) {
+  /* The app header is the left rail on wide screens; the docs grid fills the main area. */
+  .docs-layout {
+    grid-area: main;
+    max-width: none;
+    padding: 0 2rem;
+  }
+
+  .docs-layout > .site-main {
+    grid-area: auto;
+    padding: 1.75rem 0 3rem;
+  }
+}
+
+.docs-article {
+  max-width: 48rem;
+  line-height: 1.6;
+}
+
+.docs-article h1 {
+  margin-top: 0;
+}
+
+.docs-article h2 {
+  margin-top: 2.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.docs-article h2,
+.docs-article h3 {
+  scroll-margin-top: 1rem;
+}
+
+.docs-article pre {
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  line-height: 1.45;
+}
+
+.docs-article pre code {
+  font-size: 0.85rem;
+  background: none;
+  padding: 0;
+}
+
+.docs-article :not(pre) > code {
+  padding: 0.1em 0.35em;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.docs-article .table-wrap {
+  margin: 1rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.docs-article table {
+  font-size: 0.92rem;
+}
+
+.docs-article th {
+  background: var(--sidebar);
+}
+
+.docs-article blockquote {
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  border-inline-start: 3px solid var(--project);
+  background: var(--sidebar);
+}
+
+.docs-article li + li {
+  margin-top: 0.3rem;
+}
+
+.docs-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 48rem;
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.docs-pager a {
+  display: inline-flex;
+  flex-direction: column;
+  min-height: var(--target);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+.docs-pager a:hover {
+  border-color: var(--project);
+}
+
+.docs-pager .pager-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.docs-pager .next {
+  margin-inline-start: auto;
+  text-align: end;
+}
+
+@media (max-width: 80rem) {
+  .docs-layout {
+    grid-template-columns: 14rem minmax(0, 1fr);
+  }
+
+  .docs-toc {
+    display: none;
+  }
+}
+
+@media (max-width: 48rem) {
+  .docs-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .docs-sidebar {
+    position: static;
+    max-height: none;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+.docs-nav-details > summary {
+  display: none;
+}
+
+@media (max-width: 48rem) {
+  .docs-nav-details > summary {
+    display: list-item;
+    cursor: pointer;
+    min-height: 2.75rem;
+    padding: 0.6rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    font-weight: 600;
+  }
+}
+
+.docs-article td:first-child code {
+  white-space: nowrap;
+}

@@ -154,16 +154,16 @@ describe('audience helpers and FAQ', () => {
 
   test('nav items differ by audience', () => {
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Sign in', 'Register']);
     const voter = mainNav('registered').map((i) => i.label);
-    assert.deepEqual(voter, ['My desk', 'Profile', 'Verify email', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API']);
+    assert.deepEqual(voter, ['My desk', 'Profile', 'Verify email', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs']);
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
     assert.ok(!pub.includes('Polls'));
     const withPolls = mainNav('public', [], { pollsEnabled: true }).map((i) => i.label);
     assert.ok(withPolls.includes('Polls'));
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Sign in', 'Register']);
   });
 
   test('officer detection matches Node roles helper', () => {

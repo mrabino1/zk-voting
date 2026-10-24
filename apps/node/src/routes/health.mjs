@@ -31,7 +31,7 @@ export function healthRouter(deps) {
       nfp: true,
       notForProfit: true,
       chainId: deps.config.chainId,
-      product: 'Republic',
+      product: 'zk-voting',
       voteFqdn: deps.config.voteFqdn || null,
       sharedDeployment: true,
       electionFactoryAddress: contracts.factory || '',
