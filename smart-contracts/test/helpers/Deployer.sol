@@ -21,13 +21,13 @@ import {Tally} from "../../src/Tally.sol";
 import {RollupSettlement} from "../../src/l2/RollupSettlement.sol";
 import {PasskeyAccount} from "../../src/account/PasskeyAccount.sol";
 import {PasskeyAccountFactory} from "../../src/account/PasskeyAccountFactory.sol";
-import {RepublicEntryPoint, UserOp} from "../../src/account/RepublicEntryPoint.sol";
-import {RepublicPaymaster} from "../../src/account/RepublicPaymaster.sol";
+import {ZkVotingEntryPoint, UserOp} from "../../src/account/ZkVotingEntryPoint.sol";
+import {ZkVotingPaymaster} from "../../src/account/ZkVotingPaymaster.sol";
 
 import {Fixtures} from "./Fixtures.sol";
 
 /// @title Deployer
-/// @notice Best-effort full-stack deploy for Republic Foundry tests.
+/// @notice Best-effort full-stack deploy for ZK-Voting Foundry tests.
 /// @dev Preferred factory constructor: `new ElectionFactory(admin, address(0))`
 ///      (factory deploys the Election implementation). Modules are wired with
 ///      `setModules` when that function exists. Other constructors are tried
@@ -54,8 +54,8 @@ contract Deployer is Test {
     Tally internal tally;
     RollupSettlement internal settlement;
     PasskeyAccountFactory internal accountFactory;
-    RepublicEntryPoint internal entryPoint;
-    RepublicPaymaster internal paymaster;
+    ZkVotingEntryPoint internal entryPoint;
+    ZkVotingPaymaster internal paymaster;
 
     address internal admin;
     address internal clerk;
@@ -137,9 +137,9 @@ contract Deployer is Test {
             settlement = RollupSettlement(addr);
         }
 
-        entryPoint = new RepublicEntryPoint();
+        entryPoint = new ZkVotingEntryPoint();
         accountFactory = new PasskeyAccountFactory(address(entryPoint));
-        paymaster = new RepublicPaymaster(address(entryPoint), admin);
+        paymaster = new ZkVotingPaymaster(address(entryPoint), admin);
 
         vm.prank(admin);
         paymaster.setAlwaysSponsor(true);
@@ -289,8 +289,8 @@ contract Deployer is Test {
         vm.label(address(inbox), "BallotInbox");
         vm.label(address(tally), "Tally");
         vm.label(address(settlement), "RollupSettlement");
-        vm.label(address(entryPoint), "RepublicEntryPoint");
-        vm.label(address(paymaster), "RepublicPaymaster");
+        vm.label(address(entryPoint), "ZkVotingEntryPoint");
+        vm.label(address(paymaster), "ZkVotingPaymaster");
         vm.label(address(accountFactory), "PasskeyAccountFactory");
     }
 

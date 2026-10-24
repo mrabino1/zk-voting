@@ -19,16 +19,16 @@ import {VoterRegistry} from "../src/VoterRegistry.sol";
 import {DisqualificationRegistry} from "../src/DisqualificationRegistry.sol";
 import {BallotInbox} from "../src/BallotInbox.sol";
 import {Tally} from "../src/Tally.sol";
-import {RepublicEntryPoint} from "../src/account/RepublicEntryPoint.sol";
+import {ZkVotingEntryPoint} from "../src/account/ZkVotingEntryPoint.sol";
 import {PasskeyAccountFactory} from "../src/account/PasskeyAccountFactory.sol";
-import {RepublicPaymaster} from "../src/account/RepublicPaymaster.sol";
+import {ZkVotingPaymaster} from "../src/account/ZkVotingPaymaster.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
-import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
+import {ZkVotingMailbox} from "../src/l2/ZkVotingMailbox.sol";
 import {JurisdictionRegistry} from "../src/JurisdictionRegistry.sol";
 
-/// @notice Shared deploy result for the Republic election + AA stack.
-struct RepublicStack {
+/// @notice Shared deploy result for the ZK-Voting election + AA stack.
+struct ZkVotingStack {
     IHasher hasher;
     IGroth16Verifier verifier;
     bool mockVerifier;
@@ -39,9 +39,9 @@ struct RepublicStack {
     DisqualificationRegistry disqualificationRegistry;
     BallotInbox inbox;
     Tally tally;
-    RepublicEntryPoint entryPoint;
+    ZkVotingEntryPoint entryPoint;
     PasskeyAccountFactory accountFactory;
-    RepublicPaymaster paymaster;
+    ZkVotingPaymaster paymaster;
 }
 
 /// @notice Anvil / L2 helpers. `DeployLocal` and `DeployL2` inherit this.
@@ -51,7 +51,7 @@ struct RepublicStack {
 ///      `REPUBLIC_VOTE_VERIFIER`, that is `VoteVerifier` with a zero VK (fail closed).
 ///      Set `REPUBLIC_VOTE_VERIFIER` to a snarkjs-exported verifier to wrap it in
 ///      `Groth16VerifierAdapter`. That key is still untrusted until a ceremony.
-abstract contract RepublicStackScript is DeployOnce {
+abstract contract ZkVotingStackScript is DeployOnce {
     /// @dev Audit H-02: a mock (accept-all) verifier may only be deployed on
     ///      anvil (31337) or with the explicit dev flag REPUBLIC_ALLOW_MOCK_VERIFIER=1.
     error MockVerifierNotAllowed(uint256 chainId);
@@ -105,7 +105,7 @@ abstract contract RepublicStackScript is DeployOnce {
             || h == keccak256("poseidon-bn254-x5-t3-v1");
     }
 
-    function _logStack(RepublicStack memory s) internal view {
+    function _logStack(ZkVotingStack memory s) internal view {
         _log("HASHER", address(s.hasher));
         _log("VERIFIER", address(s.verifier));
         _logStr("HASH_SCHEME", s.hashScheme);
@@ -124,7 +124,7 @@ abstract contract RepublicStackScript is DeployOnce {
     }
 
     /// @dev Factory first, then modules that take `factory`, then `setModules`.
-    function _deployElectionStack(address admin) internal returns (RepublicStack memory s) {
+    function _deployElectionStack(address admin) internal returns (ZkVotingStack memory s) {
         bool useMock = _useMockVerifier();
         if (useMock && !_mockVerifierAllowed()) revert MockVerifierNotAllowed(block.chainid);
         s.mockVerifier = useMock;
@@ -181,9 +181,9 @@ abstract contract RepublicStackScript is DeployOnce {
                 address(s.voterRegistry), address(s.disqualificationRegistry), address(s.inbox), address(s.tally)
             );
 
-        s.entryPoint = new RepublicEntryPoint();
+        s.entryPoint = new ZkVotingEntryPoint();
         s.accountFactory = new PasskeyAccountFactory(address(s.entryPoint));
-        s.paymaster = new RepublicPaymaster(address(s.entryPoint), admin);
+        s.paymaster = new ZkVotingPaymaster(address(s.entryPoint), admin);
         s.paymaster.setSponsoredTargets(address(s.inbox), address(s.voterRegistry), address(s.accountFactory));
     }
 
@@ -208,20 +208,20 @@ abstract contract RepublicStackScript is DeployOnce {
 }
 
 /// @notice Broadcast the full local stack to Anvil, then create one sample election.
-contract DeployLocal is RepublicStackScript {
+contract DeployLocal is ZkVotingStackScript {
     function run() external {
         _refuseIfAlreadyDeployed();
         vm.startBroadcast();
         address admin = msg.sender;
 
-        RepublicStack memory s = _deployElectionStack(admin);
+        ZkVotingStack memory s = _deployElectionStack(admin);
 
         address sequencer = vm.envOr("SEQUENCER", admin);
         address prover = vm.envOr("PROVER", admin);
         address batchVerifier = vm.envOr("BATCH_VERIFIER", address(0));
 
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, true);
-        RepublicMailbox mailbox = new RepublicMailbox(admin);
+        ZkVotingMailbox mailbox = new ZkVotingMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
         mirror.setL2Factory(address(s.factory));
 

@@ -168,7 +168,7 @@ Merkle **depth 20** (~1M leaves) is **not** “reserve 1M × 32-byte hashes only
 | Mock vs real | `mockMode` on the contract skips `verifyProof`. Dev prover: `DEV_MOCK_PROOF=true` (default). If `DEV_MOCK_PROOF=false`, current prover **refuses** L1 submit (“production groth16 keys are not present”) | [`RollupSettlement.sol`](./smart-contracts/src/l2/RollupSettlement.sol), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
 | `L1TallyMirror.postResult(electionId, resultHash, totalBallots, l2StateRoot)` | After Node tally, **one tx per election**, if `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY` are set. Unset → tally still works (`skipped`) | Hash of counts, not ballots. [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 | Voters | **Never** pay L1 or L2 gas on the civic path | [`docs/L2.md`](./docs/L2.md) |
-| EVM paymaster | Separate: `RepublicPaymaster` sponsors UserOps that hit inbox / registry / factory **on an EVM**. Civic sequencer is not that EVM. | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
+| EVM paymaster | Separate: `ZkVotingPaymaster` sponsors UserOps that hit inbox / registry / factory **on an EVM**. Civic sequencer is not that EVM. | [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 
 This repo **does not** ship a Foundry gas snapshot for `submitBatch`. Do not treat the next table as measured.
 

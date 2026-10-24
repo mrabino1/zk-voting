@@ -10,7 +10,7 @@ import {JurisdictionRegistry} from "../../src/JurisdictionRegistry.sol";
 import {PersonRegistry} from "../../src/PersonRegistry.sol";
 import {Roles} from "../../src/Roles.sol";
 import {VoterRegistry} from "../../src/VoterRegistry.sol";
-import {RepublicMailbox} from "../../src/l2/RepublicMailbox.sol";
+import {ZkVotingMailbox} from "../../src/l2/ZkVotingMailbox.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
 
@@ -128,9 +128,9 @@ contract LowRegressionsTest is Deployer {
     // ------------------------------------------------------------------ L-07
 
     function testL07_MailboxRefusesValue() public {
-        RepublicMailbox m = new RepublicMailbox(admin);
+        ZkVotingMailbox m = new ZkVotingMailbox(admin);
         vm.deal(address(this), 1 ether);
-        (bool ok,) = address(m).call{value: 1 ether}(abi.encodeCall(RepublicMailbox.sendToL2, (hex"01")));
+        (bool ok,) = address(m).call{value: 1 ether}(abi.encodeCall(ZkVotingMailbox.sendToL2, (hex"01")));
         assertFalse(ok);
         assertEq(address(m).balance, 0);
     }

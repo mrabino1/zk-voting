@@ -1,4 +1,4 @@
-# Republic / zk-voting smart contracts — Foundry Makefile
+# zk-voting smart contracts — Foundry Makefile
 # NOT FOR PROFIT — civic public good. Not a commercial product.
 #
 # Modeled on the nuursha-nft-erc20-whitelabel Makefile: install, build,
@@ -21,7 +21,7 @@ VERBOSITY ?= -vv
 all: install build
 
 help:
-	@echo "Republic / zk-voting — Available Commands"
+	@echo "zk-voting — Available Commands"
 	@echo ""
 	@echo "Setup & Build:"
 	@echo "  make install        - Install Solidity dependencies (forge-std)"
@@ -38,7 +38,7 @@ help:
 	@echo "  make test-invariant - Invariant tests (test/invariant)"
 	@echo "  make test-all       - Unit + fuzz + invariant"
 	@echo "  make test-file f=<path> - Run a specific test file"
-	@echo "  make test-paymaster - RepublicPaymaster tests only"
+	@echo "  make test-paymaster - ZkVotingPaymaster tests only"
 	@echo "  make test-verbose   - Unit tests with -vvvv"
 	@echo "  make test-gas       - Unit tests with gas reporting"
 	@echo "  make test-coverage  - Coverage for unit tests"
@@ -47,7 +47,7 @@ help:
 	@echo ""
 	@echo "Local node & deploy:"
 	@echo "  make anvil          - Start a local Anvil node"
-	@echo "  make deploy-local   - Deploy the Republic stack to Anvil (MockVerifier)"
+	@echo "  make deploy-local   - Deploy the ZK-Voting stack to Anvil (MockVerifier)"
 	@echo "  make deploy-l2      - Deploy the election stack to an L2 RPC"
 	@echo "  make deploy-l1      - Deploy L1 settlement / tally mirror / mailbox"
 	@echo "  make create-election - Create one election (needs FACTORY, START, CUTOFF, TITLE)"
@@ -186,7 +186,7 @@ anvil:
 	anvil
 
 deploy-local:
-	@echo "Deploying Republic stack to local Anvil (MockVerifier by default)..."
+	@echo "Deploying ZK-Voting stack to local Anvil (MockVerifier by default)..."
 	@echo "Set REPUBLIC_PROVING_PATH=1 to deploy VoteVerifier instead."
 	@bash script/anvil_deploy.sh
 

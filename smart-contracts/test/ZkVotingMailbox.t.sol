@@ -5,12 +5,12 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 
-import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
+import {ZkVotingMailbox} from "../src/l2/ZkVotingMailbox.sol";
 
 /// @notice Mailbox empty-input, time-boundary, and one-shot force-include edges.
 /// @dev Ported from nuursha empty-array / warp(t-1)/t/t+1 / already-used keys.
-contract RepublicMailboxTest is Test {
-    RepublicMailbox internal mailbox;
+contract ZkVotingMailboxTest is Test {
+    ZkVotingMailbox internal mailbox;
     address internal admin;
     address internal sender;
 
@@ -22,27 +22,27 @@ contract RepublicMailboxTest is Test {
     function setUp() public {
         admin = makeAddr("admin");
         sender = makeAddr("sender");
-        mailbox = new RepublicMailbox(admin);
+        mailbox = new ZkVotingMailbox(admin);
         vm.warp(1_700_000_000);
     }
 
     function testConstructorRejectsZeroAdmin() public {
-        vm.expectRevert(RepublicMailbox.ZeroAddress.selector);
-        new RepublicMailbox(address(0));
+        vm.expectRevert(ZkVotingMailbox.ZeroAddress.selector);
+        new ZkVotingMailbox(address(0));
     }
 
     function testSendToL2EmptyReverts() public {
-        vm.expectRevert(RepublicMailbox.EmptyMessage.selector);
+        vm.expectRevert(ZkVotingMailbox.EmptyMessage.selector);
         mailbox.sendToL2("");
     }
 
     function testSendToL1EmptyReverts() public {
-        vm.expectRevert(RepublicMailbox.EmptyMessage.selector);
+        vm.expectRevert(ZkVotingMailbox.EmptyMessage.selector);
         mailbox.sendToL1("");
     }
 
     function testEnqueueEmptyReverts() public {
-        vm.expectRevert(RepublicMailbox.EmptyMessage.selector);
+        vm.expectRevert(ZkVotingMailbox.EmptyMessage.selector);
         mailbox.enqueue("");
     }
 
@@ -72,13 +72,13 @@ contract RepublicMailboxTest is Test {
     function testSendToL2RejectsValue() public {
         vm.deal(sender, 1 ether);
         vm.prank(sender);
-        (bool ok,) = address(mailbox).call{value: 1 ether}(abi.encodeCall(RepublicMailbox.sendToL2, (hex"01")));
+        (bool ok,) = address(mailbox).call{value: 1 ether}(abi.encodeCall(ZkVotingMailbox.sendToL2, (hex"01")));
         assertFalse(ok);
         assertEq(address(mailbox).balance, 0);
     }
 
     function testForceIncludeMissingNonceReverts() public {
-        vm.expectRevert(RepublicMailbox.NotReady.selector);
+        vm.expectRevert(ZkVotingMailbox.NotReady.selector);
         mailbox.forceInclude(1);
     }
 
@@ -91,7 +91,7 @@ contract RepublicMailboxTest is Test {
         assertFalse(included);
 
         vm.warp(readyAt - 1);
-        vm.expectRevert(RepublicMailbox.NotReady.selector);
+        vm.expectRevert(ZkVotingMailbox.NotReady.selector);
         mailbox.forceInclude(1);
     }
 
@@ -127,7 +127,7 @@ contract RepublicMailboxTest is Test {
         (, uint256 readyAt,,) = mailbox.queue(1);
         vm.warp(readyAt);
         mailbox.forceInclude(1);
-        vm.expectRevert(RepublicMailbox.NotReady.selector);
+        vm.expectRevert(ZkVotingMailbox.NotReady.selector);
         mailbox.forceInclude(1);
     }
 

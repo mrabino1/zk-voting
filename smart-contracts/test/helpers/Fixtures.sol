@@ -24,7 +24,7 @@ library Fixtures {
         address verifier
     ) internal pure returns (ElectionParams memory p) {
         p = build({
-            title: "Republic Civic Election",
+            title: "ZK-Voting Civic Election",
             metadataURI: "ipfs://republic/ballot",
             startTime: TIME_ORIGIN + ONE_DAY,
             cutoffTime: TIME_ORIGIN + (2 * ONE_DAY),

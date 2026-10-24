@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {PasskeyAccount} from "../src/account/PasskeyAccount.sol";
-import {RepublicPaymaster} from "../src/account/RepublicPaymaster.sol";
-import {UserOp} from "../src/account/RepublicEntryPoint.sol";
+import {ZkVotingPaymaster} from "../src/account/ZkVotingPaymaster.sol";
+import {UserOp} from "../src/account/ZkVotingEntryPoint.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -27,13 +27,13 @@ contract PaymasterEdgesTest is Deployer {
     }
 
     function testConstructorRejectsZeroEntryPoint() public {
-        vm.expectRevert(RepublicPaymaster.ZeroAddress.selector);
-        new RepublicPaymaster(address(0), admin);
+        vm.expectRevert(ZkVotingPaymaster.ZeroAddress.selector);
+        new ZkVotingPaymaster(address(0), admin);
     }
 
     function testConstructorRejectsZeroAdmin() public {
-        vm.expectRevert(RepublicPaymaster.ZeroAddress.selector);
-        new RepublicPaymaster(address(entryPoint), address(0));
+        vm.expectRevert(ZkVotingPaymaster.ZeroAddress.selector);
+        new ZkVotingPaymaster(address(entryPoint), address(0));
     }
 
     function testReceiveDepositsEth() public {
@@ -53,13 +53,13 @@ contract PaymasterEdgesTest is Deployer {
 
     function testWithdrawZeroRecipientReverts() public {
         vm.prank(admin);
-        vm.expectRevert(RepublicPaymaster.ZeroAddress.selector);
+        vm.expectRevert(ZkVotingPaymaster.ZeroAddress.selector);
         paymaster.withdraw(payable(address(0)), 1);
     }
 
     function testStrangerCannotWithdraw() public {
         vm.prank(stranger);
-        vm.expectRevert(RepublicPaymaster.NotAdmin.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotAdmin.selector);
         paymaster.withdraw(payable(stranger), 1);
     }
 
@@ -75,26 +75,26 @@ contract PaymasterEdgesTest is Deployer {
     function testWithdrawFailedWhenRecipientRejects() public {
         RejectEther sink = new RejectEther();
         vm.prank(admin);
-        vm.expectRevert(RepublicPaymaster.WithdrawFailed.selector);
+        vm.expectRevert(ZkVotingPaymaster.WithdrawFailed.selector);
         paymaster.withdraw(payable(address(sink)), 1 ether);
     }
 
     function testValidateAndPayNotEntryPointReverts() public {
         UserOp memory op;
         vm.prank(stranger);
-        vm.expectRevert(RepublicPaymaster.NotEntryPoint.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotEntryPoint.selector);
         paymaster.validateAndPay(op);
     }
 
     function testStrangerCannotSetAlwaysSponsor() public {
         vm.prank(stranger);
-        vm.expectRevert(RepublicPaymaster.NotAdmin.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotAdmin.selector);
         paymaster.setAlwaysSponsor(false);
     }
 
     function testStrangerCannotSetSponsoredTargets() public {
         vm.prank(stranger);
-        vm.expectRevert(RepublicPaymaster.NotAdmin.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotAdmin.selector);
         paymaster.setSponsoredTargets(address(1), address(2), address(3));
     }
 
@@ -105,7 +105,7 @@ contract PaymasterEdgesTest is Deployer {
         UserOp memory op;
         op.callData = hex"";
         vm.prank(address(entryPoint));
-        vm.expectRevert(RepublicPaymaster.NotSponsored.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(op);
     }
 

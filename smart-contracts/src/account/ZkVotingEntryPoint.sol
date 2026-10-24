@@ -20,7 +20,7 @@ struct UserOp {
     bytes signature;
 }
 
-interface IRepublicAccount {
+interface IZkVotingAccount {
     function validateUserOp(UserOp calldata op, bytes32 userOpHash) external returns (bool);
 
     function execute(address dest, uint256 value, bytes calldata data) external;
@@ -28,15 +28,15 @@ interface IRepublicAccount {
     function nonce() external view returns (uint256);
 }
 
-interface IRepublicPaymaster {
+interface IZkVotingPaymaster {
     function validateAndPay(UserOp calldata op) external returns (bool);
 }
 
-/// @title RepublicEntryPoint
-/// @notice Minimal bundler entry point for local Republic L2.
+/// @title ZkVotingEntryPoint
+/// @notice Minimal bundler entry point for local ZK-Voting L2.
 ///         Validate nonce → account.validateUserOp → optional paymaster → execute.
 ///         Keep small and auditable. Not a fork of eth-infinitism EntryPoint.
-contract RepublicEntryPoint {
+contract ZkVotingEntryPoint {
     error InvalidInitCode();
     error DeployFailed();
     error SenderMismatch();
@@ -91,14 +91,14 @@ contract RepublicEntryPoint {
             _deploy(op.initCode, op.sender);
         }
 
-        if (IRepublicAccount(op.sender).nonce() != op.nonce) revert InvalidNonce();
+        if (IZkVotingAccount(op.sender).nonce() != op.nonce) revert InvalidNonce();
 
         bytes32 userOpHash = getUserOpHash(op);
-        bool valid = IRepublicAccount(op.sender).validateUserOp(op, userOpHash);
+        bool valid = IZkVotingAccount(op.sender).validateUserOp(op, userOpHash);
         if (!valid) revert ValidationFailed();
 
         if (op.paymaster != address(0)) {
-            bool paid = IRepublicPaymaster(op.paymaster).validateAndPay(op);
+            bool paid = IZkVotingPaymaster(op.paymaster).validateAndPay(op);
             if (!paid) revert PaymasterRejected();
         }
 

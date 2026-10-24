@@ -16,8 +16,8 @@ import {ITallyVerifier} from "../../src/interfaces/ITallyVerifier.sol";
 import {L1TallyMirror} from "../../src/l2/L1TallyMirror.sol";
 import {RollupSettlement} from "../../src/l2/RollupSettlement.sol";
 import {PasskeyAccount} from "../../src/account/PasskeyAccount.sol";
-import {RepublicEntryPoint, UserOp} from "../../src/account/RepublicEntryPoint.sol";
-import {RepublicPaymaster} from "../../src/account/RepublicPaymaster.sol";
+import {ZkVotingEntryPoint, UserOp} from "../../src/account/ZkVotingEntryPoint.sol";
+import {ZkVotingPaymaster} from "../../src/account/ZkVotingPaymaster.sol";
 import {MockVerifier} from "../../src/zk/MockVerifier.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Deployer} from "../helpers/Deployer.sol";
@@ -288,7 +288,7 @@ contract MediumRegressionsTest is Deployer {
     }
 
     function testM08_PaymasterDefaultsOff() public {
-        RepublicPaymaster fresh = new RepublicPaymaster(address(entryPoint), admin);
+        ZkVotingPaymaster fresh = new ZkVotingPaymaster(address(entryPoint), admin);
         assertFalse(fresh.alwaysSponsor());
     }
 
@@ -301,14 +301,14 @@ contract MediumRegressionsTest is Deployer {
         op.callData = abi.encodeWithSelector(PasskeyAccount.execute.selector, makeAddr("drain"), uint256(0), "");
         op.paymaster = address(paymaster);
         vm.prank(address(entryPoint));
-        vm.expectRevert(RepublicPaymaster.NotSponsored.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(op);
 
         // Value transfers into a civic target are not sponsored either.
         op.initCode = "";
         op.callData = abi.encodeWithSelector(PasskeyAccount.execute.selector, address(inbox), uint256(1), "");
         vm.prank(address(entryPoint));
-        vm.expectRevert(RepublicPaymaster.NotSponsored.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(op);
 
         // Deploy-only and zero-value civic calls stay sponsored.

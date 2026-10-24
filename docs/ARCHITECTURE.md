@@ -497,11 +497,11 @@ P-256 / WebAuthn public key. Signature is a WebAuthn assertion.
 
 `src/account/PasskeyAccountFactory.sol` — `createAccount(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt)` (WebAuthn only), or `createAccountWithBackupSigner(credIdHash, pubX, pubY, ethBackupSigner, salt)` for an immutable secp256k1 backup key. WebAuthn assertions must carry `challenge = base64url(userOpHash)`, `type = webauthn.get` and the UP flag, and require the P-256 precompile at `0x100` (no fallback).
 
-`src/account/RepublicPaymaster.sol` — sponsors UserOps that call
+`src/account/ZkVotingPaymaster.sol` — sponsors UserOps that call
 `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`.
 Voters do not hold the L2 gas token.
 
-`src/account/RepublicEntryPoint.sol` — minimal EntryPoint sufficient for
+`src/account/ZkVotingEntryPoint.sol` — minimal EntryPoint sufficient for
 local EVM (validate, paymaster, execute). Not a full eth-infinitism copy;
 keep it small and auditable.
 
@@ -562,7 +562,7 @@ identity reverts `AlreadyPosted`. The Node
 and `script/CertifyL1.s.sol` call this when L1 env is set; they no-op
 when it is not. CI must not supply mainnet keys.
 
-`src/l2/RepublicMailbox.sol` — L1/L2 message mailbox for the rollup.
+`src/l2/ZkVotingMailbox.sol` — L1/L2 message mailbox for the rollup.
 
 ---
 
