@@ -99,7 +99,7 @@ doc:
 	forge doc
 	@echo "Documentation generated!"
 
-# Unit / integration only — skip fuzz + invariant .
+# Unit / integration only — skip fuzz + invariant.
 test:
 	@echo "Running unit and integration tests (excluding fuzz and invariant)..."
 	forge test --via-ir --no-match-path "test/{fuzz,invariant}/**"

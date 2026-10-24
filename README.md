@@ -279,6 +279,35 @@ Invariants:
 
 Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Branch policy: work on **`test/unstable`**; **`master`** is production. Expected host, disk, L1, SES, and capacity ranges: [`voting_cost_estimate.md`](./docs/voting_cost_estimate.md) (jurisdictions **at cost**; **NOT FOR PROFIT**).
 
+### Prerequisites
+
+- **Docker** with Compose v2 for the full stack ([Quickstart](#quickstart)).
+- **Foundry** (`forge`, `cast`, `anvil`) for the contracts and the `scripts/` helpers:
+
+  ```bash
+  curl -L https://foundry.paradigm.xyz | bash
+  foundryup
+  ```
+
+  See the [Foundry book](https://book.getfoundry.sh/getting-started/installation).
+- **Node.js** and npm for `apps/`, `l2/`, and `npm test`.
+- `bash`, `curl`, and `python3` for `scripts/` (`jq` optional).
+
+### Local chain, deploy, and gas economics (`scripts/`)
+
+Three helpers, documented in [`scripts/README.md`](./scripts/README.md). None of them names a node or a key: RPC URLs, chain ids, and signers come from flags, the environment, or `.env`.
+
+```bash
+./scripts/start-anvil.sh --background            # local chain; ANVIL_PORT, ANVIL_CHAIN_ID, ANVIL_FORK_URL, ...
+./scripts/deploy.sh --target local               # DeployLocal on that Anvil; writes deployments/<chainId>.json
+./scripts/get-gas-economics.sh --measure         # L1 gas from L1_RPC, ETH/USD, sizes, deploy + per-call gas
+./scripts/start-anvil.sh --stop
+```
+
+- `start-anvil.sh` prints the RPC URL. Its dev accounts are Anvil's public test accounts; never fund them on a real network.
+- `deploy.sh --target local|l2|l1` wraps `DeployLocal`, `DeployL2`, and `DeployL1`. The signer is `DEPLOYER_PRIVATE_KEY` or a Foundry keystore (`--account`). It refuses to redeploy when the deployed addresses are already in the environment or a record exists, unless `--force`. `--dry-run` simulates.
+- `get-gas-economics.sh` reads the L1 gas price from `L1_RPC` (or `--l1-rpc`, or a fixed `GAS_GWEI`) and fails with a clear message when none is set.
+
 ### Foundry tests (`smart-contracts/`)
 
 Requires [Foundry](https://book.getfoundry.sh/) (`foundryup`). solc **0.8.24**, optimizer on, **`via_ir = true`**, fuzz 256 runs (`foundry.toml`).
