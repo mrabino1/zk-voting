@@ -1,103 +1,72 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Final random beacon for a phase-2 ceremony.
+// Final random beacon for a phase-2 ceremony: an Ethereum mainnet block hash.
 //
-// The coordinator commits to a FUTURE public random value before the
-// contribution window closes: a drand round or a block hash at a given
-// height. Nobody, the coordinator included, can know that value while
-// contributions are still accepted. After it is published the coordinator
-// pastes it in and the server applies `zkey beacon` with it. Anyone can look
-// the value up again (see docs/ceremony-web.md). This server never fetches it.
+// Decision (2026-10-24): the only beacon source is the hash of a future
+// Ethereum mainnet block. The coordinator commits to a block number at least
+// N blocks (default 32, about one epoch) ahead of the current head while
+// contributions are still accepted, so nobody can know the hash yet. Close is
+// refused once that block exists. Finalize waits until the block is
+// FINALIZED by the beacon chain, then the server reads its hash from the
+// configured read-only RPC (CEREMONY_ETH_RPC_URL) and applies `zkey beacon`.
+// No RPC configured means no commit, close, or finalize: it fails closed.
+// Anyone can look the block up again on any explorer or node.
 
-/** drand networks run by the League of Entropy. Genesis and period are public. */
-export const DRAND_CHAINS = Object.freeze({
-  quicknet: Object.freeze({
-    id: 'quicknet',
-    chainHash: '52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971',
-    genesisTime: 1692803367,
-    period: 3,
-  }),
-  default: Object.freeze({
-    id: 'default',
-    chainHash: '8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce',
-    genesisTime: 1595431050,
-    period: 30,
-  }),
-});
-
-export const BLOCK_NETWORKS = Object.freeze(['ethereum-mainnet', 'bitcoin-mainnet']);
-
+export const BEACON_SOURCE = 'ethereum-block';
+export const BEACON_NETWORK = 'ethereum-mainnet';
+export const ETH_MAINNET_CHAIN_ID = 1;
+export const DEFAULT_MIN_BLOCKS_AHEAD = 32;
+export const MAX_BLOCKS_AHEAD = 7200 * 60; // about 60 days of 12 s slots
 export const DEFAULT_BEACON_ITERATIONS = 10;
 
-/** Unix seconds when a drand round is published. */
-export function drandRoundTime(chainId, round) {
-  const chain = DRAND_CHAINS[chainId];
-  if (!chain) throw new Error(`unknown drand chain ${chainId}`);
-  const r = Number(round);
-  if (!Number.isSafeInteger(r) || r < 1) throw new Error('drand round must be a positive integer');
-  return chain.genesisTime + (r - 1) * chain.period;
-}
-
-/** First drand round published at or after `unixSeconds`. */
-export function drandRoundAt(chainId, unixSeconds) {
-  const chain = DRAND_CHAINS[chainId];
-  if (!chain) throw new Error(`unknown drand chain ${chainId}`);
-  const t = Math.max(Number(unixSeconds), chain.genesisTime);
-  return Math.ceil((t - chain.genesisTime) / chain.period) + 1;
-}
-
 export function beaconLookupUrl(precommit) {
-  if (!precommit) return null;
-  if (precommit.source === 'drand') {
-    const chain = DRAND_CHAINS[precommit.chain];
-    return chain ? `https://api.drand.sh/${chain.chainHash}/public/${precommit.round}` : null;
-  }
-  if (precommit.source === 'block-hash') {
-    if (precommit.network === 'ethereum-mainnet') return `https://etherscan.io/block/${precommit.height}`;
-    if (precommit.network === 'bitcoin-mainnet') return `https://mempool.space/block-height/${precommit.height}`;
-  }
-  return null;
+  if (!precommit || precommit.source !== BEACON_SOURCE) return null;
+  return `https://etherscan.io/block/${precommit.blockNumber}`;
+}
+
+/** The name snarkjs stores inside the final zkey for the beacon contribution. */
+export function beaconName(precommit) {
+  return `zk-voting beacon ${BEACON_NETWORK} block ${precommit.blockNumber}`;
 }
 
 /**
- * Validate a beacon precommitment. `nowSeconds` must be before the round time
- * for drand, so the value is still unknown when it is committed.
+ * Validate a beacon precommitment against the current head.
+ * `blockNumber` must be at least `minBlocksAhead` past `headBlock`.
+ * If it is omitted, it defaults to head + minBlocksAhead.
  */
-export function parsePrecommit(body, nowSeconds) {
-  const source = String(body?.source || '');
+export function parsePrecommit(body, { headBlock, minBlocksAhead = DEFAULT_MIN_BLOCKS_AHEAD }) {
+  const source = body?.source === undefined || body?.source === '' ? BEACON_SOURCE : String(body.source);
+  if (source !== BEACON_SOURCE) {
+    throw new Error('the only beacon source is an Ethereum mainnet block hash (source "ethereum-block")');
+  }
+  if (!Number.isSafeInteger(headBlock) || headBlock < 0) throw new Error('could not read the current Ethereum block');
+  const raw = body?.blockNumber ?? body?.height;
+  const blockNumber = raw === undefined || raw === '' || raw === null ? headBlock + minBlocksAhead : Number(raw);
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 1) throw new Error('block number must be a positive integer');
+  if (blockNumber < headBlock + minBlocksAhead) {
+    throw new Error(
+      `block ${blockNumber} is too close: the head is ${headBlock}, so pick block ${headBlock + minBlocksAhead} or later (at least ${minBlocksAhead} blocks ahead)`,
+    );
+  }
+  if (blockNumber > headBlock + MAX_BLOCKS_AHEAD) throw new Error('block number is too far in the future');
   const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) : '';
-  if (source === 'drand') {
-    const chain = String(body.chain || 'quicknet');
-    if (!DRAND_CHAINS[chain]) throw new Error('drand chain must be quicknet or default');
-    const round = Number(body.round);
-    const roundTime = drandRoundTime(chain, round);
-    if (roundTime <= nowSeconds) {
-      throw new Error('drand round must be in the future. Pick a round published after the window closes.');
-    }
-    return {
-      source,
-      chain,
-      chainHash: DRAND_CHAINS[chain].chainHash,
-      round,
-      roundTime,
-      note,
-      lookupUrl: beaconLookupUrl({ source, chain, round }),
-    };
-  }
-  if (source === 'block-hash') {
-    const network = String(body.network || '');
-    if (!BLOCK_NETWORKS.includes(network)) {
-      throw new Error(`block network must be one of ${BLOCK_NETWORKS.join(', ')}`);
-    }
-    const height = Number(body.height);
-    if (!Number.isSafeInteger(height) || height < 1) throw new Error('block height must be a positive integer');
-    return { source, network, height, roundTime: null, note, lookupUrl: beaconLookupUrl({ source, network, height }) };
-  }
-  throw new Error('beacon source must be drand or block-hash');
+  return {
+    source,
+    network: BEACON_NETWORK,
+    chainId: ETH_MAINNET_CHAIN_ID,
+    blockNumber,
+    headAtCommit: headBlock,
+    minBlocksAhead,
+    note,
+    lookupUrl: beaconLookupUrl({ source, blockNumber }),
+  };
 }
 
-/** The published value: 32 bytes of hex (drand randomness or a block hash). */
+/** A block hash: 32 bytes of hex, with or without 0x. Returns bare lowercase hex. */
 export function parseBeaconValue(value) {
-  const hex = String(value || '').trim().toLowerCase().replace(/^0x/, '');
+  const hex = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^0x/, '');
   if (!/^[0-9a-f]{64}$/.test(hex)) {
     throw new Error('beacon value must be 32 bytes of hex (64 characters)');
   }
