@@ -117,6 +117,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
       { href: "/terms", label: t("chrome.navTerms") },
       { href: "/feedback", label: t("chrome.navFeedback") },
       { href: "/api", label: t("chrome.navApi"), spa: false },
+      { href: "/docs", label: t("chrome.navDocs"), spa: false },
       ...extra,
       { href: "/signin", label: t("chrome.navSignIn") },
       { href: "/register", label: t("chrome.navRegister") },
@@ -134,6 +135,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
     { href: "/terms", label: t("chrome.navTerms") },
     { href: "/feedback", label: t("chrome.navFeedback") },
     { href: "/api", label: t("chrome.navApi"), spa: false },
+    { href: "/docs", label: t("chrome.navDocs"), spa: false },
   ];
   if (audience === "officer") {
     items.push({ href: "/office", label: t("chrome.navAdmin") });
@@ -164,6 +166,7 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   if (href === "/register" && routeName === "register") return true;
   if (href === "/elections" && (routeName === "results" || routeName === "resultsIndex")) return true;
   if (href === "/polls" && (path === "/polls" || path.startsWith("/polls/"))) return true;
+  if (href === "/docs" && path.startsWith("/docs/")) return true;
   return false;
 }
 
@@ -226,6 +229,8 @@ export function isStandaloneHtmlPath(pathname) {
     path === "/back-office" ||
     path.startsWith("/back-office/") ||
     path === "/explorer" ||
-    path.startsWith("/explorer/")
+    path.startsWith("/explorer/") ||
+    path === "/docs" ||
+    path.startsWith("/docs/")
   );
 }

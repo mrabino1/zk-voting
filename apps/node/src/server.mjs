@@ -28,6 +28,7 @@ import { loadReceiptPdfSecret } from './receipts.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { apiKeysRouter } from './routes/apiKeys.mjs';
 import { botDocsRouter, repoLlmsRouter } from './routes/botDocs.mjs';
+import { selfHostingDocsRouter } from './routes/selfHostingDocs.mjs';
 import { authRouter } from './routes/auth.mjs';
 import { electionsRouter } from './routes/elections.mjs';
 import { pollsRouter } from './routes/polls.mjs';
@@ -79,6 +80,7 @@ function htmlCandidate(config, pathname) {
   else if (clean === '/admin' || clean.startsWith('/admin/')) file = 'admin.html';
   else if (clean === '/back-office' || clean.startsWith('/back-office/')) file = 'back-office.html';
   else if (clean === '/site-admin' || clean.startsWith('/site-admin/')) file = 'site-admin.html';
+  else if (clean === '/docs' || clean.startsWith('/docs/')) file = 'docs.html';
   return [
     path.join(config.distDir, file),
     path.join(config.publicDir, file),
@@ -330,6 +332,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', layoutPublicRouter(deps));
   app.use('/api/plugins/:name', plugins.routeDispatcher());
   app.use(repoLlmsRouter());
+  app.use(selfHostingDocsRouter());
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });

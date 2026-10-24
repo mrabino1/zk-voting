@@ -43,6 +43,7 @@ export default {
     navTerms: "Mga tuntunin",
     navFeedback: "Puna",
     navApi: "Bot API",
+    navDocs: "Dokumentasyon",
     navSignIn: "Mag-sign in",
     navDesk: "Aking mesa",
     navProfile: "Profile",

@@ -43,6 +43,7 @@ export default {
     navTerms: "条款",
     navFeedback: "反馈",
     navApi: "机器人 API",
+    navDocs: "文档",
     navSignIn: "登录",
     navDesk: "我的办公桌",
     navProfile: "个人资料",

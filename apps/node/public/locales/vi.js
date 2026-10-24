@@ -43,6 +43,7 @@ export default {
     navTerms: "Điều khoản",
     navFeedback: "Phản hồi",
     navApi: "API bot",
+    navDocs: "Tài liệu",
     navSignIn: "Đăng nhập",
     navDesk: "Bàn của tôi",
     navProfile: "Hồ sơ",

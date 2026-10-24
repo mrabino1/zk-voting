@@ -43,6 +43,7 @@ export default {
     navTerms: "약관",
     navFeedback: "의견",
     navApi: "봇 API",
+    navDocs: "문서",
     navSignIn: "로그인",
     navDesk: "내 데스크",
     navProfile: "프로필",

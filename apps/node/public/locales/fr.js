@@ -43,6 +43,7 @@ export default {
     navTerms: "Conditions",
     navFeedback: "Retour",
     navApi: "API bot",
+    navDocs: "Documentation",
     navSignIn: "Connexion",
     navDesk: "Mon bureau",
     navProfile: "Profil",

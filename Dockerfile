@@ -41,6 +41,8 @@ COPY --chown=node:node apps/node/legal ./apps/node/legal
 COPY --chown=node:node apps/node/site ./apps/node/site
 # Repo-bundled plugins (disabled until a super admin enables them).
 COPY --chown=node:node plugins ./plugins
+# Self-hosting guides served at /docs (read-only Markdown).
+COPY --chown=node:node docs/self-hosting ./docs/self-hosting
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
 COPY --chown=node:node l2/lease ./l2/lease

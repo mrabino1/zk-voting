@@ -220,6 +220,9 @@ describe('WCAG 2.2 AA axe', () => {
     ['site admin layout', '/site-admin/layout', 'admin'],
     ['site admin plugins', '/site-admin/plugins', 'admin'],
     ['site admin audit', '/site-admin/audit', 'admin'],
+    ['self-hosting docs', '/docs'],
+    ['self-hosting docs page', '/docs/tailscale'],
+    ['self-hosting docs config', '/docs/configuration'],
   ];
 
   for (const scheme of ['light', 'dark']) {
