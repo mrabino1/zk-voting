@@ -172,6 +172,8 @@ Merkle **depth 20** (~1M leaves) is **not** “reserve 1M × 32-byte hashes only
 
 This repo **does not** ship a Foundry gas snapshot for `submitBatch`. Do not treat the next table as measured.
 
+To measure on your own build: `L1_RPC=<node> ./scripts/get-gas-economics.sh --measure` prints the `forge test --gas-report` median for `submitBatch`, `postResult`, and the election-stack calls, priced at the live gas price ([`scripts/README.md`](../scripts/README.md)). Those tests use `MockVerifier`, so a real Groth16 verify adds roughly the amount in the next table.
+
 ### Gas per tx (**estimate**)
 
 | Path | Gas order of magnitude | Why |
