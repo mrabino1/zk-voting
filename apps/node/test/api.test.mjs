@@ -104,6 +104,7 @@ describe('Republic Node API', () => {
     assert.equal(status, 200);
     assert.equal(json.ok, true);
     assert.equal(json.app, 'zk-voting');
+    assert.equal(json.product, 'zk-voting');
     assert.equal(json.nfp, true);
     assert.equal(typeof json.chainId, 'number');
   });

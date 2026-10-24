@@ -177,9 +177,9 @@ describe('cms helpers', () => {
     assert.equal(parseRoute(loc('/polls/poll-1/results')).name, 'pollResults');
     assert.equal(parseRoute(loc('/elections/1')).name, 'results');
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Sign in', 'Register']);
     const withExtra = mainNav('public', [{ href: '/p/hours', label: 'Hours' }]).map((i) => i.label);
-    assert.deepEqual(withExtra, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Hours', 'Sign in', 'Register']);
+    assert.deepEqual(withExtra, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Hours', 'Sign in', 'Register']);
   });
 
   test('canManagePages: platform_admin all; clerk scoped; registrar no', () => {

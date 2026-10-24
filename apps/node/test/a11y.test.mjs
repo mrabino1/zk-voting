@@ -214,6 +214,9 @@ describe('WCAG 2.2 AA axe', () => {
     ['back office', '/back-office', 'admin'],
     ['admin hub', '/office', 'admin'],
     ['explorer', '/explorer', 'admin'],
+    ['self-hosting docs', '/docs'],
+    ['self-hosting docs page', '/docs/tailscale'],
+    ['self-hosting docs config', '/docs/configuration'],
   ];
 
   for (const scheme of ['light', 'dark']) {
