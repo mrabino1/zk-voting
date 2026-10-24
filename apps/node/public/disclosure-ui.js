@@ -106,7 +106,7 @@
     return remaining;
   }
 
-  global.RepublicDisclosure = {
+  global.ZkVotingDisclosure = {
     esc,
     fmtTime,
     formatCountdown,

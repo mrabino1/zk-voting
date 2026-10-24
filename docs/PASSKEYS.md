@@ -130,7 +130,7 @@ Voters **never pay** ZK-Voting L2 gas. There is no token.
 
 | Piece | Role |
 | --- | --- |
-| `RepublicPaymaster` | Sponsors UserOps whose `callData` targets `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`. |
+| `ZkVotingPaymaster` | Sponsors UserOps whose `callData` targets `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`. |
 | Bundler / relayer | `msg.sender` on those calls. `RELAYER_ROLE` where the contracts require it. |
 | Jurisdiction | Funds the paymaster **at cost** (sequencer/operator budget). |
 

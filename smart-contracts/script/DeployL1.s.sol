@@ -7,7 +7,7 @@ import {console2} from "forge-std/Script.sol";
 import {DeployOnce} from "./DeployGuard.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
-import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
+import {ZkVotingMailbox} from "../src/l2/ZkVotingMailbox.sol";
 
 /// @notice Ethereum (or Sepolia) settlement: rollup, tally mirror, mailbox.
 ///         `BATCH_VERIFIER` is required (audit H-06). Only with the explicit
@@ -34,7 +34,7 @@ contract DeployL1 is DeployOnce {
         bool mockMode = batchVerifier == address(0) && mockSettlement;
         if (mockMode) console2.log("WARNING: RollupSettlement in mockMode (REPUBLIC_SETTLEMENT_MOCK_MODE=1); batches are NOT verified");
         RollupSettlement settlement = new RollupSettlement(admin, sequencer, prover, batchVerifier, mockMode);
-        RepublicMailbox mailbox = new RepublicMailbox(admin);
+        ZkVotingMailbox mailbox = new ZkVotingMailbox(admin);
         L1TallyMirror mirror = new L1TallyMirror(admin, address(mailbox));
         address l2Factory = _factory();
         if (l2Factory == address(0)) revert MissingL2Factory();

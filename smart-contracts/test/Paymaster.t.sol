@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {PasskeyAccount} from "../src/account/PasskeyAccount.sol";
-import {RepublicPaymaster} from "../src/account/RepublicPaymaster.sol";
-import {UserOp} from "../src/account/RepublicEntryPoint.sol";
+import {ZkVotingPaymaster} from "../src/account/ZkVotingPaymaster.sol";
+import {UserOp} from "../src/account/ZkVotingEntryPoint.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -91,7 +91,7 @@ contract PaymasterTest is Deployer {
         unsponsored.paymaster = address(paymaster);
 
         vm.prank(address(entryPoint));
-        vm.expectRevert(RepublicPaymaster.NotSponsored.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(unsponsored);
     }
 
@@ -101,7 +101,7 @@ contract PaymasterTest is Deployer {
         assertFalse(paymaster.alwaysSponsor());
 
         vm.prank(relayer);
-        vm.expectRevert(RepublicPaymaster.NotAdmin.selector);
+        vm.expectRevert(ZkVotingPaymaster.NotAdmin.selector);
         paymaster.setAlwaysSponsor(true);
 
         vm.prank(admin);

@@ -4,9 +4,9 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 /// @title WebAuthn
-/// @notice P-256 / WebAuthn assertion checks for Republic passkey accounts.
+/// @notice P-256 / WebAuthn assertion checks for ZK-Voting passkey accounts.
 ///
-/// PRODUCTION REQUIREMENT: Republic L2 MUST enable the RIP-7212 / EIP-7951
+/// PRODUCTION REQUIREMENT: ZK-Voting L2 MUST enable the RIP-7212 / EIP-7951
 /// P-256 precompile at address `0x100` (`p256Verify`). Without it every
 /// WebAuthn signature fails closed. There is no structural fallback.
 ///

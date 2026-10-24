@@ -214,7 +214,7 @@
   }
 
   function fmtCountdown(seconds) {
-    const helper = globalThis.RepublicDisclosure;
+    const helper = globalThis.ZkVotingDisclosure;
     if (helper && typeof helper.formatCountdown === "function") {
       return helper.formatCountdown(seconds);
     }
@@ -313,7 +313,7 @@
 
   function paintDisclosure(data, overlay) {
     const el = $("disclosure-banner");
-    const helper = globalThis.RepublicDisclosure;
+    const helper = globalThis.ZkVotingDisclosure;
     if (!el || !helper) return;
     const d = {
       ...((data && data.disclosure) || {}),
@@ -326,7 +326,7 @@
   }
 
   function startCountdown() {
-    const helper = globalThis.RepublicDisclosure;
+    const helper = globalThis.ZkVotingDisclosure;
     const el = $("disclosure-banner");
     if (!helper || !el) return;
     if (countdownTimer) {

@@ -89,7 +89,7 @@ contract FactoryFuzz is Deployer {
             uint64 cutoff = uint64(bound(uint256(cutoffTime) + i + 1, uint256(start) + 1, type(uint64).max));
             vm.assume(start < cutoff);
             ElectionParams memory p = _base(start, cutoff, treeDepth, questionCount);
-            p.title = string.concat("Republic election ", vm.toString(before + i));
+            p.title = string.concat("ZK-Voting election ", vm.toString(before + i));
             uint256 countBefore = factory.electionCount();
             vm.prank(admin);
             (uint256 electionId, address election) = factory.createElection(p);
@@ -132,7 +132,7 @@ contract FactoryFuzz is Deployer {
         returns (ElectionParams memory p)
     {
         p = Fixtures.build(
-            "Republic fuzz factory",
+            "ZK-Voting fuzz factory",
             "ipfs://factory-fuzz",
             start,
             cutoff,

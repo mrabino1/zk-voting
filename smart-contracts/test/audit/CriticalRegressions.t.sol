@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {PasskeyAccount} from "../../src/account/PasskeyAccount.sol";
-import {UserOp} from "../../src/account/RepublicEntryPoint.sol";
+import {UserOp} from "../../src/account/ZkVotingEntryPoint.sol";
 import {WebAuthn} from "../../src/account/WebAuthn.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";

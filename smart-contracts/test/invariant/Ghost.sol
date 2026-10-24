@@ -7,7 +7,7 @@ import {IGroth16Verifier} from "../../src/interfaces/IGroth16Verifier.sol";
 import {IHasher} from "../../src/interfaces/IHasher.sol";
 
 /// @title Ghost
-/// @notice Ghost variables for Republic invariant tests. Tracks successful
+/// @notice Ghost variables for ZK-Voting invariant tests. Tracks successful
 ///         handler actions so invariants can compare chain state to history.
 contract Ghost {
     /// @dev electionId => nullifier => spent.

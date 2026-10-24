@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-/// @title RepublicMailbox
+/// @title ZkVotingMailbox
 /// @notice L2 ↔ L1 messages and a sequencer-stall force-inclusion hatch.
 ///         Price is ZERO. Not for profit. No fee on sendToL2.
-contract RepublicMailbox {
+contract ZkVotingMailbox {
     error ZeroAddress();
     error NotAdmin();
     error NotReady();

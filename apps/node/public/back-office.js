@@ -1021,7 +1021,7 @@
       try {
         const cfg = await request("/api/config");
         const banner = $("disclosure-banner");
-        const helper = globalThis.RepublicDisclosure;
+        const helper = globalThis.ZkVotingDisclosure;
         if (banner && cfg.disclosure && helper) {
           helper.paint(banner, cfg.disclosure);
         } else if (banner && cfg.disclosure && cfg.disclosure.note) {

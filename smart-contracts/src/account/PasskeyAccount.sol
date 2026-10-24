@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {IRepublicAccount, UserOp} from "./RepublicEntryPoint.sol";
+import {IZkVotingAccount, UserOp} from "./ZkVotingEntryPoint.sol";
 import {WebAuthn} from "./WebAuthn.sol";
 
 /// @title PasskeyAccount
@@ -27,7 +27,7 @@ import {WebAuthn} from "./WebAuthn.sol";
 /// this contract address learns only that some person registered a gasless
 /// account — they cannot read a choice or join it to the eligible-tree leaf.
 /// =============================================================================
-contract PasskeyAccount is IRepublicAccount {
+contract PasskeyAccount is IZkVotingAccount {
     error ZeroAddress();
     error NotEntryPoint();
     error InvalidNonce();
@@ -35,7 +35,7 @@ contract PasskeyAccount is IRepublicAccount {
     error InvalidSignature();
     error ExecuteFailed();
 
-    /// @notice RepublicEntryPoint that is allowed to validate and execute.
+    /// @notice ZkVotingEntryPoint that is allowed to validate and execute.
     address public immutable entryPoint;
 
     /// @notice keccak256(WebAuthn credential id). NOT an identityCommitment.

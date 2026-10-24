@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Republic / zk-voting gas economics.
+# zk-voting gas economics.
 #
 # Ported from nuursha-nft-erc20-whitelabel scripts/get-gas-economics.sh and
-# adapted to Republic deployables under smart-contracts/src:
+# adapted to ZK-Voting deployables under smart-contracts/src:
 #   1. ETH/USD from CoinGecko (Coinbase spot if CoinGecko is down)
 #   2. Gas gwei from the local node http://edps4:8545, then fallbacks
 #   3. Compiled bytecode in out/ vs EIP-170 (24576) and EIP-3860 (49152)
@@ -48,12 +48,12 @@ CONTRACTS=(
   VoteVerifier
   Groth16VerifierAdapter
   Tally
-  RepublicPaymaster
+  ZkVotingPaymaster
   PasskeyAccountFactory
   PasskeyAccount
-  RepublicEntryPoint
+  ZkVotingEntryPoint
   RollupSettlement
-  RepublicMailbox
+  ZkVotingMailbox
   L1TallyMirror
 )
 
@@ -65,7 +65,7 @@ Usage: $(basename "$0") [--gas-report]
 Reads Foundry artifacts in \$OUT_DIR (default: smart-contracts/out).
 Build first: forge build --via-ir
 
-  --gas-report   append forge test --gas-report for key Republic calls
+  --gas-report   append forge test --gas-report for key ZK-Voting calls
 EOF
 }
 
@@ -257,8 +257,8 @@ def fmt_usd(v):
         return f"${v:,.2f}"
     return f"${v:,.4f}"
 
-print("Republic gas economics (zk-voting)")
-print("Port of nuursha scripts/get-gas-economics.sh, adapted to Republic deployables.")
+print("ZK-Voting gas economics (zk-voting)")
+print("Port of nuursha scripts/get-gas-economics.sh, adapted to ZK-Voting deployables.")
 print(f"OUT_DIR: {out_dir}")
 print()
 print("Market")
@@ -343,7 +343,7 @@ for name, runtime, init, floor in rows:
     print(f"  {name:<28} {floor:12,d} {fmt_usd(usd(floor)):>12}")
 print()
 print("Usage (Nuursha NFT / claim / ERC-20 tables omitted)")
-print("  Republic has no token and no voter fee. Voters do not pay L1 or L2 gas")
+print("  ZK-Voting has no token and no voter fee. Voters do not pay L1 or L2 gas")
 print("  on the civic path. The ranges below are order-of-magnitude scenarios from")
 print("  voting_cost_estimate.md. This repo does not ship a measured submitBatch snapshot")
 print("  in that document. Pass --gas-report for Foundry gas on the key calls.")
@@ -364,7 +364,7 @@ print()
 print("Key calls a --gas-report snapshot covers:")
 print("  BallotInbox.submitVote, ElectionFactory.createElection, VoterRegistry.register,")
 print("  Tally.submitTally / submitOpenedTally, RollupSettlement.submitBatch,")
-print("  L1TallyMirror.postResult, RepublicPaymaster.validateAndPay.")
+print("  L1TallyMirror.postResult, ZkVotingPaymaster.validateAndPay.")
 
 status = 0
 if over_170 or over_3860 or missing:

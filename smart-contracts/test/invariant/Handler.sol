@@ -17,7 +17,7 @@ import {Fixtures} from "../helpers/Fixtures.sol";
 import {Ghost} from "./Ghost.sol";
 
 /// @title Handler
-/// @notice Invariant fuzzer entrypoints for Republic. Every action uses
+/// @notice Invariant fuzzer entrypoints for ZK-Voting. Every action uses
 ///         try/catch so a revert does not abort the invariant run.
 ///         Actors are pranked; Foundry's random msg.sender is ignored.
 contract Handler is Deployer, Ghost {
@@ -346,7 +346,7 @@ contract Handler is Deployer, Ghost {
         returns (ElectionParams memory p)
     {
         p = Fixtures.build(
-            "Republic invariant election",
+            "ZK-Voting invariant election",
             "ipfs://republic-invariant",
             start,
             cutoff,

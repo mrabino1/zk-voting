@@ -4,7 +4,7 @@
 
 A monorepo for a **zero-knowledge, Ethereum-settled voting and polling system** that anyone can self-host, fork, and rebrand to learn the will of the people. Default product name: **ZK-Voting** (repo slug `zk-voting`), until an administrator renames it.
 
-> **Branding is yours.** `ZK-Voting` is only the default name. A fork for a city, union, school, cooperative, or survey group should show its own name. A super admin or admin sets the product name, short name, and tagline in **Site admin > Appearance > Branding**; the saved value wins over the `BRAND_NAME` / `BRAND_SHORT_NAME` / `BRAND_TAGLINE` environment defaults, which win over the built-in "ZK-Voting". The name is server-rendered into page titles, headers, footers, docs, emails, PDFs, and the WebAuthn relying-party name. Earlier versions called the product "Republic"; some identifiers keep that name for compatibility (`republic.json`, `REPUBLIC_NODE_URL`, the `republic` Compose network, Solidity names such as `RepublicEntryPoint`).
+> **Branding is yours.** `ZK-Voting` is only the default name. A fork for a city, union, school, cooperative, or survey group should show its own name. A super admin or admin sets the product name, short name, and tagline in **Site admin > Appearance > Branding**; the saved value wins over the `BRAND_NAME` / `BRAND_SHORT_NAME` / `BRAND_TAGLINE` environment defaults, which win over the built-in "ZK-Voting". The name is server-rendered into page titles, headers, footers, docs, emails, PDFs, and the WebAuthn relying-party name. Earlier versions called the product "Republic"; some identifiers keep that name for compatibility (`republic.json`, `REPUBLIC_NODE_URL`, the `republic` Compose network, Solidity names such as `ZkVotingEntryPoint`).
 
 ## Quickstart
 
@@ -372,7 +372,7 @@ With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-c
 
 A person identifies with **email** (up to 5, one primary), an **Ethereum wallet**, a **smart-card reader**, a **driver’s license or passport**, or a **passkey** (up to 5). Many Ethereum addresses can be verified internally; **exactly one** is active. Sign-in completes with **email MFA (AWS SES)** to the primary inbox by default. Profile setup includes a **vote PIN** (4–8 digits; scrambled phone keypad at ballot submit; forgot-PIN via the same email MFA). The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
 
-Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `republic-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `RepublicPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
+Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `republic-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `ZkVotingPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
 ### Independent auditor
 
@@ -693,8 +693,8 @@ The contract set covers:
 | `Tally` (`ITallyVerifier`) | Verifies the coordinator/prover’s batch proofs that the published totals match the inbox. File: `src/Tally.sol`. |
 | `L1TallyMirror` | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
 | `RollupSettlement` | L1 contract: `submitBatch` for ZK-Voting L2 state roots. |
-| `RepublicMailbox` | L1/L2 message mailbox. |
-| Passkey AA + paymaster | `PasskeyAccount`, factory, `RepublicPaymaster`, local `RepublicEntryPoint`. |
+| `ZkVotingMailbox` | L1/L2 message mailbox. |
+| Passkey AA + paymaster | `PasskeyAccount`, factory, `ZkVotingPaymaster`, local `ZkVotingEntryPoint`. |
 
 Exact names follow the Solidity tree. The **behaviors** are the spec:
 

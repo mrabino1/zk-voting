@@ -6,7 +6,7 @@ pragma solidity ^0.8.24;
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 
 /// @title RollupSettlement
-/// @notice L1 settlement for Republic L2 (app-specific ZK rollup). No token.
+/// @notice L1 settlement for ZK-Voting L2 (app-specific ZK rollup). No token.
 /// @dev Audit H-06: outside `mockMode` a batch verifier is mandatory (constructor
 ///      reverts `VerifierRequired`) and every batch is verified. Public inputs
 ///      are reduced mod r so a snarkjs verifier never rejects them for being
