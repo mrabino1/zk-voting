@@ -1,5 +1,5 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
-# Republic Node: JSON API + voter / admin / back-office / explorer SPA host.
+# ZK-Voting Node: JSON API + voter / admin / back-office / explorer SPA host.
 # Build from the repository root so the root .dockerignore applies.
 #
 # Install npm **workspaces** (`@zk-voting/chain-client` and its in-tree

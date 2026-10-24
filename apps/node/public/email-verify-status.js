@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Email verification progress for /profile and /verify.
  * Green = verified. Red = unverified. Blue = a code was sent. Gold = still in progress.
  */

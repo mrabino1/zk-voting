@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./NOT_FOR_PROFIT.md).
 
-Commander brief for **this tree on `test/unstable`**. It answers: how Republic makes it **impossible, by design, for the public record** to join a voter’s civil / person identity to **what they voted for**, and what observers can see — typically only that a ballot was accepted, and **possibly not even who** (or, until the hour closes, **not even that a ballot exists**).
+Commander brief for **this tree on `test/unstable`**. It answers: how ZK-Voting makes it **impossible, by design, for the public record** to join a voter’s civil / person identity to **what they voted for**, and what observers can see — typically only that a ballot was accepted, and **possibly not even who** (or, until the hour closes, **not even that a ballot exists**).
 
 This is not a sales sheet. If a paragraph disagrees with the contracts or Node code, the code wins.
 
@@ -48,7 +48,7 @@ Login proves **who is sitting at the desk**. The ballot proves **an eligible sec
 
 Informational map (register → freeze → vote / nullifier / relayer → hourly disclosure → tally → results; Node vs L2 vs L1):
 
-![Republic election workflow: identity is not the ballot](./docs/images/election-workflow.png)
+![ZK-Voting election workflow: identity is not the ballot](./docs/images/election-workflow.png)
 
 ```
 Person (Node user)                          Ballot (public / chain)

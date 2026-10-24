@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public monitor: every election, verified, in before / during / after columns
  * from chain and election state. Certified option counts only after a tally.
  * Never shows how a person voted.

@@ -3,6 +3,7 @@
 // Identity links (passkey user ↔ commitment) live in a
 // separate collection from ballots and are never copied onto a vote record.
 
+import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -2710,7 +2711,11 @@ export class Store {
 
   async updateSite(patch = {}, actor = null) {
     const site = this.getSite();
-    if (patch.title != null) site.title = sanitizeText(patch.title, 120) || 'Republic';
+    if (patch.title != null) {
+      // Saving the current product name (or nothing) keeps following site-admin Branding.
+      const title = sanitizeText(patch.title, 120);
+      site.title = title && title !== brandName() && !LEGACY_DEFAULT_NAMES.includes(title) ? title : '';
+    }
     if (patch.tagline != null) site.tagline = sanitizeText(patch.tagline, 400);
     if (patch.contracts && typeof patch.contracts === 'object') {
       for (const key of ['factory', 'ballotInbox', 'verifier']) {

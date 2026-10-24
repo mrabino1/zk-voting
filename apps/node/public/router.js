@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  *
  * History router with hash fallback for static hosting.
  * Routes: `/`, `/public`, `/about`, `/faq`, `/p/:slug`, `/signin`, `/me`, `/app`,

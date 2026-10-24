@@ -2,6 +2,7 @@
 // Safe write operations for the platform super-admin API.
 // dryRun computes the after-summary and does not persist.
 
+import { brandName } from '../branding.mjs';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -109,7 +110,7 @@ export async function writeMailTest(deps, body, { dryRun }) {
   if (!dryRun) {
     await deps.mailer.send({
       to: contact.to,
-      subject: 'Republic platform check',
+      subject: `${brandName()} platform check`,
       text: 'Platform super-admin mail path check.\n\nNOT FOR PROFIT — civic public good.\n',
       html: '<p>Platform super-admin mail path check.</p><p>NOT FOR PROFIT</p>',
       meta: { purpose: 'super-admin-test' },

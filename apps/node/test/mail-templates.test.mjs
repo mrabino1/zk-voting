@@ -84,7 +84,7 @@ describe('role-promotion mail templates', () => {
       const rendered = renderPromotionEmail(role, { sample: true, handle: 'officer<script>' });
       assert.ok(rendered, role);
       assert.equal(rendered.templateId, templateIdForRole(role));
-      assert.match(rendered.subject, /Republic/);
+      assert.match(rendered.subject, /ZK-Voting/);
       assert.match(rendered.text, /NOT FOR PROFIT/);
       assert.match(rendered.text, /not a vote receipt/i);
       assert.match(rendered.text, /civic L2/i);

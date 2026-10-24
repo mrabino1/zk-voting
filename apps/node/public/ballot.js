@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Shared ballot / aspect helpers for the voter SPA (authoring lives in back-office).
  */
 

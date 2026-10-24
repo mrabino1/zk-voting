@@ -1,4 +1,4 @@
-# Republic bot API
+# ZK-Voting bot API
 
 > NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
 
@@ -256,7 +256,7 @@ Machine-readable copies:
 - `GET /api/polls/:id` (key read). One token poll.
 - `GET /api/polls/:id/weight` (key read). Read-only token weight for an address. The Node does not move tokens.
 - `GET /api/polls/:id/typed-data` (key read). EIP-712 typed data a holder signs. Query: address, choices.
-- `POST /api/polls/:id/ballots` (key voter). Submit a signed token-poll ballot. No Republic account is required. A read-only key is refused.
+- `POST /api/polls/:id/ballots` (key voter). Submit a signed token-poll ballot. No account on this site is required. A read-only key is refused.
 - `POST /api/polls/:id/tally` (key voter, signed in). Any signed-in person may ask the Node to tally a closed token poll. Counts come from accepted ballots.
 - `GET /api/polls/:id/results` (key read). Token poll results after tally.
 - `GET /api/polls/:id/artifacts` (key read). Token poll auditor pack.

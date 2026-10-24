@@ -16,8 +16,11 @@ import {
   roleChangeError,
 } from '../capabilities.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
+import { brandDefaults } from '../branding.mjs';
 import {
   AUDIENCES,
+  BRANDING_FIELDS,
+  brandingLayer,
   layoutForAudience,
   REGIONS,
   THEME_TOKENS,
@@ -54,6 +57,8 @@ function layoutSummary(layout) {
     widgets: Object.fromEntries(Object.entries(layout.regions || {}).map(([r, list]) => [r, list.map((w) => w.id)])),
     theme: layout.theme || {},
     productName: layout.branding?.productName || null,
+    shortName: layout.branding?.shortName || null,
+    tagline: layout.branding?.tagline || null,
   };
 }
 
@@ -193,6 +198,8 @@ export function siteAdminRouter(deps) {
       warnings: themeWarnings(layout),
       fileOverride: layoutService.hasFileOverride(),
       codeOverride: layoutService.hasCodeOverride(),
+      // What an empty branding field falls back to (BRAND_* env or "ZK-Voting").
+      brandingDefaults: brandDefaults(),
       schema: {
         regions: REGIONS,
         audiences: AUDIENCES,
@@ -213,9 +220,26 @@ export function siteAdminRouter(deps) {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         throw new HttpError(400, 'layout must be an object', { code: 'LAYOUT_INVALID' });
       }
-      const nextName = String(raw.branding?.productName ?? before.branding.productName).trim();
-      const input = { ...raw, branding: { productName: nextName } };
-      if (nextName !== before.branding.productName && !hasCapability(req.user, 'manage_branding')) {
+      // Branding fields the request omits keep their saved value. A value equal
+      // to the env / built-in default is saved as "" (inherit), so a later
+      // BRAND_NAME change still applies.
+      const defaults = brandDefaults();
+      const inherit = { productName: defaults.name, shortName: defaults.shortName, tagline: defaults.tagline };
+      // Echoing back the current effective value (GET /api/layout) is "no change".
+      const current = layoutService.effective().layout.branding;
+      const nextBranding = {};
+      for (const field of Object.keys(BRANDING_FIELDS)) {
+        const sent = raw.branding?.[field];
+        let v = String(sent ?? before.branding[field] ?? '').trim();
+        if (sent !== undefined && v === current[field]) v = before.branding[field] || '';
+        if (v === inherit[field]) v = '';
+        nextBranding[field] = v;
+      }
+      const input = { ...raw, branding: nextBranding };
+      const brandingChanged = Object.keys(BRANDING_FIELDS).some(
+        (field) => brandingLayer(nextBranding)[field] !== (before.branding[field] || ''),
+      );
+      if (brandingChanged && !hasCapability(req.user, 'manage_branding')) {
         throw new HttpError(403, 'only a super admin or admin may rename the product', {
           code: 'CAPABILITY',
           capability: 'manage_branding',

@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Simplified Chinese).
+ * NOT FOR PROFIT — ZK-Voting website copy (Simplified Chinese).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "非营利 — 公民公共产品。不是商业产品。无代币。不向选民收费。",
     nfpBannerExplorer:
       "非营利 — 公民公共产品。不是商业产品。无代币。无广告。",
-    brandHome: "Republic 首页",
+    brandHome: "{brand} 首页",
     brandSub: "公民选举办公室",
     brandSubExplorer: "L2 区块浏览器",
     navVoter: "选民",
@@ -51,30 +51,30 @@ export default {
     navPublic: "公开",
     session: "会话",
     officeBadge: "非营利",
-    loading: "正在加载 Republic…",
-    footerNfp: "非营利 — Republic 是一项公民公共产品。不是商业产品。",
+    loading: "正在加载 {brand}…",
+    footerNfp: "非营利 — {brand} 是一项公民公共产品。不是商业产品。",
     footerMeta:
-      "产品名称 Republic。选民不支付 gas。选择内容绝不会印在收据上。生产环境的身份承诺使用 Poseidon；此 Node 演示可能只显示 keccak256 承诺十六进制（绝不是 trapdoor 或助记词）。",
+      "产品名称 {brand}。选民不支付 gas。选择内容绝不会印在收据上。生产环境的身份承诺使用 Poseidon；此 Node 演示可能只显示 keccak256 承诺十六进制（绝不是 trapdoor 或助记词）。",
     footerOfficials: "官员：",
     footerBackOffice: "内部办公室",
     footerExplorer: "区块浏览器",
     footerAdmin: "admin",
-    footerAdminMeta: "产品名称 Republic。无代币。无广告。",
+    footerAdminMeta: "产品名称 {brand}。无代币。无广告。",
     footerL2: "L2 浏览器",
-    footerBackOfficeMeta: "产品名称 Republic。此处从不打印选择内容。",
-    footerExplorerMeta: "Republic L2 浏览器。选票明文不是本链上的字段。",
+    footerBackOfficeMeta: "产品名称 {brand}。此处从不打印选择内容。",
+    footerExplorerMeta: "{brand} L2 浏览器。选票明文不是本链上的字段。",
     footerResults: "选举结果",
     noscript:
-      "Republic 需要 JavaScript 才能与设备 passkey（WebAuthn）通信。请启用 JavaScript 并重新加载，或使用由选举事务官运营的无障碍投票站点。",
+      "{brand} 需要 JavaScript 才能与设备 passkey（WebAuthn）通信。请启用 JavaScript 并重新加载，或使用由选举事务官运营的无障碍投票站点。",
     metaDescription:
-      "Republic 是一个非营利公民投票系统。使用 passkey、Web3 钱包或智能卡数字身份证表明身份，然后投出私密、可公开核验的选票。",
-    titleHome: "Republic — 公民选举",
-    titleAdmin: "平台管理 · Republic",
-    titleCeremony: "可信设置仪式 · Republic",
-    titleCeremonyTranscript: "仪式记录 · Republic",
-    titleCeremonyAdmin: "仪式协调 · Republic",
-    titleBackOffice: "内部办公室 · Republic",
-    titleExplorer: "Republic L2 浏览器",
+      "{brand} 是一个非营利公民投票系统。使用 passkey、Web3 钱包或智能卡数字身份证表明身份，然后投出私密、可公开核验的选票。",
+    titleHome: "{brand} — 公民选举",
+    titleAdmin: "平台管理 · {brand}",
+    titleCeremony: "可信设置仪式 · {brand}",
+    titleCeremonyTranscript: "仪式记录 · {brand}",
+    titleCeremonyAdmin: "仪式协调 · {brand}",
+    titleBackOffice: "内部办公室 · {brand}",
+    titleExplorer: "{brand} L2 浏览器",
     titleBallot: "选票",
     titleRegister: "登记",
     titleResults: "结果",
@@ -154,7 +154,7 @@ export default {
   home: {
     kicker: "选民主页",
     title: "本 Node 上的选举",
-    lede: "这是 Republic 的选民服务台：用设备 passkey 登记，查看您是否在名册上，并在投票开放时填写选票。Republic 不是商业产品。",
+    lede: "这是 {brand} 的选民服务台：用设备 passkey 登记，查看您是否在名册上，并在投票开放时填写选票。{brand} 不是商业产品。",
     openCount: "目前有 {count} 场选举正在接受选票。",
     openCount_one: "目前有 {count} 场选举正在接受选票。",
     walletPresent: "此设备上有 passkey 钱包。承诺 {commitment}…",
@@ -231,7 +231,7 @@ export default {
     stepCommitRest: " 到选举名册 — 绝不是姓名，也绝不是把钱包当作叶子。",
     web3Title: "Web3 钱包",
     web3Body:
-      "签署 Republic 绑定消息。该地址唯一属于您。即使另一个地址是活动地址，它仍可在内部核验。",
+      "签署 {brand} 绑定消息。该地址唯一属于您。即使另一个地址是活动地址，它仍可在内部核验。",
     bindWallet: "绑定 Web3 钱包",
     cardTitle: "智能卡数字身份证",
     cardBody:
@@ -256,7 +256,7 @@ export default {
     identityCommitment: "身份承诺",
     copyCommitment: "复制承诺",
     copiedCommitment: "已复制身份承诺。",
-    localAddress: "Republic 本地地址",
+    localAddress: "{brand} 本地地址",
     prfWrap:
       "PRF 封装：账户材料使用盐 republic:account:v1；ZK trapdoor 使用盐 republic:identity:v1。它们不是同一组字节。",
     createFirst: "先创建 passkey 以派生承诺。trapdoor 绝不会出现在此屏幕上。",
@@ -357,7 +357,7 @@ export default {
     staleWrap:
       "此设备有 v1 passkey 封装，投票身份由账户种子派生。请在登记页重置并创建新的 passkey 后再投票。",
     noPasskey:
-      "此设备尚无 Republic passkey。请先登记，然后再返回选票。",
+      "此设备尚无 {brand} passkey。请先登记，然后再返回选票。",
     goRegister: "前往登记",
     pollsClosed:
       "此选举投票已结束。您可以查看问题；Node 不会接受新选票。",
@@ -512,7 +512,7 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Republic 需要带常驻密钥和用户核验的设备 passkey（WebAuthn）。请在带平台认证器的设备上使用较新的浏览器（Safari 16+、Chrome 108+、Firefox 122+、Edge）。绝不会显示助记词。",
+      "{brand} 需要带常驻密钥和用户核验的设备 passkey（WebAuthn）。请在带平台认证器的设备上使用较新的浏览器（Safari 16+、Chrome 108+、Firefox 122+、Edge）。绝不会显示助记词。",
     productionNote:
       "生产环境使用 keccak256（未压缩 secp256k1 公钥），然后取最后 20 字节（Ethereum）。此演示在没有曲线库时无法在 secp256k1 上做乘法，因此 getAddress() 返回标记为 republic-local-address 的 SHA-256(seed)[0:20]。",
     staleWrap:
@@ -868,7 +868,7 @@ export default {
     pluralityTag: "{type} · 相对多数",
   },
   explorer: {
-    kicker: "Republic L2 · 链 27427",
+    kicker: "{brand} L2 · 链 27427",
     title: "区块浏览器",
     lede: "每个区块的公开记录：登记（仅承诺）、已接受选票（nullifier + 选票哈希 — 绝不是选择）、取消资格、计票和 rollup 批次。投票证明仅在包含它们的小时结束后出现，因此离开投票点的人无法与实时管辖区计数对应。下方快照是上一已结束的 UTC 小时：已披露选票数、该小时结束时间，以及距下次更新的倒计时。此处从不显示选择。无广告。无代币。",
     searchLabel: "搜索账本",
@@ -879,7 +879,7 @@ export default {
     breadcrumb: "面包屑",
     privacyTitle: "选票隐私",
     privacyBody:
-      "此交易证明资格与唯一性。浏览器显示 nullifier 和选票哈希。选择明文不是 Republic L2 上的字段，也从不在此渲染。投票行仅在包含它们的小时结束后出现，因此离开投票点无法与实时管辖区计数对应。",
+      "此交易证明资格与唯一性。浏览器显示 nullifier 和选票哈希。选择明文不是 {brand} L2 上的字段，也从不在此渲染。投票行仅在包含它们的小时结束后出现，因此离开投票点无法与实时管辖区计数对应。",
     noTx: "此视图中没有交易。",
     type: "类型",
     txnHash: "交易哈希",
@@ -1042,7 +1042,7 @@ export default {
   feedback: {
     title: "反馈",
     kicker: "联系",
-    lede: "请告诉本 Republic 站点的运营者哪些地方需要改进。这不是选票。请勿填写投票选择、证件号码或种子短语。",
+    lede: "请告诉本 {brand} 站点的运营者哪些地方需要改进。这不是选票。请勿填写投票选择、证件号码或种子短语。",
     nameLabel: "姓名（可选）",
     emailLabel: "回复邮箱（可选）",
     emailHint: "仅用作发给运营者的邮件的 Reply-To 地址。留空则不附带回复地址。",

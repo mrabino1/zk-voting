@@ -174,12 +174,12 @@ describe('Republic Node API', () => {
     assert.equal(me.json.user.handle, 'admin');
   });
 
-  test('passkey register begin uses rpName Republic', async () => {
+  test('passkey register begin uses rpName ZK-Voting (the default brand)', async () => {
     const { status, json } = await api('POST', '/api/auth/passkey/register/begin', {
       body: { handle: 'alice', acceptedTerms: true },
     });
     assert.equal(status, 200);
-    assert.equal(json.rp?.name || json.rpName, 'Republic');
+    assert.equal(json.rp?.name || json.rpName, 'ZK-Voting');
     assert.ok(json.challenge);
     assert.equal(json.authenticatorSelection?.residentKey, 'required');
   });

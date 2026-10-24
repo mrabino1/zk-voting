@@ -30,7 +30,7 @@ export const CAPABILITY_LABELS = Object.freeze({
   view_users: 'List users and their roles',
   manage_plugins: 'Import, enable, disable and uninstall plugins',
   edit_layout: 'Edit navigation, widgets, regions and theme tokens',
-  manage_branding: 'Rename the product (default \u201czk-voting\u201d)',
+  manage_branding: 'Rename the product (default \u201cZK-Voting\u201d)',
   manage_elections: 'Manage elections in plugins and admin pages',
   view_audit: 'Read the site-admin audit log',
   moderate_content: 'Moderate public content and feedback in plugins',

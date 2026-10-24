@@ -1,6 +1,6 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
-# Host the Republic Node (API + SPA) and local L2 the same way a frontend
+# Host the ZK-Voting Node (API + SPA) and local L2 the same way a frontend
 # repo is hosted: one compose file, images built from this tree, data on
 # volumes, secrets via .env (never baked into the image).
 #
@@ -35,6 +35,10 @@ services:
       DATA_DIR: /data
       CHAIN_ID: ${CHAIN_ID:-27427}
       CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
+      # Product name defaults; Site admin > Branding wins. Empty = "ZK-Voting".
+      BRAND_NAME: ${BRAND_NAME:-}
+      BRAND_SHORT_NAME: ${BRAND_SHORT_NAME:-}
+      BRAND_TAGLINE: ${BRAND_TAGLINE:-}
       # Public voting hostname (vote.domain.tld). Empty = localhost demo.
       # When set, the Node treats it as the voting authority unless RP_ID is
       # some other public hostname. See README § Intentional forking.

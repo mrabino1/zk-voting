@@ -218,7 +218,7 @@ describe('POST /api/feedback', { concurrency: false }, () => {
       assert.equal(mail.replyTo, 'person@example.gov');
       assert.equal(mail.subject.includes('\n'), false);
       assert.equal(mail.subject.includes('\r'), false);
-      assert.match(mail.subject, /^Republic feedback \(Privacy\)$/);
+      assert.match(mail.subject, /^ZK-Voting feedback \(Privacy\)$/);
       assert.match(mail.html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
       assert.equal(mail.html.includes('<script'), false);
       assert.match(mail.html, /&amp;/);

@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public /feedback form. Copy comes from the locale catalog.
  */
 
+import { brandName } from "./brand.js";
 import { getLocale, localeTag, onLocaleChange, t } from "./i18n.js";
 
 const CATEGORY_KEYS = {
@@ -331,7 +332,7 @@ export function renderFeedback(main, ctx) {
             ),
           ),
     );
-    document.title = `${t("feedback.title")} — Republic`;
+    document.title = `${t("feedback.title")} — ${brandName()}`;
     const summaryNode = main.querySelector("#feedback-errors");
     if (summaryNode) summaryNode.focus();
   }

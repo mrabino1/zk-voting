@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Republic Node: JSON API + static page host.
+// ZK-Voting node: JSON API + static page host.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,6 +50,7 @@ import { ceremonyAdminRouter, ceremonyPublicRouter } from './routes/ceremony.mjs
 import { createCeremonyService } from './ceremony/service.mjs';
 import { ceremonyCsp, ceremonyHtmlFile, snarkjsVendorRoute } from './ceremony/web.mjs';
 import { layoutPublicRouter, siteAdminRouter } from './routes/siteAdmin.mjs';
+import { escapeHtml, getBranding, renderBrandedHtml, setBrandingProvider } from './branding.mjs';
 import { createLayoutService } from './layout.mjs';
 import { createPluginManager } from './plugins/manager.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
@@ -59,7 +60,7 @@ const LOADING_SHELL = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Republic — zk-voting</title>
+  <title>%BRAND_NAME%</title>
   <style>
     body { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #19191c; background: #f5f5f5; }
     @media (prefers-color-scheme: dark) { body { color: #ebebeb; background: #0e1014; } .muted { color: #adaeb0; } }
@@ -70,9 +71,9 @@ const LOADING_SHELL = `<!DOCTYPE html>
 </head>
 <body>
   <p class="nfp">NOT FOR PROFIT</p>
-  <h1>Republic</h1>
+  <h1>%BRAND_NAME%</h1>
   <p class="muted">The UI is loading. This Node process serves the civic voting API and vanilla JS pages from <code>public/</code> (or <code>dist/</code> if present).</p>
-  <p class="muted">Product: zk-voting · civic public good, not a commercial product.</p>
+  <p class="muted">%BRAND_NAME% · civic public good, not a commercial product.</p>
 </body>
 </html>
 `;
@@ -186,21 +187,54 @@ function electionShortLinks(store) {
   };
 }
 
-function spaFallback(config) {
+/**
+ * Server-render branding into a page: replace the %BRAND_*% placeholders and
+ * add <meta name="brand-*"> tags so client scripts (i18n `{brand}`) agree.
+ */
+function brandHtml(html, branding) {
+  let out = renderBrandedHtml(html, branding);
+  if (!/<meta name="brand-name"/.test(out)) {
+    const meta =
+      `<meta name="brand-name" content="${escapeHtml(branding.name)}"/>\n` +
+      `  <meta name="brand-short-name" content="${escapeHtml(branding.shortName)}"/>\n` +
+      `  <meta name="brand-tagline" content="${escapeHtml(branding.tagline)}"/>\n`;
+    const charset = /<meta charset[^>]*>\s*/i;
+    out = charset.test(out)
+      ? out.replace(charset, (m) => `${m}${meta}  `)
+      : out.replace(/<head([^>]*)>\s*/i, (m) => `${m}${meta}  `);
+  }
+  return out;
+}
+
+function spaFallback(config, layoutService) {
+  const currentBranding = () => {
+    const b = layoutService.effective().layout.branding;
+    return { name: b.productName, shortName: b.shortName, tagline: b.tagline };
+  };
   return function spaMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (req.path === '/health' || req.path.startsWith('/api')) return next();
     if (path.extname(req.path)) return next();
 
+    let branding;
+    try {
+      branding = currentBranding();
+    } catch {
+      branding = getBranding();
+    }
     for (const file of htmlCandidate(config, req.path)) {
       if (fs.existsSync(file)) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.sendFile(file);
+        res.setHeader('Cache-Control', 'no-cache');
+        fs.promises.readFile(file, 'utf8').then(
+          (html) => res.send(brandHtml(html, branding)),
+          (err) => next(err),
+        );
         return;
       }
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).send(LOADING_SHELL);
+    res.status(200).send(brandHtml(LOADING_SHELL, branding));
   };
 }
 
@@ -268,6 +302,11 @@ export async function createApp(overrides = {}) {
   const layoutService = await createLayoutService({ store, config });
   const plugins = await createPluginManager({ store, config, layout: layoutService });
   deps.layoutService = layoutService;
+  // Server modules (mail, PDFs, receipts, WebAuthn rpName) read the brand from here.
+  setBrandingProvider(() => {
+    const b = layoutService.effective().layout.branding;
+    return { name: b.productName, shortName: b.shortName, tagline: b.tagline };
+  });
   deps.plugins = plugins;
 
   const app = express();
@@ -355,7 +394,7 @@ export async function createApp(overrides = {}) {
   app.use(officePageGuard());
   app.use(serveStaticNoHtml(config.distDir));
   app.use(serveStaticNoHtml(config.publicDir));
-  app.use(spaFallback(config));
+  app.use(spaFallback(config, layoutService));
 
   app.use((req, res) => {
     if (req.path.startsWith('/api') || req.path === '/health') {
@@ -380,7 +419,7 @@ export async function startServer(overrides = {}) {
   const port = typeof addr === 'object' && addr ? addr.port : config.port;
   if (!config.quiet) {
     console.log(
-      `Republic Node (NOT FOR PROFIT) listening on ${config.host}:${port}  chainId=${config.chainId}`,
+      `${getBranding().name} node (NOT FOR PROFIT) listening on ${config.host}:${port}  chainId=${config.chainId}`,
     );
   }
   if (created.writer?.enabled && !created.writer.active) {

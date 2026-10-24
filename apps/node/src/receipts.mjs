@@ -4,6 +4,7 @@
 // still wait for hourly disclosure; the holder token can confirm a count
 // before that hour closes without listing pending turnout.
 
+import { brandName } from './branding.mjs';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -320,7 +321,7 @@ export function buildReceiptPdf(input) {
   const lines = receiptLines({ ...input, integrity });
   const ownerPassword = input.ownerPassword || receiptPdfOwnerPassword(secret, tokenHash);
   const pdf = buildDeterministicPdf({
-    title: 'Republic vote receipt',
+    title: `${brandName()} vote receipt`,
     lines,
     created: pdfCreatedDay(acceptedAt),
     protect: {
@@ -385,7 +386,7 @@ export function receiptEmailBodies({
     pdfSha256,
     integrity,
   });
-  const subject = 'Republic vote receipt (not your choices)';
+  const subject = `${brandName()} vote receipt (not your choices)`;
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',

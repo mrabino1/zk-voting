@@ -2,6 +2,7 @@
 // Public auditor pack: roots, disclosed ballot hashes, tally, contract
 // addresses. Never reads clerk identity files or choice plaintext.
 
+import { brandName } from './branding.mjs';
 import { electionState, presentElection } from './electionState.mjs';
 import { publicVoteRecord } from './store.mjs';
 
@@ -21,7 +22,7 @@ export function buildAuditorPack(election, deps) {
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,
-    product: 'Republic',
+    product: brandName(),
     chainId: deps.config.chainId,
     electionId: String(election.id),
     title: election.title,
@@ -66,7 +67,7 @@ export function assemblePollAuditorPack({ pollView, params, pollParamsHash, clos
     nfp: true,
     binding: false,
     signal: 'Signal only · non-binding · NOT FOR PROFIT',
-    product: 'Republic',
+    product: brandName(),
     republicChainId: 27427,
     poll: pollView,
     params,
