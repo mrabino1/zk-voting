@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Token-poll HTTP API. Mounted only when POLLS_ENABLED=1.
-// Ballot acceptance does not require a Republic account.
+// Ballot acceptance does not require a ZK-Voting account.
 
 import { Router } from 'express';
 

@@ -1,8 +1,8 @@
-# Republic local load test
+# ZK-Voting local load test
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-This report lists figures produced by `tools/load/harness.mjs` against a Republic Node listening on `127.0.0.1`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
+This report lists figures produced by `tools/load/harness.mjs` against a ZK-Voting Node listening on `127.0.0.1`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
 
 ## What ran
 

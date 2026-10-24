@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Read-only ERC-20 access. Republic never writes to the token chain.
+// Read-only ERC-20 access. ZK-Voting never writes to the token chain.
 // A second archive RPC is optional; when both are set they must agree.
 
 import {

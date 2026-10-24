@@ -1,8 +1,10 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public portal: drop an official outcome PDF (or paste its report id) to
  * confirm the locked file is authentic.
  */
+
+import { brandName } from "./brand.js";
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -145,7 +147,7 @@ export async function renderOutcomeVerify(main, ctx) {
         h("h1", { text: "Verify an official outcome PDF" }),
         h("p", {
           class: "lede",
-          text: "After voting time expires and a tally is posted, Republic emails a locked official PDF. Drop that file here, or paste the report id from the QR code, to confirm the bytes still match. The clerk template cannot remove this seal.",
+          text: `After voting time expires and a tally is posted, ${brandName()} emails a locked official PDF. Drop that file here, or paste the report id from the QR code, to confirm the bytes still match. The clerk template cannot remove this seal.`,
         })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,

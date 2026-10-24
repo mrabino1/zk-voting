@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Sign in: email, Ethereum (signature), smart-card reader, driver’s license /
  * passport, passkey. Every path completes with email MFA (AWS SES).
  */

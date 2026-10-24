@@ -4,7 +4,7 @@
 
 License: AGPL-3.0-or-later.
 
-zk-voting proves ballots and tallies with Groth16. Groth16 needs a circuit-specific **phase-2** setup, and whoever knows all of its secret randomness ("toxic waste") can forge proofs that verify. A ceremony spreads that secret across many people: each adds fresh randomness and throws it away. The keys are safe if **at least one** contributor was honest.
+ZK-Voting proves ballots and tallies with Groth16. Groth16 needs a circuit-specific **phase-2** setup, and whoever knows all of its secret randomness ("toxic waste") can forge proofs that verify. A ceremony spreads that secret across many people: each adds fresh randomness and throws it away. The keys are safe if **at least one** contributor was honest.
 
 This page covers the browser ceremony served by the Node at `/ceremony`. The command-line runbook for the same phase 2 is [`CEREMONY.md`](./CEREMONY.md). Both use snarkjs and produce keys that `snarkjs zkey verify` accepts.
 

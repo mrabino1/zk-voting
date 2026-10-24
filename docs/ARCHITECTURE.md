@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See `/NOT_FOR_PROFIT.md`.
 
-Product name: **Republic**. Repo name: `zk-voting`.
+Product name: **ZK-Voting** by default (renameable in site admin). Repo name: `zk-voting`.
 
 This file is two things:
 
@@ -17,7 +17,7 @@ This file is two things:
 | Solidity / circuit **interface** text | The **code** is wrong (or the interface section is overdue). |
 | A **Future** paragraph | The code is not expected to match yet. |
 
-Product intent (why Republic exists, privacy construction, disqualification) lives in the root [`README.md`](../README.md). This file is the map of packages and interfaces.
+Product intent (why ZK-Voting exists, privacy construction, disqualification) lives in the root [`README.md`](../README.md). This file is the map of packages and interfaces.
 
 ---
 
@@ -53,7 +53,7 @@ on 27427 is **Future**.
 | Node API | Express 4, Node 22, `apps/node/src/*.mjs`. Personal API keys (`Authorization: Bearer rk_…`) call the published bot catalog. |
 | Bot docs | `GET /api` (HTML), `GET /api/openapi.json`, `GET /api/llms.txt`, repo `docs/BOT_API.md` and `llms.txt`. |
 | Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
-| Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
+| ZK-Voting L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
 | Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |
 | Circuits | Circom 2: `vote.circom` (Vote 20), `tally.circom`, `identity.circom`. Hasher is Poseidon(2). Ceremony is not done. |
 | Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
@@ -63,7 +63,7 @@ on 27427 is **Future**.
 
 Two local paths, both real:
 
-1. **Demo civic path (default):** Node JSON store + Republic L2 JSON sequencer (`:8546`) + explorer ingest. No EVM required.
+1. **Demo civic path (default):** Node JSON store + ZK-Voting L2 JSON sequencer (`:8546`) + explorer ingest. No EVM required.
 2. **Contract path (optional):** set `CHAIN_RPC` + `BALLOT_INBOX_ADDRESS` + `RELAYER_PRIVATE_KEY` so the Node relays `BallotInbox.submitVote` through viem to an EVM (typically Anvil on `:8545`). `@zk-voting/chain-client` still defaults `REPUBLIC_RPC_URL` to `http://127.0.0.1:8545` (Anvil), not the civic sequencer.
 
 ---
@@ -524,7 +524,7 @@ function stateRoot() external view returns (bytes32);
 function batchCount() external view returns (uint64);
 ```
 
-Only the Republic prover/sequencer addresses. Batches are public; anyone
+Only the ZK-Voting prover/sequencer addresses. Batches are public; anyone
 can re-derive `dataHash` from posted calldata.
 
 `src/l2/L1TallyMirror.sol` — copies a tallied election result hash from L2
@@ -619,7 +619,7 @@ passes `--via-ir`). Invariants: `forge test --via-ir --match-path test/invariant
 
 - `DeployLocal.s.sol` — Anvil EVM: factory, registries, mock verifier, paymaster, rollup.
 - `DeployL1.s.sol` — Ethereum (or sepolia) settlement + optional factory.
-- `DeployL2.s.sol` — same election stack targeting an EVM configured as Republic L2 (not the civic JSON sequencer).
+- `DeployL2.s.sol` — same election stack targeting an EVM configured as ZK-Voting L2 (not the civic JSON sequencer).
 - `CreateElection.s.sol` — given factory address + JSON params, create one.
 - `CertifyL1.s.sol` — `L1TallyMirror.postResult` from `COUNTS` / `RESULT_HASH`. Wrapper: `script/certify_l1.sh` (no-op if L1 env unset).
 - `PrintAddresses.s.sol`, `anvil_deploy.sh` — local helpers (`RPC_URL` default `http://127.0.0.1:8545`).
@@ -650,13 +650,13 @@ is the fail-closed integration flag.
 
 ---
 
-## Republic L2 (`/l2`) — civic JSON sequencer
+## ZK-Voting L2 (`/l2`) — civic JSON sequencer
 
 **Implemented:** an application-specific civic rollup (Lighter-shaped:
 prove the operations, settle on L1). Plain Node. No Docker. **Not** an
 Anvil proxy and **not** a general-purpose EVM.
 
-- `l2/genesis.json` — chainId `27427` (Republic), period 2s, 1 sequencer.
+- `l2/genesis.json` — chainId `27427` (ZK-Voting), period 2s, 1 sequencer.
 - `l2/sequencer/index.mjs` — mempool, blocks when there is work plus an hourly heartbeat, hourly sealed votes.
 - `l2/archive/` — hourly S3/R2 attic for sealed hours (on by default; no prune without a bucket or `file://` sink). Gzip block and proof objects.
 - `l2/rpc/server.mjs` — JSON-RPC subset (`eth_chainId`, `eth_getBlockByNumber`,

@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  *
  * Demo tally encryption: P-256 ECDH (ECIES-style) + HKDF-SHA256 + AES-GCM.
  *
@@ -194,7 +194,7 @@ export async function encryptToTallyPub(publicKeyRaw, plaintext) {
 
 export function tallyEnvelopeEphemeral(envelopeHex) {
   const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
-  if (!eqMagic(bytes)) throw new Error("not a Republic tally envelope (missing RTv1 magic)");
+  if (!eqMagic(bytes)) throw new Error("not a tally envelope (missing RTv1 magic)");
   if (bytes.length < 4 + 65 + 12 + 16) throw new Error("tally envelope too short");
   return bytes.slice(4, 69);
 }
@@ -206,7 +206,7 @@ export function tallyEnvelopeEphemeral(envelopeHex) {
  */
 export async function decryptTallyEnvelopeWithSharedBits(sharedBits, envelopeHex) {
   const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
-  if (!eqMagic(bytes)) throw new Error("not a Republic tally envelope (missing RTv1 magic)");
+  if (!eqMagic(bytes)) throw new Error("not a tally envelope (missing RTv1 magic)");
   if (bytes.length < 4 + 65 + 12 + 16) throw new Error("tally envelope too short");
   const iv = bytes.subarray(69, 81);
   const ct = bytes.subarray(81);

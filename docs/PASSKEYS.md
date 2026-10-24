@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-Republic voters do not handle seed phrases. A **WebAuthn** credential on the device is the root secret. Two independent derivations are taken from it:
+ZK-Voting voters do not handle seed phrases. A **WebAuthn** credential on the device is the root secret. Two independent derivations are taken from it:
 
 1. An **Ethereum smart-account** key (secp256k1), used only to authorize a UserOperation.
 2. A **ZK identity** `(identityTrapdoor, nullifierSecret)`, used only inside the vote circuit.
@@ -25,7 +25,7 @@ are **Future** in that helper — it does not ship a curve implementation.
 | “The voter paid gas, so their EOA is next to the ballot” | Bundler submits the UserOp; paymaster pays; vote `msg.sender` is the relayer. |
 | Linking civil identity → wallet → choice | Wallet is not the Merkle leaf; choice is not a public field. |
 
-The browser never displays a mnemonic. Republic adds a second PRF domain for the ZK trapdoor so the **account key and the vote identity are not the same bytes**.
+The browser never displays a mnemonic. ZK-Voting adds a second PRF domain for the ZK trapdoor so the **account key and the vote identity are not the same bytes**.
 
 ---
 
@@ -40,7 +40,7 @@ The browser never displays a mnemonic. Republic adds a second PRF domain for the
    - **Derive** the secp256k1 key directly from HKDF (simpler; rotation means a new account).
 4. `PasskeyAccountFactory.createAccount(credIdHash, pubX, pubY, salt)` deploys the ERC-4337-style account whose owner is the **P-256 / WebAuthn** public key when the on-chain verifier checks assertions, **or** whose spending key is the wrapped secp256k1, depending on the account flavor in `src/account/`.
 
-Republic v1 may use secp256k1 inside the account for UserOp signatures (browser `viem` / `noble-curves`) while the WebAuthn assertion is what **unlocks** that key via PRF. A stricter flavor verifies WebAuthn on chain (`PasskeyAccount`). Both are gasless from the voter’s point of view.
+ZK-Voting v1 may use secp256k1 inside the account for UserOp signatures (browser `viem` / `noble-curves`) while the WebAuthn assertion is what **unlocks** that key via PRF. A stricter flavor verifies WebAuthn on chain (`PasskeyAccount`). Both are gasless from the voter’s point of view.
 
 ### Sign a UserOp
 
@@ -106,7 +106,7 @@ account wrap key = HKDF(ikm = prf.first,  salt = "republic:account:v1",  info = 
 
 If the authenticator returns `first` but not `second`, the wallet runs a **second assertion** with `eval.first = saltIdentity`. It will not fold identity into the account seed.
 
-`jurisdictionId` is bound when the wallet is provisioned (selected election, else `demo`) and stored on the IndexedDB record so later votes re-derive the same leaf. Default chain id is Republic L2 `27427`. Returning-user `loginPasskey` is session-only and does not eval these salts; wallet unwrap still uses `prfEvalSaltsForCredential` / `buildPrfEvalExtension`.
+`jurisdictionId` is bound when the wallet is provisioned (selected election, else `demo`) and stored on the IndexedDB record so later votes re-derive the same leaf. Default chain id is ZK-Voting L2 `27427`. Returning-user `loginPasskey` is session-only and does not eval these salts; wallet unwrap still uses `prfEvalSaltsForCredential` / `buildPrfEvalExtension`.
 
 #### IndexedDB record version 3 (Poseidon leaf)
 
@@ -126,7 +126,7 @@ v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) canno
 
 ## Gasless L2
 
-Voters **never pay** Republic L2 gas. There is no token.
+Voters **never pay** ZK-Voting L2 gas. There is no token.
 
 | Piece | Role |
 | --- | --- |

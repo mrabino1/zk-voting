@@ -1,4 +1,4 @@
-/* Republic L2 explorer — blocks, txs, search. Vote txs: nullifier + ballotHash only. */
+/* ZK-Voting L2 explorer — blocks, txs, search. Vote txs: nullifier + ballotHash only. */
 (function () {
   "use strict";
 
@@ -303,7 +303,7 @@
   function votePrivacyNote() {
     return `<p class="privacy-callout"><strong>Ballot privacy</strong>
       This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
-      Choice plaintext is not a field on Republic L2 and is never rendered here.
+      Choice plaintext is not a field on this L2 and is never rendered here.
       Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 

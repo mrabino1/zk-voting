@@ -2,6 +2,7 @@
 // Operator notice for /feedback. Not a vote receipt. No voter identity,
 // no ballot choice, and no election record.
 
+import { brandName } from './branding.mjs';
 import { escapeHtml } from './mailTemplates.mjs';
 
 function singleLine(value) {
@@ -22,7 +23,7 @@ function htmlBlock(value) {
 }
 
 /**
- * Republic-branded feedback notice. Every visitor-supplied string is escaped
+ * ZK-Voting-branded feedback notice. Every visitor-supplied string is escaped
  * in HTML and stripped of control characters before it can reach a header.
  * @param {object} input
  */
@@ -37,7 +38,7 @@ export function renderFeedbackEmail(input) {
   const termsMarkdownSha256 = singleLine(input.acceptance?.termsMarkdownSha256);
   const userAgent = singleLine(input.userAgent).slice(0, 200);
   const acceptLanguage = singleLine(input.acceptLanguage).slice(0, 80);
-  const subject = `Republic feedback (${categoryLabel})`;
+  const subject = `${brandName()} feedback (${categoryLabel})`;
 
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
@@ -80,7 +81,7 @@ export function renderFeedbackEmail(input) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #c9c3b2;border-radius:4px;">
       <tr>
         <td style="background:#13294b;color:#f4f1ea;padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;">Republic</p>
+          <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;">${escapeHtml(brandName())}</p>
           <h1 style="margin:0;font-size:22px;line-height:1.3;">Feedback</h1>
         </td>
       </tr>

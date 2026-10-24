@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Ballot UI: every aspect on one envelope. After accept, do not print selections.
  */
 
+import { brandName } from "./brand.js";
 import { openingIndexFromAnswers } from "./tally-crypto.js";
 import {
   buildBallotObject,
@@ -591,7 +592,7 @@ export async function renderVote(main, ctx) {
           h("p", {
             text: publicRecord?.staleWrap
               ? "This device has a v1 passkey wrap that derived the vote identity from the account seed. Reset it on the register page and create a new passkey before voting."
-              : "This device does not have a Republic passkey yet. Register first, then return to the ballot.",
+              : `This device does not have a ${brandName()} passkey yet. Register first, then return to the ballot.`,
           }),
           h("a", { class: "btn", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Go to registration" })
         )

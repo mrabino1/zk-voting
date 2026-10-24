@@ -1,15 +1,16 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Unregistered marketing pages, sign-in, and voting-admin hub (SPA).
  */
 
+import { brandName } from "./brand.js";
 import { audienceOf, isOfficer, postLoginPath, safeNextPath, signInHref } from "./audience.js";
 import { canEditPages, renderBlocks } from "./cms.js";
 import { FAQ_ENTRIES, faqAnswerText } from "./faq.js";
 import { logout, mountSignInPanel } from "./signin.js";
 
 const DEMO_NOTE =
-  "This Node is a working demo on the test/unstable line. Local tests still use MockVerifier. Poseidon(2) matches the vote circuit and the passkey commitment, but the dev Groth16 key is UNTRUSTED — no ceremony. The passkey helper may show republic-local-address. Tally that opens ballots uses Feldman t-of-n guardians (NON-PRODUCTION); homomorphic versus mixnet aggregation is not decided. Republic is not claiming this deploy is court-ready.";
+  `This Node is a working demo on the test/unstable line. Local tests still use MockVerifier. Poseidon(2) matches the vote circuit and the passkey commitment, but the dev Groth16 key is UNTRUSTED — no ceremony. The passkey helper may show republic-local-address. Tally that opens ballots uses Feldman t-of-n guardians (NON-PRODUCTION); homomorphic versus mixnet aggregation is not decided. ${brandName()} is not claiming this deploy is court-ready.`;
 
 function mount(node, ...children) {
   node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
@@ -130,12 +131,12 @@ export function renderPublicHome(main, ctx, bundle) {
   const overlay = bundle.cms?.overlays?.home;
   const siteTitle = bundle.cms?.site?.title;
   const tagline = overlay?.blocks?.length && overlay.replaceBuiltin ? null : bundle.cms?.site?.tagline;
-  setTitle(siteTitle || "Republic");
+  setTitle(siteTitle || brandName());
   const openCount = elections.filter((e) => e.state === 2).length;
   const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
-  const heading = replace ? overlay.title : "Republic — civic elections you can check";
+  const heading = replace ? overlay.title : `${brandName()} — civic elections you can check`;
   const ledeDefault =
-    "Republic is a not-for-profit zero-knowledge voting system. The people vote for representatives, and those representatives vote. A city, county, state, nation, union, or cooperative should be able to run an election with private ballots and a public process — without a token, a paid tier, or a vendor black box.";
+    `${brandName()} is a not-for-profit zero-knowledge voting system. The people vote for representatives, and those representatives vote. A city, county, state, nation, union, or cooperative should be able to run an election with private ballots and a public process — without a token, a paid tier, or a vendor black box.`;
   mount(main,
     h(
       "div",
@@ -176,7 +177,7 @@ export function renderPublicHome(main, ctx, bundle) {
       : h(
           "section",
           { id: "how-it-works", tabindex: "-1" },
-          h("h2", { text: "How Republic is supposed to work" }),
+          h("h2", { text: `How ${brandName()} is supposed to work` }),
       h(
         "div",
         { class: "how-grid" },
@@ -279,7 +280,7 @@ export function renderAbout(main, ctx) {
         : h(
             "p",
             { class: "lede" },
-            "Republic exists to protect and preserve a republic driven by democracy. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in."
+            `${brandName()} exists to protect and preserve a republic driven by democracy. It is not for profit. There is no token. There is no paid tier. There is no vendor lock-in.`
           ),
       ctaRow(h, audience)
     ),
@@ -362,7 +363,7 @@ export async function renderSignIn(main, ctx) {
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "Session" }),
-      h("h1", { text: "Sign in to Republic" }),
+      h("h1", { text: `Sign in to ${brandName()}` }),
       h(
         "p",
         { class: "lede" },

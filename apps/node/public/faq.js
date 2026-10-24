@@ -1,7 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public FAQ copy. Keep answers honest to README on test/unstable (demo crypto).
  */
+
+import { brandName } from "./brand.js";
 
 export const FAQ_ENTRIES = [
   {
@@ -9,7 +11,7 @@ export const FAQ_ENTRIES = [
     topic: "zk-voting",
     q: "What is zero-knowledge voting here?",
     a: [
-      "Republic uses zero-knowledge proofs so the chain can check facts about a voter without putting the ballot in the clear. A valid vote proof is supposed to show: you are in the eligible set for that election, you are not on the disqualification set, and this ciphertext is a well-formed ballot. A nullifier marks that you already voted, without naming you.",
+      `${brandName()} uses zero-knowledge proofs so the chain can check facts about a voter without putting the ballot in the clear. A valid vote proof is supposed to show: you are in the eligible set for that election, you are not on the disqualification set, and this ciphertext is a well-formed ballot. A nullifier marks that you already voted, without naming you.`,
       "ZK does not mean nobody is in charge. A jurisdiction still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, counting and eligibility checks are not meant to be a second, invisible trust sink.",
       "On this development line the product intent is that model. Implementation is incomplete: unit tests still default to a MockVerifier, and a production Groth16 ceremony has not been run. Poseidon(2) is the vote-circuit hasher and matches the JS and Solidity helpers. The checked Groth16 fixture is an untrusted local Vote(4) setup, not an election and not a ceremony. Do not treat a local demo accept as circuit-enforced exclusion.",
     ],
@@ -35,7 +37,7 @@ export const FAQ_ENTRIES = [
   {
     id: "who-can-run",
     topic: "who-runs",
-    q: "Who can run Republic?",
+    q: `Who can run ${brandName()}?`,
     a: [
       "Any body that needs a roll, a ballot, and a binding result can host it at cost: a city, county, state, nation, union, cooperative, professional college, or (if a jurisdiction demanded it) a shareholder meeting. There is no vendor lock-in and no paid SaaS tier in this repository.",
       "Running it does not, by itself, satisfy a given elections statute. Legal adoption is a question for that jurisdiction. This software is a civic public good, not a certification that a court must accept a particular deploy.",
@@ -80,7 +82,7 @@ export const FAQ_ENTRIES = [
   {
     id: "ranked-choice",
     topic: "ranked-choice",
-    q: "Does Republic support ranked choice?",
+    q: `Does ${brandName()} support ranked choice?`,
     a: [
       "Yes, on this Node path. Clerks can set the election ballot method to ranked_choice (instant-runoff / IRV). RANKED questions always use IRV. YES_NO stays plurality. Voters rank options on the ballot; the Node stores an IRV round transcript (aggregate first-preference counts per round, eliminated candidate, winner). Individual rankings are not published.",
       "On-chain v1 does not add a Solidity method enum; the method lives in the canonical ballot JSON hashed into ballotSpecHash. Mixed ballots still certify a plurality concatenation on L1. Ranked-choice is implemented in the Node UI and tally helpers, not as a separate production ZK ranking circuit.",
@@ -110,7 +112,7 @@ export const FAQ_ENTRIES = [
     topic: "outcome-reports",
     q: "What is the official outcome PDF?",
     a: [
-      "Once voting time has completely expired and a certified tally is posted, Republic issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.",
+      `Once voting time has completely expired and a certified tally is posted, ${brandName()} issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.`,
       "If you vote, you are subscribed to that contest’s official report by default. Unsubscribe from My desk only if you do not want the email. Drop the file at /outcomes/verify (or scan the QR) to confirm the bytes still match the Node fingerprint. A changed copy will fail.",
     ],
   },
@@ -119,7 +121,7 @@ export const FAQ_ENTRIES = [
     topic: "not-for-profit",
     q: "Is this a company or a token?",
     a: [
-      "No. Republic / zk-voting is not for profit: civic public good, not a commercial product. There is no token, no paid tier, and no vendor lock-in. Nobody is to make money off this repository. Jurisdictions may run it at cost (hosts, paymaster gas, paper notice). Voter data is not a product.",
+      `No. ${brandName()} is not for profit: civic public good, not a commercial product. There is no token, no paid tier, and no vendor lock-in. Nobody is to make money off this repository. Jurisdictions may run it at cost (hosts, paymaster gas, paper notice). Voter data is not a product.`,
       "The license is AGPL-3.0-or-later. Every document carries a visible NOT FOR PROFIT label. If a build adds a fee control, that is a bug.",
     ],
   },
@@ -144,7 +146,7 @@ export const FAQ_ENTRIES = [
   {
     id: "how-admins-work",
     topic: "admins",
-    q: "How do election officials work in Republic?",
+    q: `How do election officials work in ${brandName()}?`,
     a: [
       "Voting admin is role-gated. Election clerk: create elections, author the ballot, freeze the roll, and (with the registrar) approve voter registration requests; publish pages tagged to that jurisdiction. Registrar: approve those requests, insert identity commitments (never names), and revoke expired smart cards or driver’s licenses. Disqualification officer: apply or revoke public reason codes. Tally operator: post counts after cutoff. Platform admin: host the Node, create jurisdictions, grant those offices per jurisdiction, publish About / FAQ / home, set the site title, pin shared contracts, and design the official outcome PDF letterhead (QR and hash seals stay required).",
       "Clerk / registrar / disqualification officer / tally operator are granted per jurisdiction. platform_admin is a global override, not a token admin. If you are not signed in as an officer, the admin hub sends you to sign-in. The Node still enforces roles on each API action even if a form is visible.",
@@ -162,10 +164,10 @@ export const FAQ_ENTRIES = [
   {
     id: "open-source",
     topic: "open-source",
-    q: "Is Republic open source?",
+    q: `Is ${brandName()} open source?`,
     a: [
       "Yes. The license is GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). If you run a modified Node as a network service, AGPL requires you to offer the corresponding source to users of that service.",
-      "The monorepo holds the Node app, Solidity, circuits, Republic L2 sequencer, and operator docs together so a jurisdiction is not trapped in a vendor black box.",
+      `The monorepo holds the Node app, Solidity, circuits, ${brandName()} L2 sequencer, and operator docs together so a jurisdiction is not trapped in a vendor black box.`,
     ],
   },
   {
@@ -192,7 +194,7 @@ export const FAQ_ENTRIES = [
     q: "What is the block explorer for?",
     a: [
       "The public explorer at /explorer reads the civic L2 record: registrations (commitments only), accepted ballots (nullifier + ballot hash, never the choice), disqualifications, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes.",
-      "Republic L2 as implemented is an application-specific civic sequencer (JSON transactions), chainId 27427. It is not a general-purpose EVM and it does not proxy to Anvil.",
+      `${brandName()} L2 as implemented is an application-specific civic sequencer (JSON transactions), chainId 27427. It is not a general-purpose EVM and it does not proxy to Anvil.`,
     ],
   },
   {
@@ -200,7 +202,7 @@ export const FAQ_ENTRIES = [
     topic: "receipts",
     q: "Will my receipt show which option I marked?",
     a: [
-      "No. A Republic receipt is hashes only. It records that a ballot was accepted, not which option you selected. If a screen, email, or PDF prints “I voted for X,” that is a bug.",
+      `No. A ${brandName()} receipt is hashes only. It records that a ballot was accepted, not which option you selected. If a screen, email, or PDF prints “I voted for X,” that is a bug.`,
       "After you vote you may email the receipt to yourself. The email body and the attached PDF are the same evidence: election title, ballot hash, nullifier, and a copy-paste proof. The PDF is encrypted and locked against modification (print and copy are allowed; editing is not). They do not include marked options or a ciphertext opening. A changed file will not match the SHA-256 the Node recorded.",
       "Keep the receipt if you need to show that you participated. Paste it at /receipt, or drop the PDF, to confirm it counted and that the file is unmodified. That portal also shows how many ballots have been disclosed and when each hour closed. It cannot satisfy a coercer who demands proof of choice — that is intentional.",
     ],
@@ -217,7 +219,7 @@ export const FAQ_ENTRIES = [
   {
     id: "jurisdictions",
     topic: "jurisdictions",
-    q: "What is a jurisdiction in Republic?",
+    q: `What is a jurisdiction in ${brandName()}?`,
     a: [
       "The administrative owner of a roll and its elections: a nation, state, county, city, union, cooperative, or other body. It defines officers, the reason catalog, and which contests it runs. Nested precincts are a Node/registry concern.",
       "Platform admin creates jurisdictions and grants clerks and other officers onto them. A clerk in one jurisdiction cannot freeze another jurisdiction’s roll.",
@@ -281,7 +283,7 @@ export const FAQ_ENTRIES = [
     topic: "agpl",
     q: "If my county hosts a modified Node, what does AGPL require?",
     a: [
-      "AGPL-3.0-or-later requires that users of a modified network service receive the corresponding source. Hosting Republic as a public desk is exactly that kind of service. Keep the NOT FOR PROFIT label. Do not add a paid tier.",
+      `AGPL-3.0-or-later requires that users of a modified network service receive the corresponding source. Hosting ${brandName()} as a public desk is exactly that kind of service. Keep the NOT FOR PROFIT label. Do not add a paid tier.`,
     ],
   },
   {
@@ -298,7 +300,7 @@ export const FAQ_ENTRIES = [
     topic: "email-mfa",
     q: "Why does every sign-in ask for an email code?",
     a: [
-      "Email is the username and the second factor. After email, Ethereum signature, smart-card reader, or license/passport, Republic sends a 6-digit code through AWS SES. Dev login on a local host can skip that; a production desk should not.",
+      `Email is the username and the second factor. After email, Ethereum signature, smart-card reader, or license/passport, ${brandName()} sends a 6-digit code through AWS SES. Dev login on a local host can skip that; a production desk should not.`,
       "The Node does not invent a password product. The code expires in ten minutes. If SES is not configured, product MFA stays off except for the email-first path, which always uses a captured or sent OTP.",
     ],
   },

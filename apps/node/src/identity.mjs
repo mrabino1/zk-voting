@@ -3,6 +3,7 @@
 // Exactly one active Ethereum address. The vote Merkle leaf is never that
 // address.
 
+import { brandName } from './branding.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 
 import { getAddress, isAddress, keccak256, toHex, verifyMessage } from 'viem';
@@ -551,7 +552,7 @@ export function resolveBoundPerson({ sessionUser, methodOwner, addressOwner }) {
 export function buildWeb3BindMessage({ address, nonce, chainId, origin }) {
   const addr = normalizeEthAddress(address);
   return [
-    'Republic wants you to uniquely identify this Ethereum address to your person.',
+    `${brandName()} wants you to uniquely identify this Ethereum address to your person.`,
     '',
     `URI: ${origin || 'republic'}`,
     'Version: 1',
@@ -567,7 +568,7 @@ export function buildWeb3BindMessage({ address, nonce, chainId, origin }) {
 export function buildWeb3LoginMessage({ address, nonce, chainId, origin }) {
   const addr = normalizeEthAddress(address);
   return [
-    'Republic wants you to sign in with this Ethereum wallet.',
+    `${brandName()} wants you to sign in with this Ethereum wallet.`,
     '',
     `URI: ${origin || 'republic'}`,
     'Version: 1',
@@ -617,7 +618,7 @@ export function resolveCivicIdLoginPerson(store, { kind, issuer, documentNumber 
 
 export function buildSmartCardBindMessage({ fingerprint, nonce }) {
   return [
-    'Republic smart-card digital ID binding',
+    `${brandName()} smart-card digital ID binding`,
     `Nonce: ${nonce}`,
     `Fingerprint: ${fingerprint}`,
     'NOT FOR PROFIT — civic public good.',

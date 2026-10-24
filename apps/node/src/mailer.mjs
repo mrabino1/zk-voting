@@ -4,13 +4,13 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 
+import { brandName } from './branding.mjs';
 import { HttpError } from './http.mjs';
 
-const OTP_SUBJECT = 'Republic sign-in code';
 
-export function otpEmailBodies({ code, product = 'Republic', purpose } = {}) {
+export function otpEmailBodies({ code, product = brandName(), purpose } = {}) {
   const pinReset = purpose === 'pin-reset';
-  const subject = pinReset ? 'Republic vote PIN reset code' : OTP_SUBJECT;
+  const subject = pinReset ? `${brandName()} vote PIN reset code` : `${brandName()} sign-in code`;
   const lead = pinReset
     ? `Your ${product} vote PIN reset code is ${code}.`
     : `Your ${product} verification code is ${code}.`;
@@ -243,7 +243,7 @@ export function createMailer(config = {}) {
   }
 
   async function sendOtp({ to, code, purpose, factor }) {
-    const bodies = otpEmailBodies({ code, product: config.product || 'Republic', purpose });
+    const bodies = otpEmailBodies({ code, product: config.product || brandName(), purpose });
     return send({
       to,
       ...bodies,

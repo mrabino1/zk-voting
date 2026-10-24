@@ -28,7 +28,7 @@ The UI only hides what you can't use. Screens live at `/site-admin`
 | `manage_roles` | change roles that aren't admin roles |
 | `manage_admins` | grant or remove `platform_super_admin` / `platform_admin` |
 | `edit_layout` | nav, regions/widgets, visibility, order, theme tokens |
-| `manage_branding` | rename the product (default **zk-voting**) |
+| `manage_branding` | rename the product (default **ZK-Voting**) |
 | `manage_plugins` | install, enable, disable, uninstall plugins |
 | `manage_elections` | election back-office plugin pages (e.g. backoffice-notes) |
 | `view_audit` | read and verify the site-admin audit chain |

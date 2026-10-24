@@ -1,6 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Jurisdiction CMS: fork the Node UI; pin one shared contract deployment.
 
+import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
 import { isPlatformOperator } from './roles.mjs';
 
 export const SHARED_DEPLOYMENT_NOTE =
@@ -46,7 +47,8 @@ export function defaultSite() {
   return {
     nfp: true,
     sharedDeployment: true,
-    title: 'Republic',
+    // Empty = follow the product name from site admin (Branding).
+    title: '',
     tagline: '',
     contracts: {
       factory: '',
@@ -235,7 +237,7 @@ export function publicSiteView(site, config) {
   const row = site || defaultSite();
   return {
     nfp: true,
-    title: row.title || 'Republic',
+    title: (row.title && !LEGACY_DEFAULT_NAMES.includes(row.title) && row.title) || brandName(),
     tagline: row.tagline || '',
     sharedDeployment: true,
     contracts: mergePublicContracts(config, row),

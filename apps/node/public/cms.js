@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Jurisdiction CMS: clerks edit public pages. One shared factory.
  */
 
+import { brandName } from "./brand.js";
 import { audienceOf, isOfficer, signInHref } from "./audience.js";
 import { logout } from "./signin.js";
 
@@ -710,7 +711,7 @@ export async function renderOfficeSite(main, ctx, bundle) {
   const canPin = Boolean(payload.canPinContracts);
   const statusEl = h("p", { class: "field-hint", text: site.updatedAt ? `Last saved ${site.updatedAt}.` : "Not saved yet." });
 
-  const titleInput = h("input", { type: "text", value: site.title || "Republic", id: "site-title", disabled: !canPin });
+  const titleInput = h("input", { type: "text", value: site.title || brandName(), id: "site-title", disabled: !canPin });
   const taglineInput = h("textarea", { id: "site-tagline", rows: "3", disabled: !canPin });
   taglineInput.value = site.tagline || "";
   const factoryInput = h("input", {
