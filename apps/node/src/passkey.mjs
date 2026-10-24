@@ -10,7 +10,7 @@ import {
 } from '@simplewebauthn/server';
 
 import { HttpError } from './http.mjs';
-import { assertPasskeyRoom } from './identity.mjs';
+import { assertPasskeyRoom, isClaimedPerson } from './identity.mjs';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -138,10 +138,7 @@ export function createPasskeyService(config, store, hooks = {}) {
       counter: info.counter,
       transports: info.transports,
     };
-    let account = user || (pending.userId ? store.getUser(pending.userId) : null);
-    if (!account) {
-      account = await store.ensureUser({ handle: pending.handle, role: 'voter' });
-    }
+    const account = await resolveRegisterAccount({ sessionUser: user, pending });
     assertPasskeyRoom(account);
     store.addCredential(account.id, {
       id: b64urlFromBytes(cred.id),
@@ -154,6 +151,43 @@ export function createPasskeyService(config, store, hooks = {}) {
     });
     await store.persist();
     return { verified: true, user: account, acceptedTerms: Boolean(pending.acceptedTerms) };
+  }
+
+  /**
+   * Brand-new handles (or the unclaimed ADMIN_HANDLE seed) may finish without
+   * a session. A claimed person requires the session user to be that person.
+   */
+  async function resolveRegisterAccount({ sessionUser, pending }) {
+    if (sessionUser) {
+      if (pending.userId && pending.userId !== sessionUser.id) {
+        throw new HttpError(403, 'passkey registration is for a different account', {
+          code: 'HANDLE_MISMATCH',
+        });
+      }
+      if (
+        pending.handle &&
+        String(sessionUser.handle || '').toLowerCase() !== String(pending.handle).toLowerCase()
+      ) {
+        throw new HttpError(403, 'passkey registration is for a different account', {
+          code: 'HANDLE_MISMATCH',
+        });
+      }
+      return sessionUser;
+    }
+
+    let account = pending.userId ? store.getUser(pending.userId) : null;
+    if (!account && pending.handle) {
+      account = store.getUserByHandle(pending.handle);
+    }
+    if (account) {
+      if (isClaimedPerson(account)) {
+        throw new HttpError(401, 'authentication required to add a passkey', {
+          code: 'AUTH_REQUIRED',
+        });
+      }
+      return account;
+    }
+    return await store.ensureUser({ handle: pending.handle, role: 'voter' });
   }
 
   async function beginLogin({ user, handle } = {}) {
