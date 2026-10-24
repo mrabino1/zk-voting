@@ -46,6 +46,7 @@ contract BallotInbox is IBallotInbox {
     error ClearanceRequired();
     error ClearanceCommitmentNotEligible();
     error EligibleRootPending();
+    error TallyStatusUnavailable();
 
     /// @notice BN254 scalar field modulus r.
     uint256 public constant SNARK_SCALAR_FIELD =
@@ -147,13 +148,19 @@ contract BallotInbox is IBallotInbox {
     }
 
     function _requireNotTallied(uint256 electionId) internal view {
+        // Audit M-04: fail closed. The tally module is set once in the factory
+        // (M-03); a failing read or a reverting `isTallied` blocks the ballot
+        // instead of silently skipping the check. Zero means no tally module
+        // is wired, so nothing can have been tallied yet.
         (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("tallyVerifier()"));
-        if (!ok || ret.length < 32) return;
+        if (!ok || ret.length < 32) revert TallyStatusUnavailable();
         address tally = abi.decode(ret, (address));
         if (tally == address(0)) return;
         try ITallyVerifier(tally).isTallied(electionId) returns (bool done) {
             if (done) revert AlreadyTallied();
-        } catch {}
+        } catch {
+            revert TallyStatusUnavailable();
+        }
     }
 
     function _getElection(uint256 electionId) internal view returns (IElection election) {

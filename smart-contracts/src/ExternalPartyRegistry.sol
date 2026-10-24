@@ -143,7 +143,12 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     /// @inheritdoc IExternalPartyRegistry
     function clearRejection(uint256 partyIndex, uint256 identityCommitment, bytes32 evidenceHash) external {
         if (identityCommitment == 0) revert ZeroCommitment();
-        _requireOperator(partyIndex);
+        // Audit M-07: election staff may also clear (e.g. after an appeal, or
+        // when the rejecting party was paused and its operator is gone).
+        Party storage party = _party(partyIndex);
+        if (msg.sender != party.operator && !factory.isElectionStaff(electionId, msg.sender)) {
+            revert NotPartyOperator();
+        }
         if (!_rejectedBy[identityCommitment][partyIndex]) revert NotRejected();
 
         _rejectedBy[identityCommitment][partyIndex] = false;

@@ -149,6 +149,8 @@ contract Deployer is Test {
         paymaster.deposit{value: 10 ether}();
 
         _wireModules();
+        // Audit M-02: clerks may only use admin-approved vote verifiers.
+        _tryAdmin(address(factory), abi.encodeWithSignature("setVerifierApproved(address,bool)", address(verifier), true));
         _bindJurisdictions();
         _grantEverywhere();
         _label();

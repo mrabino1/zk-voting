@@ -50,6 +50,9 @@ contract RollupSettlement {
     bytes32 public stateRoot;
     uint64 public batchCount;
     mapping(uint64 => Batch) private _batches;
+    /// @notice Audit M-05: every L2 state root this contract has settled
+    ///         (genesis or a batch's `newStateRoot`), for `L1TallyMirror`.
+    mapping(bytes32 => bool) public isSettledRoot;
 
     constructor(address admin_, address sequencer_, address prover_, address batchVerifier_, bool mockMode_) {
         if (admin_ == address(0) || sequencer_ == address(0) || prover_ == address(0)) revert ZeroAddress();
@@ -85,6 +88,7 @@ contract RollupSettlement {
         if (msg.sender != admin) revert NotAuthorized();
         if (batchCount != 0) revert GenesisAlreadySet();
         stateRoot = genesisRoot;
+        isSettledRoot[genesisRoot] = true;
         emit GenesisSet(genesisRoot);
     }
 
@@ -126,6 +130,7 @@ contract RollupSettlement {
             dataLength: 0
         });
         stateRoot = newStateRoot;
+        isSettledRoot[newStateRoot] = true;
         unchecked {
             batchCount += 1;
         }

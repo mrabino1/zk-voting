@@ -15,6 +15,8 @@ import {RepublicMailbox} from "../src/l2/RepublicMailbox.sol";
 ///         settlement deployed in `mockMode` (proofs not checked).
 ///         `L2_FACTORY` (or `ELECTION_FACTORY_ADDRESS`) is required so the
 ///         mirror cannot accept colliding uint256 `postResult` writes.
+///         `TALLY_MIRROR_REQUIRE_SETTLED_ROOT=1` pins the settlement in the
+///         mirror so posts must cite a settled L2 state root (audit M-05).
 contract DeployL1 is DeployOnce {
     error MissingL2Factory();
     error MissingBatchVerifier();
@@ -37,6 +39,10 @@ contract DeployL1 is DeployOnce {
         address l2Factory = _factory();
         if (l2Factory == address(0)) revert MissingL2Factory();
         mirror.setL2Factory(l2Factory);
+        // Audit M-05 (opt-in): require every certification to cite a settled
+        // L2 state root. Off by default because the Node posts a zero root
+        // until the sequencer publishes batches.
+        if (vm.envOr("TALLY_MIRROR_REQUIRE_SETTLED_ROOT", false)) mirror.setSettlement(address(settlement));
         vm.stopBroadcast();
 
         _log("SETTLEMENT", address(settlement));

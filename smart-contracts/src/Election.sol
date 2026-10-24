@@ -18,6 +18,10 @@ contract Election is IElection {
     error NotRegistry();
     error ZeroAddress();
 
+    /// @notice Audit M-01: every root change is public; `afterStart` marks
+    ///         a mid-election (late) update observers should scrutinise.
+    event RootsUpdated(bytes32 eligibleRoot, bytes32 disqualificationRoot, bool afterStart);
+
     uint256 public electionId;
     address public factory;
     address public voterRegistry;
@@ -76,6 +80,7 @@ contract Election is IElection {
         if (msg.sender != voterRegistry && msg.sender != disqualificationRegistry) revert NotRegistry();
         eligibleRoot = eligibleRoot_;
         disqualificationRoot = disqualificationRoot_;
+        emit RootsUpdated(eligibleRoot_, disqualificationRoot_, block.timestamp >= _params.startTime);
     }
 
     /// @inheritdoc IElection

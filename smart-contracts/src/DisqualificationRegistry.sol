@@ -5,6 +5,7 @@ pragma solidity ^0.8.24;
 
 import {IDisqualificationRegistry} from "./interfaces/IDisqualificationRegistry.sol";
 import {IElection} from "./interfaces/IElection.sol";
+import {ElectionParams} from "./interfaces/ElectionParams.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IHasher} from "./interfaces/IHasher.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
@@ -47,6 +48,10 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     error AlreadyDisqualified();
     error NotDisqualified();
     error InvalidTreeDepth();
+    error VotingStarted();
+
+    /// @notice Audit M-01: the late-update switch is public and logged.
+    event LateUpdateAllowedSet(uint256 indexed electionId, bool allowed);
 
     IHasher public immutable hasher;
     IElectionFactory public immutable factory;
@@ -122,10 +127,18 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     }
 
     /// @notice Clerk may allow post-freeze updates. Default is false.
+    /// @dev Audit M-01: the switch can only be turned ON before `startTime`,
+    ///      so voters and observers know before voting opens whether roots
+    ///      may move mid-vote. Turning it OFF is always allowed (it only
+    ///      narrows the officer's power). Every change is logged, and each
+    ///      root change emits `Election.RootsUpdated(.., afterStart)`.
     function setLateUpdateAllowed(uint256 electionId, bool allowed) external {
         IElection election = _election(electionId);
-        if (msg.sender != election.params().clerk) revert NotClerk();
+        ElectionParams memory p = election.params();
+        if (msg.sender != p.clerk) revert NotClerk();
+        if (allowed && block.timestamp >= p.startTime) revert VotingStarted();
         lateUpdateAllowed[electionId] = allowed;
+        emit LateUpdateAllowedSet(electionId, allowed);
     }
 
     /// @inheritdoc IDisqualificationRegistry
