@@ -45,6 +45,9 @@ import { outcomesRouter } from './routes/outcomes.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { feedbackRouter } from './routes/feedback.mjs';
+import { ceremonyAdminRouter, ceremonyPublicRouter } from './routes/ceremony.mjs';
+import { createCeremonyService } from './ceremony/service.mjs';
+import { ceremonyCsp, ceremonyHtmlFile, snarkjsVendorRoute } from './ceremony/web.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
 
 const LOADING_SHELL = `<!DOCTYPE html>
@@ -73,7 +76,9 @@ const LOADING_SHELL = `<!DOCTYPE html>
 function htmlCandidate(config, pathname) {
   const clean = pathname.replace(/\/+$/, '') || '/';
   let file = 'index.html';
-  if (clean === '/explorer' || clean.startsWith('/explorer/')) file = 'explorer.html';
+  const ceremonyFile = ceremonyHtmlFile(clean);
+  if (ceremonyFile) file = ceremonyFile;
+  else if (clean === '/explorer' || clean.startsWith('/explorer/')) file = 'explorer.html';
   else if (clean === '/admin' || clean.startsWith('/admin/')) file = 'admin.html';
   else if (clean === '/back-office' || clean.startsWith('/back-office/')) file = 'back-office.html';
   else if (clean === '/docs' || clean.startsWith('/docs/')) file = 'docs.html';
@@ -221,6 +226,11 @@ export async function createApp(overrides = {}) {
     tokenRegistry,
     writer,
   };
+  deps.ceremonies = createCeremonyService({
+    config,
+    store,
+    ...(typeof config.ceremonyNowMs === 'function' ? { now: config.ceremonyNowMs } : {}),
+  });
 
   const app = express();
   app.locals.quiet = Boolean(config.quiet);
@@ -243,6 +253,9 @@ export async function createApp(overrides = {}) {
     }
     next();
   });
+  // Scoped CSP for the ceremony pages, their scripts, and the snarkjs worker.
+  // No global CSP exists yet; this adds none elsewhere. See docs/ceremony-web.md#csp.
+  app.use(ceremonyCsp());
   app.use(express.json({ limit: '2mb' }));
   app.use(standbyGuard(writer));
   app.use((err, req, res, next) => {
@@ -269,6 +282,8 @@ export async function createApp(overrides = {}) {
   }
 
   app.use('/api/_sa/v1', superAdminRouter(deps));
+  app.use('/api/ceremonies', ceremonyPublicRouter({ ...deps, limits: config.ceremonyRateLimits || {} }));
+  app.use('/api/ceremony-admin', ceremonyAdminRouter(deps));
   app.use(healthRouter(deps));
   app.use(termsPdfRouter(deps));
   app.use('/api/auth', authRouter(deps));
@@ -293,6 +308,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', botDocsRouter());
   app.use(repoLlmsRouter());
   app.use(selfHostingDocsRouter());
+  app.get('/vendor/snarkjs.min.js', snarkjsVendorRoute());
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });
@@ -313,7 +329,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer, ceremonies: deps.ceremonies };
 }
 
 export async function startServer(overrides = {}) {

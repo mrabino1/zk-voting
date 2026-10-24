@@ -38,6 +38,8 @@ The same guides are served by every node at **`/docs`** and live in [`docs/self-
 | [First launch](./docs/self-hosting/first-launch.md) | |
 | [Health checks](./docs/self-hosting/health-checks.md) | |
 
+Trusted setup: [Groth16 ceremony](./docs/self-hosting/ceremony.md) (served at `/docs/ceremony`).
+
 Day-two operations, keys, and incident handling: [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 ## Positioning
@@ -95,6 +97,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
 - [Circuits](#circuits)
+- [Trusted-setup ceremony](#trusted-setup-ceremony)
 - [Shared packages](#shared-packages)
 - [Chains: Ethereum L1, zk-voting L2, and Lighter](#chains-ethereum-l1-zk-voting-l2-and-lighter)
 - [Registration](#registration)
@@ -177,6 +180,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/republic.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
 | `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry `via_ir = true`: factory, registries, inbox, `Tally.sol`, account, L2 settlement) |
 | Circuits (`circuits/`) | In-tree. Vote hasher is Poseidon(2). Groth16 fixture is an **untrusted** Vote(4) proof. Ceremony **not done**. Unit tests still use MockVerifier. |
+| Trusted-setup ceremony | **Tooling in-tree, ceremony not run.** Browser ceremony on the Node (`/admin/ceremony`, `/ceremony`, public transcript with whole-chain verify) and the CLI runbook. Exports stay `trusted: false`. [`docs/ceremony-web.md`](./docs/ceremony-web.md) |
 | Proving path | **In progress** — `npm run circuits:status` / `compile` / `setup` / `export` / `prove`. Untrusted local ptau only. `MockVerifier` still default for `forge test`. |
 | Shared packages | `@zk-voting/types`, `proof-helpers`, `chain-client` |
 | zk-voting L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
@@ -705,6 +709,24 @@ Circom 2. The vote `Hasher()` is **Poseidon(2)** (`republic.hash.poseidon-bn254-
 | `circuits/identity.circom` | Commitment and nullifier primitives |
 
 Compile notes, snarkjs, **exact proving-path commands**, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md), [`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
+
+---
+
+## Trusted-setup ceremony
+
+**Yes, zk-voting needs one before a binding election.** Groth16 keys are only as trustworthy as their setup: whoever knows all of the setup's secret randomness can forge ballot or tally proofs that verify. Phase 1 (powers of tau) is reused from the public Hermez ceremony. **Phase 2 is circuit-specific** and must be run once per production circuit: `Vote(20)` and `Tally(8, 4)`. It is safe if at least one contributor was honest and discarded their randomness. **It has not been run**; current keys are untrusted.
+
+The Node runs phase 2 in the browser:
+
+| Page | Who | What |
+| --- | --- | --- |
+| `/admin/ceremony` | Platform super admin | Pin inputs (`.r1cs`, Hermez `.ptau`), create, open/close, queue, commit a drand or block-hash beacon, finalize, export, audit log |
+| `/ceremony/<id>` | Signed-in participants | Join the queue; contribute with snarkjs in a Web Worker. Randomness never leaves the tab. Receipt download. |
+| `/ceremony/<id>/transcript` | Anyone | Hash-chained transcript, **Verify whole chain** in the browser, and the `snarkjs zkey verify` commands |
+
+The server verifies every upload against the previous key before accepting it, keeps an append-only hash-chained transcript and audit log, rate-limits joins and uploads, and never fetches anything. Exports stay in the data directory marked `trusted: false`; nothing is deployed or copied into `smart-contracts/`. Ceremony pages carry their own strict CSP.
+
+Design, threat model, beacon, and verification: [`docs/ceremony-web.md`](./docs/ceremony-web.md). Operator guide: [`docs/self-hosting/ceremony.md`](./docs/self-hosting/ceremony.md). Offline CLI runbook: [`docs/CEREMONY.md`](./docs/CEREMONY.md).
 
 ---
 
