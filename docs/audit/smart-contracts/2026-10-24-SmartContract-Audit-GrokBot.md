@@ -677,7 +677,7 @@ This report was produced by GrokBot using automated tools (Foundry, Slither, Ade
 
 ## 12. Remediation and re-test (2026-10-24)
 
-The fixes were made on branch `fix/smart-contract-audit-remediation`. The work went in severity order, Critical → High → Medium → Low, with one commit per tier. **The Informational findings (I-01 to I-06) were deliberately left unchanged.** The aim was to keep existing features and flows working. Where a full fix needs a circuit change or a trusted setup, only the contract-side part was done, and the finding is marked *Partially resolved* or *Acknowledged*. The branch also merges the latest `origin/test/unstable` (`b249755`, including #79 "bind Merkle path length to tree depth"). The merge was clean, and the full suite was re-run on the merged tree.
+The fixes were made on branch `fix/smart-contract-audit-remediation`. The work went in severity order, Critical → High → Medium → Low, with one commit per tier. **The Informational findings (I-01 to I-06) were deliberately left unchanged.** The aim was to keep existing features and flows working. Where a full fix needs a circuit change or a trusted setup, only the contract-side part was done, and the finding is marked *Partially resolved* or *Acknowledged*. The branch also merges the latest `origin/test/unstable` (`b249755`, including #79 "bind Merkle path length to tree depth", and then `75b1cad`, #81 branding, which has no contract changes). Both merges were clean, and the full suite was re-run on the merged tree.
 
 ### 12.1 Commits
 
@@ -687,7 +687,7 @@ The fixes were made on branch `fix/smart-contract-audit-remediation`. The work w
 | High (H-01 to H-06) | [`24cdab0`](https://github.com/mrabino1/zk-voting/commit/24cdab0) | `test/audit/HighRegressions.t.sol` (20 tests), plus JS tests for tally V2 and `hashBallot` |
 | Medium (M-01 to M-08) | [`19c3165`](https://github.com/mrabino1/zk-voting/commit/19c3165) | `test/audit/MediumRegressions.t.sol` (16 tests) |
 | Low (L-01 to L-08) | [`0158a58`](https://github.com/mrabino1/zk-voting/commit/0158a58) | `test/audit/LowRegressions.t.sol` (8 tests) |
-| Merge `origin/test/unstable` | [`b05da8c`](https://github.com/mrabino1/zk-voting/commit/b05da8c) | full suite re-run |
+| Merge `origin/test/unstable` | [`b05da8c`](https://github.com/mrabino1/zk-voting/commit/b05da8c), then a merge of `75b1cad` | full suite re-run |
 | Re-audit cleanup | [`0132d7a`](https://github.com/mrabino1/zk-voting/commit/0132d7a) | Removes `RepublicEntryPoint.ExecuteFailed`, which the M-08 change left unused |
 
 Each regression test that is named `Exploit…` reproduces the original attack and now asserts that it is refused.
@@ -715,7 +715,7 @@ The per-finding status, with details, is in the §4 table and on each finding's 
 | Audit regression tests | — (6 PoCs in a scratch copy) | 55 (11 C + 20 H + 16 M + 8 L), all pass |
 | `packages/proof-helpers` (`npm test`) | — | 12/12 |
 | `l2` (`node --test l2/test/*.test.mjs`) | — | 64/64 |
-| `apps/node` (`npm test`) | — | 618 pass, 1 fail, 1 skipped. The failure is the existing `personal API keys › public /api docs…` docs test. It also fails without these changes and touches no file changed here. |
+| `apps/node` (`npm test`) | — | 627 pass, 1 fail, 1 skipped. The failure is the existing `personal API keys › public /api docs…` docs test. It also fails without these changes and touches no file changed here. |
 | `forge coverage --ir-minimum` | not feasible (stack too deep) | still not feasible. The same `Yul exception: … 1 too deep in the stack` happens under minimal IR, so no coverage figures are reported. The 55 targeted regression tests stand in for it. |
 
 ### 12.4 Tool re-run
