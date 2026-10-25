@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Mirrors contracts/src/ReasonCodes.sol at the repo root (uint16 catalog).
+// Mirrors smart-contracts/src/ReasonCodes.sol (uint16 catalog).
 
 export const REASON_CODES = [
   { code: 1, name: 'NOT_OF_AGE' },

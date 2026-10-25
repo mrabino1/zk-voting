@@ -174,7 +174,7 @@ export function assertEntropy(entropy, { published }) {
 export function assertExportDir(outDir) {
   const resolved = path.resolve(outDir);
   const banned = [
-    path.join(REPO, "..", "contracts", "src"),
+    path.join(REPO, "..", "smart-contracts", "src"),
     path.join(REPO, "circuits", "fixtures"),
   ];
   for (const root of banned) {
@@ -735,7 +735,7 @@ export async function exportArtifacts({ dir, out }) {
   writeJson(manifestOut, manifest);
   log(`exported ${outDir}`);
   log("Ceremony: not-done. The Solidity verifier is marked untrusted.");
-  log("Do not copy it onto contracts/src/zk/VoteVerifier.sol.");
+  log("Do not copy it onto smart-contracts/src/zk/VoteVerifier.sol.");
   return {
     dir: outDir,
     zkey: zkeyOut,
@@ -957,7 +957,7 @@ beacon:
 
 export:
   --dir [--out <directory>]
-  Refuses contracts/src and circuits/fixtures.
+  Refuses smart-contracts/src and circuits/fixtures.
 
 toy:
   [--dir circuits/build/ceremony-toy] [--power 4] [--allow-wipe]

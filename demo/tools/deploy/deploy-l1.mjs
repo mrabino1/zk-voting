@@ -72,7 +72,7 @@ console.error(
   'This entrypoint refuses a second deploy. Broadcast with forge only after this check passes:',
 );
 console.error(
-  `  DEPLOYMENTS_FILE=${recordFile} forge script ../contracts/script/DeployL1.s.sol --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"`,
+  `  DEPLOYMENTS_FILE=${recordFile} forge script ../smart-contracts/script/DeployL1.s.sol --rpc-url "$L1_RPC" --broadcast --private-key "$L1_PUBLISHER_PRIVATE_KEY"`,
 );
 console.error('Containers must not run that script. Paste the resulting addresses into .env.');
 console.error('After broadcast, re-run with --verify and the address env vars set.');
