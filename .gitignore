@@ -1,40 +1,14 @@
+# Repo-wide. App-specific rules live in demo/.gitignore.
+
 # Dependencies
 node_modules/
-apps/node/node_modules/
-packages/*/node_modules/
 .pnp
 .pnp.js
-
-# Build
-dist/
-build/
-out/
-cache/
-broadcast/
-coverage/
-lcov.info
-*.tsbuildinfo
-
-# Foundry
-smart-contracts/out/
-smart-contracts/cache/
-smart-contracts/broadcast/
-
-# Circom / snarkjs
-circuits/build/
-circuits/pot*.ptau
-*.zkey
-*.wtns
-verification_key.json
 
 # Env / secrets
 .env
 .env.local
 .env.*.local
-
-# Host-specific Compose overrides (see docker-compose.override.example.yml)
-docker-compose.override.yml
-compose.override.yml
 *.pem
 *.key
 
@@ -44,25 +18,14 @@ compose.override.yml
 .vscode/
 *.swp
 
-# Logs / runtime
-logs/
+# Logs
 *.log
-apps/node/data/
-*.sqlite
-*.sqlite-journal
 
-# L2 local data
-l2/data/
-l2/.anvil*
-
-# One-time L1 deploy records (template stays tracked)
-deployments/*.json
-!deployments/template.json
-
-# Nested tool repos
-smart-contracts/lib/**/.git
-
-# vendored forge-std extras (src/ is tracked)
-smart-contracts/lib/forge-std/test/
-smart-contracts/lib/forge-std/.github/
-smart-contracts/lib/forge-std/scripts/
+# Foundry (contracts/)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/**/.git
+contracts/lib/forge-std/test/
+contracts/lib/forge-std/.github/
+contracts/lib/forge-std/scripts/

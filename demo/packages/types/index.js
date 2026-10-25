@@ -3,7 +3,7 @@
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
- * Mirrors `smart-contracts/src/interfaces/ElectionParams.sol`,
+ * Mirrors `contracts/src/interfaces/ElectionParams.sol`,
  * `ReasonCodes.sol`, `Roles.sol`, and the Node / L2 explorer records.
  * This package is documentation-in-code: no runtime validation library
  * is implied. Callers still type-check at the edges (API, contract ABI).
