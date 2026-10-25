@@ -207,7 +207,7 @@ def main():
     # Sizes ------------------------------------------------------------------
     arts, settings, libraries = load_artifacts(out_dir, sc_dir)
     if not arts:
-        print(f"\nerror: no compiled contracts under {out_dir}. Run: (cd smart-contracts && forge build)", file=sys.stderr)
+        print(f"\nerror: no compiled contracts under {out_dir}. Run: (cd ../smart-contracts && forge build)", file=sys.stderr)
         return 1
     opt = settings.get("optimizer") or {}
     print(f"Compiler:    optimizer={'on' if opt.get('enabled') else 'off'} runs={opt.get('runs', 'n/a')} "

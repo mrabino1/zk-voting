@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZK Voting: verifiable, private, self-hosted voting</title>
+  <meta name="description" content="ZK Voting is a not-for-profit, self-hostable voting system. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets. -->
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/"><span class="logo" aria-hidden="true">zk</span> ZK Voting</a>
+      <nav aria-label="Main">
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#self-host">Self-host</a>
+        <a href="https://community.zk-voting.org">Community</a>
+        <a class="btn btn-sm" href="https://demo.zk-voting.org">Try the demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <p class="eyebrow">Not for profit &middot; Open source (AGPL-3.0-or-later)</p>
+        <h1>Elections you can <span class="accent">verify</span>.<br>Ballots that stay <span class="accent">private</span>.</h1>
+        <p class="lead">ZK Voting is a self-hostable voting and polling system. Zero-knowledge proofs let anyone check that only eligible people voted, each at most once, and that the published tally matches the accepted ballots. Nobody's choice is published.</p>
+        <div class="cta">
+          <a class="btn" href="https://demo.zk-voting.org">Open the demo</a>
+          <a class="btn btn-ghost" href="https://community.zk-voting.org">Join the community</a>
+        </div>
+        <pre class="terminal" aria-label="Self-host quickstart"><span class="dim"># run your own node</span>
+cp .env.example .env
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health</pre>
+      </div>
+    </section>
+
+    <section class="band" id="what">
+      <div class="wrap two-col">
+        <div>
+          <h2>What ZK Voting is</h2>
+          <p>Democratic processes still ask voters, candidates and courts to trust a small set of operators: who is on the roll, who was turned away, whether a ballot was counted, and whether the result matches the ballots. ZK Voting makes those claims checkable.</p>
+          <p>It has two tightly coupled parts: a Node application where voters, election officials and observers do their work, and Solidity smart contracts that register voters, open ballots, accept votes with zero-knowledge proofs and enforce disqualification on Ethereum.</p>
+        </div>
+        <ul class="checks">
+          <li>No token. No paid tier. No vendor lock-in.</li>
+          <li>Built to be forked and rebranded by a city, union, school, cooperative or other body.</li>
+          <li>Outcomes are verifiable on chain. Passing a vote does not auto-execute anything.</li>
+          <li>Run at cost: hosting, gas sponsorship, paper notices.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <p class="sub">Zero-knowledge proofs let the chain check facts about a voter without putting the ballot in the clear.</p>
+        <ol class="steps">
+          <li><span class="n">1</span><h3>Register</h3><p>A person registers for a jurisdiction. Their Merkle leaf is an identity commitment, never their wallet address.</p></li>
+          <li><span class="n">2</span><h3>Freeze the roll</h3><p>Officials commit the eligible set and the disqualification set for the election. Disqualifications are public, coded, on-chain state changes.</p></li>
+          <li><span class="n">3</span><h3>Vote with a proof</h3><p>The ballot carries a proof that the voter is eligible and not disqualified. A one-time nullifier means a second ballot is rejected.</p></li>
+          <li><span class="n">4</span><h3>Hourly disclosure</h3><p>Public dashboards publish vote proofs once an hour, after the hour closes, so a person leaving a polling place can't be matched to a live tick.</p></li>
+          <li><span class="n">5</span><h3>Proven tally</h3><p>After the poll closes, anyone can check that the published totals match the accepted ballots.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="band" id="features">
+      <div class="wrap">
+        <h2>Features</h2>
+        <div class="grid">
+          <article class="card"><h3>Eligibility proofs</h3><p>A vote is only valid if the prover is in the current eligible set for that election.</p></article>
+          <article class="card"><h3>Disqualification with due process</h3><p>Officials can bar a registered person for coded, jurisdiction-defined reasons, and the circuits reject their vote.</p></article>
+          <article class="card"><h3>One counted ballot</h3><p>Each nullifier is accepted once. Voters can change their mind privately on the form before they submit.</p></article>
+          <article class="card"><h3>Hidden choice</h3><p>The selected option is never a plaintext field anyone can read from a transaction.</p></article>
+          <article class="card"><h3>Many ballot types</h3><p>Yes/no, single choice, multiple choice, ranked choice (IRV), measures and articles.</p></article>
+          <article class="card"><h3>Flexible sign-in</h3><p>Passkeys, Ethereum wallet, email, smart card or civic ID, with email MFA and a vote PIN at ballot submit.</p></article>
+          <article class="card"><h3>Public explorer and results</h3><p>A block explorer and results pages let observers follow registrations, disqualifications and the tally.</p></article>
+          <article class="card"><h3>Independent auditor</h3><p>An offline auditor reconstructs an election from published artifacts without the node's private database.</p></article>
+          <article class="card"><h3>Accessible and scriptable</h3><p>WCAG 2.2 AA checks on the voter and admin pages, plus a documented bot API with OpenAPI and llms.txt.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="self-host">
+      <div class="wrap two-col">
+        <div>
+          <h2>Self-host it</h2>
+          <p>A jurisdiction runs its own node with Docker Compose, Coolify, Dokploy or CapRover, optionally private behind a Tailscale sidecar. Every node serves its self-hosting guides at <code>/docs</code>.</p>
+          <p>Cheap, high-volume civic activity lands on the ZK Voting L2, a purpose-built civic sequencer and prover that settles to Ethereum. Final tallies can be mirrored on Ethereum mainnet.</p>
+        </div>
+        <div class="panel">
+          <h3>Project status</h3>
+          <p>Under active development. Unit tests use a mock verifier, the first proving path is in progress and the trusted-setup ceremony is not done yet. Don't use it for a binding election today.</p>
+          <a class="link" href="https://demo.zk-voting.org">See it running on the demo &rarr;</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="band final">
+      <div class="wrap center">
+        <h2>Open source, not for profit</h2>
+        <p class="sub">ZK Voting is licensed AGPL-3.0-or-later. Nobody is meant to make money from it; voter data is not a product.</p>
+        <div class="cta center">
+          <a class="btn" href="https://demo.zk-voting.org">Try the demo</a>
+          <a class="btn btn-ghost" href="https://community.zk-voting.org">Talk to us on the forum</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot">
+      <span>&copy; ZK Voting contributors &middot; AGPL-3.0-or-later &middot; Not for profit</span>
+      <span><a href="https://demo.zk-voting.org">Demo</a> &middot; <a href="https://community.zk-voting.org">Community</a></span>
+    </div>
+  </footer>
+</body>
+</html>

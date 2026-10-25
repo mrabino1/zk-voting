@@ -208,6 +208,6 @@ export const POSEIDON_HASH_SCHEME = "zk-voting.hash.poseidon-bn254-x5-t3-v1";
 const pkgJson = path.join(REPO, "packages/proof-helpers/poseidon-constants.json");
 fs.writeFileSync(pkgJson, JSON.stringify(spec) + "\n");
 fs.writeFileSync(path.join(REPO, "circuits/hasher/poseidon_constants_t3.circom"), circom);
-fs.writeFileSync(path.join(REPO, "smart-contracts/src/hasher/PoseidonT3.sol"), sol);
+fs.writeFileSync(path.join(REPO, "../smart-contracts/src/hasher/PoseidonT3.sol"), sol);
 fs.writeFileSync(path.join(REPO, "apps/node/public/poseidon.js"), browser);
 console.log("generated poseidon circom constants, PoseidonT3.sol, public/poseidon.js");
