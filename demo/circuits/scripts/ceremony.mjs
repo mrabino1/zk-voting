@@ -174,7 +174,7 @@ export function assertEntropy(entropy, { published }) {
 export function assertExportDir(outDir) {
   const resolved = path.resolve(outDir);
   const banned = [
-    path.join(REPO, "smart-contracts", "src"),
+    path.join(REPO, "..", "smart-contracts", "src"),
     path.join(REPO, "circuits", "fixtures"),
   ];
   for (const root of banned) {

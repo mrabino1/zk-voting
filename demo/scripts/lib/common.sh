@@ -7,7 +7,7 @@
 
 # shellcheck disable=SC2034  # REPO_ROOT and SC_DIR are used by the callers.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SC_DIR="$REPO_ROOT/smart-contracts"
+SC_DIR="$(cd "$REPO_ROOT/.." && pwd)/smart-contracts"  # monorepo: smart-contracts/ sits at the repository root, next to demo/
 
 # Foundry installs to ~/.foundry/bin; add it when it is not on PATH yet.
 if [[ -d "${HOME:-/nonexistent}/.foundry/bin" ]]; then

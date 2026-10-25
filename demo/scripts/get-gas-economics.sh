@@ -200,7 +200,7 @@ if [[ "$BUILD" -eq 1 ]]; then
   (cd "$SC_DIR" && forge build >&2)
 fi
 if [[ ! -d "$OUT_DIR" ]]; then
-  die "no forge artifacts at $OUT_DIR. Run: (cd smart-contracts && forge build), or pass --build."
+  die "no forge artifacts at $OUT_DIR. Run: (cd ../smart-contracts && forge build), or pass --build."
 fi
 
 # --- deployment record ---------------------------------------------------------

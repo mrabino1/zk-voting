@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+apps/node/node_modules/
+packages/*/node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+out/
+cache/
+broadcast/
+coverage/
+lcov.info
+*.tsbuildinfo
+
+# Foundry
+
+# Circom / snarkjs
+circuits/build/
+circuits/pot*.ptau
+*.zkey
+*.wtns
+verification_key.json
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Host-specific Compose overrides (see docker-compose.override.example.yml)
+docker-compose.override.yml
+compose.override.yml
+*.pem
+*.key
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs / runtime
+logs/
+*.log
+apps/node/data/
+*.sqlite
+*.sqlite-journal
+
+# L2 local data
+l2/data/
+l2/.anvil*
+
+# One-time L1 deploy records (template stays tracked)
+deployments/*.json
+!deployments/template.json
+
+# Nested tool repos
+
+# vendored forge-std extras (src/ is tracked)

@@ -114,7 +114,7 @@ test("beacon parameters and names stay inside the snarkjs rules", () => {
 
 test("export cannot land on the production verifier or the committed fixture", () => {
   assert.throws(
-    () => assertExportDir(path.join(REPO, "smart-contracts/src/zk")),
+    () => assertExportDir(path.join(REPO, "../smart-contracts/src/zk")),
     /smart-contracts\/src/,
   );
   assert.throws(
