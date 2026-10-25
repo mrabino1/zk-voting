@@ -429,6 +429,8 @@ export async function startServer(overrides = {}) {
       try {
         if (typeof created.store.reloadFromDisk === 'function') await created.store.reloadFromDisk();
         if (typeof created.explorer.refresh === 'function') await created.explorer.refresh();
+        if (typeof created.store.claimWriter === 'function') await created.store.claimWriter();
+        if (typeof created.explorer.claimWriter === 'function') await created.explorer.claimWriter();
         created.config.receiptPdfSecret = await loadReceiptPdfSecret(created.config, { mint: true });
         created.store.writerActive = true;
         created.explorer.writerActive = true;

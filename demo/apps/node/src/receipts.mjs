@@ -22,6 +22,7 @@ import {
 } from './pdf.mjs';
 import { publicVoteRecord } from './store.mjs';
 import { sha256Hex } from './terms.mjs';
+import { migrate, putSecretIfAbsent, readSecret, usingPostgres } from './db.mjs';
 
 export const RECEIPT_SCHEMA = 'zk-voting.receipt.v1';
 export const RECEIPT_PDF_FILENAME = 'zk-voting-vote-receipt.pdf';
@@ -59,6 +60,24 @@ export async function loadReceiptPdfSecret(config, { mint = true } = {}) {
   if (fromConfig) return fromConfig;
   const fromEnv = String(process.env.RECEIPT_PDF_SECRET || '').trim();
   if (fromEnv) return fromEnv;
+  if (usingPostgres(config)) {
+    await migrate(config, { quiet: config.quiet });
+    const stored = await readSecret(config, RECEIPT_SECRET_NAME);
+    if (stored) return stored;
+    // One-time import of the secret a JSON-era node minted in DATA_DIR, so
+    // receipt PDFs issued before the move still verify.
+    let secret = '';
+    if (config?.dataDir) {
+      try {
+        secret = (await fs.readFile(path.join(config.dataDir, 'receipt-pdf.secret'), 'utf8')).trim();
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+      }
+    }
+    if (!secret && !mint) return '';
+    if (!secret) secret = randomBytes(32).toString('base64url');
+    return putSecretIfAbsent(config, RECEIPT_SECRET_NAME, secret);
+  }
   const dir = config?.dataDir;
   if (!dir) throw new Error('receipt PDF secret: dataDir or RECEIPT_PDF_SECRET required');
   const file = path.join(dir, 'receipt-pdf.secret');
@@ -74,6 +93,8 @@ export async function loadReceiptPdfSecret(config, { mint = true } = {}) {
   await fs.writeFile(file, `${secret}\n`, { encoding: 'utf8', mode: 0o600 });
   return secret;
 }
+
+const RECEIPT_SECRET_NAME = 'receipt-pdf';
 
 export function receiptPdfOwnerPassword(secret, tokenHash) {
   return createHmac('sha256', String(secret || ''))
