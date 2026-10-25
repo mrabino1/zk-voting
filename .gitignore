@@ -21,11 +21,11 @@ node_modules/
 # Logs
 *.log
 
-# Foundry (contracts/)
-contracts/out/
-contracts/cache/
-contracts/broadcast/
-contracts/lib/**/.git
-contracts/lib/forge-std/test/
-contracts/lib/forge-std/.github/
-contracts/lib/forge-std/scripts/
+# Foundry (smart-contracts/)
+smart-contracts/out/
+smart-contracts/cache/
+smart-contracts/broadcast/
+smart-contracts/lib/**/.git
+smart-contracts/lib/forge-std/test/
+smart-contracts/lib/forge-std/.github/
+smart-contracts/lib/forge-std/scripts/

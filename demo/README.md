@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./docs/NOT_FOR_PROFIT.md).
 
-> **Monorepo layout (2026-10-25):** this folder (`demo/`) holds the app. References below to `smart-contracts/` now mean [`../contracts/`](../contracts) at the repository root, and the landing page lives in [`../site/`](../site). Commands in this README run from `demo/`.
+> **Monorepo layout (2026-10-25):** this folder (`demo/`) holds the app. The Solidity package `smart-contracts/` lives at the repository root ([`../smart-contracts/`](../smart-contracts)); references below to `smart-contracts/` mean that folder, and the landing page lives in [`../site/`](../site). Commands in this README run from `demo/`.
 
 A monorepo for a **zero-knowledge, Ethereum-settled voting and polling system** that anyone can self-host, fork, and rebrand to learn the will of the people. Default product name: **zk-voting**, the same as the repo name, until an administrator renames it.
 
