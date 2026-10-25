@@ -10,10 +10,13 @@ import { PIN_MAX_LEN, PIN_MIN_LEN } from '../pin.mjs';
 import { credentialProviderPublic } from '../credentials.mjs';
 import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
 import { listAggregators } from '../guardians/aggregate.mjs';
+import { pingDatabase } from '../db.mjs';
 
 export function healthRouter(deps) {
   const router = Router();
-  router.get(['/health', '/api/health'], (req, res) => {
+  router.get(['/health', '/api/health'], asyncHandler(async (req, res) => {
+    const db = await pingDatabase(deps.config);
+    db.backend = deps.store?.backend || db.backend;
     const now = deps.config.nowFn();
     const interval = deps.config.disclosureIntervalSeconds;
     const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
@@ -22,10 +25,13 @@ export function healthRouter(deps) {
     const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
     const mode = deps.writer?.mode?.() || 'active';
     res.set('x-zk-voting-mode', mode);
-    res.json({
-      ok: true,
-      ready: true,
+    // Postgres configured but unreachable: report it (503) so the
+    // orchestrator's health check sees the Node cannot persist.
+    res.status(db.ok ? 200 : 503).json({
+      ok: db.ok,
+      ready: db.ok,
       mode,
+      db,
       acceptingWrites: deps.writer ? deps.writer.acceptingWrites() : true,
       epoch: deps.writer?.epoch?.() || 0,
       app: 'zk-voting',
@@ -40,7 +46,7 @@ export function healthRouter(deps) {
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
       disclosure: publicDisclosureView(now, interval, { acceptedBallotsDisclosed }),
     });
-  });
+  }));
   return router;
 }
 

@@ -24,6 +24,17 @@ Never commit `.env`, and never bake secrets into an image.
 | `PUBLIC_BASE_URL` | empty → `https://$VOTE_FQDN` | Origin printed in official-outcome QR codes. |
 | `TRUST_PROXY` | empty | Set `1` behind a reverse proxy or Tailscale so rate limits see the real client. |
 
+## Storage
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | empty | Postgres connection string (`postgres://user:pass@host:5432/db`, add `?sslmode=require` for TLS). When set, all Node app state (accounts and passkeys, sessions, elections, registrations, ballots, receipts, ceremonies metadata, site settings, plugin state, the explorer chain, the receipt PDF secret) lives in Postgres, so a container without a volume keeps its data. Tables are created on boot (`zkv_*`, idempotent migrations). Empty: JSON files in `DATA_DIR` (development fallback). The active backend is logged at startup and shown in `/health` as `db`. |
+| `DATA_DIR` | `/data` in the image | JSON store when `DATABASE_URL` is empty. With Postgres it still holds large files (ceremony artifacts, plugin uploads) and the writer lease. On the first boot against an empty database, an existing `zk-voting.json`, `l2-chain.json`, and `receipt-pdf.secret` here are imported once; the files are left in place and no longer read. |
+| `PGSSLMODE` | empty | Fallback for `sslmode` when the URL has none (`require`, `verify-full`). |
+| `PG_POOL_MAX` | `5` | Postgres pool size. |
+
+`/health` returns `503` with `db.ok: false` when Postgres is configured but unreachable.
+
 ## Administration
 
 | Variable | Default | Purpose |
@@ -37,7 +48,7 @@ Never commit `.env`, and never bake secrets into an image.
 | Variable | Purpose |
 | --- | --- |
 | `EXPLORER_INGEST_SECRET` | Shared by `node` and `l2`. Unset in production refuses explorer ingest. |
-| `RECEIPT_PDF_SECRET` | Key material for locked receipt and outcome PDFs. Empty: the Node creates `$DATA_DIR/receipt-pdf.secret`. |
+| `RECEIPT_PDF_SECRET` | Key material for locked receipt and outcome PDFs. Empty: the Node creates one and keeps it in Postgres (`zkv_secrets`), or in `$DATA_DIR/receipt-pdf.secret` without `DATABASE_URL`. |
 | `CREDENTIAL_PROVIDER_SECRET`, `CREDENTIAL_PROVIDER_ID` | Civil-credential connector. Empty secret means manual officer review. |
 | `RELAYER_PRIVATE_KEY`, `PRIVATE_KEY`, `L1_PUBLISHER_PRIVATE_KEY` | Chain keys. Runtime only. Never in git or an image. |
 

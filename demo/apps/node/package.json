@@ -25,6 +25,7 @@
     "@zk-voting/proof-helpers": "file:../../packages/proof-helpers",
     "cors": "2.8.5",
     "express": "4.21.2",
+    "pg": "^8.23.1",
     "snarkjs": "0.7.6",
     "viem": "2.56.5"
   },

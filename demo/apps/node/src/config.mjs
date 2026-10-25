@@ -223,6 +223,9 @@ export function getConfig(overrides = {}) {
       : process.env.L1_SETTLEMENT_ADDRESS || process.env.SETTLEMENT_ADDRESS || process.env.SETTLEMENT || '',
     l1ChainId: isTest ? 0 : Number(process.env.L1_CHAIN_ID || 0),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
+    // Postgres app state. Unset → JSON files in dataDir (dev fallback). The
+    // test suite stays on JSON unless TEST_DATABASE_URL points at a scratch DB.
+    databaseUrl: isTest ? process.env.TEST_DATABASE_URL || '' : process.env.DATABASE_URL || '',
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
     allowDevLogin: (() => {
       if (process.env.NODE_ENV === 'production') return false;
