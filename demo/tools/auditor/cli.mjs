@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Independent auditor CLI. Export public artifacts and verify invariants
-// without the Node private DB (apps/node/data/republic.json).
+// without the Node private DB (apps/node/data/zk-voting.json).
 
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { verifyAuditorBundle, AUDITOR_SCHEMA } from './verify.mjs';
 import { verifyPollBundle, POLL_AUDITOR_SCHEMA } from './verifyPoll.mjs';
 
 function usage() {
-  return `Republic auditor (NOT FOR PROFIT)
+  return `ZK-Voting auditor (NOT FOR PROFIT)
 
 Verify a public election without the Node private database.
 
@@ -54,7 +54,7 @@ function sampleBundle() {
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,
-    product: 'Republic',
+    product: 'ZK-Voting',
     chainId: 27427,
     electionId: '1',
     contracts: {
@@ -148,7 +148,7 @@ async function main(argv) {
   }
 
   if (cmd === 'export-chain') {
-    const rpcUrl = arg('--rpc', argv) || process.env.REPUBLIC_RPC_URL || 'http://127.0.0.1:8545';
+    const rpcUrl = arg('--rpc', argv) || process.env.ZK_VOTING_RPC_URL || 'http://127.0.0.1:8545';
     const factory = arg('--factory', argv) || process.env.ELECTION_FACTORY_ADDRESS;
     const election = arg('--election', argv) || arg('--id', argv);
     if (!factory || !election) {

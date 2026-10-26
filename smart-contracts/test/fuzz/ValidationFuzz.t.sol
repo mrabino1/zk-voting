@@ -10,7 +10,7 @@ import {IElection} from "../../src/interfaces/IElection.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
 
-/// @notice Fuzz factory bounds and inbox public-input length (nuursha-style).
+/// @notice Fuzz factory bounds and inbox public-input length (edge-case fuzzing).
 contract ValidationFuzz is Deployer {
     function setUp() public {
         deployStack();

@@ -111,7 +111,7 @@ async function seedPasskeyUser() {
 
 describe('passkey and Ethereum wallet login (returning users)', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-auth-login-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-auth-login-'));
     verifyAuthImpl = async () => ({
       verified: true,
       authenticationInfo: { newCounter: 1 },
@@ -158,7 +158,7 @@ describe('passkey and Ethereum wallet login (returning users)', () => {
     const { status, json } = await api('POST', '/api/auth/passkey/login/begin', { body: {} });
     assert.equal(status, 200, json?.error);
     assert.ok(json.challenge);
-    assert.equal(json.rpName, 'Republic');
+    assert.equal(json.rpName, 'ZK-Voting');
     const listed = json.allowCredentials || json.publicKey?.allowCredentials;
     assert.ok(!listed || listed.length === 0);
   });
@@ -186,7 +186,7 @@ describe('passkey and Ethereum wallet login (returning users)', () => {
     assert.equal(finish.json.verified, true);
     assert.equal(finish.json.user.handle, 'passkey-voter');
     assert.equal(finish.json.user.role, 'voter');
-    assert.ok(passkeyJar['republic.sid']);
+    assert.ok(passkeyJar['zk-voting.sid']);
     assert.ok(finish.json.identity.authMethods.some((m) => m.type === 'passkey'));
 
     const me = await api('GET', '/api/me', { jar: passkeyJar });
@@ -315,7 +315,7 @@ describe('passkey and Ethereum wallet login (returning users)', () => {
     assert.equal(login.status, 200, login.json?.error);
     assert.equal(login.json.user.handle, 'wallet-alice');
     assert.equal(login.json.user.role, 'voter');
-    assert.ok(walletJar['republic.sid']);
+    assert.ok(walletJar['zk-voting.sid']);
     const me = await api('GET', '/api/me', { jar: walletJar });
     assert.equal(me.json.user.handle, 'wallet-alice');
     assert.equal(me.json.identity.activeEthAddress, account0.address);

@@ -2,9 +2,9 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-Republic needs a **public, election-grade explorer** because the Node is not the source of truth. If the web app is down, censored, or lying, observers, losing candidates, and courts must still answer: **what happened in block N?**
+ZK-Voting needs a **public, election-grade explorer** because the Node is not the source of truth. If the web app is down, censored, or lying, observers, losing candidates, and courts must still answer: **what happened in block N?**
 
-This is not a general-purpose ETH explorer white-label. It is indexed around election outcomes on Republic L2 (chainId **27427**) and, when used, L1 settlement / tally-mirror transactions.
+This is not a general-purpose ETH explorer white-label. It is indexed around election outcomes on ZK-Voting L2 (chainId **27427**) and, when used, L1 settlement / tally-mirror transactions.
 
 UI: Node page `/explorer` (`public/explorer.html` + `explorer.js`, vanilla JS). HTTP: `GET /api/explorer/blocks`, `GET /api/explorer/blocks/:n`, `GET /api/explorer/txs/:hash`, `GET /api/explorer/disclosure`, `GET /api/explorer/search`, `GET /api/explorer/nullifiers/:value`, `GET /api/explorer/elections/:id`. Public election snapshot: `GET /api/elections/:id/summary`. Backend is the JSON log `apps/node/data/l2-chain.json` (Node appends + sequencer `POST /api/explorer/ingest`). The civic sequencer also exposes `eth_getBlockByNumber` on **:8546**. This explorer does **not** ABI-decode generic EVM logs.
 

@@ -10,7 +10,7 @@ import {ITallyVerifier} from "../../src/interfaces/ITallyVerifier.sol";
 import {Handler} from "./Handler.sol";
 
 /// @title VotingInvariant
-/// @notice Foundry invariant suite for Republic / zk-voting.
+/// @notice Foundry invariant suite for zk-voting.
 ///         fail_on_revert is false in foundry.toml; the handler also
 ///         swallows reverts so the run is not aborted.
 ///         Per individual election (not a lifetime ban): a nullifier is accepted

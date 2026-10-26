@@ -70,7 +70,7 @@ function electionBody(title) {
 
 describe('DELETE unused election', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-delete-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-delete-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

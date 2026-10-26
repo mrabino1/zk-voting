@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial sequencer.
-// JSON-RPC subset for Republic L2.
+// JSON-RPC subset for ZK-Voting L2.
 import http from 'node:http';
 import { toQuantity } from '../sequencer/state.mjs';
 
@@ -14,7 +14,26 @@ const METHODS = new Set([
   'eth_call',
   'net_version',
   'eth_getBalance',
+  // ZK-Voting identity and per-election reads (no ballots, no secrets).
+  'zkv_l2Identity',
+  'zkv_getElection',
+  'zkv_listElections',
 ]);
+
+/** Public identity of this L2. Never returns L2_SALT or L2_ADMIN_SECRET. */
+export function publicIdentity(state) {
+  const id = state.config.identity || {};
+  return {
+    chainId: state.config.chainId,
+    l2Uuid: id.l2Uuid || state.config.l2Uuid || '',
+    l2Id: id.l2Id || '',
+    operator: id.operator || '',
+    l1ChainId: id.l1ChainId || String(state.config.l1ChainId || ''),
+    registryAddress: id.registryAddress || '',
+    admission: state.config.admission || 'open',
+    adminWritesEnabled: Boolean(state.config.adminSecret),
+  };
+}
 
 function ok(id, result) {
   return { jsonrpc: '2.0', id, result };
@@ -62,6 +81,15 @@ export function dispatch(state, req) {
         if (!p[0]) return fail(id, -32602, 'missing address');
         return ok(id, state.getBalance(p[0]));
       }
+      case 'zkv_l2Identity':
+        return ok(id, publicIdentity(state));
+      case 'zkv_getElection': {
+        if (typeof p[0] !== 'string' || !p[0]) return fail(id, -32602, 'missing election UUID');
+        const info = typeof state.electionInfo === 'function' ? state.electionInfo(p[0]) : null;
+        return ok(id, info ? { ...info, l2: publicIdentity(state) } : null);
+      }
+      case 'zkv_listElections':
+        return ok(id, typeof state.listElections === 'function' ? state.listElections() : []);
       default:
         return fail(id, -32601, `method not found: ${method}`);
     }
@@ -71,9 +99,35 @@ export function dispatch(state, req) {
   }
 }
 
+/**
+ * Per-client write budget for a gasless chain. Off by default (the Node app
+ * relays every vote from one address); set L2_WRITE_RATE_PER_MIN when the RPC
+ * is reachable from the public internet.
+ */
+export function createWriteLimiter(perMinute, nowFn = () => Date.now()) {
+  const limit = Number(perMinute) || 0;
+  const buckets = new Map();
+  return function allow(key) {
+    if (limit <= 0) return true;
+    const now = nowFn();
+    const b = buckets.get(key) || { tokens: limit, at: now };
+    b.tokens = Math.min(limit, b.tokens + ((now - b.at) / 60_000) * limit);
+    b.at = now;
+    if (b.tokens < 1) {
+      buckets.set(key, b);
+      return false;
+    }
+    b.tokens -= 1;
+    buckets.set(key, b);
+    if (buckets.size > 10_000) buckets.delete(buckets.keys().next().value);
+    return true;
+  };
+}
+
 export function createRpcServer(state, { host, port } = {}) {
   const listenHost = host || state.config.rpcHost || '127.0.0.1';
   const listenPort = Number(port || state.config.rpcPort || 8546);
+  const allowWrite = createWriteLimiter(process.env.L2_WRITE_RATE_PER_MIN || state.config.writeRatePerMin || 0);
 
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -88,14 +142,14 @@ export function createRpcServer(state, { host, port } = {}) {
       const mode = state.acceptingWrites() ? 'active' : 'standby';
       res.writeHead(200, {
         'content-type': 'application/json',
-        'x-republic-mode': mode,
+        'x-zk-voting-mode': mode,
       });
       res.end(
         JSON.stringify({
           ok: true,
           ready: true,
           nfp: true,
-          name: 'Republic L2',
+          name: 'ZK-Voting L2',
           role: 'sequencer',
           mode,
           acceptingWrites: state.acceptingWrites(),
@@ -141,12 +195,17 @@ export function createRpcServer(state, { host, port } = {}) {
     const writes = (Array.isArray(body) ? body : [body]).some(
       (item) => item && item.method === 'eth_sendRawTransaction',
     );
+    if (writes && !allowWrite(req.socket?.remoteAddress || 'unknown')) {
+      res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '5' });
+      res.end(JSON.stringify(fail(Array.isArray(body) ? null : body?.id ?? null, -32005, 'write rate limit')));
+      return;
+    }
     if (writes && !state.acceptingWrites()) {
       const id = Array.isArray(body) ? null : body.id ?? null;
       res.writeHead(503, {
         'content-type': 'application/json',
         'retry-after': '2',
-        'x-republic-mode': 'standby',
+        'x-zk-voting-mode': 'standby',
       });
       res.end(
         JSON.stringify({
@@ -177,7 +236,7 @@ export function createRpcServer(state, { host, port } = {}) {
       res.writeHead(503, {
         'content-type': 'application/json',
         'retry-after': '2',
-        'x-republic-mode': 'standby',
+        'x-zk-voting-mode': 'standby',
       });
     } else {
       res.writeHead(200, { 'content-type': 'application/json' });

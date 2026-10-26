@@ -47,7 +47,7 @@ Open `https://zk-voting.your-tailnet.ts.net` from any device on the tailnet. The
 | `TS_SERVE_CONFIG` | `/config/serve.json` | Written at start-up: HTTPS on 443 proxies to `http://node:3000`. `${TS_CERT_DOMAIN}` is filled in by Tailscale. |
 | `TS_FUNNEL` | `${TS_FUNNEL:-false}` | `true` publishes the site to the internet through Funnel (the tailnet policy must allow Funnel for this node). |
 | `TS_ENABLE_HEALTH_CHECK` | `true` | Serves `/healthz` on `TS_LOCAL_ADDR_PORT` (`127.0.0.1:9002`): HTTP 200 once the node has a tailnet IP. |
-| Network | `republic` | Same Compose network as `node`, so the proxy reaches `node:3000`. |
+| Network | `zk-voting` | Same Compose network as `node`, so the proxy reaches `node:3000`. |
 
 The `node` and `l2` ports are bound to `127.0.0.1` in this file, so nothing is reachable from the public network except through Tailscale (or a proxy you add).
 

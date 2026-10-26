@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-Anything that lets people run a binding vote will be attacked. Republic does
+Anything that lets people run a binding vote will be attacked. ZK-Voting does
 not treat a public UUID as a security boundary. This file is the adversarial
 map for **who can occupy an L1 result slot**, impersonate a jurisdiction, or
 confuse the public record. Crypto gaps (MockVerifier, Poseidon, ceremony)
@@ -34,7 +34,7 @@ problem**, not a UUID problem.
 
 ```
 certificationId = keccak256(abi.encode(
-  keccak256("republic.election.identity.v1"),
+  keccak256("zk-voting.election.identity.v1"),
   factory,          // shared ElectionFactory
   electionId,       // factory uint256
   jurisdictionId    // Election.params, not a client string
@@ -155,7 +155,7 @@ Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (identifiers), [`OPERATOR.md`](.
 | Sybil | Not relevant. Splitting tokens across addresses does not raise total weight. The UI leads with weight. |
 | Whale dominance | Inherent to token weighting. Stated as signal only. |
 | Forged ballot | EIP-712 or ERC-1271 signature from the holding address. |
-| Signature replay | Domain binds `pollDomain`, token, `ballotSpecHash`, and Republic chain id 27427. One ballot per address. |
+| Signature replay | Domain binds `pollDomain`, token, `ballotSpecHash`, and ZK-Voting chain id 27427. One ballot per address. |
 | Deanonymization | Public mode is public on purpose. Address-hiding is not offered. |
 | Lying RPC | Auditor re-derives weights on an independent RPC. Block hashes are pinned. A second archive RPC, if set, must agree. |
 | Reorgs | Tally waits until the close block is finalized and re-checks hashes. |

@@ -20,10 +20,10 @@ import { isoUtc, pdfCreatedDay } from './receipts.mjs';
 import { buildResults } from './results.mjs';
 import { sha256Hex } from './terms.mjs';
 
-export const OUTCOME_REPORT_SCHEMA = 'republic.outcome-report.v1';
-export const OUTCOME_REPORT_PDF_FILENAME = 'republic-official-outcome.pdf';
-export const OUTCOME_REPORT_BEGIN = '-----BEGIN REPUBLIC OUTCOME REPORT-----';
-export const OUTCOME_REPORT_END = '-----END REPUBLIC OUTCOME REPORT-----';
+export const OUTCOME_REPORT_SCHEMA = 'zk-voting.outcome-report.v1';
+export const OUTCOME_REPORT_PDF_FILENAME = 'zk-voting-official-outcome.pdf';
+export const OUTCOME_REPORT_BEGIN = '-----BEGIN ZK-VOTING OUTCOME REPORT-----';
+export const OUTCOME_REPORT_END = '-----END ZK-VOTING OUTCOME REPORT-----';
 export const OUTCOME_VERIFY_PATH = '/outcomes/verify';
 export const OUTCOME_QR_PATH = '/o';
 

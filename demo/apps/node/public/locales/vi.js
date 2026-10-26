@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Vietnamese).
+ * NOT FOR PROFIT — ZK-Voting website copy (Vietnamese).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "PHI LỢI NHUẬN — hàng hóa công dân sự. Không phải sản phẩm thương mại. Không token. Không thu phí cử tri.",
     nfpBannerExplorer:
       "PHI LỢI NHUẬN — hàng hóa công dân sự. Không phải sản phẩm thương mại. Không token. Không quảng cáo.",
-    brandHome: "Trang chủ Republic",
+    brandHome: "Trang chủ {brand}",
     brandSub: "Văn phòng bầu cử dân sự",
     brandSubExplorer: "Trình khám phá khối L2",
     navVoter: "Cử tri",
@@ -51,27 +51,30 @@ export default {
     navPublic: "Công khai",
     session: "Phiên",
     officeBadge: "Phi lợi nhuận",
-    loading: "Đang tải Republic…",
-    footerNfp: "PHI LỢI NHUẬN — Republic là hàng hóa công dân sự. Không phải sản phẩm thương mại.",
+    loading: "Đang tải {brand}…",
+    footerNfp: "PHI LỢI NHUẬN — {brand} là hàng hóa công dân sự. Không phải sản phẩm thương mại.",
     footerMeta:
-      "Tên sản phẩm Republic. Cử tri không trả gas. Lựa chọn không bao giờ được in trên biên lai. Cam kết danh tính sản xuất dùng Poseidon; bản demo Node này có thể chỉ hiển thị hex cam kết keccak256 (không bao giờ trapdoor hay cụm từ khôi phục).",
+      "Tên sản phẩm {brand}. Cử tri không trả gas. Lựa chọn không bao giờ được in trên biên lai. Cam kết danh tính sản xuất dùng Poseidon; bản demo Node này có thể chỉ hiển thị hex cam kết keccak256 (không bao giờ trapdoor hay cụm từ khôi phục).",
     footerOfficials: "Cán bộ:",
     footerBackOffice: "văn phòng nội bộ",
     footerExplorer: "trình khám phá khối",
     footerAdmin: "admin",
-    footerAdminMeta: "Tên sản phẩm Republic. Không token. Không quảng cáo.",
+    footerAdminMeta: "Tên sản phẩm {brand}. Không token. Không quảng cáo.",
     footerL2: "Trình khám phá L2",
-    footerBackOfficeMeta: "Tên sản phẩm Republic. Lựa chọn không bao giờ được in ở đây.",
-    footerExplorerMeta: "Trình khám phá L2 của Republic. Văn bản rõ của phiếu không phải trường trên chuỗi này.",
+    footerBackOfficeMeta: "Tên sản phẩm {brand}. Lựa chọn không bao giờ được in ở đây.",
+    footerExplorerMeta: "Trình khám phá L2 của {brand}. Văn bản rõ của phiếu không phải trường trên chuỗi này.",
     footerResults: "Kết quả bầu cử",
     noscript:
-      "Republic cần JavaScript để nói chuyện với passkey thiết bị (WebAuthn). Bật JavaScript rồi tải lại, hoặc dùng trang bỏ phiếu dễ tiếp cận do thư ký của bạn vận hành.",
+      "{brand} cần JavaScript để nói chuyện với passkey thiết bị (WebAuthn). Bật JavaScript rồi tải lại, hoặc dùng trang bỏ phiếu dễ tiếp cận do thư ký của bạn vận hành.",
     metaDescription:
-      "Republic là hệ thống bỏ phiếu dân sự phi lợi nhuận. Xác định danh tính bằng passkey, ví Web3 hoặc thẻ thông minh ID số, rồi gửi phiếu kín, có thể kiểm chứng công khai.",
-    titleHome: "Republic — bầu cử dân sự",
-    titleAdmin: "Quản trị nền tảng · Republic",
-    titleBackOffice: "Văn phòng nội bộ · Republic",
-    titleExplorer: "Trình khám phá L2 Republic",
+      "{brand} là hệ thống bỏ phiếu dân sự phi lợi nhuận. Xác định danh tính bằng passkey, ví Web3 hoặc thẻ thông minh ID số, rồi gửi phiếu kín, có thể kiểm chứng công khai.",
+    titleHome: "{brand} — bầu cử dân sự",
+    titleAdmin: "Quản trị nền tảng · {brand}",
+    titleCeremony: "Nghi thức thiết lập tin cậy · {brand}",
+    titleCeremonyTranscript: "Bản ghi nghi thức · {brand}",
+    titleCeremonyAdmin: "Điều phối nghi thức · {brand}",
+    titleBackOffice: "Văn phòng nội bộ · {brand}",
+    titleExplorer: "Trình khám phá L2 {brand}",
     titleBallot: "Phiếu bầu",
     titleRegister: "Đăng ký",
     titleResults: "Kết quả",
@@ -151,7 +154,7 @@ export default {
   home: {
     kicker: "Trang cử tri",
     title: "Các cuộc bầu cử trên Node này",
-    lede: "Đây là bàn cử tri của Republic: đăng ký bằng passkey thiết bị, kiểm tra bạn có trên danh sách không, và đánh phiếu khi cuộc bỏ phiếu đang mở. Republic không phải sản phẩm thương mại.",
+    lede: "Đây là bàn cử tri của {brand}: đăng ký bằng passkey thiết bị, kiểm tra bạn có trên danh sách không, và đánh phiếu khi cuộc bỏ phiếu đang mở. {brand} không phải sản phẩm thương mại.",
     openCount: "{count} cuộc bầu cử đang nhận phiếu.",
     openCount_one: "{count} cuộc bầu cử đang nhận phiếu.",
     walletPresent: "Ví passkey trên thiết bị này. Cam kết {commitment}…",
@@ -228,7 +231,7 @@ export default {
     stepCommitRest: " vào danh sách bầu cử — không bao giờ tên, không bao giờ ví làm lá.",
     web3Title: "Ví Web3",
     web3Body:
-      "Ký thông điệp gắn Republic. Địa chỉ thuộc riêng bạn. Nó có thể được xác minh nội bộ ngay cả khi địa chỉ khác đang hoạt động.",
+      "Ký thông điệp gắn {brand}. Địa chỉ thuộc riêng bạn. Nó có thể được xác minh nội bộ ngay cả khi địa chỉ khác đang hoạt động.",
     bindWallet: "Gắn ví Web3",
     cardTitle: "Thẻ thông minh ID số",
     cardBody:
@@ -253,9 +256,9 @@ export default {
     identityCommitment: "Cam kết danh tính",
     copyCommitment: "Sao chép cam kết",
     copiedCommitment: "Đã sao chép cam kết danh tính.",
-    localAddress: "Địa chỉ cục bộ Republic",
+    localAddress: "Địa chỉ cục bộ {brand}",
     prfWrap:
-      "Wrap PRF: vật liệu tài khoản dùng muối republic:account:v1; ZK trapdoor dùng muối republic:identity:v1. Chúng không cùng các byte.",
+      "Wrap PRF: vật liệu tài khoản dùng muối zk-voting:account:v1; ZK trapdoor dùng muối zk-voting:identity:v1. Chúng không cùng các byte.",
     createFirst: "Tạo passkey để suy cam kết. Trapdoor không bao giờ hiện trên màn hình này.",
     activeEthTitle: "Địa chỉ Ethereum đang hoạt động",
     noActive:
@@ -354,7 +357,7 @@ export default {
     staleWrap:
       "Thiết bị này có wrap passkey v1 suy danh tính bỏ phiếu từ hạt giống tài khoản. Đặt lại trên trang đăng ký và tạo passkey mới trước khi bỏ phiếu.",
     noPasskey:
-      "Thiết bị này chưa có passkey Republic. Hãy đăng ký trước, rồi quay lại phiếu.",
+      "Thiết bị này chưa có passkey {brand}. Hãy đăng ký trước, rồi quay lại phiếu.",
     goRegister: "Đến đăng ký",
     pollsClosed:
       "Cuộc bỏ phiếu của cuộc bầu cử này đã đóng. Bạn có thể xem câu hỏi; Node sẽ không nhận phiếu mới.",
@@ -509,11 +512,11 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Republic cần passkey thiết bị (WebAuthn) với khóa thường trú và xác minh người dùng. Dùng trình duyệt hiện tại (Safari 16+, Chrome 108+, Firefox 122+, Edge) trên thiết bị có trình xác thực nền tảng. Cụm từ khôi phục không bao giờ được hiện.",
+      "{brand} cần passkey thiết bị (WebAuthn) với khóa thường trú và xác minh người dùng. Dùng trình duyệt hiện tại (Safari 16+, Chrome 108+, Firefox 122+, Edge) trên thiết bị có trình xác thực nền tảng. Cụm từ khôi phục không bao giờ được hiện.",
     productionNote:
-      "Sản xuất dùng keccak256(khóa công khai secp256k1 chưa nén), rồi lấy 20 byte cuối (Ethereum). Bản demo này không nhân được trên secp256k1 nếu không có thư viện đường cong, nên getAddress() trả SHA-256(seed)[0:20] gắn nhãn republic-local-address.",
+      "Sản xuất dùng keccak256(khóa công khai secp256k1 chưa nén), rồi lấy 20 byte cuối (Ethereum). Bản demo này không nhân được trên secp256k1 nếu không có thư viện đường cong, nên getAddress() trả SHA-256(seed)[0:20] gắn nhãn zk-voting-local-address.",
     staleWrap:
-      "Trình duyệt này có wrap passkey v1 (IndexedDB republic-wallet). v1 suy ZK trapdoor từ cùng hạt giống với khóa tài khoản, yếu hơn docs/PASSKEYS.md. Bản demo không thể chuyển wrap đó tại chỗ: v1 dùng muối PRF ngẫu nhiên và một miền HKDF, nên muối tài khoản/danh tính mới không mở được. Đặt lại ví thiết bị và tạo passkey mới. Địa chỉ cục bộ và cam kết danh tính sẽ đổi; mục danh sách demo trước sẽ không khớp.",
+      "Trình duyệt này có wrap passkey v1 (IndexedDB zk-voting-wallet). v1 suy ZK trapdoor từ cùng hạt giống với khóa tài khoản, yếu hơn docs/PASSKEYS.md. Bản demo không thể chuyển wrap đó tại chỗ: v1 dùng muối PRF ngẫu nhiên và một miền HKDF, nên muối tài khoản/danh tính mới không mở được. Đặt lại ví thiết bị và tạo passkey mới. Địa chỉ cục bộ và cam kết danh tính sẽ đổi; mục danh sách demo trước sẽ không khớp.",
     noEthWallet:
       "Không có ví Ethereum trong trình duyệt này. Dùng passkey, hoặc cài ví hỗ trợ personal_sign.",
     noWeb3Wallet: "Không có ví Web3 trong trình duyệt này. Cài ví hoặc dùng passkey / thẻ thông minh.",
@@ -666,7 +669,7 @@ export default {
     clerkHint:
       "Tạo cuộc bầu cử, rồi đóng băng danh sách trước khi mở bỏ phiếu. <code>maxParticipants = 0</code> nghĩa là không giới hạn. Chọn đa số tương đối (mặc định) hoặc xếp hạng (IRV).",
     chainNote:
-      "Nếu Node này đã đặt <code>CHAIN_RPC</code>, Tạo cuộc bầu cử cũng gọi <code>ElectionFactory.createElection</code> và lưu id uint256 trên chuỗi cạnh UUID. Lỗi nhà máy hiện ở đây và không lưu cục bộ. Không có <code>CHAIN_RPC</code> thì biểu mẫu này chỉ ghi <code>republic.json</code> (demo) và vẫn đúc <code>onChainElectionId</code> demo cho mạch.",
+      "Nếu Node này đã đặt <code>CHAIN_RPC</code>, Tạo cuộc bầu cử cũng gọi <code>ElectionFactory.createElection</code> và lưu id uint256 trên chuỗi cạnh UUID. Lỗi nhà máy hiện ở đây và không lưu cục bộ. Không có <code>CHAIN_RPC</code> thì biểu mẫu này chỉ ghi <code>zk-voting.json</code> (demo) và vẫn đúc <code>onChainElectionId</code> demo cho mạch.",
     jurisdiction: "Khu vực tài phán",
     titleField: "Tiêu đề",
     metadataUri: "URI siêu dữ liệu",
@@ -864,7 +867,7 @@ export default {
     pluralityTag: "{type} · đa số tương đối",
   },
   explorer: {
-    kicker: "Republic L2 · chuỗi 27427",
+    kicker: "{brand} L2 · chuỗi 27427",
     title: "Trình khám phá khối",
     lede: "Hồ sơ công khai của mọi khối: đăng ký (chỉ cam kết), phiếu đã chấp nhận (nullifier + hash phiếu — không bao giờ lựa chọn), tước tư cách, kiểm phiếu và lô rollup. Bằng chứng phiếu chỉ xuất hiện sau khi giờ chứa chúng đóng, nên người rời phòng bỏ phiếu không thể bị khớp với nhịp tăng trực tiếp của khu vực tài phán. Ảnh chụp bên dưới là giờ UTC đã đóng gần nhất: số phiếu đã công bố, khi giờ đó kết thúc, và đếm ngược đến lần cập nhật tiếp. Lựa chọn không bao giờ hiện ở đây. Không quảng cáo. Không token.",
     searchLabel: "Tìm sổ cái",
@@ -875,7 +878,7 @@ export default {
     breadcrumb: "Đường dẫn",
     privacyTitle: "Quyền riêng tư phiếu",
     privacyBody:
-      "Giao dịch này chứng minh đủ tư cách và tính duy nhất. Trình khám phá hiện nullifier và hash phiếu. Văn bản rõ của lựa chọn không phải trường trên Republic L2 và không bao giờ được vẽ ở đây. Hàng phiếu chỉ xuất hiện sau khi giờ chứa chúng đã đóng, nên rời phòng bỏ phiếu không thể khớp với nhịp tăng trực tiếp của khu vực tài phán.",
+      "Giao dịch này chứng minh đủ tư cách và tính duy nhất. Trình khám phá hiện nullifier và hash phiếu. Văn bản rõ của lựa chọn không phải trường trên {brand} L2 và không bao giờ được vẽ ở đây. Hàng phiếu chỉ xuất hiện sau khi giờ chứa chúng đã đóng, nên rời phòng bỏ phiếu không thể khớp với nhịp tăng trực tiếp của khu vực tài phán.",
     noTx: "Không có giao dịch trong khung nhìn này.",
     type: "Loại",
     txnHash: "Hash giao dịch",
@@ -1038,7 +1041,7 @@ export default {
   feedback: {
     title: "Phản hồi",
     kicker: "Liên hệ",
-    lede: "Hãy nói với người vận hành trang Republic này điều gì nên thay đổi. Đây không phải phiếu bầu. Đừng ghi lựa chọn phiếu, số giấy tờ, hoặc cụm từ hạt giống.",
+    lede: "Hãy nói với người vận hành trang {brand} này điều gì nên thay đổi. Đây không phải phiếu bầu. Đừng ghi lựa chọn phiếu, số giấy tờ, hoặc cụm từ hạt giống.",
     nameLabel: "Tên (không bắt buộc)",
     emailLabel: "Email để trả lời (không bắt buộc)",
     emailHint: "Chỉ dùng làm địa chỉ Reply-To trên thư gửi người vận hành. Để trống nếu không muốn gửi địa chỉ trả lời.",

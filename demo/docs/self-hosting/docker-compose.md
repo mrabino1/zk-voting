@@ -62,7 +62,7 @@ docker compose down              # stop (volumes are kept)
 
 | Volume | Mounted at | Contains |
 | --- | --- | --- |
-| `node-data` | `/data` in `node` | `republic.json` (users, elections, receipts), receipt PDF secret. |
+| `node-data` | `/data` in `node` | `zk-voting.json` (users, elections, receipts), receipt PDF secret. |
 | `l2-data` | `/data` in `l2`, `prover`, `archive` | Sealed blocks, proofs, mempool, leases. |
 
 Back both up before every upgrade: [Backups](./backups.md).

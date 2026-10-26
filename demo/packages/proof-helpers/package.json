@@ -2,7 +2,7 @@
   "name": "@zk-voting/proof-helpers",
   "version": "0.1.0",
   "private": true,
-  "description": "NOT FOR PROFIT — public-input serialization, packed encoding, versioned hash helpers for Republic proofs.",
+  "description": "NOT FOR PROFIT — public-input serialization, packed encoding, versioned hash helpers for ZK-Voting proofs.",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",
   "main": "index.js",

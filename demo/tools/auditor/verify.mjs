@@ -1,7 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Offline verification of a Republic auditor bundle. No Node private DB.
+// Offline verification of a ZK-Voting auditor bundle. No Node private DB.
 
-export const AUDITOR_SCHEMA = 'republic.auditor.v1';
+export const AUDITOR_SCHEMA = 'zk-voting.auditor.v1';
 
 const BANNED_FIELDS = ['choice', 'optionId', 'option_id', 'userId', 'passkeyUserId', 'plaintext', 'voteFor'];
 
@@ -43,7 +43,7 @@ export function verifyAuditorBundle(bundle) {
   check('nfp', bundle.nfp === true, 'bundle.nfp must be true');
   check(
     'schema',
-    bundle.schema === AUDITOR_SCHEMA || bundle.schema === 'republic.auditor.v1',
+    bundle.schema === AUDITOR_SCHEMA || bundle.schema === 'zk-voting.auditor.v1',
     `schema must be ${AUDITOR_SCHEMA}`,
   );
   check('electionId', bundle.electionId != null && String(bundle.electionId) !== '', 'electionId required');

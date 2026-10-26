@@ -67,7 +67,7 @@ function nowSec() {
 
 describe('one-ballot-per-nullifier and auditor pack', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-coercion-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-coercion-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -145,7 +145,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     assert.equal(first.json.receipt.choice, undefined);
     assert.equal(first.json.receipt.receiptsProveChoice, false);
     assert.ok(first.json.receipt.token);
-    assert.match(first.json.receipt.proofText, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.match(first.json.receipt.proofText, /BEGIN ZK-VOTING VOTE RECEIPT/);
     assert.doesNotMatch(first.json.receipt.proofText, /I voted for/i);
 
     const replay = await api('POST', `/api/elections/${id}/vote`, {
@@ -194,7 +194,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
 
     const artifacts = await api('GET', `/api/elections/${id}/artifacts`);
     assert.equal(artifacts.status, 200);
-    assert.equal(artifacts.json.schema, 'republic.auditor.v1');
+    assert.equal(artifacts.json.schema, 'zk-voting.auditor.v1');
     assert.equal(artifacts.json.nfp, true);
     assert.equal(artifacts.json.acceptedBallots, 1);
     assert.equal(artifacts.json.coercion.receiptsProveChoice, false);

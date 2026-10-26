@@ -1,4 +1,4 @@
-# Republic bot API
+# ZK-Voting bot API
 
 > NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
 
@@ -18,7 +18,7 @@ Create and revoke from the profile while the browser session is signed in:
 ```http
 POST /api/me/api-keys
 Content-Type: application/json
-Cookie: republic.sid=…
+Cookie: zk-voting.sid=…
 
 { "name": "assistant", "level": "read", "expiresIn": "30d" }
 ```
@@ -47,7 +47,7 @@ These path values are not record counts: `questionId` and `optionId` are ballot 
 
 ```bash
 curl -sS \
-  -H "Authorization: Bearer $REPUBLIC_API_KEY" \
+  -H "Authorization: Bearer $ZK_VOTING_API_KEY" \
   -H "Accept: application/json" \
   "$ORIGIN/api/me"
 ```
@@ -146,6 +146,7 @@ Machine-readable copies:
 - `GET /api/elections/:id` (key read). One election. When the caller is signed in, includes that person’s registration status. Choice is never included.
 - `PATCH /api/elections/:id` (key officer, signed in). Clerk edits the ballot before the roll is frozen.
 - `PUT /api/elections/:id` (key officer, signed in). Same edit as PATCH.
+- `DELETE /api/elections/:id` (key officer, signed in). Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction. Body: confirmTitle.
 - `GET /api/elections/:id/info` (key read). Voter-facing questions, options, and supporting info.
 - `GET /api/elections/:id/info/:questionId/:optionId` (key read). One option and its external links.
 - `GET /api/elections/:id/results` (key read). Certified plurality or IRV results after tally. Empty of option counts before tally.
@@ -234,7 +235,7 @@ Machine-readable copies:
 - `GET /api/outcomes/reports/:id` (key read). One official outcome report record.
 - `GET /api/outcomes/reports/:id/pdf` (key read). Locked official outcome PDF.
 - `POST /api/outcomes/verify` (key read). Check an official outcome PDF was not modified. Body: pdf bytes or id.
-- `GET /api/me/outcome-subscriptions` (key read, signed in). Elections whose official PDF this person will be emailed. Voting subscribes them by default.
+- `GET /api/me/outcome-subscriptions` (key read, signed in). Elections whose official PDF this person will be emailed. Subscription is opt-in; voting never subscribes anyone.
 - `PUT /api/me/outcome-subscriptions/:electionId` (key voter, signed in). Subscribe or confirm a subscription to an official outcome PDF.
 - `POST /api/me/outcome-subscriptions` (key voter, signed in). Subscribe the caller to an election’s official outcome PDF. Body: electionId.
 - `GET /api/admin/outcome-report-template` (key read, signed in). Platform admin reads the official outcome PDF template. QR and hash seals stay required.
@@ -249,14 +250,14 @@ Machine-readable copies:
 - `GET /api/explorer/nullifiers/:value` (key read). Whether a nullifier was accepted. The nullifier does not reveal the choice or the person.
 - `GET /api/explorer/search` (key read). Search blocks, transactions, and elections.
 - `GET /api/explorer/elections/:id` (key read). Explorer view of one election.
-- `POST /api/explorer/ingest` (key officer). Operator ingest of civic L2 events. Send the host ingest secret in X-Republic-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.
+- `POST /api/explorer/ingest` (key officer). Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.
 ### Polls
 
 - `GET /api/polls` (key read). Token polls when POLLS_ENABLED is on. Polls are signal, not binding elections. Omitted from the Node when the flag is off.
 - `GET /api/polls/:id` (key read). One token poll.
 - `GET /api/polls/:id/weight` (key read). Read-only token weight for an address. The Node does not move tokens.
 - `GET /api/polls/:id/typed-data` (key read). EIP-712 typed data a holder signs. Query: address, choices.
-- `POST /api/polls/:id/ballots` (key voter). Submit a signed token-poll ballot. No Republic account is required. A read-only key is refused.
+- `POST /api/polls/:id/ballots` (key voter). Submit a signed token-poll ballot. No account on this site is required. A read-only key is refused.
 - `POST /api/polls/:id/tally` (key voter, signed in). Any signed-in person may ask the Node to tally a closed token poll. Counts come from accepted ballots.
 - `GET /api/polls/:id/results` (key read). Token poll results after tally.
 - `GET /api/polls/:id/artifacts` (key read). Token poll auditor pack.

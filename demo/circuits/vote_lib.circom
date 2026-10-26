@@ -5,7 +5,7 @@ pragma circom 2.0.0;
 // Vote circuit: eligible-set membership + disqualification non-membership
 // + unique nullifier + ballot bind.
 //
-// HASH_SCHEME: republic.hash.poseidon-bn254-x5-t3-v1 via identity.circom →
+// HASH_SCHEME: zk-voting.hash.poseidon-bn254-x5-t3-v1 via identity.circom →
 // hasher/poseidon.circom (circomlib Poseidon(2)). Merkle paths on chain and in
 // this circuit must use the same HashLeftRight. There is no ceremony in this
 // file. Do not mix keccak-dev-v1 or standin-v0 leaves into a Poseidon proof.

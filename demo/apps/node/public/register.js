@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Passkey registration + identity commitment display (commitment hex only).
  */
 
+import { brandName } from "./brand.js";
 import { bindCivicId, bindSmartCard, bindWeb3Wallet, isMfaChallenge, provideMfaEmail, registerEthAccount, removeBoundEmail, removePasskey, setActiveEthAddress, setPrimaryEmail, startEmailRegister, verifyMfaCode } from "./identity-methods.js";
 import { renderPinManager } from "./pin-pad.js";
 import { atEmailCap, atPasskeyCap, identityCapNote, renderCivicCredentials, renderEmailAccounts, renderEthAccounts, renderPasskeyAccounts } from "./identity-accounts.js";
@@ -324,7 +325,7 @@ export async function renderRegister(main, ctx) {
             h(
               "p",
               {
-                text: "Sign a Republic binding message. The address is uniquely yours. After the signature, email MFA still runs.",
+                text: `Sign a ${brandName()} binding message. The address is uniquely yours. After the signature, email MFA still runs.`,
               }
             ),
             h(
@@ -482,7 +483,7 @@ export async function renderRegister(main, ctx) {
                   }
                 )
               ),
-              h("p", { class: "field-label", text: "Republic local address" }),
+              h("p", { class: "field-label", text: `${brandName()} local address` }),
               h("div", { class: "hex", text: `${rec.address}  ·  ${rec.addressScheme}` }),
               h("p", { class: "field-hint", text: rec.productionAddressNote }),
               rec.staleWrap
@@ -494,7 +495,7 @@ export async function renderRegister(main, ctx) {
                     }
                   )
                 : rec.prfSupported
-                ? h("p", { text: "PRF wrap: account material uses salt republic:account:v1; the ZK trapdoor uses salt republic:identity:v1. They are not the same bytes." })
+                ? h("p", { text: "PRF wrap: account material uses salt zk-voting:account:v1; the ZK trapdoor uses salt zk-voting:identity:v1. They are not the same bytes." })
                 : h(
                     "p",
                     {
@@ -1005,20 +1006,10 @@ export async function renderRegister(main, ctx) {
     announce("Confirm the passkey to authorize registration.");
     try {
       const auth = await wallet.authorizeBallot({ electionId, ballotBytes: null });
-      const body = {
-        identityCommitment: auth.identityCommitment,
-        address: auth.address,
-        addressScheme: auth.addressScheme,
-        credentialId: auth.credentialId,
-        signature: auth.signature,
-        userOpHash: auth.userOpHash,
-        userOp: {
-          sender: auth.address,
-          nonce: "0x0",
-          signature: auth.signature,
-          callData: "register",
-        },
-      };
+      // Only the commitment goes to the Node. The smart-account address,
+      // credential id, signature and userOp hash stay on this device: any of
+      // them seen at /register could later be matched against a ballot.
+      const body = { identityCommitment: auth.identityCommitment };
       let status = "pending";
       try {
         const res = await api(`/api/elections/${encodeURIComponent(electionId)}/register`, {

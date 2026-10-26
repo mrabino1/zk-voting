@@ -10,6 +10,7 @@ import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IExternalPartyRegistry} from "./interfaces/IExternalPartyRegistry.sol";
 import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
+import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 
 /// @title BallotInbox
 /// @notice Accepts gasless vote proofs. `msg.sender` is the relayer/bundler.
@@ -21,6 +22,12 @@ import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 ///      `NullifierUsed`, including a new ciphertext. Voters may change their
 ///      mind privately on the ballot form before submit. Double voting remains
 ///      impossible. Receipts list hashes only and cannot prove choice.
+///
+///      Audit H-05: `ballotHash` (public input 3) is
+///      `uint256(keccak256(encryptedBallot)) mod r` so it is always a BN254
+///      field element. Audit H-04: a clearance commitment must be eligible on
+///      this election's roll. Audit H-03: ballots are refused while a paged
+///      eligible-root rebuild is pending.
 contract BallotInbox is IBallotInbox {
     error ZeroAddress();
     error UnknownElection();
@@ -37,6 +44,13 @@ contract BallotInbox is IBallotInbox {
     error InvalidProof();
     error AlreadyTallied();
     error ClearanceRequired();
+    error ClearanceCommitmentNotEligible();
+    error EligibleRootPending();
+    error TallyStatusUnavailable();
+
+    /// @notice BN254 scalar field modulus r.
+    uint256 public constant SNARK_SCALAR_FIELD =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
     IElectionFactory public immutable factory;
 
@@ -64,7 +78,7 @@ contract BallotInbox is IBallotInbox {
         bytes calldata encryptedBallot
     ) external {
         if (encryptedBallot.length == 0) revert EmptyBallot();
-        if (publicInputs.length < 5) revert InvalidPublicInputs();
+        if (publicInputs.length != 5) revert InvalidPublicInputs();
 
         IElection election = _getElection(electionId);
         _requireNoActiveGates(electionId);
@@ -76,7 +90,8 @@ contract BallotInbox is IBallotInbox {
 
         uint256 nullifier = publicInputs[2];
         bytes32 ballotHash = bytes32(publicInputs[3]);
-        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        // Audit L-06: key by the field element so n and n + r cannot both land.
+        if (_nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD]) revert NullifierUsed();
         _recordAcceptance(electionId, nullifier, ballotHash);
     }
 
@@ -92,10 +107,10 @@ contract BallotInbox is IBallotInbox {
         uint256[] calldata mustAttestIds
     ) external {
         if (encryptedBallot.length == 0) revert EmptyBallot();
-        if (publicInputs.length < 5) revert InvalidPublicInputs();
+        if (publicInputs.length != 5) revert InvalidPublicInputs();
 
         IElection election = _getElection(electionId);
-        _requireExternalClearance(electionId, identityCommitment, mustAttestIds);
+        _requireExternalClearance(election, electionId, identityCommitment, mustAttestIds);
         address verifier = _requireOpen(election);
         _requireNotTallied(electionId);
         _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
@@ -104,13 +119,14 @@ contract BallotInbox is IBallotInbox {
 
         uint256 nullifier = publicInputs[2];
         bytes32 ballotHash = bytes32(publicInputs[3]);
-        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        // Audit L-06: key by the field element so n and n + r cannot both land.
+        if (_nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD]) revert NullifierUsed();
         _recordAcceptance(electionId, nullifier, ballotHash);
     }
 
     /// @inheritdoc IBallotInbox
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool) {
-        return _nullifierUsed[electionId][nullifier];
+        return _nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD];
     }
 
     /// @inheritdoc IBallotInbox
@@ -120,7 +136,7 @@ contract BallotInbox is IBallotInbox {
 
     /// @inheritdoc IBallotInbox
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32) {
-        return _ballotHashOf[electionId][nullifier];
+        return _ballotHashOf[electionId][nullifier % SNARK_SCALAR_FIELD];
     }
 
     /// @inheritdoc IBallotInbox
@@ -134,13 +150,19 @@ contract BallotInbox is IBallotInbox {
     }
 
     function _requireNotTallied(uint256 electionId) internal view {
+        // Audit M-04: fail closed. The tally module is set once in the factory
+        // (M-03); a failing read or a reverting `isTallied` blocks the ballot
+        // instead of silently skipping the check. Zero means no tally module
+        // is wired, so nothing can have been tallied yet.
         (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("tallyVerifier()"));
-        if (!ok || ret.length < 32) return;
+        if (!ok || ret.length < 32) revert TallyStatusUnavailable();
         address tally = abi.decode(ret, (address));
         if (tally == address(0)) return;
         try ITallyVerifier(tally).isTallied(electionId) returns (bool done) {
             if (done) revert AlreadyTallied();
-        } catch {}
+        } catch {
+            revert TallyStatusUnavailable();
+        }
     }
 
     function _getElection(uint256 electionId) internal view returns (IElection election) {
@@ -160,13 +182,22 @@ contract BallotInbox is IBallotInbox {
         if (IExternalPartyRegistry(registry).hasActiveGates()) revert ClearanceRequired();
     }
 
+    /// @dev The commitment is still not a proof public input (that needs a
+    ///      circuit change, see audit H-04), but it must at least be a
+    ///      registered, not-disqualified roll entry of this election, so a
+    ///      vetoed voter can no longer pass an arbitrary unregistered value.
     function _requireExternalClearance(
+        IElection election,
         uint256 electionId,
         uint256 identityCommitment,
         uint256[] calldata mustAttestIds
     ) internal view {
         address registry = _partyRegistry(electionId);
         if (registry == address(0)) return;
+        address voters = election.voterRegistry();
+        if (voters == address(0) || !IVoterRegistry(voters).isEligible(electionId, identityCommitment)) {
+            revert ClearanceCommitmentNotEligible();
+        }
         IExternalPartyRegistry(registry).assertCastAllowed(identityCommitment, mustAttestIds);
     }
 
@@ -195,15 +226,25 @@ contract BallotInbox is IBallotInbox {
         }
         if (publicInputs[4] != electionId) revert ElectionIdMismatch();
 
-        bytes32 expected = keccak256(encryptedBallot);
-        if (bytes32(publicInputs[3]) != expected && publicInputs[3] != uint256(expected)) {
-            revert BallotHashMismatch();
+        if (publicInputs[3] != ballotHashOfCiphertext(encryptedBallot)) revert BallotHashMismatch();
+
+        address voters = election.voterRegistry();
+        if (voters != address(0)) {
+            (bool ok, bytes memory ret) =
+                voters.staticcall(abi.encodeWithSelector(IVoterRegistry.eligibleRootPending.selector, electionId));
+            if (ok && ret.length >= 32 && abi.decode(ret, (bool))) revert EligibleRootPending();
         }
     }
 
+    /// @notice Field-safe ballot hash: `uint256(keccak256(ciphertext)) mod r`.
+    function ballotHashOfCiphertext(bytes calldata encryptedBallot) public pure returns (uint256) {
+        return uint256(keccak256(encryptedBallot)) % SNARK_SCALAR_FIELD;
+    }
+
     function _recordAcceptance(uint256 electionId, uint256 nullifier, bytes32 ballotHash) internal {
-        _nullifierUsed[electionId][nullifier] = true;
-        _ballotHashOf[electionId][nullifier] = ballotHash;
+        uint256 key = nullifier % SNARK_SCALAR_FIELD;
+        _nullifierUsed[electionId][key] = true;
+        _ballotHashOf[electionId][key] = ballotHash;
         _ballotHashList[electionId].push(ballotHash);
         _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
         unchecked {

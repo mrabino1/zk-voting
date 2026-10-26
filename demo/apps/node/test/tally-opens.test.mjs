@@ -157,7 +157,7 @@ function partialBody(share, electionId, envelopes) {
 
 describe('tally opens ballots (guardian threshold)', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-tally-opens-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-tally-opens-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

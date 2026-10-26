@@ -2,7 +2,7 @@ pragma circom 2.0.0;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 //
-// HASH_SCHEME: republic.hash.poseidon-bn254-x5-t3-v1
+// HASH_SCHEME: zk-voting.hash.poseidon-bn254-x5-t3-v1
 //
 // Selected Hasher() for identity.circom / vote.circom. Poseidon(2) over bn254,
 // S-box x^5, t=3, the circomlib parameter set. Constants live in
@@ -50,7 +50,7 @@ template Mix(t, M) {
     }
 }
 
-// Poseidon(nInputs). Republic only instantiates nInputs = 2 (t = 3).
+// Poseidon(nInputs). ZK-Voting only instantiates nInputs = 2 (t = 3).
 template Poseidon(nInputs) {
     signal input inputs[nInputs];
     signal output out;

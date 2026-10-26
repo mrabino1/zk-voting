@@ -16,12 +16,12 @@ import { sha256Hex } from '../src/terms.mjs';
 describe('deterministic PDF writer', () => {
   test('unencrypted terms-style PDF has no Encrypt dict and is stable', () => {
     const a = buildDeterministicPdf({
-      title: 'Republic Terms of Use',
+      title: 'ZK-Voting Terms of Use',
       lines: ['Alpha line', 'Beta line'],
       created: '2026-09-19',
     });
     const b = buildDeterministicPdf({
-      title: 'Republic Terms of Use',
+      title: 'ZK-Voting Terms of Use',
       lines: ['Alpha line', 'Beta line'],
       created: '2026-09-19',
     });
@@ -34,7 +34,7 @@ describe('deterministic PDF writer', () => {
   test('protected PDF forbids modify, hides plaintext, decrypts with empty user password', () => {
     const token = 'tok_HOLD_ER_TOKEN_VALUE_32bytes____';
     const pdf = buildDeterministicPdf({
-      title: 'Republic vote receipt',
+      title: 'ZK-Voting vote receipt',
       lines: [
         'This PDF is encrypted and locked against modification.',
         `Ballot hash: 0x${'ab'.repeat(32)}`,
@@ -58,7 +58,7 @@ describe('deterministic PDF writer', () => {
     assert.match(opened, new RegExp(token));
     assert.match(opened, /locked against modification/);
     const again = buildDeterministicPdf({
-      title: 'Republic vote receipt',
+      title: 'ZK-Voting vote receipt',
       lines: [
         'This PDF is encrypted and locked against modification.',
         `Ballot hash: 0x${'ab'.repeat(32)}`,

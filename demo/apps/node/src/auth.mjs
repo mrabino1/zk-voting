@@ -18,7 +18,7 @@ export function attachAuth(store, config) {
   return function authMiddleware(req, _res, next) {
     const cookies = parseCookies(req.headers.cookie);
     const sid = cookies[config.sessionCookie];
-    const mfaName = config.mfaCookie || 'republic.mfa';
+    const mfaName = config.mfaCookie || 'zk-voting.mfa';
     req.sessionId = sid || null;
     req.session = sid ? store.getSession(sid) : null;
     req.mfaNonce = cookies[mfaName] || null;
@@ -50,7 +50,9 @@ export function attachAuth(store, config) {
       req.publicUser = publicUser(req.user);
       req.apiKey = publicApiKey(found.key);
       req.authVia = 'api_key';
-      store.touchApiKey(found.key.id).catch(() => {});
+      // Never write a timestamp for the key that cast a ballot: lastUsedAt at
+      // the second of a vote would join that key's owner to the ballot row.
+      if (!isBallotRequest(req)) store.touchApiKey(found.key.id).catch(() => {});
       next();
       return;
     }
@@ -63,6 +65,13 @@ export function attachAuth(store, config) {
     req.publicUser = publicUser(req.user);
     next();
   };
+}
+
+/** POST /api/elections/:id/vote — the ballot request itself. */
+export function isBallotRequest(req) {
+  if (req.method !== 'POST') return false;
+  const p = String(req.originalUrl || req.url || '').split('?')[0];
+  return /^\/api\/elections\/[^/]+\/vote\/?$/.test(p);
 }
 
 const API_KEY_ERROR = Object.freeze({

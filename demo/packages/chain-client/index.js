@@ -22,7 +22,7 @@ const {
   functionSelector,
   encodePacked,
 } = require("@zk-voting/proof-helpers");
-const { REPUBLIC_CHAIN_ID } = require("@zk-voting/types");
+const { ZK_VOTING_CHAIN_ID } = require("@zk-voting/types");
 
 /** @typedef {import('@zk-voting/types').ElectionParams} ElectionParams */
 /** @typedef {import('@zk-voting/types').VoteEnvelope} VoteEnvelope */
@@ -120,22 +120,6 @@ const INBOX_ABI = [
   },
   {
     type: "function",
-    name: "submitVoteWithClearance",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "electionId", type: "uint256" },
-      { name: "a", type: "uint256[2]" },
-      { name: "b", type: "uint256[2][2]" },
-      { name: "c", type: "uint256[2]" },
-      { name: "publicInputs", type: "uint256[]" },
-      { name: "encryptedBallot", type: "bytes" },
-      { name: "identityCommitment", type: "uint256" },
-      { name: "mustAttestIds", type: "uint256[]" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
     name: "nullifierUsed",
     stateMutability: "view",
     inputs: [
@@ -160,6 +144,33 @@ const INBOX_ABI = [
       { name: "nullifier", type: "uint256" },
     ],
     outputs: [{ type: "bytes32" }],
+  },
+];
+
+/**
+ * Opt-in only. `submitVoteWithClearance` puts the voter's plaintext
+ * identityCommitment in calldata next to the nullifier — a permanent public
+ * link from roll entry to ballot. It is NOT part of INBOX_ABI so no default
+ * client path can call it. Import CLEARANCE_INBOX_ABI explicitly only for
+ * contract tests; the fix is in-circuit clearance
+ * (docs/proposals/ballot-unlinkability-contracts.md).
+ */
+const CLEARANCE_INBOX_ABI = [
+  {
+    type: "function",
+    name: "submitVoteWithClearance",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2]" },
+      { name: "b", type: "uint256[2][2]" },
+      { name: "c", type: "uint256[2]" },
+      { name: "publicInputs", type: "uint256[]" },
+      { name: "encryptedBallot", type: "bytes" },
+      { name: "identityCommitment", type: "uint256" },
+      { name: "mustAttestIds", type: "uint256[]" },
+    ],
+    outputs: [],
   },
 ];
 
@@ -328,7 +339,7 @@ function calldataTwoUint256(signature, a, b) {
 /**
  * @typedef {Object} ChainClientOptions
  * @property {string} [rpcUrl] JSON-RPC endpoint (Foundry Anvil default http://127.0.0.1:8545).
- *   Civic Republic L2 sequencer listens on :8546 and is not this EVM.
+ *   Civic ZK-Voting L2 sequencer listens on :8546 and is not this EVM.
  * @property {number} [chainId]
  * @property {string} factoryAddress ElectionFactory.
  * @property {string} [inboxAddress] BallotInbox; can also be read from Election.inbox().
@@ -353,8 +364,8 @@ function normalizeOptions(factoryOrOpts, maybeOpts) {
 function getFactory(factoryAddressOrOpts, opts) {
   const options = normalizeOptions(factoryAddressOrOpts, opts);
   const address = padAddress(options.factoryAddress);
-  const rpcUrl = options.rpcUrl || process.env.REPUBLIC_RPC_URL || "http://127.0.0.1:8545";
-  const chainId = options.chainId || Number(process.env.REPUBLIC_CHAIN_ID || REPUBLIC_CHAIN_ID);
+  const rpcUrl = options.rpcUrl || process.env.ZK_VOTING_RPC_URL || "http://127.0.0.1:8545";
+  const chainId = options.chainId || Number(process.env.ZK_VOTING_CHAIN_ID || ZK_VOTING_CHAIN_ID);
   const viem = tryViem();
 
   async function read(functionName, args = []) {
@@ -628,7 +639,7 @@ async function submitVote(inboxAddressOrOpts, envelope, opts) {
       : { ...(inboxAddressOrOpts || {}), ...(opts || {}) };
 
   const inbox = padAddress(options.inboxAddress || options.to);
-  const rpcUrl = options.rpcUrl || process.env.REPUBLIC_RPC_URL || "http://127.0.0.1:8545";
+  const rpcUrl = options.rpcUrl || process.env.ZK_VOTING_RPC_URL || "http://127.0.0.1:8545";
   const viem = tryViem();
 
   if (!envelope) throw new Error("submitVote: VoteEnvelope required");
@@ -678,7 +689,7 @@ async function getElectionAddress(factoryAddressOrOpts, electionId, opts) {
 }
 
 async function acceptedBallots(inboxAddress, electionId, opts = {}) {
-  const rpcUrl = opts.rpcUrl || process.env.REPUBLIC_RPC_URL || "http://127.0.0.1:8545";
+  const rpcUrl = opts.rpcUrl || process.env.ZK_VOTING_RPC_URL || "http://127.0.0.1:8545";
   const viem = tryViem();
   const inbox = padAddress(inboxAddress);
   if (viem && opts.publicClient) {
@@ -697,7 +708,7 @@ async function acceptedBallots(inboxAddress, electionId, opts = {}) {
 }
 
 async function nullifierUsed(inboxAddress, electionId, nullifier, opts = {}) {
-  const rpcUrl = opts.rpcUrl || process.env.REPUBLIC_RPC_URL || "http://127.0.0.1:8545";
+  const rpcUrl = opts.rpcUrl || process.env.ZK_VOTING_RPC_URL || "http://127.0.0.1:8545";
   const inbox = padAddress(inboxAddress);
   const raw = await ethCall(rpcUrl, {
     to: inbox,
@@ -709,9 +720,10 @@ async function nullifierUsed(inboxAddress, electionId, nullifier, opts = {}) {
 const l1 = require("./l1");
 
 module.exports = {
-  REPUBLIC_CHAIN_ID,
+  ZK_VOTING_CHAIN_ID,
   FACTORY_ABI,
   INBOX_ABI,
+  CLEARANCE_INBOX_ABI,
   PARTY_REGISTRY_ABI,
   ELECTION_ABI,
   rpc,

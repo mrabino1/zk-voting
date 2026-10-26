@@ -1,26 +1,28 @@
-# zk-voting
+# ZK-Voting
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`NOT_FOR_PROFIT.md`](./docs/NOT_FOR_PROFIT.md).
 
 > **Monorepo layout (2026-10-25):** this folder (`demo/`) holds the app. The Solidity package `smart-contracts/` lives at the repository root ([`../smart-contracts/`](../smart-contracts)); references below to `smart-contracts/` mean that folder, and the landing page lives in [`../site/`](../site). Commands in this README run from `demo/`.
 
-A monorepo for a **zero-knowledge, Ethereum-settled voting and polling system** that anyone can self-host, fork, and rebrand to learn the will of the people. Default product name: **zk-voting**, the same as the repo name, until an administrator renames it.
+A monorepo for a **zero-knowledge, Ethereum-settled voting and polling system** that anyone can self-host, fork, and rebrand to learn the will of the people. Default product name: **ZK-Voting** (repo slug `zk-voting`), until an administrator renames it.
 
-> **Branding is yours.** `zk-voting` is only the default name. A fork for a city, union, school, cooperative, or survey group should show its own name. Today officers edit the public home page and contract pins at `/office/site`, and environment variables always win over values saved there. A full branding configuration (name, logo, colors, email sender) is on the roadmap. Earlier versions of this README called the product "Republic"; some identifiers keep that name for compatibility (`republic.json`, `REPUBLIC_NODE_URL`, the `republic` Compose network, Solidity names such as `RepublicEntryPoint`).
+> **Branding is yours.** `ZK-Voting` is only the default name. A fork for a city, union, school, cooperative, or survey group should show its own name. A super admin or admin sets the product name, short name, and tagline in **Site admin > Appearance > Branding**; the saved value wins over the `BRAND_NAME` / `BRAND_SHORT_NAME` / `BRAND_TAGLINE` environment defaults, which win over the built-in "ZK-Voting". The name is server-rendered into page titles, headers, footers, docs, emails, PDFs, and the WebAuthn relying-party name. Earlier versions called the product "ZK-Voting"; some identifiers keep that name for compatibility (`zk-voting.json`, `ZK_VOTING_NODE_URL`, the `zk-voting` Compose network, Solidity names such as `ZkVotingEntryPoint`).
 
 ## Quickstart
 
-You need Docker with Compose v2. Full guide: [Docker Compose quickstart](./docs/self-hosting/docker-compose.md).
+You need Docker with Compose v2 (and Node.js 20+ once, for the setup script). Full guide: [Docker Compose quickstart](./docs/self-hosting/docker-compose.md).
 
 ```bash
-git clone https://github.com/<your-org>/zk-voting.git
-cd zk-voting
-cp .env.example .env          # set VOTE_FQDN, SUPER_ADMIN_EMAIL, and the secrets it lists
-docker compose up -d --build
+git clone https://github.com/mrabino1/zk-voting.git
+cd zk-voting/demo
+./setup.sh                    # guided: writes .env, never prints a secret
+docker compose up -d --build  # setup.sh prints this exact command for your answers
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-Then open `http://127.0.0.1:3000`, go to **Register**, and claim the administrator handle (`ADMIN_HANDLE`, default `admin`) right away: [First launch](./docs/self-hosting/first-launch.md).
+`./setup.sh` (also `npm run setup`, or `./system_actions.sh setup`) asks for the super admin and setup token, the chain id, the entropy ceremony and setup entropy, the hostname, port, proxy and database, and the L2 identity and L1 submitter (`L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_UUID`, `L2_SALT`, `L2_ADMIN_SECRET`, then derives `L2_OPERATOR_ADDRESS` and `L2_ID` and warns when the submitter balance is low). Run it again any time: your answers are the defaults. `--deploy coolify` prints the Coolify settings instead (secret values by name only). By hand instead: `cp .env.example .env` and edit it.
+
+Then open the site and finish [first-run setup](./docs/self-hosting/first-launch.md) at `/setup`: create the super admin passkey (enter the `SETUP_TOKEN` from `.env`), confirm the steps and press **Finish setup**.
 
 Private by default: [`docker-compose.tailscale.yml`](./docker-compose.tailscale.yml) runs the same stack behind a `tailscale/tailscale:stable` sidecar with HTTPS on your tailnet and no public ports.
 
@@ -40,26 +42,54 @@ The same guides are served by every node at **`/docs`** and live in [`docs/self-
 | [First launch](./docs/self-hosting/first-launch.md) | |
 | [Health checks](./docs/self-hosting/health-checks.md) | |
 
+Trusted setup: [Groth16 ceremony](./docs/self-hosting/ceremony.md) (served at `/docs/ceremony`).
+
 Day-two operations, keys, and incident handling: [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+
+## Community discussion (optional Discourse)
+
+A vote tells you *what* people want. A conversation tells you *why*. We encourage every operator to run an open-source [Discourse](https://www.discourse.org) forum ([source](https://github.com/discourse/discourse)) next to zk-voting so constituents can discuss polls and elections with each other. It is **optional**: zk-voting works the same without it, and nothing in the app depends on it.
+
+**Why**
+
+- **Deliberation before a vote:** read the question, ask what it means, hear the arguments before the poll opens.
+- **Reflection after a vote:** the tally shows the result; the forum shows the reasons and the next question.
+- **Transparency:** one public place for ballot text, timelines, eligibility rules, and published results.
+- **Q&A with candidates and organizers:** officers, candidates, and the independent auditor answer in public.
+
+**How**
+
+- Self-host Discourse with its [official Docker install](https://github.com/discourse/discourse_docker) (`./discourse-setup` on a Linux host), or on [Coolify](https://coolify.io) or another open-source host on Linux (Dokploy, CapRover, plain Docker).
+- Give it its own subdomain, for example `community.<your-domain>` next to `vote.<your-domain>`. **HTTPS only.**
+- Single sign-on through [DiscourseConnect](https://meta.discourse.org/t/setup-discourseconnect-official-single-sign-on-for-discourse-sso/13045) pointing at the app is a **future, optional** idea. It is **not implemented** today; forum accounts are created on the forum.
+- Suggested categories: **Announcements** (read-only), **one category per election or poll**, and **Feedback** on the voting site itself.
+
+**Rules that protect the ballot**
+
+- Nobody is ever required to say how they voted, and organizers must never ask.
+- A forum identity is separate from the anonymous ballot. **Forum accounts must never be linked to ballots, receipts, nullifiers, or voting credentials**, by the operator or anyone else.
+- Remove vote-buying offers, coercion, and demands for proof of how someone voted.
+
+Full guide: [Community forum (optional Discourse)](./docs/self-hosting/discourse.md), also served at `/docs/discourse`. Install guides for the app itself: [`docs/self-hosting/`](./docs/self-hosting/README.md).
 
 ## Positioning
 
-[vote.makerdao.com](https://vote.makerdao.com) is the sample for this voting experience. That portal was built for MakerDAO's own governance. zk-voting makes the same kind of vote generic and self-hosted, like Discourse, so anybody can run their own vote. Maker executive votes are binding: when they pass, the underlying contracts execute the change. A zk-voting outcome is non-binding sentiment. The verifiable result is stored on chain, and passing a vote does not auto-execute anything. Operators also get more oversight and admin than that portal: an approval chain of platform and jurisdiction officers, public disqualification reason codes, and an independent auditor. Full note: [Inspiration: vote.makerdao.com](./implementation.md#inspiration-votemakerdaocom).
+[vote.makerdao.com](https://vote.makerdao.com) is the sample for this voting experience. That portal was built for MakerDAO's own governance. ZK-Voting makes the same kind of vote generic and self-hosted, like Discourse, so anybody can run their own vote. Maker executive votes are binding: when they pass, the underlying contracts execute the change. A ZK-Voting outcome is non-binding sentiment. The verifiable result is stored on chain, and passing a vote does not auto-execute anything. Operators also get more oversight and admin than that portal: an approval chain of platform and jurisdiction officers, public disqualification reason codes, and an independent auditor. Full note: [Inspiration: vote.makerdao.com](./implementation.md#inspiration-votemakerdaocom).
 
 This repository holds two tightly coupled pieces of software (and the circuits, L2, and packages that bind them):
 
 1. A **Node application**: the product surface for voters, election officials, and public observers (`apps/node`).
 2. A **`smart-contracts/`** package: Solidity for Ethereum that registers voters, opens ballots, records (or commits to) votes with zero-knowledge proofs, and **enforces disqualification** so that a person who is on the roll can still be barred from a given election for jurisdiction-defined reasons.
 
-The same **Solidity** is meant to run **on Ethereum mainnet (L1)** and on any EVM venue a jurisdiction chooses (Lighter, other L2s, Foundry Anvil). Cheap, high-volume civic activity in *this* repo lands on **zk-voting L2** (this repo’s civic JSON sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): prove the operations, settle proofs and state to Ethereum. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there.
+The same **Solidity** is meant to run **on Ethereum mainnet (L1)** and on any EVM venue a jurisdiction chooses (Lighter, other L2s, Foundry Anvil). Cheap, high-volume civic activity in *this* repo lands on **ZK-Voting L2** (this repo’s civic JSON sequencer + prover, **chainId 27427**), in the same family of design as [Lighter](https://lighter.xyz): prove the operations, settle proofs and state to Ethereum. Canonical law, final tallies, and dispute-grade records can live on L1, or be mirrored there.
 
-zk-voting L2 **as implemented** is an application-specific civic sequencer (JSON transactions: register / vote / disqualify / tally / userop). It is **not** a general-purpose EVM and it does **not** proxy to Anvil. Portable EVM bytecode still deploys to Anvil, Ethereum L1, Lighter’s EVM surface, and other EVM L2s. Executing that bytecode *on* 27427 is **Future**.
+ZK-Voting L2 **as implemented** is an application-specific civic sequencer (JSON transactions: register / vote / disqualify / tally / userop). It is **not** a general-purpose EVM and it does **not** proxy to Anvil. Portable EVM bytecode still deploys to Anvil, Ethereum L1, Lighter’s EVM surface, and other EVM L2s. Executing that bytecode *on* 27427 is **Future**.
 
 **Status:** this repository is an **implemented monorepo**. Circuits, shared packages, Foundry contracts, Node app, civic L2, and operator docs are in-tree. `test/unstable` is the development line. `master` is production only. **Forking is intentional:** a jurisdiction runs its own Node and pins one shared `ElectionFactory` — see [Intentional forking](#intentional-forking).
 
 How to read this README:
 
-- **Product intent** (privacy, disqualification, roles) is the spec for what zk-voting is for.
+- **Product intent** (privacy, disqualification, roles) is the spec for what ZK-Voting is for.
 - **Implemented today** (status table, how to run, Node/L2 sections) must match the tree. If those paragraphs lie, this file is overdue.
 - **Future** work is labeled. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) is the package map and Solidity/circuit interface contract.
 
@@ -67,7 +97,7 @@ How to read this README:
 
 ## Not for profit
 
-This software is **not a commercial product**. It exists to protect and preserve a republic driven by democracy: the people vote for representatives, and those representatives vote. A city, county, state, nation, union, cooperative, or (if a jurisdiction demanded it) a shareholder meeting should be able to run a binding election with **public verifiability** and **private ballots**.
+This software is **not a commercial product**. It exists to protect and preserve a democratic republic: the people vote for representatives, and those representatives vote. A city, county, state, nation, union, cooperative, or (if a jurisdiction demanded it) a shareholder meeting should be able to run a binding election with **public verifiability** and **private ballots**.
 
 - There is **no token**. There is **no paid tier**. There is **no vendor lock-in**.
 - Nobody is to make money off this repository. Jurisdictions may run it **at cost** (hosts, paymaster gas, paper notice).
@@ -82,6 +112,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 
 - [Quickstart](#quickstart)
 - [Self-hosting docs](#self-hosting-docs)
+- [Community discussion (optional Discourse)](#community-discussion-optional-discourse)
 - [Positioning](#positioning)
 - [Not for profit](#not-for-profit)
 - [Purpose](#purpose)
@@ -97,6 +128,7 @@ If you want to get rich, this is the wrong repository. Full charter: [`NOT_FOR_P
 - [Node application](#node-application)
 - [Smart contracts](#smart-contracts)
 - [Circuits](#circuits)
+- [Trusted-setup ceremony](#trusted-setup-ceremony)
 - [Shared packages](#shared-packages)
 - [Chains: Ethereum L1, zk-voting L2, and Lighter](#chains-ethereum-l1-zk-voting-l2-and-lighter)
 - [Registration](#registration)
@@ -176,14 +208,15 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | This README | Product intent + honest stack (must match the tree) |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Implemented map + Solidity/circuit interfaces; **Future** labeled |
 | [`docs/THREAT_MODEL.md`](./docs/THREAT_MODEL.md) | Adversary map for election identity and L1 certification |
-| Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/republic.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
+| Node application (`apps/node`) | Express 4 API + **vanilla JS** pages in `public/`. JSON store `apps/node/data/zk-voting.json`. **No Vite, no React, no SQLite.** `system_actions.sh` |
 | `smart-contracts/` | In-tree (Solidity 0.8.24, Foundry `via_ir = true`: factory, registries, inbox, `Tally.sol`, account, L2 settlement) |
 | Circuits (`circuits/`) | In-tree. Vote hasher is Poseidon(2). Groth16 fixture is an **untrusted** Vote(4) proof. Ceremony **not done**. Unit tests still use MockVerifier. |
+| Trusted-setup ceremony | **Tooling in-tree, ceremony not run.** Browser ceremony on the Node (`/admin/ceremony`, `/ceremony`, public transcript with whole-chain verify) and the CLI runbook. Exports stay `trusted: false`. [`docs/ceremony-web.md`](./docs/ceremony-web.md) |
 | Proving path | **In progress** — `npm run circuits:status` / `compile` / `setup` / `export` / `prove`. Untrusted local ptau only. `MockVerifier` still default for `forge test`. |
 | Shared packages | `@zk-voting/types`, `proof-helpers`, `chain-client` |
-| zk-voting L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
+| ZK-Voting L2 (`l2/`) | Civic JSON sequencer + prover, chainId **27427**, JSON-RPC **:8546**, L1 `RollupSettlement`. **Not** an Anvil EVM proxy |
 | Block explorer | Node `/explorer` over `l2-chain.json` + ingest API; see [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
-| Passkeys | WebAuthn PRF helper; demo address is `republic-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
+| Passkeys | WebAuthn PRF helper; demo address is `zk-voting-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
 | Person identity | Passkey / Web3 / smart card / email / civic ID; vote PIN at ballot submit; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
 | Tally that opens ballots | **Demo slice in-tree.** `tallyScheme=opens_ballots` encrypts choices to a Feldman t-of-n P-256 public key (**NON-PRODUCTION**). `t` proved partials open envelopes; `t-1` cannot. Invented `counts[]` are rejected. Homomorphic vs mixnet aggregation is not selected ([`docs/TALLY_GUARDIANS.md`](./docs/TALLY_GUARDIANS.md)). Legacy `sum_only` still allows any partition of `acceptedBallots`. Not MACI. |
 | Coercion slice | One accepted nullifier + hash-only receipts (not MACI, not last-vote-counts). |
@@ -250,6 +283,35 @@ Invariants:
 
 Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Branch policy: work on **`test/unstable`**; **`master`** is production. Expected host, disk, L1, SES, and capacity ranges: [`voting_cost_estimate.md`](./docs/voting_cost_estimate.md) (jurisdictions **at cost**; **NOT FOR PROFIT**).
 
+### Prerequisites
+
+- **Docker** with Compose v2 for the full stack ([Quickstart](#quickstart)).
+- **Foundry** (`forge`, `cast`, `anvil`) for the contracts and the `scripts/` helpers:
+
+  ```bash
+  curl -L https://foundry.paradigm.xyz | bash
+  foundryup
+  ```
+
+  See the [Foundry book](https://book.getfoundry.sh/getting-started/installation).
+- **Node.js** and npm for `apps/`, `l2/`, and `npm test`.
+- `bash`, `curl`, and `python3` for `scripts/` (`jq` optional).
+
+### Local chain, deploy, and gas economics (`scripts/`)
+
+Three helpers, documented in [`scripts/README.md`](./scripts/README.md). None of them names a node or a key: RPC URLs, chain ids, and signers come from flags, the environment, or `.env`.
+
+```bash
+./scripts/start-anvil.sh --background            # local chain; ANVIL_PORT, ANVIL_CHAIN_ID, ANVIL_FORK_URL, ...
+./scripts/deploy.sh --target local               # DeployLocal on that Anvil; writes deployments/<chainId>.json
+./scripts/get-gas-economics.sh --measure         # L1 gas from L1_RPC, ETH/USD, sizes, deploy + per-call gas
+./scripts/start-anvil.sh --stop
+```
+
+- `start-anvil.sh` prints the RPC URL. Its dev accounts are Anvil's public test accounts; never fund them on a real network.
+- `deploy.sh --target local|l2|l1` wraps `DeployLocal`, `DeployL2`, and `DeployL1`. The signer is `DEPLOYER_PRIVATE_KEY` or a Foundry keystore (`--account`). It refuses to redeploy when the deployed addresses are already in the environment or a record exists, unless `--force`. `--dry-run` simulates.
+- `get-gas-economics.sh` reads the L1 gas price from `L1_RPC` (or `--l1-rpc`, or a fixed `GAS_GWEI`) and fails with a clear message when none is set.
+
 ### Foundry tests (`smart-contracts/`)
 
 Requires [Foundry](https://book.getfoundry.sh/) (`foundryup`). solc **0.8.24**, optimizer on, **`via_ir = true`**, fuzz 256 runs (`foundry.toml`).
@@ -271,7 +333,7 @@ Tests must pass with `MockVerifier`. Invariants include: a nullifier is **accept
 Non-mock local deploy (fail closed until a VK is installed):
 
 ```bash
-REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+ZK_VOTING_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
 ### Circuits (proving path in progress)
@@ -314,7 +376,7 @@ See [`.env.example`](./.env.example) and [`docs/OPERATOR.md`](./docs/OPERATOR.md
 
 Coolify rolling update: old and new containers share `node-data` and `l2-data` on one host. A standby container stays healthy (`ok: true`, `"mode":"standby"`) and does not write until it holds the lease. Healthchecks must not require `mode=active`. Archive is on by default; only the lease holder prunes. L1 contracts (`SETTLEMENT_ADDRESS`, `VERIFIER_ADDRESS`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`) are deployed once — `npm run deploy:l1 -- --check` — and containers only read those addresses. Settings: [`docs/ROLLING_UPDATES.md`](./docs/ROLLING_UPDATES.md).
 
-### zk-voting L2 (sequencer + prover)
+### ZK-Voting L2 (sequencer + prover)
 
 ```bash
 npm run l2:sequencer        # node l2/sequencer/index.mjs   JSON-RPC :8546
@@ -326,14 +388,14 @@ Genesis **chainId 27427**, one sequencer. The producer wakes every ~2s and, by d
 
 ```bash
 export L2_RPC_PORT=8546
-export REPUBLIC_CHAIN_ID=27427
+export ZK_VOTING_CHAIN_ID=27427
 # Civic sequencer (implemented):
-export REPUBLIC_L2_RPC_URL=http://127.0.0.1:8546
+export ZK_VOTING_L2_RPC_URL=http://127.0.0.1:8546
 # Foundry Anvil for Solidity (optional contract path), default in chain-client:
-export REPUBLIC_RPC_URL=http://127.0.0.1:8545
+export ZK_VOTING_RPC_URL=http://127.0.0.1:8545
 ```
 
-`@zk-voting/chain-client` still defaults `REPUBLIC_RPC_URL` to Anvil **:8545**. Point `CHAIN_RPC` at Anvil only when `BallotInbox` is actually deployed there. Do not treat `:8545` as the civic sequencer.
+`@zk-voting/chain-client` still defaults `ZK_VOTING_RPC_URL` to Anvil **:8545**. Point `CHAIN_RPC` at Anvil only when `BallotInbox` is actually deployed there. Do not treat `:8545` as the civic sequencer.
 
 ### Block explorer
 
@@ -343,7 +405,7 @@ With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-c
 
 A person identifies with **email** (up to 5, one primary), an **Ethereum wallet**, a **smart-card reader**, a **driver’s license or passport**, or a **passkey** (up to 5). Many Ethereum addresses can be verified internally; **exactly one** is active. Sign-in completes with **email MFA (AWS SES)** to the primary inbox by default. Profile setup includes a **vote PIN** (4–8 digits; scrambled phone keypad at ballot submit; forgot-PIN via the same email MFA). The vote Merkle leaf is still the identity commitment. [`docs/IDENTITY.md`](./docs/IDENTITY.md).
 
-Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `republic-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `RepublicPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
+Browser WebAuthn (`residentKey`, `extensions.prf`). PRF → HKDF wraps a seed in IndexedDB. **Today** `passkey-wallet.js` labels the derived account `zk-voting-local-address` (no secp256k1 in that helper). **Future:** wrap/derive a real secp256k1 smart-account key; UserOps bundled; `ZkVotingPaymaster` sponsors register/vote on an EVM. Never display a mnemonic. [`docs/PASSKEYS.md`](./docs/PASSKEYS.md).
 
 ### Independent auditor
 
@@ -444,13 +506,13 @@ BALLOT_INBOX_ADDRESS=
 VERIFIER_ADDRESS=
 RELAYER_PRIVATE_KEY=
 
-# --- Republic L2 ---
+# --- ZK-Voting L2 ---
 L2_RPC_PORT=8546
 L2_BATCH_SIZE=4
 L2_SKIP_EMPTY_BLOCKS=1
 L2_HEARTBEAT_SECONDS=3600
 DEV_MOCK_PROOF=true
-REPUBLIC_NODE_URL=http://node:3000
+ZK_VOTING_NODE_URL=http://node:3000
 
 # --- optional L1 (prover settlement + Node tally-hash). Empty = no-op. ---
 L1_RPC=
@@ -509,7 +571,7 @@ This is a GitHub / host fork of **this** Node. It is not a fork of MACI, Semapho
 | Yours (this fork / this host) | Shared (pin — do not redeploy) |
 | --- | --- |
 | Node process, vanilla JS in `apps/node/public/`, `/office` CMS | `ElectionFactory` (`ELECTION_FACTORY_ADDRESS` or `FACTORY`) |
-| JSON store (`apps/node/data/republic.json`), officer grants | `BallotInbox` (`BALLOT_INBOX_ADDRESS`) |
+| JSON store (`apps/node/data/zk-voting.json`), officer grants | `BallotInbox` (`BALLOT_INBOX_ADDRESS`) |
 | Voting hostname `VOTE_FQDN` (e.g. `vote.domain.tld`), WebAuthn `RP_ID` / `WEBAUTHN_ORIGINS`, SES MFA | Vote verifier (`VERIFIER_ADDRESS` or `VERIFIER`) |
 | Relayer key and paymaster funds for **this** host | Optional L1 `L1TallyMirror` / `RollupSettlement` when you settle with the same contracts |
 
@@ -534,7 +596,7 @@ curl -fsS http://127.0.0.1:3000/health
 ```
 
 5. Register at `/register` with the seeded `ADMIN_HANDLE` (`admin` unless you changed it) so that person is `platform_super_admin`. Create the jurisdiction (a `demo` jurisdiction is seeded on empty store). Grant clerk / registrar / disqualification / tally roles. The host (`platform_super_admin`, or a `platform_admin` they approve) edits About, FAQ, home copy, and site title at `/office/pages` and `/office/site`. Clerks publish **jurisdiction-tagged** pages. Only a platform operator may change contract addresses on `/office/site` when env did not already lock them.
-6. When `CHAIN_RPC` is set, clerk **Create election** calls the shared factory. A factory revert is **502/503**; nothing is written to `republic.json`.
+6. When `CHAIN_RPC` is set, clerk **Create election** calls the shared factory. A factory revert is **502/503**; nothing is written to `zk-voting.json`.
 
 Operator narrative: [`docs/OPERATOR.md`](./docs/OPERATOR.md). Site pin: `/office/site`. Pages: `/office/pages`.
 
@@ -607,7 +669,7 @@ The Node side is the human product: a long-lived Node process, a web frontend, a
 ### What it is not responsible for
 
 - Being the canonical roll **when contracts are deployed**. The canonical eligible-set and disqualification-set commitments live in the contracts. **Demo path:** `CHAIN_RPC` unset — the JSON store is the operator cache and the only roll.
-- Silently “fixing” a tally. If the chain rejects a proof, the UI reports failure. Do not edit `republic.json` to change counts after freeze.
+- Silently “fixing” a tally. If the chain rejects a proof, the UI reports failure. Do not edit `zk-voting.json` to change counts after freeze.
 - Inventing disqualification law. The app presents **coded reasons** the jurisdiction configured; clerks apply them.
 
 ### Shape
@@ -663,9 +725,9 @@ The contract set covers:
 | `BallotInbox` | Accepts vote messages + ZK proofs. Rejects proofs that fail eligibility, disqualification, uniqueness, or time window. |
 | `Tally` (`ITallyVerifier`) | Verifies the coordinator/prover’s batch proofs that the published totals match the inbox. File: `src/Tally.sol`. |
 | `L1TallyMirror` | If L2 is where votes land, L1 holds the result (or a commitment to it) that courts and the Node treat as final. |
-| `RollupSettlement` | L1 contract: `submitBatch` for zk-voting L2 state roots. |
-| `RepublicMailbox` | L1/L2 message mailbox. |
-| Passkey AA + paymaster | `PasskeyAccount`, factory, `RepublicPaymaster`, local `RepublicEntryPoint`. |
+| `RollupSettlement` | L1 contract: `submitBatch` for ZK-Voting L2 state roots. |
+| `ZkVotingMailbox` | L1/L2 message mailbox. |
+| Passkey AA + paymaster | `PasskeyAccount`, factory, `ZkVotingPaymaster`, local `ZkVotingEntryPoint`. |
 
 Exact names follow the Solidity tree. The **behaviors** are the spec:
 
@@ -698,7 +760,7 @@ Contracts must be **boring Solidity**: explicit access control, no upgrade surpr
 
 ## Circuits
 
-Circom 2. The vote `Hasher()` is **Poseidon(2)** (`republic.hash.poseidon-bn254-x5-t3-v1`), the same permutation as `packages/proof-helpers`, Solidity `PoseidonHasher`, and the demo passkey leaf. Constants are the circomlib bn254 t=3 set, vendored in-tree. **That match is not a trusted setup.** Local powers-of-tau keys are **UNTRUSTED**. Foundry unit-test trees keep `KeccakHasher` (`keccak-dev-v1`) and `MockVerifier`. The legacy stand-in (`a + b + a*b`) is not included by the circuit.
+Circom 2. The vote `Hasher()` is **Poseidon(2)** (`zk-voting.hash.poseidon-bn254-x5-t3-v1`), the same permutation as `packages/proof-helpers`, Solidity `PoseidonHasher`, and the demo passkey leaf. Constants are the circomlib bn254 t=3 set, vendored in-tree. **That match is not a trusted setup.** Local powers-of-tau keys are **UNTRUSTED**. Foundry unit-test trees keep `KeccakHasher` (`keccak-dev-v1`) and `MockVerifier`. The legacy stand-in (`a + b + a*b`) is not included by the circuit.
 
 | Circuit | Role |
 | --- | --- |
@@ -707,6 +769,24 @@ Circom 2. The vote `Hasher()` is **Poseidon(2)** (`republic.hash.poseidon-bn254-
 | `circuits/identity.circom` | Commitment and nullifier primitives |
 
 Compile notes, snarkjs, **exact proving-path commands**, and MockVerifier policy: [`circuits/README.md`](./circuits/README.md), [`circuits/HASH_SCHEME.md`](./circuits/HASH_SCHEME.md). Solidity trees in tests may use `KeccakHasher` implementing the same `IHasher.hashLeftRight` shape.
+
+---
+
+## Trusted-setup ceremony
+
+**Yes, ZK-Voting needs one before a binding election.** Groth16 keys are only as trustworthy as their setup: whoever knows all of the setup's secret randomness can forge ballot or tally proofs that verify. Phase 1 (powers of tau) is reused from the public Hermez ceremony. **Phase 2 is circuit-specific** and must be run once per production circuit: `Vote(20)` and `Tally(8, 4)`. It is safe if at least one contributor was honest and discarded their randomness. **It has not been run**; current keys are untrusted.
+
+The Node runs phase 2 in the browser:
+
+| Page | Who | What |
+| --- | --- | --- |
+| `/admin/ceremony` | Platform super admin | Pin inputs (`.r1cs`, Hermez `.ptau`), create, invite list, open/close, queue, commit a future Ethereum mainnet block as the beacon, finalize, export, audit log |
+| `/ceremony/<id>` | Invited accounts only | Join the queue; contribute with snarkjs in a Web Worker. Randomness never leaves the tab. Receipt download. |
+| `/ceremony/<id>/transcript` | Anyone | Hash-chained transcript, **Verify whole chain** in the browser, and the `snarkjs zkey verify` commands |
+
+The server verifies every upload against the previous key before accepting it, keeps an append-only hash-chained transcript and audit log, rate-limits joins and uploads, and never fetches circuit or ptau files. **Participation is invite only**: the coordinator adds accounts by handle or sends single-use email invite links, and the server refuses everyone else; the public transcript shows invitees only by pseudonymous id. **The beacon is decided: the hash of a future Ethereum mainnet block**, committed at least 32 blocks ahead and read only after it is finalized, read-only from `CEREMONY_ETH_RPC_URL` (unset: finalize fails closed). The block number and hash go in the transcript so anyone can check them. Exports stay in the data directory marked `trusted: false`; nothing is deployed or copied into `smart-contracts/`. Ceremony pages carry their own strict CSP.
+
+Design, threat model, beacon, and verification: [`docs/ceremony-web.md`](./docs/ceremony-web.md). Operator guide: [`docs/self-hosting/ceremony.md`](./docs/self-hosting/ceremony.md). Offline CLI runbook: [`docs/CEREMONY.md`](./docs/CEREMONY.md).
 
 ---
 
@@ -722,13 +802,13 @@ npm workspaces (Node 22):
 
 ---
 
-## Chains: Ethereum L1, zk-voting L2, and Lighter
+## Chains: Ethereum L1, ZK-Voting L2, and Lighter
 
 ### Why two layers (plus a named L2 in this repo)
 
 | Layer | Job | Implemented today |
 | --- | --- | --- |
-| **zk-voting L2** (this repo, chainId **27427**) | High-volume civic actions: registration, vote messages, disqualifications, tallies. **Own sequencer + prover.** Gasless for voters. | Civic **JSON** sequencer on **:8546**. Prover writes mock proofs or calls L1 `RollupSettlement`. Not an EVM. |
+| **ZK-Voting L2** (this repo, chainId **27427**) | High-volume civic actions: registration, vote messages, disqualifications, tallies. **Own sequencer + prover.** Gasless for voters. | Civic **JSON** sequencer on **:8546**. Prover writes mock proofs or calls L1 `RollupSettlement`. Not an EVM. |
 | **Foundry Anvil** (dev EVM, typically **:8545**) | Run the portable Solidity stack locally (`DeployLocal`). | Yes. Separate from 27427. |
 | **Lighter** ([lighter.xyz](https://lighter.xyz)) | Prior art and a possible alternate **EVM** venue. | Not operated from this repo. |
 | **Ethereum mainnet (L1)** | Canonical settlement. `RollupSettlement` + optional `L1TallyMirror`. Deploy the same Solidity when the election must live where any Ethereum full node can verify it. | Contracts in-tree. No production deploy. |
@@ -737,16 +817,16 @@ Lighter’s original core is an application-specific ZK rollup (verifiable excha
 
 - Deploy to **Ethereum mainnet** when L1 is the required venue.
 - Deploy to **Anvil / other EVM L2s** (including Lighter’s EVM) when a jurisdiction wants that operator.
-- Run **zk-voting L2 (27427)** for the default high-throughput civic JSON path in this repo.
+- Run **ZK-Voting L2 (27427)** for the default high-throughput civic JSON path in this repo.
 - **Future:** execute the same Solidity *on* 27427 (EVM or validity VM). Do not document that as present.
 
 If a given Lighter environment is not yet suitable for these contracts, the same artifacts should still deploy to Ethereum L1 and to any other EVM L2. The product requirement is “L2 like Lighter, plus L1,” not a hard dependency on a single third-party sequencer remaining available.
 
-zk-voting L2 details (genesis, sequencer, prover, settlement): [`docs/L2.md`](./docs/L2.md).
+ZK-Voting L2 details (genesis, sequencer, prover, settlement): [`docs/L2.md`](./docs/L2.md).
 
 ### Deployment policy
 
-- **Development / staging elections** → zk-voting L2 and L1 test networks. Branch `test/unstable`.
+- **Development / staging elections** → ZK-Voting L2 and L1 test networks. Branch `test/unstable`.
 - **Production elections** → explicit choice per jurisdiction: L2-only, L1-only, or L2 execution + L1 result mirror. Branch `master`.
 - `system_actions.sh` and deploy scripts must never “accidentally” point a production jurisdiction at `test/unstable` configuration. `master` is the production line.
 
@@ -892,7 +972,7 @@ The Node is the authoring tool for this ballot. The contracts store the hash of 
 
 | Kind | Example | Typical chain choice |
 | --- | --- | --- |
-| Local / municipal | City council, school board, local measure | L2 (zk-voting 27427) |
+| Local / municipal | City council, school board, local measure | L2 (ZK-Voting 27427) |
 | Regional / state / province | Statewide office or referendum | L2, L1 mirror of tally |
 | National | General election, national referendum | L1 certified result; L2 may still take the vote messages |
 | Non-governmental | Union, cooperative, professional college | L2, optional L1 |
@@ -928,9 +1008,9 @@ A **corrupt tally operator** on the legacy **SUM_ONLY** path can still post any 
 
 ### Election workflow diagram
 
-Informational map of the lifecycle. **Identity is not the ballot.** The Node holds the civil roll; zk-voting L2 records nullifiers and ballot hashes via a relayer; public proofs wait for **hourly disclosure**; Ethereum L1 is optional court-grade settlement.
+Informational map of the lifecycle. **Identity is not the ballot.** The Node holds the civil roll; ZK-Voting L2 records nullifiers and ballot hashes via a relayer; public proofs wait for **hourly disclosure**; Ethereum L1 is optional court-grade settlement.
 
-![zk-voting election workflow: register, freeze, vote with nullifier and relayer, hourly disclosure, tally, results — Node vs L2 vs L1, identity is not the ballot](./docs/images/election-workflow.png)
+![ZK-Voting election workflow: register, freeze, vote with nullifier and relayer, hourly disclosure, tally, results — Node vs L2 vs L1, identity is not the ballot](./docs/images/election-workflow.png)
 
 Mermaid source: [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd). Regenerate the PNG with `npm run docs:workflow` (`@mermaid-js/mermaid-cli` / `mmdc`; needs Chromium). `npm run test:docs` checks that the source and committed PNG are present — CI does not re-render.
 
@@ -1087,7 +1167,7 @@ Still ahead of a binding election (**Future**): Poseidon hasher swap, Groth16 **
 Dates are not committed. Items 1–4 are **in the tree** (with the honest caveats in Current status). Item 10 has a pragmatic in-tree slice (not full MACI). Everything else after item 4 is **Future**.
 
 1. **Spec freeze (this README)** — purpose, monorepo, L1 + L2, registration, disqualification. **Done (kept current as code landed).**
-2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and an EVM configured as zk-voting L2. **In-tree.**
+2. **Contract interfaces** — registry, disqualification, election, inbox, tally verifier; deploy scripts for Ethereum and an EVM configured as ZK-Voting L2. **In-tree.**
 3. **Node skeleton** — jurisdictions, users, roles, election admin, voter home. **In-tree** (vanilla JS + JSON store, not Vite/React/SQLite).
 4. **Circuits + packages** — eligible vote, tally summation, JS clients. **In-tree** (Poseidon / ceremony still outstanding).
 5. **First proving path** — **in progress.** Eligible-vote circuit compiles; untrusted local powers-of-tau + Groth16 setup/export/prove scripts exist (`npm run circuits:*`). `MockVerifier` still default for unit tests. Poseidon + ceremony still outstanding.
@@ -1097,9 +1177,9 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 9. **EVM (or validity) execution on chainId 27427** so the same bytecode runs on the civic L2. **Future.**
 10. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice in-tree (not full MACI, not last-vote-counts):**
    - **One accepted nullifier:** `submitVote` for a spent nullifier reverts `NullifierUsed`, including a new ciphertext. Double voting remains impossible. `acceptedBallots` is unique nullifiers, so tally `sum(counts)` is a unique-voter invariant. Voters may change their mind privately on the ballot form **before** submit; the inbox does not accept a second ballot.
-   - **Receipts cannot prove choice:** the Node receipt lists `ballotHash`, nullifier, UserOp hash — never the marked options or the opening. After accept, the voter may email that receipt (body + PDF locked against modification) and paste it, or drop the PDF, at `/receipt` to confirm it counted and that the file was not changed. Hourly turnout on that page is how many ballots were disclosed and when each hour closed, not a count by candidate. A receipt is not “I voted for X,” and it is not a second ballot.
+   - **Receipts cannot prove choice:** the Node receipt lists `ballotHash` and nullifier — never the marked options or the opening, and no UserOp hash. After accept, the voter downloads the receipt PDF (locked against modification); emailing a token-only copy is opt-in and off by default. The voter can paste the token, or drop the PDF, at `/receipt` to confirm it counted and that the file was not changed. Hourly turnout on that page is how many ballots were disclosed and when each hour closed, not a count by candidate. A receipt is not “I voted for X,” and it is not a second ballot.
    - **Auditor pack:** `tools/auditor` CLI + [`docs/AUDITOR.md`](./docs/AUDITOR.md) + `GET /api/elections/:id/artifacts` export public roots, disclosed ballot hashes, tally, and contract addresses and verify sum/invariants **without** the Node private DB. Packs assert unique nullifiers and `receiptsProveChoice: false`.
-   - **Outcomes monitor:** a separate public portal at `/outcomes` (alias `/monitor`) lists every election in before / during / after columns from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). It runs the auditor pack plus freeze-root and L1 hash checks. During voting it shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. After cutoff and a tally, a locked official outcome PDF is emailed to subscribers (default: everyone who voted; unsubscribe on `/me`) and can be checked at `/outcomes/verify`. This is not `/receipt` and not a live horse race.
+   - **Outcomes monitor:** a separate public portal at `/outcomes` (alias `/monitor`) lists every election in before / during / after columns from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). It runs the auditor pack plus freeze-root and L1 hash checks. During voting it shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. After cutoff and a tally, a locked official outcome PDF is emailed to subscribers (opt-in on `/me`; casting a ballot never subscribes anyone) and can be checked at `/outcomes/verify`. This is not `/receipt` and not a live horse race.
    - **Still later / Future:** MACI-style encrypted message queues / key-changing; guardian / forced-reveal if a tally operator stalls. Last-vote-counts / re-vote supersession is **out of scope** for this slice.
 
 ---
@@ -1108,7 +1188,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 
 | Term | Meaning in this repo |
 | --- | --- |
-| **zk-voting** | Default product name (an administrator can rename it). Civic ZK voting / tally stack in this monorepo. |
+| **ZK-Voting** | Default product name (an administrator can rename it). Civic ZK voting / tally stack in this monorepo. |
 | **Jurisdiction** | The body that owns a roll and elections (government or other). |
 | **Fork (this Node)** | An intentional copy of the Node UI/host for a jurisdiction. Pins the shared `ElectionFactory` / inbox / verifier. Not a new factory deploy and not a commercial L2. |
 | **Voting FQDN** | The subdomain a jurisdiction creates for this Node (`vote.domain.tld`), set as `VOTE_FQDN`. It is the public voting authority: passkeys, browser origin, and official links. |
@@ -1119,7 +1199,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 | **Nullifier** | A unique value revealed at vote time so the same person is counted once, without publishing their name. Spent at most once: a second ballot for that nullifier is rejected. Double voting is impossible. |
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
-| **L2** | zk-voting L2 (chainId **27427**) by default: civic JSON sequencer in `l2/`. Lighter and other EVM L2s as portable Solidity venues. Execution off L1, security anchored to Ethereum. |
+| **L2** | ZK-Voting L2 (chainId **27427**) by default: civic JSON sequencer in `l2/`. Lighter and other EVM L2s as portable Solidity venues. Execution off L1, security anchored to Ethereum. |
 | **Passkey** | WebAuthn credential; PRF wraps the Ethereum key and (separately) the ZK trapdoor. One of several ways to identify a person (with email, Web3 wallet, smart-card reader, and hashed license/passport). |
 | **Person** | One Node user. Uniquely identified. Authenticators and ETH addresses cannot be shared across people. |
 | **Active Ethereum address** | The single ETH address currently registered for that person’s gasless ops. Other verified addresses stay internal. Not the Merkle leaf. |
@@ -1132,7 +1212,7 @@ Jurisdictions **are meant to fork this repository** (the Node). That is document
 
 - [MACI](https://maci.pse.dev/) — on-chain polls, signup policies, collusion-resistant messaging, proven tallies.
 - [Semaphore](https://semaphore.pse.dev/) — anonymous group membership proofs (a likely building block for “I am still in the eligible set”).
-- [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 *family* this repo treats as the high-throughput venue. zk-voting L2 is operated from `l2/` (chainId 27427) as a **civic JSON** sequencer, not as a Lighter-hosted or Anvil-proxied EVM.
+- [Lighter](https://lighter.xyz) — ZK rollup that settles to Ethereum; the L2 *family* this repo treats as the high-throughput venue. ZK-Voting L2 is operated from `l2/` (chainId 27427) as a **civic JSON** sequencer, not as a Lighter-hosted or Anvil-proxied EVM.
 
 ---
 

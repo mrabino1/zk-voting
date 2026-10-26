@@ -84,7 +84,7 @@ describe('role-promotion mail templates', () => {
       const rendered = renderPromotionEmail(role, { sample: true, handle: 'officer<script>' });
       assert.ok(rendered, role);
       assert.equal(rendered.templateId, templateIdForRole(role));
-      assert.match(rendered.subject, /Republic/);
+      assert.match(rendered.subject, /ZK-Voting/);
       assert.match(rendered.text, /NOT FOR PROFIT/);
       assert.match(rendered.text, /not a vote receipt/i);
       assert.match(rendered.text, /civic L2/i);
@@ -126,7 +126,7 @@ describe('role-promotion mail API', () => {
     await new Promise((resolve) => webhook.listen(0, '127.0.0.1', resolve));
     webhookUrl = `http://127.0.0.1:${webhook.address().port}/mail`;
 
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-mail-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-mail-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

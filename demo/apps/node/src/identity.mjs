@@ -3,6 +3,7 @@
 // Exactly one active Ethereum address. The vote Merkle leaf is never that
 // address.
 
+import { brandName } from './branding.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 
 import { getAddress, isAddress, keccak256, toHex, verifyMessage } from 'viem';
@@ -294,6 +295,23 @@ export function assertEmailRoom(user, addingEmail) {
   }
 }
 
+/**
+ * A person is "claimed" once they hold any sign-in factor. The seeded
+ * ADMIN_HANDLE row starts with empty credentials/authMethods so the first
+ * unauthenticated registration can still claim it; that bootstrap race is
+ * tracked separately (setup-token). Adding a passkey to a claimed person
+ * always requires a session for that same account.
+ */
+export function isClaimedPerson(user) {
+  if (!user) return false;
+  if (countPasskeys(user) > 0) return true;
+  if ((user.authMethods || []).length > 0) return true;
+  if ((user.ethAccounts || []).length > 0) return true;
+  if (user.email) return true;
+  if (user.activeEthAddress) return true;
+  return false;
+}
+
 export function assertPasskeyRoom(user) {
   if (!user) return;
   const count = countPasskeys(user);
@@ -370,7 +388,7 @@ export function civicIdHash({ kind, issuer, documentNumber }) {
   if (!isCivicIdKind(k)) throw new HttpError(400, 'invalid civic id kind');
   const issuerN = normalizeIssuer(issuer);
   const doc = normalizeDocumentNumber(documentNumber);
-  return keccak256(toHex(Buffer.from(`republic:civic_id:v1|${k}|${issuerN}|${doc}`, 'utf8')));
+  return keccak256(toHex(Buffer.from(`zk-voting:civic_id:v1|${k}|${issuerN}|${doc}`, 'utf8')));
 }
 
 export function civicIdLabel(kind) {
@@ -534,9 +552,9 @@ export function resolveBoundPerson({ sessionUser, methodOwner, addressOwner }) {
 export function buildWeb3BindMessage({ address, nonce, chainId, origin }) {
   const addr = normalizeEthAddress(address);
   return [
-    'Republic wants you to uniquely identify this Ethereum address to your person.',
+    `${brandName()} wants you to uniquely identify this Ethereum address to your person.`,
     '',
-    `URI: ${origin || 'republic'}`,
+    `URI: ${origin || 'zk-voting'}`,
     'Version: 1',
     `Chain ID: ${chainId}`,
     `Nonce: ${nonce}`,
@@ -550,9 +568,9 @@ export function buildWeb3BindMessage({ address, nonce, chainId, origin }) {
 export function buildWeb3LoginMessage({ address, nonce, chainId, origin }) {
   const addr = normalizeEthAddress(address);
   return [
-    'Republic wants you to sign in with this Ethereum wallet.',
+    `${brandName()} wants you to sign in with this Ethereum wallet.`,
     '',
-    `URI: ${origin || 'republic'}`,
+    `URI: ${origin || 'zk-voting'}`,
     'Version: 1',
     `Chain ID: ${chainId}`,
     `Nonce: ${nonce}`,
@@ -600,7 +618,7 @@ export function resolveCivicIdLoginPerson(store, { kind, issuer, documentNumber 
 
 export function buildSmartCardBindMessage({ fingerprint, nonce }) {
   return [
-    'Republic smart-card digital ID binding',
+    `${brandName()} smart-card digital ID binding`,
     `Nonce: ${nonce}`,
     `Fingerprint: ${fingerprint}`,
     'NOT FOR PROFIT — civic public good.',

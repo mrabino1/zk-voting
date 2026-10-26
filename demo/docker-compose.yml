@@ -1,6 +1,6 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
-# Host the Republic Node (API + SPA) and local L2 the same way a frontend
+# Host the ZK-Voting Node (API + SPA) and local L2 the same way a frontend
 # repo is hosted: one compose file, images built from this tree, data on
 # volumes, secrets via .env (never baked into the image).
 #
@@ -33,8 +33,17 @@ services:
       HOST: "0.0.0.0"
       PORT: "3000"
       DATA_DIR: /data
+      # Postgres app state; empty keeps the JSON store in the volume above.
+      DATABASE_URL: ${DATABASE_URL:-}
       CHAIN_ID: ${CHAIN_ID:-27427}
+      # Setup entropy (/setup steps 3-4). ZK_ENTROPY is a secret.
+      ENTROPY_CEREMONY_URL: ${ENTROPY_CEREMONY_URL:-}
+      ZK_ENTROPY: ${ZK_ENTROPY:-}
       CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
+      # Product name defaults; Site admin > Branding wins. Empty = "ZK-Voting".
+      BRAND_NAME: ${BRAND_NAME:-}
+      BRAND_SHORT_NAME: ${BRAND_SHORT_NAME:-}
+      BRAND_TAGLINE: ${BRAND_TAGLINE:-}
       # Public voting hostname (vote.domain.tld). Empty = localhost demo.
       # When set, the Node treats it as the voting authority unless RP_ID is
       # some other public hostname. See README § Intentional forking.
@@ -42,6 +51,8 @@ services:
       RP_ID: ${RP_ID:-localhost}
       WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      # Secret. When set, /setup asks for it before creating the super admin.
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       # Runtime only. Do not bake this into the image. Empty leaves contactEmail alone.
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       BALLOT_INBOX_ADDRESS: ${BALLOT_INBOX_ADDRESS:-}
@@ -76,6 +87,14 @@ services:
       L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
       L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+      # L2 identity (read-only here: no L1 submitter key in the Node container).
+      # GET /api/l2/identity and /api/l2/:l2Id/elections/:uuid/results.
+      L2_UUID: ${L2_UUID:-}
+      L2_ID: ${L2_ID:-}
+      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_CIVIC_RPC: ${L2_CIVIC_RPC:-http://l2:8546}
     volumes:
       - node-data:/data
     depends_on:
@@ -93,7 +112,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   l2:
     build:
@@ -105,8 +124,11 @@ services:
     init: true
     stop_grace_period: 30s
     command: ["node", "sequencer/index.mjs"]
+    # The sequencer JSON-RPC accepts eth_sendRawTransaction with no auth, and
+    # the node reaches it on the compose network (http://l2:8546). Publish it
+    # on the host loopback only; set L2_RPC_BIND=0.0.0.0 to expose it on purpose.
     ports:
-      - "${L2_RPC_PORT:-8546}:8546"
+      - "${L2_RPC_BIND:-127.0.0.1}:${L2_RPC_PORT:-8546}:8546"
     environment:
       L2_RPC_HOST: "0.0.0.0"
       L2_RPC_PORT: "8546"
@@ -117,8 +139,19 @@ services:
       L2_HEARTBEAT_SECONDS: ${L2_HEARTBEAT_SECONDS:-3600}
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
+      # L2 identity + admission (demo/docs/L2-IDENTITY-AND-SETTLEMENT.md).
+      # strict: only operator-signed admin txs, only opened election UUIDs,
+      # only votes bound to an approved eligibility root.
+      L2_ADMISSION: ${L2_ADMISSION:-strict}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_UUID: ${L2_UUID:-}
+      L2_ID: ${L2_ID:-}
+      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
+      L2_WRITE_RATE_PER_MIN: ${L2_WRITE_RATE_PER_MIN:-0}
     volumes:
       - l2-data:/data
     healthcheck:
@@ -133,7 +166,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   prover:
     build:
@@ -152,11 +185,20 @@ services:
       L2_BATCH_SIZE: ${L2_BATCH_SIZE:-4}
       DEV_MOCK_PROOF: ${DEV_MOCK_PROOF:-true}
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
-      REPUBLIC_NODE_URL: ${REPUBLIC_NODE_URL:-http://node:3000}
+      ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       L1_RPC: ${L1_RPC:-}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
       SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
-      PRIVATE_KEY: ${PRIVATE_KEY:-}
+      # The L2 operator's L1 key (minimal ETH; pays batch gas). PRIVATE_KEY is the legacy name.
+      L1_SUBMITTER_PRIVATE_KEY: ${L1_SUBMITTER_PRIVATE_KEY:-${PRIVATE_KEY:-}}
+      L1_SUBMITTER_MIN_BATCHES: ${L1_SUBMITTER_MIN_BATCHES:-20}
+      L1_SUBMITTER_GAS_PER_BATCH: ${L1_SUBMITTER_GAS_PER_BATCH:-250000}
+      L2_ADMISSION: ${L2_ADMISSION:-strict}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_UUID: ${L2_UUID:-}
+      L2_SALT: ${L2_SALT:-}
+      L2_ID: ${L2_ID:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
     volumes:
       - l2-data:/data
     depends_on:
@@ -171,7 +213,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
   # Hourly L2 attic. Default ARCHIVE_ENABLED=1. With no bucket and no
   # file:// sink the daemon warns and does not touch sequencer files.
@@ -217,12 +259,12 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - republic
+      - zk-voting
 
 volumes:
   node-data:
   l2-data:
 
 networks:
-  republic:
+  zk-voting:
     driver: bridge

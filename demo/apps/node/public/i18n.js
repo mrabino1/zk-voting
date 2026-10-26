@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Website locale (English default). Optional locales follow ACS home-language
  * rank in the United States after English: Spanish, Chinese, Tagalog, Vietnamese,
  * Arabic, French, Korean, Portuguese, Hindi. Fallback is English. Persist only
@@ -7,6 +7,7 @@
  * operator documentation stay English.
  */
 
+import { brandName, escapeBrandHtml } from "./brand.js";
 import en from "./locales/en.js";
 import es from "./locales/es.js";
 import zh from "./locales/zh.js";
@@ -19,8 +20,8 @@ import pt from "./locales/pt.js";
 import hi from "./locales/hi.js";
 
 export const DEFAULT_LOCALE = "en";
-export const STORAGE_KEY = "republic_lang";
-export const LOCALE_EVENT = "republic:locale";
+export const STORAGE_KEY = "zk_voting_lang";
+export const LOCALE_EVENT = "zk-voting:locale";
 
 /** BCP-47 tags written to html[lang] and Intl.DateTimeFormat. */
 export const HTML_LANG = {
@@ -109,7 +110,8 @@ export function t(key, vars) {
     template = lookup(CATALOGS[locale], key) || lookup(CATALOGS.en, key);
   }
   if (template == null) return key;
-  return interpolate(template, vars);
+  // `{brand}` is the product name from site admin; callers may override it.
+  return interpolate(template, { brand: brandName(), ...(vars || {}) });
 }
 
 export function applyDocumentLang(locale = getLocale()) {
@@ -146,7 +148,7 @@ export function applyStatic(root) {
   scope.querySelectorAll("[data-i18n-html]").forEach((el) => {
     const key = el.getAttribute("data-i18n-html");
     if (!key) return;
-    el.innerHTML = t(key);
+    el.innerHTML = t(key, { brand: escapeBrandHtml(brandName()) });
   });
   for (const [dataAttr, attr] of ATTR_MAP) {
     scope.querySelectorAll(`[${dataAttr}]`).forEach((el) => {
@@ -598,7 +600,7 @@ export function resetLocaleForTests(locale = DEFAULT_LOCALE) {
   currentLocale = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
 }
 
-export const RepublicI18n = {
+export const ZkVotingI18n = {
   SUPPORTED_LOCALES,
   RTL_LOCALES,
   HTML_LANG,
@@ -620,7 +622,7 @@ export const RepublicI18n = {
 };
 
 if (typeof window !== "undefined") {
-  window.RepublicI18n = RepublicI18n;
+  window.ZkVotingI18n = ZkVotingI18n;
   applyDocumentLang(currentLocale);
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") {

@@ -1,9 +1,9 @@
 # NOT FOR PROFIT
 
-**Republic** Node — civic public good, not a commercial product.
+**ZK-Voting** Node — civic public good, not a commercial product.
 
-This package is the long-lived Node process for **zk-voting**
-(product name Republic): JSON HTTP API, WebAuthn passkeys, email / Web3 /
+This package is the long-lived Node process for **ZK-Voting**
+(product name ZK-Voting by default): JSON HTTP API, WebAuthn passkeys, email / Web3 /
 smart-card / license-passport person identity with AWS SES email MFA, a gasless
 vote relayer, an L2 block-explorer backend, and a
 static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
@@ -45,8 +45,8 @@ runs those same checks for every election, grouped before / during / after votin
 from chain status. During the open window it still does not invent unofficial
 option counts. After voting time expires and a tally is posted, subscribers
 receive a locked official outcome PDF (counts, start, end); `/outcomes/verify`
-checks the file was not changed. Voters are subscribed by default when they
-vote.
+checks the file was not changed. Subscribing is opt-in on `/me`; casting a
+ballot never subscribes anyone.
 
 ---
 
@@ -122,7 +122,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
 | `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
-| `CHAIN_ID` | `27427` | Republic L2 chain id (health + explorer) |
+| `CHAIN_ID` | `27427` | ZK-Voting L2 chain id (health + explorer) |
 | `CHAIN_RPC` | _empty_ | If set, clerk `POST /api/elections` calls `ElectionFactory.createElection` and `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem. Unset = JSON-only demo. |
 | `ELECTION_FACTORY_ADDRESS` | _empty_ | Shared factory for every forked Node (`FACTORY` alias). Env wins over `/office/site`. Required when `CHAIN_RPC` is set unless the site pin is set. |
 | `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
@@ -136,6 +136,7 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `VOTE_FQDN` | _empty_ | Public voting hostname this jurisdiction creates, e.g. `vote.domain.tld`. Bare FQDN (no scheme, port, or path). It is the voting authority: when set, `RP_ID` becomes this host unless `RP_ID` is already a different public hostname, `https://<VOTE_FQDN>` is always an accepted origin, and `PUBLIC_BASE_URL` defaults to that `https://` origin. Empty = local demo. |
 | `RP_ID` | `localhost`, or `VOTE_FQDN` when that is set | WebAuthn rpID. `localhost` does not override `VOTE_FQDN`. |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). `https://$VOTE_FQDN` is prepended when `VOTE_FQDN` is set. |
+| `CORS_ALLOWED_ORIGINS` | empty | Comma-separated extra origins allowed to make **credentialed** cross-origin requests. `WEBAUTHN_ORIGINS` and `PUBLIC_BASE_URL` are always trusted. Other origins still get CORS for public reads, without cookies. |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_super_admin` when the store has none. Does not create a second super admin |
 | `SUPER_ADMIN_EMAIL` | _empty_ | Contact email for that person. Empty leaves `contactEmail` as stored. Invalid refuses to start. Read at process start (not a build arg). The active writer applies it on every boot; standby does not write |
 | `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
@@ -155,10 +156,10 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 | `PUBLIC_BASE_URL` | `https://$VOTE_FQDN` when that is set, else first WebAuthn origin | Origin printed in official-outcome QR codes (`/o/<reportId>`) |
 | `NODE_ENV` | _unset_ | `test` enables dev login, smart-card mock, and sets disclosure interval to 0 |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` (`0` when `NODE_ENV=test`) | Public vote proofs and turnout wait until this interval’s bucket closes |
-| `REPUBLIC_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
-| `REPUBLIC_HASH_SCHEME` | `keccak-dev-v1` (Poseidon if `REPUBLIC_PROVING_PATH=1`) | HashLeftRight advertised in config. The vote circuit is Poseidon. See `/circuits/HASH_SCHEME.md` |
+| `ZK_VOTING_PROVING_PATH` | off | `1` marks the Node as non-mock proving-path (`GET /api/config` `proving.provingPath`) |
+| `ZK_VOTING_HASH_SCHEME` | `keccak-dev-v1` (Poseidon if `ZK_VOTING_PROVING_PATH=1`) | HashLeftRight advertised in config. The vote circuit is Poseidon. See `/circuits/HASH_SCHEME.md` |
 
-Passkey rpName is always **Republic**.
+Passkey rpName is the current product name (site admin > Branding, else `BRAND_NAME`, else **ZK-Voting**).
 
 Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **smart-card reader**, **license/passport**, and passkey. A person may bind **up to 5 emails** (exactly one primary) and **up to 5 passkeys**. Register a person first (`/register`). Manage them on `/me`. Every path completes with an email one-time code when SES MFA is on (primary inbox by default). Caps are code constants — no extra env vars. Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
 
@@ -275,10 +276,11 @@ PATCH /api/admin/outcome-report-template
 POST /api/admin/outcome-report-template/preview
 ```
 
-Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `republic.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).
+Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `zk-voting.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).
 
 Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
-reason codes, CORS open for local tools.
+reason codes, CORS open for local tools (any origin can read the API, but
+only trusted origins get credentialed, cookie-carrying CORS; see `CORS_ALLOWED_ORIGINS`).
 
 Without `CHAIN_RPC`, creating an election writes the local JSON store (UUID public id + minted short code + a demo `onChainElectionId` for the circuit). Votes that pass the election window, nullifier check, and bound open-window roots are accepted in that store so the explorer and SPA can run a demo. The vote POST does not carry `identityCommitment`. Those accepts still wait for hourly public disclosure unless the interval is `0`. Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified, matching the on-chain eligible root. Freeze snapshots the roots used for the open window. The circuit proves membership in that root and non-membership in the disqualification chain. An unarmed MockVerifier still does not check the witness. The demo passkey leaf is Poseidon.
 
@@ -286,7 +288,7 @@ When `CHAIN_RPC` is set, `POST /api/elections` must also succeed on
 `ElectionFactory` (same params as `smart-contracts/script/CreateElection.s.sol`).
 The Node keeps a UUID public id and stores `onChainElectionId` /
 `onChainElectionAddress` / `createTxHash` on the election record. A factory
-revert returns **502/503** to the clerk and does **not** write `republic.json`.
+revert returns **502/503** to the clerk and does **not** write `zk-voting.json`.
 
 Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
 `POST /tally` still records counts. `l1Certification.status` is `skipped`.
@@ -326,7 +328,7 @@ one it finds.
 ## Data
 
 ```
-apps/node/data/republic.json    users, elections, votes, envelopes, termsAcceptances (gitignored)
+apps/node/data/zk-voting.json    users, elections, votes, envelopes, termsAcceptances (gitignored)
 apps/node/data/l2-chain.json    append-only blocks/txs for /explorer
 apps/node/legal/terms.md        canonical Terms of Use (PDF + hashes derived at boot)
 ```

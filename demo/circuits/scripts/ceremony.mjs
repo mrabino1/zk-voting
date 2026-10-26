@@ -28,22 +28,22 @@ const REPO = path.resolve(CIRCUITS, "..");
 const BUILD = path.join(CIRCUITS, "build");
 const TOY_CIRCOM = path.join(CIRCUITS, "ceremony", "toy.circom");
 
-export const TRANSCRIPT_SCHEMA = "republic.groth16.phase2.transcript.v1";
-export const EXPORT_SCHEMA = "republic.groth16.phase2.export.v1";
-export const SIDECAR_SCHEMA = "republic.groth16.phase2.contribution.v1";
+export const TRANSCRIPT_SCHEMA = "zk-voting.groth16.phase2.transcript.v1";
+export const EXPORT_SCHEMA = "zk-voting.groth16.phase2.export.v1";
+export const SIDECAR_SCHEMA = "zk-voting.groth16.phase2.contribution.v1";
 
 const CIRCOM_VERSION = "2.2.2";
 const CIRCOM_SHA256 = "f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5";
 const CIRCOM_URL = `https://github.com/iden3/circom/releases/download/v${CIRCOM_VERSION}/circom-linux-amd64`;
 
-const TOY_PHASE1_ENTROPY = "republic-toy-phase1-published-entropy-not-a-ceremony";
+const TOY_PHASE1_ENTROPY = "zk-voting-toy-phase1-published-entropy-not-a-ceremony";
 const TOY_ENTROPIES = [
-  "republic-toy-contributor-1-published-entropy-not-a-ceremony",
-  "republic-toy-contributor-2-published-entropy-not-a-ceremony",
-  "republic-toy-contributor-3-published-entropy-not-a-ceremony",
+  "zk-voting-toy-contributor-1-published-entropy-not-a-ceremony",
+  "zk-voting-toy-contributor-2-published-entropy-not-a-ceremony",
+  "zk-voting-toy-contributor-3-published-entropy-not-a-ceremony",
 ];
 export const TOY_BEACON_HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const TOY_BEACON_NAME = "republic-toy-beacon";
+const TOY_BEACON_NAME = "zk-voting-toy-beacon";
 
 const UNTRUSTED_NOTE =
   "Produced by circuits/scripts/ceremony.mjs. A transcript of this shape is not evidence that a public ceremony took place. Keys stay untrusted until a real ceremony is attested in a reviewed commit. Do not deploy the exported verifier for a binding election.";
@@ -162,7 +162,7 @@ export function assertEntropy(entropy, { published }) {
   if (typeof entropy !== "string" || entropy.length < 32) {
     const how = published
       ? "Pass --published-entropy with at least 32 characters."
-      : "Set REPUBLIC_CEREMONY_ENTROPY to at least 32 characters. It is not written to the transcript.";
+      : "Set ZK_VOTING_CEREMONY_ENTROPY to at least 32 characters. It is not written to the transcript.";
     throw new Error(`entropy must be at least 32 characters. ${how}`);
   }
   if (entropy.includes("\n") || entropy.includes("\r") || entropy.includes("\0")) {
@@ -798,7 +798,7 @@ export async function runToy({ dir, power = 4, allowOutsideBuild = false } = {})
     "contribute",
     pot0,
     pot1,
-    "--name=republic-toy-phase1",
+    "--name=zk-voting-toy-phase1",
     `--entropy=${TOY_PHASE1_ENTROPY}`,
   ]);
   runSnarkjs(["powersoftau", "prepare", "phase2", pot1, phase2]);
@@ -814,13 +814,13 @@ export async function runToy({ dir, power = 4, allowOutsideBuild = false } = {})
   });
   await contributeInDir({
     dir: root,
-    name: "republic-toy-1",
+    name: "zk-voting-toy-1",
     entropy: TOY_ENTROPIES[0],
     entropyPolicy: "published",
   });
   await contributeInDir({
     dir: root,
-    name: "republic-toy-2",
+    name: "zk-voting-toy-2",
     entropy: TOY_ENTROPIES[1],
     entropyPolicy: "published",
   });
@@ -829,7 +829,7 @@ export async function runToy({ dir, power = 4, allowOutsideBuild = false } = {})
   await contributeStandalone({
     input: tip,
     output: incoming,
-    name: "republic-toy-3",
+    name: "zk-voting-toy-3",
     entropy: TOY_ENTROPIES[2],
     entropyPolicy: "published",
   });
@@ -909,10 +909,10 @@ function entropyFromFlags(flags) {
   }
   if (flags.entropy) {
     throw new Error(
-      "Refusing --entropy for a private contribution; it would sit in the shell history. Export REPUBLIC_CEREMONY_ENTROPY, or pass --published-entropy for a public drill.",
+      "Refusing --entropy for a private contribution; it would sit in the shell history. Export ZK_VOTING_CEREMONY_ENTROPY, or pass --published-entropy for a public drill.",
     );
   }
-  const envName = flags["entropy-env"] ? String(flags["entropy-env"]) : "REPUBLIC_CEREMONY_ENTROPY";
+  const envName = flags["entropy-env"] ? String(flags["entropy-env"]) : "ZK_VOTING_CEREMONY_ENTROPY";
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(envName)) {
     throw new Error("--entropy-env must be an environment variable name");
   }
@@ -946,7 +946,7 @@ init:
 contribute:
   --dir <ceremony> --name <participant>
   --in <prev.zkey> --out <next.zkey> --name <participant>
-  Entropy: REPUBLIC_CEREMONY_ENTROPY, or --published-entropy for a drill.
+  Entropy: ZK_VOTING_CEREMONY_ENTROPY, or --published-entropy for a drill.
 
 accept:
   --dir <ceremony> --zkey <participant.zkey>

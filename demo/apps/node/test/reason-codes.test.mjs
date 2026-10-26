@@ -113,7 +113,7 @@ async function vote(electionId, { identityCommitment, nullifier, root, disqRoot 
 
 describe('reason codes and Node disqualification vote gate', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-reason-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-reason-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

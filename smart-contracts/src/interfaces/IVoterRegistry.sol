@@ -24,7 +24,17 @@ interface IVoterRegistry {
     /// @notice Size of registered ∩ ¬currently-disqualified.
     function eligibleCount(uint256 electionId) external view returns (uint256);
 
-    /// @notice Republish `Election.eligibleRoot` from the current intersection.
-    ///         Only the disqualification registry may call this.
+    /// @notice Start republishing `Election.eligibleRoot` from the current
+    ///         intersection (paged, see `continueEligibleRebuild`). Only the
+    ///         disqualification registry may call this.
     function rebuildEligibleRoot(uint256 electionId) external returns (bytes32);
+
+    /// @notice Process up to `maxLeaves` (0 = default batch) roll entries of a
+    ///         pending eligible-root rebuild. Permissionless. Returns true once
+    ///         the new root is published.
+    function continueEligibleRebuild(uint256 electionId, uint256 maxLeaves) external returns (bool done);
+
+    /// @notice True while a disqualify / revoke rebuild has not been finished;
+    ///         `BallotInbox` refuses ballots meanwhile.
+    function eligibleRootPending(uint256 electionId) external view returns (bool);
 }

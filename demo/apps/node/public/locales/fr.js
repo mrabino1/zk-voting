@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (French).
+ * NOT FOR PROFIT — ZK-Voting website copy (French).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "SANS BUT LUCRATIF — bien public civique. Pas un produit commercial. Pas de token. Pas de frais pour les électeurs.",
     nfpBannerExplorer:
       "SANS BUT LUCRATIF — bien public civique. Pas un produit commercial. Pas de token. Pas de publicité.",
-    brandHome: "Accueil Republic",
+    brandHome: "Accueil {brand}",
     brandSub: "Bureau des élections civiques",
     brandSubExplorer: "Explorateur de blocs L2",
     navVoter: "Électeur",
@@ -51,27 +51,30 @@ export default {
     navPublic: "Public",
     session: "Session",
     officeBadge: "Sans but lucratif",
-    loading: "Chargement de Republic…",
-    footerNfp: "SANS BUT LUCRATIF — Republic est un bien public civique. Pas un produit commercial.",
+    loading: "Chargement de {brand}…",
+    footerNfp: "SANS BUT LUCRATIF — {brand} est un bien public civique. Pas un produit commercial.",
     footerMeta:
-      "Nom du produit : Republic. Les électeurs ne paient pas le gas. Le choix n’est jamais imprimé sur un reçu. Les identity commitments de production utilisent Poseidon ; cette démo du Node peut n’afficher qu’un hex keccak256 du commitment (jamais un trapdoor ni une phrase secrète).",
+      "Nom du produit : {brand}. Les électeurs ne paient pas le gas. Le choix n’est jamais imprimé sur un reçu. Les identity commitments de production utilisent Poseidon ; cette démo du Node peut n’afficher qu’un hex keccak256 du commitment (jamais un trapdoor ni une phrase secrète).",
     footerOfficials: "Officiers :",
     footerBackOffice: "bureau interne",
     footerExplorer: "explorateur de blocs",
     footerAdmin: "admin",
-    footerAdminMeta: "Nom du produit : Republic. Pas de token. Pas de publicité.",
+    footerAdminMeta: "Nom du produit : {brand}. Pas de token. Pas de publicité.",
     footerL2: "Explorateur L2",
-    footerBackOfficeMeta: "Nom du produit : Republic. Le choix n’est jamais imprimé ici.",
-    footerExplorerMeta: "Explorateur L2 de Republic. Le texte en clair du bulletin n’est pas un champ de cette chaîne.",
+    footerBackOfficeMeta: "Nom du produit : {brand}. Le choix n’est jamais imprimé ici.",
+    footerExplorerMeta: "Explorateur L2 de {brand}. Le texte en clair du bulletin n’est pas un champ de cette chaîne.",
     footerResults: "Résultats de l’élection",
     noscript:
-      "Republic a besoin de JavaScript pour parler à la passkey de votre appareil (WebAuthn). Activez JavaScript et rechargez, ou utilisez un site de scrutin accessible géré par votre greffier.",
+      "{brand} a besoin de JavaScript pour parler à la passkey de votre appareil (WebAuthn). Activez JavaScript et rechargez, ou utilisez un site de scrutin accessible géré par votre greffier.",
     metaDescription:
-      "Republic est un système de vote civique sans but lucratif. Identifiez-vous avec une passkey, un portefeuille Web3 ou une carte à puce d’identité numérique, puis déposez un bulletin privé et vérifiable publiquement.",
-    titleHome: "Republic — élections civiques",
-    titleAdmin: "Administration de la plateforme · Republic",
-    titleBackOffice: "Bureau interne · Republic",
-    titleExplorer: "Explorateur L2 de Republic",
+      "{brand} est un système de vote civique sans but lucratif. Identifiez-vous avec une passkey, un portefeuille Web3 ou une carte à puce d’identité numérique, puis déposez un bulletin privé et vérifiable publiquement.",
+    titleHome: "{brand} — élections civiques",
+    titleAdmin: "Administration de la plateforme · {brand}",
+    titleCeremony: "Cérémonie de configuration de confiance · {brand}",
+    titleCeremonyTranscript: "Transcription de la cérémonie · {brand}",
+    titleCeremonyAdmin: "Coordination de la cérémonie · {brand}",
+    titleBackOffice: "Bureau interne · {brand}",
+    titleExplorer: "Explorateur L2 de {brand}",
     titleBallot: "Bulletin",
     titleRegister: "Inscription",
     titleResults: "Résultats",
@@ -151,7 +154,7 @@ export default {
   home: {
     kicker: "Accueil électeur",
     title: "Élections sur ce Node",
-    lede: "Ceci est le bureau électeur de Republic : inscrivez-vous avec une passkey d’appareil, vérifiez si vous êtes sur la liste, et remplissez un bulletin pendant que le scrutin est ouvert. Republic n’est pas un produit commercial.",
+    lede: "Ceci est le bureau électeur de {brand} : inscrivez-vous avec une passkey d’appareil, vérifiez si vous êtes sur la liste, et remplissez un bulletin pendant que le scrutin est ouvert. {brand} n’est pas un produit commercial.",
     openCount: "{count} élections acceptent actuellement des bulletins.",
     openCount_one: "{count} élection accepte actuellement des bulletins.",
     walletPresent: "Portefeuille passkey sur cet appareil. Commitment {commitment}…",
@@ -228,7 +231,7 @@ export default {
     stepCommitRest: " à une liste électorale — jamais un nom, jamais le portefeuille comme feuille.",
     web3Title: "Portefeuille Web3",
     web3Body:
-      "Signez un message de liaison Republic. L’adresse vous est unique. Elle peut être vérifiée en interne même si une autre adresse est l’active.",
+      "Signez un message de liaison {brand}. L’adresse vous est unique. Elle peut être vérifiée en interne même si une autre adresse est l’active.",
     bindWallet: "Lier le portefeuille Web3",
     cardTitle: "Identité numérique sur carte à puce",
     cardBody:
@@ -253,9 +256,9 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "Copier le commitment",
     copiedCommitment: "Identity commitment copié.",
-    localAddress: "Adresse locale Republic",
+    localAddress: "Adresse locale {brand}",
     prfWrap:
-      "Wrap PRF : le matériel de compte utilise le sel republic:account:v1 ; le trapdoor ZK utilise le sel republic:identity:v1. Ce ne sont pas les mêmes octets.",
+      "Wrap PRF : le matériel de compte utilise le sel zk-voting:account:v1 ; le trapdoor ZK utilise le sel zk-voting:identity:v1. Ce ne sont pas les mêmes octets.",
     createFirst: "Créez une passkey pour dériver le commitment. Le trapdoor n’apparaît jamais sur cet écran.",
     activeEthTitle: "Adresse Ethereum active",
     noActive:
@@ -354,7 +357,7 @@ export default {
     staleWrap:
       "Cet appareil a un wrap passkey v1 qui dérivait l’identité de vote de la graine du compte. Réinitialisez-le sur la page d’inscription et créez une nouvelle passkey avant de voter.",
     noPasskey:
-      "Cet appareil n’a pas encore de passkey Republic. Inscrivez-vous d’abord, puis revenez au bulletin.",
+      "Cet appareil n’a pas encore de passkey {brand}. Inscrivez-vous d’abord, puis revenez au bulletin.",
     goRegister: "Aller à l’inscription",
     pollsClosed:
       "Le scrutin est fermé pour cette élection. Vous pouvez consulter les questions ; le Node n’acceptera pas de nouveau bulletin.",
@@ -509,11 +512,11 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Republic exige une passkey d’appareil (WebAuthn) avec une clé résidente et une vérification utilisateur. Utilisez un navigateur actuel (Safari 16+, Chrome 108+, Firefox 122+, Edge) sur un appareil avec un authentificateur de plateforme. Aucune phrase secrète n’est jamais affichée.",
+      "{brand} exige une passkey d’appareil (WebAuthn) avec une clé résidente et une vérification utilisateur. Utilisez un navigateur actuel (Safari 16+, Chrome 108+, Firefox 122+, Edge) sur un appareil avec un authentificateur de plateforme. Aucune phrase secrète n’est jamais affichée.",
     productionNote:
-      "La production utilise keccak256(clé publique secp256k1 non compressée), puis prend les 20 derniers octets (Ethereum). Cette démo ne peut pas multiplier sur secp256k1 sans bibliothèque de courbe, donc getAddress() renvoie SHA-256(seed)[0:20] étiqueté republic-local-address.",
+      "La production utilise keccak256(clé publique secp256k1 non compressée), puis prend les 20 derniers octets (Ethereum). Cette démo ne peut pas multiplier sur secp256k1 sans bibliothèque de courbe, donc getAddress() renvoie SHA-256(seed)[0:20] étiqueté zk-voting-local-address.",
     staleWrap:
-      "Ce navigateur a un wrap passkey v1 (IndexedDB republic-wallet). v1 dérivait le trapdoor ZK de la même graine que la clé de compte, ce qui est plus faible que docs/PASSKEYS.md. La démo ne peut pas migrer ce wrap sur place : v1 utilisait un sel PRF aléatoire et un seul domaine HKDF, donc les nouveaux sels compte/identité ne peuvent pas le déballer. Réinitialisez le portefeuille de l’appareil et créez une nouvelle passkey. L’adresse locale et l’identity commitment changeront ; toute entrée de liste de démo antérieure ne correspondra plus.",
+      "Ce navigateur a un wrap passkey v1 (IndexedDB zk-voting-wallet). v1 dérivait le trapdoor ZK de la même graine que la clé de compte, ce qui est plus faible que docs/PASSKEYS.md. La démo ne peut pas migrer ce wrap sur place : v1 utilisait un sel PRF aléatoire et un seul domaine HKDF, donc les nouveaux sels compte/identité ne peuvent pas le déballer. Réinitialisez le portefeuille de l’appareil et créez une nouvelle passkey. L’adresse locale et l’identity commitment changeront ; toute entrée de liste de démo antérieure ne correspondra plus.",
     noEthWallet:
       "Aucun portefeuille Ethereum dans ce navigateur. Utilisez une passkey, ou installez un portefeuille qui prend en charge personal_sign.",
     noWeb3Wallet: "Aucun portefeuille Web3 dans ce navigateur. Installez un portefeuille ou utilisez une passkey / carte à puce.",
@@ -666,7 +669,7 @@ export default {
     clerkHint:
       "Créez une élection, puis gelez la liste avant l’ouverture du scrutin. <code>maxParticipants = 0</code> signifie illimité. Choisissez la pluralité (par défaut) ou le vote préférentiel (IRV).",
     chainNote:
-      "Si ce Node a <code>CHAIN_RPC</code> défini, Créer une élection appelle aussi <code>ElectionFactory.createElection</code> et stocke l’id uint256 on-chain à côté de l’UUID. Les échecs d’usine s’affichent ici et rien n’est enregistré localement. Sans <code>CHAIN_RPC</code>, ce formulaire n’écrit que <code>republic.json</code> (démo) et frappe encore un <code>onChainElectionId</code> de démo pour le circuit.",
+      "Si ce Node a <code>CHAIN_RPC</code> défini, Créer une élection appelle aussi <code>ElectionFactory.createElection</code> et stocke l’id uint256 on-chain à côté de l’UUID. Les échecs d’usine s’affichent ici et rien n’est enregistré localement. Sans <code>CHAIN_RPC</code>, ce formulaire n’écrit que <code>zk-voting.json</code> (démo) et frappe encore un <code>onChainElectionId</code> de démo pour le circuit.",
     jurisdiction: "Juridiction",
     titleField: "Titre",
     metadataUri: "URI de métadonnées",
@@ -864,7 +867,7 @@ export default {
     pluralityTag: "{type} · pluralité",
   },
   explorer: {
-    kicker: "Republic L2 · chaîne 27427",
+    kicker: "{brand} L2 · chaîne 27427",
     title: "Explorateur de blocs",
     lede: "Registre public de chaque bloc : inscriptions (commitments seulement), bulletins acceptés (nullifier + hachage du bulletin — jamais le choix), disqualifications, dépouillements et lots de rollup. Les preuves de vote n’apparaissent qu’après la clôture de l’heure qui les contenait, afin qu’une personne quittant un bureau de vote ne puisse pas être associée à un tic de juridiction en direct. L’instantané ci-dessous est la dernière heure UTC close : nombre de bulletins divulgués, fin de cette heure, et compte à rebours jusqu’à la prochaine mise à jour. Le choix n’est jamais affiché ici. Pas de publicité. Pas de tokens.",
     searchLabel: "Rechercher le registre",
@@ -875,7 +878,7 @@ export default {
     breadcrumb: "Fil d’Ariane",
     privacyTitle: "Confidentialité du bulletin",
     privacyBody:
-      "Cette transaction prouve l’éligibilité et l’unicité. L’explorateur affiche le nullifier et le hachage du bulletin. Le texte en clair du choix n’est pas un champ sur Republic L2 et n’est jamais rendu ici. Les lignes de vote n’apparaissent qu’après la clôture de l’heure qui les contenait, afin que quitter un bureau de vote ne puisse pas être associé à un tic de juridiction en direct.",
+      "Cette transaction prouve l’éligibilité et l’unicité. L’explorateur affiche le nullifier et le hachage du bulletin. Le texte en clair du choix n’est pas un champ sur {brand} L2 et n’est jamais rendu ici. Les lignes de vote n’apparaissent qu’après la clôture de l’heure qui les contenait, afin que quitter un bureau de vote ne puisse pas être associé à un tic de juridiction en direct.",
     noTx: "Aucune transaction dans cette vue.",
     type: "Type",
     txnHash: "Hachage txn",
@@ -1038,7 +1041,7 @@ export default {
   feedback: {
     title: "Retour",
     kicker: "Contact",
-    lede: "Dites à l’opérateur de ce site Republic ce qui devrait changer. Ce n’est pas un bulletin. N’indiquez pas un choix de vote, un numéro de document, ni une phrase de récupération.",
+    lede: "Dites à l’opérateur de ce site {brand} ce qui devrait changer. Ce n’est pas un bulletin. N’indiquez pas un choix de vote, un numéro de document, ni une phrase de récupération.",
     nameLabel: "Nom (facultatif)",
     emailLabel: "Adresse de réponse (facultatif)",
     emailHint: "Sert seulement d’adresse Reply-To sur le message à l’opérateur. Laissez vide pour n’envoyer aucune adresse de réponse.",

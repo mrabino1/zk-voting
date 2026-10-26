@@ -1,0 +1,19 @@
+{
+  "name": "backoffice-notes",
+  "displayName": "Operator notes",
+  "version": "1.0.0",
+  "description": "Example back-office plugin: a shared notes page for election managers plus a log of role changes.",
+  "author": "zk-voting maintainers",
+  "license": "MIT",
+  "type": "backoffice",
+  "minAppVersion": "0.1.0",
+  "permissions": ["client", "routes", "storage", "admin_pages", "menu", "events", "users:read", "elections:read"],
+  "entrypoints": {
+    "server": "server/index.mjs",
+    "client": "client.mjs"
+  },
+  "hooks": ["routes", "adminPages", "menu", "event:user.role_changed"],
+  "slots": ["site-admin.page", "site-admin.dashboard"],
+  "adminPages": [{ "id": "notes", "title": "Operator notes", "capability": "manage_elections" }],
+  "menu": [{ "label": "Operator notes", "page": "notes" }]
+}

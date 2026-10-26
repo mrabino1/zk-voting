@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-/// @title RepublicMailbox
+/// @title ZkVotingMailbox
 /// @notice L2 ↔ L1 messages and a sequencer-stall force-inclusion hatch.
 ///         Price is ZERO. Not for profit. No fee on sendToL2.
-contract RepublicMailbox {
+contract ZkVotingMailbox {
     error ZeroAddress();
     error NotAdmin();
     error NotReady();
@@ -38,7 +38,9 @@ contract RepublicMailbox {
         inclusionDelay = 1 days;
     }
 
-    function sendToL2(bytes calldata message) external payable {
+    /// @dev Audit L-07: non-payable. There is no bridge credit, so any value
+    ///      sent would have been locked forever.
+    function sendToL2(bytes calldata message) external {
         if (message.length == 0) revert EmptyMessage();
         uint256 n = ++toL2Nonce;
         emit MessageToL2(n, msg.sender, message);
@@ -57,6 +59,8 @@ contract RepublicMailbox {
         emit Enqueued(n, msg.sender, block.timestamp + inclusionDelay, message);
     }
 
+    /// @notice ADVISORY (audit L-07): this re-emits the queued message for the
+    ///         sequencer / indexer. Settlement does not yet enforce inclusion.
     function forceInclude(uint256 nonce) external {
         Pending storage p = queue[nonce];
         if (p.sender == address(0) || p.included) revert NotReady();

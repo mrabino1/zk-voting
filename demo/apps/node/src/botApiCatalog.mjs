@@ -2,6 +2,7 @@
 // Public bot catalog. This file is the source for GET /api, OpenAPI, and
 // the LLM guide. Host-only administration routes are omitted on purpose.
 
+import { brandName } from './branding.mjs';
 import {
   API_KEY_DEFAULT_EXPIRATION,
   API_KEY_EXPIRATIONS,
@@ -834,7 +835,7 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/explorer/ingest', {
     tag: 'Explorer',
     summary:
-      'Operator ingest of civic L2 events. Send the host ingest secret in X-Republic-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.',
+      `Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.`,
   }),
 
   R('/api/polls', {
@@ -855,7 +856,7 @@ export const BOT_OPERATIONS = [
   }),
   V('POST', '/api/polls/:id/ballots', {
     tag: 'Polls',
-    summary: 'Submit a signed token-poll ballot. No Republic account is required. A read-only key is refused.',
+    summary: 'Submit a signed token-poll ballot. No account on this site is required. A read-only key is refused.',
   }),
   V('POST', '/api/polls/:id/tally', {
     tag: 'Polls',
@@ -969,7 +970,7 @@ export function botDiscovery() {
   return {
     nfp: true,
     notForProfit: true,
-    product: 'Republic',
+    product: brandName(),
     app: 'zk-voting',
     documentation: '/api',
     openapi: '/api/openapi.json',
@@ -1048,8 +1049,8 @@ export function renderOpenApi() {
       ]
         .filter(Boolean)
         .join(' '),
-      'x-republic-min-level': entry.minLevel,
-      'x-republic-api-key': entry.apiKey,
+      'x-zk-voting-min-level': entry.minLevel,
+      'x-zk-voting-api-key': entry.apiKey,
       responses: {
         200: { description: 'JSON body. nfp is true.' },
         201: { description: 'Created. JSON body. nfp is true.' },
@@ -1082,7 +1083,7 @@ export function renderOpenApi() {
   return {
     openapi: '3.0.3',
     info: {
-      title: 'Republic bot API',
+      title: `${brandName()} bot API`,
       version: '1.0.0',
       description:
         'NOT FOR PROFIT civic voting API for an external bot. Create a personal API key on /me. Send Authorization: Bearer rk_… or X-Api-Key. Levels: read, voter, officer. Expiration: 7d, 30d, 90d, 180d, 365d, or never (default 30d).',
@@ -1112,7 +1113,7 @@ export function renderOpenApi() {
 
 function guideBody() {
   const lines = [];
-  lines.push('# Republic bot API');
+  lines.push(`# ${brandName()} bot API`);
   lines.push('');
   lines.push('> NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.');
   lines.push('');
@@ -1136,7 +1137,7 @@ function guideBody() {
   lines.push('```http');
   lines.push('POST /api/me/api-keys');
   lines.push('Content-Type: application/json');
-  lines.push('Cookie: republic.sid=…');
+  lines.push('Cookie: zk-voting.sid=…');
   lines.push('');
   lines.push('{ "name": "assistant", "level": "read", "expiresIn": "30d" }');
   lines.push('```');
@@ -1177,7 +1178,7 @@ function guideBody() {
   lines.push('');
   lines.push('```bash');
   lines.push('curl -sS \\');
-  lines.push('  -H "Authorization: Bearer $REPUBLIC_API_KEY" \\');
+  lines.push('  -H "Authorization: Bearer $ZK_VOTING_API_KEY" \\');
   lines.push('  -H "Accept: application/json" \\');
   lines.push('  "$ORIGIN/api/me"');
   lines.push('```');
@@ -1222,11 +1223,11 @@ export function renderBotGuideMarkdown() {
 
 export function renderRepoLlmsTxt() {
   const text = [
-    '# Republic (zk-voting)',
+    `# ${brandName()} (zk-voting)`,
     '',
     '> NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
-    'This repository is a zero-knowledge voting monorepo (product name Republic). Read it in this order when answering questions or calling the Node API.',
+    `This repository is a zero-knowledge voting monorepo (product name ${brandName()}). Read it in this order when answering questions or calling the Node API.`,
     '',
     '## Bot API',
     '',
@@ -1248,7 +1249,7 @@ export function renderRepoLlmsTxt() {
     '',
     '## Product map',
     '',
-    '- `README.md` — what Republic is for and how to run it',
+    `- \`README.md\` — what ${brandName()} is for and how to run it`,
     '- `docs/ARCHITECTURE.md` — packages and interfaces',
     '- `docs/BOT_API.md` — every bot route',
     '- `docs/IDENTITY.md` — person, emails, passkeys, vote PIN',
@@ -1324,8 +1325,8 @@ export function renderBotHtml() {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Bot API · Republic</title>
-  <meta name="description" content="How an external bot calls a Republic user’s API with a personal key."/>
+  <title>Bot API · ${escapeHtml(brandName())}</title>
+  <meta name="description" content="How an external bot calls a ${escapeHtml(brandName())} user’s API with a personal key."/>
   <link rel="describedby" href="/api/openapi.json" type="application/json"/>
   <link rel="describedby" href="/api/llms.txt" type="text/plain"/>
   <style>
@@ -1359,7 +1360,7 @@ export function renderBotHtml() {
   <a class="skip" href="#main">Skip to main content</a>
   <header>
     <p class="kicker">NOT FOR PROFIT</p>
-    <h1>Republic bot API</h1>
+    <h1>${escapeHtml(brandName())} bot API</h1>
     <p>Civic public good. Not a commercial product. No token. No fees to voters.</p>
   </header>
   <main id="main">
@@ -1374,7 +1375,7 @@ X-Api-Key: rk_…</code></pre>
       <p>Path parameters named <code>id</code>, <code>partyId</code>, <code>requestId</code>, <code>methodId</code>, and <code>electionId</code> are UUIDs. A sequential integer is rejected with <code>400</code> and <code>ID_NOT_UUID</code>, so the path does not reveal how many people or records exist. The on-chain election id stays inside the election object for the circuit. Short links <code>/v/{code}</code> and <code>/e/{code}</code> redirect to <code>/vote/{uuid}</code> and are not accepted as <code>/api/elections/:id</code>.</p>
       <p>Ballot labels (<code>questionId</code>, <code>optionId</code>), guardian slots (<code>:index</code>), mail template names, and page slugs are not record counts. A new jurisdiction is assigned a UUID.</p>
       <pre><code>curl -sS \\
-  -H "Authorization: Bearer $REPUBLIC_API_KEY" \\
+  -H "Authorization: Bearer $ZK_VOTING_API_KEY" \\
   -H "Accept: application/json" \\
   "$ORIGIN/api/me"</code></pre>
     </section>
@@ -1415,7 +1416,7 @@ Content-Type: application/json
     ${sections}
   </main>
   <footer>
-    <p>NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.</p>
+    <p>NOT FOR PROFIT — ${escapeHtml(brandName())} is a civic public good. Not a commercial product.</p>
     <p>Machine-readable: <a href="/api/openapi.json">/api/openapi.json</a> · <a href="/api/llms.txt">/api/llms.txt</a> · <a href="/api?format=json">/api?format=json</a></p>
   </footer>
 </body>

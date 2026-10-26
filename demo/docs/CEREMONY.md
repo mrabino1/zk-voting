@@ -8,13 +8,15 @@ The committed Vote(4) files in [`circuits/fixtures/untrusted`](../circuits/fixtu
 
 License: AGPL-3.0-or-later.
 
+**Browser ceremony.** The Node also runs this phase 2 as a web ceremony: a coordinator page at `/admin/ceremony`, in-browser contributions at `/ceremony`, and a public transcript with a whole-chain verifier. See [`ceremony-web.md`](./ceremony-web.md). This runbook stays the reference for offline contributions and for checking any key by hand.
+
 ---
 
 ## What phase 2 is
 
 Groth16 needs a structured reference string.
 
-1. **Phase 1** is powers-of-tau. It is circuit-independent. Republic does not run that ceremony in this repository. A coordinator points phase 2 at a phase-2-prepared `.ptau` file.
+1. **Phase 1** is powers-of-tau. It is circuit-independent. ZK-Voting does not run that ceremony in this repository. A coordinator points phase 2 at a phase-2-prepared `.ptau` file.
 2. **Phase 2** is circuit-specific. `groth16 setup` binds one `.r1cs` to that `.ptau` and produces `zkey_0000.zkey`. That file still contains phase-2 toxic waste. Each later participant re-randomizes it. A final **beacon** contribution uses public randomness so the last human participant does not know the finished key either.
 
 `circuits/scripts/ceremony.mjs` (wrapper: `circuits/scripts/ceremony.sh`) runs only phase 2:
@@ -36,7 +38,7 @@ Groth16 needs a structured reference string.
 
 - The script overwrites `ceremony`, `trusted`, `attestation`, and `publicCeremony` on every save. Hand-editing them to claim a ceremony makes `verify` fail.
 - `--trusted`, `--ceremony-done`, and `--claim-ceremony` are refused.
-- Private entropy is read from `REPUBLIC_CEREMONY_ENTROPY` and is not written into the transcript, the sidecar, or the log line. `--entropy` on the command line is refused for that reason.
+- Private entropy is read from `ZK_VOTING_CEREMONY_ENTROPY` and is not written into the transcript, the sidecar, or the log line. `--entropy` on the command line is refused for that reason.
 - A drill may pass `--published-entropy`. The transcript then stores that string so it is obvious the toxic waste is known. The CI toy does this. A published-entropy transcript is not a ceremony.
 - `beacon` does not download Bitcoin, drand, or any other public source. It records `source: "coordinator-supplied"`. A hash you chose yourself is not a random beacon.
 - Phase 1 is labeled `untrusted-local` unless the coordinator passes `--phase1 external` and a `--phase1-note` naming the public file. External phase 1 still does not complete phase 2.
@@ -65,7 +67,7 @@ Record the git commit and the sha256 of the `.r1cs` (the transcript stores that 
 
 Use a public phase-1 file that has already been prepared for phase 2 (`snarkjs powersoftau prepare phase2`), at a power large enough for this `.r1cs`. Record the URL and the file hash in `--phase1-note`.
 
-Do not feed phase 2 with the powers-of-tau from `npm run circuits:setup` or `npm run circuits:smoke`. Those contributions use the published string `republic-local-untrusted-dev-only-not-a-ceremony`.
+Do not feed phase 2 with the powers-of-tau from `npm run circuits:setup` or `npm run circuits:smoke`. Those contributions use the published string `zk-voting-local-untrusted-dev-only-not-a-ceremony`.
 
 ```bash
 node circuits/scripts/ceremony.mjs init \
@@ -107,7 +109,7 @@ Collect at least two contributions before the beacon. A real ceremony wants many
 
 ### 4. Precommit the beacon, then apply it
 
-Before the last contribution is accepted, publish the randomness source you will use and the exact encoding (for example a future Bitcoin block header hash, or a drand round). Do not choose the hash after you have seen the last contribution.
+Before the last contribution is accepted, publish the randomness source you will use and the exact encoding (the web ceremony uses the hash of a future, finalized Ethereum mainnet block; use the same here). Do not choose the hash after you have seen the last contribution.
 
 When that value is public, pass the bytes yourself. This repository does not fetch them.
 
@@ -117,7 +119,7 @@ node circuits/scripts/ceremony.mjs beacon \
   --hash <even-length hex, 1..255 bytes> \
   --iterations 10 \
   --name "Final Beacon" \
-  --note "Bitcoin block <height>, header hash, checked by <who>"
+  --note "Ethereum mainnet block <number>, block hash, checked by <who>"
 ```
 
 snarkjs requires the iteration exponent to be an integer from 10 to 63. `10` means `2^10` hash iterations.
@@ -163,8 +165,8 @@ Confirm `ceremony` is `not-done`. Confirm your view of the latest contribution h
 3. Generate entropy locally (at least 32 characters; use a long draw from a CSPRNG). Put it in the environment so it is not an argument to the script:
 
 ```bash
-read -s REPUBLIC_CEREMONY_ENTROPY
-export REPUBLIC_CEREMONY_ENTROPY
+read -s ZK_VOTING_CEREMONY_ENTROPY
+export ZK_VOTING_CEREMONY_ENTROPY
 ```
 
 4. Contribute. Either update a directory you hold:
@@ -186,7 +188,7 @@ node circuits/scripts/ceremony.mjs contribute \
 
 The script prints a 64-byte contribution hash. The standalone form also writes `zkey_next.zkey.contribution.json` with that hash and **without** your entropy.
 
-5. Send the new zkey to the coordinator over a public channel. Do not send `REPUBLIC_CEREMONY_ENTROPY`. Unset it (`unset REPUBLIC_CEREMONY_ENTROPY`) and delete any file you used to hold it.
+5. Send the new zkey to the coordinator over a public channel. Do not send `ZK_VOTING_CEREMONY_ENTROPY`. Unset it (`unset ZK_VOTING_CEREMONY_ENTROPY`) and delete any file you used to hold it.
 6. Wait until the coordinator publishes a transcript that includes your hash. Compare it to the hash you printed. If they accepted someone else's fork of the same parent zkey, contribute again on the new tip. Your previous zkey cannot be appended out of order.
 
 You do not run `beacon` or `export`.
@@ -211,7 +213,7 @@ That command:
 
 The entropy strings contain `not-a-ceremony` and are stored in the transcript because they are published. Delete that directory when you are done; it is gitignored via `circuits/build/`.
 
-A green CI job means the scripts can build and check a multi-contributor transcript. It does not mean Republic has a trusted setup.
+A green CI job means the scripts can build and check a multi-contributor transcript. It does not mean ZK-Voting has a trusted setup.
 
 ---
 

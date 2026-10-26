@@ -12,7 +12,7 @@ import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 ///      This contract does **not** fake a pairing that always returns true.
 ///      When `verifyingKeyHash == bytes32(0)` the key is unconfigured: we
 ///      delegate to `mockVerifier` if set, otherwise revert `VerifierNotConfigured()`.
-///      `REPUBLIC_PROVING_PATH=1` deploys this with `mockVerifier = address(0)`.
+///      `ZK_VOTING_PROVING_PATH=1` deploys this with `mockVerifier = address(0)`.
 ///
 /// Public inputs convention:
 ///      input[0] = eligibleRoot
@@ -121,6 +121,13 @@ contract VoteVerifier is IGroth16Verifier {
     /// @notice True when a non-zero verifying key hash has been installed.
     function hasKey() public view returns (bool) {
         return verifyingKeyHash != bytes32(0);
+    }
+
+    /// @notice True while the VK is unconfigured and proofs are delegated to a
+    ///         mock. `ElectionFactory` refuses such a verifier unless mock
+    ///         verifiers are explicitly allowed (audit H-02).
+    function isMock() external view returns (bool) {
+        return !hasKey() && mockVerifier != address(0);
     }
 
     function alpha() external view returns (uint256 x, uint256 y) {

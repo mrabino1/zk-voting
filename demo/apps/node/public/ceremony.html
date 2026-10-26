@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="/lang-init.js"></script>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1014" media="(prefers-color-scheme: dark)" />
+    <title data-i18n="chrome.titleCeremony">Trusted-setup ceremony · %BRAND_NAME%</title>
+    <script src="/canonical-url.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+    <link rel="stylesheet" href="/ceremony.css" />
+  </head>
+  <body>
+    <!-- NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product. -->
+    <a class="skip-link" href="#main" data-i18n="chrome.skip">Skip to main content</a>
+    <div class="nfp-banner" role="note" data-i18n="chrome.nfpBanner">
+      NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
+    </div>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="%BRAND_NAME% home" data-i18n-aria-label="chrome.brandHome">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
+              <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M10 18.5 L15.5 24 L26 12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">%BRAND_NAME%</span>
+            <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
+          </span>
+        </a>
+        <nav class="nav-main" aria-label="Primary" data-i18n-aria-label="chrome.navPrimary">
+          <ul>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/signin">Sign in</a></li>
+            <li><a href="/register">Register</a></li>
+          </ul>
+        </nav>
+        <div id="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" aria-label="Session" data-i18n-aria-label="chrome.session"></div>
+        <span class="office-badge" data-i18n="chrome.officeBadge">Not for profit</span>
+      </div>
+    </header>
+
+    <main id="main" class="site-main" tabindex="-1">
+      <header class="page-head">
+        <p class="kicker">%BRAND_NAME% · Trusted setup</p>
+        <h1 id="ceremony-title">Trusted-setup ceremony</h1>
+        <p class="lede" id="ceremony-lede">
+          Each zero-knowledge circuit needs its own Groth16 phase-2 setup. Many people add randomness in turn.
+          The result is safe if at least one of them was honest and threw their randomness away.
+        </p>
+      </header>
+      <noscript><p class="notice notice-warn">The ceremony needs JavaScript. Contributions are computed in your browser so your entropy never leaves it.</p></noscript>
+      <div id="ceremony-flash" role="status" aria-live="polite" hidden></div>
+      <div id="ceremony-root" class="stack"><p class="loading-msg">Loading ceremonies…</p></div>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-nfp" data-i18n="chrome.footerNfp">NOT FOR PROFIT — %BRAND_NAME% is a civic public good. Not a commercial product.</p>
+      <p class="footer-meta">
+        <span data-i18n="chrome.footerAdminMeta">Product name %BRAND_NAME%. No token. No ads.</span>
+        <span lang="en">
+          <a href="/terms">Terms</a>
+          ·
+          <a href="/feedback">Feedback</a>
+          ·
+          <a href="/explorer">L2 explorer</a>
+          · AGPL-3.0-or-later
+        </span>
+      </p>
+    </footer>
+    <script type="module" src="/signin.js"></script>
+    <script type="module" src="/ceremony.js"></script>
+  </body>
+</html>

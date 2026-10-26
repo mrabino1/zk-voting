@@ -1,10 +1,14 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { brandName } from './branding.mjs';
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
 import { normalizeEmail } from './identity.mjs';
+import { resolveEnvCeremonyUrl, resolveEnvEntropy } from './entropy.mjs';
+import { DEFAULT_CHAIN_ID, resolveEnvChainId } from './setup.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -168,31 +172,41 @@ export function getConfig(overrides = {}) {
   const authority = resolveVoteAuthority(overrides, defaultOrigins);
 
   const isTest = process.env.NODE_ENV === 'test';
+  const chainIdEnv = resolveEnvChainId(
+    Object.prototype.hasOwnProperty.call(overrides, 'chainId') ? overrides.chainId : process.env.CHAIN_ID,
+  );
   const disclosureIntervalSeconds = resolveDisclosureIntervalSeconds(
     overrides.disclosureIntervalSeconds ?? process.env.DISCLOSURE_INTERVAL_SECONDS,
     { isTest },
   );
 
-  const provingPath = envFlag(overrides.provingPath ?? process.env.REPUBLIC_PROVING_PATH, false);
+  const provingPath = envFlag(overrides.provingPath ?? process.env.ZK_VOTING_PROVING_PATH, false);
   const useMockVerifier = provingPath
     ? false
-    : envFlag(overrides.useMockVerifier ?? process.env.REPUBLIC_USE_MOCK_VERIFIER, true);
+    : envFlag(overrides.useMockVerifier ?? process.env.ZK_VOTING_USE_MOCK_VERIFIER, true);
   const hashScheme =
     overrides.hashScheme ||
-    process.env.REPUBLIC_HASH_SCHEME ||
-    (provingPath ? 'republic.hash.poseidon-bn254-x5-t3-v1' : 'republic.hash.keccak-dev-v1');
+    process.env.ZK_VOTING_HASH_SCHEME ||
+    (provingPath ? 'zk-voting.hash.poseidon-bn254-x5-t3-v1' : 'zk-voting.hash.keccak-dev-v1');
 
   const config = {
     nfp: true,
     app: 'zk-voting',
-    product: 'Republic',
     pkgRoot: PKG_ROOT,
     port,
     host: String(overrides.host ?? process.env.HOST ?? '0.0.0.0'),
-    chainId: Number(process.env.CHAIN_ID || 27427),
+    // CHAIN_ID from the environment. null = not fixed; the first-run setup
+    // screen may choose it. Read it through config.chainId (see setup.mjs).
+    chainIdEnv,
+    chainId: chainIdEnv ?? DEFAULT_CHAIN_ID,
+    setupToken: String(overrides.setupToken ?? process.env.SETUP_TOKEN ?? '').trim(),
+    // ENTROPY_CEREMONY_URL (public ceremony origin). ZK_ENTROPY is attached
+    // below as a non-enumerable property so it never ends up in a JSON dump.
+    // Read both through entropyInfo() in entropy.mjs.
+    entropyCeremonyUrlEnv: resolveEnvCeremonyUrl(overrides.entropyCeremonyUrl ?? process.env.ENTROPY_CEREMONY_URL),
+    firstRunRedirect: envFlag(overrides.firstRunRedirect ?? process.env.FIRST_RUN_REDIRECT, !isTest),
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
-    rpName: 'Republic',
     rpID: authority.rpID,
     voteFqdn: authority.voteFqdn,
     origins: authority.origins,
@@ -223,6 +237,9 @@ export function getConfig(overrides = {}) {
       : process.env.L1_SETTLEMENT_ADDRESS || process.env.SETTLEMENT_ADDRESS || process.env.SETTLEMENT || '',
     l1ChainId: isTest ? 0 : Number(process.env.L1_CHAIN_ID || 0),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
+    // Postgres app state. Unset → JSON files in dataDir (dev fallback). The
+    // test suite stays on JSON unless TEST_DATABASE_URL points at a scratch DB.
+    databaseUrl: isTest ? process.env.TEST_DATABASE_URL || '' : process.env.DATABASE_URL || '',
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
     allowDevLogin: (() => {
       if (process.env.NODE_ENV === 'production') return false;
@@ -265,11 +282,16 @@ export function getConfig(overrides = {}) {
     includeOtpInCapture: isTest,
     allowCaptureMailer: isTest || envFlag(process.env.ALLOW_CAPTURE_MAILER, false),
     receiptPdfSecret: String(overrides.receiptPdfSecret ?? process.env.RECEIPT_PDF_SECRET ?? '').trim(),
+    // NON-PRODUCTION: accept JSON "ciphertext" ballots (plaintext answers). Off by
+    // default; the shipped client always encrypts. Only fixtures turn this on.
+    allowPlaintextBallots: Boolean(
+      overrides.allowPlaintextBallots ?? envFlag(process.env.ZKV_ALLOW_PLAINTEXT_BALLOTS, false),
+    ),
     publicBaseUrl: authority.publicBaseUrl,
     mailWebhookUrl: String(overrides.mailWebhookUrl ?? process.env.MAIL_WEBHOOK_URL ?? '').trim(),
-    sessionCookie: 'republic.sid',
+    sessionCookie: 'zk-voting.sid',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
-    mfaCookie: 'republic.mfa',
+    mfaCookie: 'zk-voting.mfa',
     mfaTtlMs: 10 * 60 * 1000,
     quiet: process.env.NODE_ENV === 'test',
     publicDir: path.join(PKG_ROOT, 'public'),
@@ -283,8 +305,28 @@ export function getConfig(overrides = {}) {
         : envFlag(process.env.POLLS_ENABLED, false),
     pollMaxOptions: Number(process.env.POLL_MAX_OPTIONS || 32),
     tokenRpcs: tokenRpcMap(),
+    // Phase-2 trusted-setup ceremony (docs/ceremony-web.md). Empty dirs mean
+    // DATA_DIR/ceremonies and DATA_DIR/ceremony-inputs.
+    ceremonyDir: process.env.CEREMONY_DIR || '',
+    ceremonyInputDir: process.env.CEREMONY_INPUT_DIR || '',
+    ceremonyMaxZkeyBytes: megabytes(process.env.CEREMONY_MAX_ZKEY_MB, 1024),
+    ceremonyMaxInputBytes: megabytes(process.env.CEREMONY_MAX_INPUT_MB, 2048),
+    // Beacon = a future Ethereum mainnet block hash, read from this read-only
+    // JSON-RPC (comma-separate several to require agreement). Unset fails closed.
+    ceremonyEthRpcUrls: String(process.env.CEREMONY_ETH_RPC_URL || '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean),
+    ceremonyBeaconMinBlocksAhead: strictPositiveInt(process.env.CEREMONY_BEACON_MIN_BLOCKS_AHEAD, 32),
     ...overrides,
   };
+  // Display name (site admin > BRAND_NAME > "ZK-Voting"); live, so a rename in
+  // site admin reaches mail, PDFs and the WebAuthn rpName without a restart.
+  for (const key of ['product', 'rpName']) {
+    if (overrides[key] === undefined) {
+      Object.defineProperty(config, key, { get: brandName, enumerable: true, configurable: true });
+    }
+  }
   // `VOTE_FQDN` wins over a localhost template even when overrides spread last.
   config.voteFqdn = authority.voteFqdn;
   config.rpID = authority.rpID;
@@ -339,10 +381,87 @@ export function getConfig(overrides = {}) {
     overrides.archiveEnabled !== undefined ? overrides.archiveEnabled : process.env.ARCHIVE_ENABLED,
     true,
   );
+  applySiteAdminConfig(config, overrides);
+  delete config.entropy; // a test override copied by ...overrides; keep it out of dumps
+  Object.defineProperty(config, 'entropyEnv', {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: resolveEnvEntropy(Object.prototype.hasOwnProperty.call(overrides, 'entropy') ? overrides.entropy : process.env.ZK_ENTROPY),
+  });
   return config;
 }
 
+/** Repository root (apps/node/../..). Bundled plugins live in `<repo>/plugins`. */
+export const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
+
+function pick(overrides, key, envValue) {
+  return Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : envValue;
+}
+
+function positiveInt(value, fallback, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+}
+
+/**
+ * Site admin: layout and plugins. Safe defaults: zip upload OFF, 1 MiB zip cap,
+ * a fresh sign-in (10 min) required to install.
+ */
+function applySiteAdminConfig(config, overrides) {
+  config.pluginsAllowUpload = envFlag(pick(overrides, 'pluginsAllowUpload', process.env.PLUGINS_ALLOW_UPLOAD), false);
+  config.pluginsBundledDir = String(
+    pick(overrides, 'pluginsBundledDir', process.env.PLUGINS_DIR) || path.join(REPO_ROOT, 'plugins'),
+  );
+  config.pluginsUploadDir = String(
+    pick(overrides, 'pluginsUploadDir', process.env.PLUGINS_UPLOAD_DIR) || path.join(config.dataDir, 'plugins'),
+  );
+  config.pluginMaxZipBytes = positiveInt(
+    pick(overrides, 'pluginMaxZipBytes', process.env.PLUGIN_MAX_ZIP_BYTES),
+    1024 * 1024,
+    16 * 1024 * 1024,
+  );
+  config.pluginReauthMs = positiveInt(
+    pick(overrides, 'pluginReauthMs', process.env.PLUGIN_REAUTH_MS),
+    10 * 60 * 1000,
+    60 * 60 * 1000,
+  );
+  config.layoutFile = String(
+    pick(overrides, 'layoutFile', process.env.LAYOUT_FILE) || path.join(PKG_ROOT, 'site', 'layout.json'),
+  );
+  config.layoutOverrideModule = String(
+    pick(overrides, 'layoutOverrideModule', process.env.LAYOUT_OVERRIDE_MODULE) ||
+      path.join(PKG_ROOT, 'site', 'layout.override.mjs'),
+  );
+  config.appVersion = String(pick(overrides, 'appVersion', '') || readPackageVersion());
+}
+
+let packageVersion = '';
+function readPackageVersion() {
+  if (packageVersion) return packageVersion;
+  try {
+    packageVersion = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version || '0.0.0';
+  } catch {
+    packageVersion = '0.0.0';
+  }
+  return packageVersion;
+}
+
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
+
+function strictPositiveInt(value, fallback) {
+  if (value === undefined || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`expected a positive integer, got ${value}`);
+  return n;
+}
+
+function megabytes(value, fallbackMb) {
+  const n = Number(value);
+  const mb = Number.isFinite(n) && n > 0 ? n : fallbackMb;
+  return Math.floor(mb * 1024 * 1024);
+}
 
 function resolveStepUpMs(value) {
   if (value === undefined || value === null || value === '') return 15 * 60 * 1000;

@@ -4,13 +4,13 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 
+import { brandName } from './branding.mjs';
 import { HttpError } from './http.mjs';
 
-const OTP_SUBJECT = 'Republic sign-in code';
 
-export function otpEmailBodies({ code, product = 'Republic', purpose } = {}) {
+export function otpEmailBodies({ code, product = brandName(), purpose } = {}) {
   const pinReset = purpose === 'pin-reset';
-  const subject = pinReset ? 'Republic vote PIN reset code' : OTP_SUBJECT;
+  const subject = pinReset ? `${brandName()} vote PIN reset code` : `${brandName()} sign-in code`;
   const lead = pinReset
     ? `Your ${product} vote PIN reset code is ${code}.`
     : `Your ${product} verification code is ${code}.`;
@@ -90,8 +90,8 @@ function safeReplyTo(value) {
 }
 
 export function buildRawMime({ from, to, subject, text, html, attachments = [], replyTo } = {}) {
-  const mixed = `RepublicMixed_${randomBytes(12).toString('hex')}`;
-  const alt = `RepublicAlt_${randomBytes(12).toString('hex')}`;
+  const mixed = `ZkVotingMixed_${randomBytes(12).toString('hex')}`;
+  const alt = `ZkVotingAlt_${randomBytes(12).toString('hex')}`;
   const reply = safeReplyTo(replyTo);
   const lines = [
     `From: ${headerSafe(from)}`,
@@ -219,7 +219,9 @@ export function createMailer(config = {}) {
       meta: captureCodes ? { ...meta } : { ...meta, code: undefined },
       at: Date.now(),
     };
-    sent.push(record);
+    // Vote receipts hold a holder token; outside the test capture mailer, do
+    // not keep them in process memory after delivery.
+    if (meta?.purpose !== 'vote-receipt' || config.captureEmail) sent.push(record);
 
     if (sesReady && !config.sesDryRun) {
       await sendViaSesv2(config, {
@@ -243,7 +245,7 @@ export function createMailer(config = {}) {
   }
 
   async function sendOtp({ to, code, purpose, factor }) {
-    const bodies = otpEmailBodies({ code, product: config.product || 'Republic', purpose });
+    const bodies = otpEmailBodies({ code, product: config.product || brandName(), purpose });
     return send({
       to,
       ...bodies,

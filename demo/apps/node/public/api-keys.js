@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Profile controls for personal API keys. The secret stays in memory only
  * until the person leaves this view. It is never written to storage.
  */

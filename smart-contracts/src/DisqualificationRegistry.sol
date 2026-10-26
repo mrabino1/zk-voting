@@ -5,11 +5,13 @@ pragma solidity ^0.8.24;
 
 import {IDisqualificationRegistry} from "./interfaces/IDisqualificationRegistry.sol";
 import {IElection} from "./interfaces/IElection.sol";
+import {ElectionParams} from "./interfaces/ElectionParams.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IHasher} from "./interfaces/IHasher.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 import {ReasonCodes} from "./ReasonCodes.sol";
 import {DisqualificationSet} from "./tree/DisqualificationSet.sol";
+import {FrontierTree} from "./tree/FrontierTree.sol";
 
 /// @title DisqualificationRegistry
 /// @notice Per-election disqualification set. `merkleRoot` is the indexed chain
@@ -23,11 +25,15 @@ import {DisqualificationSet} from "./tree/DisqualificationSet.sol";
 ///      root changes and a later vote can prove a gap again.
 ///
 ///      After each rebuild, the voter registry republishes `eligibleRoot` as
-///      registered ∩ ¬currently-disqualified. The vote circuit proves both
-///      membership in that root and non-membership in this chain.
+///      registered ∩ ¬currently-disqualified (paged for large rolls, audit
+///      H-03). The vote circuit proves both membership in that root and
+///      non-membership in this chain.
 ///
 ///      Tree construction matches `src/tree/IncrementalMerkleTree.sol`:
-///      depth 16–32, zeros precomputed via `IHasher.hashLeftRight`.
+///      depth 16–32, zeros precomputed via `IHasher.hashLeftRight`. The chain
+///      is built with an O(k log k) sort and a `FrontierTree` (amortized ~2
+///      hashes per link) instead of an insertion sort and `depth` hashes per
+///      link.
 contract DisqualificationRegistry is IDisqualificationRegistry {
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;
@@ -42,16 +48,10 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     error AlreadyDisqualified();
     error NotDisqualified();
     error InvalidTreeDepth();
-    error TreeFull();
+    error VotingStarted();
 
-    /// @dev IncrementalMerkleTree storage (depth 16–32, hasher-precomputed zeros).
-    struct Tree {
-        uint8 depth;
-        uint256 nextIndex;
-        uint256 currentRoot;
-        mapping(uint256 => uint256) filledSubtrees;
-        mapping(uint256 => uint256) zeros;
-    }
+    /// @notice Audit M-01: the late-update switch is public and logged.
+    event LateUpdateAllowedSet(uint256 indexed electionId, bool allowed);
 
     IHasher public immutable hasher;
     IElectionFactory public immutable factory;
@@ -65,22 +65,14 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     ///      published tree sorts them before hashing the indexed chain.
     mapping(uint256 => uint256[]) private _active;
 
-    mapping(uint256 => Tree) private _trees;
+    mapping(uint256 => FrontierTree.Data) private _trees;
+    mapping(uint256 => bytes32) private _chainRoots;
 
     constructor(address hasher_, address factory_) {
         if (hasher_ == address(0) || factory_ == address(0)) revert ZeroAddress();
-        // Deployer helpers try (factory, hasher) first; the exclusive spec is
-        // (hasher, factory). Detect IHasher so either order wires correctly.
-        if (_looksLikeHasher(hasher_) && !_looksLikeHasher(factory_)) {
-            hasher = IHasher(hasher_);
-            factory = IElectionFactory(factory_);
-        } else if (_looksLikeHasher(factory_) && !_looksLikeHasher(hasher_)) {
-            hasher = IHasher(factory_);
-            factory = IElectionFactory(hasher_);
-        } else {
-            hasher = IHasher(hasher_);
-            factory = IElectionFactory(factory_);
-        }
+        // Audit L-08: fixed argument order (hasher, factory). No guessing.
+        hasher = IHasher(hasher_);
+        factory = IElectionFactory(factory_);
     }
 
     /// @inheritdoc IDisqualificationRegistry
@@ -126,10 +118,18 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     }
 
     /// @notice Clerk may allow post-freeze updates. Default is false.
+    /// @dev Audit M-01: the switch can only be turned ON before `startTime`,
+    ///      so voters and observers know before voting opens whether roots
+    ///      may move mid-vote. Turning it OFF is always allowed (it only
+    ///      narrows the officer's power). Every change is logged, and each
+    ///      root change emits `Election.RootsUpdated(.., afterStart)`.
     function setLateUpdateAllowed(uint256 electionId, bool allowed) external {
         IElection election = _election(electionId);
-        if (msg.sender != election.params().clerk) revert NotClerk();
+        ElectionParams memory p = election.params();
+        if (msg.sender != p.clerk) revert NotClerk();
+        if (allowed && block.timestamp >= p.startTime) revert VotingStarted();
         lateUpdateAllowed[electionId] = allowed;
+        emit LateUpdateAllowedSet(electionId, allowed);
     }
 
     /// @inheritdoc IDisqualificationRegistry
@@ -139,20 +139,12 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
     /// @inheritdoc IDisqualificationRegistry
     function merkleRoot(uint256 electionId) external view returns (bytes32) {
-        return bytes32(_trees[electionId].currentRoot);
+        return _chainRoots[electionId];
     }
 
     /// @inheritdoc IDisqualificationRegistry
     function reasonCodeOf(uint256 electionId, uint256 identityCommitment) external view returns (uint16) {
         return _reasonCodeOf[electionId][identityCommitment];
-    }
-
-    function _looksLikeHasher(address candidate) internal view returns (bool) {
-        try IHasher(candidate).hashLeftRight(0, 0) returns (uint256) {
-            return true;
-        } catch {
-            return false;
-        }
     }
 
     function _election(uint256 electionId) internal view returns (IElection election) {
@@ -183,25 +175,29 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         }
     }
 
-    /// @dev Rebuild the indexed chain and publish it as `disqualificationRoot`.
+    /// @dev Rebuild the indexed chain and publish it as `disqualificationRoot`,
+    ///      then ask the voter registry to rebuild `eligibleRoot` (paged).
     function _publishChain(uint256 electionId, IElection election) internal {
         uint8 depth = election.params().treeDepth;
         if (depth < MIN_DEPTH || depth > MAX_DEPTH) revert InvalidTreeDepth();
         uint256[] memory sorted = _sortedActive(electionId);
         uint256[] memory leaves = DisqualificationSet.chainLeaves(sorted, hasher);
 
-        Tree storage tree = _trees[electionId];
-        _resetTree(tree, depth);
+        FrontierTree.Data storage tree = _trees[electionId];
+        FrontierTree.reset(tree, depth, hasher);
         for (uint256 i; i < leaves.length; ++i) {
-            _insert(tree, leaves[i]);
+            FrontierTree.append(tree, leaves[i], hasher);
         }
+        bytes32 chainRoot = bytes32(FrontierTree.root(tree, hasher));
+        _chainRoots[electionId] = chainRoot;
 
-        bytes32 eligible = election.eligibleRoot();
+        // Publish the new chain first so the voter registry reads it when its
+        // (possibly paged) eligible rebuild completes.
+        election.setRoots(election.eligibleRoot(), chainRoot);
         address registry = _voterRegistry();
         if (registry != address(0)) {
-            eligible = IVoterRegistry(registry).rebuildEligibleRoot(electionId);
+            IVoterRegistry(registry).rebuildEligibleRoot(electionId);
         }
-        election.setRoots(eligible, bytes32(tree.currentRoot));
     }
 
     function _sortedActive(uint256 electionId) internal view returns (uint256[] memory out) {
@@ -211,16 +207,36 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         for (uint256 i; i < n; ++i) {
             out[i] = src[i];
         }
-        for (uint256 i = 1; i < n; ++i) {
-            uint256 key = out[i];
-            uint256 j = i;
-            while (j > 0 && out[j - 1] > key) {
-                out[j] = out[j - 1];
-                unchecked {
-                    --j;
-                }
+        _heapSort(out);
+    }
+
+    /// @dev In-place heap sort, O(k log k), no recursion.
+    function _heapSort(uint256[] memory a) internal pure {
+        uint256 n = a.length;
+        if (n < 2) return;
+        for (uint256 start = n / 2; start > 0;) {
+            unchecked {
+                --start;
             }
-            out[j] = key;
+            _siftDown(a, start, n);
+        }
+        for (uint256 end = n - 1; end > 0;) {
+            (a[0], a[end]) = (a[end], a[0]);
+            _siftDown(a, 0, end);
+            unchecked {
+                --end;
+            }
+        }
+    }
+
+    function _siftDown(uint256[] memory a, uint256 root, uint256 n) internal pure {
+        while (true) {
+            uint256 child = 2 * root + 1;
+            if (child >= n) return;
+            if (child + 1 < n && a[child] < a[child + 1]) ++child;
+            if (a[root] >= a[child]) return;
+            (a[root], a[child]) = (a[child], a[root]);
+            root = child;
         }
     }
 
@@ -228,48 +244,5 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
-    }
-
-    function _resetTree(Tree storage tree, uint8 depth) internal {
-        _initTree(tree, depth);
-        tree.nextIndex = 0;
-    }
-
-    function _initTree(Tree storage tree, uint8 depth) internal {
-        uint256 z = 0;
-        tree.zeros[0] = 0;
-        for (uint8 i = 0; i < depth;) {
-            z = hasher.hashLeftRight(z, z);
-            tree.zeros[i + 1] = z;
-            tree.filledSubtrees[i] = tree.zeros[i];
-            unchecked {
-                ++i;
-            }
-        }
-        tree.depth = depth;
-        tree.currentRoot = z;
-        tree.nextIndex = 0;
-    }
-
-    function _insert(Tree storage tree, uint256 leaf) internal {
-        uint256 index = tree.nextIndex;
-        if (index >= (uint256(1) << tree.depth)) revert TreeFull();
-
-        uint256 currentIndex = index;
-        uint256 currentHash = leaf;
-        for (uint8 i = 0; i < tree.depth;) {
-            if (currentIndex % 2 == 0) {
-                tree.filledSubtrees[i] = currentHash;
-                currentHash = hasher.hashLeftRight(currentHash, tree.zeros[i]);
-            } else {
-                currentHash = hasher.hashLeftRight(tree.filledSubtrees[i], currentHash);
-            }
-            currentIndex /= 2;
-            unchecked {
-                ++i;
-            }
-        }
-        tree.nextIndex = index + 1;
-        tree.currentRoot = currentHash;
     }
 }

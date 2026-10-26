@@ -2,8 +2,8 @@
 
 **This software is not a commercial product.**
 
-zk-voting (product name: **Republic**) exists to protect and preserve a
-republic driven by democracy: the people vote for representatives, and
+ZK-Voting (repo `zk-voting`; product name renameable in site admin) exists to protect and preserve a
+democratic republic: the people vote for representatives, and
 those representatives vote. It is written so that a city, county, state,
 nation, or any body that must run a binding election — including replacing
 every publicly traded company's shareholder vote if a jurisdiction demanded

@@ -12,7 +12,7 @@ library Fixtures {
     uint64 internal constant ONE_DAY = 1 days;
     uint8 internal constant TREE_DEPTH = 16;
 
-    bytes32 internal constant DEFAULT_JURISDICTION = keccak256("republic-test-jurisdiction");
+    bytes32 internal constant DEFAULT_JURISDICTION = keccak256("zk-voting-test-jurisdiction");
     bytes32 internal constant DEFAULT_BALLOT_SPEC = keccak256("canonical-ballot-json");
 
     /// @notice Default civic election: unlimited roll, one-day window starting one day after origin.
@@ -24,8 +24,8 @@ library Fixtures {
         address verifier
     ) internal pure returns (ElectionParams memory p) {
         p = build({
-            title: "Republic Civic Election",
-            metadataURI: "ipfs://republic/ballot",
+            title: "ZK-Voting Civic Election",
+            metadataURI: "ipfs://zk-voting/ballot",
             startTime: TIME_ORIGIN + ONE_DAY,
             cutoffTime: TIME_ORIGIN + (2 * ONE_DAY),
             maxParticipants: 0,
@@ -137,7 +137,7 @@ library Fixtures {
     }
 
     function ballotHash(bytes memory encrypted) internal pure returns (uint256) {
-        return uint256(keccak256(encrypted));
+        return uint256(keccak256(encrypted)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     }
 
     /// @dev Circuit / proof-helpers order: [root, disqRoot, nullifier, ballotHash, electionId]

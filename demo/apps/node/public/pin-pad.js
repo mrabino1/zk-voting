@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Phone keypad (3×3 + 0). Digits only via the pad — keyboard typing is blocked
  * while a pad is on screen so a watcher cannot read a typed pattern.
  */

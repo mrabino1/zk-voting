@@ -3,13 +3,13 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {IRepublicPaymaster, UserOp} from "./RepublicEntryPoint.sol";
+import {IZkVotingPaymaster, UserOp} from "./ZkVotingEntryPoint.sol";
 
-/// @title RepublicPaymaster
+/// @title ZkVotingPaymaster
 /// @notice Civic gas sponsor. Voters do not hold an L2 gas token and are
 ///         never charged. The jurisdiction funds this contract at cost.
 ///         There is no fee, no markup, and no admin skimming of voter funds.
-contract RepublicPaymaster is IRepublicPaymaster {
+contract ZkVotingPaymaster is IZkVotingPaymaster {
     error ZeroAddress();
     error NotEntryPoint();
     error NotAdmin();
@@ -25,8 +25,14 @@ contract RepublicPaymaster is IRepublicPaymaster {
     address public immutable admin;
 
     /// @notice When true (default), every UserOp through this paymaster is
-    ///         sponsored. Republic L2 is gasless for voters by policy.
-    bool public alwaysSponsor = true;
+    ///         sponsored. ZK-Voting L2 is gasless for voters by policy.
+    /// @notice Audit M-08: off by default. Deployments sponsor only the civic
+    ///         targets (inbox, voter registry, account factory) unless an
+    ///         admin opts into blanket sponsorship.
+    bool public alwaysSponsor;
+
+    /// @dev `execute(address,uint256,bytes)` on PasskeyAccount.
+    bytes4 internal constant EXECUTE_SELECTOR = bytes4(keccak256("execute(address,uint256,bytes)"));
 
     address public ballotInbox;
     address public voterRegistry;
@@ -91,12 +97,19 @@ contract RepublicPaymaster is IRepublicPaymaster {
         revert NotSponsored();
     }
 
+    /// @dev Audit M-08: a factory `initCode` no longer sponsors whatever
+    ///      `callData` rides along; the call itself must be a zero-value
+    ///      `execute` into a civic target (or empty, deploy-only).
     function _isSponsored(UserOp calldata op) internal view returns (bool) {
         if (op.initCode.length >= 20) {
             address factory = address(bytes20(op.initCode[:20]));
-            if (accountFactory != address(0) && factory == accountFactory) return true;
+            if (accountFactory == address(0) || factory != accountFactory) return false;
+            if (op.callData.length == 0) return true;
         }
 
+        if (op.callData.length < 68) return false;
+        if (bytes4(op.callData[:4]) != EXECUTE_SELECTOR) return false;
+        if (uint256(bytes32(op.callData[36:68])) != 0) return false;
         address dest = _executeDest(op.callData);
         if (dest == address(0)) return false;
         if (ballotInbox != address(0) && dest == ballotInbox) return true;

@@ -4,6 +4,7 @@
 // Verification reuses the auditor pack. During never publishes unofficial
 // option counts.
 
+import { brandName } from './branding.mjs';
 import { presentAspects } from './ballot.mjs';
 import { publicIdFields, publicIdMatchesScope, l1IdentityOf } from './electionIds.mjs';
 import {
@@ -17,7 +18,7 @@ import { buildResults } from './results.mjs';
 import { verifyAuditorBundle } from '../../../tools/auditor/verify.mjs';
 import { OUTCOME_VERIFY_PATH } from './outcomeReports.mjs';
 
-export const OUTCOMES_SCHEMA = 'republic.outcomes.v1';
+export const OUTCOMES_SCHEMA = 'zk-voting.outcomes.v1';
 
 export const PHASE_BEFORE = 'before';
 export const PHASE_DURING = 'during';
@@ -367,7 +368,7 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
   return {
     nfp: true,
     schema: OUTCOMES_SCHEMA,
-    product: 'Republic',
+    product: brandName(),
     electionId: String(election.id),
     ...publicIdFields(election),
     title: election.title,
@@ -428,7 +429,7 @@ export function presentOutcomesIndex(deps, opts = {}) {
   return {
     nfp: true,
     schema: OUTCOMES_SCHEMA,
-    product: 'Republic',
+    product: brandName(),
     portal: '/outcomes',
     now,
     chain: {

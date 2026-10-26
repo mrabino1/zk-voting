@@ -1,8 +1,10 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public portal: paste a vote receipt to confirm it counted. Hourly turnout
  * metrics only — never a candidate or option.
  */
+
+import { brandName } from "./brand.js";
 
 function proofFromQuery(query) {
   const raw = query?.get?.("proof") || query?.get?.("receipt") || "";
@@ -11,7 +13,7 @@ function proofFromQuery(query) {
 
 function storedProof() {
   try {
-    return sessionStorage.getItem("republic.receipt.proof") || "";
+    return sessionStorage.getItem("zk-voting.receipt.proof") || "";
   } catch {
     return "";
   }
@@ -19,7 +21,7 @@ function storedProof() {
 
 function rememberProof(text) {
   try {
-    if (text) sessionStorage.setItem("republic.receipt.proof", text);
+    if (text) sessionStorage.setItem("zk-voting.receipt.proof", text);
   } catch {
     /* ignore quota */
   }
@@ -222,7 +224,7 @@ export async function renderReceiptPortal(main, ctx) {
       { class: "receipt", "aria-labelledby": "verify-result-heading" },
       h("h2", { id: "verify-result-heading", text: r.counted ? "This ballot counted" : "Not found" }),
       h("p", {
-        text: r.note || "A Republic receipt lists hashes only. It cannot prove which option was marked.",
+        text: r.note || `A ${brandName()} receipt lists hashes only. It cannot prove which option was marked.`,
       }),
       h(
         "ul",
@@ -268,7 +270,7 @@ export async function renderReceiptPortal(main, ctx) {
         h("h1", { text: "Check a vote receipt" }),
         h("p", {
           class: "lede",
-          text: "Paste the proof from your emailed receipt or the ballot screen, or drop the locked PDF. Republic will tell you whether that ballot was accepted and whether the PDF still matches the issued bytes. This page never shows a candidate or an option.",
+          text: `Paste the proof from your emailed receipt or the ballot screen, or drop the locked PDF. ${brandName()} will tell you whether that ballot was accepted and whether the PDF still matches the issued bytes. This page never shows a candidate or an option.`,
         })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
@@ -282,7 +284,7 @@ export async function renderReceiptPortal(main, ctx) {
           "Receipt proof",
           h("span", {
             class: "field-hint",
-            text: "Copy the block that starts with BEGIN REPUBLIC VOTE RECEIPT, or drop the emailed PDF. Do not paste a screenshot of your marked ballot.",
+            text: "Copy the block that starts with BEGIN ZK-VOTING VOTE RECEIPT, or drop the emailed PDF. Do not paste a screenshot of your marked ballot.",
           })
         ),
         h("textarea", {
@@ -303,7 +305,7 @@ export async function renderReceiptPortal(main, ctx) {
           "Locked PDF (optional)",
           h("span", {
             class: "field-hint",
-            text: "Drop the emailed republic-vote-receipt.pdf. The Node hashes the exact bytes. A modified file will not match.",
+            text: "Drop the emailed zk-voting-vote-receipt.pdf. The Node hashes the exact bytes. A modified file will not match.",
           }),
           h("input", {
             id: "receipt-pdf-file",

@@ -16,7 +16,7 @@ function expectedRoot(depth, commitments) {
 }
 
 async function openStore() {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-eligible-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-eligible-'));
   const store = await Store.open({ dataDir: dir, adminHandle: 'admin' });
   return { dir, store };
 }

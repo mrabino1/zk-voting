@@ -3,7 +3,8 @@
 // Identity links (passkey user ↔ commitment) live in a
 // separate collection from ballots and are never copied onto a vote record.
 
-import { randomBytes, randomUUID } from 'node:crypto';
+import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -20,7 +21,16 @@ import {
   publicApiKey,
 } from './apiKeys.mjs';
 import { resolveSuperAdminEmail } from './config.mjs';
+import {
+  PgDocument,
+  describeDatabaseUrl,
+  migrate,
+  recordImport,
+  resolveDatabaseUrl,
+  usingPostgres,
+} from './db.mjs';
 import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
+import { ensureSiteAdminCollections } from './siteAudit.mjs';
 import { isDisclosed } from './disclosure.mjs';
 import {
   electionMatchesRef,
@@ -113,7 +123,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 8,
+      version: 9,
       nextElectionId: 1,
       nodeId: randomUUID(),
     },
@@ -147,6 +157,10 @@ function emptyData() {
     apiKeys: [],
     superAdminKeys: [],
     superAdminAudit: [],
+    // Phase-2 trusted-setup ceremonies (src/ceremony/service.mjs).
+    ceremonies: [],
+    // electionId -> sorted hashes of spent vote passes (no order, no time).
+    votePassSpent: {},
     runtime: {},
   };
 }
@@ -188,42 +202,150 @@ export function mergeTallyL1(prev, next) {
   return next;
 }
 
+/** Fill defaults and repair collection shapes on a loaded document. */
+function normalizeLoadedData(parsed) {
+  const data = { ...emptyData(), ...(parsed || {}) };
+  for (const key of ARRAY_COLLECTIONS) {
+    if (!Array.isArray(data[key])) data[key] = [];
+  }
+  data.site = { ...defaultSite(), ...(data.site || {}) };
+  data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
+  ensureSuperAdminCollections(data);
+  ensureSiteAdminCollections(data);
+  data.meta = data.meta || {};
+  data.meta.version = Math.max(Number(data.meta.version || 0), 9);
+  scrubBallotLinkage(data);
+  return data;
+}
+
+/**
+ * Drop fields older nodes stored that could join a ballot to a person:
+ * a userOpHash bound to the smart-account address, the email hint and send
+ * time of an emailed receipt, and second-precision acceptance times.
+ */
+export function scrubBallotLinkage(data) {
+  if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
+    data.votePassSpent = {};
+  }
+  const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
+  for (const r of data.receipts || []) {
+    if (!r || typeof r !== 'object') continue;
+    delete r.userOpHash;
+    delete r.emailHint;
+    delete r.emailedAt;
+    if (r.acceptedAt != null) r.acceptedAt = hour(r.acceptedAt);
+  }
+  for (const v of data.votes || []) {
+    if (v && typeof v === 'object' && v.acceptedAt != null) v.acceptedAt = hour(v.acceptedAt);
+  }
+  // Older builds subscribed the voter at the moment of the ballot; those rows'
+  // timestamps were a per-user vote clock. Keep the choice, drop the clock.
+  const day = (iso) => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? new Date(Math.floor(t / 86400000) * 86400000).toISOString() : iso;
+  };
+  for (const s of data.outcomeSubscriptions || []) {
+    if (!s || typeof s !== 'object' || s.source !== 'vote-default') continue;
+    s.source = 'legacy-default';
+    if (s.createdAt) s.createdAt = day(s.createdAt);
+    if (s.updatedAt) s.updatedAt = day(s.updatedAt);
+  }
+  return data;
+}
+
+function insertAtRandom(list, item) {
+  list.splice(randomInt(list.length + 1), 0, item);
+}
+
+const ARRAY_COLLECTIONS = [
+  'users',
+  'sessions',
+  'jurisdictions',
+  'elections',
+  'registrations',
+  'registrationRequests',
+  'identityLinks',
+  'disqualifications',
+  'votes',
+  'receipts',
+  'envelopes',
+  'notifications',
+  'tallyGuardians',
+  'pages',
+  'termsAcceptances',
+  'outcomeSubscriptions',
+  'outcomeReports',
+  'outcomeReportDeliveries',
+  'externalParties',
+  'partyRejections',
+  'partyAttestations',
+  'polls',
+  'pollBallots',
+  'pollResults',
+  'mailOutbox',
+  'apiKeys',
+  'superAdminKeys',
+  'superAdminAudit',
+  'ceremonies',
+];
+
+const PG_NAMESPACE = 'store';
+/** Ballot-side collections whose Postgres timestamps are hour-truncated (db.mjs). */
+export const BALLOT_TIMING_COLLECTIONS = ['votes', 'receipts', 'envelopes', 'votePassSpent', 'elections'];
+
+async function readJsonFile(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 export class Store {
   constructor(filePath, data) {
     this.filePath = filePath;
     this.data = data;
     this._write = Promise.resolve();
+    /** 'json' (DATA_DIR file, dev fallback) or 'postgres' (DATABASE_URL). */
+    this.backend = 'json';
+    this.pg = null;
   }
 
   static async open(config) {
     await fs.mkdir(config.dataDir, { recursive: true });
-    const filePath = path.join(config.dataDir, 'republic.json');
+    const filePath = path.join(config.dataDir, 'zk-voting.json');
     let data;
-    try {
-      const raw = await fs.readFile(filePath, 'utf8');
-      data = { ...emptyData(), ...JSON.parse(raw) };
-      data.pages = Array.isArray(data.pages) ? data.pages : [];
-      data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
-      data.receipts = Array.isArray(data.receipts) ? data.receipts : [];
-      data.outcomeSubscriptions = Array.isArray(data.outcomeSubscriptions) ? data.outcomeSubscriptions : [];
-      data.outcomeReports = Array.isArray(data.outcomeReports) ? data.outcomeReports : [];
-      data.outcomeReportDeliveries = Array.isArray(data.outcomeReportDeliveries)
-        ? data.outcomeReportDeliveries
-        : [];
-      data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
-      data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
-      data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
-      data.polls = Array.isArray(data.polls) ? data.polls : [];
-      data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
-      data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
-      data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
-      data.site = { ...defaultSite(), ...(data.site || {}) };
-      data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
-      data = emptyData();
+    let pgDoc = null;
+    let imported = false;
+    if (usingPostgres(config)) {
+      await migrate(config, { quiet: config.quiet });
+      pgDoc = new PgDocument(config, PG_NAMESPACE, { coarseTimes: BALLOT_TIMING_COLLECTIONS });
+      const stored = await pgDoc.load();
+      if (stored) {
+        data = normalizeLoadedData(stored);
+      } else {
+        // One-time import: tables are empty and DATA_DIR still has a JSON store.
+        const legacy = await readJsonFile(filePath);
+        data = legacy ? normalizeLoadedData(legacy) : emptyData();
+        imported = Boolean(legacy);
+      }
+    } else {
+      const legacy = await readJsonFile(filePath);
+      data = legacy ? normalizeLoadedData(legacy) : emptyData();
     }
     const store = new Store(filePath, data);
+    if (pgDoc) {
+      store.backend = 'postgres';
+      store.pg = pgDoc;
+    }
+    if (!config.quiet) {
+      console.info(
+        store.backend === 'postgres'
+          ? `[zk-voting] store backend: postgres (${describeDatabaseUrl(resolveDatabaseUrl(config))})`
+          : `[zk-voting] store backend: json file ${filePath} (dev fallback; set DATABASE_URL for postgres)`,
+      );
+    }
     store.writerActive = config.writerActive !== false;
     store.lease = config.writerLeaseHandle || null;
     for (const user of store.data.users) {
@@ -241,26 +363,37 @@ export class Store {
     store.ensureJurisdictionIds();
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
-    if (!Array.isArray(store.data.termsAcceptances)) store.data.termsAcceptances = [];
-    if (!Array.isArray(store.data.receipts)) store.data.receipts = [];
-    if (!Array.isArray(store.data.registrationRequests)) store.data.registrationRequests = [];
-    if (!Array.isArray(store.data.outcomeSubscriptions)) store.data.outcomeSubscriptions = [];
-    if (!Array.isArray(store.data.outcomeReports)) store.data.outcomeReports = [];
-    if (!Array.isArray(store.data.outcomeReportDeliveries)) store.data.outcomeReportDeliveries = [];
-    if (!Array.isArray(store.data.externalParties)) store.data.externalParties = [];
-    if (!Array.isArray(store.data.partyRejections)) store.data.partyRejections = [];
-    if (!Array.isArray(store.data.partyAttestations)) store.data.partyAttestations = [];
-    if (!Array.isArray(store.data.polls)) store.data.polls = [];
-    if (!Array.isArray(store.data.pollBallots)) store.data.pollBallots = [];
-    if (!Array.isArray(store.data.pollResults)) store.data.pollResults = [];
-    if (!Array.isArray(store.data.mailOutbox)) store.data.mailOutbox = [];
-    if (!Array.isArray(store.data.apiKeys)) store.data.apiKeys = [];
+    for (const key of ARRAY_COLLECTIONS) {
+      if (!Array.isArray(store.data[key])) store.data[key] = [];
+    }
     ensureSuperAdminCollections(store.data);
+    // v9: site admin (capability roles audit, layout, plugin registry).
+    ensureSiteAdminCollections(store.data);
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 8);
-    if (store.writerActive) await store.persist();
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 9);
+    if (store.writerActive) {
+      if (store.pg) await store.pg.claimWriter();
+      await store.persist();
+      if (imported) {
+        await recordImport(config, filePath, {
+          users: store.data.users.length,
+          elections: store.data.elections.length,
+          votes: store.data.votes.length,
+        });
+        if (!config.quiet) {
+          console.info(
+            `[zk-voting] imported ${filePath} into postgres (users=${store.data.users.length} elections=${store.data.elections.length} votes=${store.data.votes.length}); the JSON file is left in place and no longer read`,
+          );
+        }
+      }
+    }
     return store;
+  }
+
+  /** Take the Postgres writer fence (standby promotion). No-op on the JSON backend. */
+  async claimWriter(owner) {
+    if (this.pg) await this.pg.claimWriter(owner);
   }
 
   refuseIfStandby() {
@@ -273,36 +406,17 @@ export class Store {
     }
   }
 
+  /** Re-read persisted state (standby promotion). Postgres or the JSON file. */
   async reloadFromDisk() {
-    let raw;
-    try {
-      raw = await fs.readFile(this.filePath, 'utf8');
-    } catch (err) {
-      if (err.code === 'ENOENT') return;
-      throw err;
+    let parsed;
+    if (this.pg) {
+      parsed = await this.pg.load();
+      if (!parsed) return;
+    } else {
+      parsed = await readJsonFile(this.filePath);
+      if (!parsed) return;
     }
-    const data = { ...emptyData(), ...JSON.parse(raw) };
-    data.pages = Array.isArray(data.pages) ? data.pages : [];
-    data.termsAcceptances = Array.isArray(data.termsAcceptances) ? data.termsAcceptances : [];
-    data.receipts = Array.isArray(data.receipts) ? data.receipts : [];
-    data.outcomeSubscriptions = Array.isArray(data.outcomeSubscriptions) ? data.outcomeSubscriptions : [];
-    data.outcomeReports = Array.isArray(data.outcomeReports) ? data.outcomeReports : [];
-    data.outcomeReportDeliveries = Array.isArray(data.outcomeReportDeliveries)
-      ? data.outcomeReportDeliveries
-      : [];
-    data.externalParties = Array.isArray(data.externalParties) ? data.externalParties : [];
-    data.partyRejections = Array.isArray(data.partyRejections) ? data.partyRejections : [];
-    data.partyAttestations = Array.isArray(data.partyAttestations) ? data.partyAttestations : [];
-    data.polls = Array.isArray(data.polls) ? data.polls : [];
-    data.pollBallots = Array.isArray(data.pollBallots) ? data.pollBallots : [];
-    data.pollResults = Array.isArray(data.pollResults) ? data.pollResults : [];
-    data.mailOutbox = Array.isArray(data.mailOutbox) ? data.mailOutbox : [];
-      data.apiKeys = Array.isArray(data.apiKeys) ? data.apiKeys : [];
-      ensureSuperAdminCollections(data);
-      data.site = { ...defaultSite(), ...(data.site || {}) };
-    data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
-    data.meta = data.meta || {};
-    data.meta.version = Math.max(Number(data.meta.version || 0), 8);
+    const data = normalizeLoadedData(parsed);
     for (const user of data.users || []) ensurePersonFields(user);
     this.data = data;
     this.ensureJurisdictionIds();
@@ -319,6 +433,17 @@ export class Store {
         throw new HttpError(503, 'stale writer fence', { code: 'STALE_FENCE', mode: 'standby' });
       }
       this.data.meta.writerEpoch = this.lease.epoch;
+    }
+    if (this.pg) {
+      try {
+        await this.pg.save(this.data);
+      } catch (err) {
+        if (err && err.code === 'STALE_FENCE') {
+          throw new HttpError(503, 'stale writer fence', { code: 'STALE_FENCE', mode: 'standby' });
+        }
+        throw err;
+      }
+      return;
     }
     this._write = this._write.then(async () => {
       const tmp = `${this.filePath}.${process.pid}.tmp`;
@@ -381,7 +506,7 @@ export class Store {
     user.contactEmail = email;
     if (!config.quiet) {
       console.info(
-        `[republic] platform super admin contact email set from SUPER_ADMIN_EMAIL (${emailHint(email)})`,
+        `[zk-voting] platform super admin contact email set from SUPER_ADMIN_EMAIL (${emailHint(email)})`,
       );
     }
     return true;
@@ -2045,12 +2170,10 @@ export class Store {
     );
   }
 
-  async markReceiptEmailed(id, { emailHint } = {}) {
+  /** Kept for API compatibility. Records nothing: no email hint, no send time. */
+  async markReceiptEmailed(id) {
     const rec = (this.data.receipts || []).find((r) => r.id === id);
     if (!rec) return null;
-    rec.emailedAt = new Date().toISOString();
-    if (emailHint) rec.emailHint = emailHint;
-    await this.persist();
     return rec;
   }
 
@@ -2091,9 +2214,15 @@ export class Store {
     if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
+    const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
+    if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash)) {
+      throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
+    }
+    // relay.relayVote passes a bucket-coarsened time (coarseAcceptedAt); the
+    // fallback is coarsened to the hour here too.
     const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
       ? Math.floor(Number(vote.acceptedAt))
-      : Math.floor(Date.now() / 1000);
+      : Math.floor(Date.now() / 3600000) * 3600;
     const ballotHash = toBytes32(vote.ballotHash);
     let pdfSha256 = null;
     if (vote.pdfSha256) {
@@ -2109,26 +2238,26 @@ export class Store {
       relayer: vote.relayer || 'node',
       acceptedAt,
     };
-    this.data.votes.push(record);
+    // Each collection gets its own random insert position, so array order (and
+    // the zkv_rows `pos` column) is not arrival order and the three rows of
+    // one ballot do not share an index. No userOpHash, no email fields.
+    insertAtRandom(this.data.votes, record);
     if (vote.receiptTokenHash) {
       if (!Array.isArray(this.data.receipts)) this.data.receipts = [];
-      this.data.receipts.push({
+      insertAtRandom(this.data.receipts, {
         id: randomUUID(),
         electionId: record.electionId,
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
         tokenHash: String(vote.receiptTokenHash),
-        userOpHash: vote.userOpHash ? String(vote.userOpHash) : null,
         acceptedAt,
-        emailedAt: null,
-        emailHint: null,
         pdfSha256,
         pdfProtected: true,
         pdfIntegrity: vote.pdfIntegrity ? String(vote.pdfIntegrity) : null,
       });
     }
     if (envelope) {
-      this.data.envelopes.push({
+      insertAtRandom(this.data.envelopes, {
         electionId: record.electionId,
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
@@ -2136,10 +2265,22 @@ export class Store {
         ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
+    if (spentPassHash) {
+      const key = String(vote.electionId);
+      const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
+      list.push(spentPassHash);
+      list.sort();
+      this.data.votePassSpent[key] = list;
+    }
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
     await this.persist();
     return record;
+  }
+
+  votePassSpent(electionId, hash) {
+    const list = this.data.votePassSpent?.[String(electionId)];
+    return Array.isArray(list) && list.includes(String(hash).toLowerCase());
   }
 
   listVotes(electionId) {
@@ -2701,7 +2842,11 @@ export class Store {
 
   async updateSite(patch = {}, actor = null) {
     const site = this.getSite();
-    if (patch.title != null) site.title = sanitizeText(patch.title, 120) || 'Republic';
+    if (patch.title != null) {
+      // Saving the current product name (or nothing) keeps following site-admin Branding.
+      const title = sanitizeText(patch.title, 120);
+      site.title = title && title !== brandName() && !LEGACY_DEFAULT_NAMES.includes(title) ? title : '';
+    }
     if (patch.tagline != null) site.tagline = sanitizeText(patch.tagline, 400);
     if (patch.contracts && typeof patch.contracts === 'object') {
       for (const key of ['factory', 'ballotInbox', 'verifier']) {

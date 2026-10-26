@@ -55,7 +55,7 @@ describe('terms plain-text hash', () => {
     assert.equal(sha256Hex(Buffer.from(doc.plainText, 'utf8')), doc.plainTextSha256);
     assert.equal(createHash('sha256').update(doc.markdownBytes).digest('hex'), doc.plainTextSha256);
 
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-terms-plain-'));
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-terms-plain-'));
     const filePath = path.join(dir, 'terms.md');
     const header = '---\nversion: 3\nlastUpdated: 2026-09-19\ntitle: Test Terms\nfilename: test.pdf\n---\n\n';
     await writeFile(filePath, `${header}# Test\n\nAlpha text.\n`, 'utf8');
@@ -71,7 +71,7 @@ describe('terms plain-text hash', () => {
 
 describe('terms notice service', () => {
   test('hash change sends once per member; unchanged does not; failure does not store the hash', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-terms-svc-'));
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-terms-svc-'));
     const filePath = path.join(dir, 'terms.md');
     const header = '---\nversion: 4\nlastUpdated: 2026-09-19\ntitle: Test Terms\nfilename: notice.pdf\n---\n\n';
     await writeFile(filePath, `${header}# Test\n\nFirst wording.\n`, 'utf8');
@@ -246,7 +246,7 @@ describe('terms notice on sign-in', () => {
   }
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-terms-signin-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-terms-signin-'));
     const createdMailer = createMailer({ captureEmail: true, allowCaptureMailer: true });
     const realSend = createdMailer.send.bind(createdMailer);
     createdMailer.send = async (msg) => {
@@ -309,13 +309,13 @@ describe('terms notice on sign-in', () => {
     });
     assert.equal(login.status, 200, login.text);
     assert.equal(login.json.verified, true);
-    assert.ok(jar['republic.sid']);
+    assert.ok(jar['zk-voting.sid']);
     assert.equal(login.json.user.termsNotifiedHash, doc.plainTextSha256);
     assert.ok(login.json.user.termsNotifiedAt);
     const stamped = login.json.user.termsNotifiedAt;
     const mine = updatedMessages(mailer).filter((row) => row.to === 'new-member@example.com');
     assert.equal(mine.length, 1);
-    assert.equal(mine[0].subject, 'Republic Terms of Use were updated');
+    assert.equal(mine[0].subject, 'ZK-Voting Terms of Use were updated');
     assert.match(mine[0].text, /https:\/\/vote\.example\.test\/terms/);
     assert.match(mine[0].text, new RegExp(doc.plainTextSha256));
     assert.equal(mine[0].attachments.length, 1);
@@ -332,7 +332,7 @@ describe('terms notice on sign-in', () => {
     assert.equal(second.json.user.termsNotifiedAt, stamped);
     assert.equal(updatedMessages(mailer).filter((row) => row.to === 'new-member@example.com').length, 1);
 
-    const disk = JSON.parse(await readFile(path.join(tmp, 'republic.json'), 'utf8'));
+    const disk = JSON.parse(await readFile(path.join(tmp, 'zk-voting.json'), 'utf8'));
     const row = disk.users.find((user) => user.handle === 'new-member');
     assert.equal(row.termsNotifiedHash, doc.plainTextSha256);
     assert.equal(row.termsNotifiedAt, stamped);
@@ -392,7 +392,7 @@ describe('terms notice on sign-in', () => {
     assert.equal(verify.json.user.handle, 'retry-member');
     assert.equal(verify.json.user.termsNotifiedHash, null);
     assert.equal(verify.json.user.termsNotifiedAt, null);
-    assert.ok(jar['republic.sid']);
+    assert.ok(jar['zk-voting.sid']);
     assert.equal(updatedMessages(mailer).filter((row) => row.to === 'retry-member@example.com').length, 0);
     assert.ok(warnings.some((line) => line.includes('userId=') && line.includes('reason=send_failed')));
     assert.ok(warnings.every((line) => !line.includes('retry-member@example.com')));
@@ -443,10 +443,10 @@ describe('terms notice on sign-in', () => {
 });
 
 describe('terms notice store migration', () => {
-  test('an older republic.json gains null notice fields and version 8', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-terms-migrate-'));
+  test('an older zk-voting.json gains null notice fields and version 8', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-terms-migrate-'));
     await writeFile(
-      path.join(dir, 'republic.json'),
+      path.join(dir, 'zk-voting.json'),
       JSON.stringify({
         meta: { nfp: true, app: 'zk-voting', version: 7, nextElectionId: 1 },
         users: [
@@ -466,7 +466,7 @@ describe('terms notice store migration', () => {
     assert.equal(user.termsNotifiedHash, null);
     assert.equal(user.termsNotifiedAt, null);
     assert.ok(store.data.meta.version >= 8);
-    const disk = JSON.parse(await readFile(path.join(dir, 'republic.json'), 'utf8'));
+    const disk = JSON.parse(await readFile(path.join(dir, 'zk-voting.json'), 'utf8'));
     const row = disk.users.find((item) => item.handle === 'old-member');
     assert.equal(row.termsNotifiedHash, null);
     assert.equal(row.termsNotifiedAt, null);

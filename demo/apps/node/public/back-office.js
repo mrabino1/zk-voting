@@ -103,7 +103,8 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function flash(el, kind, message) {
@@ -1020,7 +1021,7 @@
       try {
         const cfg = await request("/api/config");
         const banner = $("disclosure-banner");
-        const helper = globalThis.RepublicDisclosure;
+        const helper = globalThis.ZkVotingDisclosure;
         if (banner && cfg.disclosure && helper) {
           helper.paint(banner, cfg.disclosure);
         } else if (banner && cfg.disclosure && cfg.disclosure.note) {
@@ -2051,7 +2052,7 @@
   defaultTimes();
   wireBuilder();
   renderBuilder();
-  window.addEventListener("republic:session", async () => {
+  window.addEventListener("zk-voting:session", async () => {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications()]);
   });

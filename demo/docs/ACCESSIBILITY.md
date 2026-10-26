@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See `/NOT_FOR_PROFIT.md`.
 
-Product name: **Republic**. This note covers the Node SPA and the admin, back-office, and explorer shells in `apps/node/public/`.
+Product name: **ZK-Voting** by default (renameable in site admin). This note covers the Node SPA and the admin, back-office, and explorer shells in `apps/node/public/`.
 
 Audit date: 2026-09-27. Standard: **WCAG 2.2 Level AA**. Automated engine: **axe-core 4.10.3** (tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`) in headless Chrome via `puppeteer-core`.
 
@@ -14,11 +14,11 @@ Audit date: 2026-09-27. Standard: **WCAG 2.2 Level AA**. Automated engine: **axe
 | Registered voter | `/me`, `/register`, `/vote/:id`, `/elections/:id/results` |
 | Officer / admin | `/admin`, `/back-office`, `/office`, `/explorer` |
 
-Each route was checked in light and dark (`prefers-color-scheme`). A separate pass checked keyboard order, the language listbox, Arabic RTL chrome, and ranked-ballot names.
+Each route was checked in the dark theme (the demo now ships one dark scheme; earlier passes also covered a light scheme). A separate pass checked keyboard order, the language listbox, Arabic RTL chrome, and ranked-ballot names.
 
 ## What was fixed
 
-**Contrast (1.4.3).** Kickers use `--gold-text`, darkened in light (`#3f5c0a`) and the Infisical project yellow in dark (`#e0ed34`), both at least 4.5:1 on the canvas and on cards. Muted text is `#525355` in light and `#adaeb0` in dark so small hints clear the canvas. Status text sits on its tinted background only when that pair clears 4.5:1. Chrome (banner, sidebar, footer, buttons) uses `--ink` on the surface color in both schemes. `prefers-contrast: more` resets the tokens at the end of `styles.css`, including status backgrounds, so it wins over the dark scheme.
+**Contrast (1.4.3).** Kickers and badges use `--gold-text`, the project yellow (`#e0ed34`), at least 4.5:1 on the canvas (`#0e0f11`) and on cards (`#16171a`). Muted text is `#a3a4aa`, so small hints and card descriptions clear both surfaces. Card accent colors (icon tiles, title underlines) are decorative; the text beside them uses `--ink` or `--muted`. Status text sits on its tinted background only when that pair clears 4.5:1. Chrome (top bar, sidebar, footer, buttons) uses `--ink` on the surface color. `prefers-contrast: more` resets the tokens at the end of `styles.css`, including status backgrounds and card accents, so it wins over the dark theme.
 
 **Names (1.3.1, 4.1.2).** Back-office aspect and ballot fields are tied to their labels with `for` / `id`. Remove controls name the thing they remove. Ranked-choice Up, Down, Add, and Remove buttons, and the “About this choice” link, include the candidate name. The sign-in email field uses `autocomplete="email"` (axe rejects `username email`).
 

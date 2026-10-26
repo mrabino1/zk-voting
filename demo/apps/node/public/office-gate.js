@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Gate /admin and /back-office: unauthenticated visitors are redirected by the
  * Node; signed-in non-officers see a lock screen instead of the workbench.
  */

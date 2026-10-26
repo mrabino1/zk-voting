@@ -93,7 +93,7 @@ async function createElection(title = 'Civil review') {
 
 describe('registration approval and revocable credentials', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-reg-cred-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-reg-cred-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -396,13 +396,13 @@ describe('registration approval and revocable credentials', () => {
     assert.equal(added.status, 201, added.json?.error);
     const denied = await api('POST', '/api/integrations/credentials/status', {
       body: { civicIdHash: hash, status: 'revoked', reason: 'PROVIDER' },
-      headers: { 'x-republic-provider-secret': 'wrong' },
+      headers: { 'x-zk-voting-provider-secret': 'wrong' },
     });
     assert.equal(denied.status, 401);
 
     const ok = await api('POST', '/api/integrations/credentials/status', {
       body: { civicIdHash: hash, status: 'revoked', reason: 'PROVIDER', providerRef: 'dmv-batch-1' },
-      headers: { 'x-republic-provider-secret': 'test-provider-secret' },
+      headers: { 'x-zk-voting-provider-secret': 'test-provider-secret' },
     });
     assert.equal(ok.status, 200, ok.json?.error);
     assert.equal(ok.json.credential.status, 'revoked');
@@ -416,7 +416,7 @@ describe('credential provider stays manual without a secret', () => {
   let base2;
 
   before(async () => {
-    tmp2 = await mkdtemp(path.join(os.tmpdir(), 'republic-manual-'));
+    tmp2 = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-manual-'));
     const created = await createApp({
       dataDir: tmp2,
       allowDevLogin: true,

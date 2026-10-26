@@ -1,5 +1,5 @@
 /**
- * @fileoverview Proof helpers for Republic vote / tally Groth16 public inputs.
+ * @fileoverview Proof helpers for ZK-Voting vote / tally Groth16 public inputs.
  *
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
@@ -413,7 +413,7 @@ function functionSelector(signature) {
 }
 
 /**
- * HashLeftRight for `republic.hash.keccak-dev-v1`.
+ * HashLeftRight for `zk-voting.hash.keccak-dev-v1`.
  * Concatenate two 32-byte words and keccak256. Solidity `KeccakHasher`
  * does the same. Production trees use Poseidon via `IHasher`.
  *
@@ -437,7 +437,7 @@ const merkle = createMerkleHelpers({
 
 /**
  * Scheme-dispatch HashLeftRight. Default is keccak-dev-v1 so existing tests
- * keep their roots. The vote circuit uses `republic.hash.poseidon-bn254-x5-t3-v1`.
+ * keep their roots. The vote circuit uses `zk-voting.hash.poseidon-bn254-x5-t3-v1`.
  *
  * @param {string|bigint} left
  * @param {string|bigint} right
@@ -490,20 +490,29 @@ function publicInputsToHex(publicInputs) {
   return arr.map(toHex32);
 }
 
-/** Solidity `TallyPublicInputs.VERSION` / TALLY_SOL_MOCK_V1. */
-const TALLY_INSTANCE_VERSION = 1n;
+/** Solidity `TallyPublicInputs.VERSION` (TALLY_SOL_V2, audit H-01). */
+const TALLY_INSTANCE_VERSION = 2n;
+
+/** BN254 scalar field modulus r. */
+const SNARK_SCALAR_FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+function toField(v) {
+  return toBigInt(v) % SNARK_SCALAR_FIELD;
+}
 
 /**
- * Serialize Tally.sol mock Groth16 public inputs (TALLY_SOL_MOCK_V1).
+ * Serialize Tally.sol Groth16 public inputs (TALLY_SOL_V2).
  *
  * Order:
- * `[version, electionId, acceptedCount, countsHash, ballotRoot, openingsHash]`.
+ * `[version, electionId, acceptedCount, countsHash, ballotRoot, openingsHash, tallyKeyHash]`,
+ * every word reduced mod r. `tallyKeyHash = keccak256(tallyPubKeyX ‖ tallyPubKeyY)`.
  *
  * This is **not** `circuits/tally.circom` public signals (those are
  * `[total, electionId, counts…, acceptedCount]` for the default Tally(8,4)).
  *
  * @param {object} input
- * @returns {bigint[]} Length 6.
+ * @returns {bigint[]} Length 7.
  */
 function serializeTallyPublicInputs(input) {
   if (input == null || typeof input !== "object") {
@@ -512,17 +521,18 @@ function serializeTallyPublicInputs(input) {
   const countsHash = input.countsHash != null ? input.countsHash : 0;
   return [
     TALLY_INSTANCE_VERSION,
-    toBigInt(input.electionId),
-    toBigInt(input.acceptedCount),
-    toBigInt(countsHash),
-    toBigInt(input.ballotRoot == null ? 0 : input.ballotRoot),
-    toBigInt(input.openingsHash == null ? 0 : input.openingsHash),
+    toField(input.electionId),
+    toField(input.acceptedCount),
+    toField(countsHash),
+    toField(input.ballotRoot == null ? 0 : input.ballotRoot),
+    toField(input.openingsHash == null ? 0 : input.openingsHash),
+    toField(input.tallyKeyHash == null ? 0 : input.tallyKeyHash),
   ];
 }
 
 function parseTallyPublicInputs(publicInputs) {
-  if (!Array.isArray(publicInputs) || publicInputs.length !== 6) {
-    throw new Error("parseTallyPublicInputs: expected 6 public inputs (TALLY_SOL_MOCK_V1)");
+  if (!Array.isArray(publicInputs) || publicInputs.length !== 7) {
+    throw new Error("parseTallyPublicInputs: expected 7 public inputs (TALLY_SOL_V2)");
   }
   return {
     version: toBigInt(publicInputs[0]),
@@ -531,6 +541,7 @@ function parseTallyPublicInputs(publicInputs) {
     countsHash: toBigInt(publicInputs[3]),
     ballotRoot: toBigInt(publicInputs[4]),
     openingsHash: toBigInt(publicInputs[5]),
+    tallyKeyHash: toBigInt(publicInputs[6]),
   };
 }
 
@@ -542,6 +553,7 @@ module.exports = {
   serializeTallyPublicInputs,
   parseTallyPublicInputs,
   TALLY_INSTANCE_VERSION,
+  SNARK_SCALAR_FIELD,
   toBigInt,
   toHex32,
   hexToBytes,

@@ -3,7 +3,7 @@
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
-import { disclosurePublicView, withDisclosedCount } from './disclosure.mjs';
+import { publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { publicIdFields } from './electionIds.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
@@ -114,7 +114,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
         }
       : null,
     createdAt: election.createdAt,
-    disclosure: disclosurePublicView(now, interval, {
+    disclosure: publicDisclosureView(now, interval, {
       acceptedBallotsDisclosed: acceptedBallots,
     }),
     nfp: true,
@@ -128,7 +128,7 @@ export async function publishDue(deps) {
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
-    : disclosurePublicView(now, interval);
+    : publicDisclosureView(now, interval);
   return { now, interval, view };
 }
 
@@ -140,7 +140,7 @@ export function electionDisclosure(election, deps, view) {
     now,
     interval,
   );
-  const base = view || disclosurePublicView(now, interval);
+  const base = view || publicDisclosureView(now, interval);
   return withDisclosedCount(base, acceptedBallotsDisclosed);
 }
 

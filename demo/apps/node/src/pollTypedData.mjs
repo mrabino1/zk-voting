@@ -8,9 +8,9 @@ import { stableStringify } from './ballotSpec.mjs';
 
 export const SIGNAL_LABEL = 'Signal only · non-binding · NOT FOR PROFIT';
 export const ABSTAIN_ID = 'abstain';
-export const REPUBLIC_CHAIN_ID = 27427n;
-export const POLL_SCHEMA = 'republic.auditor.poll.v1';
-export const POLL_RECEIPT_SCHEMA = 'republic.receipt.poll.v1';
+export const ZK_VOTING_CHAIN_ID = 27427n;
+export const POLL_SCHEMA = 'zk-voting.auditor.poll.v1';
+export const POLL_RECEIPT_SCHEMA = 'zk-voting.receipt.poll.v1';
 
 export const TOKEN_POLL_TYPES = {
   TokenPollBallot: [
@@ -19,7 +19,7 @@ export const TOKEN_POLL_TYPES = {
     { name: 'voter', type: 'address' },
     { name: 'choices', type: 'uint16[]' },
     { name: 'ballotSpecHash', type: 'bytes32' },
-    { name: 'republicChainId', type: 'uint256' },
+    { name: 'zkVotingChainId', type: 'uint256' },
     { name: 'issuedAt', type: 'uint64' },
   ],
 };
@@ -28,7 +28,7 @@ export function pollDomainOf(nodeId, pollId) {
   return keccak256(
     encodeAbiParameters(
       [{ type: 'string' }, { type: 'string' }, { type: 'string' }],
-      ['republic:token-poll:v1', String(nodeId), String(pollId)],
+      ['zk-voting:token-poll:v1', String(nodeId), String(pollId)],
     ),
   );
 }
@@ -44,7 +44,7 @@ export function tokenPollTypedData({
 }) {
   return {
     domain: {
-      name: 'Republic Token Poll',
+      name: 'ZK-Voting Token Poll',
       version: '1',
       chainId: Number(tokenChainId),
     },
@@ -56,7 +56,7 @@ export function tokenPollTypedData({
       voter,
       choices: choiceIndexes.map((n) => Number(n)),
       ballotSpecHash,
-      republicChainId: REPUBLIC_CHAIN_ID,
+      zkVotingChainId: ZK_VOTING_CHAIN_ID,
       issuedAt: BigInt(issuedAt),
     },
   };
@@ -104,7 +104,7 @@ export function canonicalBallotRow(ballot) {
 
 export function merkleRoot(rows) {
   let level = rows.map((row) => hashCanonical(row));
-  if (!level.length) return keccak256(stringToHex('republic:token-poll:empty'));
+  if (!level.length) return keccak256(stringToHex('zk-voting:token-poll:empty'));
   while (level.length > 1) {
     if (level.length % 2 === 1) level = [...level, level[level.length - 1]];
     const next = [];

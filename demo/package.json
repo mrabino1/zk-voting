@@ -2,7 +2,7 @@
   "name": "zk-voting",
   "private": true,
   "version": "0.1.0",
-  "description": "NOT FOR PROFIT — zero-knowledge civic voting for republican democracy.",
+  "description": "NOT FOR PROFIT — zero-knowledge civic voting for a democratic republic.",
   "license": "AGPL-3.0-or-later",
   "workspaces": [
     "apps/node",
@@ -12,7 +12,9 @@
   ],
   "scripts": {
     "build": "npm run build -w apps/node",
-    "test": "npm run test:node && npm run test:packages && npm run test:l2 && npm run test:contracts && npm run test:auditor && npm run test:docs",
+    "test": "npm run test:node && npm run test:packages && npm run test:l2 && npm run test:contracts && npm run test:auditor && npm run test:docs && npm run test:setup",
+    "setup": "node tools/setup/setup.mjs",
+    "test:setup": "node --test tools/setup/*.test.mjs",
     "test:node": "npm run test -w apps/node",
     "test:packages": "npm test -w @zk-voting/chain-client && npm test -w @zk-voting/proof-helpers",
     "certify:l1": "node apps/node/scripts/certify-l1.mjs",
@@ -40,6 +42,7 @@
     "dev": "npm run dev -w apps/node",
     "l2:sequencer": "node l2/sequencer/index.mjs",
     "l2:prover": "node l2/prover/index.mjs",
+    "l2:identity": "node l2/bin/l2-identity.mjs",
     "l2:archive": "node l2/archive/cli.mjs archive",
     "l2:archive:restore": "node l2/archive/cli.mjs restore",
     "l2:archive:daemon": "node l2/archive/cli.mjs daemon",

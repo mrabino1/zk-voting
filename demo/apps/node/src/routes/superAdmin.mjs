@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Router } from 'express';
 
-import { timingSafeEqual } from 'node:crypto';
+import { secretsEqual } from '../secureCompare.mjs';
 
 import { isSuperAdmin } from '../roles.mjs';
 import { HttpError, asyncHandler } from '../http.mjs';
@@ -80,10 +80,7 @@ function bearerToken(req) {
 }
 
 function tokensEqual(a, b) {
-  const left = Buffer.from(String(a || ''));
-  const right = Buffer.from(String(b || ''));
-  if (!left.length || left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
+  return secretsEqual(a, b);
 }
 
 function csrfOk(req) {
@@ -113,7 +110,7 @@ async function audit(deps, req, fields) {
       ...fields,
     });
   } catch (err) {
-    if (!deps.config.quiet) console.error('[republic] sa audit failed', err?.code || err?.message || 'error');
+    if (!deps.config.quiet) console.error('[zk-voting] sa audit failed', err?.code || err?.message || 'error');
   }
 }
 
@@ -217,7 +214,7 @@ async function requireKeyManager(deps, req, res, { write = true } = {}) {
       reason: 'standby',
     });
     res.set('Retry-After', '2');
-    res.set('x-republic-mode', 'standby');
+    res.set('x-zk-voting-mode', 'standby');
     res.status(503).json({
       ok: false,
       error: 'maintenance handover',
@@ -294,7 +291,7 @@ async function requireActor(deps, req, res, scope, { write = false } = {}) {
       reason: 'standby',
     });
     res.set('Retry-After', '2');
-    res.set('x-republic-mode', 'standby');
+    res.set('x-zk-voting-mode', 'standby');
     res.status(503).json({
       ok: false,
       error: 'maintenance handover',

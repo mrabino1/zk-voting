@@ -1,5 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import { isUnsafeObjectKey } from './safeKeys.mjs';
+
 export class HttpError extends Error {
   /**
    * @param {number} status
@@ -28,7 +30,7 @@ export function parseCookies(header) {
     if (i === -1) continue;
     const k = part.slice(0, i).trim();
     const v = part.slice(i + 1).trim();
-    if (!k) continue;
+    if (!k || isUnsafeObjectKey(k)) continue;
     try {
       out[k] = decodeURIComponent(v);
     } catch {
@@ -59,7 +61,7 @@ export function clearSessionCookie(res, config) {
 
 export function setMfaCookie(res, config, nonce) {
   const maxAge = Math.floor((config.mfaTtlMs || 10 * 60 * 1000) / 1000);
-  const name = config.mfaCookie || 'republic.mfa';
+  const name = config.mfaCookie || 'zk-voting.mfa';
   const parts = [
     `${name}=${encodeURIComponent(nonce)}`,
     'HttpOnly',
@@ -71,7 +73,7 @@ export function setMfaCookie(res, config, nonce) {
 }
 
 export function clearMfaCookie(res, config) {
-  const name = config.mfaCookie || 'republic.mfa';
+  const name = config.mfaCookie || 'zk-voting.mfa';
   res.append('Set-Cookie', `${name}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`);
 }
 
@@ -79,7 +81,7 @@ export function errorHandler(err, req, res, _next) {
   const status = Number(err.status || err.statusCode || 500);
   if (status === 503) {
     res.set('Retry-After', String(err.extra?.retryAfter || 2));
-    res.set('x-republic-mode', err.extra?.mode || 'standby');
+    res.set('x-zk-voting-mode', err.extra?.mode || 'standby');
   }
   const hideInternals = status >= 500 && !(err instanceof HttpError);
   if (status >= 500 && !req.app?.locals?.quiet) {
@@ -133,14 +135,38 @@ export function stripBallotPii(value) {
   if (!value || typeof value !== 'object') return value;
   const out = {};
   for (const [k, v] of Object.entries(value)) {
-    if (BANNED_PRIVACY_KEYS.has(k)) continue;
+    if (BANNED_PRIVACY_KEYS.has(k) || isUnsafeObjectKey(k)) continue;
     out[k] = k === 'encryptedBallot' ? v : stripBallotPii(v);
   }
   return out;
 }
 
-/** Vote POST projection: same strip, used before relay reads the body. */
+/**
+ * Keys a ballot request must never carry into the relay: anything that names
+ * the voter (identity commitment, wallet / smart-account address, a userOp
+ * hash bound to that address, a passkey credential), the PIN token and the
+ * vote pass (checked by the route, then dropped), and any email.
+ */
+export const VOTE_IDENTITY_KEYS = Object.freeze([
+  'identityCommitment',
+  'identity_commitment',
+  'commitment',
+  'address',
+  'sender',
+  'smartAccount',
+  'userOpHash',
+  'userOp',
+  'credentialId',
+  'pinToken',
+  'votePass',
+  'email',
+]);
+const VOTE_IDENTITY_KEY_SET = new Set(VOTE_IDENTITY_KEYS);
+
+/** Vote POST projection: same strip plus voter-identity keys, used before relay reads the body. */
 export function sanitizeVoteBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
-  return stripBallotPii(body);
+  const out = stripBallotPii(body);
+  for (const k of Object.keys(out)) if (VOTE_IDENTITY_KEY_SET.has(k)) delete out[k];
+  return out;
 }

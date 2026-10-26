@@ -14,6 +14,7 @@ import {
   parseReceiptProof,
   receiptLines,
   buildReceiptPdf,
+  hashReceiptToken,
 } from '../src/receipts.mjs';
 import {
   decryptPdfStreams,
@@ -109,7 +110,7 @@ describe('receipt proof helpers', () => {
       token: 'tok_example_token_value_32bytes____',
       acceptedAt: HOUR_START + 90,
     });
-    assert.match(text, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.match(text, /BEGIN ZK-VOTING VOTE RECEIPT/);
     const parsed = parseReceiptProof(text);
     assert.equal(parsed.schema, RECEIPT_SCHEMA);
     assert.equal(parsed.electionId, 'el-1');
@@ -174,7 +175,7 @@ describe('receipt proof helpers', () => {
 
 describe('email receipt, PDF, and verify portal', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-receipt-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-receipt-'));
     clock = HOUR_START + 90;
     const created = await createApp({
       dataDir: tmp,
@@ -270,7 +271,7 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.match(receipt.pdfSha256, /^[0-9a-f]{64}$/);
     assert.equal(receipt.pdfProtected, true);
     assert.equal(receipt.pdfModify, false);
-    assert.match(receipt.proofText, /BEGIN REPUBLIC VOTE RECEIPT/);
+    assert.match(receipt.proofText, /BEGIN ZK-VOTING VOTE RECEIPT/);
     assert.equal(leakChoice(receipt).join(','), '');
     assert.equal(voted.json.vote.choice, undefined);
 
@@ -280,8 +281,20 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.equal(noToken.status, 401);
     assert.equal(noToken.json.code, 'RECEIPT_TOKEN_REQUIRED');
 
-    const emailed = await api('POST', '/api/receipts/email', {
+    const notOptedIn = await api('POST', '/api/receipts/email', {
       body: { token: receipt.token, email: 'voter@example.org' },
+    });
+    assert.equal(notOptedIn.status, 400);
+    assert.equal(notOptedIn.json.code, 'EMAIL_OPT_IN_REQUIRED');
+    const noAddress = await api('POST', '/api/receipts/email', {
+      jar: voterJar,
+      body: { token: receipt.token, optIn: true },
+    });
+    assert.equal(noAddress.status, 400);
+    assert.equal(noAddress.json.code, 'EMAIL_REQUIRED');
+
+    const emailed = await api('POST', '/api/receipts/email', {
+      body: { token: receipt.token, email: 'voter@example.org', optIn: true },
     });
     assert.equal(emailed.status, 200, emailed.json?.error);
     assert.equal(emailed.json.emailed, true);
@@ -290,31 +303,45 @@ describe('email receipt, PDF, and verify portal', () => {
     assert.ok(captured);
     assert.equal(captured.to, 'voter@example.org');
     assert.match(captured.subject, /not your choices/i);
-    assert.match(captured.text, /BEGIN REPUBLIC VOTE RECEIPT/);
-    assert.match(captured.html, /BEGIN REPUBLIC VOTE RECEIPT/);
-    assert.equal(captured.attachments.length, 1);
-    assert.equal(captured.attachments[0].contentType, 'application/pdf');
-    assert.equal(captured.attachments[0].sha256, emailed.json.pdfSha256);
-    const pdfLatin = captured.attachments[0].content.toString('latin1');
-    assert.match(pdfLatin, /%PDF-/);
-    assert.match(pdfLatin, /\/Filter \/Standard/);
+    assert.match(captured.text, /BEGIN ZK-VOTING VOTE RECEIPT/);
+    assert.match(captured.html, /BEGIN ZK-VOTING VOTE RECEIPT/);
+    // Thin, opt-in email: token only. No attachment, nullifier, ballot hash.
+    assert.equal(captured.attachments.length, 0);
+    const mailDump = JSON.stringify({ text: captured.text, html: captured.html, meta: captured.meta });
+    for (const handle of [receipt.nullifier, receipt.ballotHash]) {
+      assert.ok(handle);
+      assert.equal(mailDump.toLowerCase().includes(String(handle).toLowerCase()), false, `email leaks ${handle}`);
+    }
+    assert.doesNotMatch(mailDump, /nullifier:|ballotHash:|userOpHash:/);
+    assert.equal(captured.meta.nullifier, undefined);
+    assert.equal(captured.meta.ballotHash, undefined);
     assert.doesNotMatch(captured.text, new RegExp(ZEBRA));
     assert.doesNotMatch(captured.html, new RegExp(ZEBRA));
-    assert.doesNotMatch(pdfLatin, new RegExp(ZEBRA));
-    assert.doesNotMatch(pdfLatin, new RegExp(String(receipt.token).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.doesNotMatch(captured.text, /I voted for/i);
-    assert.match(captured.text, /locked against modification/i);
-    assert.equal(emailed.json.pdfProtected, true);
+    // Nothing about the send is stored with the receipt row.
+    const row = store.findReceiptByTokenHash(hashReceiptToken(receipt.token));
+    assert.equal(row.emailHint, undefined);
+    assert.equal(row.emailedAt, undefined);
+    assert.equal(row.userOpHash, undefined);
 
     const pdf = await api('POST', '/api/receipts/pdf', { body: { token: receipt.token } });
     assert.equal(pdf.status, 200);
     assert.match(pdf.res.headers.get('content-type') || '', /pdf/);
-    assert.equal(pdf.res.headers.get('x-pdf-sha256'), emailed.json.pdfSha256);
+    assert.equal(pdf.res.headers.get('x-pdf-sha256'), receipt.pdfSha256);
     assert.equal(pdf.res.headers.get('x-pdf-protected'), 'true');
     assert.equal(pdf.res.headers.get('x-pdf-modify'), 'false');
     assert.equal(pdf.res.headers.get('x-receipts-prove-choice'), 'false');
-    const pdfBuf = Buffer.from(captured.attachments[0].content);
-    assert.equal(sha256Hex(pdfBuf), emailed.json.pdfSha256);
+    const rawPdf = await fetch(base + '/api/receipts/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: receipt.token }),
+    });
+    const pdfBuf = Buffer.from(await rawPdf.arrayBuffer());
+    assert.equal(sha256Hex(pdfBuf), receipt.pdfSha256);
+    const pdfLatin = pdfBuf.toString('latin1');
+    assert.match(pdfLatin, /%PDF-/);
+    assert.match(pdfLatin, /\/Filter \/Standard/);
+    assert.doesNotMatch(pdfLatin, new RegExp(ZEBRA));
     const enc = readPdfEncryption(pdfBuf);
     assert.ok(enc);
     assert.equal(pdfAllowsModify(enc.permissions), false);
@@ -385,7 +412,7 @@ describe('instant disclosure still hides choice on receipts', () => {
   let localMailer;
 
   before(async () => {
-    localTmp = await mkdtemp(path.join(os.tmpdir(), 'republic-receipt-0-'));
+    localTmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-receipt-0-'));
     const created = await createApp({
       dataDir: localTmp,
       allowDevLogin: true,
@@ -444,7 +471,7 @@ describe('instant disclosure still hides choice on receipts', () => {
     });
     assert.equal(voted.status, 201, voted.json?.error);
     const emailed = await call('POST', '/api/receipts/email', {
-      body: { token: voted.json.receipt.token, email: 'copy@example.org' },
+      body: { token: voted.json.receipt.token, email: 'copy@example.org', optIn: true },
     });
     assert.equal(emailed.status, 200, emailed.json?.error);
     const captured = localMailer.lastVoteReceipt();

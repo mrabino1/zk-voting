@@ -1,0 +1,15 @@
+{
+  "name": "zk-entropy",
+  "version": "0.1.0",
+  "description": "NOT FOR PROFIT. Entropy collection, mixing, and ceremony chaining for zk-voting setup ceremonies.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "bin": { "zk-entropy": "bin/zk-entropy.js" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:all": "node --test test/*.test.mjs && cd ceremony && npm test"
+  }
+}

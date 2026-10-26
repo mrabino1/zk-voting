@@ -130,10 +130,10 @@ function unpackCreateResult(result) {
   return {};
 }
 
-export function republicChain(chainId, rpc) {
+export function zkVotingChain(chainId, rpc) {
   return defineChain({
     id: chainId,
-    name: 'Republic',
+    name: 'ZK-Voting',
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     rpcUrls: { default: { http: [rpc || 'http://127.0.0.1:8545'] } },
   });
@@ -291,7 +291,7 @@ export function createChain(config) {
   let account;
 
   if (hasWallet) {
-    const chain = republicChain(config.chainId, rpc);
+    const chain = zkVotingChain(config.chainId, rpc);
     account = privateKeyToAccount(key);
     publicClient = createPublicClient({ chain, transport: http(rpc) });
     wallet = createWalletClient({ account, chain, transport: http(rpc) });

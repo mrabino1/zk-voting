@@ -17,11 +17,11 @@ import {Fixtures} from "../helpers/Fixtures.sol";
 import {Ghost} from "./Ghost.sol";
 
 /// @title Handler
-/// @notice Invariant fuzzer entrypoints for Republic. Every action uses
+/// @notice Invariant fuzzer entrypoints for ZK-Voting. Every action uses
 ///         try/catch so a revert does not abort the invariant run.
 ///         Actors are pranked; Foundry's random msg.sender is ignored.
 contract Handler is Deployer, Ghost {
-    bytes32 public constant JURISDICTION = keccak256("republic-fuzz-jurisdiction");
+    bytes32 public constant JURISDICTION = keccak256("zk-voting-fuzz-jurisdiction");
 
     uint256[2] internal _a;
     uint256[2][2] internal _b;
@@ -260,7 +260,7 @@ contract Handler is Deployer, Ghost {
             IElection(el).eligibleRoot(),
             IElection(el).disqualificationRoot(),
             nullifier,
-            uint256(keccak256(ballot)),
+            uint256(keccak256(ballot)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617,
             electionId
         );
         vm.prank(relayer);
@@ -293,7 +293,7 @@ contract Handler is Deployer, Ghost {
             IElection(el).eligibleRoot(),
             IElection(el).disqualificationRoot(),
             nullifier,
-            uint256(keccak256(ballot)),
+            uint256(keccak256(ballot)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617,
             electionId
         );
         vm.prank(relayer);
@@ -346,8 +346,8 @@ contract Handler is Deployer, Ghost {
         returns (ElectionParams memory p)
     {
         p = Fixtures.build(
-            "Republic invariant election",
-            "ipfs://republic-invariant",
+            "ZK-Voting invariant election",
+            "ipfs://zk-voting-invariant",
             start,
             cutoff,
             cap,

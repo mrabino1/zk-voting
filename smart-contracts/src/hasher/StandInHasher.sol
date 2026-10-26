@@ -8,7 +8,7 @@ import {IHashScheme} from "../interfaces/IHashScheme.sol";
 import {HashScheme} from "./HashScheme.sol";
 
 /// @title StandInHasher
-/// @notice Matches `circuits/hasher/standin.circom` (`republic.hash.standin-v0`).
+/// @notice Matches `circuits/hasher/standin.circom` (`zk-voting.hash.standin-v0`).
 /// @dev Use only on the local proving path so JS witnesses, Circom, and the
 ///      Solidity tree share one HashLeftRight. NOT Poseidon. NOT for a binding election.
 ///      `hashLeftRight(x, 0) == x`, so an all-zero Merkle path is degenerate.

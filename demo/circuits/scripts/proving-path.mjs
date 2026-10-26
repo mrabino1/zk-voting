@@ -9,7 +9,7 @@
  * This is NOT a ceremony. Anyone who ran `setup` knows the toxic waste.
  * Do not use these keys for a binding election.
  *
- * HASH_SCHEME for the vote circuit is republic.hash.poseidon-bn254-x5-t3-v1.
+ * HASH_SCHEME for the vote circuit is zk-voting.hash.poseidon-bn254-x5-t3-v1.
  * `smoke` builds an untrusted Vote(4) proof and refreshes circuits/fixtures/untrusted.
  * `verify` checks that fixture with snarkjs and fails if the files or snarkjs are missing.
  *
@@ -30,10 +30,10 @@ const CIRCUITS = path.resolve(SCRIPT_DIR, "..");
 const REPO = path.resolve(CIRCUITS, "..");
 const BUILD = path.join(CIRCUITS, "build");
 const HASH_SCHEME = helpers.HASH_SCHEMES.POSEIDON_BN254_X5_T3_V1;
-const PTAU_POWER = Number(process.env.REPUBLIC_PTAU_POWER || 16);
-const SMOKE_PTAU_POWER = Number(process.env.REPUBLIC_SMOKE_PTAU_POWER || 14);
+const PTAU_POWER = Number(process.env.ZK_VOTING_PTAU_POWER || 16);
+const SMOKE_PTAU_POWER = Number(process.env.ZK_VOTING_SMOKE_PTAU_POWER || 14);
 const FIXTURE = path.join(CIRCUITS, "fixtures", "untrusted");
-const UNTRUSTED_ENTROPY = "republic-local-untrusted-dev-only-not-a-ceremony";
+const UNTRUSTED_ENTROPY = "zk-voting-local-untrusted-dev-only-not-a-ceremony";
 
 function log(msg) {
   console.log(msg);
@@ -97,11 +97,11 @@ function toolStatus() {
 
 function printStatus() {
   const s = toolStatus();
-  log("Republic proving path — IN PROGRESS (not a ceremony)");
+  log("ZK-Voting proving path — IN PROGRESS (not a ceremony)");
   log(`HASH_SCHEME=${s.hashScheme}`);
   log(`CEREMONY=${s.ceremony}`);
-  log(`REPUBLIC_PROVING_PATH=${s.provingPath ? "1" : "0"}`);
-  log(`REPUBLIC_USE_MOCK_VERIFIER=${s.mockVerifierDefault ? "1" : "0"} (unit tests keep MockVerifier)`);
+  log(`ZK_VOTING_PROVING_PATH=${s.provingPath ? "1" : "0"}`);
+  log(`ZK_VOTING_USE_MOCK_VERIFIER=${s.mockVerifierDefault ? "1" : "0"} (unit tests keep MockVerifier)`);
   log(`circom=${s.circom || "(not on PATH)"}`);
   log(`snarkjs=${s.snarkjs || "(not installed — npm install snarkjs)"}`);
   log(`vote.r1cs=${s.voteR1cs}`);
@@ -115,7 +115,7 @@ function printStatus() {
   log("  npm run circuits:prove      # demo Poseidon witness + groth16 verify (Vote 20)");
   log("  npm run circuits:smoke      # UNTRUSTED Vote(4) proof; refreshes circuits/fixtures/untrusted");
   log("  npm run circuits:verify     # verify that fixture, or fail if keys/snarkjs are missing");
-  log("  REPUBLIC_PROVING_PATH=1 forge script script/DeployLocal.s.sol");
+  log("  ZK_VOTING_PROVING_PATH=1 forge script script/DeployLocal.s.sol");
   log("");
   log("Install Circom 2 if compile is needed: https://docs.circom.io/getting-started/installation/");
   log("Do not copy zkeys into git. Do not overwrite smart-contracts/src/zk/VoteVerifier.sol.");
@@ -163,7 +163,7 @@ function setup() {
     "contribute",
     ptau0,
     ptau1,
-    "--name=republic-local-untrusted",
+    "--name=zk-voting-local-untrusted",
     `-e=${UNTRUSTED_ENTROPY}`,
     "-v",
   ]);
@@ -179,7 +179,7 @@ function setup() {
       "contribute",
       z0,
       zFinal,
-      "--name=republic-local-untrusted",
+      "--name=zk-voting-local-untrusted",
       `-e=${UNTRUSTED_ENTROPY}`,
     ]);
   }
@@ -406,7 +406,7 @@ function copyVote20Fixture() {
     "// UNTRUSTED — local dev Groth16 verifier for Vote(20).",
     "// No ceremony has been held. The powers-of-tau entropy is public.",
     "// Do not use this verifying key for a binding election.",
-    "// HASH_SCHEME=republic.hash.poseidon-bn254-x5-t3-v1",
+    "// HASH_SCHEME=zk-voting.hash.poseidon-bn254-x5-t3-v1",
     "// =============================================================================",
     "",
   ].join("\n");
@@ -460,7 +460,7 @@ async function smoke() {
     "contribute",
     ptau0,
     ptau1,
-    "--name=republic-local-untrusted",
+    "--name=zk-voting-local-untrusted",
     `-e=${UNTRUSTED_ENTROPY}`,
     "-v",
   ]);
@@ -473,7 +473,7 @@ async function smoke() {
     "contribute",
     z0,
     zFinal,
-    "--name=republic-local-untrusted",
+    "--name=zk-voting-local-untrusted",
     `-e=${UNTRUSTED_ENTROPY}`,
   ]);
   const witness = helpers.buildVoteWitness({ depth: 4, scheme: HASH_SCHEME });
@@ -505,12 +505,12 @@ async function testCmd() {
   selfCheck();
   await verifyFixture();
   if (!helpers.provingPathEnabled()) {
-    log("REPUBLIC_PROVING_PATH is off. Fixture verify ran. Full Vote(20) setup was not repeated.");
+    log("ZK_VOTING_PROVING_PATH is off. Fixture verify ran. Full Vote(20) setup was not repeated.");
     return;
   }
   const s = toolStatus();
   if (!s.circom || !s.snarkjs) {
-    fail("REPUBLIC_PROVING_PATH=1 but circom/snarkjs are missing.");
+    fail("ZK_VOTING_PROVING_PATH=1 but circom/snarkjs are missing.");
   }
   compile();
   setup();
@@ -529,12 +529,12 @@ Commands:
   prove     Demo Vote(20) witness, groth16 prove, verify
   smoke     UNTRUSTED Vote(4) setup + proof; refresh circuits/fixtures/untrusted
   verify    Verify the committed fixture, or fail if keys/snarkjs are missing
-  test      Poseidon self-check + fixture verify (full Vote(20) only if REPUBLIC_PROVING_PATH=1)
+  test      Poseidon self-check + fixture verify (full Vote(20) only if ZK_VOTING_PROVING_PATH=1)
   all       compile + setup + export + prove
   help      This text
 
 HASH_SCHEME=${HASH_SCHEME}
-Env: REPUBLIC_PROVING_PATH=1  REPUBLIC_USE_MOCK_VERIFIER=0  REPUBLIC_PTAU_POWER=16  REPUBLIC_SMOKE_PTAU_POWER=14
+Env: ZK_VOTING_PROVING_PATH=1  ZK_VOTING_USE_MOCK_VERIFIER=0  ZK_VOTING_PTAU_POWER=16  ZK_VOTING_SMOKE_PTAU_POWER=14
 Ceremony: not-done. MockVerifier stays the Foundry unit-test default.
 `);
 }

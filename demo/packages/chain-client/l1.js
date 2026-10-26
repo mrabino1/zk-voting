@@ -18,8 +18,8 @@
 
 const { toBigInt, toHex32, encodePacked, keccak256, functionSelector } = require("@zk-voting/proof-helpers");
 
-/** keccak256("republic.election.identity.v1") — matches `ElectionIdentity.DOMAIN`. */
-const IDENTITY_DOMAIN_STRING = "republic.election.identity.v1";
+/** keccak256("zk-voting.election.identity.v1") — matches `ElectionIdentity.DOMAIN`. */
+const IDENTITY_DOMAIN_STRING = "zk-voting.election.identity.v1";
 
 function padAddress(addr) {
   const hex = String(addr).replace(/^0x/i, "").toLowerCase().padStart(40, "0");

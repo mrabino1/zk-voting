@@ -32,11 +32,8 @@ import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.
 import { publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash, certifyArgsForElection } from '../l1Certify.mjs';
-import {
-  dispatchOfficialOutcomeReports,
-  resolveVoterForOutcomeSubscribe,
-  subscribeVoterToOutcome,
-} from '../outcomeReports.mjs';
+import { dispatchOfficialOutcomeReports } from '../outcomeReports.mjs';
+import { createVotePassService } from '../votePass.mjs';
 import { partiesRouter } from './parties.mjs';
 import { publicUser } from '../roles.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
@@ -78,6 +75,7 @@ async function revokeHandler(req, store, explorer) {
 
 export function electionsRouter(deps) {
   const { store, explorer, chain, config, l1, pin } = deps;
+  const votePass = deps.votePass || createVotePassService(config);
   const router = Router();
   router.param('id', uuidParam('id'));
   router.param('requestId', uuidParam('requestId'));
@@ -662,6 +660,61 @@ export function electionsRouter(deps) {
     }),
   );
 
+  // Public key for session-less vote passes (RSA blind signatures).
+  router.get(
+    '/:id/vote-pass',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      res.json({ ...(await votePass.publicKey()), electionId: String(election.id), nfp: true });
+    }),
+  );
+
+  // Eligibility step, separate from the ballot. This request may carry the
+  // session, the vote PIN token and (for external-party elections) the
+  // identity commitment. It returns a blind signature only; the Node never
+  // sees the token it signs, so it cannot link this request to the ballot.
+  router.post(
+    '/:id/vote-pass',
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      if (election.votingPaused) {
+        throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
+      }
+      const body = req.body || {};
+      if (body.blinded == null || body.blinded === '') {
+        throw new HttpError(400, 'blinded vote pass required', { code: 'VOTE_PASS_BAD' });
+      }
+      const hasParties = store.listActiveExternalParties(election.id).length > 0;
+      let commitmentSubject = null;
+      if (hasParties) {
+        const rawCommitment = body.identityCommitment;
+        if (rawCommitment == null || rawCommitment === '') {
+          throw new HttpError(400, 'identityCommitment required for external party clearance', {
+            code: 'IDENTITY_COMMITMENT_REQUIRED',
+          });
+        }
+        await assertExternalClearance(store, election.id, rawCommitment, { now: config.nowFn() });
+        commitmentSubject = `c:${String(rawCommitment)}`;
+      }
+      if (req.user && pin) {
+        pin.assertVoteAllowed(req.user, body.pinToken);
+      }
+      const blindSignature = await votePass.signBlinded(body.blinded);
+      // One pass per cleared commitment per process (in memory only).
+      votePass.claimIssue(election.id, commitmentSubject);
+      res.status(201).json({
+        ok: true,
+        nfp: true,
+        blindSignature,
+        message:
+          'Vote pass signed blind. Unblind it in this browser and cast the ballot without your session; the Node cannot tie the pass to this request.',
+      });
+    }),
+  );
+
+  // Ballot submission. Session-less by design: identity fields in the body are
+  // dropped (see relay.mjs), no outcome subscription is created here, and when
+  // a vote pass is presented the session cookie is not consulted at all.
   router.post(
     '/:id/vote',
     asyncHandler(async (req, res) => {
@@ -669,21 +722,24 @@ export function electionsRouter(deps) {
       if (electionForGate?.votingPaused) {
         throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
       }
-      if (electionForGate && store.listActiveExternalParties(electionForGate.id).length) {
-        const rawCommitment = req.body?.identityCommitment;
-        if (rawCommitment == null || rawCommitment === '') {
-          throw new HttpError(400, 'identityCommitment required for external party clearance', {
-            code: 'IDENTITY_COMMITMENT_REQUIRED',
-          });
+      const rawBody = req.body || {};
+      let spentPassHash = null;
+      if (rawBody.votePass && electionForGate) {
+        spentPassHash = await votePass.verify(electionForGate.id, rawBody.votePass);
+        if (store.votePassSpent(electionForGate.id, spentPassHash)) {
+          throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
         }
-        await assertExternalClearance(store, electionForGate.id, rawCommitment, {
-          now: config.nowFn(),
+      } else if (electionForGate && store.listActiveExternalParties(electionForGate.id).length) {
+        // Clearance now happens on POST /vote-pass, never on the ballot request.
+        throw new HttpError(403, 'a vote pass is required: external party clearance happens before the ballot', {
+          code: 'VOTE_PASS_REQUIRED',
         });
+      } else if (req.user && pin) {
+        // Legacy signed-in path (API clients). Nothing about req.user is
+        // persisted with the ballot. The shipped SPA uses a vote pass instead.
+        pin.assertVoteAllowed(req.user, rawBody.pinToken);
       }
-      const body = sanitizeVoteBody(req.body);
-      if (req.user && pin) {
-        pin.assertVoteAllowed(req.user, body?.pinToken);
-      }
+      const body = sanitizeVoteBody(rawBody);
       const result = await relayVote({
         store,
         explorer,
@@ -693,19 +749,8 @@ export function electionsRouter(deps) {
         body,
         now: config.nowFn(),
         intervalSeconds: config.disclosureIntervalSeconds,
+        spentPassHash,
       });
-      const election = store.getElection(req.params.id);
-      const voterId = resolveVoterForOutcomeSubscribe(store, {
-        userId: req.user?.id,
-        electionId: election?.id || req.params.id,
-      });
-      if (voterId && election) {
-        await subscribeVoterToOutcome(store, {
-          userId: voterId,
-          electionId: election.id,
-          source: 'vote-default',
-        });
-      }
       res.status(201).json({
         ok: true,
         accepted: true,
@@ -714,8 +759,8 @@ export function electionsRouter(deps) {
         vote: result.vote,
         receipt: result.receipt,
         message: result.published
-          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Email or paste the receipt at /receipt — it cannot prove how you voted.'
-          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Email or paste the receipt at /receipt — it cannot prove how you voted.',
+          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
+          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.',
         nfp: true,
       });
     }),

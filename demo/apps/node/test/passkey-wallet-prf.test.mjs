@@ -32,12 +32,12 @@ const PRF_IDENTITY = Uint8Array.from({ length: 32 }, (_, i) => (i * 5 + 7) & 0xf
 const SEED = Uint8Array.from({ length: 32 }, (_, i) => 0xa0 + (i % 16));
 
 const VECTORS = {
-  saltAccount: '2116cfbf73763fce04df582be7e68888bf13acff3c6775c6a69a8d55590cf427',
-  saltIdentity: 'afd32da566374f5aeea83ee8be78e790b95b02c30e28d8d12d2612ec42c6acc9',
-  wrapKey: '6ca996ea0e238fcba6f7df6e4b9a1c9751b9e2f3d4d54226a215a9e3b3cae658',
-  trapdoor: '47d056fe5167727938ff04f1418d5b6392cd0e229507d3823c99a30897a1cddf',
-  nullifierSecret: 'f799aaeb233a9818b15ec079ecdfe1a7d922f7b05108322ea12841b58d7ea2ab',
-  commitment: '0x2a72c42b0d52e0f7be848c88043ccad13d5fc1cddaa938c77425e3303d745b0a',
+  saltAccount: '75ace57534dee3bdfa43693664c1f02c51b60cbd4fc4a84e13b24f2975e9c664',
+  saltIdentity: '2b697bb905a0af4beb2e3a4123795c59617573c201cfbeb915e9b10829f10fc1',
+  wrapKey: 'bf5028891742b9332cbad3f1b6ed4f4509404cf443093373d0f047d77f2fe9b5',
+  trapdoor: '9b738bc455811d4f3b045be58b5a9afeeae5cb01ea359286968fb44c7bc08c29',
+  nullifierSecret: 'd0144bd9bc573397da0d5e24a4ecdd70e1b08b4b9e6cb77eec2e7349af9964e8',
+  commitment: '0x1fb4a8da6667f5e0105f31a2f5c86509bbaf4dd50425709ccd5c315fb808f350',
 };
 
 function hexEq(a, b) {
@@ -143,14 +143,14 @@ describe('passkey PRF/HKDF domain separation', () => {
 
   test('v1 construction (identity HKDF of the account seed) is not the v2 identity', async () => {
     const v1 = await hkdfSha256Bits(SEED, {
-      salt: 'republic.identity.v1',
+      salt: 'zk-voting.identity.v1',
       info: 'trapdoor+nullifier',
       length: 64,
     });
     const ident = await deriveIdentitySecrets(PRF_IDENTITY);
     assert.notEqual(bytesToHex(v1.subarray(0, 32)), bytesToHex(ident.trapdoor));
     const v1FromAccountPrf = await hkdfSha256Bits(PRF_ACCOUNT, {
-      salt: 'republic.identity.v1',
+      salt: 'zk-voting.identity.v1',
       info: 'trapdoor+nullifier',
       length: 64,
     });
@@ -172,7 +172,7 @@ describe('passkey PRF/HKDF domain separation', () => {
       BigInt(`0x${bytesToHex(ident.nullifierSecret)}`),
     );
     assert.equal(ident.commitment, expected);
-    assert.equal(ident.hasher, 'republic.hash.poseidon-bn254-x5-t3-v1');
+    assert.equal(ident.hasher, 'zk-voting.hash.poseidon-bn254-x5-t3-v1');
     const packed = new Uint8Array(64);
     packed.set(ident.trapdoor, 0);
     packed.set(ident.nullifierSecret, 32);
@@ -196,8 +196,8 @@ describe('passkey PRF/HKDF domain separation', () => {
   test('v1 and keccak v2 records are stale; Poseidon v3 records are current', () => {
     assert.equal(WALLET_RECORD_VERSION, 3);
     assert.equal(IDENTITY_SCHEME, 'prf-hkdf-poseidon-v3');
-    assert.equal(ACCOUNT_PRF_DOMAIN, 'republic:account:v1');
-    assert.equal(IDENTITY_PRF_DOMAIN, 'republic:identity:v1');
+    assert.equal(ACCOUNT_PRF_DOMAIN, 'zk-voting:account:v1');
+    assert.equal(IDENTITY_PRF_DOMAIN, 'zk-voting:identity:v1');
     assert.equal(
       isCurrentWalletRecord({ version: 1, wrapScheme: 'prf-hkdf-aes-gcm', identityCommitment: '0xab' }),
       false,

@@ -1,5 +1,5 @@
 %% NOT FOR PROFIT — civic public good, not a commercial product.
-%% Republic / zk-voting — informational election workflow.
+%% ZK-Voting — informational election workflow.
 %% Render: npm run docs:workflow
 %% Output: docs/images/election-workflow.png
 %%{init: {
@@ -27,7 +27,7 @@ flowchart TB
 
   subgraph Split["Identity is not the ballot"]
     direction LR
-    Person["Person / Node login<br/>email, passkey, wallet, card, license hash<br/>legal roll stays in republic.json"]
+    Person["Person / Node login<br/>email, passkey, wallet, card, license hash<br/>legal roll stays in zk-voting.json"]
     Gap["no public join key"]
     PublicBallot["Public ballot record<br/>nullifier + ballotHash + relayer<br/>ciphertext choice — no name, no wallet"]
     Person --> Gap --> PublicBallot
@@ -46,8 +46,8 @@ flowchart TB
 
   subgraph Layers["Where it runs"]
     direction LR
-    Node["Republic Node<br/>clerks, voters, receipts, explorer"]
-    L2["Republic L2 chainId 27427<br/>register / vote / disqualify / tally"]
+    Node["ZK-Voting Node<br/>clerks, voters, receipts, explorer"]
+    L2["ZK-Voting L2 chainId 27427<br/>register / vote / disqualify / tally"]
     L1["Ethereum L1<br/>RollupSettlement + L1TallyMirror"]
     Node -->|"JSON txs"| L2
     L2 -->|"batch proof / certify"| L1

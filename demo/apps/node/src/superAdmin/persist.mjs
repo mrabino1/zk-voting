@@ -46,8 +46,14 @@ async function locked(store, fn) {
   }
 }
 
+// A standby on the JSON backend re-reads the writer's file; on Postgres it
+// uses the state it loaded at open (refreshed on promotion).
+function readsFile(store) {
+  return store.writerActive === false && store.backend !== 'postgres';
+}
+
 export function readSuperAdminKey(store, id) {
-  if (store.writerActive === false) {
+  if (readsFile(store)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(store.filePath, 'utf8'));
       const rows = Array.isArray(parsed.superAdminKeys) ? parsed.superAdminKeys : [];
@@ -60,7 +66,7 @@ export function readSuperAdminKey(store, id) {
 }
 
 function visibleKeys(store) {
-  if (store.writerActive !== false) return keys(store);
+  if (!readsFile(store)) return keys(store);
   try {
     const parsed = JSON.parse(fs.readFileSync(store.filePath, 'utf8'));
     return Array.isArray(parsed.superAdminKeys) ? parsed.superAdminKeys : [];
@@ -193,7 +199,7 @@ export async function touchSuperAdminKey(store, id, ip, nowMs = Date.now()) {
 }
 
 export function persistedAudit(store) {
-  if (store.writerActive === false) {
+  if (readsFile(store)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(store.filePath, 'utf8'));
       return Array.isArray(parsed.superAdminAudit) ? parsed.superAdminAudit : [];

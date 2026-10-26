@@ -1,4 +1,4 @@
-/* Republic L2 explorer — blocks, txs, search. Vote txs: nullifier + ballotHash only. */
+/* ZK-Voting L2 explorer — blocks, txs, search. Vote txs: nullifier + ballotHash only. */
 (function () {
   "use strict";
 
@@ -84,7 +84,8 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function errText(err) {
@@ -213,7 +214,7 @@
   }
 
   function fmtCountdown(seconds) {
-    const helper = globalThis.RepublicDisclosure;
+    const helper = globalThis.ZkVotingDisclosure;
     if (helper && typeof helper.formatCountdown === "function") {
       return helper.formatCountdown(seconds);
     }
@@ -302,7 +303,7 @@
   function votePrivacyNote() {
     return `<p class="privacy-callout"><strong>Ballot privacy</strong>
       This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
-      Choice plaintext is not a field on Republic L2 and is never rendered here.
+      Choice plaintext is not a field on this L2 and is never rendered here.
       Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 
@@ -312,7 +313,7 @@
 
   function paintDisclosure(data, overlay) {
     const el = $("disclosure-banner");
-    const helper = globalThis.RepublicDisclosure;
+    const helper = globalThis.ZkVotingDisclosure;
     if (!el || !helper) return;
     const d = {
       ...((data && data.disclosure) || {}),
@@ -325,7 +326,7 @@
   }
 
   function startCountdown() {
-    const helper = globalThis.RepublicDisclosure;
+    const helper = globalThis.ZkVotingDisclosure;
     const el = $("disclosure-banner");
     if (!helper || !el) return;
     if (countdownTimer) {

@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  *
  * Demo tally encryption: P-256 ECDH (ECIES-style) + HKDF-SHA256 + AES-GCM.
  *
@@ -26,8 +26,8 @@ export const TALLY_SCHEME_OPENS_BALLOTS = "opens_ballots";
 
 export const TALLY_CRYPTO_SCHEME = "p256-ecies-aesgcm-v1";
 export const TALLY_ENVELOPE_MAGIC = new Uint8Array([0x52, 0x54, 0x76, 0x31]); // RTv1
-export const TALLY_HKDF_INFO = "republic-tally-ecies-p256-v1";
-export const TALLY_INSTANCE_VERSION = 1;
+export const TALLY_HKDF_INFO = "zk-voting-tally-ecies-p256-v1";
+export const TALLY_INSTANCE_VERSION = 2; // TallyPublicInputs.VERSION (TALLY_SOL_V2)
 
 export const DEMO_KEY_WARNING =
   "NON-PRODUCTION single P-256 key used only to exercise this envelope format. Election tallies do not use it. A binding election needs the Feldman guardian ceremony, and even that ceremony is not a production Groth16 tally.";
@@ -165,7 +165,7 @@ async function aesFromShared(sharedBits) {
     {
       name: "HKDF",
       hash: "SHA-256",
-      salt: utf8Bytes("republic.tally.salt.v1"),
+      salt: utf8Bytes("zk-voting.tally.salt.v1"),
       info: utf8Bytes(TALLY_HKDF_INFO),
     },
     ikm,
@@ -194,7 +194,7 @@ export async function encryptToTallyPub(publicKeyRaw, plaintext) {
 
 export function tallyEnvelopeEphemeral(envelopeHex) {
   const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
-  if (!eqMagic(bytes)) throw new Error("not a Republic tally envelope (missing RTv1 magic)");
+  if (!eqMagic(bytes)) throw new Error("not a tally envelope (missing RTv1 magic)");
   if (bytes.length < 4 + 65 + 12 + 16) throw new Error("tally envelope too short");
   return bytes.slice(4, 69);
 }
@@ -206,7 +206,7 @@ export function tallyEnvelopeEphemeral(envelopeHex) {
  */
 export async function decryptTallyEnvelopeWithSharedBits(sharedBits, envelopeHex) {
   const bytes = typeof envelopeHex === "string" ? hexToBytes(envelopeHex) : envelopeHex;
-  if (!eqMagic(bytes)) throw new Error("not a Republic tally envelope (missing RTv1 magic)");
+  if (!eqMagic(bytes)) throw new Error("not a tally envelope (missing RTv1 magic)");
   if (bytes.length < 4 + 65 + 12 + 16) throw new Error("tally envelope too short");
   const iv = bytes.subarray(69, 81);
   const ct = bytes.subarray(81);

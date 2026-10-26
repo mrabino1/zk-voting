@@ -1,8 +1,8 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public URLs never include .html. /admin not /admin.html.
  */
-(function canonicalRepublicUrl() {
+(function canonicalZkVotingUrl() {
   var path = location.pathname || "/";
   if (!/\.html$/i.test(path)) return;
   var next = path.replace(/\.html$/i, "") || "/";

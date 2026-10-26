@@ -3,17 +3,19 @@
 // them closes, then land in one disclosure block (bucketed timestamp, ordered
 // by nullifier). Payloads never include a voter choice or a passkey user id.
 
+import { randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { keccak256, stringToHex } from 'viem';
 
 import {
-  disclosurePublicView,
+  publicDisclosureView,
   hourBucket,
   isDelayedPublicType,
   isDisclosed,
 } from './disclosure.mjs';
+import { PgDocument, migrate, recordImport, usingPostgres } from './db.mjs';
 
 function emptyChain(chainId) {
   return {
@@ -63,37 +65,88 @@ function sameNullifier(a, b) {
   return x === y || x.endsWith(y) || y.endsWith(x);
 }
 
+function normalizeChain(chain, chainId) {
+  chain.chainId = chain.chainId || chainId;
+  chain.blocks = chain.blocks || [];
+  chain.txs = chain.txs || {};
+  chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
+  chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
+  chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
+  return chain;
+}
+
+const PG_NAMESPACE = 'l2chain';
+
+async function readChainFile(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 export class Explorer {
   constructor(filePath, chain) {
     this.filePath = filePath;
     this.chain = chain;
     this._write = Promise.resolve();
+    this.backend = 'json';
+    this.pg = null;
   }
 
   static async open(config) {
     await fs.mkdir(config.dataDir, { recursive: true });
     const filePath = config.l2ChainFile || path.join(config.dataDir, 'l2-chain.json');
     let chain;
-    try {
-      chain = JSON.parse(await fs.readFile(filePath, 'utf8'));
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
-      chain = emptyChain(config.chainId);
+    let pgDoc = null;
+    let imported = false;
+    if (usingPostgres(config)) {
+      await migrate(config, { quiet: config.quiet });
+      // txs is keyed by hash: one row per tx instead of one huge value.
+      pgDoc = new PgDocument(config, PG_NAMESPACE, { mapKeys: ['txs'], coarseTimes: ['sealed'] });
+      chain = await pgDoc.load();
+      if (!chain) {
+        chain = await readChainFile(filePath);
+        imported = Boolean(chain);
+      }
+    } else {
+      chain = await readChainFile(filePath);
     }
-    chain.chainId = chain.chainId || config.chainId;
-    chain.blocks = chain.blocks || [];
-    chain.txs = chain.txs || {};
-    chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
-    chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
-    chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
+    chain = normalizeChain(chain || emptyChain(config.chainId), config.chainId);
     const explorer = new Explorer(filePath, chain);
+    if (pgDoc) {
+      explorer.backend = 'postgres';
+      explorer.pg = pgDoc;
+    }
     explorer.writerActive = config.writerActive !== false;
-    if (explorer.writerActive) await explorer.persist();
+    if (explorer.writerActive) {
+      if (explorer.pg) await explorer.pg.claimWriter();
+      await explorer.persist();
+      if (imported) {
+        await recordImport(config, filePath, { blocks: chain.blocks.length, txs: Object.keys(chain.txs).length });
+        if (!config.quiet) {
+          console.info(
+            `[zk-voting] imported ${filePath} into postgres (blocks=${chain.blocks.length} txs=${Object.keys(chain.txs).length})`,
+          );
+        }
+      }
+    }
     return explorer;
+  }
+
+  /** Take the Postgres writer fence (standby promotion). No-op on the JSON backend. */
+  async claimWriter(owner) {
+    if (this.pg) await this.pg.claimWriter(owner);
   }
 
   async persist() {
     if (this.writerActive === false) return this._write;
+    if (this.pg) {
+      const p = this.pg.save(this.chain);
+      this._write = p.catch(() => {});
+      return p;
+    }
     this._write = this._write.then(async () => {
       const tmp = `${this.filePath}.${process.pid}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(this.chain, null, 2));
@@ -103,19 +156,13 @@ export class Explorer {
   }
 
   async refresh() {
-    try {
-      const onDisk = JSON.parse(await fs.readFile(this.filePath, 'utf8'));
-      if (onDisk && Array.isArray(onDisk.blocks)) {
-        this.chain = onDisk;
-        this.chain.txs = this.chain.txs || {};
-        this.chain.sealed = Array.isArray(this.chain.sealed) ? this.chain.sealed : [];
-        this.chain.sealedPolls = Array.isArray(this.chain.sealedPolls) ? this.chain.sealedPolls : [];
-        this.chain.seenBlockHashes = Array.isArray(this.chain.seenBlockHashes)
-          ? this.chain.seenBlockHashes
-          : [];
-      }
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
+    // On Postgres, a writer holding the fence is the only one that can change
+    // the chain, so its in-memory copy is authoritative: skip the full reload
+    // the JSON backend does before each append. Standbys still reload.
+    if (this.pg && this.writerActive !== false && this.pg.epoch > 0) return this.chain;
+    const stored = this.pg ? await this.pg.load() : await readChainFile(this.filePath);
+    if (stored && Array.isArray(stored.blocks)) {
+      this.chain = normalizeChain(stored, this.chain.chainId);
     }
     return this.chain;
   }
@@ -195,7 +242,10 @@ export class Explorer {
     if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }
-    this.chain.sealed.push({ receivedAt: now, payload: body });
+    // Random position, so the sealed queue's order is not arrival order.
+    // Callers pass a bucket-coarsened receivedAt (relay.coarseAcceptedAt).
+    const at = randomInt(this.chain.sealed.length + 1);
+    this.chain.sealed.splice(at, 0, { receivedAt: now, payload: body });
     await this.persist();
     return { sealed: true, published: false };
   }
@@ -320,7 +370,7 @@ export class Explorer {
     }
 
     const rows = fromOutcomes.length ? fromOutcomes : fromBlock;
-    const l2Delayed = src.source === 'republic-l2';
+    const l2Delayed = src.source === 'zk-voting-l2';
     const blockTs = block?.timestamp != null ? Number(block.timestamp) : now;
 
     for (const row of rows) {
@@ -457,7 +507,7 @@ export class Explorer {
   }
 
   publicDisclosure(now, intervalSeconds) {
-    return disclosurePublicView(now, intervalSeconds, {
+    return publicDisclosureView(now, intervalSeconds, {
       acceptedBallotsDisclosed: this.countPublishedVoteTxs(),
     });
   }

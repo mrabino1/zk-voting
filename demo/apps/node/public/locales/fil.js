@@ -1,5 +1,5 @@
 /**
- * NOT FOR PROFIT — Republic website copy (Tagalog / Filipino).
+ * NOT FOR PROFIT — ZK-Voting website copy (Tagalog / Filipino).
  * Website UI only. Smart-contract identifiers and operator docs stay English.
  */
 
@@ -24,7 +24,7 @@ export default {
       "HINDI PARA SA TUBO — pampublikong kabutihang sibil. Hindi komersyal na produkto. Walang token. Walang bayad sa mga botante.",
     nfpBannerExplorer:
       "HINDI PARA SA TUBO — pampublikong kabutihang sibil. Hindi komersyal na produkto. Walang token. Walang ad.",
-    brandHome: "Home ng Republic",
+    brandHome: "Home ng {brand}",
     brandSub: "Tanggapan ng mga sibil na halalan",
     brandSubExplorer: "L2 block explorer",
     navVoter: "Botante",
@@ -51,27 +51,30 @@ export default {
     navPublic: "Publiko",
     session: "Sesyon",
     officeBadge: "Hindi para sa tubo",
-    loading: "Nilo-load ang Republic…",
-    footerNfp: "HINDI PARA SA TUBO — Ang Republic ay pampublikong kabutihang sibil. Hindi komersyal na produkto.",
+    loading: "Nilo-load ang {brand}…",
+    footerNfp: "HINDI PARA SA TUBO — Ang {brand} ay pampublikong kabutihang sibil. Hindi komersyal na produkto.",
     footerMeta:
-      "Pangalan ng produkto: Republic. Hindi nagbabayad ng gas ang mga botante. Hindi kailanman naka-print ang iyong pinili sa resibo. Gumagamit ng Poseidon ang mga identity commitment sa produksyon; maaaring magpakita lang ang demo ng Node na ito ng keccak256 commitment hex (hindi kailanman trapdoor o seed phrase).",
+      "Pangalan ng produkto: {brand}. Hindi nagbabayad ng gas ang mga botante. Hindi kailanman naka-print ang iyong pinili sa resibo. Gumagamit ng Poseidon ang mga identity commitment sa produksyon; maaaring magpakita lang ang demo ng Node na ito ng keccak256 commitment hex (hindi kailanman trapdoor o seed phrase).",
     footerOfficials: "Mga opisyal:",
     footerBackOffice: "panloob na tanggapan",
     footerExplorer: "block explorer",
     footerAdmin: "admin",
-    footerAdminMeta: "Pangalan ng produkto: Republic. Walang token. Walang ad.",
+    footerAdminMeta: "Pangalan ng produkto: {brand}. Walang token. Walang ad.",
     footerL2: "L2 explorer",
-    footerBackOfficeMeta: "Pangalan ng produkto: Republic. Hindi kailanman naka-print dito ang iyong pinili.",
-    footerExplorerMeta: "L2 explorer ng Republic. Hindi field sa chain na ito ang plaintext ng balota.",
+    footerBackOfficeMeta: "Pangalan ng produkto: {brand}. Hindi kailanman naka-print dito ang iyong pinili.",
+    footerExplorerMeta: "L2 explorer ng {brand}. Hindi field sa chain na ito ang plaintext ng balota.",
     footerResults: "Mga resulta ng halalan",
     noscript:
-      "Kailangan ng Republic ang JavaScript para kausapin ang passkey ng iyong device (WebAuthn). I-enable ang JavaScript at i-reload, o gumamit ng accessible na voting site na pinapatakbo ng inyong clerk.",
+      "Kailangan ng {brand} ang JavaScript para kausapin ang passkey ng iyong device (WebAuthn). I-enable ang JavaScript at i-reload, o gumamit ng accessible na voting site na pinapatakbo ng inyong clerk.",
     metaDescription:
-      "Ang Republic ay sistemang sibil ng pagboto na hindi para sa tubo. Kilalanin ang iyong sarili gamit ang passkey, Web3 wallet, o smart-card digital ID, pagkatapos ay magpasa ng pribado at pampublikong nabe-verify na balota.",
-    titleHome: "Republic — mga sibil na halalan",
-    titleAdmin: "Admin ng plataporma · Republic",
-    titleBackOffice: "Panloob na tanggapan · Republic",
-    titleExplorer: "L2 explorer ng Republic",
+      "Ang {brand} ay sistemang sibil ng pagboto na hindi para sa tubo. Kilalanin ang iyong sarili gamit ang passkey, Web3 wallet, o smart-card digital ID, pagkatapos ay magpasa ng pribado at pampublikong nabe-verify na balota.",
+    titleHome: "{brand} — mga sibil na halalan",
+    titleAdmin: "Admin ng plataporma · {brand}",
+    titleCeremony: "Seremonya ng trusted setup · {brand}",
+    titleCeremonyTranscript: "Transcript ng seremonya · {brand}",
+    titleCeremonyAdmin: "Tagapag-ugnay ng seremonya · {brand}",
+    titleBackOffice: "Panloob na tanggapan · {brand}",
+    titleExplorer: "L2 explorer ng {brand}",
     titleBallot: "Balota",
     titleRegister: "Rehistro",
     titleResults: "Mga resulta",
@@ -151,7 +154,7 @@ export default {
   home: {
     kicker: "Home ng botante",
     title: "Mga halalan sa Node na ito",
-    lede: "Ito ang desk ng botante para sa Republic: magparehistro gamit ang passkey ng device, tingnan kung nasa talaan ka, at markahan ang balota habang bukas ang botohan. Hindi komersyal na produkto ang Republic.",
+    lede: "Ito ang desk ng botante para sa {brand}: magparehistro gamit ang passkey ng device, tingnan kung nasa talaan ka, at markahan ang balota habang bukas ang botohan. Hindi komersyal na produkto ang {brand}.",
     openCount: "{count} halalan ang kasalukuyang tumatanggap ng mga balota.",
     openCount_one: "{count} halalan ang kasalukuyang tumatanggap ng mga balota.",
     walletPresent: "May passkey wallet sa device na ito. Commitment {commitment}…",
@@ -228,7 +231,7 @@ export default {
     stepCommitRest: " sa talaan ng halalan — hindi kailanman pangalan, hindi kailanman ang wallet bilang leaf.",
     web3Title: "Web3 wallet",
     web3Body:
-      "Pirmahan ang Republic binding message. Sa iyo lang ang address. Maaari itong i-verify sa loob kahit iba ang aktibong address.",
+      "Pirmahan ang {brand} binding message. Sa iyo lang ang address. Maaari itong i-verify sa loob kahit iba ang aktibong address.",
     bindWallet: "I-bind ang Web3 wallet",
     cardTitle: "Smart card digital ID",
     cardBody:
@@ -253,9 +256,9 @@ export default {
     identityCommitment: "Identity commitment",
     copyCommitment: "Kopyahin ang commitment",
     copiedCommitment: "Nakopya ang identity commitment.",
-    localAddress: "Local address ng Republic",
+    localAddress: "Local address ng {brand}",
     prfWrap:
-      "PRF wrap: gumagamit ang account material ng salt republic:account:v1; gumagamit ang ZK trapdoor ng salt republic:identity:v1. Hindi sila magkaparehong bytes.",
+      "PRF wrap: gumagamit ang account material ng salt zk-voting:account:v1; gumagamit ang ZK trapdoor ng salt zk-voting:identity:v1. Hindi sila magkaparehong bytes.",
     createFirst: "Gumawa ng passkey para mahango ang commitment. Hindi kailanman lumalabas ang trapdoor sa screen na ito.",
     activeEthTitle: "Aktibong Ethereum address",
     noActive:
@@ -354,7 +357,7 @@ export default {
     staleWrap:
       "May v1 passkey wrap ang device na ito na hinango ang vote identity mula sa account seed. I-reset ito sa pahina ng rehistro at gumawa ng bagong passkey bago bumoto.",
     noPasskey:
-      "Wala pang Republic passkey ang device na ito. Magparehistro muna, pagkatapos ay bumalik sa balota.",
+      "Wala pang {brand} passkey ang device na ito. Magparehistro muna, pagkatapos ay bumalik sa balota.",
     goRegister: "Pumunta sa pagpaparehistro",
     pollsClosed:
       "Sarado na ang botohan para sa halalang ito. Maaari mong suriin ang mga tanong; hindi tatanggap ang Node ng bagong balota.",
@@ -509,11 +512,11 @@ export default {
   },
   wallet: {
     webAuthnUnavailable:
-      "Kailangan ng Republic ng passkey ng device (WebAuthn) na may resident key at user verification. Gumamit ng kasalukuyang browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) sa device na may platform authenticator. Hindi kailanman ipinapakita ang seed phrase.",
+      "Kailangan ng {brand} ng passkey ng device (WebAuthn) na may resident key at user verification. Gumamit ng kasalukuyang browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) sa device na may platform authenticator. Hindi kailanman ipinapakita ang seed phrase.",
     productionNote:
-      "Gumagamit ang produksyon ng keccak256(uncompressed secp256k1 public key), pagkatapos ay kinukuha ang huling 20 bytes (Ethereum). Hindi makakapag-multiply ang demo na ito sa secp256k1 nang walang curve library, kaya nagbabalik ang getAddress() ng SHA-256(seed)[0:20] na may label na republic-local-address.",
+      "Gumagamit ang produksyon ng keccak256(uncompressed secp256k1 public key), pagkatapos ay kinukuha ang huling 20 bytes (Ethereum). Hindi makakapag-multiply ang demo na ito sa secp256k1 nang walang curve library, kaya nagbabalik ang getAddress() ng SHA-256(seed)[0:20] na may label na zk-voting-local-address.",
     staleWrap:
-      "May v1 passkey wrap ang browser na ito (IndexedDB republic-wallet). Hinango ng v1 ang ZK trapdoor mula sa parehong seed ng account key, na mas mahina kaysa docs/PASSKEYS.md. Hindi maaaring i-migrate ng demo ang wrap na iyon sa lugar: gumamit ang v1 ng random PRF salt at iisang HKDF domain, kaya hindi ito mabubuksan ng mga bagong account/identity salt. I-reset ang wallet ng device at gumawa ng bagong passkey. Magbabago ang local address at identity commitment; hindi tutugma ang anumang naunang demo roll entry.",
+      "May v1 passkey wrap ang browser na ito (IndexedDB zk-voting-wallet). Hinango ng v1 ang ZK trapdoor mula sa parehong seed ng account key, na mas mahina kaysa docs/PASSKEYS.md. Hindi maaaring i-migrate ng demo ang wrap na iyon sa lugar: gumamit ang v1 ng random PRF salt at iisang HKDF domain, kaya hindi ito mabubuksan ng mga bagong account/identity salt. I-reset ang wallet ng device at gumawa ng bagong passkey. Magbabago ang local address at identity commitment; hindi tutugma ang anumang naunang demo roll entry.",
     noEthWallet:
       "Walang Ethereum wallet sa browser na ito. Gumamit ng passkey, o mag-install ng wallet na sumusuporta sa personal_sign.",
     noWeb3Wallet: "Walang Web3 wallet sa browser na ito. Mag-install ng wallet o gumamit ng passkey / smart card.",
@@ -666,7 +669,7 @@ export default {
     clerkHint:
       "Gumawa ng halalan, pagkatapos ay i-freeze ang talaan bago magbukas ang botohan. Ang <code>maxParticipants = 0</code> ay walang limitasyon. Pumili ng plurality (default) o ranked choice (IRV).",
     chainNote:
-      "Kung naka-set ang <code>CHAIN_RPC</code> sa Node na ito, tumatawag din ang Create election sa <code>ElectionFactory.createElection</code> at iniimbak ang on-chain uint256 id sa tabi ng UUID. Ipinapakita rito ang mga pagkabigo ng factory at walang nase-save sa lokal. Kung walang <code>CHAIN_RPC</code>, nagsusulat lang ang form na ito sa <code>republic.json</code> (demo) at gumagawa pa rin ng demo <code>onChainElectionId</code> para sa circuit.",
+      "Kung naka-set ang <code>CHAIN_RPC</code> sa Node na ito, tumatawag din ang Create election sa <code>ElectionFactory.createElection</code> at iniimbak ang on-chain uint256 id sa tabi ng UUID. Ipinapakita rito ang mga pagkabigo ng factory at walang nase-save sa lokal. Kung walang <code>CHAIN_RPC</code>, nagsusulat lang ang form na ito sa <code>zk-voting.json</code> (demo) at gumagawa pa rin ng demo <code>onChainElectionId</code> para sa circuit.",
     jurisdiction: "Hurisdiksyon",
     titleField: "Pamagat",
     metadataUri: "Metadata URI",
@@ -864,7 +867,7 @@ export default {
     pluralityTag: "{type} · plurality",
   },
   explorer: {
-    kicker: "Republic L2 · chain 27427",
+    kicker: "{brand} L2 · chain 27427",
     title: "Block explorer",
     lede: "Pampublikong talaan ng bawat block: mga pagpaparehistro (commitments lang), tinanggap na mga balota (nullifier + ballot hash — hindi kailanman ang pinili), mga diskwalipikasyon, mga tally, at rollup batches. Lumalabas ang vote proofs pagkatapos lang magsara ng oras na naglalaman nito, kaya hindi maitutugma ang taong umalis sa voting office sa live na tick ng hurisdiksyon. Ang snapshot sa ibaba ang huling saradong UTC oras: nai-disclose na bilang ng balota, kung kailan nagtapos ang oras na iyon, at ang countdown sa susunod na update. Hindi kailanman ipinapakita rito ang pinili. Walang ad. Walang token.",
     searchLabel: "Hanapin ang ledger",
@@ -875,7 +878,7 @@ export default {
     breadcrumb: "Breadcrumb",
     privacyTitle: "Privacy ng balota",
     privacyBody:
-      "Pinatutunayan ng transaksyong ito ang kwalipikasyon at pagiging natatangi. Ipinapakita ng explorer ang nullifier at ballot hash. Hindi field sa Republic L2 ang plaintext ng pagpipilian at hindi kailanman ni-re-render dito. Lumalabas ang vote rows pagkatapos lang magsara ng oras na naglalaman nito, kaya hindi maitutugma ang paglabas sa voting office sa live na tick ng hurisdiksyon.",
+      "Pinatutunayan ng transaksyong ito ang kwalipikasyon at pagiging natatangi. Ipinapakita ng explorer ang nullifier at ballot hash. Hindi field sa {brand} L2 ang plaintext ng pagpipilian at hindi kailanman ni-re-render dito. Lumalabas ang vote rows pagkatapos lang magsara ng oras na naglalaman nito, kaya hindi maitutugma ang paglabas sa voting office sa live na tick ng hurisdiksyon.",
     noTx: "Walang transaksyon sa view na ito.",
     type: "Uri",
     txnHash: "Txn hash",
@@ -1038,7 +1041,7 @@ export default {
   feedback: {
     title: "Puna",
     kicker: "Makipag-ugnayan",
-    lede: "Sabihin sa operator ng site na ito ng Republic kung ano ang dapat baguhin. Hindi ito balota. Huwag maglagay ng boto, numero ng dokumento, o seed phrase.",
+    lede: "Sabihin sa operator ng site na ito ng {brand} kung ano ang dapat baguhin. Hindi ito balota. Huwag maglagay ng boto, numero ng dokumento, o seed phrase.",
     nameLabel: "Pangalan (opsyonal)",
     emailLabel: "Email para sa tugon (opsyonal)",
     emailHint: "Ginagamit lang bilang Reply-To address sa mensahe sa operator. Iwanang blangko kung ayaw magpadala ng address.",

@@ -11,6 +11,7 @@ import { after, before, describe, test } from 'node:test';
 
 import { DEMO_JURISDICTION_ID } from '../src/recordIds.mjs';
 import { createApp } from '../src/server.mjs';
+import { blindVotePass, unblindVotePass } from '../public/vote-pass.js';
 
 let tmp;
 let server;
@@ -88,13 +89,24 @@ async function createElection(title, jar = clerkJar) {
   return created.json.election;
 }
 
+// Real client flow: blind a vote pass on the eligibility request (which is
+// where external-party clearance is checked now), then cast the ballot with
+// the unblinded pass and NO identityCommitment on the ballot request.
 async function vote(electionId, { identityCommitment, nullifier }) {
+  const key = await api('GET', `/api/elections/${electionId}/vote-pass`);
+  assert.equal(key.status, 200, key.json?.error);
+  const pending = await blindVotePass(key.json, electionId);
+  const issued = await api('POST', `/api/elections/${electionId}/vote-pass`, {
+    body: { blinded: pending.blinded, identityCommitment },
+  });
+  if (issued.status !== 201) return issued;
+  const pass = await unblindVotePass(key.json, electionId, pending, issued.json.blindSignature);
   return api('POST', `/api/elections/${electionId}/vote`, {
     body: {
       proof: { accept: true },
       publicInputs: { nullifier, electionId },
       encryptedBallot: '0xc0ffee',
-      identityCommitment,
+      votePass: pass,
     },
   });
 }
@@ -126,7 +138,7 @@ describe('approval chain and external vote parties', () => {
     await new Promise((resolve) => oracle.listen(0, '127.0.0.1', resolve));
     oracleUrl = `http://127.0.0.1:${oracle.address().port}/check`;
 
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-parties-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-parties-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

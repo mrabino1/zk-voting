@@ -1,5 +1,5 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
-# Republic Node: JSON API + voter / admin / back-office / explorer SPA host.
+# ZK-Voting Node: JSON API + voter / admin / back-office / explorer SPA host.
 # Build from the repository root so the root .dockerignore applies.
 #
 # Install npm **workspaces** (`@zk-voting/chain-client` and its in-tree
@@ -38,6 +38,9 @@ COPY --chown=node:node apps/node/src ./apps/node/src
 COPY --chown=node:node apps/node/public ./apps/node/public
 COPY --chown=node:node apps/node/scripts ./apps/node/scripts
 COPY --chown=node:node apps/node/legal ./apps/node/legal
+COPY --chown=node:node apps/node/site ./apps/node/site
+# Repo-bundled plugins (disabled until a super admin enables them).
+COPY --chown=node:node plugins ./plugins
 # Self-hosting guides served at /docs (read-only Markdown).
 COPY --chown=node:node docs/self-hosting ./docs/self-hosting
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
@@ -48,6 +51,9 @@ COPY --chown=node:node l2/lease ./l2/lease
 COPY --chown=node:node l2/archive ./l2/archive
 COPY --chown=node:node l2/disclosure.mjs ./l2/disclosure.mjs
 COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
+# L2 identity, operator auth and L1 funding helpers (state.mjs imports adminAuth).
+COPY --chown=node:node l2/adminAuth.mjs l2/identity.mjs ./l2/
+COPY --chown=node:node l2/prover/funding.mjs ./l2/prover/funding.mjs
 
 USER node
 WORKDIR /src/apps/node

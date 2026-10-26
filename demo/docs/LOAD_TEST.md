@@ -1,8 +1,8 @@
-# Republic local load test
+# ZK-Voting local load test
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-This report lists figures produced by `tools/load/harness.mjs` against a Republic Node listening on `127.0.0.1`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
+This report lists figures produced by `tools/load/harness.mjs` against a ZK-Voting Node listening on `127.0.0.1`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
 
 ## What ran
 
@@ -243,14 +243,14 @@ _No phase reported an HTTP or client error._
 
 ### Store files
 
-- Population 100: `republic.json` 435352 bytes, `l2-chain.json` 155690 bytes.
-  One snapshot of that `republic.json`: pretty stringify 0.6 ms (435352 bytes), compact stringify 0.4 ms (359769 bytes), pretty write 0.3 ms.
-- Population 200: `republic.json` 841200 bytes, `l2-chain.json` 307990 bytes.
-  One snapshot of that `republic.json`: pretty stringify 1.1 ms (841200 bytes), compact stringify 0.8 ms (692117 bytes), pretty write 1.4 ms.
-- Population 400: `republic.json` 1653549 bytes, `l2-chain.json` 612590 bytes.
-  One snapshot of that `republic.json`: pretty stringify 2.2 ms (1653549 bytes), compact stringify 1.8 ms (1357466 bytes), pretty write 10.2 ms.
-- Population 800: `republic.json` 3276681 bytes, `l2-chain.json` 1221790 bytes.
-  One snapshot of that `republic.json`: pretty stringify 4.0 ms (3276681 bytes), compact stringify 3.0 ms (2686598 bytes), pretty write 1.7 ms.
+- Population 100: `zk-voting.json` 435352 bytes, `l2-chain.json` 155690 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 0.6 ms (435352 bytes), compact stringify 0.4 ms (359769 bytes), pretty write 0.3 ms.
+- Population 200: `zk-voting.json` 841200 bytes, `l2-chain.json` 307990 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 1.1 ms (841200 bytes), compact stringify 0.8 ms (692117 bytes), pretty write 1.4 ms.
+- Population 400: `zk-voting.json` 1653549 bytes, `l2-chain.json` 612590 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 2.2 ms (1653549 bytes), compact stringify 1.8 ms (1357466 bytes), pretty write 10.2 ms.
+- Population 800: `zk-voting.json` 3276681 bytes, `l2-chain.json` 1221790 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 4.0 ms (3276681 bytes), compact stringify 3.0 ms (2686598 bytes), pretty write 1.7 ms.
 
 ### CPU profile
 
@@ -506,14 +506,14 @@ _No phase reported an HTTP or client error._
 
 ### Store files
 
-- Population 100: `republic.json` 435152 bytes, `l2-chain.json` 155690 bytes.
-  One snapshot of that `republic.json`: pretty stringify 0.7 ms (435152 bytes), compact stringify 0.5 ms (359569 bytes), pretty write 0.7 ms.
-- Population 200: `republic.json` 841936 bytes, `l2-chain.json` 307990 bytes.
-  One snapshot of that `republic.json`: pretty stringify 1.1 ms (841936 bytes), compact stringify 0.9 ms (692853 bytes), pretty write 0.6 ms.
-- Population 400: `republic.json` 1653469 bytes, `l2-chain.json` 612590 bytes.
-  One snapshot of that `republic.json`: pretty stringify 3.2 ms (1653469 bytes), compact stringify 3.0 ms (1357386 bytes), pretty write 1.6 ms.
-- Population 800: `republic.json` 3276481 bytes, `l2-chain.json` 1221790 bytes.
-  One snapshot of that `republic.json`: pretty stringify 4.7 ms (3276481 bytes), compact stringify 3.1 ms (2686398 bytes), pretty write 2.9 ms.
+- Population 100: `zk-voting.json` 435152 bytes, `l2-chain.json` 155690 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 0.7 ms (435152 bytes), compact stringify 0.5 ms (359569 bytes), pretty write 0.7 ms.
+- Population 200: `zk-voting.json` 841936 bytes, `l2-chain.json` 307990 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 1.1 ms (841936 bytes), compact stringify 0.9 ms (692853 bytes), pretty write 0.6 ms.
+- Population 400: `zk-voting.json` 1653469 bytes, `l2-chain.json` 612590 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 3.2 ms (1653469 bytes), compact stringify 3.0 ms (1357386 bytes), pretty write 1.6 ms.
+- Population 800: `zk-voting.json` 3276481 bytes, `l2-chain.json` 1221790 bytes.
+  One snapshot of that `zk-voting.json`: pretty stringify 4.7 ms (3276481 bytes), compact stringify 3.1 ms (2686398 bytes), pretty write 2.9 ms.
 
 ### CPU profile
 

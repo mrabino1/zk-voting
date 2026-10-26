@@ -4,7 +4,7 @@
  */
 (function () {
   try {
-    var stored = window.localStorage.getItem("republic_lang");
+    var stored = window.localStorage.getItem("zk_voting_lang");
     var tags = {
       en: "en",
       es: "es",

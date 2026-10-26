@@ -158,6 +158,7 @@ describe('vote public inputs (5-signal)', () => {
       encryptedBallot: ENCRYPTED,
       pinToken: 'pin-1',
       userOpHash: '0x' + 'ab'.repeat(32),
+      votePass: { token: 'aa'.repeat(32), signature: '0x01', electionId: '7' },
       proof: { mock: true, publicInputs: [ROOT, DISQ, NULLIFIER, BALLOT, String(ELECTION_ID)] },
       answers: [{ optionIds: ['yes'] }],
       identityCommitment: '0xabc',
@@ -169,10 +170,13 @@ describe('vote public inputs (5-signal)', () => {
       'electionId',
       'encryptedBallot',
       'nullifier',
-      'pinToken',
       'proof',
-      'userOpHash',
+      'votePass',
     ]);
+    // The PIN token and userOp hash never ride on the ballot request.
+    assert.equal(body.pinToken, undefined);
+    assert.equal(body.userOpHash, undefined);
+    assert.deepEqual(Object.keys(body.votePass).sort(), ['signature', 'token']);
     assert.equal(body.answers, undefined);
     assert.equal(body.identityCommitment, undefined);
     assert.equal(body.address, undefined);
@@ -199,7 +203,6 @@ describe('vote public inputs (5-signal)', () => {
     assert.equal(stripped.userOp.hash, '0x' + 'cd'.repeat(32));
     assert.equal(stripped.proof.answers, undefined);
     assert.equal(stripped.proof.userId, undefined);
-    assert.equal(stripped.pinToken, 'pin-1');
     assert.equal(stripped.encryptedBallot, ENCRYPTED);
     assert.deepEqual(stripped.proof.publicInputs, body.proof.publicInputs);
   });
@@ -215,5 +218,19 @@ describe('vote public inputs (5-signal)', () => {
     );
     assert.equal(parsed.disqRoot, undefined);
     assert.equal(parsed.root, undefined);
+  });
+});
+
+describe('hashBallot field reduction (audit H-05)', () => {
+  test('ballot hash is keccak(ciphertext) mod r, always < r', async () => {
+    const { keccak256 } = await import('viem');
+    const { SNARK_SCALAR_FIELD } = await import('../src/relay.mjs');
+    for (let i = 0; i < 64; i++) {
+      const ct = `0x${i.toString(16).padStart(2, '0').repeat(48)}`;
+      const h = BigInt(hashBallot(ct));
+      assert.ok(h < SNARK_SCALAR_FIELD);
+      assert.equal(h, BigInt(keccak256(ct)) % SNARK_SCALAR_FIELD);
+      assert.equal(hashBallot(ct).length, 66);
+    }
   });
 });

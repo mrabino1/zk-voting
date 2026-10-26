@@ -10,6 +10,7 @@
 # Usage
 #   ./system_actions.sh              interactive menu
 #   ./system_actions.sh help
+#   ./system_actions.sh setup        guided first-run setup (writes .env)
 #   ./system_actions.sh 1            launch test system (pull + npm run dev)
 #   ./system_actions.sh 2 my-feature create feature/* from test/unstable
 #   ./system_actions.sh 3            merge feature/* into test/unstable
@@ -279,6 +280,10 @@ ${BLD}zk-voting system_actions.sh${RST}
 Development happens on ${CYN}${DEV_BRANCH}${RST} (feature/* merges here).
 Production is ${CYN}${PROD_BRANCH}${RST} only.
 
+First run
+  setup, --setup  guided setup: writes .env, prints the launch command
+                  (same as ./setup.sh; secrets are never printed)
+
 Git workflow
   1, launch, --launch-test-system
                   fetch + pull, npm install, npm run dev
@@ -291,7 +296,7 @@ Git workflow
 
 Data / chain (JSON store, no SQL database)
   5, data, --data-status
-                  republic.json counts
+                  zk-voting.json counts
   6, connectivity
                   Node / L2 / CHAIN_RPC / L1_RPC reachability
   7, users, --list-users
@@ -384,6 +389,7 @@ main() {
   case "$cmd" in
     "" ) menu ;;
     help|-h|--help) cmd_help ;;
+    setup|--setup) exec "$ROOT/setup.sh" "$@" ;;
     1|--launch-test-system|launch|launch-test) launch_test_system ;;
     2|--create-feature|create-feature) create_feature_branch "${1:-}" ;;
     3|--merge-feature|merge-feature) merge_feature_to_main ;;

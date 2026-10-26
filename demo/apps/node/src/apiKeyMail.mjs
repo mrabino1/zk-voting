@@ -2,6 +2,7 @@
 // Transactional notice when a person mints an API key. The secret is never
 // included. If the person did not create the key, they contact support.
 
+import { brandName } from './branding.mjs';
 import { randomUUID } from 'node:crypto';
 
 import { apiKeyLevelLabel, formatApiKeyExpiry } from './apiKeys.mjs';
@@ -37,8 +38,8 @@ export function describeApiKeyTemplate() {
   return {
     id: API_KEY_CREATED_TEMPLATE_ID,
     label: 'API key created',
-    headline: 'An API key was created on your Republic account',
-    subject: 'An API key was created on your Republic account',
+    headline: `An API key was created on your ${brandName()} account`,
+    subject: `An API key was created on your ${brandName()} account`,
   };
 }
 
@@ -65,7 +66,7 @@ export function renderApiKeyCreatedEmail(input) {
   const createdAt = singleLine(input.createdAt);
   const profileUrl = singleLine(input.profileUrl) || '/me';
   const supportUrl = singleLine(input.supportUrl) || '/feedback';
-  const subject = 'An API key was created on your Republic account';
+  const subject = `An API key was created on your ${brandName()} account`;
   const headline = subject;
 
   const text = [
@@ -73,7 +74,7 @@ export function renderApiKeyCreatedEmail(input) {
     '',
     `Hello ${handle},`,
     '',
-    'An API key was created on your Republic account.',
+    `An API key was created on your ${brandName()} account.`,
     `Name: ${keyName}`,
     `Authorization: ${levelLabel}`,
     `Expiration: ${expiryLabel}`,
@@ -89,7 +90,7 @@ export function renderApiKeyCreatedEmail(input) {
     'This message is not a vote receipt. Ballot choice is never included.',
     'API-key mail is stored on the Node. It is never written to civic L2 transactions.',
     '',
-    '— Republic',
+    `— ${brandName()}`,
   ].join('\n');
 
   const row = (label, value) =>
@@ -108,14 +109,14 @@ export function renderApiKeyCreatedEmail(input) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #c9c3b2;border-radius:4px;">
       <tr>
         <td style="background:#13294b;color:#f4f1ea;padding:20px 24px;">
-          <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;">Republic</p>
+          <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;">${escapeHtml(brandName())}</p>
           <h1 style="margin:0;font-size:22px;line-height:1.3;">${escapeHtml(headline)}</h1>
         </td>
       </tr>
       <tr>
         <td style="padding:24px;">
           <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">Hello ${escapeHtml(handle)},</p>
-          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">An API key was created on your Republic account.</p>
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">An API key was created on your ${escapeHtml(brandName())} account.</p>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
             ${row('Name', keyName)}
             ${row('Authorization', levelLabel)}

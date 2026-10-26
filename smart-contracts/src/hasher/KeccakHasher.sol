@@ -8,7 +8,7 @@ import {IHashScheme} from "../interfaces/IHashScheme.sol";
 import {HashScheme} from "./HashScheme.sol";
 
 /// @title KeccakHasher
-/// @notice `republic.hash.keccak-dev-v1`. Default hasher for Foundry unit tests
+/// @notice `zk-voting.hash.keccak-dev-v1`. Default hasher for Foundry unit tests
 ///         and the Node Merkle tree so tests do not need a trusted setup.
 /// @dev The vote circuit uses Poseidon (`PoseidonHasher`). This keccak tree is the
 ///      unit-test / demo default. Do not mix keccak leaves with Poseidon proofs.

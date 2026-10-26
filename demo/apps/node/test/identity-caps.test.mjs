@@ -178,7 +178,7 @@ describe('mfa destination prefers primary except email-first and bind', () => {
 
 describe('passkey and email caps (primary email)', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-caps-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-caps-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -190,7 +190,7 @@ describe('passkey and email caps (primary email)', () => {
       passkeyHooks: {
         generateRegistrationOptions: async (opts) => ({
           challenge: `chal-${opts.userName}-${Date.now()}`,
-          rp: { name: 'Republic', id: 'localhost' },
+          rp: { name: 'ZK-Voting', id: 'localhost' },
           user: { name: opts.userName },
           authenticatorSelection: { residentKey: 'required' },
           excludeCredentials: opts.excludeCredentials || [],
@@ -291,7 +291,7 @@ describe('passkey and email caps (primary email)', () => {
     assert.equal(finish.status, 200, finish.json?.error);
     assert.equal(finish.json.mfaRequired, true);
     assert.equal(finish.json.verified, false);
-    assert.ok(loginJar['republic.mfa']);
+    assert.ok(loginJar['zk-voting.mfa']);
   });
 
   test('first email is primary; list APIs return all emails and which is primary', async () => {

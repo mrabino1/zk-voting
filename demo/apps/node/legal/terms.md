@@ -1,23 +1,23 @@
 ---
 version: 2
 lastUpdated: 2026-09-29
-title: Republic Terms of Use
-filename: republic-terms.pdf
+title: ZK-Voting Terms of Use
+filename: zk-voting-terms.pdf
 ---
 
-# Republic Terms of Use
+# ZK-Voting Terms of Use
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. No token. No fees to voters.
 
 Last updated: 29 September 2026. Version 2.
 
-These Terms of Use (“Terms”) govern access to and use of Republic (repository name zk-voting), including this Node, its public pages, registration, voting, officer desks, and related APIs (the “Service”). The English text controls.
+These Terms of Use (“Terms”) govern access to and use of ZK-Voting (repository name zk-voting), including this Node, its public pages, registration, voting, officer desks, and related APIs (the “Service”). The English text controls.
 
 The SHA-256 fingerprint the Node records is of the **exact PDF bytes** generated from this markdown source (UTF-8). The Node also publishes a SHA-256 of this markdown file so an operator can see both fingerprints. Changing this source changes both hashes.
 
 ## 1. Acceptance of Terms
 
-By accessing the Service, creating an account, checking “I agree,” or otherwise using Republic, you acknowledge that you have read these Terms and agree to be bound by them.
+By accessing the Service, creating an account, checking “I agree,” or otherwise using ZK-Voting, you acknowledge that you have read these Terms and agree to be bound by them.
 
 If you act for a jurisdiction, union, cooperative, or other body, you represent that you have authority to bind that body to the operational rules of the Node it hosts.
 
@@ -25,11 +25,11 @@ Registration on this Node requires an affirmative acceptance. The Node stores wh
 
 ## 2. Nature and purpose — civic public good
 
-Republic exists so a city, county, state, nation, union, cooperative, professional college, or (if a jurisdiction demanded it) a shareholder meeting can run a roll, a ballot, and a publicly checkable result with private choices.
+ZK-Voting exists so a city, county, state, nation, union, cooperative, professional college, or (if a jurisdiction demanded it) a shareholder meeting can run a roll, a ballot, and a publicly checkable result with private choices.
 
 The Service is **not for profit**. There is no paid SaaS tier in this software, no token, and no vendor lock-in. Hosting may be run **at cost** by a government or volunteer. Nobody is to make money off this repository. See `/NOT_FOR_PROFIT.md`.
 
-Republic is software. Running it does not, by itself, satisfy a given elections statute or guarantee that a court must accept a particular deploy.
+ZK-Voting is software. Running it does not, by itself, satisfy a given elections statute or guarantee that a court must accept a particular deploy.
 
 ## 3. Who provides the Service
 
@@ -37,7 +37,7 @@ The Service on a given host is provided by the operator of that Node (a clerk, I
 
 ## 4. Not legal advice, not a certification, not a broker
 
-Republic is not a law firm, not your agent, not a broker, not an escrow of funds, and not a substitute for professional legal, tax, or election-administration advice. Documents, rolls, and tallies in the Service are produced by users and officers of the hosting jurisdiction.
+ZK-Voting is not a law firm, not your agent, not a broker, not an escrow of funds, and not a substitute for professional legal, tax, or election-administration advice. Documents, rolls, and tallies in the Service are produced by users and officers of the hosting jurisdiction.
 
 This development line (`test/unstable`) is a working demo. Local tests still use a MockVerifier. Poseidon(2) is the vote-circuit hasher. There is no production Groth16 ceremony. Do not treat a local demo accept as court-ready.
 
@@ -49,7 +49,7 @@ Voters do not pay gas. The paymaster / relayer, when configured, sponsors L2 fee
 
 A person is unique. You may verify email, a Web3 wallet, a smart-card reader, a driver’s license or passport, and a passkey. Several Ethereum addresses may be verified internally; only one is active. The public roll stores an identity commitment, never your name, never a document number, and never the active address as the Merkle leaf.
 
-Email is the username and the second factor. After another first factor, Republic sends a 6-digit code through AWS SES when configured.
+Email is the username and the second factor. After another first factor, ZK-Voting sends a 6-digit code through AWS SES when configured.
 
 Registered is not the same as eligible. A clerk or disqualification officer may bar a registered person for a public reason code. Personal evidence stays off-chain; only a hash of evidence is posted.
 
@@ -67,9 +67,9 @@ A separate public monitor at `/outcomes` lists every election before, during, an
 
 ## 8. Privacy, cookies, and data the Node stores
 
-The Node JSON store (`republic.json`) may hold handles, hashed authenticators, session ids, election records, and terms-acceptance fingerprints. It must not hold legal names, dates of birth, or street addresses on chain. License and passport numbers are hashed, not stored.
+The Node JSON store (`zk-voting.json`) may hold handles, hashed authenticators, session ids, election records, and terms-acceptance fingerprints. It must not hold legal names, dates of birth, or street addresses on chain. License and passport numbers are hashed, not stored.
 
-Session cookies (`republic.sid`, `republic.mfa`) are first-party, HttpOnly, and needed to keep you signed in and to complete email MFA. Blocking them prevents sign-in.
+Session cookies (`zk-voting.sid`, `zk-voting.mfa`) are first-party, HttpOnly, and needed to keep you signed in and to complete email MFA. Blocking them prevents sign-in.
 
 Transactional email (MFA codes, a PDF of these Terms on acceptance, optional hash-only vote receipts, and feedback sent to the site operator from `/feedback`) is sent with AWS SES when `SES_FROM_ADDRESS` and `AWS_REGION` are set. Do not reply to those messages; the From address may be unmonitored. Feedback mail goes to the platform super admin, not onto the roll and not onto civic L2.
 
@@ -85,7 +85,7 @@ Viewing `/terms` shows the current fingerprints. Acceptance (checkbox at registe
 
 Source code is licensed AGPL-3.0-or-later unless a file says otherwise. These Terms are part of the civic public-good documentation. You may run, study, and share the software under that license. You may not wrap it in a token, sell it as SaaS, or skim voter or jurisdiction funds.
 
-Marks such as “Republic” as used here name this civic project. They are not a claim of government endorsement.
+Marks such as “ZK-Voting” as used here name this civic project. They are not a claim of government endorsement.
 
 **Feedback.** Any and all feedback you submit through the Service, including at /feedback, becomes the property of the legal owner of this project. Any intellectual property given via feedback becomes the ownership of the website's legal owner. Where an assignment of that intellectual property is not possible under applicable law, you grant the website's legal owner a perpetual, irrevocable, worldwide, royalty-free (zero cost) license to that intellectual property. The website's legal owner has no obligation to use, credit, or compensate you for feedback or for that intellectual property. This assignment and license do not create a fee, a royalty, a token, or any duty to pay. The Service remains NOT FOR PROFIT — a civic public good, not a commercial product. No token. No fees to voters.
 

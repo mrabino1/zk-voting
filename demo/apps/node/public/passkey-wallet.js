@@ -1,42 +1,43 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  *
- * Passkey-held wallet for Republic.
+ * Passkey-held wallet for ZK-Voting.
  *
  * - WebAuthn resident key + userVerification required.
  * - Two PRF / HKDF domains (docs/PASSKEYS.md): account key ≠ trapdoor/nullifierSecret.
- *   prf.eval(saltAccount)  → HKDF("republic:account:v1")  → AES-GCM wrap of secp256k1 seed
- *   prf.eval(saltIdentity) → HKDF("republic:identity:v1") → (identityTrapdoor, nullifierSecret)
- * - saltAccount  = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:account:v1", binding=chain id)
- * - saltIdentity = HKDF-SHA-256(ikm=credentialId, salt/info domain "republic:identity:v1", binding=jurisdictionId)
+ *   prf.eval(saltAccount)  → HKDF("zk-voting:account:v1")  → AES-GCM wrap of secp256k1 seed
+ *   prf.eval(saltIdentity) → HKDF("zk-voting:identity:v1") → (identityTrapdoor, nullifierSecret)
+ * - saltAccount  = HKDF-SHA-256(ikm=credentialId, salt/info domain "zk-voting:account:v1", binding=chain id)
+ * - saltIdentity = HKDF-SHA-256(ikm=credentialId, salt/info domain "zk-voting:identity:v1", binding=jurisdictionId)
  * - Authenticators that return only one PRF eval are prompted a second time with saltIdentity.
- *   Republic will not derive the trapdoor from the account seed or account PRF output.
+ *   ZK-Voting will not derive the trapdoor from the account seed or account PRF output.
  * - The seed stands in for a secp256k1 private key. This file does not ship a
  *   curve implementation, so it cannot emit an uncompressed public key.
  * - getAddress() therefore returns `0x` + first 20 bytes of SHA-256(seed) and
- *   labels the scheme `republic-local-address`.
+ *   labels the scheme `zk-voting-local-address`.
  * - Production (Ethereum) addresses are keccak256(uncompressed secp256k1 pubkey)[12:32].
  *   A compact keccak256 remains for ballot hashes. The identity commitment is Poseidon.
  * - NEVER render a seed phrase. The seed never leaves RAM except as AES-GCM ciphertext
  *   in IndexedDB. signUserOp() unwraps, HMAC-signs, then zeroes the seed.
  *
- * IndexedDB `republic-wallet` schema version 2. Record `version` 3 stores a Poseidon
+ * IndexedDB `zk-voting-wallet` schema version 2. Record `version` 3 stores a Poseidon
  * identity commitment (`prf-hkdf-poseidon-v3`). v1 wraps derived the ZK identity from
  * the account seed. v2 stored keccak256(trapdoor || nullifierSecret). Neither matches
  * the vote circuit. Reset the demo wallet and create a new passkey.
  */
 
+import { brandName } from "./brand.js";
 import { POSEIDON_HASH_SCHEME, poseidonCommitmentHex } from "./poseidon.js";
 import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
-const DB_NAME = "republic-wallet";
+const DB_NAME = "zk-voting-wallet";
 const DB_VERSION = 2;
 const STORE = "wallet";
 const RECORD_KEY = "primary";
 
 /** @see docs/PASSKEYS.md domain-separated salts */
-export const ACCOUNT_PRF_DOMAIN = "republic:account:v1";
-export const IDENTITY_PRF_DOMAIN = "republic:identity:v1";
-export const ACCOUNT_HKDF_INFO = "republic-secp256k1-wrap";
+export const ACCOUNT_PRF_DOMAIN = "zk-voting:account:v1";
+export const IDENTITY_PRF_DOMAIN = "zk-voting:identity:v1";
+export const ACCOUNT_HKDF_INFO = "zk-voting-secp256k1-wrap";
 export const IDENTITY_HKDF_INFO = "trapdoor+nullifier";
 export const WALLET_RECORD_VERSION = 3;
 export const IDENTITY_SCHEME = "prf-hkdf-poseidon-v3";
@@ -44,16 +45,16 @@ export const DEFAULT_CHAIN_ID = 27427;
 export const DEFAULT_JURISDICTION_ID = "demo";
 
 const WRAP_INFO = ACCOUNT_HKDF_INFO;
-const FALLBACK_INFO = "republic-prf-fallback-v1";
-const FALLBACK_IDENTITY_INFO = "republic-prf-fallback-identity-v1";
-const PRF_ENABLE_INFO = "republic:prf-enable:v1";
+const FALLBACK_INFO = "zk-voting-prf-fallback-v1";
+const FALLBACK_IDENTITY_INFO = "zk-voting-prf-fallback-identity-v1";
+const PRF_ENABLE_INFO = "zk-voting:prf-enable:v1";
 
 export const STALE_WALLET_MESSAGE =
-  "This browser has a v1 passkey wrap or a pre-Poseidon identity commitment (IndexedDB republic-wallet). v1 derived the ZK trapdoor from the same seed as the account key. v2 hashed the leaf with keccak256. The demo leaf is now Poseidon(trapdoor, nullifierSecret), the same hash as the vote circuit. Reset the device wallet and create a new passkey. The identity commitment will change; any prior demo roll entry will not match.";
+  "This browser has a v1 passkey wrap or a pre-Poseidon identity commitment (IndexedDB zk-voting-wallet). v1 derived the ZK trapdoor from the same seed as the account key. v2 hashed the leaf with keccak256. The demo leaf is now Poseidon(trapdoor, nullifierSecret), the same hash as the vote circuit. Reset the device wallet and create a new passkey. The identity commitment will change; any prior demo roll entry will not match.";
 
-export const ADDRESS_SCHEME = "republic-local-address";
+export const ADDRESS_SCHEME = "zk-voting-local-address";
 export const PRODUCTION_ADDRESS_NOTE =
-  "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled republic-local-address.";
+  "Production uses keccak256(uncompressed secp256k1 public key), then takes the last 20 bytes (Ethereum). This demo cannot multiply on secp256k1 without a curve library, so getAddress() returns SHA-256(seed)[0:20] labeled zk-voting-local-address.";
 
 const textEncoder = new TextEncoder();
 
@@ -276,6 +277,19 @@ export function keccak256Hex(input) {
   return "0x" + bytesToHex(keccak256(input));
 }
 
+/** BN254 scalar field modulus r. */
+export const SNARK_SCALAR_FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Vote public input 3: `uint256(keccak256(ciphertext)) % r`, as 0x-bytes32.
+ * Matches `BallotInbox.ballotHashOfCiphertext` (audit H-05).
+ */
+export function ballotHashHex(ciphertextBytes) {
+  const h = BigInt(keccak256Hex(ciphertextBytes)) % SNARK_SCALAR_FIELD;
+  return "0x" + h.toString(16).padStart(64, "0");
+}
+
 /* -------------------------------------------------------------------------- */
 /* IndexedDB                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -392,8 +406,8 @@ export async function hkdfSha256Bits(ikm, { salt = new Uint8Array(), info = new 
 /**
  * 32-byte WebAuthn PRF eval salt (docs/PASSKEYS.md).
  *
- *   saltAccount  = HKDF-SHA-256(ikm=credentialId, salt="republic:account:v1",  info=chainId)
- *   saltIdentity = HKDF-SHA-256(ikm=credentialId, salt="republic:identity:v1", info=jurisdictionId)
+ *   saltAccount  = HKDF-SHA-256(ikm=credentialId, salt="zk-voting:account:v1",  info=chainId)
+ *   saltIdentity = HKDF-SHA-256(ikm=credentialId, salt="zk-voting:identity:v1", info=jurisdictionId)
  *
  * HKDF-Extract uses the domain string as salt; HKDF-Expand uses the binding as info
  * so the two domains cannot be swapped and chain id cannot be confused with jurisdiction id.
@@ -677,7 +691,7 @@ export async function createCredential(serverOptions = {}) {
   const challenge = pk.challenge ? coerceBytes(pk.challenge) : randomChallenge();
   const userId = pk.user?.id ? coerceBytes(pk.user.id) : random32();
   const rpId = pk.rp?.id || (typeof location !== "undefined" ? location.hostname : undefined);
-  const rpName = pk.rp?.name || "Republic";
+  const rpName = pk.rp?.name || brandName();
   const userName = pk.user?.name || serverOptions.displayName || "voter";
   const displayName = pk.user?.displayName || userName;
 
@@ -720,8 +734,8 @@ export async function createCredential(serverOptions = {}) {
 
   const credential = await enqueueWebAuthn(() => navigator.credentials.create({ publicKey }));
   if (!credential) throw new Error("Passkey creation was cancelled.");
-  credential._republicPrfEvalFirst = evalFirst;
-  if (evalSecond) credential._republicPrfEvalSecond = evalSecond;
+  credential._zkVotingPrfEvalFirst = evalFirst;
+  if (evalSecond) credential._zkVotingPrfEvalSecond = evalSecond;
   return credential;
 }
 
@@ -846,7 +860,7 @@ async function provisionFromCredential(credential, { displayName, chainId, juris
 
     if (prfAccount && !prfIdentity) {
       throw new Error(
-        "This authenticator returned an account PRF output but not an identity-domain PRF output. Republic will not derive the trapdoor from the account key."
+        `This authenticator returned an account PRF output but not an identity-domain PRF output. ${brandName()} will not derive the trapdoor from the account key.`
       );
     }
 
@@ -941,7 +955,7 @@ async function unwrapWalletMaterial({ needIdentity = false } = {}) {
       if (needIdentity) {
         if (!prfIdentity) {
           throw new Error(
-            "This authenticator did not return a PRF output for the identity domain. Republic will not derive the trapdoor from the account key."
+            `This authenticator did not return a PRF output for the identity domain. ${brandName()} will not derive the trapdoor from the account key.`
           );
         }
         identity = await deriveIdentitySecrets(prfIdentity);
@@ -1022,7 +1036,7 @@ export async function hasWallet() {
 
 /**
  * Address of the passkey-held account.
- * Demo: 0x + SHA-256(seed)[0:20], scheme republic-local-address.
+ * Demo: 0x + SHA-256(seed)[0:20], scheme zk-voting-local-address.
  * Production: keccak256(uncompressed secp256k1 pubkey)[12:32].
  */
 export async function getAddress() {
@@ -1065,16 +1079,35 @@ async function resolveDerivationContext({ api, chainId, jurisdictionId } = {}) {
  * PRF domain, derive (trapdoor, nullifierSecret) under the identity PRF domain,
  * and optionally finish with the Node (`POST /api/auth/passkey/register/{begin,finish}`).
  */
-export async function registerPasskey({ api, displayName, chainId, jurisdictionId, acceptedTerms } = {}) {
+export async function registerPasskey({
+  api,
+  displayName,
+  chainId,
+  jurisdictionId,
+  acceptedTerms,
+  beginPath = "/api/auth/passkey/register/begin",
+  finishPath = "/api/auth/passkey/register/finish",
+  extraBody = null,
+  strict = false,
+} = {}) {
   let server = null;
   let finishError = null;
+  let finishResult = null;
   if (typeof api === "function") {
     try {
-      server = await api("/api/auth/passkey/register/begin", {
+      server = await api(beginPath, {
         method: "POST",
-        body: { displayName: displayName || "voter", handle: displayName || "voter", acceptedTerms },
+        body: {
+          displayName: displayName || "voter",
+          handle: displayName || "voter",
+          acceptedTerms,
+          ...(extraBody || {}),
+        },
       });
-    } catch {
+    } catch (err) {
+      // strict (first-run setup): a refused begin must not fall back to a
+      // local-only passkey.
+      if (strict) throw err;
       server = null;
     }
   }
@@ -1094,19 +1127,21 @@ export async function registerPasskey({ api, displayName, chainId, jurisdictionI
 
   if (typeof api === "function") {
     try {
-      await api("/api/auth/passkey/register/finish", {
+      finishResult = await api(finishPath, {
         method: "POST",
         body: {
           ...serializeAttestation(credential, publicRecord),
           handle: displayName || "voter",
           acceptedTerms,
+          ...(extraBody || {}),
         },
       });
     } catch (err) {
+      if (strict) throw err;
       finishError = err.message || "Passkey finish did not complete on the Node.";
     }
   }
-  return { ...publicRecord, finishError };
+  return { ...publicRecord, finishError, finishResult };
 }
 
 function serializeAttestation(credential, publicRecord) {
@@ -1241,7 +1276,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
         if (choiceIndex != null) packed = packChoices([Number(choiceIndex)]);
         else packed = coerceBytes(ballotBytes);
         encryptedBallot = await encryptToTallyPub(tallyPubKey, packed);
-        ballotHash = keccak256Hex(hexToBytes(encryptedBallot));
+        ballotHash = ballotHashHex(hexToBytes(encryptedBallot));
       } else {
         const packed = coerceBytes(ballotBytes);
         const ikm = await importHkdfIkm(seed);
@@ -1250,7 +1285,7 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
             name: "HKDF",
             hash: "SHA-256",
             salt: electionKey,
-            info: textEncoder.encode("republic-ballot-elgamal-standin"),
+            info: textEncoder.encode("zk-voting-ballot-elgamal-standin"),
           },
           ikm,
           { name: "AES-GCM", length: 256 },
@@ -1263,12 +1298,17 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
         );
         const blob = concatBytes(iv, ciphertext);
         encryptedBallot = "0x" + bytesToHex(blob);
-        ballotHash = keccak256Hex(blob);
+        ballotHash = ballotHashHex(blob);
       }
     }
+    // v2: a fresh random salt per authorization, so the hash cannot be
+    // recomputed from the (registration-time) address and the public ballot
+    // hash. The hash and signature are local-only; the vote POST omits them.
+    const userOpSalt = crypto.getRandomValues(new Uint8Array(32));
     const userOpMaterial = keccak256(
       concatBytes(
-        textEncoder.encode("republic.userop.v1"),
+        textEncoder.encode("zk-voting.userop.v2"),
+        userOpSalt,
         coerceBytes(rec.address),
         electionKey,
         ballotHash ? hexToBytes(ballotHash) : new Uint8Array(32)
@@ -1305,5 +1345,5 @@ export async function resetWallet() {
 }
 
 export function webAuthnUnavailableMessage() {
-  return "Republic requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.";
+  return `${brandName()} requires a device passkey (WebAuthn) with a resident key and user verification. Use a current browser (Safari 16+, Chrome 108+, Firefox 122+, Edge) on a device with a platform authenticator. No seed phrase is ever shown.`;
 }

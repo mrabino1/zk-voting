@@ -117,7 +117,7 @@ cmd_list_users() {
   echo "  store  $STORE_FILE"
   echo
   if [[ ! -f "$STORE_FILE" ]]; then
-    warn "no republic.json yet — start the Node once, or use launch (option 1)"
+    warn "no zk-voting.json yet — start the Node once, or use launch (option 1)"
     echo
     return 0
   fi

@@ -71,7 +71,7 @@ describe('L2 hourly S3/R2 archive attic', () => {
   let dataDir;
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l2-archive-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l2-archive-'));
     sinkRoot = path.join(tmp, 'sink');
     dataDir = path.join(tmp, 'l2-data');
     fs.mkdirSync(path.join(dataDir, 'blocks'), { recursive: true });
@@ -86,7 +86,7 @@ describe('L2 hourly S3/R2 archive attic', () => {
     const config = loadConfig();
     config.dataDir = dataDir;
     config.disclosureIntervalSeconds = HOUR;
-    config.republicNodeUrl = '';
+    config.zkVotingNodeUrl = '';
     return config;
   }
 

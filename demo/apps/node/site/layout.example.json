@@ -1,0 +1,15 @@
+{
+  "branding": { "productName": "zk-voting" },
+  "nav": {
+    "managed": false,
+    "items": [{ "id": "help", "label": "Help", "href": "/faq", "audience": "all" }],
+    "hidden": []
+  },
+  "regions": {
+    "banner": [],
+    "footer": [
+      { "id": "footer-note", "type": "notice", "title": "", "body": "Layout set from apps/node/site/layout.json (file override).", "audience": "all" }
+    ]
+  },
+  "theme": { "light": {}, "dark": {} }
+}

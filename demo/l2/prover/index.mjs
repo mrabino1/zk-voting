@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // NOT FOR PROFIT — civic public good, not a commercial prover.
-// Watches Republic L2 blocks, batches them, and settles proofs to L1
+// Watches ZK-Voting L2 blocks, batches them, and settles proofs to L1
 // RollupSettlement — or writes mock proofs locally.
 import fs from 'node:fs';
 import path from 'node:path';
 import { WriterLease } from '../lease/lease.mjs';
 import { loadConfig } from '../sequencer/state.mjs';
 import { ROLLUP_SETTLEMENT_ABI } from './batch.mjs';
+import { importOptional, resolveIdentityAsync, resolveOperatorAddress } from '../identity.mjs';
+import { checkBatchAdmission } from './admission.mjs';
+import { checkSubmitterFunding } from './funding.mjs';
 import {
   assertProverDoesNotDeploy,
   loadSettlementView,
@@ -56,7 +59,7 @@ function asG1(pair) {
 
 async function submitBatchL1(batch) {
   if (!config.l1Rpc || !config.settlementAddress || !config.privateKey) {
-    return { submitted: false, reason: 'L1_RPC, SETTLEMENT_ADDRESS, or PRIVATE_KEY not set' };
+    return { submitted: false, reason: 'L1_RPC, SETTLEMENT_ADDRESS, or L1_SUBMITTER_PRIVATE_KEY not set' };
   }
   if (!config.devMockProof) {
     return {
@@ -67,8 +70,8 @@ async function submitBatchL1(batch) {
   let viem;
   let accounts;
   try {
-    viem = await import('viem');
-    accounts = await import('viem/accounts');
+    viem = await importOptional('viem');
+    accounts = await importOptional('viem/accounts');
   } catch {
     return { submitted: false, reason: 'viem is not installed; wrote proof JSON instead' };
   }
@@ -87,15 +90,18 @@ async function submitBatchL1(batch) {
     chain,
     transport: viem.http(config.l1Rpc),
   });
+  // L1 values come from batch.settlement: a chained root and
+  // dataHash = keccak(abi.encode(index, prev, new)), as RollupSettlement checks.
+  const l1 = batch.settlement || batch;
   const hash = await wallet.writeContract({
     address: config.settlementAddress,
     abi: ROLLUP_SETTLEMENT_ABI,
     functionName: 'submitBatch',
     args: [
       BigInt(batch.batchIndex),
-      asBytes32(batch.prevStateRoot),
-      asBytes32(batch.newStateRoot),
-      asBytes32(batch.dataHash),
+      asBytes32(l1.prevStateRoot),
+      asBytes32(l1.newStateRoot),
+      asBytes32(l1.dataHash),
       asG1(batch.proof.a),
       [asG1(batch.proof.b[0]), asG1(batch.proof.b[1])],
       asG1(batch.proof.c),
@@ -117,12 +123,27 @@ async function tick(cursor, lease) {
     console.error(`prover fail closed: ${gate.reason}`);
     return;
   }
+  if (gate.mode === 'submit') {
+    const funding = await fundingStatus();
+    if (funding && funding.level === 'empty') {
+      console.error(`prover holding batches: ${funding.message}`);
+      return;
+    }
+  }
   const result = await runProverTick({
     config,
     cursor,
     l2Rpc: config.l2RpcUrl,
     gate,
     submit: submitBatchL1,
+    admit: (blocks) =>
+      checkBatchAdmission(blocks, {
+        admission: config.admission,
+        adminSecret: config.adminSecret,
+        chainId: config.chainId,
+        l2Uuid: config.l2Uuid,
+        getElection: (uuid) => rpc('zkv_getElection', [uuid]),
+      }),
   });
   Object.assign(cursor, result.cursor);
   for (const action of result.actions) {
@@ -139,10 +160,37 @@ async function tick(cursor, lease) {
   }
 }
 
+let submitterAddress = '';
+let lastFunding = null;
+let lastFundingAt = 0;
+async function fundingStatus() {
+  if (!config.l1Rpc || !submitterAddress) return null;
+  const now = Date.now();
+  if (lastFunding && now - lastFundingAt < 5 * 60_000) return lastFunding;
+  lastFunding = await checkSubmitterFunding({ l1Rpc: config.l1Rpc, address: submitterAddress });
+  lastFundingAt = now;
+  if (lastFunding.level === 'low' || lastFunding.level === 'unreachable') console.warn(lastFunding.message);
+  return lastFunding;
+}
+
 async function main() {
   assertProverDoesNotDeploy();
+  submitterAddress = await resolveOperatorAddress(process.env);
+  config.identity = await resolveIdentityAsync(process.env);
   console.log(
-    'Republic L2 prover  NOT FOR PROFIT  rpc=' +
+    `L2 identity  uuid=${config.identity.l2Uuid || '(unset)'}  l2Id=${config.identity.l2Id || '(unset)'}  submitter=${submitterAddress || '(none)'}`,
+  );
+  for (const p of config.identity.problems) console.warn(`L2 identity: ${p}`);
+  if (config.identity.problems.some((p) => p.includes('does not match'))) {
+    // Never settle under an identity this operator cannot prove it owns.
+    throw new Error('L2_ID does not match the submitter key, L2_UUID and L2_SALT; refusing to start');
+  }
+  if (config.l1Rpc && submitterAddress) {
+    const f = await fundingStatus();
+    if (f) console.log(f.message);
+  }
+  console.log(
+    'ZK-Voting L2 prover  NOT FOR PROFIT  rpc=' +
       config.l2RpcUrl +
       '  batchSize=' +
       config.batchSize +

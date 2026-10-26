@@ -236,7 +236,7 @@ describe('Feldman guardians', () => {
   });
 
   test('CLI deal file has no secret share and t partials verify', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-guardian-cli-'));
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-guardian-cli-'));
     try {
       const secrets = [];
       for (let i = 1; i <= 3; i++) {

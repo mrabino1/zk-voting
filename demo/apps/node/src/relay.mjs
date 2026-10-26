@@ -13,6 +13,7 @@ import { keccak256, toHex } from 'viem';
 import proofHelpers from '@zk-voting/proof-helpers';
 
 import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
+import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
@@ -21,7 +22,6 @@ import { isDisclosed, nextPublishAt } from './disclosure.mjs';
 import {
   buildReceiptPdf,
   mintHolderToken,
-  optionalUserOpHash,
   presentHolderReceipt,
 } from './receipts.mjs';
 import { publicVoteRecord } from './store.mjs';
@@ -77,8 +77,17 @@ function toEncryptedHex(encryptedBallot) {
   throw new HttpError(400, 'encryptedBallot required');
 }
 
+/** BN254 scalar field modulus r (Groth16 public inputs must be < r). */
+export const SNARK_SCALAR_FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Ballot hash bound as vote public input 3: `uint256(keccak256(ciphertext)) % r`.
+ * Matches `BallotInbox.ballotHashOfCiphertext` (audit H-05).
+ */
 export function hashBallot(encryptedBallot) {
-  return keccak256(toEncryptedHex(encryptedBallot));
+  const h = BigInt(keccak256(toEncryptedHex(encryptedBallot)));
+  return toHex(h % SNARK_SCALAR_FIELD, { size: 32 });
 }
 
 export function parseVoteBody(body, electionOrId, roots = {}) {
@@ -202,12 +211,25 @@ function assertBoundRoots(election, parsed, store) {
  * Node cannot write "this user voted for X" even if the client sends it.
  * The leaf, wallet, and plaintext answers are not fields of this request.
  */
-export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds, config }) {
+/** Coarsen a server timestamp to the start of its disclosure bucket (default 1 hour). */
+export function coarseAcceptedAt(ts, intervalSeconds) {
+  const bucket = Number(intervalSeconds) > 0 ? Math.floor(Number(intervalSeconds)) : 3600;
+  return Math.floor(Number(ts) / bucket) * bucket;
+}
+
+export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds, config, spentPassHash = null }) {
   const election = store.requireElection(electionId);
   const envelope = sanitizeVoteBody(body);
   const parsed = parseVoteBody(envelope, election);
   const questions = election.questions || [];
   const answers = answersFromVoteBody(envelope, parsed.encryptedBallot);
+  if (answers && !(config || {}).allowPlaintextBallots) {
+    // A JSON "ciphertext" is the voter's choices in the clear next to the
+    // nullifier. The shipped client always encrypts; refuse anything else.
+    throw new HttpError(400, 'plaintext ballots are refused: encryptedBallot must be ciphertext', {
+      code: 'PLAINTEXT_BALLOT',
+    });
+  }
   if (answers) assertBallotAnswers(questions, answers);
   const rankingPayload = extractRankingPayload(election, envelope, parsed.encryptedBallot);
   const ts = now ?? Math.floor(Date.now() / 1000);
@@ -252,7 +274,10 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   }
 
   const holder = mintHolderToken();
-  const userOpHash = optionalUserOpHash(envelope?.userOpHash || envelope?.userOp?.hash);
+  // No userOpHash: the passkey wallet's hash is bound to the smart-account
+  // address, so storing it would let anyone with the roll join a ballot to a
+  // person. Timestamps are coarsened to the disclosure bucket.
+  const acceptedAt = coarseAcceptedAt(ts, interval);
   const nullifier = toBytes32(parsed.nullifier);
   const ballotHash = toBytes32(parsed.ballotHash);
   const artifact = buildReceiptPdf({
@@ -261,10 +286,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       nullifier,
       ballotHash,
       electionId: String(election.id),
-      acceptedAt: ts,
-      userOpHash,
+      acceptedAt,
     },
-    receipt: { userOpHash, tokenHash: holder.receiptTokenHash },
+    receipt: { tokenHash: holder.receiptTokenHash },
     token: holder.token,
     hmacSecret: (config || {}).receiptPdfSecret,
   });
@@ -274,9 +298,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       ballotHash,
       electionId: election.id,
       relayer: 'node',
-      acceptedAt: ts,
+      acceptedAt,
       receiptTokenHash: holder.receiptTokenHash,
-      userOpHash,
+      spentPassHash,
       pdfSha256: artifact.pdfSha256,
       pdfIntegrity: artifact.integrity,
     },
@@ -290,13 +314,12 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       electionId: vote.electionId,
       relayer: 'node',
     },
-    ts,
+    acceptedAt,
     interval,
   );
 
   const published = isDisclosed(vote.acceptedAt, ts, interval);
   const nextAt = nextPublishAt(ts, interval);
-  const receiptRow = store.findReceiptForVote(vote.electionId, vote.nullifier);
   return {
     ok: true,
     vote: publicVoteRecord(vote),
@@ -304,7 +327,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     nextPublishAt: nextAt,
     receipt: presentHolderReceipt({
       election,
-      vote: { ...vote, userOpHash: receiptRow?.userOpHash || null },
+      vote,
       token: holder.token,
       published,
       nextPublishAt: nextAt,
@@ -332,7 +355,7 @@ export function relayTokenPollBallot(body) {
   }
   const out = {};
   for (const [key, value] of Object.entries(body)) {
-    if (POLL_BALLOT_BANNED.has(key)) continue;
+    if (POLL_BALLOT_BANNED.has(key) || isUnsafeObjectKey(key)) continue;
     out[key] = value;
   }
   return out;

@@ -71,11 +71,10 @@ describe('self-hosting docs renderer', () => {
 });
 
 describe('self-hosting docs navigation', () => {
-  test('Docs is in the public and registered nav as a full page load', () => {
+  test('Docs is a standalone page, not in the voting-demo nav', () => {
     for (const audience of ['public', 'voter', 'officer']) {
       const item = mainNav(audience).find((i) => i.href === '/docs');
-      assert.ok(item, audience);
-      assert.equal(item.spa, false);
+      assert.equal(item, undefined, audience);
     }
     assert.equal(isStandaloneHtmlPath('/docs'), true);
     assert.equal(isStandaloneHtmlPath('/docs/tailscale'), true);

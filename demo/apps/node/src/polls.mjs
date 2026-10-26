@@ -29,7 +29,7 @@ import { buildPollReceipt } from './receipts.mjs';
 import { tokenPollResultsDto } from './results.mjs';
 import { evaluateWeightedPoll } from './weightedTally.mjs';
 
-export const REPUBLIC_L2_CHAIN_ID = 27427;
+export const ZK_VOTING_L2_CHAIN_ID = 27427;
 const MAX_OPTIONS_DEFAULT = 32;
 
 function fail(status, message, code) {
@@ -169,7 +169,7 @@ function applyParams(poll, body, config) {
   if (!token?.configured || !isAddress(String(token.address || ''))) {
     fail(503, 'token polls are disabled until VOTING_TOKEN_ADDRESS is a valid address', 'POLLS_DISABLED');
   }
-  if (token.chainId === REPUBLIC_L2_CHAIN_ID || !Number.isInteger(token.chainId) || token.chainId <= 0) {
+  if (token.chainId === ZK_VOTING_L2_CHAIN_ID || !Number.isInteger(token.chainId) || token.chainId <= 0) {
     fail(503, 'VOTING_TOKEN_CHAIN_ID is invalid', 'POLLS_DISABLED');
   }
   const startTime = intField(body.startTime ?? poll.startTime, 'startTime');
@@ -433,7 +433,7 @@ export function typedDataFor(deps, id, address, choices, issuedAt) {
       primaryType: typed.primaryType,
       message: {
         ...typed.message,
-        republicChainId: typed.message.republicChainId.toString(),
+        zkVotingChainId: typed.message.zkVotingChainId.toString(),
         issuedAt: typed.message.issuedAt.toString(),
       },
     },

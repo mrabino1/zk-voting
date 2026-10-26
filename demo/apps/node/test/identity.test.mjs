@@ -82,7 +82,7 @@ async function bindWeb3(account, { handle, jar } = {}) {
 
 describe('person identity (passkey / web3 / smart card, one active ETH)', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-identity-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-identity-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -146,7 +146,7 @@ describe('person identity (passkey / web3 / smart card, one active ETH)', () => 
     assert.equal(bound.json.identity.verifiedEthAddressCount, 1);
     assert.equal(bound.json.identity.ethAccounts[0].active, true);
     assert.ok(bound.json.identity.authMethods.some((m) => m.type === 'web3'));
-    assert.ok(aliceJar['republic.sid']);
+    assert.ok(aliceJar['zk-voting.sid']);
 
     const me = await api('GET', '/api/me', { jar: aliceJar });
     assert.equal(me.json.identity.activeEthAddress, account0.address);
@@ -346,7 +346,7 @@ describe('smart-card mock is off unless ALLOW_SMART_CARD_MOCK', () => {
   let base2;
 
   before(async () => {
-    tmp2 = await mkdtemp(path.join(os.tmpdir(), 'republic-card-'));
+    tmp2 = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-card-'));
     const created = await createApp({
       dataDir: tmp2,
       allowDevLogin: true,

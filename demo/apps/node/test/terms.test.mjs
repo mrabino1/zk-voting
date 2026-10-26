@@ -100,7 +100,7 @@ describe('terms document hashes', () => {
   });
 
   test('changing markdown changes both hashes', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-terms-src-'));
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-terms-src-'));
     const filePath = path.join(dir, 'terms.md');
     await writeFile(
       filePath,
@@ -147,19 +147,19 @@ describe('terms document hashes', () => {
       subject: 'Terms',
       text: 'attached',
       html: '<p>attached</p>',
-      attachments: [{ filename: 'republic-terms.pdf', contentType: 'application/pdf', content: pdf }],
+      attachments: [{ filename: 'zk-voting-terms.pdf', contentType: 'application/pdf', content: pdf }],
     });
     const mime = raw.toString('utf8');
     assert.match(mime, /multipart\/mixed/);
     assert.match(mime, /application\/pdf/);
-    assert.match(mime, /filename="republic-terms.pdf"/);
+    assert.match(mime, /filename="zk-voting-terms.pdf"/);
     assert.match(mime, /Content-Transfer-Encoding: base64/);
   });
 });
 
 describe('terms HTTP: public hashes, accept, view, SES capture', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-terms-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-terms-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -303,7 +303,7 @@ describe('terms HTTP: public hashes, accept, view, SES capture', () => {
     assert.equal(listed[0].emailed, true);
     assert.equal(listed[0].hashOf, 'pdf-bytes');
 
-    const disk = JSON.parse(await readFile(path.join(tmp, 'republic.json'), 'utf8'));
+    const disk = JSON.parse(await readFile(path.join(tmp, 'zk-voting.json'), 'utf8'));
     assert.ok(Array.isArray(disk.termsAcceptances));
     assert.equal(disk.termsAcceptances.length, 1);
     const person = disk.users.find((u) => u.handle === 'terms-alice');

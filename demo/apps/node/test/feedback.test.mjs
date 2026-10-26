@@ -20,7 +20,7 @@ function listen(application) {
 }
 
 async function boot(overrides = {}) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'republic-feedback-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-feedback-'));
   let now = 1_700_000_000_000;
   let created;
   try {
@@ -211,14 +211,14 @@ describe('POST /api/feedback', { concurrency: false }, () => {
           message: needle,
           category: 'privacy',
         }),
-        { headers: { 'user-agent': 'RepublicTest/1' } },
+        { headers: { 'user-agent': 'ZkVotingTest/1' } },
       );
       assert.equal(sent.status, 200, sent.text);
       const mail = app.mailer.lastFeedback();
       assert.equal(mail.replyTo, 'person@example.gov');
       assert.equal(mail.subject.includes('\n'), false);
       assert.equal(mail.subject.includes('\r'), false);
-      assert.match(mail.subject, /^Republic feedback \(Privacy\)$/);
+      assert.match(mail.subject, /^ZK-Voting feedback \(Privacy\)$/);
       assert.match(mail.html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
       assert.equal(mail.html.includes('<script'), false);
       assert.match(mail.html, /&amp;/);
@@ -226,7 +226,7 @@ describe('POST /api/feedback', { concurrency: false }, () => {
       assert.equal(mail.text.includes('\r'), false);
       assert.equal(mail.text.includes('\nBcc:'), false);
       assert.match(mail.text, /Name: AdaBcc: evil@evil\.test/);
-      assert.match(mail.text, /User-Agent: RepublicTest\/1/);
+      assert.match(mail.text, /User-Agent: ZkVotingTest\/1/);
       assert.match(mail.text, /Terms PDF SHA-256: [0-9a-f]{64}/);
       assert.match(mail.html, /NOT FOR PROFIT/);
       assert.equal(lines.some((line) => line.includes('NEEDLE_do_not_log')), false);

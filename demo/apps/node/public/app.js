@@ -1,8 +1,9 @@
 /**
- * NOT FOR PROFIT — Republic is a civic public good. Not a commercial product.
- * Voter home and application shell for the Republic Node SPA.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
+ * Voter home and application shell for the ZK-Voting Node SPA.
  */
 
+import { brandName } from "./brand.js";
 import { LOCALE_EVENT } from "./i18n.js";
 import { fetchWithStandbyRetry } from "./standby-retry.js";
 import { startRouter, navigate, currentRoute } from "./router.js";
@@ -13,6 +14,9 @@ import { questionsOf, typeLabel } from "./ballot.js";
 import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
+import { loadSetupStatus, renderSetup, setupRedirectFor } from "./setup.js";
+import { entropySetupSteps } from "./setup-entropy.js";
+import { siteSetupSteps } from "./setup-site.js";
 import {
   registerEthAccount,
   removeBoundEmail,
@@ -51,7 +55,7 @@ import {
   renderOfficeSite,
 } from "./cms.js";
 
-const VOTER_STORE_KEY = "republic.voter.v1";
+const VOTER_STORE_KEY = "zk-voting.voter.v1";
 
 const STATE_LABELS = {
   0: "Created",
@@ -423,7 +427,11 @@ export function announce(message) {
 }
 
 export function setTitle(page) {
-  document.title = page ? `${page} — Republic` : "Republic — civic elections";
+  const named = page && page !== brandName();
+  document.title = named ? `${page} — ${brandName()}` : `${brandName()} — civic elections`;
+  // Decorative top-bar breadcrumb (aria-hidden); the document title stays the accessible source.
+  const crumb = typeof document.getElementById === "function" ? document.getElementById("topbar-crumb") : null;
+  if (crumb) crumb.textContent = named ? page : "Home";
 }
 
 export function reasonLabel(code) {
@@ -670,7 +678,7 @@ function renderDesk(main, route, bundle) {
       h(
         "p",
         { class: "lede" },
-        "This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. Republic is not a commercial product."
+        `This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. ${brandName()} is not a commercial product.`
       ),
       h(
         "div",
@@ -741,7 +749,7 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "outcome-sub-heading" },
       h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
       h("p", {
-        text: "When you vote, you are subscribed to that contest’s official PDF by default. The report is emailed only after voting time has completely expired and a certified tally is posted. Unsubscribe here only if you do not want that file.",
+        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a certified tally is posted.",
       }),
       renderOutcomeSubscriptions(outcomeSubscriptions, {
         h,
@@ -795,7 +803,7 @@ function renderOutcomeSubscriptions(payload, { h, api, onRefresh } = {}) {
   if (!rows.length) {
     return h("p", {
       class: "field-hint",
-      text: "No outcome subscriptions yet. After you vote, this contest appears here as subscribed. You can also verify a PDF at /outcomes/verify.",
+      text: "No outcome subscriptions yet. Voting does not subscribe you; subscribe to a contest here if you want its official PDF. You can also verify a PDF at /outcomes/verify.",
     });
   }
   return h(
@@ -808,7 +816,7 @@ function renderOutcomeSubscriptions(payload, { h, api, onRefresh } = {}) {
         h("p", { text: row.electionTitle || row.electionId }),
         h(
           "p",
-          { class: "field-hint", text: row.subscribed ? "Subscribed (default after you vote)." : "Unsubscribed — you will not be emailed this official PDF." }
+          { class: "field-hint", text: row.subscribed ? "Subscribed." : "Unsubscribed — you will not be emailed this official PDF." }
         ),
         h(
           "div",
@@ -1057,7 +1065,12 @@ async function renderRoute(route) {
   if (!main) return;
   main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
   try {
-    const meHint = await loadMe();
+    const [meHint, setupStatus] = await Promise.all([loadMe(), loadSetupStatus(api)]);
+    const setupTarget = setupRedirectFor(setupStatus, route.name);
+    if (setupTarget) {
+      navigate(setupTarget, { replace: true });
+      return;
+    }
     const cms = await loadPublicCms(api);
     let pollsEnabled = false;
     try {
@@ -1069,7 +1082,10 @@ async function renderRoute(route) {
     updateNav(route, meHint, cms.nav || [], pollsEnabled);
     const context = { ...ctx(), route, me: meHint, cms, pollsEnabled };
 
-    if (route.name === "home") {
+    if (route.name === "setup") {
+      setTitle("First-run setup");
+      await renderSetup(main, { ...context, setupStatus, setupExtraSteps: [...entropySetupSteps, ...siteSetupSteps] });
+    } else if (route.name === "home") {
       const audience = audienceOf(meHint);
       if (audience !== "public") {
         navigate("/me", { replace: true });

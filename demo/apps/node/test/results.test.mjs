@@ -246,7 +246,7 @@ describe('results API', () => {
   }
 
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-results-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-results-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,

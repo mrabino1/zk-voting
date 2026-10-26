@@ -1,18 +1,19 @@
 // NOT FOR PROFIT — civic public good, not a commercial sequencer.
-// Republic L2 chain state, civic mempool, and keccak256 (Ethereum).
+// ZK-Voting L2 chain state, civic mempool, and keccak256 (Ethereum).
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  disclosurePublicView,
+  publicDisclosureView,
   isDisclosed,
   isHeldVoteType,
   publishedThrough,
   resolveDisclosureIntervalSeconds,
 } from '../disclosure.mjs';
 import { StaleFenceError, WriterLease } from '../lease/lease.mjs';
+import { isAdminTxType, verifyAdminCivic } from '../adminAuth.mjs';
 
 export const L2_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CHAIN_ID = 27427;
@@ -32,7 +33,15 @@ export const CIVIC_TYPES = Object.freeze([
   'party_add',
   'party_reject',
   'party_attest',
+  'election_open',
 ]);
+
+/** Admission modes. strict: operator-authenticated admin txs, UUID elections, approved voters only. */
+export const ADMISSION_MODES = Object.freeze(['open', 'strict']);
+const ELECTION_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Civic types that act inside one election and must name an opened election in strict mode. */
+const ELECTION_SCOPED_TYPES = new Set(['register', 'vote', 'disqualify', 'tally', 'userop']);
 
 /** Token-poll txs. Accepted only when POLLS_ENABLED is set. Vote validation is unchanged. */
 export const POLL_TX_TYPES = Object.freeze(['poll_params', 'poll_vote', 'poll_tally']);
@@ -236,12 +245,17 @@ export function topicWord(value) {
   }
 }
 
+// Copying `__proto__` (or `constructor` / `prototype`) from parsed JSON onto
+// `out` would swap its prototype and let forbidden keys ride along as
+// inherited properties.
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function stripForbidden(value) {
   if (Array.isArray(value)) return value.map(stripForbidden);
   if (value && typeof value === 'object') {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      if (FORBIDDEN_KEYS.has(String(k).toLowerCase())) continue;
+      if (FORBIDDEN_KEYS.has(String(k).toLowerCase()) || UNSAFE_OBJECT_KEYS.has(k)) continue;
       out[k] = stripForbidden(v);
     }
     return out;
@@ -351,16 +365,25 @@ export function loadConfig(root = L2_ROOT) {
     bundler,
     genesisStateRoot: normalizeHex(genesis.genesisStateRoot || ZERO_HASH, 32),
     contracts: file.contracts || {},
-    republicNodeUrl: (process.env.REPUBLIC_NODE_URL || file.republicNodeUrl || '').replace(
+    zkVotingNodeUrl: (process.env.ZK_VOTING_NODE_URL || file.zkVotingNodeUrl || '').replace(
       /\/$/,
       '',
     ),
     explorerIngestSecret: String(process.env.EXPLORER_INGEST_SECRET || file.explorerIngestSecret || '').trim(),
     l1Rpc: process.env.L1_RPC || file.l1Rpc || '',
     settlementAddress: process.env.SETTLEMENT_ADDRESS || file.settlementAddress || '',
-    privateKey: process.env.PRIVATE_KEY || '',
+    // L1 batch submitter key. Paid by the L2 operator, never by voters.
+    privateKey: process.env.L1_SUBMITTER_PRIVATE_KEY || process.env.PRIVATE_KEY || '',
+    // strict: only the operator (L2_ADMIN_SECRET) opens elections and registers
+    // voters, election ids are UUIDs unique on this L2, and votes must bind an
+    // approved eligibility root. open: legacy demo behaviour.
+    admission: ADMISSION_MODES.includes(String(process.env.L2_ADMISSION || file.admission || '').toLowerCase())
+      ? String(process.env.L2_ADMISSION || file.admission).toLowerCase()
+      : 'open',
+    adminSecret: String(process.env.L2_ADMIN_SECRET || '').trim(),
+    l2Uuid: String(process.env.L2_UUID || file.l2Uuid || '').trim().toLowerCase(),
     devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof !== false),
-    voteProvingPath: parseBool(process.env.REPUBLIC_PROVING_PATH, false),
+    voteProvingPath: parseBool(process.env.ZK_VOTING_PROVING_PATH, false),
     l2RpcUrl:
       process.env.L2_RPC_URL ||
       `http://${process.env.L2_RPC_HOST || file.rpcHost || '127.0.0.1'}:${
@@ -458,6 +481,8 @@ export class ChainState {
     this.nullifierIndex = new Set();
     this.commitmentIndex = new Set();
     this.tallyIndex = new Set();
+    /** electionUuid -> { openedBy, eligibleRoots:Set, approvedSenders:Set, openTx } */
+    this.electionRegistry = new Map();
     this.eventTopics = {
       registered: topic0('Registered(uint256,uint256)'),
       voteAccepted: topic0('VoteAccepted(uint256,uint256,bytes32,address)'),
@@ -506,7 +531,7 @@ export class ChainState {
   }
 
   disclosureView() {
-    return disclosurePublicView(this.now(), this.config.disclosureIntervalSeconds);
+    return publicDisclosureView(this.now(), this.config.disclosureIntervalSeconds);
   }
 
   blockPath(number) {
@@ -859,6 +884,7 @@ export class ChainState {
     if (type === 'poll_params' || type === 'poll_vote' || type === 'poll_tally') {
       return normalizeAddress(c.pollRegistry || '0x1007');
     }
+    if (type === 'election_open') return normalizeAddress(c.electionRegistry || '0x1008');
     return normalizeAddress(c.entryPoint || '0x1005');
   }
 
@@ -867,6 +893,7 @@ export class ChainState {
     if (this._knownHash(tx.hash)) return tx.hash;
     this.assertWritable();
     this._assertUniqueCivic(tx);
+    this._assertAdmitted(tx);
     if (this.shouldHoldVote(tx)) {
       tx.receivedAt = this.now();
       this.rememberSealed(tx);
@@ -1109,7 +1136,7 @@ export class ChainState {
   }
 
   async postExplorer(block) {
-    const base = this.config.republicNodeUrl;
+    const base = this.config.zkVotingNodeUrl;
     if (!base) return;
     const outcomes = {
       register: [],
@@ -1129,7 +1156,7 @@ export class ChainState {
       if (outcomes[pub.type]) outcomes[pub.type].push(pub);
     }
     const body = {
-      source: 'republic-l2',
+      source: 'zk-voting-l2',
       notForProfit: true,
       chainId: this.config.chainId,
       block: this.rpcBlock(block, true),
@@ -1137,7 +1164,7 @@ export class ChainState {
     };
     const headers = { 'content-type': 'application/json' };
     if (this.config.explorerIngestSecret) {
-      headers['x-republic-ingest-secret'] = this.config.explorerIngestSecret;
+      headers['x-zk-voting-ingest-secret'] = this.config.explorerIngestSecret;
     }
     let wait = 400;
     let res;
@@ -1364,6 +1391,115 @@ export class ChainState {
       if (id) this.commitmentIndex.add(`${type}|${election}|${id}`);
     }
     if (type === 'tally') this.tallyIndex.add(election);
+    if (type === 'election_open' && election) {
+      const key = election.toLowerCase();
+      if (!this.electionRegistry.has(key)) {
+        this.electionRegistry.set(key, {
+          electionUuid: key,
+          openTx: tx.hash,
+          eligibleRoots: new Set(),
+          approvedSenders: new Set(),
+        });
+      }
+      const entry = this.electionRegistry.get(key);
+      if (civic.eligibleRoot != null) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
+      for (const a of Array.isArray(civic.approvedSenders) ? civic.approvedSenders : []) {
+        entry.approvedSenders.add(normalizeAddress(a));
+      }
+    }
+    if (type === 'register' && election && civic.eligibleRoot != null) {
+      const entry = this.electionRegistry.get(election.toLowerCase());
+      if (entry) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
+    }
+  }
+
+  /**
+   * Admission gate for a gasless chain (strict mode). Voters pay nothing, so
+   * the sequencer refuses anything that is not operator-authenticated or bound
+   * to an election this L2 opened and voters this L2 approved.
+   */
+  _assertAdmitted(tx) {
+    if (this.config.admission !== 'strict') return;
+    const reject = (msg) => {
+      throw Object.assign(new Error(`not admitted: ${msg}`), { code: -32001 });
+    };
+    const civic = tx.civic || {};
+    const type = String(tx.civicType || '').toLowerCase();
+    if (isAdminTxType(type)) {
+      const auth = verifyAdminCivic(civic, {
+        secret: this.config.adminSecret,
+        chainId: this.config.chainId,
+        l2Uuid: this.config.l2Uuid,
+      });
+      if (!auth.ok) reject(auth.reason);
+    }
+    if (type === 'election_open') {
+      const id = String(civic.electionId ?? '');
+      if (!ELECTION_UUID_RE.test(id)) reject('electionId must be a UUID');
+      if (this.electionRegistry.has(id.toLowerCase())) reject('election UUID already exists on this L2');
+      return;
+    }
+    if (!ELECTION_SCOPED_TYPES.has(type)) return;
+    const id = String(civic.electionId ?? '').toLowerCase();
+    if (!ELECTION_UUID_RE.test(id)) reject('electionId must be a UUID opened on this L2');
+    const entry = this.electionRegistry.get(id);
+    if (!entry) reject('unknown election on this L2');
+    if (type === 'vote') {
+      if (entry.eligibleRoots.size === 0) reject('no approved voters for this election yet');
+      if (civic.eligibleRoot == null) reject('vote must bind the election eligibleRoot');
+      if (!entry.eligibleRoots.has(topicWord(civic.eligibleRoot))) {
+        reject('eligibleRoot is not an approved voter set for this election');
+      }
+    }
+    if (type === 'userop') {
+      const sender = civic.sender ? normalizeAddress(civic.sender) : '';
+      if (!sender || !entry.approvedSenders.has(sender)) reject('sender is not approved for this election');
+    }
+  }
+
+  /** Public view of one election on this L2. Never includes ballots or secrets. */
+  electionInfo(electionUuid) {
+    const key = String(electionUuid || '').toLowerCase();
+    const entry = this.electionRegistry.get(key);
+    if (!entry) return null;
+    let registered = 0;
+    let votes = 0;
+    let tally = null;
+    let openedAtBlock = null;
+    for (const block of this.blocks) {
+      for (const tx of block.transactions || []) {
+        if (!tx || typeof tx !== 'object') continue;
+        const c = tx.civic || {};
+        if (String(c.electionId ?? '').toLowerCase() !== key) continue;
+        const t = String(tx.civicType || c.type || '').toLowerCase();
+        if (t === 'election_open') openedAtBlock = block.number;
+        else if (t === 'register') registered += 1;
+        else if (t === 'vote') votes += 1;
+        else if (t === 'tally') {
+          tally = {
+            blockNumber: block.number,
+            txHash: tx.hash,
+            countsHash: c.countsHash != null ? topicWord(c.countsHash) : null,
+            resultHash: c.resultHash != null ? topicWord(c.resultHash) : null,
+            counts: Array.isArray(c.counts) || (c.counts && typeof c.counts === 'object') ? c.counts : null,
+          };
+        }
+      }
+    }
+    return {
+      electionUuid: key,
+      openTx: entry.openTx,
+      openedAtBlock,
+      eligibleRoots: [...entry.eligibleRoots],
+      approvedSenders: entry.approvedSenders.size,
+      registered,
+      votesSealedInBlocks: votes,
+      tally,
+    };
+  }
+
+  listElections() {
+    return [...this.electionRegistry.keys()];
   }
 
   _assertUniqueCivic(tx) {
@@ -1401,6 +1537,7 @@ export class ChainState {
     this.nullifierIndex = new Set();
     this.commitmentIndex = new Set();
     this.tallyIndex = new Set();
+    this.electionRegistry = new Map();
     this.load();
     if (this.writerActive && this.blocks.length === 0) this.writeGenesis();
   }

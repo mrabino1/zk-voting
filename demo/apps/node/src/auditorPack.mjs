@@ -2,11 +2,12 @@
 // Public auditor pack: roots, disclosed ballot hashes, tally, contract
 // addresses. Never reads clerk identity files or choice plaintext.
 
+import { brandName } from './branding.mjs';
 import { electionState, presentElection } from './electionState.mjs';
 import { publicVoteRecord } from './store.mjs';
 
-export const AUDITOR_SCHEMA = 'republic.auditor.v1';
-export const POLL_AUDITOR_SCHEMA = 'republic.auditor.poll.v1';
+export const AUDITOR_SCHEMA = 'zk-voting.auditor.v1';
+export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 
 /**
  * Build a JSON bundle an independent verifier can check without the Node
@@ -21,7 +22,7 @@ export function buildAuditorPack(election, deps) {
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,
-    product: 'Republic',
+    product: brandName(),
     chainId: deps.config.chainId,
     electionId: String(election.id),
     title: election.title,
@@ -66,8 +67,8 @@ export function assemblePollAuditorPack({ pollView, params, pollParamsHash, clos
     nfp: true,
     binding: false,
     signal: 'Signal only · non-binding · NOT FOR PROFIT',
-    product: 'Republic',
-    republicChainId: 27427,
+    product: brandName(),
+    zkVotingChainId: 27427,
     poll: pollView,
     params,
     pollParamsHash: pollParamsHash || null,

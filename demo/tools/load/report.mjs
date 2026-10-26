@@ -144,12 +144,12 @@ function fileNotes(run) {
   for (const scale of completedScales(run)) {
     const files = scale.files || {};
     lines.push(
-      `- Population ${scale.n}: \`republic.json\` ${num(files.republicJsonBytes)} bytes, \`l2-chain.json\` ${num(files.l2ChainJsonBytes)} bytes.`,
+      `- Population ${scale.n}: \`zk-voting.json\` ${num(files.zkVotingJsonBytes)} bytes, \`l2-chain.json\` ${num(files.l2ChainJsonBytes)} bytes.`,
     );
     const bench = scale.snapshotMicrobench;
     if (bench) {
       lines.push(
-        `  One snapshot of that \`republic.json\`: pretty stringify ${n(bench.prettyStringifyMs, 1)} ms (${num(bench.prettyBytes)} bytes), compact stringify ${n(bench.compactStringifyMs, 1)} ms (${num(bench.compactBytes)} bytes), pretty write ${n(bench.prettyWriteMs, 1)} ms.`,
+        `  One snapshot of that \`zk-voting.json\`: pretty stringify ${n(bench.prettyStringifyMs, 1)} ms (${num(bench.prettyBytes)} bytes), compact stringify ${n(bench.compactStringifyMs, 1)} ms (${num(bench.compactBytes)} bytes), pretty write ${n(bench.prettyWriteMs, 1)} ms.`,
       );
     }
   }
@@ -286,11 +286,11 @@ export function renderReport(runs) {
   const first = list[0] || {};
   const cfg = first.config || {};
   const parts = [];
-  parts.push(`# Republic local load test
+  parts.push(`# ZK-Voting local load test
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-This report lists figures produced by \`tools/load/harness.mjs\` against a Republic Node listening on \`127.0.0.1\`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
+This report lists figures produced by \`tools/load/harness.mjs\` against a ZK-Voting Node listening on \`127.0.0.1\`. Displayed latencies are rounded to 0.1 ms and throughputs to 0.01 ops/s. The JSON next to this file keeps the unrounded summaries. Nothing in the tables was filled in by hand.
 
 ## What ran
 

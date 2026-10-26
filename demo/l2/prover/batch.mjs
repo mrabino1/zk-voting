@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial prover.
-// Batch construction for Republic L2. Public data is nullifiers, roots, and
+// Batch construction for ZK-Voting L2. Public data is nullifiers, roots, and
 // ballot hashes only — never ballot plaintext.
 import {
   keccak256Hex,
@@ -8,6 +8,12 @@ import {
   stableStringify,
   ZERO_HASH,
 } from '../sequencer/state.mjs';
+import {
+  computeElectionKey,
+  computeSettlementDataHash,
+  computeSettlementStateRoot,
+  isUuid,
+} from '../identity.mjs';
 
 export function mockProof() {
   return {
@@ -82,7 +88,51 @@ export function computeDataHash(publicData) {
   return keccak256Hex(stableStringify(publicData));
 }
 
-export function buildBatch({ batchIndex, blocks, prevStateRoot }) {
+/**
+ * Elections touched by this batch, keyed the way L1 keys them:
+ * electionKey = keccak(abi.encode(domain, l1ChainId, l2Id, bytes16(electionUuid))).
+ */
+export function electionsInBatch(civic, identity) {
+  const byId = new Map();
+  for (const c of civic) {
+    const id = String(c.electionId || '').toLowerCase();
+    if (!id) continue;
+    const row = byId.get(id) || { electionUuid: id, electionKey: null, votes: 0, registered: 0, tally: false };
+    if (c.type === 'vote') row.votes += 1;
+    if (c.type === 'register') row.registered += 1;
+    if (c.type === 'tally') row.tally = true;
+    byId.set(id, row);
+  }
+  const l2Id = identity?.l2Id;
+  for (const row of byId.values()) {
+    if (l2Id && isUuid(row.electionUuid)) {
+      row.electionKey = computeElectionKey({
+        l1ChainId: identity.l1ChainId || 0,
+        l2Id,
+        electionUuid: row.electionUuid,
+      });
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.electionUuid.localeCompare(b.electionUuid));
+}
+
+/**
+ * The values sent to L1. RollupSettlement requires prevStateRoot to equal the
+ * last accepted newStateRoot and dataHash = keccak(abi.encode(index, prev, new)),
+ * so the L1 root chains batch to batch and commits to the public data hash.
+ */
+export function settlementForBatch({ batchIndex, publicDataHash, prevSettlementRoot, l2Id }) {
+  const prev = prevSettlementRoot || ZERO_HASH;
+  const next = computeSettlementStateRoot({ l2Id: l2Id || ZERO_HASH, prevStateRoot: prev, publicDataHash });
+  return {
+    batchIndex: Number(batchIndex),
+    prevStateRoot: prev,
+    newStateRoot: next,
+    dataHash: computeSettlementDataHash({ batchIndex, prevStateRoot: prev, newStateRoot: next }),
+  };
+}
+
+export function buildBatch({ batchIndex, blocks, prevStateRoot, identity = null, prevSettlementRoot = null }) {
   if (!blocks.length) {
     throw new Error('empty batch');
   }
@@ -97,7 +147,21 @@ export function buildBatch({ batchIndex, blocks, prevStateRoot }) {
   publicData.newStateRoot = hashBytes.length
     ? keccak256Hex(Buffer.concat(hashBytes))
     : last.stateRoot;
+  if (identity && (identity.l2Id || identity.l2Uuid)) {
+    publicData.identity = {
+      l2Uuid: identity.l2Uuid || '',
+      l2Id: identity.l2Id || '',
+      l1ChainId: String(identity.l1ChainId || ''),
+    };
+  }
+  publicData.elections = electionsInBatch(publicData.civic, identity);
   const dataHash = computeDataHash(publicData);
+  const settlement = settlementForBatch({
+    batchIndex,
+    publicDataHash: dataHash,
+    prevSettlementRoot,
+    l2Id: identity?.l2Id,
+  });
   return {
     notForProfit: true,
     batchIndex: Number(batchIndex),
@@ -108,6 +172,7 @@ export function buildBatch({ batchIndex, blocks, prevStateRoot }) {
     endBlock: last.number,
     blockHashes: blocks.map((b) => b.hash),
     publicData,
+    settlement,
     proof: mockProof(),
   };
 }

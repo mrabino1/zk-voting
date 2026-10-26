@@ -55,7 +55,7 @@ function listen(application) {
 }
 
 async function tallyFixture(overrides = {}) {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-l1-'));
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-l1-'));
   const created = await createApp({
     dataDir: tmp,
     allowDevLogin: true,

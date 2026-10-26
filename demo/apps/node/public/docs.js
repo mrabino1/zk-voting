@@ -1,12 +1,14 @@
 /**
- * NOT FOR PROFIT — zk-voting is a civic public good. Not a commercial product.
+ * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Self-hosting docs: renders docs/self-hosting/*.md at /docs and /docs/<slug>.
  * The Markdown comes from this server (/docs-src/self-hosting/). Every piece of
  * text is escaped; only a small, fixed set of elements is produced.
  */
 
 const SRC = "/docs-src/self-hosting";
-const SITE = "zk-voting docs";
+import { brandName } from "./brand.js";
+
+const SITE = `${brandName()} docs`;
 
 export function escapeHtml(value) {
   return String(value)

@@ -22,8 +22,15 @@ import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 ///        this slice binds openings ↔ counts ↔ inbox ballotRoot. MockVerifier
 ///        does not prove discrete-log decryption; do not treat it as a ceremony.
 ///
-///      Public inputs: `TallyPublicInputs` (TALLY_SOL_MOCK_V1). Not the same
-///      encoding as `circuits/tally.circom`. See that file's header.
+///      Public inputs: `TallyPublicInputs` (TALLY_SOL_V2, every word reduced
+///      mod r). Not the same encoding as `circuits/tally.circom`. See that
+///      file's header.
+///
+///      Audit H-01: tally proofs are verified by a dedicated, set-once
+///      `tallyProofVerifier`, never by the election's *vote* verifier. Until a
+///      super admin installs one, every tally submission reverts
+///      `TallyVerifierNotSet`. A verifier reporting `isMock() == true` is
+///      refused unless the factory explicitly allows mock verifiers (dev / test).
 contract Tally is ITallyVerifier {
     error ZeroAddress();
     error UnknownElection();
@@ -33,11 +40,16 @@ contract Tally is ITallyVerifier {
     error EmptyCounts();
     error CountMismatch();
     error InvalidProof();
-    error ZeroVerifier();
     error OpeningsRequired();
     error OpeningLengthMismatch();
     error OpeningMismatch();
     error OptionOutOfRange();
+    error NotSuperAdmin();
+    error TallyVerifierNotSet();
+    error TallyVerifierAlreadySet();
+    error MockVerifierNotAllowed();
+
+    event TallyProofVerifierSet(address indexed verifier);
 
     /// @notice Factory that maps `electionId` → Election clone.
     IElectionFactory public immutable factory;
@@ -47,9 +59,22 @@ contract Tally is ITallyVerifier {
     mapping(uint256 => bytes32) private _openingsHash;
     mapping(uint256 => uint8) private _postedScheme;
 
+    /// @notice Groth16 verifier for the `TallyPublicInputs` instance. Set once.
+    address public tallyProofVerifier;
+
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
         factory = IElectionFactory(factory_);
+    }
+
+    /// @notice Install the tally proof verifier. Super admin only; set once.
+    function setTallyProofVerifier(address verifier_) external {
+        if (!factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
+        if (verifier_ == address(0)) revert ZeroAddress();
+        if (tallyProofVerifier != address(0)) revert TallyVerifierAlreadySet();
+        if (_reportsMock(verifier_) && !_factoryAllowsMock()) revert MockVerifierNotAllowed();
+        tallyProofVerifier = verifier_;
+        emit TallyProofVerifierSet(verifier_);
     }
 
     /// @inheritdoc ITallyVerifier
@@ -71,9 +96,17 @@ contract Tally is ITallyVerifier {
         if (total != accepted) revert CountMismatch();
 
         bytes32 countsHash = keccak256(abi.encodePacked(counts));
+        bytes32 root = IBallotInbox(inbox).ballotRoot(electionId);
         _verify(
             verifier,
-            TallyPublicInputs.mockInstance(electionId, accepted, countsHash, bytes32(0), bytes32(0)),
+            TallyPublicInputs.instance(
+                electionId,
+                accepted,
+                countsHash,
+                root,
+                bytes32(0),
+                TallyPublicInputs.tallyKeyHashOf(p.tallyPubKeyX, p.tallyPubKeyY)
+            ),
             a,
             b,
             c
@@ -98,7 +131,7 @@ contract Tally is ITallyVerifier {
         if (counts.length == 0) revert EmptyCounts();
         if (_tallied[electionId]) revert AlreadyTallied();
 
-        (address inbox, address verifier,) = _authorize(electionId);
+        (address inbox, address verifier, ElectionParams memory p) = _authorize(electionId);
 
         uint256 accepted = IBallotInbox(inbox).acceptedBallots(electionId);
         if (openings.length != accepted) revert OpeningLengthMismatch();
@@ -113,7 +146,14 @@ contract Tally is ITallyVerifier {
 
         _verify(
             verifier,
-            TallyPublicInputs.mockInstance(electionId, accepted, countsHash, root, openedHash),
+            TallyPublicInputs.instance(
+                electionId,
+                accepted,
+                countsHash,
+                root,
+                openedHash,
+                TallyPublicInputs.tallyKeyHashOf(p.tallyPubKeyX, p.tallyPubKeyY)
+            ),
             a,
             b,
             c
@@ -147,7 +187,8 @@ contract Tally is ITallyVerifier {
         return _postedScheme[electionId];
     }
 
-    /// @dev Operator-only, after cutoff. Returns the election inbox, groth16 verifier, and params.
+    /// @dev Operator-only, after cutoff. Returns the election inbox, the tally
+    ///      proof verifier (never the vote verifier), and params.
     function _authorize(uint256 electionId)
         internal
         view
@@ -161,8 +202,19 @@ contract Tally is ITallyVerifier {
         if (msg.sender != p.tallyOperator) revert NotTallyOperator();
         // CLOSED: voting window is [startTime, cutoffTime). Cutoff is exclusive.
         if (block.timestamp < p.cutoffTime) revert ElectionNotClosed();
-        if (p.verifier == address(0)) revert ZeroVerifier();
-        return (election.inbox(), p.verifier, p);
+        verifier = tallyProofVerifier;
+        if (verifier == address(0)) revert TallyVerifierNotSet();
+        inbox = election.inbox();
+    }
+
+    function _reportsMock(address verifier_) internal view returns (bool) {
+        (bool ok, bytes memory ret) = verifier_.staticcall(abi.encodeWithSignature("isMock()"));
+        return ok && ret.length >= 32 && abi.decode(ret, (bool));
+    }
+
+    function _factoryAllowsMock() internal view returns (bool) {
+        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("allowMockVerifiers()"));
+        return ok && ret.length >= 32 && abi.decode(ret, (bool));
     }
 
     function _sum(uint256[] calldata counts) internal pure returns (uint256 total) {

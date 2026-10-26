@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See `/NOT_FOR_PROFIT.md`.
 
-Product name: **Republic**. Repo name: `zk-voting`.
+Product name: **ZK-Voting** by default (renameable in site admin). Repo name: `zk-voting`.
 
 This file is two things:
 
@@ -17,7 +17,7 @@ This file is two things:
 | Solidity / circuit **interface** text | The **code** is wrong (or the interface section is overdue). |
 | A **Future** paragraph | The code is not expected to match yet. |
 
-Product intent (why Republic exists, privacy construction, disqualification) lives in the root [`README.md`](../README.md). This file is the map of packages and interfaces.
+Product intent (why ZK-Voting exists, privacy construction, disqualification) lives in the root [`README.md`](../README.md). This file is the map of packages and interfaces.
 
 ---
 
@@ -52,19 +52,19 @@ on 27427 is **Future**.
 | Node UI | Vanilla JS + HTML/CSS in `apps/node/public/`. Express serves `public/` (and `dist/` if present). **No Vite. No React.** |
 | Node API | Express 4, Node 22, `apps/node/src/*.mjs`. Personal API keys (`Authorization: Bearer rk_…`) call the published bot catalog. |
 | Bot docs | `GET /api` (HTML), `GET /api/openapi.json`, `GET /api/llms.txt`, repo `docs/BOT_API.md` and `llms.txt`. |
-| Node store | JSON files: `apps/node/data/republic.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
-| Republic L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
+| Node store | JSON files: `apps/node/data/zk-voting.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
+| ZK-Voting L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
 | Foundry / Anvil | Solidity tests and `DeployLocal` / `DeployL1` / `DeployL2` against an EVM (`anvil` default **:8545**). Separate from the civic sequencer. |
 | Circuits | Circom 2: `vote.circom` (Vote 20), `tally.circom`, `identity.circom`. Hasher is Poseidon(2). Ceremony is not done. |
 | Verifier | Foundry + local path: `MockVerifier`. `VoteVerifier` is a structural stub until a ceremony. |
 | Explorer | Node `/explorer` over `l2-chain.json`, filled by Node writes and `POST /api/explorer/ingest`. |
 | Ballot types | Node UI/API: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `MEASURE`, `ARTICLE`, `RANKED` (IRV on the Node path). |
-| Passkey helper | `public/passkey-wallet.js`: WebAuthn + PRF wrap. Demo address is `republic-local-address` (SHA-256 of seed). Production secp256k1 Ethereum addresses are **Future** in that helper (it does not ship a curve implementation). |
+| Passkey helper | `public/passkey-wallet.js`: WebAuthn + PRF wrap. Demo address is `zk-voting-local-address` (SHA-256 of seed). Production secp256k1 Ethereum addresses are **Future** in that helper (it does not ship a curve implementation). |
 
 Two local paths, both real:
 
-1. **Demo civic path (default):** Node JSON store + Republic L2 JSON sequencer (`:8546`) + explorer ingest. No EVM required.
-2. **Contract path (optional):** set `CHAIN_RPC` + `BALLOT_INBOX_ADDRESS` + `RELAYER_PRIVATE_KEY` so the Node relays `BallotInbox.submitVote` through viem to an EVM (typically Anvil on `:8545`). `@zk-voting/chain-client` still defaults `REPUBLIC_RPC_URL` to `http://127.0.0.1:8545` (Anvil), not the civic sequencer.
+1. **Demo civic path (default):** Node JSON store + ZK-Voting L2 JSON sequencer (`:8546`) + explorer ingest. No EVM required.
+2. **Contract path (optional):** set `CHAIN_RPC` + `BALLOT_INBOX_ADDRESS` + `RELAYER_PRIVATE_KEY` so the Node relays `BallotInbox.submitVote` through viem to an EVM (typically Anvil on `:8545`). `@zk-voting/chain-client` still defaults `ZK_VOTING_RPC_URL` to `http://127.0.0.1:8545` (Anvil), not the civic sequencer.
 
 ---
 
@@ -88,7 +88,7 @@ passkey (WebAuthn, device-bound)
 ```
 
 **Today’s browser helper** follows that shape but labels the derived account
-`republic-local-address` until a secp256k1 library is wired. Production
+`zk-voting-local-address` until a secp256k1 library is wired. Production
 Ethereum address derivation remains keccak256 of the uncompressed pubkey.
 
 When they vote:
@@ -109,8 +109,10 @@ When they vote:
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
 The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
-ciphertext. After accept, the voter may email that receipt: the message body
-and a PDF attachment are the same evidence. That PDF uses PDF Standard Security
+ciphertext. After accept, the default is to download the locked PDF or copy
+the proof on the device. Emailing is opt-in (explicit address plus `optIn`):
+the message carries the election and holder token only — no nullifier, no
+ballot hash, no attachment — and nothing about the send is stored. The PDF uses PDF Standard Security
 so it cannot be edited (print and copy remain allowed). The Node records
 SHA-256 of the exact bytes; `/receipt` accepts the proof or the file and
 rejects a modified PDF. A public `/receipt` portal answers whether the ballot
@@ -124,8 +126,8 @@ the open window it still does not invent unofficial option counts. After
 `cutoffTime` has passed and a tally is posted, the Node issues a locked
 **official outcome PDF** (option counts, start, end) with a required QR and
 SHA-256 / HMAC authenticity page; `/outcomes/verify` checks the file was not
-changed. Voters are subscribed to that PDF by default when they vote and may
-unsubscribe on `/me`. This is
+changed. Subscribing to that PDF is opt-in on `/me`; casting a ballot never
+creates a subscription (see `docs/OPERATOR.md`, "Ballot unlinkability"). This is
 **not** MACI and
 **not** last-vote-counts: a coercer who can force the first (and only) submit
 still wins that ballot.
@@ -146,7 +148,7 @@ timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
   and local instant demo may set `0`.
 
-Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`republic.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
+Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`zk-voting.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
 ### Person (unique) vs one active Ethereum address
 
@@ -433,7 +435,7 @@ function verifyProof(
 
 `MockVerifier` (tests / local L2 default): owner can `setAccept(bool)`.
 `VoteVerifier` is the generated/production verifier (zero VK until a ceremony;
-delegates to `mockVerifier` only while unconfigured). `REPUBLIC_PROVING_PATH=1`
+delegates to `mockVerifier` only while unconfigured). `ZK_VOTING_PROVING_PATH=1`
 deploys `VoteVerifier` with no mock fallback. `Groth16VerifierAdapter` wraps a
 snarkjs-exported verifier (`circuits/build/`) onto `IGroth16Verifier`.
 Unconfigured key still checks input length and pairing-shaped points.
@@ -495,13 +497,13 @@ precomputed, `IHasher.hashLeftRight(uint256, uint256)`.
 `src/account/PasskeyAccount.sol` — ERC-4337-style account whose owner is a
 P-256 / WebAuthn public key. Signature is a WebAuthn assertion.
 
-`src/account/PasskeyAccountFactory.sol` — `createAccount(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt)`.
+`src/account/PasskeyAccountFactory.sol` — `createAccount(bytes32 credIdHash, uint256 pubX, uint256 pubY, bytes32 salt)` (WebAuthn only), or `createAccountWithBackupSigner(credIdHash, pubX, pubY, ethBackupSigner, salt)` for an immutable secp256k1 backup key. WebAuthn assertions must carry `challenge = base64url(userOpHash)`, `type = webauthn.get` and the UP flag, and require the P-256 precompile at `0x100` (no fallback).
 
-`src/account/RepublicPaymaster.sol` — sponsors UserOps that call
+`src/account/ZkVotingPaymaster.sol` — sponsors UserOps that call
 `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`.
 Voters do not hold the L2 gas token.
 
-`src/account/RepublicEntryPoint.sol` — minimal EntryPoint sufficient for
+`src/account/ZkVotingEntryPoint.sol` — minimal EntryPoint sufficient for
 local EVM (validate, paymaster, execute). Not a full eth-infinitism copy;
 keep it small and auditable.
 
@@ -524,7 +526,7 @@ function stateRoot() external view returns (bytes32);
 function batchCount() external view returns (uint64);
 ```
 
-Only the Republic prover/sequencer addresses. Batches are public; anyone
+Only the ZK-Voting prover/sequencer addresses. Batches are public; anyone
 can re-derive `dataHash` from posted calldata.
 
 `src/l2/L1TallyMirror.sol` — copies a tallied election result hash from L2
@@ -562,7 +564,7 @@ identity reverts `AlreadyPosted`. The Node
 and `script/CertifyL1.s.sol` call this when L1 env is set; they no-op
 when it is not. CI must not supply mainnet keys.
 
-`src/l2/RepublicMailbox.sol` — L1/L2 message mailbox for the rollup.
+`src/l2/ZkVotingMailbox.sol` — L1/L2 message mailbox for the rollup.
 
 ---
 
@@ -619,7 +621,7 @@ passes `--via-ir`). Invariants: `forge test --via-ir --match-path test/invariant
 
 - `DeployLocal.s.sol` — Anvil EVM: factory, registries, mock verifier, paymaster, rollup.
 - `DeployL1.s.sol` — Ethereum (or sepolia) settlement + optional factory.
-- `DeployL2.s.sol` — same election stack targeting an EVM configured as Republic L2 (not the civic JSON sequencer).
+- `DeployL2.s.sol` — same election stack targeting an EVM configured as ZK-Voting L2 (not the civic JSON sequencer).
 - `CreateElection.s.sol` — given factory address + JSON params, create one.
 - `CertifyL1.s.sol` — `L1TallyMirror.postResult` from `COUNTS` / `RESULT_HASH`. Wrapper: `script/certify_l1.sh` (no-op if L1 env unset).
 - `PrintAddresses.s.sol`, `anvil_deploy.sh` — local helpers (`RPC_URL` default `http://127.0.0.1:8545`).
@@ -645,18 +647,18 @@ is the local Foundry path.
 **in progress**. Local `npm run circuits:setup` is UNTRUSTED. Phase-2
 contribute / verify / beacon / export tooling is `docs/CEREMONY.md`. Running
 it does not complete a ceremony. Until a real ceremony, MockVerifier is the
-Foundry unit-test path. `REPUBLIC_PROVING_PATH=1`
+Foundry unit-test path. `ZK_VOTING_PROVING_PATH=1`
 is the fail-closed integration flag.
 
 ---
 
-## Republic L2 (`/l2`) — civic JSON sequencer
+## ZK-Voting L2 (`/l2`) — civic JSON sequencer
 
 **Implemented:** an application-specific civic rollup (Lighter-shaped:
 prove the operations, settle on L1). Plain Node. No Docker. **Not** an
 Anvil proxy and **not** a general-purpose EVM.
 
-- `l2/genesis.json` — chainId `27427` (Republic), period 2s, 1 sequencer.
+- `l2/genesis.json` — chainId `27427` (ZK-Voting), period 2s, 1 sequencer.
 - `l2/sequencer/index.mjs` — mempool, blocks when there is work plus an hourly heartbeat, hourly sealed votes.
 - `l2/archive/` — hourly S3/R2 attic for sealed hours (on by default; no prune without a bucket or `file://` sink). Gzip block and proof objects.
 - `l2/rpc/server.mjs` — JSON-RPC subset (`eth_chainId`, `eth_getBlockByNumber`,
@@ -690,7 +692,7 @@ Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator
 are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
 `platform_admin` is a global override and may act in every jurisdiction.
 
-**Store:** JSON file `apps/node/data/republic.json` (gitignored). Native
+**Store:** JSON file `apps/node/data/zk-voting.json` (gitignored). Native
 addons such as `better-sqlite3` are **not** used. A jurisdiction owns
 its elections.
 
@@ -750,7 +752,7 @@ GET  /api/outcomes/reports          (issued official outcome PDFs)
 GET  /api/outcomes/reports/:id
 GET  /api/outcomes/reports/:id/pdf  (locked official PDF; X-Pdf-Protected)
 POST /api/outcomes/verify           (drop PDF or report id; pdfUnmodified)
-GET  /api/me/outcome-subscriptions  (default-on after vote; unsubscribe by exception)
+GET  /api/me/outcome-subscriptions  (opt-in; casting a ballot never subscribes)
 PUT  /api/me/outcome-subscriptions/:electionId
 GET  /api/admin/outcome-report-template
 PATCH /api/admin/outcome-report-template  (letterhead/intro; QR+hash always on)
@@ -827,7 +829,7 @@ Merkle leaf remains the identity commitment ([`IDENTITY.md`](./IDENTITY.md)).
 
 Product rule: **`eligible = registered ∩ ¬currently-disqualified`**, in
 registration order. Node freeze roots and `Election.eligibleRoot` use that
-same incremental tree (depth from the election, `republic.hash.keccak-dev-v1`
+same incremental tree (depth from the election, `zk-voting.hash.keccak-dev-v1`
 on the Node and in Foundry).
 
 | Path | What publishes the eligible root |
@@ -843,8 +845,13 @@ eligible root, so the inbox rejects it (`EligibleRootMismatch`) even when
 
 `POST /api/elections/:id/vote` accepts the relay envelope:
 `encryptedBallot`, `proof`, `publicInputs` (or the same signals flattened),
-`nullifier`, election id, `ballotHash`, plus the non-choice controls
-`pinToken` and `userOpHash`.
+`nullifier`, election id, `ballotHash`, plus a one-use blind-signed
+`votePass` (`{ token, signature }`). The SPA sends it with
+`credentials: "omit"`, so no session cookie rides with the ballot; the pass is
+obtained earlier from `POST /api/elections/:id/vote-pass` (PIN and external
+clearance are checked there). No `userOpHash` is sent or stored, and a
+plaintext ballot is refused (`PLAINTEXT_BALLOT`) unless the non-production
+`ZKV_ALLOW_PLAINTEXT_BALLOTS=1` is set.
 
 `stripBallotPii` / `sanitizeVoteBody` drop banned keys before relay. A client
 that also sends `answers`, `identityCommitment`, `address`, `credentialId`,
@@ -899,6 +906,9 @@ same gap.
 `armNonMembershipWitness` checks the gap under `publicInputs[1]`. After a
 coded disqualification the disqualified witness returns false and
 `submitVote` reverts `InvalidProof`. Unarmed proofs still follow `acceptAll`.
+Both witnesses must be exactly `witnessTreeDepth` levels long (set with
+`setWitnessTreeDepth`, 16–32), as in the fixed-depth circuit. A shorter path
+would let an internal node pass as a leaf or chain link.
 
 ### Remaining ZK gap
 
@@ -980,7 +990,7 @@ generic EVM logs.
 - `npm test -w apps/node` for API tests (`NODE_ENV=test node --test`).
 - `npm run test:l2` for civic sequencer tests.
 - `npm run test:auditor` for the independent verifier (no Node DB).
-- Optional: `npm run circuits:test` (Groth16 only if circom+snarkjs are installed, or if `REPUBLIC_PROVING_PATH=1`).
+- Optional: `npm run circuits:test` (Groth16 only if circom+snarkjs are installed, or if `ZK_VOTING_PROVING_PATH=1`).
 
 ---
 

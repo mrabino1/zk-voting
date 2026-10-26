@@ -13,7 +13,7 @@ export function standbyDelayMs(response, attempt) {
 function isStandbyResponse(response) {
   if (!response || response.status !== 503) return false;
   const mode = response.headers && typeof response.headers.get === 'function'
-    ? response.headers.get('x-republic-mode')
+    ? response.headers.get('x-zk-voting-mode')
     : null;
   return String(mode || '').toLowerCase() === 'standby';
 }

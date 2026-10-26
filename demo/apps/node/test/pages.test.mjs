@@ -177,9 +177,9 @@ describe('cms helpers', () => {
     assert.equal(parseRoute(loc('/polls/poll-1/results')).name, 'pollResults');
     assert.equal(parseRoute(loc('/elections/1')).name, 'results');
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['Results', 'Receipt', 'Outcomes', 'Sign in', 'Register', 'About']);
     const withExtra = mainNav('public', [{ href: '/p/hours', label: 'Hours' }]).map((i) => i.label);
-    assert.deepEqual(withExtra, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Hours', 'Sign in', 'Register']);
+    assert.deepEqual(withExtra, ['Results', 'Receipt', 'Outcomes', 'Hours', 'Sign in', 'Register', 'About']);
   });
 
   test('canManagePages: platform_admin all; clerk scoped; registrar no', () => {
@@ -206,7 +206,7 @@ describe('cms helpers', () => {
 
 describe('pages HTTP CMS and clean URLs', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-pages-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-pages-'));
     const created = await createApp({
       dataDir: tmp,
       allowDevLogin: true,
@@ -433,7 +433,7 @@ describe('pages HTTP CMS and clean URLs', () => {
     const pin = await api('PATCH', '/api/office/site', {
       jar: adminJar,
       body: {
-        title: 'Northbridge Republic',
+        title: 'Northbridge ZK-Voting',
         tagline: 'Fork the Node, keep the factory.',
         contracts: { factory: '0x3333333333333333333333333333333333333333' },
       },
@@ -445,7 +445,7 @@ describe('pages HTTP CMS and clean URLs', () => {
     assert.equal(cfg.json.electionFactoryAddress.toLowerCase(), '0x3333333333333333333333333333333333333333');
     assert.equal(cfg.json.addresses.factory.toLowerCase(), '0x3333333333333333333333333333333333333333');
     const site = await api('GET', '/api/site');
-    assert.equal(site.json.title, 'Northbridge Republic');
+    assert.equal(site.json.title, 'Northbridge ZK-Voting');
   });
 
   test('home overlay publishes and office editor HTML is served at a clean URL', async () => {

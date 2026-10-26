@@ -218,7 +218,7 @@ describe('outcome phase helpers', () => {
 
 describe('outcomes monitor HTTP', () => {
   before(async () => {
-    tmp = await mkdtemp(path.join(os.tmpdir(), 'republic-outcomes-'));
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-outcomes-'));
     clock = NOW;
     const created = await createApp({
       dataDir: tmp,
@@ -296,7 +296,7 @@ describe('outcomes monitor HTTP', () => {
 
     const before = await api('GET', `/api/outcomes/${id}`);
     assert.equal(before.status, 200, before.json?.error);
-    assert.equal(before.json.schema, 'republic.outcomes.v1');
+    assert.equal(before.json.schema, 'zk-voting.outcomes.v1');
     assert.equal(before.json.phase, 'before');
     assert.equal(before.json.state, 0);
     assert.equal(before.json.certified, null);
@@ -400,7 +400,7 @@ describe('outcomes monitor HTTP', () => {
 
     const board = await api('GET', '/api/outcomes');
     assert.equal(board.status, 200);
-    assert.equal(board.json.schema, 'republic.outcomes.v1');
+    assert.equal(board.json.schema, 'zk-voting.outcomes.v1');
     const ids = (list) => (list || []).map((e) => e.id);
     assert.ok(ids(board.json.phases.before).includes(beforeId));
     assert.ok(ids(board.json.phases.during).includes(duringId));

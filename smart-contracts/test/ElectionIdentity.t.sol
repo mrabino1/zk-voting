@@ -31,7 +31,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         publisherB = makeAddr("publisherB");
         attacker = makeAddr("attacker");
         jurisdictionA = Fixtures.DEFAULT_JURISDICTION;
-        jurisdictionB = keccak256("republic-foreign-jurisdiction");
+        jurisdictionB = keccak256("zk-voting-foreign-jurisdiction");
         vm.prank(admin);
         jurisdictions.createJurisdiction(jurisdictionB, attacker, "Foreign");
         vm.prank(admin);
@@ -107,9 +107,23 @@ contract ElectionIdentitySeparationTest is Deployer {
         assertEq(IElection(el).params().jurisdictionId, jurisdictionA);
     }
 
-    function testWithoutRegistrySelfDeclaredClerkStillCreates() public {
+    /// @dev Audit M-02: without a registry, self-declared clerks no longer
+    ///      create; an admin-granted CLERK_ROLE plus an approved verifier does.
+    function testWithoutRegistrySelfDeclaredClerkNeedsRoleAndApprovedVerifier() public {
         ElectionFactory naked = new ElectionFactory(admin, address(0));
         ElectionParams memory p = defaultParams();
+        vm.prank(p.clerk);
+        vm.expectRevert(ElectionFactory.MissingRole.selector);
+        naked.createElection(p);
+
+        vm.prank(admin);
+        naked.grantRole(Roles.CLERK_ROLE, p.clerk);
+        vm.prank(p.clerk);
+        vm.expectRevert(ElectionFactory.VerifierNotApproved.selector);
+        naked.createElection(p);
+
+        vm.prank(admin);
+        naked.setVerifierApproved(p.verifier, true);
         vm.prank(p.clerk);
         (uint256 id, address el) = naked.createElection(p);
         assertEq(id, 1);
@@ -294,7 +308,7 @@ contract ElectionIdentitySeparationTest is Deployer {
     }
 
     function testCertificationIdDomainMatchesLiteral() public pure {
-        assertEq(ElectionIdentity.DOMAIN, keccak256("republic.election.identity.v1"));
+        assertEq(ElectionIdentity.DOMAIN, keccak256("zk-voting.election.identity.v1"));
         address fac = address(0x1111111111111111111111111111111111111111);
         bytes32 got = ElectionIdentity.certificationId(fac, 7, keccak256("demo"));
         assertEq(got, keccak256(abi.encode(ElectionIdentity.DOMAIN, fac, uint256(7), keccak256("demo"))));

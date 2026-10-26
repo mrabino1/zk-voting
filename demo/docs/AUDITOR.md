@@ -2,13 +2,13 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product. See [`/NOT_FOR_PROFIT.md`](../NOT_FOR_PROFIT.md).
 
-This pack lets an observer, losing candidate, or court **export public election artifacts** and **verify tally / uniqueness invariants offline** without the Node’s private database (`apps/node/data/republic.json`). The Node is allowed to be down. Canonical truth is the chain; the Node may publish a convenience JSON pack of already-public fields.
+This pack lets an observer, losing candidate, or court **export public election artifacts** and **verify tally / uniqueness invariants offline** without the Node’s private database (`apps/node/data/zk-voting.json`). The Node is allowed to be down. Canonical truth is the chain; the Node may publish a convenience JSON pack of already-public fields.
 
 This is the roadmap auditor slice (item 10). It does **not** replace a Groth16 ceremony or Poseidon hasher.
 
 ---
 
-## What is in a bundle (`republic.auditor.v1`)
+## What is in a bundle (`zk-voting.auditor.v1`)
 
 | Field | Why it is public |
 | --- | --- |
@@ -32,7 +32,7 @@ From the repository root (Node 22):
 # Verify a JSON file (no network, no Node DB)
 node tools/auditor/cli.mjs verify --file bundle.json
 
-# Export from the Node’s *public* HTTP (not republic.json)
+# Export from the Node’s *public* HTTP (not zk-voting.json)
 node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1 --out bundle.json
 node tools/auditor/cli.mjs verify-node --base http://127.0.0.1:3000 --election 1
 
@@ -92,7 +92,7 @@ The Node also hosts `/outcomes`, which runs `verifyAuditorBundle` plus freeze-ro
 
 ---
 
-## Token polls (`republic.auditor.poll.v1`)
+## Token polls (`zk-voting.auditor.poll.v1`)
 
 **NOT FOR PROFIT.** A token-poll pack is not a civic election pack. It lists the poll parameters, disclosed ballots (address, choice, signature, weight evidence), and the official result. It has no `userId` and no nullifier.
 
