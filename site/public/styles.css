@@ -28,6 +28,7 @@ h3{font-size:18px;margin:0 0 8px}
 .terminal{margin:48px 0 0;max-width:620px;background:#0a0a0c;border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;color:#d4d4dc;font-size:14px;line-height:1.7;overflow-x:auto}
 .dim{color:#6b6b78}
 .two-col{display:grid;grid-template-columns:1.2fr 1fr;gap:56px;align-items:start}
+.two-col>*{min-width:0}
 p{color:var(--muted)}
 .checks{list-style:none;margin:0;padding:0;display:grid;gap:14px}
 .checks li{padding:16px 18px 16px 46px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);position:relative}
@@ -52,3 +53,32 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
 .final{background:radial-gradient(ellipse 60% 80% at 50% 100%,rgba(139,92,246,.18),transparent 70%),var(--bg2)}
 @media (max-width:960px){.stats{grid-template-columns:1fr 1fr}.steps{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr;gap:32px}}
 @media (max-width:640px){nav a:not(.btn){display:none}.steps,.grid{grid-template-columns:1fr}section{padding:64px 0}}
+.vision{border-top:1px solid var(--line)}
+.vision-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.vz{margin:0;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.vz-svg{display:block;width:100%;height:auto;margin:0 0 16px}
+.vz figcaption h3{margin-bottom:6px}
+.vz-points{margin:0;padding-left:20px;color:var(--muted);font-size:15px}.vz-points li{margin:4px 0}
+.vz-svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;fill:var(--muted);font-size:14px}
+.vz-svg .vz-h{fill:var(--text);font-size:17px;font-weight:700}
+.vz-svg .vz-label{fill:var(--accent2);font:600 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.03em;text-transform:uppercase}
+.vz-svg .vz-s{fill:var(--text);font-size:13px}
+.vz-svg .vz-m{fill:var(--muted);font-size:14px}
+.vz-svg .vz-code{fill:var(--accent2);font:600 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.vz-svg .vz-big{fill:var(--accent2);font-size:44px;font-weight:700}
+.vz-svg .vz-tick{fill:#fff;font-size:15px;font-weight:700}
+.vz-svg .vz-x{fill:#fca5a5;font-size:15px;font-weight:700}
+.vz-svg .vz-reject{fill:#fca5a5;font-size:14px;font-weight:600}
+.vz-box{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+.vz-dashed{stroke:var(--accent2);stroke-dasharray:6 5}
+.vz-key{stroke:var(--accent)}
+.vz-frame{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:8 6}
+.vz-chip{fill:rgba(139,92,246,.18);stroke:rgba(167,139,250,.45)}
+.vz-pill{fill:var(--bg2);stroke:var(--accent2);stroke-width:1.5}
+.vz-l1{fill:rgba(139,92,246,.14);stroke:var(--accent);stroke-width:2}
+.vz-flow{fill:none;stroke:var(--accent2);stroke-width:2}
+.vz-dash-line{stroke-dasharray:5 5}
+.vz-ok{fill:var(--accent);stroke:var(--accent2)}
+.vz-no{fill:none;stroke:#fca5a5;stroke-width:2;stroke-dasharray:4 3}
+@media (max-width:960px){.vision-grid{grid-template-columns:1fr}}
+@media (max-width:640px){.vz{margin:0 -16px;padding:14px 8px}.vz figcaption{padding:0 8px}}
