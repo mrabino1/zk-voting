@@ -111,23 +111,27 @@ export function signInHref(next) {
   return `/signin?next=${encodeURIComponent(safe)}`;
 }
 
+/** Main informational site (what ZK Voting is and why). Not part of the demo. */
+export const MAIN_SITE_URL = "https://zk-voting.org";
+/** Community discussion forum (Discourse). */
+export const COMMUNITY_URL = "https://community.zk-voting.org";
+
 export function mainNav(audience, extraNav = [], options = {}) {
   const extra = Array.isArray(extraNav) ? extraNav.filter((i) => i && i.href && i.label) : [];
   const polls = options && options.pollsEnabled ? [{ href: "/polls", label: t("polls.nav") }] : [];
+  // The demo Node shows the voting flow only (register, sign in, vote,
+  // receipt, tally). Informational content lives on the main site.
+  const mainSite = { href: MAIN_SITE_URL, label: t("chrome.navAbout"), spa: false };
   if (audience === "public") {
     return [
-      { href: "/about", label: t("chrome.navAbout") },
-      { href: "/faq", label: t("chrome.navFaq") },
+      ...polls,
+      { href: "/elections", label: t("chrome.navResults") },
       { href: "/receipt", label: t("chrome.navReceipt") },
       { href: "/outcomes", label: t("chrome.navOutcomes") },
-      ...polls,
-      { href: "/terms", label: t("chrome.navTerms") },
-      { href: "/feedback", label: t("chrome.navFeedback") },
-      { href: "/api", label: t("chrome.navApi"), spa: false },
-      { href: "/docs", label: t("chrome.navDocs"), spa: false },
       ...extra,
       { href: "/signin", label: t("chrome.navSignIn") },
       { href: "/register", label: t("chrome.navRegister") },
+      mainSite,
     ];
   }
   const items = [
@@ -139,13 +143,10 @@ export function mainNav(audience, extraNav = [], options = {}) {
     ...polls,
     { href: "/receipt", label: t("chrome.navReceipt") },
     { href: "/outcomes", label: t("chrome.navOutcomes") },
-    { href: "/terms", label: t("chrome.navTerms") },
-    { href: "/feedback", label: t("chrome.navFeedback") },
-    { href: "/api", label: t("chrome.navApi"), spa: false },
-    { href: "/docs", label: t("chrome.navDocs"), spa: false },
+    mainSite,
   ];
   if (audience === "officer") {
-    items.push({ href: "/office", label: t("chrome.navAdmin") });
+    items.splice(items.length - 1, 0, { href: "/office", label: t("chrome.navAdmin") });
   }
   return items;
 }

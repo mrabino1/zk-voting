@@ -375,7 +375,7 @@ describe('WCAG 2.2 AA axe', () => {
         dir: document.documentElement.dir,
         mainLang: document.getElementById('main')?.getAttribute('lang'),
         skip: document.querySelector('.skip-link')?.textContent || '',
-        about: document.querySelector('.nav-main a[href="/about"]')?.textContent || '',
+        about: document.querySelector('.nav-main a[href="https://zk-voting.org"]')?.textContent || '',
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
       }));
       assert.equal(rtl.lang, 'ar');
@@ -385,10 +385,13 @@ describe('WCAG 2.2 AA axe', () => {
       assert.equal(rtl.about, 'حول');
       assert.equal(rtl.overflow, false);
 
-      await page.click('a[href="/faq"]');
+      await page.click('.nav-main a[href="/receipt"]');
       await settle(page);
       const focused = await page.evaluate(() => document.activeElement?.id);
       assert.equal(focused, 'main');
+      // FAQ is no longer linked from the demo chrome; load it directly.
+      await page.goto(`${base}/faq`, { waitUntil: 'networkidle0', timeout: 30000 });
+      await settle(page);
       const beforeToggle = await page.$eval('#faq-list details', (el) => el.open);
       await page.focus('#faq-list details summary');
       await page.keyboard.press('Enter');
