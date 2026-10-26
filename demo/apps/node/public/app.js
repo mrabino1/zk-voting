@@ -14,6 +14,7 @@ import { questionsOf, typeLabel } from "./ballot.js";
 import { renderElectionInfo, renderOptionInfo } from "./info.js";
 import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
+import { loadSetupStatus, renderSetup, setupRedirectFor } from "./setup.js";
 import {
   registerEthAccount,
   removeBoundEmail,
@@ -1062,7 +1063,12 @@ async function renderRoute(route) {
   if (!main) return;
   main.replaceChildren(h("p", { class: "loading-msg", text: "Loading…" }));
   try {
-    const meHint = await loadMe();
+    const [meHint, setupStatus] = await Promise.all([loadMe(), loadSetupStatus(api)]);
+    const setupTarget = setupRedirectFor(setupStatus, route.name);
+    if (setupTarget) {
+      navigate(setupTarget, { replace: true });
+      return;
+    }
     const cms = await loadPublicCms(api);
     let pollsEnabled = false;
     try {
@@ -1074,7 +1080,10 @@ async function renderRoute(route) {
     updateNav(route, meHint, cms.nav || [], pollsEnabled);
     const context = { ...ctx(), route, me: meHint, cms, pollsEnabled };
 
-    if (route.name === "home") {
+    if (route.name === "setup") {
+      setTitle("First-run setup");
+      await renderSetup(main, { ...context, setupStatus });
+    } else if (route.name === "home") {
       const audience = audienceOf(meHint);
       if (audience !== "public") {
         navigate("/me", { replace: true });

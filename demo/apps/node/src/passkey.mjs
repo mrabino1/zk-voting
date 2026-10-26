@@ -109,7 +109,7 @@ export function createPasskeyService(config, store, hooks = {}) {
     return options;
   }
 
-  async function finishRegister({ body, user, handle }) {
+  async function finishRegister({ body, user, handle, claimSeedOnly = null }) {
     const userName = (user?.handle || handle || body?.handle || '').trim();
     const chal = challengeFromClientData(body);
     const pending = take(chal) || (userName ? take(`reg:${userName.toLowerCase()}`) : null);
@@ -140,6 +140,29 @@ export function createPasskeyService(config, store, hooks = {}) {
     };
     const account = await resolveRegisterAccount({ sessionUser: user, pending });
     assertPasskeyRoom(account);
+    if (!user) {
+      // Claim guard, checked synchronously right before the write: two
+      // session-less finishes for the same unclaimed row (e.g. the first-run
+      // super admin) both pass resolveRegisterAccount, but only the first to
+      // reach this line may attach a credential.
+      if (isClaimedPerson(account)) {
+        throw new HttpError(409, 'this account was claimed by another registration', {
+          code: 'ALREADY_CLAIMED',
+        });
+      }
+      if (claimSeedOnly && account.id !== claimSeedOnly) {
+        throw new HttpError(409, 'registration does not match the setup account', {
+          code: 'SETUP_ADMIN_EXISTS',
+        });
+      }
+      if (!claimSeedOnly && config.setupToken && account.role === 'platform_super_admin') {
+        // With SETUP_TOKEN set, the super admin row is claimed only through
+        // /api/setup (which checks the token), never by a bare handle.
+        throw new HttpError(403, 'use the first-run setup screen to create the super admin', {
+          code: 'SETUP_TOKEN_REQUIRED',
+        });
+      }
+    }
     store.addCredential(account.id, {
       id: b64urlFromBytes(cred.id),
       publicKey: b64urlFromBytes(cred.publicKey),

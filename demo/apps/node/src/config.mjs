@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { brandName } from './branding.mjs';
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
 import { normalizeEmail } from './identity.mjs';
+import { DEFAULT_CHAIN_ID, resolveEnvChainId } from './setup.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -170,6 +171,9 @@ export function getConfig(overrides = {}) {
   const authority = resolveVoteAuthority(overrides, defaultOrigins);
 
   const isTest = process.env.NODE_ENV === 'test';
+  const chainIdEnv = resolveEnvChainId(
+    Object.prototype.hasOwnProperty.call(overrides, 'chainId') ? overrides.chainId : process.env.CHAIN_ID,
+  );
   const disclosureIntervalSeconds = resolveDisclosureIntervalSeconds(
     overrides.disclosureIntervalSeconds ?? process.env.DISCLOSURE_INTERVAL_SECONDS,
     { isTest },
@@ -190,7 +194,12 @@ export function getConfig(overrides = {}) {
     pkgRoot: PKG_ROOT,
     port,
     host: String(overrides.host ?? process.env.HOST ?? '0.0.0.0'),
-    chainId: Number(process.env.CHAIN_ID || 27427),
+    // CHAIN_ID from the environment. null = not fixed; the first-run setup
+    // screen may choose it. Read it through config.chainId (see setup.mjs).
+    chainIdEnv,
+    chainId: chainIdEnv ?? DEFAULT_CHAIN_ID,
+    setupToken: String(overrides.setupToken ?? process.env.SETUP_TOKEN ?? '').trim(),
+    firstRunRedirect: envFlag(overrides.firstRunRedirect ?? process.env.FIRST_RUN_REDIRECT, !isTest),
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpID: authority.rpID,

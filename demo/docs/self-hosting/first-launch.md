@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-On the very first boot, with an empty `node-data` volume, the Node prepares itself. There is no setup wizard to click through and no SQL to run.
+On the very first boot, with an empty `node-data` volume, the Node prepares itself. There is no SQL to run. The first visitor is sent to the **first-run setup screen** (`/setup`) to create the platform super admin and choose the chain id.
 
 ## What happens on an empty volume
 
@@ -12,16 +12,20 @@ On the very first boot, with an empty `node-data` volume, the Node prepares itse
 4. It seeds a **Demo jurisdiction** so the officer pages have something to show.
 5. If `RECEIPT_PDF_SECRET` is empty, it creates `$DATA_DIR/receipt-pdf.secret`.
 
-## Claim the administrator account
+## First-run setup (`/setup`)
 
 Do this right after the first deploy, before you share the address:
 
-1. Open the site and go to **Register** (`/register`).
-2. Enter the `ADMIN_HANDLE` value (default `admin`) as your handle.
-3. Create a passkey on your device and complete the email code if SES is configured.
-4. Sign in. **Officials → platform admin** (`/admin`) is now available.
+1. Open the site. While no super admin exists every page sends you to `/setup`.
+2. **Super admin.** Keep or change the handle (default from `ADMIN_HANDLE`), accept the Terms, and create a passkey. If `SETUP_TOKEN` is set, enter it first. Complete the email code if SES is configured.
+3. **Chain id.** If `CHAIN_ID` is set in the environment it is shown read-only ("fixed by the environment"). Otherwise pick 27427 (civic L2, default), 1 (Ethereum mainnet), 11155111 (Sepolia), 31337 (local) or a custom positive integer. It is stored server-side; `CHAIN_ID` in the environment always wins over it. Restart the Node after changing it so the wallet chain client picks it up.
+4. Press **Finish setup**. The screen never shows again.
 
-Until that account is claimed, anyone who can reach the site could try to claim it. Keep the Node private while you claim it: use the [Tailscale sidecar](./tailscale.md), a firewall, or your PaaS's basic-auth option. Then open it to the public.
+Only the first super admin wins: once one exists, `POST /api/setup/admin/*` answers `409 SETUP_ADMIN_EXISTS`, including for a second visitor who started at the same time. `GET /api/setup` reports the state.
+
+Until the super admin exists, anyone who can reach the site could try to create it. Set `SETUP_TOKEN`, or keep the Node private while you claim it: use the [Tailscale sidecar](./tailscale.md), a firewall, or your PaaS's basic-auth option. Then open it to the public.
+
+The older path still works when `SETUP_TOKEN` is empty: go to **Register** (`/register`), enter the `ADMIN_HANDLE` value as your handle and create a passkey.
 
 ## Make it yours
 
