@@ -982,6 +982,25 @@ textarea {
   margin-top: 0;
 }
 
+/* Demo home: numbered voting steps. */
+.demo-steps {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+@media (min-width: 1000px) {
+  .demo-steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.demo-steps > li {
+  background: var(--paper);
+  border-top: 4px solid var(--navy);
+  padding: 0.9rem 1rem 1rem;
+}
+
 .identity-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -2143,6 +2162,7 @@ textarea {
 .notice,
 .punch-section,
 .how-grid article,
+.demo-steps > li,
 .receipt,
 .stat,
 .q-card,

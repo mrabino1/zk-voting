@@ -154,16 +154,16 @@ describe('audience helpers and FAQ', () => {
 
   test('nav items differ by audience', () => {
     const pub = mainNav('public').map((i) => i.label);
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['Results', 'Receipt', 'Outcomes', 'Sign in', 'Register', 'About']);
     const voter = mainNav('registered').map((i) => i.label);
-    assert.deepEqual(voter, ['My desk', 'Profile', 'Verify email', 'Register', 'Results', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs']);
+    assert.deepEqual(voter, ['My desk', 'Profile', 'Verify email', 'Register', 'Results', 'Receipt', 'Outcomes', 'About']);
     const officer = mainNav('officer').map((i) => i.label);
     assert.ok(officer.includes('Admin'));
     assert.ok(!pub.includes('Admin'));
     assert.ok(!pub.includes('Polls'));
     const withPolls = mainNav('public', [], { pollsEnabled: true }).map((i) => i.label);
     assert.ok(withPolls.includes('Polls'));
-    assert.deepEqual(pub, ['About', 'FAQ', 'Receipt', 'Outcomes', 'Terms', 'Feedback', 'Bot API', 'Docs', 'Sign in', 'Register']);
+    assert.deepEqual(pub, ['Results', 'Receipt', 'Outcomes', 'Sign in', 'Register', 'About']);
   });
 
   test('officer detection matches Node roles helper', () => {
@@ -206,7 +206,7 @@ describe('audience HTTP routes and admin gates', () => {
       assert.match(page.res.headers.get('content-type') || '', /html/, url);
       assert.match(page.text, /NOT FOR PROFIT/, url);
       assert.match(page.text, /About/, url);
-      assert.match(page.text, /FAQ/, url);
+      assert.match(page.text, /zk-voting\.org/, url);
     }
     const vote = await api('GET', '/vote/3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01');
     assert.equal(vote.status, 200);

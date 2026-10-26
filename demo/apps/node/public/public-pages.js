@@ -1,10 +1,18 @@
 /**
  * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
- * Unregistered marketing pages, sign-in, and voting-admin hub (SPA).
+ * Demo home (voting flow only), legacy about/FAQ pages, sign-in, and voting-admin hub (SPA).
  */
 
 import { brandName } from "./brand.js";
-import { audienceOf, isOfficer, postLoginPath, safeNextPath, signInHref } from "./audience.js";
+import {
+  COMMUNITY_URL,
+  MAIN_SITE_URL,
+  audienceOf,
+  isOfficer,
+  postLoginPath,
+  safeNextPath,
+  signInHref,
+} from "./audience.js";
 import { canEditPages, renderBlocks } from "./cms.js";
 import { FAQ_ENTRIES, faqAnswerText } from "./faq.js";
 import { logout, mountSignInPanel } from "./signin.js";
@@ -28,9 +36,7 @@ function ctaRow(h, audience) {
       h("a", { class: "btn", href: "/register", "data-nav": "", text: "Register" }),
       h("a", { class: "btn btn-secondary", href: "/signin", "data-nav": "", text: "Sign in" }),
       h("a", { class: "btn btn-secondary", href: "/receipt", "data-nav": "", text: "Check a receipt" }),
-      h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "Outcomes monitor" }),
-      h("a", { class: "btn btn-secondary", href: "/about", "data-nav": "", text: "About us" }),
-      h("a", { class: "btn btn-secondary", href: "/faq", "data-nav": "", text: "FAQ" })
+      h("a", { class: "btn btn-secondary", href: "/outcomes", "data-nav": "", text: "See the tally" })
     );
   }
   return h(
@@ -125,27 +131,81 @@ function publicCalendar(h, ctx, elections, source) {
   );
 }
 
+/**
+ * Demo home: the voting flow only. What ZK Voting is and why it matters
+ * lives on the main site (MAIN_SITE_URL); discussion on the community forum.
+ */
+function votingSteps(h, ctx) {
+  const steps = [
+    {
+      n: "1",
+      title: "Join the roll",
+      text: "Register for an election with a passkey, wallet, email, or ID. The roll stores an identity commitment, never your address or document number.",
+      href: "/register",
+      cta: "Register",
+    },
+    {
+      n: "2",
+      title: "Sign in",
+      text: "Come back with the same passkey or account. Your desk lists the ballots you can mark.",
+      href: "/signin",
+      cta: "Sign in",
+    },
+    {
+      n: "3",
+      title: "Cast a private ballot",
+      text: "Your device builds a zero-knowledge proof that you are eligible and have not voted yet. The ballot is accepted without revealing your choice.",
+      href: ctx.pollsEnabled ? "/polls" : "/elections",
+      cta: ctx.pollsEnabled ? "Open polls" : "Elections",
+    },
+    {
+      n: "4",
+      title: "Check your receipt",
+      text: "Paste your receipt to confirm your ballot was counted. It never shows which option you picked.",
+      href: "/receipt",
+      cta: "Check a receipt",
+    },
+    {
+      n: "5",
+      title: "See the tally",
+      text: "After the poll closes, the published totals can be checked against the accepted ballots.",
+      href: "/outcomes",
+      cta: "Outcomes",
+    },
+  ];
+  return h(
+    "ol",
+    { class: "how-grid demo-steps" },
+    ...steps.map((step) =>
+      h(
+        "li",
+        {},
+        h("h3", { text: `${step.n}. ${step.title}` }),
+        h("p", { text: step.text }),
+        h("a", { class: "btn btn-secondary", href: step.href, "data-nav": "", text: step.cta })
+      )
+    )
+  );
+}
+
 export function renderPublicHome(main, ctx, bundle) {
   const { h, setTitle } = ctx;
   const { elections, source, audience } = bundle;
   const overlay = bundle.cms?.overlays?.home;
   const siteTitle = bundle.cms?.site?.title;
-  const tagline = overlay?.blocks?.length && overlay.replaceBuiltin ? null : bundle.cms?.site?.tagline;
   setTitle(siteTitle || brandName());
   const openCount = elections.filter((e) => e.state === 2).length;
   const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
-  const heading = replace ? overlay.title : `${brandName()} — civic elections you can check`;
-  const ledeDefault =
-    `${brandName()} is a not-for-profit zero-knowledge voting system. The people vote for representatives, and those representatives vote. A city, county, state, nation, union, or cooperative should be able to run an election with private ballots and a public process — without a token, a paid tier, or a vendor black box.`;
+  const heading = replace ? overlay.title : `Try a ${brandName()} vote`;
+  const lede =
+    "This is a working demo of the voting flow: how members of a group join the roll, cast an anonymous ballot with a zero-knowledge proof, and check the tally.";
   mount(main,
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "Public home" }),
+      h("p", { class: "kicker", text: "Voting demo" }),
       h("h1", { text: heading }),
-      replace
-        ? null
-        : h("p", { class: "lede", text: tagline || ledeDefault }),
+      replace ? null : h("p", { class: "lede", text: lede }),
       ctaRow(h, audience || "public"),
       demoBanner(h),
       h(
@@ -153,9 +213,6 @@ export function renderPublicHome(main, ctx, bundle) {
         { class: "notice", role: "status" },
         h("p", {
           text: `${openCount} election${openCount === 1 ? "" : "s"} currently listed as open on this Node.`,
-        }),
-        h("p", {
-          text: "Choice stays private. Eligibility, disqualification reason codes, and the published tally are meant to be checkable. Public turnout waits until the hour that contained each ballot has closed.",
         })
       )
     ),
@@ -163,65 +220,32 @@ export function renderPublicHome(main, ctx, bundle) {
     overlay && !replace && overlay.blocks?.length
       ? h("section", { class: "prose cms-prose", "aria-label": "From this Node" }, ...renderBlocks(h, overlay.blocks))
       : null,
+    replace
+      ? null
+      : h(
+          "section",
+          { id: "how-it-works", tabindex: "-1", "aria-labelledby": "steps-heading" },
+          h("h2", { id: "steps-heading", text: "How a vote works" }),
+          votingSteps(h, ctx)
+        ),
     h(
       "section",
       { "aria-labelledby": "calendar-heading" },
       h("h2", { id: "calendar-heading", text: "Open elections calendar" }),
       h("p", {
-        text: "This calendar is public. It does not show whether you are on a roll. Sign in or register to see your personal status and to mark a ballot.",
+        text: "Pick an election to register for, vote in, or follow. Sign in to see your personal status.",
       }),
       publicCalendar(h, ctx, elections, source)
     ),
-    replace
-      ? null
-      : h(
-          "section",
-          { id: "how-it-works", tabindex: "-1" },
-          h("h2", { text: `How ${brandName()} is supposed to work` }),
-      h(
-        "div",
-        { class: "how-grid" },
-        h(
-          "article",
-          {},
-          h("h3", { text: "Privacy of choice" }),
-          h("p", {
-            text: "The option you mark is not published. Receipts are hashes. A coercer who sees that you registered still cannot read the ballot from this desk.",
-          })
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "Public verifiability" }),
-          h("p", {
-            text: "Anyone can inspect registration commitments, disqualification codes, hourly disclosed proofs, and the posted tally. The /outcomes portal groups every contest before, during, and after voting from chain status and runs those checks. Paste a vote receipt at /receipt to confirm that ballot counted — never which option it carried. Officials still maintain the legal roll; counting should not be a second invisible database.",
-          })
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "One person, several authenticators" }),
-          h("p", {
-            text: "Email, Ethereum, smart-card reader, driver’s license or passport, or passkey. Several ETH addresses may be verified; only one is active. The Merkle leaf is an identity commitment, never that address and never a document number.",
-          })
-        ),
-        h(
-          "article",
-          {},
-          h("h3", { text: "Jurisdictions at cost" }),
-          h("p", {
-            text: "Clerks, registrars, disqualification officers, and tally operators are granted per jurisdiction. The jurisdiction paymaster sponsors gas. Voters are not charged.",
-          })
-        )
-      )
-    ),
     h(
       "p",
-      {},
-      h("a", { href: "/about", "data-nav": "", text: "About us" }),
+      { class: "field-hint" },
+      "Officials create ballots and freeze the roll from the ",
+      h("a", { href: "/office", text: "admin hub" }),
+      ". Want to know what ZK Voting is and why it matters? ",
+      h("a", { href: MAIN_SITE_URL, text: "Visit zk-voting.org" }),
       " · ",
-      h("a", { href: "/faq", "data-nav": "", text: "Frequently asked questions" }),
-      " · AGPL-3.0-or-later"
+      h("a", { href: COMMUNITY_URL, text: "Community forum" })
     )
   );
 }
