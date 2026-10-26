@@ -68,6 +68,8 @@ Never commit `.env`, and never bake secrets into an image.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CHAIN_ID` | `27427` | Chain id. Set = fixed by the environment; `/setup` shows it read-only. Empty = the super admin picks it on `/setup` (presets 27427 civic L2, 1 mainnet, 11155111 Sepolia, 31337 local, or custom). The environment always wins over the stored choice. Compose passes the same value to the L2 sequencer as `L2_CHAIN_ID`. Not a positive integer refuses to start. The wallet chain client is built at boot: restart after changing it. |
+| `ENTROPY_CEREMONY_URL` | empty | Public entropy ceremony origin (`https://host`, or `http://localhost:…`; a bare host means https). Set = `/setup` step 3 is read-only. Not a valid URL refuses to start. See [`zk-entropy/ceremony`](../../../zk-entropy/ceremony/README.md). |
+| `ZK_ENTROPY` | empty | **Secret.** A `zke1:` entropy string (closed ceremony output or local). Set = wins over the value saved on `/setup` step 4, which then shows it read-only. A bad checksum refuses to start (the value is never logged). Mixed into browser ceremony contributions; see [`ceremony-web.md`](../ceremony-web.md). |
 | `CHAIN_RPC` | `http://l2:8546` | Where the Node reaches the sequencer. Empty runs without a chain. |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | empty | Pin the one shared deployment. Forks do not redeploy. |
 | `L2_RPC_PORT` | `8546` | Host port for the sequencer. Do not expose publicly. |

@@ -68,6 +68,12 @@ The server enforces the list on join, on upload, and again before accepting a ve
 4. The page downloads the latest key, checks its SHA-256 against the transcript, runs `snarkjs zkey contribute` **in a Web Worker in that tab**, and uploads only the new key. The randomness never leaves the tab, and the worker zeroes its buffers when done.
 5. The page compares the contribution hash the server computed with the one the browser computed, then downloads a JSON receipt (also kept in the browser so it can be downloaded again).
 
+### Optional entropy string
+
+Below the randomness box is an optional **Entropy string** field. Paste a `zke1:` string from [`zk-entropy`](../../zk-entropy/README.md): the output of a closed public entropy ceremony (`zke1:ceremony:…`, for example from ceremony.zk-voting.org) or one you made yourself (`node zk-entropy/bin/zk-entropy.js generate`, giving `zke1:local:…`). A bare 64-hex value is accepted too. The page checks the string's checksum as you type and refuses to start with a mistyped one.
+
+The 32-byte output is mixed in **in addition to** the pad randomness and fresh `crypto.getRandomValues` bytes (`pad ‖ pasted ‖ random`, then snarkjs adds its own draw), so a public or weak string can never make a contribution weaker. It stays in the tab like the rest. For the super admin the field is prefilled with the value saved at first-run setup (step 4) or `ZK_ENTROPY`.
+
 Contributors who want more assurance can use the CLI instead (`circuits/scripts/ceremony.mjs contribute` on an offline machine) and hand the result to the coordinator; the web flow is for reach, not for the strongest possible hygiene.
 
 ---

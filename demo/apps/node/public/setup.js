@@ -6,7 +6,8 @@
  * super admin exists the server refuses the admin steps (409) and this page
  * only shows a "setup is closed" note.
  *
- * Steps: 1. super admin passkey  2. chain id  …  Finish.
+ * Steps: 1. super admin passkey  2. chain id  3–4. entropy ceremony and
+ * setup entropy (setup-entropy.js, via ctx.setupExtraSteps)  Finish.
  */
 
 import { isMfaChallenge, provideMfaEmail, verifyMfaCode } from "./identity-methods.js";
@@ -191,7 +192,7 @@ export async function renderSetup(main, ctx) {
             name: "handle",
             autocomplete: "username",
             value: state.handle || s.suggestedHandle || "admin",
-            pattern: "[A-Za-z0-9][A-Za-z0-9._-]{1,31}",
+            pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]{1,31}",
             required: true,
             onInput: (e) => {
               state.handle = e.target.value;
@@ -367,7 +368,7 @@ export async function renderSetup(main, ctx) {
         : h(
             "div",
             { class: "stack" },
-            h("p", { text: "Finishing pins the chain id above for this install and stops sending you to this screen." }),
+            h("p", { text: "Finishing pins the chain id and entropy choices above for this install and stops sending you to this screen." }),
             h("div", { class: "actions" }, h("button", { class: "btn", type: "button", onClick: finish, disabled: state.busy || !isSuper(), text: "Finish setup" }))
           )
     );
@@ -387,7 +388,7 @@ export async function renderSetup(main, ctx) {
         { class: "page-head" },
         h("p", { class: "kicker", text: "First run" }),
         h("h1", { text: "Set up this install" }),
-        h("p", { class: "lede", text: "Create the platform super admin, choose the chain, then finish. Each step can be re-run until you press Finish." })
+        h("p", { class: "lede", text: "Create the platform super admin, choose the chain, set up entropy, then finish. Each step can be re-run until you press Finish." })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
       state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,
