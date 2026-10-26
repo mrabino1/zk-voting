@@ -15,6 +15,7 @@
     <div class="wrap nav-inner">
       <a class="brand" href="/"><span class="logo" aria-hidden="true">zk</span> ZK Voting</a>
       <nav aria-label="Main">
+        <a href="#vision">Vision</a>
         <a href="#why">Why it matters</a>
         <a href="#who">Who it's for</a>
         <a href="#how">How it works</a>
@@ -40,6 +41,129 @@
           <li><strong>100%</strong><span>of the tally checkable by anyone</span></li>
           <li><strong>$0</strong><span>to voters: no token, no fees</span></li>
         </ul>
+      </div>
+    </section>
+
+    <section class="vision" id="vision" aria-labelledby="vision-title">
+      <div class="wrap">
+        <p class="eyebrow">The big picture</p>
+        <h2 id="vision-title">Many civic L2s, one shared record on Ethereum</h2>
+        <p class="sub">Anyone can run a civic L2 for their own elections. Each one batches votes and settles them to Ethereum L1, so the record outlives any single operator.</p>
+        <div class="vision-grid">
+          <figure class="vz">
+            <svg class="vz-svg" viewBox="0 0 520 470" role="img" aria-labelledby="vz-macro-title vz-macro-desc" focusable="false">
+              <title id="vz-macro-title">Macro view: many independent civic L2s settling to Ethereum L1</title>
+              <desc id="vz-macro-desc">Three civic L2 boxes labeled A, B and C, plus a dashed box for unlimited more. Each holds election chips with no limit on how many. Arrows carry vote batches from every L2 down to one Ethereum L1 box, where each batch is keyed by hash of the L2 ID and the election UUID. A two-way arrow notes that results can be rebuilt from either the L2 or L1.</desc>
+              <defs>
+                <marker id="vz-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a78bfa"/></marker>
+              </defs>
+              <text class="vz-label" x="260" y="24" text-anchor="middle">Anyone can run one &middot; unlimited L2s</text>
+              <g>
+                <rect class="vz-box" x="10" y="40" width="114" height="132" rx="12"/>
+                <text class="vz-h" x="67" y="66" text-anchor="middle">Civic L2 A</text>
+                <rect class="vz-chip" x="24" y="80" width="86" height="22" rx="6"/><text class="vz-s" x="67" y="96" text-anchor="middle">election 1</text>
+                <rect class="vz-chip" x="24" y="108" width="86" height="22" rx="6"/><text class="vz-s" x="67" y="124" text-anchor="middle">election 2</text>
+                <text class="vz-m" x="67" y="154" text-anchor="middle">+ unlimited</text>
+              </g>
+              <g>
+                <rect class="vz-box" x="138" y="40" width="114" height="132" rx="12"/>
+                <text class="vz-h" x="195" y="66" text-anchor="middle">Civic L2 B</text>
+                <rect class="vz-chip" x="152" y="80" width="86" height="22" rx="6"/><text class="vz-s" x="195" y="96" text-anchor="middle">election 1</text>
+                <rect class="vz-chip" x="152" y="108" width="86" height="22" rx="6"/><text class="vz-s" x="195" y="124" text-anchor="middle">election 2</text>
+                <text class="vz-m" x="195" y="154" text-anchor="middle">+ unlimited</text>
+              </g>
+              <g>
+                <rect class="vz-box" x="266" y="40" width="114" height="132" rx="12"/>
+                <text class="vz-h" x="323" y="66" text-anchor="middle">Civic L2 C</text>
+                <rect class="vz-chip" x="280" y="80" width="86" height="22" rx="6"/><text class="vz-s" x="323" y="96" text-anchor="middle">election 1</text>
+                <rect class="vz-chip" x="280" y="108" width="86" height="22" rx="6"/><text class="vz-s" x="323" y="124" text-anchor="middle">election 2</text>
+                <text class="vz-m" x="323" y="154" text-anchor="middle">+ unlimited</text>
+              </g>
+              <g>
+                <rect class="vz-box vz-dashed" x="394" y="40" width="116" height="132" rx="12"/>
+                <text class="vz-big" x="452" y="104" text-anchor="middle">&#8734;</text>
+                <text class="vz-m" x="452" y="134" text-anchor="middle">more L2s</text>
+              </g>
+              <path class="vz-flow" d="M67 176V262" marker-end="url(#vz-arrow)"/>
+              <path class="vz-flow" d="M195 176V262" marker-end="url(#vz-arrow)"/>
+              <path class="vz-flow" d="M323 176V262" marker-end="url(#vz-arrow)"/>
+              <path class="vz-flow vz-dash-line" d="M452 176V262" marker-end="url(#vz-arrow)"/>
+              <rect class="vz-pill" x="100" y="196" width="320" height="46" rx="23"/>
+              <text class="vz-s" x="260" y="215" text-anchor="middle">vote batches, each keyed by</text>
+              <text class="vz-code" x="260" y="234" text-anchor="middle">hash(L2 ID, election UUID)</text>
+              <rect class="vz-l1" x="10" y="270" width="500" height="92" rx="14"/>
+              <text class="vz-h" x="260" y="306" text-anchor="middle">Ethereum L1</text>
+              <text class="vz-m" x="260" y="332" text-anchor="middle">Shared settlement layer and permanent public record</text>
+              <path class="vz-flow" d="M140 384H380" marker-start="url(#vz-arrow)" marker-end="url(#vz-arrow)"/>
+              <text class="vz-m" x="70" y="389" text-anchor="middle">L2 data</text>
+              <text class="vz-m" x="450" y="389" text-anchor="middle">L1 record</text>
+              <text class="vz-label" x="260" y="424" text-anchor="middle">Results can be rebuilt from either one</text>
+              <text class="vz-m" x="260" y="450" text-anchor="middle">No single operator has to be trusted to keep them</text>
+            </svg>
+            <figcaption>
+              <h3>Macro view</h3>
+              <ul class="vz-points">
+                <li>Anyone can run a civic L2, and there's no limit on how many exist.</li>
+                <li>Each L2 can hold any number of elections.</li>
+                <li>Every L2 settles its vote batches to Ethereum L1, keyed by <code>hash(L2 ID, election UUID)</code>.</li>
+                <li>Results can be rebuilt from the L2's data or from the L1 record.</li>
+              </ul>
+            </figcaption>
+          </figure>
+          <figure class="vz">
+            <svg class="vz-svg" viewBox="0 0 520 470" role="img" aria-labelledby="vz-l2-title vz-l2-desc" focusable="false">
+              <title id="vz-l2-title">L2 view: one election team's L2</title>
+              <desc id="vz-l2-desc">Voters at the edge vote for free and send ballots to the sequencer. A voter who is not pre-approved is rejected by the prover. The sequencer and prover batch the accepted votes. The operator's minimally funded L1 key pays to submit each batch to Ethereum L1. The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</desc>
+              <rect class="vz-frame" x="6" y="6" width="508" height="352" rx="16"/>
+              <text class="vz-label" x="24" y="34">One election team's L2</text>
+              <text class="vz-code" x="496" y="34" text-anchor="end">L2 ID = operator key + salt</text>
+              <text class="vz-m" x="24" y="66">Voters at the edge &middot; vote free</text>
+              <g>
+                <circle class="vz-ok" cx="44" cy="96" r="15"/><text class="vz-tick" x="44" y="101" text-anchor="middle">&#10003;</text>
+                <circle class="vz-ok" cx="92" cy="96" r="15"/><text class="vz-tick" x="92" y="101" text-anchor="middle">&#10003;</text>
+                <circle class="vz-ok" cx="140" cy="96" r="15"/><text class="vz-tick" x="140" y="101" text-anchor="middle">&#10003;</text>
+                <circle class="vz-ok" cx="188" cy="96" r="15"/><text class="vz-tick" x="188" y="101" text-anchor="middle">&#10003;</text>
+                <circle class="vz-no" cx="300" cy="96" r="15"/><text class="vz-x" x="300" y="101" text-anchor="middle">?</text>
+                <text class="vz-m" x="324" y="92">not</text>
+                <text class="vz-m" x="324" y="110">pre-approved</text>
+              </g>
+              <path class="vz-flow" d="M116 116V150" marker-end="url(#vz-arrow2)"/>
+              <path class="vz-flow vz-dash-line" d="M300 116V150" marker-end="url(#vz-arrow2)"/>
+              <defs>
+                <marker id="vz-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a78bfa"/></marker>
+              </defs>
+              <rect class="vz-box" x="24" y="156" width="200" height="74" rx="12"/>
+              <text class="vz-h" x="124" y="188" text-anchor="middle">Sequencer</text>
+              <text class="vz-m" x="124" y="212" text-anchor="middle">orders and batches votes</text>
+              <path class="vz-flow" d="M226 193H272" marker-end="url(#vz-arrow2)"/>
+              <rect class="vz-box" x="278" y="156" width="218" height="74" rx="12"/>
+              <text class="vz-h" x="387" y="188" text-anchor="middle">Prover</text>
+              <text class="vz-m" x="387" y="212" text-anchor="middle">proves each batch</text>
+              <text class="vz-reject" x="312" y="142">&#10005; rejected by the prover</text>
+              <path class="vz-flow" d="M387 232V268" marker-end="url(#vz-arrow2)"/>
+              <text class="vz-m" x="24" y="262">Election UUIDs are unique</text>
+              <text class="vz-m" x="24" y="282">within this L2</text>
+              <rect class="vz-box vz-key" x="218" y="274" width="278" height="70" rx="12"/>
+              <text class="vz-h" x="357" y="302" text-anchor="middle">Operator L1 key</text>
+              <text class="vz-m" x="357" y="326" text-anchor="middle">minimally funded, pays to submit</text>
+              <path class="vz-flow" d="M357 346V384" marker-end="url(#vz-arrow2)"/>
+              <text class="vz-s" x="347" y="372" text-anchor="end">batch</text>
+              <rect class="vz-l1" x="10" y="388" width="500" height="72" rx="14"/>
+              <text class="vz-h" x="260" y="420" text-anchor="middle">Ethereum L1</text>
+              <text class="vz-m" x="260" y="444" text-anchor="middle">batch settled under hash(L2 ID, election UUID)</text>
+            </svg>
+            <figcaption>
+              <h3>L2 view: one election team</h3>
+              <ul class="vz-points">
+                <li>Voters at the edge vote for free.</li>
+                <li>Only pre-approved voters are accepted. The prover rejects everyone else.</li>
+                <li>The sequencer and prover batch the votes.</li>
+                <li>The operator's minimally funded L1 key pays to submit each batch to L1.</li>
+                <li>The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</li>
+              </ul>
+            </figcaption>
+          </figure>
+        </div>
       </div>
     </section>
 
