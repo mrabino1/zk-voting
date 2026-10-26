@@ -282,6 +282,11 @@ export function getConfig(overrides = {}) {
     includeOtpInCapture: isTest,
     allowCaptureMailer: isTest || envFlag(process.env.ALLOW_CAPTURE_MAILER, false),
     receiptPdfSecret: String(overrides.receiptPdfSecret ?? process.env.RECEIPT_PDF_SECRET ?? '').trim(),
+    // NON-PRODUCTION: accept JSON "ciphertext" ballots (plaintext answers). Off by
+    // default; the shipped client always encrypts. Only fixtures turn this on.
+    allowPlaintextBallots: Boolean(
+      overrides.allowPlaintextBallots ?? envFlag(process.env.ZKV_ALLOW_PLAINTEXT_BALLOTS, false),
+    ),
     publicBaseUrl: authority.publicBaseUrl,
     mailWebhookUrl: String(overrides.mailWebhookUrl ?? process.env.MAIL_WEBHOOK_URL ?? '').trim(),
     sessionCookie: 'zk-voting.sid',

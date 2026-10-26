@@ -109,8 +109,10 @@ When they vote:
 A coercer who sees the public address learns only that the person registered.
 They cannot read the choice. The Node **must not** print "I voted for X".
 The receipt is hashes only (nullifier, `ballotHash`). It cannot open the
-ciphertext. After accept, the voter may email that receipt: the message body
-and a PDF attachment are the same evidence. That PDF uses PDF Standard Security
+ciphertext. After accept, the default is to download the locked PDF or copy
+the proof on the device. Emailing is opt-in (explicit address plus `optIn`):
+the message carries the election and holder token only — no nullifier, no
+ballot hash, no attachment — and nothing about the send is stored. The PDF uses PDF Standard Security
 so it cannot be edited (print and copy remain allowed). The Node records
 SHA-256 of the exact bytes; `/receipt` accepts the proof or the file and
 rejects a modified PDF. A public `/receipt` portal answers whether the ballot
@@ -124,8 +126,8 @@ the open window it still does not invent unofficial option counts. After
 `cutoffTime` has passed and a tally is posted, the Node issues a locked
 **official outcome PDF** (option counts, start, end) with a required QR and
 SHA-256 / HMAC authenticity page; `/outcomes/verify` checks the file was not
-changed. Voters are subscribed to that PDF by default when they vote and may
-unsubscribe on `/me`. This is
+changed. Subscribing to that PDF is opt-in on `/me`; casting a ballot never
+creates a subscription (see `docs/OPERATOR.md`, "Ballot unlinkability"). This is
 **not** MACI and
 **not** last-vote-counts: a coercer who can force the first (and only) submit
 still wins that ballot.
@@ -750,7 +752,7 @@ GET  /api/outcomes/reports          (issued official outcome PDFs)
 GET  /api/outcomes/reports/:id
 GET  /api/outcomes/reports/:id/pdf  (locked official PDF; X-Pdf-Protected)
 POST /api/outcomes/verify           (drop PDF or report id; pdfUnmodified)
-GET  /api/me/outcome-subscriptions  (default-on after vote; unsubscribe by exception)
+GET  /api/me/outcome-subscriptions  (opt-in; casting a ballot never subscribes)
 PUT  /api/me/outcome-subscriptions/:electionId
 GET  /api/admin/outcome-report-template
 PATCH /api/admin/outcome-report-template  (letterhead/intro; QR+hash always on)
@@ -843,8 +845,13 @@ eligible root, so the inbox rejects it (`EligibleRootMismatch`) even when
 
 `POST /api/elections/:id/vote` accepts the relay envelope:
 `encryptedBallot`, `proof`, `publicInputs` (or the same signals flattened),
-`nullifier`, election id, `ballotHash`, plus the non-choice controls
-`pinToken` and `userOpHash`.
+`nullifier`, election id, `ballotHash`, plus a one-use blind-signed
+`votePass` (`{ token, signature }`). The SPA sends it with
+`credentials: "omit"`, so no session cookie rides with the ballot; the pass is
+obtained earlier from `POST /api/elections/:id/vote-pass` (PIN and external
+clearance are checked there). No `userOpHash` is sent or stored, and a
+plaintext ballot is refused (`PLAINTEXT_BALLOT`) unless the non-production
+`ZKV_ALLOW_PLAINTEXT_BALLOTS=1` is set.
 
 `stripBallotPii` / `sanitizeVoteBody` drop banned keys before relay. A client
 that also sends `answers`, `identityCommitment`, `address`, `credentialId`,

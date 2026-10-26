@@ -45,8 +45,8 @@ runs those same checks for every election, grouped before / during / after votin
 from chain status. During the open window it still does not invent unofficial
 option counts. After voting time expires and a tally is posted, subscribers
 receive a locked official outcome PDF (counts, start, end); `/outcomes/verify`
-checks the file was not changed. Voters are subscribed by default when they
-vote.
+checks the file was not changed. Subscribing is opt-in on `/me`; casting a
+ballot never subscribes anyone.
 
 ---
 

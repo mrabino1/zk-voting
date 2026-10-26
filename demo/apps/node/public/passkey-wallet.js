@@ -1301,9 +1301,14 @@ export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, ch
         ballotHash = ballotHashHex(blob);
       }
     }
+    // v2: a fresh random salt per authorization, so the hash cannot be
+    // recomputed from the (registration-time) address and the public ballot
+    // hash. The hash and signature are local-only; the vote POST omits them.
+    const userOpSalt = crypto.getRandomValues(new Uint8Array(32));
     const userOpMaterial = keccak256(
       concatBytes(
-        textEncoder.encode("zk-voting.userop.v1"),
+        textEncoder.encode("zk-voting.userop.v2"),
+        userOpSalt,
         coerceBytes(rec.address),
         electionKey,
         ballotHash ? hexToBytes(ballotHash) : new Uint8Array(32)

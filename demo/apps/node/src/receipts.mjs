@@ -12,7 +12,7 @@ import path from 'node:path';
 import { isDisclosed, nextPublishAt, hourBucket, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { HttpError } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
-import { emailHint, normalizeEmail, userEmail } from './identity.mjs';
+import { emailHint, normalizeEmail } from './identity.mjs';
 import { toBytes32 } from './merkle.mjs';
 import {
   buildDeterministicPdf,
@@ -386,70 +386,36 @@ export async function issueAndStoreReceiptPdf(deps, { election, vote, receiptRow
   return artifact;
 }
 
-export function receiptEmailBodies({
-  election,
-  vote,
-  receipt,
-  token,
-  published,
-  nextPublishAt: nextAt,
-  pdfSha256,
-  integrity = null,
-}) {
+/**
+ * Opt-in emailed receipt. Deliberately thin: election title, the holder token
+ * and where to verify / download the locked PDF. No nullifier, no ballot hash,
+ * no userOp hash, no acceptance time and no PDF attachment — an inbox (or the
+ * mail provider) should not hold the public handle of the ballot.
+ */
+export function receiptEmailBodies({ election, vote, receipt, token }) {
   const bits = electionPublicBits(election);
-  const proof = formatReceiptProof({
-    electionId: bits.electionId || vote?.electionId,
-    nullifier: vote?.nullifier || receipt?.nullifier,
-    ballotHash: vote?.ballotHash || receipt?.ballotHash,
-    userOpHash: receipt?.userOpHash || vote?.userOpHash,
-    token,
-    acceptedAt: vote?.acceptedAt ?? receipt?.acceptedAt,
-    pdfSha256,
-    integrity,
-  });
+  const electionId = bits.electionId || vote?.electionId || receipt?.electionId || null;
+  const proof = formatReceiptProof({ electionId, token });
   const subject = `${brandName()} vote receipt (not your choices)`;
   const text = [
     'NOT FOR PROFIT — civic public good. Not a commercial product.',
     '',
-    'A ballot was accepted. This message is evidence of voting, not of how you voted. It does not list a candidate or an option. If a copy of this receipt names a choice, it is invalid.',
-    '',
-    'The attached PDF is encrypted and locked against modification. Printing and copying are allowed; editing is not. If a copy can be edited, it is not authentic. Drop that file at /receipt to confirm it still matches the SHA-256 below.',
+    'You asked for a copy of your vote receipt by email. This message is evidence of voting, not of how you voted. It does not list a candidate, an option, or the ballot nullifier.',
     '',
     `Election: ${bits.electionTitle || '—'}`,
-    `Election id: ${bits.electionId || vote?.electionId || '—'}`,
-    `Accepted (UTC): ${isoUtc(vote?.acceptedAt ?? receipt?.acceptedAt) || '—'}`,
-    `Ballot hash: ${vote?.ballotHash || receipt?.ballotHash || '—'}`,
-    `Nullifier: ${vote?.nullifier || receipt?.nullifier || '—'}`,
-    `UserOp hash: ${receipt?.userOpHash || vote?.userOpHash || '—'}`,
-    pdfSha256 ? `PDF SHA-256: ${pdfSha256}` : null,
-    integrity ? `Integrity (HMAC-SHA256): ${integrity}` : null,
+    `Election id: ${electionId || '—'}`,
     '',
-    published
-      ? 'Public explorer rows for this ballot are disclosed.'
-      : `Public explorer rows wait until the hour that contained this ballot closes${
-          nextAt ? ` (next disclosure ${isoUtc(nextAt)}).` : '.'
-        }`,
-    '',
-    'Paste the proof below at /receipt to confirm this ballot was counted. That portal also shows how many ballots have been disclosed and when each hour closed — never which option anyone marked.',
+    'Paste the receipt below at /receipt to confirm the ballot was counted, or to download the locked PDF. Anyone holding this token can do the same, so delete this message if you do not need it.',
     '',
     proof,
-    '',
-    'Keep this message if you need to show that you participated. A modified PDF will not match.',
-  ]
-    .filter((line) => line != null)
-    .join('\n');
+  ].join('\n');
   const html = `<!DOCTYPE html>
 <html lang="en"><body style="font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5;color:#111">
 <p class="nfp" style="font-weight:700;letter-spacing:0.04em">NOT FOR PROFIT</p>
-<p>A ballot was accepted. This message is <strong>evidence of voting</strong>, not of how you voted. It does not list a candidate or an option.</p>
+<p>You asked for a copy of your vote receipt by email. This message is <strong>evidence of voting</strong>, not of how you voted. It does not list a candidate, an option, or the ballot nullifier.</p>
 <p>Election: ${htmlEscape(bits.electionTitle || '—')}<br/>
-Election id: <code>${htmlEscape(bits.electionId || vote?.electionId || '—')}</code><br/>
-Accepted (UTC): ${htmlEscape(isoUtc(vote?.acceptedAt ?? receipt?.acceptedAt) || '—')}<br/>
-Ballot hash: <code style="word-break:break-all">${htmlEscape(vote?.ballotHash || receipt?.ballotHash || '—')}</code><br/>
-Nullifier: <code style="word-break:break-all">${htmlEscape(vote?.nullifier || receipt?.nullifier || '—')}</code></p>
-${pdfSha256 ? `<p>PDF SHA-256: <code style="word-break:break-all">${htmlEscape(pdfSha256)}</code></p>` : ''}
-${integrity ? `<p>Integrity (HMAC-SHA256): <code style="word-break:break-all">${htmlEscape(integrity)}</code></p>` : ''}
-<p>The attached PDF is encrypted and locked against modification. Drop it at <code>/receipt</code> to confirm it was not changed. Turnout on that page is an hourly snapshot and never includes a candidate or option.</p>
+Election id: <code>${htmlEscape(electionId || '—')}</code></p>
+<p>Paste the receipt below at <code>/receipt</code> to confirm the ballot was counted, or to download the locked PDF. Anyone holding this token can do the same, so delete this message if you do not need it.</p>
 <pre style="font-family:ui-monospace,monospace;font-size:0.85rem;white-space:pre-wrap;word-break:break-all;background:#f6f4ef;padding:0.85rem;border:1px solid #ccc">${htmlEscape(proof)}</pre>
 <p style="color:#444">Civic public good. Not a commercial product.</p>
 </body></html>`;
@@ -651,18 +617,24 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
   });
 }
 
-function resolveEmail(req, body) {
+function resolveEmail(_req, body) {
+  // Never fall back to the signed-in account's address: the voter types it.
   const raw = body?.email;
   if (raw) return normalizeEmail(raw);
-  const fromUser = userEmail(req.user);
-  if (fromUser) return fromUser;
-  throw new HttpError(400, 'email required to send a receipt', { code: 'EMAIL_REQUIRED' });
+  throw new HttpError(400, 'type the address to send this receipt to', { code: 'EMAIL_REQUIRED' });
 }
 
+/**
+ * Opt-in only (download is the default). Requires the holder token, an
+ * explicitly typed address and `optIn: true`. Stores nothing about the send.
+ */
 export async function emailReceipt(deps, req, body = {}) {
   const proof = parseReceiptProof(body.proof, body);
   if (!proof.token) {
     throw new HttpError(401, 'a receipt token is required to email a copy', { code: 'RECEIPT_TOKEN_REQUIRED' });
+  }
+  if (body.optIn !== true) {
+    throw new HttpError(400, 'emailing a receipt is opt-in: send optIn: true', { code: 'EMAIL_OPT_IN_REQUIRED' });
   }
   const row = deps.store.findReceiptByTokenHash(hashReceiptToken(proof.token));
   if (!row) throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND' });
@@ -670,55 +642,18 @@ export async function emailReceipt(deps, req, body = {}) {
   if (!vote) throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND' });
   const election = deps.store.requireElection(vote.electionId);
   const to = resolveEmail(req, body);
-  const now = deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
-  const published = isDisclosed(vote.acceptedAt, now, interval);
-  const nextAt = published ? null : nextPublishAt(now, interval);
-  const artifact = await issueAndStoreReceiptPdf(deps, {
-    election,
-    vote,
-    receiptRow: row,
-    token: proof.token,
-  });
-  const bodies = receiptEmailBodies({
-    election,
-    vote,
-    receipt: row,
-    token: proof.token,
-    published,
-    nextPublishAt: nextAt,
-    pdfSha256: artifact.pdfSha256,
-    integrity: artifact.integrity,
-  });
+  const bodies = receiptEmailBodies({ election, vote, receipt: row, token: proof.token });
   await deps.mailer.send({
     to,
     ...bodies,
-    attachments: [
-      {
-        filename: artifact.filename,
-        contentType: 'application/pdf',
-        content: artifact.pdf,
-      },
-    ],
-    meta: {
-      purpose: 'vote-receipt',
-      electionId: String(election.id),
-      nullifier: vote.nullifier,
-      ballotHash: vote.ballotHash,
-      pdfSha256: artifact.pdfSha256,
-    },
+    meta: { purpose: 'vote-receipt', electionId: String(election.id) },
   });
-  await deps.store.markReceiptEmailed(row.id, { emailHint: emailHint(to) });
   return {
     ok: true,
     nfp: true,
     emailed: true,
     toHint: emailHint(to),
-    pdfSha256: artifact.pdfSha256,
-    pdfProtected: true,
-    pdfModify: false,
-    integrity: artifact.integrity,
-    filename: artifact.filename,
+    attachments: 0,
     receiptsProveChoice: false,
   };
 }

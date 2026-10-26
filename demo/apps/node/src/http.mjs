@@ -141,8 +141,32 @@ export function stripBallotPii(value) {
   return out;
 }
 
-/** Vote POST projection: same strip, used before relay reads the body. */
+/**
+ * Keys a ballot request must never carry into the relay: anything that names
+ * the voter (identity commitment, wallet / smart-account address, a userOp
+ * hash bound to that address, a passkey credential), the PIN token and the
+ * vote pass (checked by the route, then dropped), and any email.
+ */
+export const VOTE_IDENTITY_KEYS = Object.freeze([
+  'identityCommitment',
+  'identity_commitment',
+  'commitment',
+  'address',
+  'sender',
+  'smartAccount',
+  'userOpHash',
+  'userOp',
+  'credentialId',
+  'pinToken',
+  'votePass',
+  'email',
+]);
+const VOTE_IDENTITY_KEY_SET = new Set(VOTE_IDENTITY_KEYS);
+
+/** Vote POST projection: same strip plus voter-identity keys, used before relay reads the body. */
 export function sanitizeVoteBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
-  return stripBallotPii(body);
+  const out = stripBallotPii(body);
+  for (const k of Object.keys(out)) if (VOTE_IDENTITY_KEY_SET.has(k)) delete out[k];
+  return out;
 }

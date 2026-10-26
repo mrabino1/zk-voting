@@ -171,4 +171,47 @@ describe('postgres app state', { skip: url ? false : 'TEST_DATABASE_URL unset' }
     assert.equal(c.store.data.meta.fenceProbe, 'from-b');
     await c.close();
   });
+  test('ballot rows carry hour-truncated updated_at (no per-second vote clock)', async () => {
+    const node = await boot(await tmp(), { databaseUrl: url });
+    const admin = await devLogin(node.base, 'admin', 'platform_admin');
+    const call = async (method, p, body, cookie) => {
+      const res = await fetch(node.base + p, {
+        method,
+        headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    const now = Math.floor(Date.now() / 1000);
+    const made = await call('POST', '/api/elections', {
+      title: 'pg timing',
+      startTime: now - 10,
+      cutoffTime: now + 3600,
+      treeDepth: 16,
+      questions: [{ type: 'YES_NO', prompt: '?' }],
+    }, admin);
+    assert.equal(made.status, 201, made.json?.error);
+    const id = made.json.id;
+    assert.equal((await call('POST', `/api/elections/${id}/register`, { identityCommitment: '0xbee' }, admin)).status, 201);
+    assert.equal((await call('POST', `/api/elections/${id}/freeze`, null, admin)).status, 200);
+    const voted = await call('POST', `/api/elections/${id}/vote`, {
+      proof: { accept: true },
+      publicInputs: { nullifier: '0x77', electionId: id },
+      encryptedBallot: '0x0badc0de',
+    });
+    assert.equal(voted.status, 201, voted.json?.error);
+    await node.store.persist();
+    const { rows } = await client.query(
+      `SELECT collection, (updated_at = date_trunc('hour', updated_at)) AS coarse
+         FROM zkv_rows WHERE collection = ANY($1::text[])`,
+      [['votes', 'receipts', 'envelopes', 'votePassSpent']],
+    );
+    assert.ok(rows.some((r) => r.collection === 'votes'), 'vote row persisted');
+    for (const r of rows) assert.equal(r.coarse, true, `${r.collection} updated_at is hour-truncated`);
+    const users = await client.query(
+      `SELECT bool_or(updated_at <> date_trunc('hour', updated_at)) AS fine FROM zkv_rows WHERE collection = 'users'`,
+    );
+    assert.equal(users.rows[0].fine, true, 'non-ballot collections keep normal timestamps');
+    await node.close();
+  });
 });

@@ -18,6 +18,7 @@ import {
 import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
+import { obtainVotePass } from "./vote-pass.js";
 
 function tallyEncryptionBlurb(election) {
   const ceremony = election.tallyCeremony;
@@ -80,15 +81,16 @@ export function mockVotePublicInputs({ eligibleRoot, disqRoot, nullifier, ballot
 
 /**
  * Relay envelope only. Choice stays inside `encryptedBallot`. The leaf, wallet,
- * credential id, and plaintext `answers` are not fields of this POST.
+ * credential id, PIN token, userOp hash and plaintext `answers` are not fields
+ * of this POST. Eligibility rides on a blind-signed vote pass, and the request
+ * is sent without cookies, so the Node cannot tie the ballot to an account.
  */
 export function buildVoteRequestBody({
   electionId,
   nullifier,
   ballotHash,
   encryptedBallot,
-  pinToken,
-  userOpHash,
+  votePass,
   proof,
 }) {
   const body = {
@@ -96,10 +98,11 @@ export function buildVoteRequestBody({
     nullifier,
     ballotHash,
     encryptedBallot,
-    userOpHash,
     proof,
   };
-  if (pinToken) body.pinToken = pinToken;
+  if (votePass?.token && votePass?.signature) {
+    body.votePass = { token: votePass.token, signature: votePass.signature };
+  }
   return body;
 }
 
@@ -155,6 +158,8 @@ export async function renderVote(main, ctx) {
     pinDigits: "",
     pinKeypad: null,
     pinToken: null,
+    votePass: null,
+    emailOptIn: false,
     emailTo: "",
     emailBusy: false,
     downloadBusy: false,
@@ -778,13 +783,26 @@ export async function renderVote(main, ctx) {
         ballotHash: auth.ballotHash,
         electionId: onChainId,
       });
+      // Blind-signed, one-per-voter pass. Fetched with the session (PIN and
+      // eligibility are checked there); the Node signs without seeing the
+      // token, so the pass carried below cannot be mapped back to the account.
+      if (!state.votePass || state.votePass.electionId !== String(election.id)) {
+        if (source === "sample") {
+          state.votePass = null;
+        } else {
+          const pass = await obtainVotePass(api, election.id, {
+            pinToken: state.pinToken || undefined,
+            identityCommitment: publicRecord?.identityCommitment,
+          });
+          state.votePass = { electionId: String(election.id), ...pass };
+        }
+      }
       const body = buildVoteRequestBody({
         electionId: String(election.id),
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
         encryptedBallot: auth.encryptedBallot,
-        pinToken: state.pinToken || undefined,
-        userOpHash: auth.userOpHash,
+        votePass: state.votePass,
         proof: {
           mock: true,
           a: ["0x0", "0x0"],
@@ -804,10 +822,13 @@ export async function renderVote(main, ctx) {
         res = await api(`/api/elections/${encodeURIComponent(election.id)}/vote`, {
           method: "POST",
           body,
+          // No session cookie on the ballot request (see buildVoteRequestBody).
+          credentials: "omit",
         });
         accepted = res?.accepted !== false;
         message = res?.message || "The Node accepted the ballot for relay.";
       } catch (err) {
+        if (["VOTE_PASS_SPENT", "VOTE_PASS_INVALID"].includes(err.data?.code)) state.votePass = null;
         if (source === "sample" && err.status >= 400) {
           accepted = true;
           message = `Passkey signature stored locally. The Node has no matching live election (${err.message}). This receipt does not list your choices.`;
@@ -825,7 +846,6 @@ export async function renderVote(main, ctx) {
         at: serverReceipt.acceptedAtIso || new Date().toISOString(),
         ballotHash: serverReceipt.ballotHash || auth.ballotHash,
         nullifier: serverReceipt.nullifier || auth.nullifier,
-        userOpHash: serverReceipt.userOpHash || auth.userOpHash,
         token: serverReceipt.token || null,
         proofText: serverReceipt.proofText || null,
         published: serverReceipt.published,
@@ -846,6 +866,7 @@ export async function renderVote(main, ctx) {
       state.answersPreview = null;
       state.pendingAnswers = null;
       state.pinToken = null;
+      state.votePass = null;
       state.pinDigits = "";
       announce("Ballot submitted. Receipt does not include your choices.");
     } catch (err) {
@@ -870,7 +891,6 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       election?.id ? `electionId: ${election.id}` : null,
       receipt.nullifier ? `nullifier: ${receipt.nullifier}` : null,
       receipt.ballotHash ? `ballotHash: ${receipt.ballotHash}` : null,
-      receipt.userOpHash ? `userOpHash: ${receipt.userOpHash}` : null,
       receipt.token ? `token: ${receipt.token}` : null,
       "-----END ZK-VOTING VOTE RECEIPT-----",
     ]
@@ -881,7 +901,7 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
     event.preventDefault();
     if (state.emailBusy) return;
     if (!receipt.token) {
-      state.error = "This device only has a local receipt. The Node token is required to email a PDF copy.";
+      state.error = "This device only has a local receipt. The Node token is required to email a copy.";
       announce(state.error);
       paintFromReceipt();
       return;
@@ -890,13 +910,18 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
     state.error = "";
     paintFromReceipt();
     try {
+      const to = String(state.emailTo || "").trim();
+      if (!to) throw new Error("Type the address to send this receipt to.");
+      if (!state.emailOptIn) throw new Error("Tick the box to confirm you want a copy by email.");
       const res = await api("/api/receipts/email", {
         method: "POST",
-        body: { token: receipt.token, proof, email: state.emailTo || undefined },
+        // Cookie-less: the send is not tied to the signed-in account.
+        credentials: "omit",
+        body: { token: receipt.token, email: to, optIn: true },
       });
       state.info = res?.toHint
-        ? `Receipt emailed to ${res.toHint}. The message and locked PDF do not list your choices.`
-        : "Receipt emailed. The message and locked PDF do not list your choices.";
+        ? `Receipt token emailed to ${res.toHint}. The message does not list your choices or the nullifier.`
+        : "Receipt token emailed. The message does not list your choices or the nullifier.";
       announce(state.info);
     } catch (err) {
       state.error = err.message || "Could not email this receipt.";
@@ -978,7 +1003,6 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       h("li", {}, h("span", { class: "lbl", text: "Recorded" }), h("span", { text: receipt.at || receipt.acceptedAtIso || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Ballot hash" }), h("span", { class: "hex", text: receipt.ballotHash || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "Nullifier" }), h("span", { class: "hex", text: receipt.nullifier || "—" })),
-      h("li", {}, h("span", { class: "lbl", text: "UserOp hash" }), h("span", { class: "hex", text: receipt.userOpHash || "—" })),
       h("li", {}, h("span", { class: "lbl", text: "PDF" }), h("span", { text: "Locked against modification" })),
       receipt.pdfSha256
         ? h("li", {}, h("span", { class: "lbl", text: "PDF SHA-256" }), h("span", { class: "hex", text: receipt.pdfSha256 }))
@@ -1025,34 +1049,52 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       })
     ),
     h(
-      "form",
-      { class: "stack receipt-email-form", onSubmit: onEmail },
-      h("h3", { text: "Email this receipt" }),
-      h("p", {
-        class: "field-hint",
-        text: "The email body and the attached PDF are the same evidence: hashes only. The PDF is encrypted so it cannot be edited. They do not list a candidate or an option. If you are signed in with email, you can leave the address blank.",
-      }),
+      "details",
+      { class: "receipt-email-optin" },
+      h("summary", { text: "Optional: email a copy (off by default)" }),
       h(
-        "label",
-        { class: "field", for: "receipt-email" },
-        "Email address",
-        h("input", {
-          id: "receipt-email",
-          name: "email",
-          type: "email",
-          autocomplete: "email",
-          value: state.emailTo,
-          onInput: (event) => {
-            state.emailTo = event.target.value;
-          },
+        "form",
+        { class: "stack receipt-email-form", onSubmit: onEmail },
+        h("p", {
+          class: "field-hint",
+          text: "Downloading the locked PDF or copying the proof keeps the receipt on this device only. An email puts the receipt token in your inbox and with your mail provider; anyone holding it can look this ballot up at /receipt. The message lists the election and the token only: no choices, no nullifier, no attachment. Nothing about the send is stored with the ballot.",
+        }),
+        h(
+          "label",
+          { class: "field", for: "receipt-email" },
+          "Email address",
+          h("input", {
+            id: "receipt-email",
+            name: "email",
+            type: "email",
+            autocomplete: "off",
+            required: true,
+            value: state.emailTo,
+            onInput: (event) => {
+              state.emailTo = event.target.value;
+            },
+          })
+        ),
+        h(
+          "label",
+          { class: "field field-check", for: "receipt-email-optin" },
+          h("input", {
+            id: "receipt-email-optin",
+            type: "checkbox",
+            checked: Boolean(state.emailOptIn),
+            onChange: (event) => {
+              state.emailOptIn = event.target.checked;
+            },
+          }),
+          " I understand, and want this receipt token emailed."
+        ),
+        h("button", {
+          class: "btn btn-secondary",
+          type: "submit",
+          disabled: state.emailBusy || !receipt.token,
+          text: state.emailBusy ? "Sending…" : "Email me the receipt token",
         })
-      ),
-      h("button", {
-        class: "btn",
-        type: "submit",
-        disabled: state.emailBusy || !receipt.token,
-        text: state.emailBusy ? "Sending…" : "Email me the receipt",
-      })
+      )
     )
   );
 }

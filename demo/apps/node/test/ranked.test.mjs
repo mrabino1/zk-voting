@@ -101,6 +101,9 @@ describe('Ranked-choice ballots and IRV tally', () => {
       quiet: true,
       port: 0,
       disclosureIntervalSeconds: 0,
+      // Plaintext JSON ballots are rejected by default; these fixtures exercise
+      // the non-production plaintext tally path on purpose.
+      allowPlaintextBallots: true,
     });
     app = created.app;
     store = created.store;

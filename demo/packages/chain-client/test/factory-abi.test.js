@@ -9,7 +9,7 @@
 const assert = require("node:assert/strict");
 const { describe, test } = require("node:test");
 
-const { FACTORY_ABI, INBOX_ABI, PARTY_REGISTRY_ABI } = require("../index.js");
+const { CLEARANCE_INBOX_ABI, FACTORY_ABI, INBOX_ABI, PARTY_REGISTRY_ABI } = require("../index.js");
 
 describe("external party factory ABI", () => {
   test("ElectionFactory exposes getPartyRegistry", () => {
@@ -19,8 +19,15 @@ describe("external party factory ABI", () => {
     assert.equal(fn.outputs[0].type, "address");
   });
 
-  test("BallotInbox exposes submitVoteWithClearance", () => {
-    const fn = INBOX_ABI.find(
+  test("default INBOX_ABI does not expose submitVoteWithClearance (plaintext commitment in calldata)", () => {
+    assert.equal(
+      INBOX_ABI.some((item) => item.type === "function" && item.name === "submitVoteWithClearance"),
+      false,
+    );
+  });
+
+  test("submitVoteWithClearance is only in the explicit opt-in CLEARANCE_INBOX_ABI", () => {
+    const fn = CLEARANCE_INBOX_ABI.find(
       (item) => item.type === "function" && item.name === "submitVoteWithClearance",
     );
     assert.ok(fn);

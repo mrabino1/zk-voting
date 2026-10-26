@@ -3,6 +3,7 @@
 // them closes, then land in one disclosure block (bucketed timestamp, ordered
 // by nullifier). Payloads never include a voter choice or a passkey user id.
 
+import { randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -103,7 +104,7 @@ export class Explorer {
     if (usingPostgres(config)) {
       await migrate(config, { quiet: config.quiet });
       // txs is keyed by hash: one row per tx instead of one huge value.
-      pgDoc = new PgDocument(config, PG_NAMESPACE, { mapKeys: ['txs'] });
+      pgDoc = new PgDocument(config, PG_NAMESPACE, { mapKeys: ['txs'], coarseTimes: ['sealed'] });
       chain = await pgDoc.load();
       if (!chain) {
         chain = await readChainFile(filePath);
@@ -241,7 +242,10 @@ export class Explorer {
     if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }
-    this.chain.sealed.push({ receivedAt: now, payload: body });
+    // Random position, so the sealed queue's order is not arrival order.
+    // Callers pass a bucket-coarsened receivedAt (relay.coarseAcceptedAt).
+    const at = randomInt(this.chain.sealed.length + 1);
+    this.chain.sealed.splice(at, 0, { receivedAt: now, payload: body });
     await this.persist();
     return { sealed: true, published: false };
   }

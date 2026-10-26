@@ -219,7 +219,7 @@ describe('official outcome PDF HTTP', () => {
     assert.equal(json.outcomes.officialReport.pdfProtected, true);
     assert.equal(json.outcomes.officialReport.pdfModify, false);
     assert.equal(json.outcomes.officialReport.qr, true);
-    assert.equal(json.outcomes.officialReport.defaultSubscribeOnVote, true);
+    assert.equal(json.outcomes.officialReport.defaultSubscribeOnVote, false);
     assert.equal(json.outcomes.officialReport.verifyPath, '/outcomes/verify');
   });
 
@@ -229,7 +229,7 @@ describe('official outcome PDF HTTP', () => {
     assert.match(page.res.headers.get('content-type') || '', /html/);
   });
 
-  test('vote default-subscribes; unsubscribe is the exception; PDF after cutoff+tally', async () => {
+  test('voting never subscribes; opt-in subscribe; PDF after cutoff+tally', async () => {
     const id = await createOpenElection('Outcome PDF race');
     const commit = '0xabc111';
     await officerEnroll(id, commit, store.getUserByHandle('voter1').id);
@@ -246,12 +246,25 @@ describe('official outcome PDF HTTP', () => {
     });
     assert.equal(voted.status, 201, voted.json?.error);
 
+    // The ballot request must not write any per-user row (C3).
+    const none = await api('GET', '/api/me/outcome-subscriptions', { jar: voterJar });
+    assert.equal(none.status, 200, none.json?.error);
+    assert.equal(
+      (none.json.subscriptions || []).some((s) => String(s.electionId) === String(id)),
+      false,
+    );
+    assert.equal(store.findOutcomeSubscription(store.getUserByHandle('voter1').id, id), null);
+
+    const optIn = await api('PUT', `/api/me/outcome-subscriptions/${id}`, {
+      jar: voterJar,
+      body: { subscribed: true },
+    });
+    assert.equal(optIn.status, 200, optIn.json?.error);
     const subs = await api('GET', '/api/me/outcome-subscriptions', { jar: voterJar });
-    assert.equal(subs.status, 200, subs.json?.error);
     const mine = (subs.json.subscriptions || []).find((s) => String(s.electionId) === String(id));
     assert.ok(mine);
     assert.equal(mine.subscribed, true);
-    assert.equal(mine.votedDefault, true);
+    assert.equal(mine.votedDefault, false);
     assert.equal(mine.reportIssued, false);
 
     store.requireElection(id).cutoffTime = nowSec() - 1;

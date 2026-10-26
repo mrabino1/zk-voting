@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
 
-import { attachAuth, enforceApiKeyAccess } from './auth.mjs';
+import { attachAuth, enforceApiKeyAccess, isBallotRequest } from './auth.mjs';
 import { corsOptionsDelegate } from './corsPolicy.mjs';
 import { installConsoleCapture, recordLog, setLogLevel } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
@@ -27,6 +27,7 @@ import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
 import { loadReceiptPdfSecret } from './receipts.mjs';
+import { createVotePassService } from './votePass.mjs';
 import { adminRouter } from './routes/admin.mjs';
 import { apiKeysRouter } from './routes/apiKeys.mjs';
 import { botDocsRouter, repoLlmsRouter } from './routes/botDocs.mjs';
@@ -284,6 +285,7 @@ export async function createApp(overrides = {}) {
   const terms = configOverrides.terms || createTermsService({ store, mailer, config });
   const mfa = createMfaService({ config, store, mailer, terms });
   const pin = createPinService({ store });
+  const votePass = createVotePassService(config);
   const tokenRegistry = tokenRegistryOverride || createTokenRegistry(config);
   const deps = {
     config,
@@ -296,6 +298,7 @@ export async function createApp(overrides = {}) {
     mfa,
     terms,
     pin,
+    votePass,
     tokenRegistry,
     writer,
   };
@@ -346,6 +349,9 @@ export async function createApp(overrides = {}) {
 
   if (!config.quiet) {
     app.use((req, res, next) => {
+      // Ballot unlinkability: never log the ballot POST (no line, no timestamp),
+      // so access logs cannot be lined up with vote-pass issuance or sessions.
+      if (isBallotRequest(req)) return next();
       const t = Date.now();
       res.on('finish', () => {
         const line = `[zk-voting] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - t}ms`;
@@ -412,7 +418,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, writer, plugins, ceremonies: deps.ceremonies };
+  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, votePass, writer, plugins, ceremonies: deps.ceremonies };
 }
 
 export async function startServer(overrides = {}) {
