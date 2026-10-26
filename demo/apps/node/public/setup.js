@@ -7,7 +7,8 @@
  * only shows a "setup is closed" note.
  *
  * Steps: 1. super admin passkey  2. chain id  3–4. entropy ceremony and
- * setup entropy (setup-entropy.js, via ctx.setupExtraSteps)  Finish.
+ * setup entropy (setup-entropy.js), site and environment, L2 identity and L1
+ * funding (setup-site.js), all via ctx.setupExtraSteps  Finish.
  */
 
 import { isMfaChallenge, provideMfaEmail, verifyMfaCode } from "./identity-methods.js";
@@ -388,7 +389,7 @@ export async function renderSetup(main, ctx) {
         { class: "page-head" },
         h("p", { class: "kicker", text: "First run" }),
         h("h1", { text: "Set up this install" }),
-        h("p", { class: "lede", text: "Create the platform super admin, choose the chain, set up entropy, then finish. Each step can be re-run until you press Finish." })
+        h("p", { class: "lede", text: "Create the platform super admin, choose the chain, set up entropy, check the site settings and the L2 identity, then finish. ./setup.sh fills in most of this before the first launch. Each step can be re-run until you press Finish." })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
       state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,

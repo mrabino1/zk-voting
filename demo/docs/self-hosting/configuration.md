@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-Every setting is an environment variable read when the process starts. Copy `.env.example` to `.env`; Compose interpolates it. Environment variables always win over values an officer saves in the app at `/office/site`.
+Every setting is an environment variable read when the process starts. Run `./setup.sh` to write `.env` from a few questions (see [First launch](./first-launch.md)), or copy `.env.example` to `.env` and edit it; Compose interpolates it. Environment variables always win over values an officer saves in the app at `/office/site`.
 
 Never commit `.env`, and never bake secrets into an image.
 

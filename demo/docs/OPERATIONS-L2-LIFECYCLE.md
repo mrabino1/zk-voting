@@ -52,4 +52,4 @@ Outside Docker: `npm run l2:sequencer` / `npm run l2:prover` (`demo/package.json
 
 ## 7. Coolify demo-test
 
-The Coolify `demo-test` app builds only `demo/Dockerfile` (the Node app). `CHAIN_RPC` and `ELECTION_FACTORY_ADDRESS` are empty there, so there is no `l2`, no `prover`, no chain: the app runs JSON-only (elections in the Node data store). No batch ever reaches L1 from demo-test. To run the L2, deploy the Compose file (`docs/self-hosting/coolify.md`).
+The Coolify `demo-test` app builds only `demo/Dockerfile` (the Node app). `CHAIN_RPC` and `ELECTION_FACTORY_ADDRESS` are empty there, so there is no `l2`, no `prover`, no chain: the app runs JSON-only (elections in the Node data store). No batch ever reaches L1 from demo-test. To run the L2, deploy the Compose file (`docs/self-hosting/coolify.md`); `./setup.sh --deploy coolify` writes the L2 identity and L1 submitter into `demo/.env` and prints the Coolify variables (secrets by name only).

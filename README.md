@@ -2,7 +2,30 @@
 
 **NOT FOR PROFIT**: civic public good, not a commercial product. License: AGPL-3.0-or-later ([`LICENSE`](./LICENSE)).
 
-A zero-knowledge, Ethereum-settled voting and polling system that anyone can self-host, fork and rebrand. This repository is a monorepo with four parts:
+A zero-knowledge, Ethereum-settled voting and polling system that anyone can self-host, fork and rebrand.
+
+## Quick start: clone and launch
+
+```bash
+git clone https://github.com/mrabino1/zk-voting.git
+cd zk-voting
+./setup.sh            # or: cd demo && npm run setup
+```
+
+`./setup.sh` asks six short questions and writes `demo/.env`:
+
+1. **Super admin**: handle, contact email, and a setup token (`SETUP_TOKEN`) that guards `/setup` until you claim it.
+2. **Chain id**: 27427 (civic L2, default), 1, 11155111, 31337 or your own; or leave it for the `/setup` page.
+3. **Entropy ceremony**: is there one, and its host (for example `ceremony.zk-voting.org`).
+4. **Setup entropy**: if the ceremony is closed, paste its validated `zke1:ceremony:…` output; otherwise generate local entropy now or skip.
+5. **Site and environment**: public hostname (`VOTE_FQDN`), port, reverse proxy, database (JSON or Postgres), product name. Missing app secrets are generated.
+6. **L2 identity and L1 settlement**: `L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY` (secret), and a new `L2_UUID`, `L2_SALT` (secret) and `L2_ADMIN_SECRET` (secret), from which it derives `L2_OPERATOR_ADDRESS` and `L2_ID` and checks the submitter balance (warning when low).
+
+It never prints a secret, keeps your answers as the defaults when you run it again (a re-run with nothing changed writes nothing), and ends with the exact launch command: `docker compose up -d --build` here, the Coolify settings (`--deploy coolify`), or `npm run dev`. Then open `/setup` in the browser to create the super admin passkey and finish. Options: `./setup.sh --help` (`-y` takes every default). Details: [First launch](./demo/docs/self-hosting/first-launch.md), [L2 identity and settlement](./demo/docs/L2-IDENTITY-AND-SETTLEMENT.md).
+
+## What is in this repository
+
+This repository is a monorepo with four parts:
 
 | Folder | What it is | Served at |
 | --- | --- | --- |
@@ -13,7 +36,7 @@ A zero-knowledge, Ethereum-settled voting and polling system that anyone can sel
 
 `circuits` at the root is a symlink to `demo/circuits`, so the Foundry tests in `smart-contracts/` can still read `../circuits/fixtures`.
 
-## Quick start
+## Build and test each part
 
 ```bash
 # app

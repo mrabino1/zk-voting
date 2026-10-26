@@ -10,17 +10,19 @@ A monorepo for a **zero-knowledge, Ethereum-settled voting and polling system** 
 
 ## Quickstart
 
-You need Docker with Compose v2. Full guide: [Docker Compose quickstart](./docs/self-hosting/docker-compose.md).
+You need Docker with Compose v2 (and Node.js 20+ once, for the setup script). Full guide: [Docker Compose quickstart](./docs/self-hosting/docker-compose.md).
 
 ```bash
-git clone https://github.com/<your-org>/zk-voting.git
-cd zk-voting
-cp .env.example .env          # set VOTE_FQDN, SUPER_ADMIN_EMAIL, and the secrets it lists
-docker compose up -d --build
+git clone https://github.com/mrabino1/zk-voting.git
+cd zk-voting/demo
+./setup.sh                    # guided: writes .env, never prints a secret
+docker compose up -d --build  # setup.sh prints this exact command for your answers
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-Then open `http://127.0.0.1:3000`, go to **Register**, and claim the administrator handle (`ADMIN_HANDLE`, default `admin`) right away: [First launch](./docs/self-hosting/first-launch.md).
+`./setup.sh` (also `npm run setup`, or `./system_actions.sh setup`) asks for the super admin and setup token, the chain id, the entropy ceremony and setup entropy, the hostname, port, proxy and database, and the L2 identity and L1 submitter (`L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_UUID`, `L2_SALT`, `L2_ADMIN_SECRET`, then derives `L2_OPERATOR_ADDRESS` and `L2_ID` and warns when the submitter balance is low). Run it again any time: your answers are the defaults. `--deploy coolify` prints the Coolify settings instead (secret values by name only). By hand instead: `cp .env.example .env` and edit it.
+
+Then open the site and finish [first-run setup](./docs/self-hosting/first-launch.md) at `/setup`: create the super admin passkey (enter the `SETUP_TOKEN` from `.env`), confirm the steps and press **Finish setup**.
 
 Private by default: [`docker-compose.tailscale.yml`](./docker-compose.tailscale.yml) runs the same stack behind a `tailscale/tailscale:stable` sidecar with HTTPS on your tailnet and no public ports.
 
