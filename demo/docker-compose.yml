@@ -36,6 +36,9 @@ services:
       # Postgres app state; empty keeps the JSON store in the volume above.
       DATABASE_URL: ${DATABASE_URL:-}
       CHAIN_ID: ${CHAIN_ID:-27427}
+      # Setup entropy (/setup steps 3-4). ZK_ENTROPY is a secret.
+      ENTROPY_CEREMONY_URL: ${ENTROPY_CEREMONY_URL:-}
+      ZK_ENTROPY: ${ZK_ENTROPY:-}
       CHAIN_RPC: ${CHAIN_RPC:-http://l2:8546}
       # Product name defaults; Site admin > Branding wins. Empty = "ZK-Voting".
       BRAND_NAME: ${BRAND_NAME:-}

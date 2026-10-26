@@ -36,12 +36,15 @@ async function contribute(id, msg) {
   const cap = captureLogger(id);
   const oldZkey = { type: "mem", data: new Uint8Array(msg.zkey) };
   const newZkey = { type: "mem" };
-  // Mix the page's collected entropy with fresh OS randomness. snarkjs then
-  // hashes this string together with its own getRandomValues draw.
+  // Mix the page's collected entropy, the optional pasted entropy (a
+  // validated zk-entropy output: 64 lowercase hex), and fresh OS randomness.
+  // snarkjs then hashes this string together with its own getRandomValues draw.
+  const pasted = typeof msg.pasted === "string" ? msg.pasted : "";
+  if (pasted && !/^[0-9a-f]{64}$/.test(pasted)) throw new Error("pasted entropy must be 64 lowercase hex");
   const extra = new Uint8Array(64);
   self.crypto.getRandomValues(extra);
   const collected = new Uint8Array(msg.entropy);
-  let entropy = toHex(collected) + toHex(extra);
+  let entropy = toHex(collected) + pasted + toHex(extra);
   collected.fill(0);
   extra.fill(0);
   const hash = await snarkjs.zKey.contribute(oldZkey, newZkey, msg.name, entropy, cap.logger);

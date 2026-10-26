@@ -9,6 +9,12 @@
 //                                      claim the row (first finish wins)
 //   PUT  /api/setup/chain-id           super admin, before setup is finished,
 //                                      only when CHAIN_ID is not set in env
+//   PUT  /api/setup/ceremony           super admin, before finish: is there a
+//                                      public entropy ceremony, and its host
+//   PUT  /api/setup/entropy            super admin, before finish: save the
+//                                      closed ceremony's output or local
+//                                      entropy (zke1 string), or skip
+//   GET  /api/setup/entropy            super admin: the saved entropy value
 //   POST /api/setup/complete           super admin: mark setup finished
 //
 // Once a super admin holds a sign-in factor, the admin endpoints answer 409
@@ -32,6 +38,13 @@ import {
   unclaimedSuperAdmin,
 } from '../setup.mjs';
 import { requireAcceptedTerms } from '../terms.mjs';
+import {
+  ENTROPY_MODES,
+  entropyInfo,
+  entropyPublic,
+  normalizeCeremonyUrl,
+  parseEntropyString,
+} from '../entropy.mjs';
 
 export function setupStatus({ config, store }, req) {
   const adminExists = hasClaimedSuperAdmin(store, isClaimedPerson);
@@ -51,6 +64,7 @@ export function setupStatus({ config, store }, req) {
     suggestedHandle: !adminExists ? seed?.handle || config.adminHandle || 'admin' : null,
     chainId: { value: chain.chainId, source: chain.source, fixed: chain.fixed, env: 'CHAIN_ID' },
     chainIdPresets: CHAIN_ID_PRESETS,
+    entropy: entropyPublic(entropyInfo(config, store)),
     completedAt: setup.completedAt || null,
   };
 }
@@ -181,6 +195,102 @@ export function setupRouter(deps) {
       const setup = setupMeta(store);
       setup.chainId = chainId;
       setup.chainIdSetAt = new Date().toISOString();
+      await store.persist();
+      res.json(setupStatus(deps, req));
+    }),
+  );
+
+  function refuseIfComplete(what) {
+    if (readSetup(store).completedAt) {
+      throw new HttpError(409, `setup is finished; set ${what} in the environment to change it`, {
+        code: 'SETUP_COMPLETE',
+      });
+    }
+  }
+
+  router.put(
+    '/ceremony',
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      if (config.entropyCeremonyUrlEnv) {
+        throw new HttpError(409, 'ENTROPY_CEREMONY_URL is fixed by the environment', {
+          code: 'ENTROPY_CEREMONY_FIXED_BY_ENV',
+        });
+      }
+      refuseIfComplete('ENTROPY_CEREMONY_URL');
+      const enabled = req.body?.enabled;
+      if (typeof enabled !== 'boolean') {
+        throw new HttpError(400, 'enabled must be true or false', { code: 'SETUP_BAD_CEREMONY' });
+      }
+      const setup = setupMeta(store);
+      const entropy = { ...(setup.entropy || {}) };
+      if (enabled) {
+        const url = normalizeCeremonyUrl(req.body?.url);
+        if (!url) {
+          throw new HttpError(400, 'ceremony host must be a hostname or https URL, for example ceremony.example.org', {
+            code: 'SETUP_BAD_CEREMONY_URL',
+          });
+        }
+        entropy.ceremony = true;
+        entropy.ceremonyUrl = url;
+      } else {
+        entropy.ceremony = false;
+        entropy.ceremonyUrl = null;
+        // A pasted ceremony output no longer applies without a ceremony.
+        if (entropy.mode === 'ceremony') {
+          entropy.mode = null;
+          entropy.value = null;
+        }
+      }
+      setup.entropy = entropy;
+      await store.persist();
+      res.json(setupStatus(deps, req));
+    }),
+  );
+
+  router.get('/entropy', requireSuperAdmin, (req, res) => {
+    res.set('cache-control', 'no-store');
+    const info = entropyInfo(config, store);
+    res.json({ nfp: true, entropy: { ...entropyPublic(info), value: info.value } });
+  });
+
+  router.put(
+    '/entropy',
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      if (config.entropyEnv) {
+        throw new HttpError(409, 'ZK_ENTROPY is fixed by the environment', { code: 'ENTROPY_FIXED_BY_ENV' });
+      }
+      refuseIfComplete('ZK_ENTROPY');
+      const mode = req.body?.mode;
+      if (!ENTROPY_MODES.includes(mode)) {
+        throw new HttpError(400, 'mode must be ceremony, local or skip', { code: 'SETUP_BAD_ENTROPY_MODE' });
+      }
+      const setup = setupMeta(store);
+      const entropy = { ...(setup.entropy || {}) };
+      if (mode === 'skip') {
+        entropy.mode = 'skip';
+        entropy.value = null;
+      } else {
+        const parsed = parseEntropyString(req.body?.value);
+        if (!parsed.ok) {
+          throw new HttpError(400, `entropy value rejected: ${parsed.error}`, { code: 'SETUP_BAD_ENTROPY' });
+        }
+        if (parsed.source !== mode) {
+          throw new HttpError(400, `that is a ${parsed.source} entropy string, not ${mode}`, {
+            code: 'SETUP_ENTROPY_SOURCE_MISMATCH',
+          });
+        }
+        if (mode === 'ceremony' && entropyInfo(config, store).ceremony.enabled !== true) {
+          throw new HttpError(409, 'say there is a ceremony (step 3) before pasting its output', {
+            code: 'SETUP_NO_CEREMONY',
+          });
+        }
+        entropy.mode = mode;
+        entropy.value = parsed.value;
+      }
+      entropy.savedAt = new Date().toISOString();
+      setup.entropy = entropy;
       await store.persist();
       res.json(setupStatus(deps, req));
     }),

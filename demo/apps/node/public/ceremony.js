@@ -5,6 +5,13 @@
  * Privacy: the entropy you add (pointer and key timings plus
  * crypto.getRandomValues) stays in this tab. Only the new .zkey file, your
  * chosen public name, and an optional attestation are uploaded.
+ *
+ * Optional entropy string: paste a zk-entropy string (zke1:…, for example a
+ * closed public ceremony's output, or one made with the zk-entropy CLI) or a
+ * bare 64-hex value. It is validated here (checksum) and mixed into the
+ * contribution together with the pad entropy and fresh OS randomness, so it
+ * can only add to it. The super admin gets the value saved in first-run setup
+ * prefilled. See docs/ceremony-web.md.
  */
 
 import "./i18n.js";
@@ -24,6 +31,7 @@ import {
   statusPill,
   waitForJob,
 } from "./ceremony-common.js";
+import { parseEntropyString } from "./vendor/zk-entropy.js";
 
 const root = document.getElementById("ceremony-root");
 const flash = document.getElementById("ceremony-flash");
@@ -261,6 +269,35 @@ function contributeFlow(c) {
     e.preventDefault();
   });
 
+  const pasteHint = el("p", { class: "field-hint", id: "contrib-entropy-hint", "aria-live": "polite" }, "Optional. A zk-entropy string (zke1:…), for example a closed public ceremony's output, or 64 hex characters. Mixed in with the randomness above; it never leaves this tab.");
+  const pasteInput = el("textarea", { id: "contrib-entropy", name: "entropyString", rows: "2", spellcheck: "false", autocomplete: "off", "aria-describedby": "contrib-entropy-hint" });
+  let pasteCheck = null;
+  const checkPaste = async () => {
+    const raw = pasteInput.value.trim();
+    pasteCheck = raw ? await parseEntropyString(raw, { allowHex: true }) : null;
+    if (!pasteCheck) {
+      pasteInput.removeAttribute("aria-invalid");
+      pasteHint.textContent = "Optional. Left empty, only the randomness above is used.";
+    } else if (pasteCheck.ok) {
+      pasteInput.setAttribute("aria-invalid", "false");
+      pasteHint.textContent = pasteCheck.source === "hex" ? "64-hex value accepted (no checksum to verify)." : `Checksum OK (${pasteCheck.source} entropy, transcript ${pasteCheck.transcriptHash.slice(0, 12)}…).`;
+    } else {
+      pasteInput.setAttribute("aria-invalid", "true");
+      pasteHint.textContent = `Not accepted: ${pasteCheck.error}.`;
+    }
+    return pasteCheck;
+  };
+  pasteInput.addEventListener("input", checkPaste);
+  loadMe()
+    .then((u) => (u && u.role === "platform_super_admin" ? api("/api/setup/entropy") : null))
+    .then((r) => {
+      if (r?.entropy?.value && !pasteInput.value) {
+        pasteInput.value = r.entropy.value;
+        checkPaste().then(() => (pasteHint.textContent += " Prefilled from first-run setup."));
+      }
+    })
+    .catch(() => {});
+
   const nameInput = el("input", { id: "contrib-name", name: "name", class: "field-input", required: true, maxlength: "64", autocomplete: "off", "aria-describedby": "contrib-name-hint" });
   const attest = el("textarea", { id: "contrib-attest", name: "attestation", rows: "3", maxlength: "4000", "aria-describedby": "contrib-attest-hint" });
   const status = el("p", { id: "contrib-status", role: "status", "aria-live": "polite" });
@@ -282,11 +319,18 @@ function contributeFlow(c) {
           return;
         }
         nameInput.removeAttribute("aria-invalid");
+        const pasted = await checkPaste();
+        if (pasted && !pasted.ok) {
+          status.textContent = `Entropy string: ${pasted.error}. Fix it or clear the field.`;
+          pasteInput.focus();
+          return;
+        }
         button.disabled = true;
         busy = true;
         steps.hidden = false;
         try {
-          await contribute(c, name, attest.value, pool, status, steps);
+          await contribute(c, name, attest.value, pool, status, steps, pasted ? pasted.outputHex : "");
+          pasteInput.value = "";
         } catch (err) {
           status.textContent = `Not accepted: ${errorText(err)}`;
           button.disabled = false;
@@ -327,7 +371,8 @@ function contributeFlow(c) {
         "Your browser's secure random generator is always used. Movement and typing add more. None of it leaves this tab, and it is discarded when you are done."
       ),
       pad,
-      el("p", { class: "entropy-meter" }, el("label", { for: "entropy-progress" }, "Collected "), progress, " ", progressText)
+      el("p", { class: "entropy-meter" }, el("label", { for: "entropy-progress" }, "Collected "), progress, " ", progressText),
+      el("div", { class: "field" }, el("label", { class: "field-label", for: "contrib-entropy" }, "Entropy string (optional)"), pasteInput, pasteHint)
     ),
     el("h3", {}, "2. Compute and upload"),
     el("p", {}, `Your browser downloads the latest key (${fmtBytes(c.contributions.at(-1)?.zkeyBytes ?? c.initial?.zkeyBytes)}), adds your randomness, and uploads the result. Keep this tab open.`),
@@ -335,7 +380,7 @@ function contributeFlow(c) {
   ];
 }
 
-async function contribute(c, name, attestation, pool, status, steps) {
+async function contribute(c, name, attestation, pool, status, steps, pastedHex = "") {
   const parent = c.tipIndex;
   status.textContent = "Downloading the latest key…";
   const prev = await download(`/api/ceremonies/${c.id}/files/${c.tipZkey}`, (got, total) => {
@@ -349,7 +394,7 @@ async function contribute(c, name, attestation, pool, status, steps) {
   const entropy = new Uint32Array(pool.length + 16);
   entropy.set(pool);
   crypto.getRandomValues(entropy.subarray(pool.length));
-  const result = await runWorker("contribute", { zkey: prev, name, entropy: entropy.buffer }, [prev, entropy.buffer]);
+  const result = await runWorker("contribute", { zkey: prev, name, entropy: entropy.buffer, pasted: pastedHex }, [prev, entropy.buffer]);
   steps.value = 70;
   status.textContent = "Uploading…";
   const headers = { "content-type": "application/octet-stream" };

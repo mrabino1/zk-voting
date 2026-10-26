@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { brandName } from './branding.mjs';
 import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
 import { normalizeEmail } from './identity.mjs';
+import { resolveEnvCeremonyUrl, resolveEnvEntropy } from './entropy.mjs';
 import { DEFAULT_CHAIN_ID, resolveEnvChainId } from './setup.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
@@ -199,6 +200,10 @@ export function getConfig(overrides = {}) {
     chainIdEnv,
     chainId: chainIdEnv ?? DEFAULT_CHAIN_ID,
     setupToken: String(overrides.setupToken ?? process.env.SETUP_TOKEN ?? '').trim(),
+    // ENTROPY_CEREMONY_URL (public ceremony origin). ZK_ENTROPY is attached
+    // below as a non-enumerable property so it never ends up in a JSON dump.
+    // Read both through entropyInfo() in entropy.mjs.
+    entropyCeremonyUrlEnv: resolveEnvCeremonyUrl(overrides.entropyCeremonyUrl ?? process.env.ENTROPY_CEREMONY_URL),
     firstRunRedirect: envFlag(overrides.firstRunRedirect ?? process.env.FIRST_RUN_REDIRECT, !isTest),
     disclosureIntervalSeconds,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
@@ -372,6 +377,13 @@ export function getConfig(overrides = {}) {
     true,
   );
   applySiteAdminConfig(config, overrides);
+  delete config.entropy; // a test override copied by ...overrides; keep it out of dumps
+  Object.defineProperty(config, 'entropyEnv', {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: resolveEnvEntropy(Object.prototype.hasOwnProperty.call(overrides, 'entropy') ? overrides.entropy : process.env.ZK_ENTROPY),
+  });
   return config;
 }
 
