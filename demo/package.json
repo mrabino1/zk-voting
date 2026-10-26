@@ -40,6 +40,7 @@
     "dev": "npm run dev -w apps/node",
     "l2:sequencer": "node l2/sequencer/index.mjs",
     "l2:prover": "node l2/prover/index.mjs",
+    "l2:identity": "node l2/bin/l2-identity.mjs",
     "l2:archive": "node l2/archive/cli.mjs archive",
     "l2:archive:restore": "node l2/archive/cli.mjs restore",
     "l2:archive:daemon": "node l2/archive/cli.mjs daemon",

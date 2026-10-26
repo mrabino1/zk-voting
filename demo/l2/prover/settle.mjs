@@ -122,6 +122,7 @@ export async function commitBatch({
       lastProvenBlock: Math.max(Number(cursor.lastProvenBlock) || 0, Number(endBlock)),
       lastBatchIndex: Math.max(Number(cursor.lastBatchIndex), batchIndex),
       lastDataHash: existing?.dataHash || batch.dataHash,
+      lastSettlementRoot: existing?.settlement?.newStateRoot || batch.settlement?.newStateRoot || null,
     };
     writeJsonAtomic(cursorPathFor(dataDir), nextCursor);
     return { ok: true, duplicate: true, submitted: false, reason: 'already recorded', cursor: nextCursor };
@@ -161,6 +162,7 @@ export async function commitBatch({
         lastProvenBlock: Number(endBlock),
         lastBatchIndex: batchIndex,
         lastDataHash: batch.dataHash,
+        lastSettlementRoot: batch.settlement?.newStateRoot || null,
       };
       writeJsonAtomic(cursorPathFor(dataDir), nextCursor);
       return { ok: true, duplicate: true, submitted: false, reason: 'chain', cursor: nextCursor };
@@ -204,6 +206,7 @@ export async function commitBatch({
     lastProvenBlock: Number(endBlock),
     lastBatchIndex: batchIndex,
     lastDataHash: batch.dataHash,
+        lastSettlementRoot: batch.settlement?.newStateRoot || null,
   };
   writeJsonAtomic(proofPath, record);
   writeJsonAtomic(cursorPathFor(dataDir), nextCursor);
@@ -275,7 +278,7 @@ export function hexToNumber(q) {
   return Number(BigInt(q));
 }
 
-export async function runProverTick({ config, cursor, l2Rpc, gate, submit, fetchImpl = fetch }) {
+export async function runProverTick({ config, cursor, l2Rpc, gate, submit, admit = null, fetchImpl = fetch }) {
   assertProverDoesNotDeploy();
   const latest = hexToNumber(await rpcCall(l2Rpc, 'eth_blockNumber', [], fetchImpl));
   const batchSize = config.batchSize || 4;
@@ -308,7 +311,20 @@ export async function runProverTick({ config, cursor, l2Rpc, gate, submit, fetch
       prevStateRoot = parent?.stateRoot || prevStateRoot;
     }
     const batchIndex = Number(current.lastBatchIndex) + 1;
-    const batch = buildBatch({ batchIndex, blocks, prevStateRoot });
+    if (typeof admit === 'function') {
+      const verdict = await admit(blocks);
+      if (verdict && verdict.ok === false) {
+        actions.push({ ok: false, failClosed: true, submitted: false, reason: verdict.reason, cursor: current });
+        break;
+      }
+    }
+    const batch = buildBatch({
+      batchIndex,
+      blocks,
+      prevStateRoot,
+      identity: config.identity || null,
+      prevSettlementRoot: current.lastSettlementRoot || config.genesisStateRoot || null,
+    });
     const result = await commitBatch({
       batch,
       cursor: current,

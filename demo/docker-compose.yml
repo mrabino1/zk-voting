@@ -85,6 +85,14 @@ services:
       L1_PUBLISHER_PRIVATE_KEY: ${L1_PUBLISHER_PRIVATE_KEY:-}
       L1_SETTLEMENT_ADDRESS: ${L1_SETTLEMENT_ADDRESS:-}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+      # L2 identity (read-only here: no L1 submitter key in the Node container).
+      # GET /api/l2/identity and /api/l2/:l2Id/elections/:uuid/results.
+      L2_UUID: ${L2_UUID:-}
+      L2_ID: ${L2_ID:-}
+      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_CIVIC_RPC: ${L2_CIVIC_RPC:-http://l2:8546}
     volumes:
       - node-data:/data
     depends_on:
@@ -131,6 +139,17 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
+      # L2 identity + admission (demo/docs/L2-IDENTITY-AND-SETTLEMENT.md).
+      # strict: only operator-signed admin txs, only opened election UUIDs,
+      # only votes bound to an approved eligibility root.
+      L2_ADMISSION: ${L2_ADMISSION:-strict}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_UUID: ${L2_UUID:-}
+      L2_ID: ${L2_ID:-}
+      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
+      L2_WRITE_RATE_PER_MIN: ${L2_WRITE_RATE_PER_MIN:-0}
     volumes:
       - l2-data:/data
     healthcheck:
@@ -168,7 +187,16 @@ services:
       L1_RPC: ${L1_RPC:-}
       L1_CHAIN_ID: ${L1_CHAIN_ID:-}
       SETTLEMENT_ADDRESS: ${SETTLEMENT_ADDRESS:-}
-      PRIVATE_KEY: ${PRIVATE_KEY:-}
+      # The L2 operator's L1 key (minimal ETH; pays batch gas). PRIVATE_KEY is the legacy name.
+      L1_SUBMITTER_PRIVATE_KEY: ${L1_SUBMITTER_PRIVATE_KEY:-${PRIVATE_KEY:-}}
+      L1_SUBMITTER_MIN_BATCHES: ${L1_SUBMITTER_MIN_BATCHES:-20}
+      L1_SUBMITTER_GAS_PER_BATCH: ${L1_SUBMITTER_GAS_PER_BATCH:-250000}
+      L2_ADMISSION: ${L2_ADMISSION:-strict}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_UUID: ${L2_UUID:-}
+      L2_SALT: ${L2_SALT:-}
+      L2_ID: ${L2_ID:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
     volumes:
       - l2-data:/data
     depends_on:
