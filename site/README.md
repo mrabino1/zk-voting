@@ -6,6 +6,11 @@ The voting demo is a separate app (`demo/`). This site only links to it; never e
 
 - `public/`: the site itself (`index.html`, `styles.css`, `favicon.svg`).
 - `Dockerfile` + `nginx.conf`: serves `public/` with nginx on port 80, with a `GET /health` endpoint.
+- `check-assets.sh`: checks the `?v=<hash>` cache-busting versions on local assets (CSS, SVG and so on) referenced from the HTML pages. After changing an asset, run `site/check-assets.sh --fix` and commit the updated HTML.
+
+## Caching
+
+HTML is served with `Cache-Control: no-cache`, so browsers always revalidate it. Local assets are linked as `file?v=<first 10 hex of its sha256>`, so a changed file gets a new URL and a stale cached copy (from the server, a CDN or the browser) is never reused. The infographic SVGs also carry their own colors and font sizes as presentation attributes, so they stay legible even if `styles.css` is stale or fails to load.
 
 ## Coolify
 
