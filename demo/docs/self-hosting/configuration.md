@@ -40,6 +40,8 @@ Never commit `.env`, and never bake secrets into an image.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADMIN_HANDLE` | `admin` | Handle of the platform administrator seeded on an empty store. See [First launch](./first-launch.md). |
+| `SETUP_TOKEN` | empty | **Secret.** When set, the first-run `/setup` screen asks for it before creating the super admin, and the seeded row cannot be claimed through `/register`. |
+| `FIRST_RUN_REDIRECT` | `true` (`false` in tests) | Send visitors to `/setup` while no super admin exists, and the super admin until they press Finish. |
 | `SUPER_ADMIN_EMAIL` | empty | Contact email of that administrator. Applied on every boot by the active writer. Invalid values refuse to start. |
 | `POLLS_ENABLED` | empty | `1` turns on token-weighted polls. |
 
@@ -65,7 +67,7 @@ Never commit `.env`, and never bake secrets into an image.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `CHAIN_ID` | `27427` | Civic L2 chain id. |
+| `CHAIN_ID` | `27427` | Chain id. Set = fixed by the environment; `/setup` shows it read-only. Empty = the super admin picks it on `/setup` (presets 27427 civic L2, 1 mainnet, 11155111 Sepolia, 31337 local, or custom). The environment always wins over the stored choice. Compose passes the same value to the L2 sequencer as `L2_CHAIN_ID`. Not a positive integer refuses to start. The wallet chain client is built at boot: restart after changing it. |
 | `CHAIN_RPC` | `http://l2:8546` | Where the Node reaches the sequencer. Empty runs without a chain. |
 | `ELECTION_FACTORY_ADDRESS`, `BALLOT_INBOX_ADDRESS`, `VERIFIER_ADDRESS` | empty | Pin the one shared deployment. Forks do not redeploy. |
 | `L2_RPC_PORT` | `8546` | Host port for the sequencer. Do not expose publicly. |

@@ -22,6 +22,7 @@ import { createPasskeyService } from './passkey.mjs';
 import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
 import { createMfaService } from './mfa.mjs';
+import { installChainIdAccessor } from './setup.mjs';
 import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
@@ -31,6 +32,7 @@ import { apiKeysRouter } from './routes/apiKeys.mjs';
 import { botDocsRouter, repoLlmsRouter } from './routes/botDocs.mjs';
 import { selfHostingDocsRouter } from './routes/selfHostingDocs.mjs';
 import { authRouter } from './routes/auth.mjs';
+import { setupRouter } from './routes/setup.mjs';
 import { electionsRouter } from './routes/elections.mjs';
 import { pollsRouter } from './routes/polls.mjs';
 import { createTokenRegistry } from './tokenSource.mjs';
@@ -252,6 +254,8 @@ export async function createApp(overrides = {}) {
   config.writerActive = writer.active;
   config.writerLeaseHandle = writer.lease;
   const store = await Store.open(config);
+  // One chain id accessor: env CHAIN_ID > first-run setup choice > 27427.
+  installChainIdAccessor(config, store);
   store.writerActive = writer.active;
   store.lease = writer.lease;
   const runtime = store.data.runtime || {};
@@ -357,6 +361,7 @@ export async function createApp(overrides = {}) {
   app.use('/api/ceremony-admin', ceremonyAdminRouter(deps));
   app.use(healthRouter(deps));
   app.use(termsPdfRouter(deps));
+  app.use('/api/setup', setupRouter(deps));
   app.use('/api/auth', authRouter(deps));
   app.use('/api/elections', electionsRouter(deps));
   if (config.pollsReady) {

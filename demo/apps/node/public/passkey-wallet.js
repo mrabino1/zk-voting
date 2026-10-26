@@ -1079,16 +1079,35 @@ async function resolveDerivationContext({ api, chainId, jurisdictionId } = {}) {
  * PRF domain, derive (trapdoor, nullifierSecret) under the identity PRF domain,
  * and optionally finish with the Node (`POST /api/auth/passkey/register/{begin,finish}`).
  */
-export async function registerPasskey({ api, displayName, chainId, jurisdictionId, acceptedTerms } = {}) {
+export async function registerPasskey({
+  api,
+  displayName,
+  chainId,
+  jurisdictionId,
+  acceptedTerms,
+  beginPath = "/api/auth/passkey/register/begin",
+  finishPath = "/api/auth/passkey/register/finish",
+  extraBody = null,
+  strict = false,
+} = {}) {
   let server = null;
   let finishError = null;
+  let finishResult = null;
   if (typeof api === "function") {
     try {
-      server = await api("/api/auth/passkey/register/begin", {
+      server = await api(beginPath, {
         method: "POST",
-        body: { displayName: displayName || "voter", handle: displayName || "voter", acceptedTerms },
+        body: {
+          displayName: displayName || "voter",
+          handle: displayName || "voter",
+          acceptedTerms,
+          ...(extraBody || {}),
+        },
       });
-    } catch {
+    } catch (err) {
+      // strict (first-run setup): a refused begin must not fall back to a
+      // local-only passkey.
+      if (strict) throw err;
       server = null;
     }
   }
@@ -1108,19 +1127,21 @@ export async function registerPasskey({ api, displayName, chainId, jurisdictionI
 
   if (typeof api === "function") {
     try {
-      await api("/api/auth/passkey/register/finish", {
+      finishResult = await api(finishPath, {
         method: "POST",
         body: {
           ...serializeAttestation(credential, publicRecord),
           handle: displayName || "voter",
           acceptedTerms,
+          ...(extraBody || {}),
         },
       });
     } catch (err) {
+      if (strict) throw err;
       finishError = err.message || "Passkey finish did not complete on the Node.";
     }
   }
-  return { ...publicRecord, finishError };
+  return { ...publicRecord, finishError, finishResult };
 }
 
 function serializeAttestation(credential, publicRecord) {
