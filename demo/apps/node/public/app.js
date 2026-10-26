@@ -424,7 +424,11 @@ export function announce(message) {
 }
 
 export function setTitle(page) {
-  document.title = page && page !== brandName() ? `${page} — ${brandName()}` : `${brandName()} — civic elections`;
+  const named = page && page !== brandName();
+  document.title = named ? `${page} — ${brandName()}` : `${brandName()} — civic elections`;
+  // Decorative top-bar breadcrumb (aria-hidden); the document title stays the accessible source.
+  const crumb = typeof document.getElementById === "function" ? document.getElementById("topbar-crumb") : null;
+  if (crumb) crumb.textContent = named ? page : "Home";
 }
 
 export function reasonLabel(code) {

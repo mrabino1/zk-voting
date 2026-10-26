@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="/lang-init.js"></script>
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="dark" />
     <meta
       name="description"
       content="%BRAND_NAME% is a not-for-profit civic voting system. Identify yourself with a passkey, Web3 wallet, or smart-card digital ID, then cast a private, publicly verifiable ballot."
@@ -14,24 +14,23 @@
     <meta property="og:site_name" content="%BRAND_NAME%" />
     <meta property="og:title" content="%BRAND_NAME% — civic elections" />
     <meta property="og:description" content="%BRAND_TAGLINE%" />
-    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0e1014" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#0e0f11" />
     <title data-i18n="chrome.titleHome">%BRAND_NAME% — civic elections</title>
     <script src="/canonical-url.js"></script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="app-shell">
     <!-- NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product. -->
     <!-- Voter SPA shell (apps/node/public/index.html). Do not replace with a placeholder. -->
     <a class="skip-link skip" href="#main" data-i18n="chrome.skip">Skip to main content</a>
     <div id="nfp-banner" class="nfp-banner nfp-ribbon" role="note" data-i18n="chrome.nfpBanner">
       NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
     </div>
-    <header class="site-header" id="site-header">
-      <div class="header-inner">
+    <div class="app-topbar" id="app-topbar">
+      <div class="topbar-start">
         <a class="brand" href="/" data-nav aria-label="%BRAND_NAME% home" data-i18n-aria-label="chrome.brandHome">
           <span class="brand-mark" aria-hidden="true">
-            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
+            <svg width="22" height="22" viewBox="0 0 36 36" focusable="false">
               <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
               <path
                 d="M10 18.5 L15.5 24 L26 12"
@@ -48,6 +47,18 @@
             <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
           </span>
         </a>
+        <span class="topbar-chip" aria-hidden="true">Demo</span>
+        <span class="topbar-sep" aria-hidden="true"></span>
+        <span class="topbar-crumb" id="topbar-crumb" aria-hidden="true">Home</span>
+      </div>
+      <div class="topbar-actions">
+        <div id="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" aria-label="Session" data-i18n-aria-label="chrome.session"></div>
+      </div>
+    </div>
+    <header class="site-header" id="site-header">
+      <div class="header-inner">
+        <p class="nav-section-label" aria-hidden="true">Voting</p>
         <nav class="nav-main" aria-label="Public" data-i18n-aria-label="chrome.navPublic">
           <ul>
             <li><a href="/elections" data-nav>Results</a></li>
@@ -58,8 +69,6 @@
             <li><a href="https://zk-voting.org">About</a></li>
           </ul>
         </nav>
-        <div id="lang-switcher"></div>
-        <div id="session-chrome" class="session-chrome" aria-label="Session" data-i18n-aria-label="chrome.session"></div>
       </div>
     </header>
     <main id="main" class="site-main" tabindex="-1">
