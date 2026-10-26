@@ -410,7 +410,7 @@ The PDF is emailed with **AWS SES** on first accept of a hash, using the same en
 
 A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; certified option counts appear after a tally. It is not the receipt portal.
 
-After `cutoffTime` has fully expired **and** a certified tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Voters who cast a ballot are subscribed to that email by default and unsubscribe only by exception on `/me`. Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
+After `cutoffTime` has fully expired **and** a certified tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Subscribing to that email is opt-in on `/me`; casting a ballot never creates a subscription (see "Ballot unlinkability" below). Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
 
 | Variable | Role |
 | --- | --- |
@@ -461,6 +461,91 @@ The visitor must tick the checkbox that feedback becomes the property of the pro
 Reply-To is set only when the optional address validates. Names, the message, and request metadata are stripped of control characters. HTML in the mail is escaped. The email may include User-Agent and Accept-Language. It does not include an IP address, a cookie, a voter id, or any election field.
 
 ---
+
+## Ballot unlinkability
+
+Goal: nothing the Node writes, relays, logs or emails ties a ballot (nullifier,
+`ballotHash`, receipt, ciphertext) to an account, session, email address or
+identity commitment. The Node-side mechanics:
+
+- **Vote pass, then a cookie-less ballot.** Checks that need to know who is
+  voting (session, vote PIN, external-party clearance of an identity
+  commitment) run on `POST /api/elections/:id/vote-pass`. The browser sends only
+  an RSA-blinded value (RSA-FDH, domain `zk-voting.vote-pass.v1`, bound to the
+  election id). It unblinds the signature locally and casts on
+  `POST /api/elections/:id/vote` with `credentials: "omit"`, sending
+  `{ token, signature }`. The Node checks the signature but cannot tell which
+  issuance it came from. Spent passes are stored as a hash only, in a
+  collection with no user id or time. The key lives in `$DATA_DIR/vote-pass.key.json`
+  or the `vote-pass-rsa` row in `zkv_secrets`. Its public half is served by
+  `GET /api/elections/:id/vote-pass` and must stay the same for every voter.
+  When external parties are active, a ballot without a pass gets
+  `403 VOTE_PASS_REQUIRED`.
+- **No identity on the ballot request.** `sanitizeVoteBody` strips
+  `identityCommitment`, `userId`, `pinToken`, `userOpHash`, `address`,
+  `credentialId` and choice keys. The API-key "last used" stamp is not touched
+  on a ballot request. The passkey wallet's UserOp hash is salted per
+  authorization and never leaves the browser.
+- **No timing or order join.** `acceptedAt` is floored to the disclosure
+  interval (hourly by default). Ballot rows are inserted at a random position.
+  The Postgres `updated_at` column is floored to the hour for `votes`,
+  `receipts`, `envelopes`, `votePassSpent` and `elections`. The Node's own access log skips
+  `POST /api/elections/:id/vote` entirely: no line, no timestamp.
+- **No subscription on vote.** Casting never creates an outcome-PDF
+  subscription; it is opt-in on `/me`. Legacy `vote-default` rows are relabelled
+  `legacy-default` and their timestamps floored to the day on load.
+- **Receipts.** Download is the default. Emailing a copy is opt-in
+  (`optIn: true` and an explicit address; no session fallback). The email holds
+  the election and the holder token only, with no nullifier, `ballotHash`,
+  `userOpHash`, time or attachment. Nothing about the send (`emailHint`,
+  `emailedAt`) is written to the receipt row, and the in-memory mail log does
+  not keep it outside tests.
+- **No plaintext ballots.** A ciphertext that decodes as readable JSON is
+  refused with `400 PLAINTEXT_BALLOT`. `ZKV_ALLOW_PLAINTEXT_BALLOTS=1`
+  (`allowPlaintextBallots`) turns that off for ranked/IRV demos and tests only.
+  It is **NON-PRODUCTION**: with it on, the operator can read rankings.
+- **Relayer only.** Ballots reach the inbox through the Node relayer
+  (`msg.sender` = relayer), never from the voter's own wallet. The chain-client
+  default `INBOX_ABI` does not include `submitVoteWithClearance`; it lives in
+  `CLEARANCE_INBOX_ABI` until the contract change in
+  [`proposals/ballot-unlinkability-contracts.md`](./proposals/ballot-unlinkability-contracts.md)
+  lands.
+
+### `/vote` log policy (operators must enforce)
+
+- Do not log client IP, cookies, `Authorization`, user agent or request body
+  for `POST /api/elections/*/vote` at any layer: reverse proxy (nginx, Caddy,
+  Traefik), load balancer (ALB, Cloudflare), WAF, APM or packet capture.
+  Disable access logs for that path, or strip it to method, path and status
+  with the timestamp truncated to the hour.
+- Do not keep request-level logs for `POST /api/elections/*/vote-pass` next to
+  ballot data. If you keep them, keep them apart and short-lived.
+- Do not run a session-sticky load balancer on `/vote`. Do not add tracing
+  headers or request ids that are also set on signed-in requests.
+- Support dumps and backups of `zk-voting.json` / `zkv_rows` must not be joined
+  with proxy logs.
+
+### Residual risks (Node side)
+
+- An operator watching live traffic can still guess by timing: a pass issued at
+  12:00:01 and a ballot at 12:00:03 from the same network. The browser keeps
+  the pass, so a voter who wants more distance can wait or use another network
+  before casting. Tor or a mixnet relay would close this; neither is built.
+- A malicious operator could serve a different vote-pass public key to each
+  voter and tag them. The key is served from one place and is the same for
+  everyone on an honest Node; auditors should compare its fingerprint from
+  several clients.
+- `POST /vote-pass` with an identity commitment and no session is
+  unauthenticated, like the old vote path. It is capped once per commitment per
+  election in memory, so a restart resets the cap. The nullifier still stops a
+  second counted ballot.
+- A voter who opts into the receipt email gives their mail provider the holder
+  token. With the token, `/api/receipts/verify` returns the nullifier, and
+  per-ballot tally opening (C2 below) would then reveal the choice.
+- On-chain: the tally opens each ciphertext (C2), and
+  `submitVoteWithClearance` puts the identity commitment in calldata next to
+  the nullifier (C1). Both need the contract and circuit changes in the
+  proposal. Until then the honest claim is limited to the Node.
 
 ## Secrets and production
 

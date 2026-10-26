@@ -202,10 +202,14 @@ function isPlainObject(v) {
  * value is an object → one row per entry. Everything else → one 'value' row.
  */
 export class PgDocument {
-  constructor(config, ns, { mapKeys = [] } = {}) {
+  constructor(config, ns, { mapKeys = [], coarseTimes = [] } = {}) {
     this.config = config;
     this.ns = ns;
     this.mapKeys = new Set(mapKeys);
+    // Collections whose row / collection `updated_at` is truncated to the hour,
+    // so the database cannot be used to join a ballot row to the second it
+    // arrived (and from there to a session or a log line).
+    this.coarseTimes = new Set(coarseTimes);
     this.cache = new Map(); // name -> { kind, rows: Map<key, json> }
     this.epoch = 0;
     this._write = Promise.resolve();
@@ -345,21 +349,22 @@ export class PgDocument {
           const chunk = ops.upserts.slice(i, i + 500);
           const params = [this.ns];
           const values = chunk.map((u, j) => {
-            params.push(u.collection, u.key, u.pos, u.json);
-            const b = 2 + j * 4;
-            return `($1, $${b}, $${b + 1}, $${b + 2}, $${b + 3}::jsonb, now())`;
+            params.push(u.collection, u.key, u.pos, u.json, this.coarseTimes.has(u.collection));
+            const b = 2 + j * 5;
+            return `($1, $${b}, $${b + 1}, $${b + 2}, $${b + 3}::jsonb, CASE WHEN $${b + 4}::boolean THEN date_trunc('hour', now()) ELSE now() END)`;
           });
           await client.query(
             `INSERT INTO zkv_rows (ns, collection, key, pos, doc, updated_at) VALUES ${values.join(', ')}
-             ON CONFLICT (ns, collection, key) DO UPDATE SET pos = EXCLUDED.pos, doc = EXCLUDED.doc, updated_at = now()`,
+             ON CONFLICT (ns, collection, key) DO UPDATE SET pos = EXCLUDED.pos, doc = EXCLUDED.doc, updated_at = EXCLUDED.updated_at`,
             params,
           );
         }
         const touched = new Set([...ops.upserts.map((u) => u.collection), ...ops.deletes.map((d) => d.collection)]);
         if (touched.size) {
           await client.query(
-            'UPDATE zkv_collections SET updated_at = now() WHERE ns = $1 AND name = ANY($2::text[])',
-            [this.ns, [...touched]],
+            `UPDATE zkv_collections SET updated_at = CASE WHEN name = ANY($3::text[]) THEN date_trunc('hour', now()) ELSE now() END
+             WHERE ns = $1 AND name = ANY($2::text[])`,
+            [this.ns, [...touched], [...this.coarseTimes]],
           );
         }
         await client.query('COMMIT');

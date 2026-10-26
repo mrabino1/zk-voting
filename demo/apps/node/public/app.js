@@ -749,7 +749,7 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "outcome-sub-heading" },
       h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
       h("p", {
-        text: "When you vote, you are subscribed to that contest’s official PDF by default. The report is emailed only after voting time has completely expired and a certified tally is posted. Unsubscribe here only if you do not want that file.",
+        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a certified tally is posted.",
       }),
       renderOutcomeSubscriptions(outcomeSubscriptions, {
         h,
@@ -803,7 +803,7 @@ function renderOutcomeSubscriptions(payload, { h, api, onRefresh } = {}) {
   if (!rows.length) {
     return h("p", {
       class: "field-hint",
-      text: "No outcome subscriptions yet. After you vote, this contest appears here as subscribed. You can also verify a PDF at /outcomes/verify.",
+      text: "No outcome subscriptions yet. Voting does not subscribe you; subscribe to a contest here if you want its official PDF. You can also verify a PDF at /outcomes/verify.",
     });
   }
   return h(
@@ -816,7 +816,7 @@ function renderOutcomeSubscriptions(payload, { h, api, onRefresh } = {}) {
         h("p", { text: row.electionTitle || row.electionId }),
         h(
           "p",
-          { class: "field-hint", text: row.subscribed ? "Subscribed (default after you vote)." : "Unsubscribed — you will not be emailed this official PDF." }
+          { class: "field-hint", text: row.subscribed ? "Subscribed." : "Unsubscribed — you will not be emailed this official PDF." }
         ),
         h(
           "div",

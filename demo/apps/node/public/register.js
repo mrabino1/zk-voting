@@ -1006,20 +1006,10 @@ export async function renderRegister(main, ctx) {
     announce("Confirm the passkey to authorize registration.");
     try {
       const auth = await wallet.authorizeBallot({ electionId, ballotBytes: null });
-      const body = {
-        identityCommitment: auth.identityCommitment,
-        address: auth.address,
-        addressScheme: auth.addressScheme,
-        credentialId: auth.credentialId,
-        signature: auth.signature,
-        userOpHash: auth.userOpHash,
-        userOp: {
-          sender: auth.address,
-          nonce: "0x0",
-          signature: auth.signature,
-          callData: "register",
-        },
-      };
+      // Only the commitment goes to the Node. The smart-account address,
+      // credential id, signature and userOp hash stay on this device: any of
+      // them seen at /register could later be matched against a ballot.
+      const body = { identityCommitment: auth.identityCommitment };
       let status = "pending";
       try {
         const res = await api(`/api/elections/${encodeURIComponent(electionId)}/register`, {

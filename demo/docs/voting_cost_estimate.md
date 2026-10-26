@@ -273,7 +273,7 @@ When `SES_FROM_ADDRESS` and `AWS_REGION` are set ([`.env.example`](./.env.exampl
 | Vote PIN reset OTP | Forgot-PIN | no |
 | Terms of Use PDF | First accept of a given PDF hash (`already_sent_this_hash` otherwise) | yes — raw MIME; SESv2 Simple **cannot** attach ([`apps/node/src/mailer.mjs`](./apps/node/src/mailer.mjs)) |
 | Optional hash-only vote receipt PDF | After accept, if the voter emails it | yes, locked PDF |
-| Official outcome PDF | After cutoff + certified tally; voters subscribed by default | yes, locked PDF |
+| Official outcome PDF | After cutoff + certified tally; opt-in subscription | yes, locked PDF |
 
 Unset SES → Node still records accepts and **captures** mail in-process (tests). No AWS bill.
 

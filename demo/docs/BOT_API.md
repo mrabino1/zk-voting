@@ -235,7 +235,7 @@ Machine-readable copies:
 - `GET /api/outcomes/reports/:id` (key read). One official outcome report record.
 - `GET /api/outcomes/reports/:id/pdf` (key read). Locked official outcome PDF.
 - `POST /api/outcomes/verify` (key read). Check an official outcome PDF was not modified. Body: pdf bytes or id.
-- `GET /api/me/outcome-subscriptions` (key read, signed in). Elections whose official PDF this person will be emailed. Voting subscribes them by default.
+- `GET /api/me/outcome-subscriptions` (key read, signed in). Elections whose official PDF this person will be emailed. Subscription is opt-in; voting never subscribes anyone.
 - `PUT /api/me/outcome-subscriptions/:electionId` (key voter, signed in). Subscribe or confirm a subscription to an official outcome PDF.
 - `POST /api/me/outcome-subscriptions` (key voter, signed in). Subscribe the caller to an election’s official outcome PDF. Body: electionId.
 - `GET /api/admin/outcome-report-template` (key read, signed in). Platform admin reads the official outcome PDF template. QR and hash seals stay required.

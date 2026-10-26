@@ -4,7 +4,7 @@
 // separate collection from ballots and are never copied onto a vote record.
 
 import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -159,6 +159,8 @@ function emptyData() {
     superAdminAudit: [],
     // Phase-2 trusted-setup ceremonies (src/ceremony/service.mjs).
     ceremonies: [],
+    // electionId -> sorted hashes of spent vote passes (no order, no time).
+    votePassSpent: {},
     runtime: {},
   };
 }
@@ -212,7 +214,47 @@ function normalizeLoadedData(parsed) {
   ensureSiteAdminCollections(data);
   data.meta = data.meta || {};
   data.meta.version = Math.max(Number(data.meta.version || 0), 9);
+  scrubBallotLinkage(data);
   return data;
+}
+
+/**
+ * Drop fields older nodes stored that could join a ballot to a person:
+ * a userOpHash bound to the smart-account address, the email hint and send
+ * time of an emailed receipt, and second-precision acceptance times.
+ */
+export function scrubBallotLinkage(data) {
+  if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
+    data.votePassSpent = {};
+  }
+  const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
+  for (const r of data.receipts || []) {
+    if (!r || typeof r !== 'object') continue;
+    delete r.userOpHash;
+    delete r.emailHint;
+    delete r.emailedAt;
+    if (r.acceptedAt != null) r.acceptedAt = hour(r.acceptedAt);
+  }
+  for (const v of data.votes || []) {
+    if (v && typeof v === 'object' && v.acceptedAt != null) v.acceptedAt = hour(v.acceptedAt);
+  }
+  // Older builds subscribed the voter at the moment of the ballot; those rows'
+  // timestamps were a per-user vote clock. Keep the choice, drop the clock.
+  const day = (iso) => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? new Date(Math.floor(t / 86400000) * 86400000).toISOString() : iso;
+  };
+  for (const s of data.outcomeSubscriptions || []) {
+    if (!s || typeof s !== 'object' || s.source !== 'vote-default') continue;
+    s.source = 'legacy-default';
+    if (s.createdAt) s.createdAt = day(s.createdAt);
+    if (s.updatedAt) s.updatedAt = day(s.updatedAt);
+  }
+  return data;
+}
+
+function insertAtRandom(list, item) {
+  list.splice(randomInt(list.length + 1), 0, item);
 }
 
 const ARRAY_COLLECTIONS = [
@@ -248,6 +290,8 @@ const ARRAY_COLLECTIONS = [
 ];
 
 const PG_NAMESPACE = 'store';
+/** Ballot-side collections whose Postgres timestamps are hour-truncated (db.mjs). */
+export const BALLOT_TIMING_COLLECTIONS = ['votes', 'receipts', 'envelopes', 'votePassSpent', 'elections'];
 
 async function readJsonFile(filePath) {
   try {
@@ -276,7 +320,7 @@ export class Store {
     let imported = false;
     if (usingPostgres(config)) {
       await migrate(config, { quiet: config.quiet });
-      pgDoc = new PgDocument(config, PG_NAMESPACE);
+      pgDoc = new PgDocument(config, PG_NAMESPACE, { coarseTimes: BALLOT_TIMING_COLLECTIONS });
       const stored = await pgDoc.load();
       if (stored) {
         data = normalizeLoadedData(stored);
@@ -2126,12 +2170,10 @@ export class Store {
     );
   }
 
-  async markReceiptEmailed(id, { emailHint } = {}) {
+  /** Kept for API compatibility. Records nothing: no email hint, no send time. */
+  async markReceiptEmailed(id) {
     const rec = (this.data.receipts || []).find((r) => r.id === id);
     if (!rec) return null;
-    rec.emailedAt = new Date().toISOString();
-    if (emailHint) rec.emailHint = emailHint;
-    await this.persist();
     return rec;
   }
 
@@ -2172,9 +2214,15 @@ export class Store {
     if (existing) {
       throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
+    const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
+    if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash)) {
+      throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
+    }
+    // relay.relayVote passes a bucket-coarsened time (coarseAcceptedAt); the
+    // fallback is coarsened to the hour here too.
     const acceptedAt = Number.isFinite(Number(vote.acceptedAt))
       ? Math.floor(Number(vote.acceptedAt))
-      : Math.floor(Date.now() / 1000);
+      : Math.floor(Date.now() / 3600000) * 3600;
     const ballotHash = toBytes32(vote.ballotHash);
     let pdfSha256 = null;
     if (vote.pdfSha256) {
@@ -2190,26 +2238,26 @@ export class Store {
       relayer: vote.relayer || 'node',
       acceptedAt,
     };
-    this.data.votes.push(record);
+    // Each collection gets its own random insert position, so array order (and
+    // the zkv_rows `pos` column) is not arrival order and the three rows of
+    // one ballot do not share an index. No userOpHash, no email fields.
+    insertAtRandom(this.data.votes, record);
     if (vote.receiptTokenHash) {
       if (!Array.isArray(this.data.receipts)) this.data.receipts = [];
-      this.data.receipts.push({
+      insertAtRandom(this.data.receipts, {
         id: randomUUID(),
         electionId: record.electionId,
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
         tokenHash: String(vote.receiptTokenHash),
-        userOpHash: vote.userOpHash ? String(vote.userOpHash) : null,
         acceptedAt,
-        emailedAt: null,
-        emailHint: null,
         pdfSha256,
         pdfProtected: true,
         pdfIntegrity: vote.pdfIntegrity ? String(vote.pdfIntegrity) : null,
       });
     }
     if (envelope) {
-      this.data.envelopes.push({
+      insertAtRandom(this.data.envelopes, {
         electionId: record.electionId,
         nullifier: record.nullifier,
         ballotHash: record.ballotHash,
@@ -2217,10 +2265,22 @@ export class Store {
         ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
+    if (spentPassHash) {
+      const key = String(vote.electionId);
+      const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
+      list.push(spentPassHash);
+      list.sort();
+      this.data.votePassSpent[key] = list;
+    }
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
     await this.persist();
     return record;
+  }
+
+  votePassSpent(electionId, hash) {
+    const list = this.data.votePassSpent?.[String(electionId)];
+    return Array.isArray(list) && list.includes(String(hash).toLowerCase());
   }
 
   listVotes(electionId) {

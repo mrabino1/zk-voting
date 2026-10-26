@@ -158,6 +158,7 @@ describe('vote public inputs (5-signal)', () => {
       encryptedBallot: ENCRYPTED,
       pinToken: 'pin-1',
       userOpHash: '0x' + 'ab'.repeat(32),
+      votePass: { token: 'aa'.repeat(32), signature: '0x01', electionId: '7' },
       proof: { mock: true, publicInputs: [ROOT, DISQ, NULLIFIER, BALLOT, String(ELECTION_ID)] },
       answers: [{ optionIds: ['yes'] }],
       identityCommitment: '0xabc',
@@ -169,10 +170,13 @@ describe('vote public inputs (5-signal)', () => {
       'electionId',
       'encryptedBallot',
       'nullifier',
-      'pinToken',
       'proof',
-      'userOpHash',
+      'votePass',
     ]);
+    // The PIN token and userOp hash never ride on the ballot request.
+    assert.equal(body.pinToken, undefined);
+    assert.equal(body.userOpHash, undefined);
+    assert.deepEqual(Object.keys(body.votePass).sort(), ['signature', 'token']);
     assert.equal(body.answers, undefined);
     assert.equal(body.identityCommitment, undefined);
     assert.equal(body.address, undefined);
@@ -199,7 +203,6 @@ describe('vote public inputs (5-signal)', () => {
     assert.equal(stripped.userOp.hash, '0x' + 'cd'.repeat(32));
     assert.equal(stripped.proof.answers, undefined);
     assert.equal(stripped.proof.userId, undefined);
-    assert.equal(stripped.pinToken, 'pin-1');
     assert.equal(stripped.encryptedBallot, ENCRYPTED);
     assert.deepEqual(stripped.proof.publicInputs, body.proof.publicInputs);
   });

@@ -219,7 +219,9 @@ export function createMailer(config = {}) {
       meta: captureCodes ? { ...meta } : { ...meta, code: undefined },
       at: Date.now(),
     };
-    sent.push(record);
+    // Vote receipts hold a holder token; outside the test capture mailer, do
+    // not keep them in process memory after delivery.
+    if (meta?.purpose !== 'vote-receipt' || config.captureEmail) sent.push(record);
 
     if (sesReady && !config.sesDryRun) {
       await sendViaSesv2(config, {

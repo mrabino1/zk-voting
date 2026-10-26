@@ -162,8 +162,8 @@ export function outcomeReportsRouter(deps) {
       });
       res.json({
         nfp: true,
-        defaultSubscribeOnVote: true,
-        unsubscribeByException: true,
+        defaultSubscribeOnVote: false,
+        unsubscribeByException: false,
         subscriptions: rows.filter((r) => r.source || r.subscribed || r.reportIssued),
         all: rows,
       });
