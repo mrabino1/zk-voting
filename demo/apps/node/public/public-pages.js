@@ -49,6 +49,11 @@ function ctaRow(h, audience) {
   );
 }
 
+/** Decorative tinted icon tile for dashboard cards (styles.css .card-icon). */
+function cardIcon(h, icon) {
+  return h("span", { class: `card-icon card-icon-${icon}`, "aria-hidden": "true" });
+}
+
 function demoBanner(h) {
   return h(
     "div",
@@ -79,7 +84,8 @@ function publicCalendar(h, ctx, elections, source) {
       const st = electionStateInfo(election.state);
       return h(
         "article",
-        { class: "election-card", role: "listitem" },
+        { class: "election-card dash-card", role: "listitem" },
+        cardIcon(h, "ballot"),
         h("p", { class: "kicker", text: election.jurisdiction }),
         h("h2", { text: election.title }),
         h("p", { class: "cluster" }, h("span", { class: `status-pill ${st.className}`, text: st.label })),
@@ -139,6 +145,8 @@ function votingSteps(h, ctx) {
   const steps = [
     {
       n: "1",
+      icon: "register",
+      accent: "yellow",
       title: "Join the roll",
       text: "Register for an election with a passkey, wallet, email, or ID. The roll stores an identity commitment, never your address or document number.",
       href: "/register",
@@ -146,6 +154,8 @@ function votingSteps(h, ctx) {
     },
     {
       n: "2",
+      icon: "signin",
+      accent: "orange",
       title: "Sign in",
       text: "Come back with the same passkey or account. Your desk lists the ballots you can mark.",
       href: "/signin",
@@ -153,6 +163,8 @@ function votingSteps(h, ctx) {
     },
     {
       n: "3",
+      icon: "ballot",
+      accent: "green",
       title: "Cast a private ballot",
       text: "Your device builds a zero-knowledge proof that you are eligible and have not voted yet. The ballot is accepted without revealing your choice.",
       href: ctx.pollsEnabled ? "/polls" : "/elections",
@@ -160,6 +172,8 @@ function votingSteps(h, ctx) {
     },
     {
       n: "4",
+      icon: "receipt",
+      accent: "purple",
       title: "Check your receipt",
       text: "Paste your receipt to confirm your ballot was counted. It never shows which option you picked.",
       href: "/receipt",
@@ -167,6 +181,8 @@ function votingSteps(h, ctx) {
     },
     {
       n: "5",
+      icon: "tally",
+      accent: "red",
       title: "See the tally",
       text: "After the poll closes, the published totals can be checked against the accepted ballots.",
       href: "/outcomes",
@@ -179,10 +195,16 @@ function votingSteps(h, ctx) {
     ...steps.map((step) =>
       h(
         "li",
-        {},
+        { class: `dash-card accent-${step.accent}` },
+        cardIcon(h, step.icon),
         h("h3", { text: `${step.n}. ${step.title}` }),
         h("p", { text: step.text }),
-        h("a", { class: "btn btn-secondary", href: step.href, "data-nav": "", text: step.cta })
+        h(
+          "div",
+          { class: "card-stats" },
+          h("span", { class: "card-stat" }, "Step ", h("strong", { text: step.n }), ` of ${steps.length}`),
+          h("a", { class: "btn btn-secondary", href: step.href, "data-nav": "", text: step.cta })
+        )
       )
     )
   );
