@@ -32,6 +32,15 @@ services:
       DISCLOSURE_INTERVAL_SECONDS: ${DISCLOSURE_INTERVAL_SECONDS:-3600}
       ZK_VOTING_NODE_URL: ${ZK_VOTING_NODE_URL:-http://node:3000}
       EXPLORER_INGEST_SECRET: ${EXPLORER_INGEST_SECRET:-}
+      # Same admission and identity as the primary, so a promotion keeps the rules.
+      L2_ADMISSION: ${L2_ADMISSION:-strict}
+      L2_ADMIN_SECRET: ${L2_ADMIN_SECRET:-}
+      L2_UUID: ${L2_UUID:-}
+      L2_ID: ${L2_ID:-}
+      L2_OPERATOR_ADDRESS: ${L2_OPERATOR_ADDRESS:-}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-}
+      L2_REGISTRY_ADDRESS: ${L2_REGISTRY_ADDRESS:-}
+      L2_WRITE_RATE_PER_MIN: ${L2_WRITE_RATE_PER_MIN:-0}
     volumes:
       - l2-data:/data
     healthcheck:

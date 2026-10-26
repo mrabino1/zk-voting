@@ -45,6 +45,7 @@ import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
 import { outcomesRouter } from './routes/outcomes.mjs';
+import { l2ResultsRouter } from './routes/l2Results.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { feedbackRouter } from './routes/feedback.mjs';
@@ -380,6 +381,7 @@ export async function createApp(overrides = {}) {
   app.use('/api', receiptsRouter(deps));
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
+  app.use('/api', l2ResultsRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', botDocsRouter());
   app.use('/api/site-admin', siteAdminRouter(deps));
