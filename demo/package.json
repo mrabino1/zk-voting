@@ -12,7 +12,9 @@
   ],
   "scripts": {
     "build": "npm run build -w apps/node",
-    "test": "npm run test:node && npm run test:packages && npm run test:l2 && npm run test:contracts && npm run test:auditor && npm run test:docs",
+    "test": "npm run test:node && npm run test:packages && npm run test:l2 && npm run test:contracts && npm run test:auditor && npm run test:docs && npm run test:setup",
+    "setup": "node tools/setup/setup.mjs",
+    "test:setup": "node --test tools/setup/*.test.mjs",
     "test:node": "npm run test -w apps/node",
     "test:packages": "npm test -w @zk-voting/chain-client && npm test -w @zk-voting/proof-helpers",
     "certify:l1": "node apps/node/scripts/certify-l1.mjs",

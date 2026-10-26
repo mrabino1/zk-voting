@@ -288,7 +288,7 @@ describe('first-run setup entropy (steps 3–4)', () => {
 
   test('setup page wires steps 3–4 and the contribution page has the validated paste field', async () => {
     const app = await readFile(path.join(here, '../public/app.js'), 'utf8');
-    assert.match(app, /setupExtraSteps: entropySetupSteps/);
+    assert.match(app, /setupExtraSteps: \[\.\.\.entropySetupSteps, \.\.\.siteSetupSteps\]/);
     const steps = await readFile(path.join(here, '../public/setup-entropy.js'), 'utf8');
     assert.match(steps, /export const entropySetupSteps = \[ceremonyStep, entropyStep\]/);
     const cer = await readFile(path.join(here, '../public/ceremony.js'), 'utf8');

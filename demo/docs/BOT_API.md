@@ -146,6 +146,7 @@ Machine-readable copies:
 - `GET /api/elections/:id` (key read). One election. When the caller is signed in, includes that person’s registration status. Choice is never included.
 - `PATCH /api/elections/:id` (key officer, signed in). Clerk edits the ballot before the roll is frozen.
 - `PUT /api/elections/:id` (key officer, signed in). Same edit as PATCH.
+- `DELETE /api/elections/:id` (key officer, signed in). Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction. Body: confirmTitle.
 - `GET /api/elections/:id/info` (key read). Voter-facing questions, options, and supporting info.
 - `GET /api/elections/:id/info/:questionId/:optionId` (key read). One option and its external links.
 - `GET /api/elections/:id/results` (key read). Certified plurality or IRV results after tally. Empty of option counts before tally.

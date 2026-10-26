@@ -3336,3 +3336,25 @@ tbody tr:hover > td {
 .setup-page .entropy-meter { display: flex; align-items: center; gap: 0.5rem; }
 .setup-page .entropy-meter progress { width: min(100%, 24rem); height: 0.75rem; accent-color: var(--project); }
 .setup-page textarea#setup-entropy-paste { display: block; width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+
+/* First-run setup steps 5–6: long hex values (L2_ID, operator) wrap on phones. */
+.setup-step dl.status-dl {
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+}
+.setup-step .status-dl dd {
+  margin: 0;
+  min-width: 0;
+}
+@media (max-width: 540px) {
+  .setup-step dl.status-dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+  .setup-step .status-dl dd {
+    margin-bottom: 0.45rem;
+  }
+}
+.setup-step .status-dl dd code {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}

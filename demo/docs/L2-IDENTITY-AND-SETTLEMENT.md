@@ -29,6 +29,14 @@ Two L2s can reuse the same election UUID: their `l2Id`s differ, so the
 
 ## Setup (operator)
 
+The guided setup does all of this for you: `./setup.sh` (step 6) asks for `L1_RPC`
+and `L1_SUBMITTER_PRIVATE_KEY` (hidden), mints `L2_UUID`, `L2_SALT` and
+`L2_ADMIN_SECRET` when they are missing (kept on every re-run), derives and pins
+`L2_OPERATOR_ADDRESS` and `L2_ID`, and checks the submitter balance with a warning
+when it is low or empty. It writes them to `demo/.env` and never prints a secret.
+The `/setup` page (step "L2 identity and L1 funding") shows the public half from
+`GET /api/l2/identity?funding=1`. By hand:
+
 ```bash
 npm run l2:identity -- init            # prints L2_UUID, L2_SALT, L2_ADMIN_SECRET (store as secrets)
 # set L1_SUBMITTER_PRIVATE_KEY (secret) and L1_RPC
@@ -41,7 +49,7 @@ Env (`demo/.env.example`): `L1_SUBMITTER_PRIVATE_KEY` (secret), `L1_RPC`,
 `L2_UUID`, `L2_SALT` (secret), `L2_ID`, `L2_OPERATOR_ADDRESS`,
 `L2_ADMIN_SECRET` (secret), `L2_ADMISSION` (`strict` in Compose),
 `L2_WRITE_RATE_PER_MIN`, `L2_CIVIC_RPC`, `L2_REGISTRY_ADDRESS` (TBD).
-The guided setup screen should collect these; the API and CLI already exist.
+`./setup.sh` collects these; `/setup` shows the public ones and the funding level.
 
 ## Who pays
 

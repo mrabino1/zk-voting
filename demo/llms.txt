@@ -1,4 +1,4 @@
-# ZK-Voting
+# ZK-Voting (zk-voting)
 
 > NOT FOR PROFIT — civic public good. Not a commercial product.
 

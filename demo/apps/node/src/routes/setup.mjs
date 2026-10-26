@@ -15,7 +15,16 @@
 //                                      closed ceremony's output or local
 //                                      entropy (zke1 string), or skip
 //   GET  /api/setup/entropy            super admin: the saved entropy value
+//   PUT  /api/setup/site               super admin, before finish: the
+//                                      product name (same rules as Site
+//                                      admin > Layout); the rest of step 5
+//                                      comes from env (./setup.sh) and is
+//                                      shown read-only in setupStatus.site
 //   POST /api/setup/complete           super admin: mark setup finished
+//
+// Step 6 (L2 identity and L1 funding) reads GET /api/l2/identity?funding=1.
+// L2_UUID, L2_SALT, L2_ADMIN_SECRET and L1_SUBMITTER_PRIVATE_KEY live in env
+// only (./setup.sh or npm run l2:identity -- init); nothing here returns them.
 //
 // Once a super admin holds a sign-in factor, the admin endpoints answer 409
 // SETUP_ADMIN_EXISTS for ever. When SETUP_TOKEN is set, the admin endpoints
@@ -24,6 +33,7 @@
 import { Router } from 'express';
 
 import { requireSuperAdmin } from '../auth.mjs';
+import { BRAND_NAME_MAX, brandDefaults, cleanBrandText, isSafeBrandText } from '../branding.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { isClaimedPerson } from '../identity.mjs';
 import { secretsEqual } from '../secureCompare.mjs';
@@ -37,6 +47,7 @@ import {
   setupMeta,
   unclaimedSuperAdmin,
 } from '../setup.mjs';
+import { appendSiteAudit } from '../siteAudit.mjs';
 import { requireAcceptedTerms } from '../terms.mjs';
 import {
   ENTROPY_MODES,
@@ -46,7 +57,31 @@ import {
   parseEntropyString,
 } from '../entropy.mjs';
 
-export function setupStatus({ config, store }, req) {
+/**
+ * Step 5, super admin only: what the environment (./setup.sh, .env) set for
+ * this deployment. Never a secret: the database is reported by kind and the
+ * setup token as set / not set.
+ */
+export function siteInfo({ config, layoutService }) {
+  const branding = layoutService?.effective().layout.branding || {};
+  const saved = layoutService?.saved().branding || {};
+  return {
+    voteFqdn: config.voteFqdn || null,
+    publicOrigin: config.origins?.[0] || null,
+    rpId: config.rpID || null,
+    trustProxy: config.trustProxy === undefined || config.trustProxy === false ? null : String(config.trustProxy),
+    port: config.port ?? null,
+    database: config.databaseUrl ? 'postgres' : 'json',
+    setupTokenSet: Boolean(config.setupToken),
+    productName: branding.productName || brandDefaults().name,
+    productNameDefault: brandDefaults().name,
+    productNameSaved: Boolean(saved.productName),
+    env: 'VOTE_FQDN, ZK_VOTING_PORT, TRUST_PROXY, DATABASE_URL, BRAND_NAME',
+  };
+}
+
+export function setupStatus(deps, req) {
+  const { config, store } = deps;
   const adminExists = hasClaimedSuperAdmin(store, isClaimedPerson);
   const setup = readSetup(store);
   const chain = chainIdInfo(config, store);
@@ -65,6 +100,7 @@ export function setupStatus({ config, store }, req) {
     chainId: { value: chain.chainId, source: chain.source, fixed: chain.fixed, env: 'CHAIN_ID' },
     chainIdPresets: CHAIN_ID_PRESETS,
     entropy: entropyPublic(entropyInfo(config, store)),
+    site: viewerIsSuper ? siteInfo(deps) : null,
     completedAt: setup.completedAt || null,
   };
 }
@@ -292,6 +328,45 @@ export function setupRouter(deps) {
       entropy.savedAt = new Date().toISOString();
       setup.entropy = entropy;
       await store.persist();
+      res.json(setupStatus(deps, req));
+    }),
+  );
+
+  router.put(
+    '/site',
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      if (readSetup(store).completedAt) {
+        throw new HttpError(409, 'setup is finished; rename the product in Site admin > Layout', {
+          code: 'SETUP_COMPLETE',
+        });
+      }
+      const { layoutService } = deps;
+      if (!layoutService) throw new HttpError(503, 'layout service unavailable');
+      const raw = req.body?.productName;
+      if (typeof raw !== 'string') {
+        throw new HttpError(400, 'productName must be a string ("" = default)', { code: 'SETUP_BAD_NAME' });
+      }
+      let name = cleanBrandText(raw, BRAND_NAME_MAX);
+      if (raw.trim() && (!name || !isSafeBrandText(raw.trim(), BRAND_NAME_MAX))) {
+        throw new HttpError(400, `product name must be 1–${BRAND_NAME_MAX} plain characters`, { code: 'SETUP_BAD_NAME' });
+      }
+      // Same rule as Site admin > Layout: the env / built-in default is saved
+      // as "" (inherit), so a later BRAND_NAME change still applies.
+      if (name === brandDefaults().name) name = '';
+      const before = layoutService.saved();
+      if ((before.branding?.productName || '') !== name) {
+        await layoutService.save({ ...before, branding: { ...before.branding, productName: name } });
+        await appendSiteAudit(store, {
+          actor: req.user,
+          area: 'layout',
+          action: 'layout.update',
+          method: req.method,
+          path: req.originalUrl,
+          before: { productName: before.branding?.productName || null },
+          after: { productName: name || null },
+        });
+      }
       res.json(setupStatus(deps, req));
     }),
   );

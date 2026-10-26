@@ -16,6 +16,7 @@ import { renderResults, renderResultsIndex } from "./results.js";
 import { SESSION_EVENT, logout, mountSignInPanel } from "./signin.js";
 import { loadSetupStatus, renderSetup, setupRedirectFor } from "./setup.js";
 import { entropySetupSteps } from "./setup-entropy.js";
+import { siteSetupSteps } from "./setup-site.js";
 import {
   registerEthAccount,
   removeBoundEmail,
@@ -1083,7 +1084,7 @@ async function renderRoute(route) {
 
     if (route.name === "setup") {
       setTitle("First-run setup");
-      await renderSetup(main, { ...context, setupStatus, setupExtraSteps: entropySetupSteps });
+      await renderSetup(main, { ...context, setupStatus, setupExtraSteps: [...entropySetupSteps, ...siteSetupSteps] });
     } else if (route.name === "home") {
       const audience = audienceOf(meHint);
       if (audience !== "public") {
