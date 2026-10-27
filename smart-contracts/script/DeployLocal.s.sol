@@ -213,7 +213,15 @@ abstract contract ZkVotingStackScript is DeployOnce {
 
 /// @notice Broadcast the full local stack to Anvil, then create one sample election.
 contract DeployLocal is ZkVotingStackScript {
+    error LocalDeployOnly(uint256 chainId);
+
     function run() external {
+        // This script deploys a sample election and, on the mock path, an
+        // accept-all verifier. It is for chain 31337. A public chain needs
+        // ZK_VOTING_ALLOW_PUBLIC_DEPLOY=1 and still has to pass the mock gate.
+        if (block.chainid != ANVIL_CHAIN_ID && !_envTruthy("ZK_VOTING_ALLOW_PUBLIC_DEPLOY")) {
+            revert LocalDeployOnly(block.chainid);
+        }
         _refuseIfAlreadyDeployed();
         vm.startBroadcast();
         address admin = msg.sender;

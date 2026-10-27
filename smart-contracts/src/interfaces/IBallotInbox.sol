@@ -27,10 +27,20 @@ interface IBallotInbox {
     error BatchLengthMismatch();
     error BatchTooEarly();
     error DuplicateNullifier();
+    error InvalidNullifier();
+    error BallotTooLarge();
+    error ContractPaused();
+    error ReentrantCall();
 
     event VoteAccepted(uint256 indexed electionId, uint256 indexed nullifier, bytes32 ballotHash, address relayer);
 
+    /// @notice One batch landed. `count` is the number of ballots, not a choice total.
+    event VoteBatchAccepted(uint256 indexed electionId, uint256 count, address relayer);
+
     function MAX_VOTE_BATCH() external view returns (uint256);
+
+    /// @notice Largest ciphertext `submitVote` / `submitVoteBatch` will read.
+    function MAX_BALLOT_BYTES() external view returns (uint256);
 
     /// @notice BN254 scalar field modulus r.
     function SNARK_SCALAR_FIELD() external view returns (uint256);

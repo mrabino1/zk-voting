@@ -7,9 +7,9 @@ import {ElectionParams} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
-import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
+import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
 
 /// @title BallotInbox
 /// @notice Accepts gasless vote proofs. `msg.sender` is the relayer/bundler.
@@ -35,6 +35,9 @@ import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 contract BallotInbox is IBallotInbox {
     uint256 public constant MAX_VOTE_BATCH = 64;
 
+    /// @notice Calldata bound for one ciphertext. Aggregate envelopes are far smaller.
+    uint256 public constant MAX_BALLOT_BYTES = 32 * 1024;
+
     /// @notice BN254 scalar field modulus r.
     uint256 public constant SNARK_SCALAR_FIELD =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
@@ -53,6 +56,16 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => bytes32) private _ballotRoot;
     mapping(uint256 => uint64) private _lastBatchAt;
 
+    /// @dev Appended slot. 1 while a submission is inside `nonReentrant`.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
+
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
         _factory = IElectionFactory(factory_);
@@ -68,7 +81,8 @@ contract BallotInbox is IBallotInbox {
         uint256[2] calldata c,
         uint256[] calldata publicInputs,
         bytes calldata encryptedBallot
-    ) external {
+    ) external nonReentrant {
+        _requireNotPaused();
         _requireRelayer();
         if (_disclosureInterval() != 0) revert UseVoteBatch();
         _acceptOne(electionId, a, b, c, publicInputs, encryptedBallot);
@@ -82,7 +96,8 @@ contract BallotInbox is IBallotInbox {
         uint256[2][] calldata c,
         uint256[][] calldata publicInputs,
         bytes[] calldata encryptedBallots
-    ) external {
+    ) external nonReentrant {
+        _requireNotPaused();
         _requireRelayer();
         uint256 n = encryptedBallots.length;
         if (n == 0) revert EmptyBatch();
@@ -110,6 +125,8 @@ contract BallotInbox is IBallotInbox {
             _recordAcceptance(electionId, nullifiers[j], hashes[j]);
         }
         _lastBatchAt[electionId] = uint64(block.timestamp);
+        // Count only. A yes/no split here would publish the batch tally.
+        emit VoteBatchAccepted(electionId, n, msg.sender);
     }
 
     /// @inheritdoc IBallotInbox
@@ -135,6 +152,11 @@ contract BallotInbox is IBallotInbox {
     /// @inheritdoc IBallotInbox
     function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32) {
         return _ballotHashList[electionId][index];
+    }
+
+    function _requireNotPaused() internal view {
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("isPaused()"));
+        if (ok && ret.length >= 32 && abi.decode(ret, (bool))) revert ContractPaused();
     }
 
     function _requireNotTallied(uint256 electionId) internal view {
@@ -180,6 +202,7 @@ contract BallotInbox is IBallotInbox {
         bytes calldata encryptedBallot
     ) internal view returns (uint256 nullifier, bytes32 ballotHash) {
         if (encryptedBallot.length == 0) revert EmptyBallot();
+        if (encryptedBallot.length > MAX_BALLOT_BYTES) revert BallotTooLarge();
         if (publicInputs.length != 5) revert InvalidPublicInputs();
 
         IElection election = _getElection(electionId);
@@ -187,10 +210,15 @@ contract BallotInbox is IBallotInbox {
         _requireNotTallied(electionId);
         _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
 
-        if (!IGroth16Verifier(verifier).verifyProof(a, b, c, publicInputs)) revert InvalidProof();
-
+        // Spent key is the field residue. keccak-dev-v1 nullifiers are full
+        // keccak words; reducing them keeps one key per field element. A residue
+        // of zero is not a nullifier (it is the unset word, and every multiple
+        // of r would otherwise alias it).
         nullifier = publicInputs[2] % SNARK_SCALAR_FIELD;
+        if (nullifier == 0) revert InvalidNullifier();
         ballotHash = bytes32(publicInputs[3]);
+
+        if (!CappedVerifierCall.accepted(verifier, a, b, c, publicInputs)) revert InvalidProof();
         if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
     }
 

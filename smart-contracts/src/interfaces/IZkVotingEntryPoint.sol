@@ -13,6 +13,7 @@ interface IZkVotingEntryPoint {
     error InvalidNonce();
     error ValidationFailed();
     error PaymasterRejected();
+    error ReentrantCall();
 
     event UserOpHandled(address indexed sender, uint256 nonce, address paymaster);
     /// @notice Audit M-08: an op whose execution reverted. Validation already

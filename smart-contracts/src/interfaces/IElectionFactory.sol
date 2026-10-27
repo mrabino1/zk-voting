@@ -24,6 +24,8 @@ interface IElectionFactory {
     error VerifierNotApproved();
     error CannotGrantSuperAdmin();
     error NotPendingAdmin();
+    error AlreadyPaused();
+    error NotPaused();
 
     event ElectionCreated(
         uint256 indexed electionId,
@@ -50,6 +52,8 @@ interface IElectionFactory {
     event VerifierApprovalSet(address indexed verifier, bool approved);
     event AdminTransferStarted(address indexed currentAdmin, address indexed pendingAdmin);
     event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
+    event ContractPaused(address indexed guardian, uint64 pausedAt);
+    event ContractUnpaused(address indexed guardian);
 
     function createElection(ElectionParams calldata params) external returns (uint256 electionId, address election);
 
@@ -91,6 +95,13 @@ interface IElectionFactory {
 
     function disclosureInterval() external view returns (uint64);
 
+    /// @notice A single pause cannot last longer than this, even if the admin key is lost.
+    function MAX_PAUSE_DURATION() external view returns (uint64);
+
+    function pausedAt() external view returns (uint64);
+
+    function isPaused() external view returns (bool);
+
     function roles(bytes32 role, address account) external view returns (bool);
 
     function setAllowMockVerifiers(bool allowed) external;
@@ -98,6 +109,10 @@ interface IElectionFactory {
     function setRelayer(address account, bool allowed) external;
 
     function setDisclosureInterval(uint64 interval) external;
+
+    function pause() external;
+
+    function unpause() external;
 
     function setVerifierApproved(address verifier, bool approved) external;
 
