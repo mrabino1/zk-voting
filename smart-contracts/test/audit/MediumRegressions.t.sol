@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -16,12 +16,19 @@ import {ITallyVerifier} from "../../src/interfaces/ITallyVerifier.sol";
 import {L1TallyMirror} from "../../src/l2/L1TallyMirror.sol";
 import {RollupSettlement} from "../../src/l2/RollupSettlement.sol";
 import {PasskeyAccount} from "../../src/account/PasskeyAccount.sol";
-import {ZkVotingEntryPoint, UserOp} from "../../src/account/ZkVotingEntryPoint.sol";
+import {ZkVotingEntryPoint} from "../../src/account/ZkVotingEntryPoint.sol";
+import {UserOp} from "../../src/interfaces/UserOp.sol";
 import {ZkVotingPaymaster} from "../../src/account/ZkVotingPaymaster.sol";
 import {MockVerifier} from "../../src/zk/MockVerifier.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IBallotInbox} from "../../src/interfaces/IBallotInbox.sol";
+import {IDisqualificationRegistry} from "../../src/interfaces/IDisqualificationRegistry.sol";
+import {IElectionFactory} from "../../src/interfaces/IElectionFactory.sol";
+import {IExternalPartyRegistry} from "../../src/interfaces/IExternalPartyRegistry.sol";
+import {IL1TallyMirror} from "../../src/interfaces/IL1TallyMirror.sol";
+import {IZkVotingPaymaster} from "../../src/interfaces/IZkVotingPaymaster.sol";
 
 contract MedSink {
     uint256 public value;
@@ -56,7 +63,7 @@ contract MediumRegressionsTest is Deployer {
     function testM01_LateUpdateCannotBeEnabledAfterStart() public {
         (uint256 id, address el) = prepareOpenElection(Fixtures.identityCommitment(uint256(1)));
         vm.prank(clerk);
-        vm.expectRevert(DisqualificationRegistry.VotingStarted.selector);
+        vm.expectRevert(IDisqualificationRegistry.VotingStarted.selector);
         disqualification.setLateUpdateAllowed(id, true);
         // Narrowing is always allowed.
         vm.prank(clerk);
@@ -64,7 +71,7 @@ contract MediumRegressionsTest is Deployer {
         assertFalse(disqualification.lateUpdateAllowed(id));
         // Without the pre-start opt-in, the officer cannot move roots mid-vote.
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.RollFrozen.selector);
+        vm.expectRevert(IDisqualificationRegistry.RollFrozen.selector);
         disqualification.disqualify(id, Fixtures.identityCommitment(uint256(1)), ReasonCodes.DECEASED, bytes32(0));
         el;
     }
@@ -75,7 +82,7 @@ contract MediumRegressionsTest is Deployer {
         registerVoter(id, cm);
         freezeRoll(el);
         vm.expectEmit(true, false, false, true, address(disqualification));
-        emit DisqualificationRegistry.LateUpdateAllowedSet(id, true);
+        emit IDisqualificationRegistry.LateUpdateAllowedSet(id, true);
         vm.prank(clerk);
         disqualification.setLateUpdateAllowed(id, true);
         warpOpen(el);
@@ -102,7 +109,7 @@ contract MediumRegressionsTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.verifier = address(new MockVerifier()); // attacker-chosen accept-all
         vm.prank(clerk);
-        vm.expectRevert(ElectionFactory.VerifierNotApproved.selector);
+        vm.expectRevert(IElectionFactory.VerifierNotApproved.selector);
         factory.createElection(p);
         // Approved verifier still works for the clerk (flow preserved).
         vm.prank(clerk);
@@ -116,13 +123,13 @@ contract MediumRegressionsTest is Deployer {
         address attacker = makeAddr("attacker");
         p.clerk = attacker;
         vm.prank(attacker);
-        vm.expectRevert(ElectionFactory.MissingRole.selector);
+        vm.expectRevert(IElectionFactory.MissingRole.selector);
         naked.createElection(p);
     }
 
     function testM02_VerifierApprovalIsSuperAdminOnly() public {
         vm.prank(clerk);
-        vm.expectRevert(ElectionFactory.NotSuperAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotSuperAdmin.selector);
         factory.setVerifierApproved(address(1), true);
         vm.prank(admin);
         factory.setVerifierApproved(address(1), true);
@@ -133,10 +140,10 @@ contract MediumRegressionsTest is Deployer {
 
     function testM03_ExploitModuleRewireRefused() public {
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ModulesAlreadySet.selector);
+        vm.expectRevert(IElectionFactory.ModulesAlreadySet.selector);
         factory.setModules(address(1), address(2), address(3), address(4));
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ModulesAlreadySet.selector);
+        vm.expectRevert(IElectionFactory.ModulesAlreadySet.selector);
         factory.wireModules(address(1), address(2), address(3), address(4));
         assertEq(factory.ballotInbox(), address(inbox));
     }
@@ -144,14 +151,14 @@ contract MediumRegressionsTest is Deployer {
     function testM03_ModulesRejectZero() public {
         ElectionFactory f = new ElectionFactory(admin, address(0));
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ZeroAddress.selector);
+        vm.expectRevert(IElectionFactory.ZeroAddress.selector);
         f.setModules(address(1), address(0), address(3), address(4));
     }
 
     function testM03_SuperAdminNotGrantableAndRolesRevocable() public {
         address x = makeAddr("x");
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.CannotGrantSuperAdmin.selector);
+        vm.expectRevert(IElectionFactory.CannotGrantSuperAdmin.selector);
         factory.grantRole(Roles.PLATFORM_SUPER_ADMIN_ROLE, x);
 
         vm.prank(admin);
@@ -165,14 +172,14 @@ contract MediumRegressionsTest is Deployer {
     function testM03_TwoStepAdminTransfer() public {
         address next = makeAddr("nextAdmin");
         vm.prank(next);
-        vm.expectRevert(ElectionFactory.NotAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotAdmin.selector);
         factory.transferAdmin(next);
 
         vm.prank(admin);
         factory.transferAdmin(next);
         assertEq(factory.admin(), admin, "not until accepted");
         vm.prank(makeAddr("other"));
-        vm.expectRevert(ElectionFactory.NotPendingAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotPendingAdmin.selector);
         factory.acceptAdmin();
 
         vm.prank(next);
@@ -191,7 +198,7 @@ contract MediumRegressionsTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(id, el, 7, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.TallyStatusUnavailable.selector);
+        vm.expectRevert(IBallotInbox.TallyStatusUnavailable.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
 
         vm.clearMockedCalls();
@@ -201,7 +208,7 @@ contract MediumRegressionsTest is Deployer {
 
     // ------------------------------------------------------------------ M-05
 
-    function _cert(bytes32 resultHash, bytes32 root) internal returns (L1TallyMirror.Certification memory c) {
+    function _cert(bytes32 resultHash, bytes32 root) internal returns (IL1TallyMirror.Certification memory c) {
         c.factory = makeAddr("l2Factory"); // no code on this chain
         c.electionId = 1;
         c.jurisdictionId = keccak256("CIVIC");
@@ -212,14 +219,14 @@ contract MediumRegressionsTest is Deployer {
 
     function testM05_SupersedeWithinDisputeWindowOnly() public {
         L1TallyMirror mirror = new L1TallyMirror(admin, address(0));
-        L1TallyMirror.Certification memory c = _cert(keccak256("wrong"), bytes32(0));
+        IL1TallyMirror.Certification memory c = _cert(keccak256("wrong"), bytes32(0));
         vm.prank(admin);
         mirror.postCertifiedResult(c);
         bytes32 id = mirror.certificationIdOf(c.factory, c.electionId, c.jurisdictionId);
         assertFalse(mirror.isFinal(id));
 
         vm.prank(makeAddr("publisher"));
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.supersedeCertifiedResult(id, keccak256("right"), 10, bytes32(0), keccak256("order"));
 
         vm.prank(admin);
@@ -229,7 +236,7 @@ contract MediumRegressionsTest is Deployer {
         vm.warp(block.timestamp + mirror.DISPUTE_WINDOW());
         assertTrue(mirror.isFinal(id));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.DisputeWindowClosed.selector);
+        vm.expectRevert(IL1TallyMirror.DisputeWindowClosed.selector);
         mirror.supersedeCertifiedResult(id, keccak256("late"), 10, bytes32(0), bytes32(0));
     }
 
@@ -238,11 +245,11 @@ contract MediumRegressionsTest is Deployer {
         vm.prank(admin);
         mirror.setSettlement(address(settlement));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.SettlementAlreadySet.selector);
+        vm.expectRevert(IL1TallyMirror.SettlementAlreadySet.selector);
         mirror.setSettlement(address(settlement));
 
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.UnsettledStateRoot.selector);
+        vm.expectRevert(IL1TallyMirror.UnsettledStateRoot.selector);
         mirror.postCertifiedResult(_cert(keccak256("r"), keccak256("unsettled")));
 
         bytes32 g = keccak256("genesis");
@@ -272,7 +279,7 @@ contract MediumRegressionsTest is Deployer {
         assertTrue(parties.isRejected(cm), "stale rejection");
 
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(ExternalPartyRegistry.NotPartyOperator.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotPartyOperator.selector);
         parties.clearRejection(idx, cm, bytes32(0));
 
         vm.prank(clerk);
@@ -301,14 +308,14 @@ contract MediumRegressionsTest is Deployer {
         op.callData = abi.encodeWithSelector(PasskeyAccount.execute.selector, makeAddr("drain"), uint256(0), "");
         op.paymaster = address(paymaster);
         vm.prank(address(entryPoint));
-        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
+        vm.expectRevert(IZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(op);
 
         // Value transfers into a civic target are not sponsored either.
         op.initCode = "";
         op.callData = abi.encodeWithSelector(PasskeyAccount.execute.selector, address(inbox), uint256(1), "");
         vm.prank(address(entryPoint));
-        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
+        vm.expectRevert(IZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(op);
 
         // Deploy-only and zero-value civic calls stay sponsored.

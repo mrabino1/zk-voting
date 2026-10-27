@@ -1,58 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-/// @title UserOp
-/// @notice ERC-4337-lite UserOperation. Not the full eth-infinitism layout:
-///         no `preVerificationGas`, no `maxPriorityFeePerGas`, no paymaster
-///         gas limits. Gas is civic-sponsored; there is no gas token.
-struct UserOp {
-    address sender;
-    uint256 nonce;
-    bytes initCode;
-    bytes callData;
-    uint256 callGasLimit;
-    uint256 verificationGasLimit;
-    uint256 maxFeePerGas;
-    address paymaster;
-    bytes paymasterAndData;
-    bytes signature;
-}
-
-interface IZkVotingAccount {
-    function validateUserOp(UserOp calldata op, bytes32 userOpHash) external returns (bool);
-
-    function execute(address dest, uint256 value, bytes calldata data) external;
-
-    function nonce() external view returns (uint256);
-}
-
-interface IZkVotingPaymaster {
-    function validateAndPay(UserOp calldata op) external returns (bool);
-}
+import {IZkVotingAccount} from "../interfaces/IZkVotingAccount.sol";
+import {IZkVotingEntryPoint} from "../interfaces/IZkVotingEntryPoint.sol";
+import {IZkVotingPaymaster} from "../interfaces/IZkVotingPaymaster.sol";
+import {UserOp} from "../interfaces/UserOp.sol";
 
 /// @title ZkVotingEntryPoint
 /// @notice Minimal bundler entry point for local ZK-Voting L2.
 ///         Validate nonce → account.validateUserOp → optional paymaster → execute.
 ///         Keep small and auditable. Not a fork of eth-infinitism EntryPoint.
-contract ZkVotingEntryPoint {
-    error InvalidInitCode();
-    error DeployFailed();
-    error SenderMismatch();
-    error AccountNotDeployed();
-    error InvalidNonce();
-    error ValidationFailed();
-    error PaymasterRejected();
-
-    event UserOpHandled(address indexed sender, uint256 nonce, address paymaster);
-    /// @notice Audit M-08: an op whose execution reverted. Validation already
-    ///         passed (nonce consumed), so the batch continues. `revertReason`
-    ///         is truncated to `MAX_RETURN_BYTES`.
-    event UserOpReverted(address indexed sender, uint256 nonce, bytes revertReason);
-
+contract ZkVotingEntryPoint is IZkVotingEntryPoint {
     /// @notice Audit M-08: cap on copied returndata (return-bomb guard).
     uint256 public constant MAX_RETURN_BYTES = 256;
+
+    /// @dev 1 while `handleOps` is on the stack. An account execute cannot reenter it.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
 
     /// @notice Pack a UserOp hash bound to this chain and this EntryPoint.
     function getUserOpHash(UserOp calldata op) public view returns (bytes32) {
@@ -78,7 +50,7 @@ contract ZkVotingEntryPoint {
     ///      signature, paymaster) still reverts the batch — the bundler should
     ///      have simulated it — but an execution revert is isolated: it emits
     ///      `UserOpReverted` and the remaining ops still run.
-    function handleOps(UserOp[] calldata ops) external {
+    function handleOps(UserOp[] calldata ops) external nonReentrant {
         uint256 n = ops.length;
         for (uint256 i; i < n; ++i) {
             _handle(ops[i]);

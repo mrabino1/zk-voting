@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {BallotInbox} from "../src/BallotInbox.sol";
+import {IElection} from "../src/interfaces/IElection.sol";
+import {IHasher} from "../src/interfaces/IHasher.sol";
 import {ExternalPartyRegistry} from "../src/ExternalPartyRegistry.sol";
 import {ReasonCodes} from "../src/ReasonCodes.sol";
+import {EligibleSet} from "../src/tree/EligibleSet.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Super admin / admin / election staff approvals and the per-election
 ///         external-party factory that can veto a registered voter at cast time.
@@ -106,7 +110,7 @@ contract ExternalPartyTest is Deployer {
         assertEq(registry.activePartyCount(), 24);
     }
 
-    function testFelonyVetoBlocksVoteEvenAfterRegistration() public {
+    function testFelonyVetoRemovesLeafFromEligibleRoot() public {
         uint256 commitment = Fixtures.identityCommitment(uint256(77));
         uint256 other = Fixtures.identityCommitment(uint256(88));
         (uint256 id, address el) = createElection();
@@ -122,28 +126,39 @@ contract ExternalPartyTest is Deployer {
         vm.prank(clerk);
         uint256 death = registry.addParty(deathRecords, "Vital records / DECEASED", "", MODE_VETO);
 
-        // Registered and not clerk-disqualified, but the felony oracle vetoes at cast time.
+        bytes32 before = IElection(el).eligibleRoot();
         vm.prank(felonyRecords);
         registry.reject(felony, commitment, ReasonCodes.INELIGIBLE_STATUS, keccak256("case-file"));
 
         assertTrue(registry.isRejected(commitment));
-        _expectClearedRevert(id, el, 1, commitment);
+        assertTrue(disqualification.isDisqualified(id, commitment));
+        assertFalse(voterRegistry.isEligible(id, commitment));
+        uint256[] memory onlyOther = new uint256[](1);
+        onlyOther[0] = other;
+        assertEq(
+            uint256(IElection(el).eligibleRoot()),
+            EligibleSet.rootOf(onlyOther, Fixtures.TREE_DEPTH, IHasher(address(hasher)))
+        );
+        _expectStaleRootRevert(id, el, 1, before);
         assertEq(inbox.acceptedBallots(id), 0);
 
         vm.prank(felonyRecords);
         registry.clearRejection(felony, commitment, keccak256("appeal"));
         assertFalse(registry.isRejected(commitment));
+        assertFalse(disqualification.isDisqualified(id, commitment));
+        assertTrue(voterRegistry.isEligible(id, commitment));
 
-        _submitCleared(id, el, 1, commitment);
+        submitVote(id, el, 1);
         assertEq(inbox.acceptedBallots(id), 1);
 
-        // A second registered person: death records can still veto independently.
+        bytes32 afterFirst = IElection(el).eligibleRoot();
         vm.prank(deathRecords);
         registry.reject(death, other, ReasonCodes.DECEASED, keccak256("vital-stat"));
-        _expectClearedRevert(id, el, 2, other);
+        assertTrue(disqualification.isDisqualified(id, other));
+        _expectStaleRootRevert(id, el, 2, afterFirst);
     }
 
-    function testPlainSubmitVoteRevertsOnceGatesAreActive() public {
+    function testVetoPartyDoesNotForceACommitmentOntoTheBallot() public {
         uint256 commitment = Fixtures.identityCommitment(uint256(3));
         (uint256 id, address el) = prepareOpenElection(commitment);
         ExternalPartyRegistry registry = ExternalPartyRegistry(factory.getPartyRegistry(id));
@@ -154,30 +169,32 @@ contract ExternalPartyTest is Deployer {
         vm.prank(clerk);
         registry.addParty(ageRecords, "Age verification", "", MODE_VETO);
 
-        bytes memory enc = Fixtures.encryptedBallot(12);
-        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
-        uint256[] memory inputs = voteInputs(id, el, 12, enc);
-        vm.prank(relayer);
-        vm.expectRevert(BallotInbox.ClearanceRequired.selector);
-        inbox.submitVote(id, a, b, c, inputs, enc);
+        // A veto party that has not rejected this commitment does not block the
+        // shared relayer, and the ballot carries no identity commitment.
+        submitVote(id, el, 12);
+        assertEq(inbox.acceptedBallots(id), 2);
     }
 
-    function testMustAttestAgeOracleRequiredAtCast() public {
+    function testMustAttestExcludesLeafUntilAttested() public {
         uint256 commitment = Fixtures.identityCommitment(uint256(9));
         (uint256 id, address el) = prepareOpenElection(commitment);
         ExternalPartyRegistry registry = ExternalPartyRegistry(factory.getPartyRegistry(id));
+        bytes32 before = IElection(el).eligibleRoot();
 
         vm.prank(clerk);
         uint256 age = registry.addParty(ageRecords, "Age / NOT_OF_AGE", "", MODE_MUST_ATTEST);
 
-        uint256[] memory ids = new uint256[](1);
-        ids[0] = age;
-        _expectClearedRevertWithIds(id, el, 1, commitment, ids);
+        assertTrue(registry.missingRequiredAttestation(commitment));
+        assertFalse(voterRegistry.isEligible(id, commitment));
+        assertTrue(IElection(el).eligibleRoot() != before);
+        _expectStaleRootRevert(id, el, 1, before);
 
         vm.prank(ageRecords);
         registry.attest(age, commitment, 0, keccak256("dmv-record"));
 
-        _submitClearedWithIds(id, el, 1, commitment, ids);
+        assertFalse(registry.missingRequiredAttestation(commitment));
+        assertTrue(voterRegistry.isEligible(id, commitment));
+        submitVote(id, el, 1);
         assertEq(inbox.acceptedBallots(id), 1);
     }
 
@@ -194,8 +211,9 @@ contract ExternalPartyTest is Deployer {
         vm.prank(clerk);
         registry.setPartyActive(idx, false);
         assertFalse(registry.hasActiveGates());
-        // Rejection mapping still set, but the inbox allows plain submitVote
-        // when no party is active. Live civic path still reads the mapping.
+        // The rejection mapping remains, but a paused party is not in the
+        // disqualification root, so the shared relayer can submit.
+        assertFalse(disqualification.isDisqualified(id, commitment));
         submitVote(id, el, 99);
         assertEq(inbox.acceptedBallots(id), 1);
     }
@@ -225,44 +243,15 @@ contract ExternalPartyTest is Deployer {
         factory.setModules(address(voterRegistry), address(disqualification), address(inbox), address(tally));
     }
 
-    function _submitCleared(uint256 electionId, address election, uint256 nullifier, uint256 commitment) internal {
-        uint256[] memory ids;
-        _submitClearedWithIds(electionId, election, nullifier, commitment, ids);
-    }
-
-    function _submitClearedWithIds(
-        uint256 electionId,
-        address election,
-        uint256 nullifier,
-        uint256 commitment,
-        uint256[] memory ids
-    ) internal {
-        bytes memory enc = Fixtures.encryptedBallot(nullifier);
-        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
-        uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
-        vm.prank(relayer);
-        inbox.submitVoteWithClearance(electionId, a, b, c, inputs, enc, commitment, ids);
-    }
-
-    function _expectClearedRevert(uint256 electionId, address election, uint256 nullifier, uint256 commitment)
+    function _expectStaleRootRevert(uint256 electionId, address election, uint256 nullifier, bytes32 staleEligible)
         internal
     {
-        uint256[] memory ids;
-        _expectClearedRevertWithIds(electionId, election, nullifier, commitment, ids);
-    }
-
-    function _expectClearedRevertWithIds(
-        uint256 electionId,
-        address election,
-        uint256 nullifier,
-        uint256 commitment,
-        uint256[] memory ids
-    ) internal {
         bytes memory enc = Fixtures.encryptedBallot(nullifier);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
+        inputs[0] = uint256(staleEligible);
         vm.prank(relayer);
-        vm.expectRevert();
-        inbox.submitVoteWithClearance(electionId, a, b, c, inputs, enc, commitment, ids);
+        vm.expectRevert(IBallotInbox.EligibleRootMismatch.selector);
+        inbox.submitVote(electionId, a, b, c, inputs, enc);
     }
 }

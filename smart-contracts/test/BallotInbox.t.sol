@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -9,6 +9,7 @@ import {BallotInbox} from "../src/BallotInbox.sol";
 import {IdentityCommitment} from "../src/IdentityCommitment.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Ballot inbox: MockVerifier happy path, per-election once-only ballot, voting window.
 ///
@@ -49,8 +50,9 @@ contract BallotInboxTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
 
+        uint256 canonical = nullifier % inbox.SNARK_SCALAR_FIELD();
         vm.expectEmit(true, true, false, false, address(inbox));
-        emit VoteAccepted(electionId, nullifier, bytes32(0), relayer);
+        emit VoteAccepted(electionId, canonical, bytes32(0), relayer);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
 
@@ -255,7 +257,7 @@ contract BallotInboxTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(id, el, n, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
     }
 
@@ -270,11 +272,15 @@ contract BallotInboxTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, second);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, second);
 
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertEq(inbox.acceptedBallots(electionId), 1, "second ballot must not mint a second voter");
-        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)), "first accepted hash is final");
+        assertEq(
+            inbox.ballotHashOf(electionId, nullifier),
+            bytes32(Fixtures.ballotHash(first)),
+            "first accepted hash is final"
+        );
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -9,6 +9,8 @@ import {ElectionParams} from "../../src/interfaces/ElectionParams.sol";
 import {IElection} from "../../src/interfaces/IElection.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IBallotInbox} from "../../src/interfaces/IBallotInbox.sol";
+import {IElectionFactory} from "../../src/interfaces/IElectionFactory.sol";
 
 /// @notice Fuzz factory bounds and inbox public-input length (edge-case fuzzing).
 contract ValidationFuzz is Deployer {
@@ -23,7 +25,7 @@ contract ValidationFuzz is Deployer {
         ElectionParams memory p = defaultParams();
         p.treeDepth = depth;
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.InvalidTreeDepth.selector);
+        vm.expectRevert(IElectionFactory.InvalidTreeDepth.selector);
         factory.createElection(p);
     }
 
@@ -32,7 +34,7 @@ contract ValidationFuzz is Deployer {
         ElectionParams memory p = defaultParams();
         p.questionCount = 0;
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.InvalidQuestionCount.selector);
+        vm.expectRevert(IElectionFactory.InvalidQuestionCount.selector);
         factory.createElection(p);
     }
 
@@ -42,7 +44,7 @@ contract ValidationFuzz is Deployer {
         uint256[] memory inputs = new uint256[](len);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.InvalidPublicInputs.selector);
+        vm.expectRevert(IBallotInbox.InvalidPublicInputs.selector);
         inbox.submitVote(electionId, a, b, c, inputs, Fixtures.encryptedBallot(1));
         election;
     }

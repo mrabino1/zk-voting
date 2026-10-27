@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {IPersonRegistry} from "./interfaces/IPersonRegistry.sol";
 import {Roles} from "./Roles.sol";
 
 /// @title PersonRegistry
@@ -13,20 +14,7 @@ import {Roles} from "./Roles.sol";
 /// This registry only answers: which EOA / smart account is this person using
 /// for gasless ops right now, and has the clerk verified these wallets as
 /// belonging to that unique person.
-contract PersonRegistry {
-    error ZeroAddress();
-    error ZeroPerson();
-    error NotAdmin();
-    error NotRegistrar();
-    error AlreadyOwned(bytes32 personId);
-    error NotVerified();
-    error SameActive();
-
-    event AddressVerified(bytes32 indexed personId, address indexed account);
-    event ActiveAddressSet(bytes32 indexed personId, address indexed account, address previous);
-    event RoleGranted(bytes32 indexed role, address indexed account);
-    event RoleRevoked(bytes32 indexed role, address indexed account);
-
+contract PersonRegistry is IPersonRegistry {
     address public immutable admin;
     mapping(bytes32 => mapping(address => bool)) public verified;
     mapping(bytes32 => address) public activeAddress;

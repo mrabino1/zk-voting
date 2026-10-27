@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -10,6 +10,7 @@ import {DisqualificationSet} from "../src/tree/DisqualificationSet.sol";
 import {EligibleSet} from "../src/tree/EligibleSet.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Eligible root is registered ∩ ¬currently-disqualified.
 ///         A coded disqualification removes the commitment from that root, so
@@ -139,13 +140,13 @@ contract EligibleDisqualificationTest is Deployer {
         bytes memory encDq = Fixtures.encryptedBallot(nullifierDq);
         uint256[] memory staleRoll =
             Fixtures.publicInputs(roll, disq, nullifierDq, Fixtures.ballotHash(encDq), electionId);
-        vm.expectRevert(BallotInbox.EligibleRootMismatch.selector);
+        vm.expectRevert(IBallotInbox.EligibleRootMismatch.selector);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, staleRoll, encDq);
 
         uint256[] memory staleDisq =
             Fixtures.publicInputs(eligible, bytes32(0), nullifierDq, Fixtures.ballotHash(encDq), electionId);
-        vm.expectRevert(BallotInbox.DisqualificationRootMismatch.selector);
+        vm.expectRevert(IBallotInbox.DisqualificationRootMismatch.selector);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, staleDisq, encDq);
 
@@ -154,7 +155,7 @@ contract EligibleDisqualificationTest is Deployer {
         assertEq(publishedDq[0], uint256(eligible));
         assertEq(publishedDq[1], uint256(disq));
         assertFalse(verifier.verifyProof(a, b, c, publishedDq), "armed DQ witness fails inclusion");
-        vm.expectRevert(BallotInbox.InvalidProof.selector);
+        vm.expectRevert(IBallotInbox.InvalidProof.selector);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, publishedDq, encDq);
         assertFalse(inbox.nullifierUsed(electionId, nullifierDq));
@@ -241,7 +242,7 @@ contract EligibleDisqualificationTest is Deployer {
 
         uint256[] memory published = voteInputs(electionId, election, nullifier, enc);
         assertFalse(verifier.verifyProof(a, b, c, published));
-        vm.expectRevert(BallotInbox.InvalidProof.selector);
+        vm.expectRevert(IBallotInbox.InvalidProof.selector);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, published, enc);
         assertFalse(inbox.nullifierUsed(electionId, nullifier));

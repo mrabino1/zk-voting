@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {ElectionParams} from "../../src/interfaces/ElectionParams.sol";
 import {BallotInbox} from "../../src/BallotInbox.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IBallotInbox} from "../../src/interfaces/IBallotInbox.sol";
 
 /// @title VoteFuzz
 /// @notice Fuzz timestamps, nullifiers, and encrypted ballots.
@@ -39,7 +40,7 @@ contract VoteFuzz is Deployer {
         public
     {
         vm.assume(encryptedBallot.length > 0 && encryptedBallot.length <= 512);
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         vm.warp(bound(block.timestamp, startTime, uint256(cutoffTime) - 1));
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
@@ -51,7 +52,7 @@ contract VoteFuzz is Deployer {
         assertEq(inbox.acceptedBallots(electionId), 1);
 
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
         assertEq(inbox.acceptedBallots(electionId), 1, "double-vote accepted in same election");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
@@ -77,7 +78,7 @@ contract VoteFuzz is Deployer {
         vm.assume(firstBallot.length > 0 && firstBallot.length <= 512);
         vm.assume(secondBallot.length > 0 && secondBallot.length <= 512);
         vm.assume(keccak256(firstBallot) != keccak256(secondBallot));
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         vm.warp(bound(block.timestamp, startTime, uint256(cutoffTime) - 1));
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
@@ -89,7 +90,7 @@ contract VoteFuzz is Deployer {
 
         uint256[] memory secondInputs = voteInputs(electionId, election, nullifier, secondBallot);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
         assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot in this election");
         assertEq(inbox.ballotHashOf(electionId, nullifier), stored, "first ballot must not be superseded");
@@ -112,7 +113,7 @@ contract VoteFuzz is Deployer {
     ) public {
         vm.assume(ballotA.length > 0 && ballotA.length <= 512);
         vm.assume(ballotB.length > 0 && ballotB.length <= 512);
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
 
         ElectionParams memory p = Fixtures.withTimes(defaultParams(), startTime, cutoffTime);
         p.maxParticipants = 32;
@@ -138,7 +139,7 @@ contract VoteFuzz is Deployer {
 
     function testFuzz_voteOutsideWindowReverts(uint256 ts, uint256 nullifier, bytes calldata encryptedBallot) public {
         vm.assume(encryptedBallot.length > 0 && encryptedBallot.length <= 512);
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
 
         uint256 tooEarly = bound(ts, 0, uint256(startTime) > 0 ? uint256(startTime) - 1 : 0);
         uint256 tooLate = bound(ts, cutoffTime, uint256(cutoffTime) + 365 days);
@@ -162,7 +163,7 @@ contract VoteFuzz is Deployer {
 
     function testFuzz_voteInWindowAccepted(uint256 ts, uint256 nullifier, bytes calldata encryptedBallot) public {
         vm.assume(encryptedBallot.length > 0 && encryptedBallot.length <= 512);
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         uint256 t = bound(ts, startTime, uint256(cutoffTime) - 1);
         vm.warp(t);
         assertTrue(block.timestamp >= startTime && block.timestamp < cutoffTime);
@@ -178,7 +179,7 @@ contract VoteFuzz is Deployer {
 
     function testFuzz_encryptedBallots(bytes calldata encryptedBallot, uint256 nullifier) public {
         vm.assume(encryptedBallot.length > 0 && encryptedBallot.length <= 1024);
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         vm.warp(startTime);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, encryptedBallot);
@@ -189,7 +190,7 @@ contract VoteFuzz is Deployer {
     }
 
     function testFuzz_emptyBallotReverts(uint256 nullifier) public {
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         vm.warp(startTime);
         bytes memory empty;
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
@@ -201,7 +202,7 @@ contract VoteFuzz is Deployer {
     }
 
     function testFuzz_timestampsBound(uint64 start, uint64 cutoff, uint256 voteAt, uint256 nullifier) public {
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         uint64 origin = uint64(block.timestamp + 1);
         start = uint64(bound(start, origin, origin + 30 days));
         cutoff = uint64(bound(cutoff, uint256(start) + 1 hours, uint256(start) + 30 days));
@@ -240,7 +241,7 @@ contract VoteFuzz is Deployer {
         vm.assume(firstBallot.length > 0 && firstBallot.length <= 256);
         vm.assume(secondBallot.length > 0 && secondBallot.length <= 256);
         vm.assume(keccak256(firstBallot) != keccak256(secondBallot));
-        vm.assume(nullifier != 0);
+        vm.assume(nullifier % inbox.SNARK_SCALAR_FIELD() != 0);
         vm.warp(startTime);
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();

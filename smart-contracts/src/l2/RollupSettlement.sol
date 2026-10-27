@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
+import {IRollupSettlement} from "../interfaces/IRollupSettlement.sol";
 
 /// @title RollupSettlement
 /// @notice L1 settlement for ZK-Voting L2 (app-specific ZK rollup). No token.
@@ -11,36 +12,13 @@ import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 ///      reverts `VerifierRequired`) and every batch is verified. Public inputs
 ///      are reduced mod r so a snarkjs verifier never rejects them for being
 ///      out of field. `mockMode` is a constructor-time, explicit dev/test flag.
-contract RollupSettlement {
-    error ZeroAddress();
-    error NotAuthorized();
-    error BadBatchIndex();
-    error PrevRootMismatch();
-    error DataHashMismatch();
-    error InvalidProof();
-    error GenesisAlreadySet();
-    error VerifierRequired();
-    error UnsupportedRole();
-
-    event BatchSubmitted(uint64 indexed batchIndex, bytes32 newStateRoot, bytes32 dataHash, uint256 l1Block);
-    event GenesisSet(bytes32 stateRoot);
-    event SequencerSet(address indexed sequencer);
-    event ProverSet(address indexed prover);
-
+contract RollupSettlement is IRollupSettlement {
     bytes32 public constant SEQUENCER_ROLE = keccak256("SEQUENCER_ROLE");
     bytes32 public constant PROVER_ROLE = keccak256("PROVER_ROLE");
 
     /// @notice BN254 scalar field modulus r.
     uint256 internal constant SNARK_SCALAR_FIELD =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
-
-    struct Batch {
-        bytes32 prevStateRoot;
-        bytes32 newStateRoot;
-        bytes32 dataHash;
-        uint256 l1Block;
-        uint256 dataLength;
-    }
 
     address public admin;
     address public sequencer;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -10,6 +10,9 @@ import {ExternalPartyRegistry} from "../src/ExternalPartyRegistry.sol";
 import {Roles} from "../src/Roles.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IElection} from "../src/interfaces/IElection.sol";
+import {IElectionFactory} from "../src/interfaces/IElectionFactory.sol";
+import {IExternalPartyRegistry} from "../src/interfaces/IExternalPartyRegistry.sol";
 
 /// @notice Factory validation, role transfer lockout, and clone initialize-once.
 /// @dev Factory/ownable edge cases: zero address, old-owner dead,
@@ -26,31 +29,31 @@ contract ElectionFactoryAuthTest is Deployer {
     }
 
     function testConstructorRejectsZeroAdmin() public {
-        vm.expectRevert(ElectionFactory.ZeroAddress.selector);
+        vm.expectRevert(IElectionFactory.ZeroAddress.selector);
         new ElectionFactory(address(0), address(0));
     }
 
     function testSetImplementationZeroReverts() public {
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ZeroAddress.selector);
+        vm.expectRevert(IElectionFactory.ZeroAddress.selector);
         factory.setImplementation(address(0));
     }
 
     function testStrangerCannotSetImplementation() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.NotAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotAdmin.selector);
         factory.setImplementation(address(electionImpl));
     }
 
     function testSetPartyRegistryImplementationZeroReverts() public {
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ZeroAddress.selector);
+        vm.expectRevert(IElectionFactory.ZeroAddress.selector);
         factory.setPartyRegistryImplementation(address(0));
     }
 
     function testStrangerCannotSetPartyRegistryImplementation() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.NotSuperAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotSuperAdmin.selector);
         factory.setPartyRegistryImplementation(address(1));
     }
 
@@ -58,7 +61,7 @@ contract ElectionFactoryAuthTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.treeDepth = 15;
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.InvalidTreeDepth.selector);
+        vm.expectRevert(IElectionFactory.InvalidTreeDepth.selector);
         factory.createElection(p);
     }
 
@@ -66,7 +69,7 @@ contract ElectionFactoryAuthTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.treeDepth = 33;
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.InvalidTreeDepth.selector);
+        vm.expectRevert(IElectionFactory.InvalidTreeDepth.selector);
         factory.createElection(p);
     }
 
@@ -86,13 +89,13 @@ contract ElectionFactoryAuthTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.questionCount = 0;
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.InvalidQuestionCount.selector);
+        vm.expectRevert(IElectionFactory.InvalidQuestionCount.selector);
         factory.createElection(p);
     }
 
     function testStrangerCreateElectionRevertsNotJurisdictionClerk() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(defaultParams());
     }
 
@@ -110,25 +113,25 @@ contract ElectionFactoryAuthTest is Deployer {
         vm.prank(admin);
         factory.grantRole(Roles.CLERK_ROLE, extraClerk);
         vm.prank(extraClerk);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(defaultParams());
     }
 
     function testApproveAdminZeroReverts() public {
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ZeroAddress.selector);
+        vm.expectRevert(IElectionFactory.ZeroAddress.selector);
         factory.approveAdmin(address(0));
     }
 
     function testStrangerCannotApproveAdmin() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.NotSuperAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotSuperAdmin.selector);
         factory.approveAdmin(platformAdmin);
     }
 
     function testCannotRevokeBootstrapSuper() public {
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.CannotRevokeSuper.selector);
+        vm.expectRevert(IElectionFactory.CannotRevokeSuper.selector);
         factory.revokeAdmin(admin);
     }
 
@@ -146,20 +149,20 @@ contract ElectionFactoryAuthTest is Deployer {
 
         address other = makeAddr("otherStaff");
         vm.prank(platformAdmin);
-        vm.expectRevert(ElectionFactory.NotAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotAdmin.selector);
         factory.approveElectionStaff(id, other);
     }
 
     function testApproveStaffUnknownElectionReverts() public {
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.UnknownElection.selector);
+        vm.expectRevert(IElectionFactory.UnknownElection.selector);
         factory.approveElectionStaff(99, stranger);
     }
 
     function testApproveStaffZeroReverts() public {
         (uint256 id,) = createElection();
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.ZeroAddress.selector);
+        vm.expectRevert(IElectionFactory.ZeroAddress.selector);
         factory.approveElectionStaff(id, address(0));
     }
 
@@ -176,27 +179,27 @@ contract ElectionFactoryAuthTest is Deployer {
         vm.prank(admin);
         factory.revokeElectionStaff(id, staff);
         vm.prank(staff);
-        vm.expectRevert(ExternalPartyRegistry.NotStaff.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotStaff.selector);
         parties.addParty(makeAddr("op2"), "Other", "", 0);
     }
 
     function testCloneInitializeTwiceReverts() public {
         (, address el) = createElection();
         ElectionParams memory p = defaultParams();
-        vm.expectRevert(Election.AlreadyInitialized.selector);
+        vm.expectRevert(IElection.AlreadyInitialized.selector);
         Election(el).initialize(99, p, address(factory), address(voterRegistry), address(disqualification), address(inbox));
     }
 
     function testPartyCloneInitializeTwiceReverts() public {
         (uint256 id,) = createElection();
         ExternalPartyRegistry parties = ExternalPartyRegistry(factory.getPartyRegistry(id));
-        vm.expectRevert(ExternalPartyRegistry.AlreadyInitialized.selector);
+        vm.expectRevert(IExternalPartyRegistry.AlreadyInitialized.selector);
         parties.initialize(id, address(factory));
     }
 
     function testPartyInitializeZeroElectionIdReverts() public {
         ExternalPartyRegistry impl = new ExternalPartyRegistry();
-        vm.expectRevert(ExternalPartyRegistry.NotFactory.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotFactory.selector);
         impl.initialize(0, address(factory));
     }
 
@@ -207,13 +210,13 @@ contract ElectionFactoryAuthTest is Deployer {
 
     function testStrangerCannotGrantRole() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.NotAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotAdmin.selector);
         factory.grantRole(Roles.CLERK_ROLE, stranger);
     }
 
     function testStrangerCannotWireModules() public {
         vm.prank(stranger);
-        vm.expectRevert(ElectionFactory.NotAdmin.selector);
+        vm.expectRevert(IElectionFactory.NotAdmin.selector);
         factory.setModules(address(1), address(2), address(3), address(4));
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -9,6 +9,7 @@ import {IHasher} from "../src/interfaces/IHasher.sol";
 import {DisqualificationSet} from "../src/tree/DisqualificationSet.sol";
 import {EligibleSet} from "../src/tree/EligibleSet.sol";
 import {MockVerifier} from "../src/zk/MockVerifier.sol";
+import {IMockVerifier} from "../src/interfaces/IMockVerifier.sol";
 
 /// @notice Regression: Merkle inclusion and chain non-membership checks must
 ///         bind the path length to the tree depth. Without that, an internal
@@ -149,10 +150,10 @@ contract MerklePathDepthTest is Test {
         (uint256[] memory els, uint8[] memory idx) = _dropFirst(p);
         uint256 node = hasher.hashLeftRight(leaves[0], leaves[1]);
 
-        vm.expectRevert(MockVerifier.InvalidWitnessDepth.selector);
+        vm.expectRevert(IMockVerifier.InvalidWitnessDepth.selector);
         v.armInclusionWitness(1, node, els, idx);
 
-        vm.expectRevert(MockVerifier.InvalidWitnessDepth.selector);
+        vm.expectRevert(IMockVerifier.InvalidWitnessDepth.selector);
         v.armNonMembershipWitness(1, node, 0, 0, els, idx);
 
         v.armInclusionWitness(1, leaves[0], p.pathElements, p.pathIndices);
@@ -169,20 +170,20 @@ contract MerklePathDepthTest is Test {
         MockVerifier v = new MockVerifier();
         v.setInclusionHasher(address(hasher));
         EligibleSet.Proof memory p = EligibleSet.inclusionProof(_leaves(), 0, DEPTH, hasher);
-        vm.expectRevert(MockVerifier.InvalidWitnessDepth.selector);
+        vm.expectRevert(IMockVerifier.InvalidWitnessDepth.selector);
         v.armInclusionWitness(1, 0xa1, p.pathElements, p.pathIndices);
     }
 
     function testMockVerifierDepthBounds() public {
         MockVerifier v = new MockVerifier();
-        vm.expectRevert(MockVerifier.InvalidWitnessDepth.selector);
+        vm.expectRevert(IMockVerifier.InvalidWitnessDepth.selector);
         v.setWitnessTreeDepth(15);
-        vm.expectRevert(MockVerifier.InvalidWitnessDepth.selector);
+        vm.expectRevert(IMockVerifier.InvalidWitnessDepth.selector);
         v.setWitnessTreeDepth(33);
         v.setWitnessTreeDepth(32);
         assertEq(v.witnessTreeDepth(), 32);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(MockVerifier.NotOwner.selector);
+        vm.expectRevert(IMockVerifier.NotOwner.selector);
         v.setWitnessTreeDepth(16);
     }
 }

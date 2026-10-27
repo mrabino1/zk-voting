@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
+import {IGroth16VerifierAdapter} from "../interfaces/IGroth16VerifierAdapter.sol";
 
 /// @title Groth16VerifierAdapter
 /// @notice Adapts a snarkjs-exported verifier (`uint[N] calldata` public inputs) to
@@ -12,10 +13,7 @@ import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 /// @dev The snarkjs Solidity file is **not** in git (`circuits/build/`). Deploy that
 ///      artifact, then this adapter. A zero verifying key in `VoteVerifier` is not a
 ///      ceremony. Adapter never short-circuits to true.
-contract Groth16VerifierAdapter is IGroth16Verifier {
-    error ZeroAddress();
-    error UnsupportedPublicInputCount();
-
+contract Groth16VerifierAdapter is IGroth16VerifierAdapter {
     address public immutable impl;
     uint256 public immutable publicInputCount;
 

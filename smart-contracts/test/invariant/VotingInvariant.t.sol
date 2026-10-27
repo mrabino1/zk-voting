@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -11,8 +11,8 @@ import {Handler} from "./Handler.sol";
 
 /// @title VotingInvariant
 /// @notice Foundry invariant suite for zk-voting.
-///         fail_on_revert is false in foundry.toml; the handler also
-///         swallows reverts so the run is not aborted.
+///         fail_on_revert is true. The handler try/catches expected reverts
+///         so a revert that escapes an action fails the campaign.
 ///         Per individual election (not a lifetime ban): a nullifier is accepted
 ///         at most once in that election. Same identity may vote in other elections.
 ///         `invariant_nullifierOnceOnlyPerElection_doubleVoteRejected` (and
@@ -68,6 +68,7 @@ contract VotingInvariant is StdInvariant, Test {
             uint256 onChainAccepted = handler.getInbox().acceptedBallots(electionId);
             assertEq(onChainAccepted, handler.acceptedByElection(electionId));
             assertEq(onChainAccepted, used, "per-election: acceptedBallots == unique spent nullifiers");
+            assertFalse(handler.getInbox().nullifierUsed(electionId, 0), "zero nullifier must stay unspent");
         }
         assertEq(handler.votesAccepted(), ghostAccepted);
     }

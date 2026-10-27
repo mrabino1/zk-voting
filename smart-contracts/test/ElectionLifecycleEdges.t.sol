@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -9,6 +9,7 @@ import {ElectionState} from "../src/interfaces/ElectionParams.sol";
 import {BallotInbox} from "../src/BallotInbox.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice State machine, freeze auth, registry-only root writes, exact window.
 contract ElectionLifecycleEdgesTest is Deployer {
@@ -28,13 +29,13 @@ contract ElectionLifecycleEdgesTest is Deployer {
 
     function testFreezeByNonClerkReverts() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(Election.NotClerk.selector);
+        vm.expectRevert(IElection.NotClerk.selector);
         IElection(election).freezeRoll();
         vm.prank(admin);
-        vm.expectRevert(Election.NotClerk.selector);
+        vm.expectRevert(IElection.NotClerk.selector);
         IElection(election).freezeRoll();
         vm.prank(registrar);
-        vm.expectRevert(Election.NotClerk.selector);
+        vm.expectRevert(IElection.NotClerk.selector);
         IElection(election).freezeRoll();
     }
 
@@ -61,7 +62,7 @@ contract ElectionLifecycleEdgesTest is Deployer {
 
     function testSetRootsOnlyFromRegistries() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(Election.NotRegistry.selector);
+        vm.expectRevert(IElection.NotRegistry.selector);
         IElection(election).setRoots(bytes32(uint256(1)), bytes32(uint256(2)));
 
         vm.prank(address(voterRegistry));
@@ -76,11 +77,11 @@ contract ElectionLifecycleEdgesTest is Deployer {
 
     function testBumpParticipantCountOnlyFromVoterRegistry() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(Election.NotRegistry.selector);
+        vm.expectRevert(IElection.NotRegistry.selector);
         IElection(election).bumpParticipantCount();
 
         vm.prank(address(disqualification));
-        vm.expectRevert(Election.NotRegistry.selector);
+        vm.expectRevert(IElection.NotRegistry.selector);
         IElection(election).bumpParticipantCount();
 
         vm.prank(address(voterRegistry));
@@ -90,7 +91,7 @@ contract ElectionLifecycleEdgesTest is Deployer {
 
     function testInitializeZeroFactoryReverts() public {
         Election fresh = new Election();
-        vm.expectRevert(Election.ZeroAddress.selector);
+        vm.expectRevert(IElection.ZeroAddress.selector);
         fresh.initialize(1, defaultParams(), address(0), address(1), address(2), address(3));
     }
 
@@ -100,7 +101,7 @@ contract ElectionLifecycleEdgesTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, 1, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.RollNotFrozen.selector);
+        vm.expectRevert(IBallotInbox.RollNotFrozen.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
     }
 }

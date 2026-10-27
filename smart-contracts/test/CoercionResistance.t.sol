@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {IElection} from "../src/interfaces/IElection.sol";
 import {BallotInbox} from "../src/BallotInbox.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Coercion slice: one accepted nullifier, choice-free on-chain state.
 ///         A second ballot (even a new ciphertext) reverts. Double voting is
@@ -35,7 +36,7 @@ contract CoercionResistanceTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, later);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, later);
 
         assertEq(inbox.acceptedBallots(electionId), 1);
@@ -57,7 +58,7 @@ contract CoercionResistanceTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, late);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.OutsideVotingWindow.selector);
+        vm.expectRevert(IBallotInbox.OutsideVotingWindow.selector);
         inbox.submitVote(electionId, a, b, c, inputs, late);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
         assertEq(inbox.acceptedBallots(electionId), 1);

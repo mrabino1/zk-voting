@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -13,6 +13,12 @@ import {VoterRegistry} from "../../src/VoterRegistry.sol";
 import {ZkVotingMailbox} from "../../src/l2/ZkVotingMailbox.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IBallotInbox} from "../../src/interfaces/IBallotInbox.sol";
+import {IElection} from "../../src/interfaces/IElection.sol";
+import {IExternalPartyRegistry} from "../../src/interfaces/IExternalPartyRegistry.sol";
+import {IJurisdictionRegistry} from "../../src/interfaces/IJurisdictionRegistry.sol";
+import {IPersonRegistry} from "../../src/interfaces/IPersonRegistry.sol";
+import {IVoterRegistry} from "../../src/interfaces/IVoterRegistry.sol";
 
 contract LowRegressionsTest is Deployer {
     uint256 internal constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
@@ -27,11 +33,11 @@ contract LowRegressionsTest is Deployer {
 
     function testL01_ImplementationsAreLocked() public {
         Election impl = Election(factory.implementation());
-        vm.expectRevert(Election.AlreadyInitialized.selector);
+        vm.expectRevert(IElection.AlreadyInitialized.selector);
         impl.initialize(1, defaultParams(), address(this), address(1), address(2), address(3));
 
         ExternalPartyRegistry pimpl = ExternalPartyRegistry(factory.partyRegistryImplementation());
-        vm.expectRevert(ExternalPartyRegistry.AlreadyInitialized.selector);
+        vm.expectRevert(IExternalPartyRegistry.AlreadyInitialized.selector);
         pimpl.initialize(1, address(this));
 
         // Clones still initialize exactly once through the factory.
@@ -44,7 +50,7 @@ contract LowRegressionsTest is Deployer {
     function testL02_FreezeRollEmits() public {
         (uint256 id, address el) = createElection();
         vm.expectEmit(true, true, false, true, el);
-        emit Election.RollFrozen(id, clerk);
+        emit IElection.RollFrozen(id, clerk);
         freezeRoll(el);
     }
 
@@ -58,7 +64,7 @@ contract LowRegressionsTest is Deployer {
         for (uint256 i; i < 5; ++i) six[i] = five[i];
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.InvalidPublicInputs.selector);
+        vm.expectRevert(IBallotInbox.InvalidPublicInputs.selector);
         inbox.submitVote(id, a, b, c, six, enc);
     }
 
@@ -70,7 +76,7 @@ contract LowRegressionsTest is Deployer {
         vm.prank(admin);
         j.createJurisdiction(jid, clerk, "Ward 9");
         vm.prank(admin);
-        vm.expectRevert(JurisdictionRegistry.JurisdictionExists.selector);
+        vm.expectRevert(IJurisdictionRegistry.JurisdictionExists.selector);
         j.createJurisdiction(jid, makeAddr("hijack"), "Ward 9");
         assertEq(j.clerkOf(jid), clerk);
 
@@ -95,7 +101,7 @@ contract LowRegressionsTest is Deployer {
         vm.prank(admin);
         voterRegistry.revokeRole(Roles.REGISTRAR_ROLE, x);
         vm.prank(x);
-        vm.expectRevert(VoterRegistry.NotRegistrar.selector);
+        vm.expectRevert(IVoterRegistry.NotRegistrar.selector);
         voterRegistry.register(id, Fixtures.identityCommitment(uint256(12)));
 
         PersonRegistry p = new PersonRegistry(admin);
@@ -104,7 +110,7 @@ contract LowRegressionsTest is Deployer {
         vm.prank(admin);
         p.revokeRole(Roles.REGISTRAR_ROLE, x);
         vm.prank(x);
-        vm.expectRevert(PersonRegistry.NotRegistrar.selector);
+        vm.expectRevert(IPersonRegistry.NotRegistrar.selector);
         p.verifyAddress(keccak256("p"), makeAddr("acct"));
     }
 
@@ -120,7 +126,7 @@ contract LowRegressionsTest is Deployer {
         uint256[] memory inputs = voteInputs(id, el, n + R, enc);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
         assertEq(inbox.acceptedBallots(id), 1);
     }

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="/lang-init.js"></script>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1014" media="(prefers-color-scheme: dark)" />
+    <meta name="robots" content="noindex" />
+    <title data-i18n="chrome.titleAdmin">Platform admin · %BRAND_NAME%</title>
+    <script src="/canonical-url.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+  </head>
+  <body>
+    <!-- NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product. -->
+    <a class="skip-link" href="#main" data-i18n="chrome.skip">Skip to main content</a>
+    <div class="nfp-banner" role="note" data-i18n="chrome.nfpBanner">
+      NOT FOR PROFIT — civic public good. Not a commercial product. No token. No fees to voters.
+    </div>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="%BRAND_NAME% home" data-i18n-aria-label="chrome.brandHome">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
+              <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M10 18.5 L15.5 24 L26 12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">%BRAND_NAME%</span>
+            <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
+          </span>
+        </a>
+        <nav class="nav-main" aria-label="Primary" data-i18n-aria-label="chrome.navPrimary">
+          <ul>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/signin">Sign in</a></li>
+            <li><a href="/register">Register</a></li>
+          </ul>
+        </nav>
+        <div id="lang-switcher"></div>
+        <div id="session-chrome" class="session-chrome" aria-label="Session" data-i18n-aria-label="chrome.session"></div>
+        <span class="office-badge" data-i18n="chrome.officeBadge">Not for profit</span>
+      </div>
+    </header>
+
+    <main id="main" class="site-main" tabindex="-1">
+      <header class="page-head">
+        <p class="kicker">Voting admin</p>
+        <h1>Host this Node</h1>
+        <p class="lede">
+          Jurisdictions are the organizations of this public-good stack. Grant clerks,
+          registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
+          and no console that takes fees. Dashboards do not show live vote ticks; public
+          proof of ballots is published once an hour.
+        </p>
+        <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
+          <p class="disclosure-note">
+            Public vote proofs publish at the top of each hour. This console does not show a live jurisdiction increase.
+          </p>
+        </aside>
+        <p class="session-line" id="session-line">Checking session…</p>
+      </header>
+
+      <div id="officer-gate" class="audience-gate" hidden>
+        <div class="panel">
+          <h2>Officer access required</h2>
+          <p id="officer-gate-copy">This desk is for election officials. Sign in with an officer session.</p>
+          <div class="cta-row">
+            <a class="btn" href="/signin?next=/admin">Sign in</a>
+            <a class="btn btn-secondary" href="/me">My desk</a>
+            <button class="btn btn-secondary" type="button" id="officer-gate-signout">Sign out</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="office-work">
+      <nav class="office-hub" aria-label="Voting admin">
+        <a href="/office">Admin hub</a>
+        <a href="/back-office">Elections, roll, tally</a>
+        <a href="/admin" aria-current="page">Jurisdictions and roles</a>
+        <a href="/explorer">Explorer</a>
+      </nav>
+
+      <section aria-labelledby="host-heading">
+        <h2 id="host-heading" class="visually-hidden">Host status</h2>
+        <dl class="stat-grid" id="host-stats">
+          <div class="stat">
+            <dt>Health</dt>
+            <dd class="plain" id="stat-health"><span class="status-dot"></span>Checking…</dd>
+          </div>
+          <div class="stat">
+            <dt>Chain ID</dt>
+            <dd id="stat-chain">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Election factory</dt>
+            <dd id="stat-factory">—</dd>
+          </div>
+          <div class="stat">
+            <dt>NOT FOR PROFIT</dt>
+            <dd class="plain" id="stat-nfp">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <div
+        id="sign-in-root"
+        data-heading="Sign in"
+        data-dev-handle="admin"
+        data-dev-role="platform_admin"
+        data-lede="Platform admin uses the same email, Ethereum, smart-card, or license session as every other person. Dev sign-in exists only when this host set ALLOW_DEV_LOGIN=1."
+      ></div>
+
+      <div class="grid-2">
+        <section class="panel" aria-labelledby="create-j-heading">
+          <header>
+            <h2 id="create-j-heading">Create jurisdiction</h2>
+          </header>
+          <p class="field-hint">A jurisdiction owns a roll and elections (nation, state, county, city, or other body).</p>
+          <form id="form-jurisdiction" class="form-grid">
+            <div class="field">
+              <label class="field-label" for="j-name">Name <span class="req">*</span></label>
+              <input id="j-name" name="name" required maxlength="120" autocomplete="organization" placeholder="County of Example" />
+            </div>
+            <p class="field-hint" id="j-id-note">The Node assigns a UUID. You cannot choose the id.</p>
+            <div class="field">
+              <label class="field-label" for="j-uri">Metadata URI</label>
+              <input id="j-uri" name="metadataURI" inputmode="url" placeholder="ipfs://… or https://…" />
+            </div>
+            <div class="actions">
+              <button class="btn" type="submit">Create jurisdiction</button>
+            </div>
+            <div class="flash" id="flash-jurisdiction" role="status"></div>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="grant-heading">
+          <header>
+            <h2 id="grant-heading">Grant officers</h2>
+          </header>
+          <p class="field-hint">
+            Clerk, registrar, disqualification officer, and tally operator are scoped to one
+            jurisdiction. <code>platform_admin</code> remains a global override and is not granted here.
+          </p>
+          <form id="form-grant" class="form-grid">
+            <div class="field">
+              <label class="field-label" for="g-user">User <span class="req">*</span></label>
+              <select id="g-user" name="userId" required>
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-jurisdiction">Jurisdiction <span class="req">*</span></label>
+              <select id="g-jurisdiction" name="jurisdictionId" required>
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="g-role">Role <span class="req">*</span></label>
+              <select id="g-role" name="role" required>
+                <option value="clerk">clerk — create elections, freeze roll</option>
+                <option value="registrar">registrar — insert identity commitments</option>
+                <option value="disqualification_officer">disqualification_officer — reason codes</option>
+                <option value="tally_operator">tally_operator — post counts</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="btn" type="submit">Grant role</button>
+            </div>
+            <div class="flash" id="flash-grant" role="status"></div>
+          </form>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="list-j-heading">
+        <header>
+          <h2 id="list-j-heading">Jurisdictions</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-j">Refresh</button>
+        </header>
+        <div class="table-wrap">
+          <table class="data-table" id="table-jurisdictions">
+            <caption class="visually-hidden">Known jurisdictions</caption>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Id</th>
+                <th>Officers</th>
+                <th>Metadata</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="officers-heading">
+        <header>
+          <h2 id="officers-heading">Jurisdiction officers</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-o">Refresh</button>
+        </header>
+        <p class="field-hint">
+          Grants live on the jurisdiction, not as a single global user role. Revoke removes that
+          office for that jurisdiction only.
+        </p>
+        <div class="table-wrap">
+          <table class="data-table" id="table-officers">
+            <caption class="visually-hidden">Officers granted per jurisdiction</caption>
+            <thead>
+              <tr>
+                <th>Jurisdiction</th>
+                <th>Handle</th>
+                <th>Role</th>
+                <th>Granted</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flash" id="flash-officers" role="status"></div>
+      </section>
+      <section class="panel" aria-labelledby="users-heading">
+        <header>
+          <h2 id="users-heading">Users</h2>
+          <button class="btn btn-secondary" type="button" id="btn-refresh-u">Refresh</button>
+        </header>
+        <div class="table-wrap">
+          <table class="data-table" id="table-users">
+            <caption class="visually-hidden">Node users and roles</caption>
+            <thead>
+              <tr>
+                <th>Handle</th>
+                <th>Global role</th>
+                <th>Jurisdiction offices</th>
+                <th>Methods</th>
+                <th>Active ETH</th>
+                <th>Person key</th>
+                <th>Id</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="empty">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="addrs-heading">
+        <header>
+          <h2 id="addrs-heading">Public host facts</h2>
+        </header>
+        <p class="field-hint">These are not secrets. Private keys never belong in this console.</p>
+        <div class="table-wrap">
+          <table class="data-table" id="table-addresses">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="2" class="empty">Waiting for host status…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="outcome-pdf-heading">
+        <header>
+          <h2 id="outcome-pdf-heading">Official outcome PDF</h2>
+        </header>
+        <p class="field-hint">
+          Customize the letterhead and intro for official reports emailed after voting time
+          expires. The QR verification mark and SHA-256 / HMAC seals are always included and
+          cannot be removed.
+        </p>
+        <form id="form-outcome-pdf" class="form-grid">
+          <div class="field">
+            <label class="field-label" for="op-heading">Heading</label>
+            <input id="op-heading" name="heading" maxlength="120" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-letterhead">Letterhead</label>
+            <input id="op-letterhead" name="letterhead" maxlength="160" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-intro">Intro</label>
+            <textarea id="op-intro" name="intro" rows="4" maxlength="4000"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-footer">Footer</label>
+            <input id="op-footer" name="footer" maxlength="500" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="op-contact">Contact line</label>
+            <input id="op-contact" name="contactLine" maxlength="240" />
+          </div>
+          <div class="field">
+            <label class="field-label">
+              <input id="op-jurisdiction" name="showJurisdiction" type="checkbox" checked />
+              Show jurisdiction name
+            </label>
+          </div>
+          <p class="field-hint" id="op-locked-note">
+            Locked: QR verification, SHA-256 of the PDF bytes, and HMAC integrity. Admins cannot
+            turn these off.
+          </p>
+          <div class="actions">
+            <button class="btn" type="submit">Save template</button>
+            <button class="btn btn-secondary" type="button" id="btn-outcome-preview">Preview PDF</button>
+          </div>
+          <div class="flash" id="flash-outcome-pdf" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="mail-heading">
+        <h2 id="mail-heading">Role-promotion emails</h2>
+        <p class="field-hint">
+          When someone is promoted, the Node queues a civic notice. These messages are never written to civic L2 transactions.
+        </p>
+        <label for="mail-template">Template</label>
+        <select id="mail-template" name="mail-template"></select>
+      </section>
+
+      <section class="panel danger-zone danger-none" aria-labelledby="danger-heading">
+        <h2 id="danger-heading">Danger Zone</h2>
+        <div class="danger-row">
+          <div>
+            <p class="danger-row-title">No fee controls</p>
+            <p>
+              There is none that takes fees. This software will not mint a token, charge a voter,
+              skim ETH, or open a paid tier. Gas sponsorship is paid by the jurisdiction at cost.
+            </p>
+            <p class="field-hint">If a build adds a fee control here, it is a bug. See NOT_FOR_PROFIT.md.</p>
+          </div>
+        </div>
+      </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-nfp" data-i18n="chrome.footerNfp">NOT FOR PROFIT — %BRAND_NAME% is a civic public good. Not a commercial product.</p>
+      <p class="footer-meta">
+        <span data-i18n="chrome.footerAdminMeta">Product name %BRAND_NAME%. No token. No ads.</span>
+        <span lang="en">
+          <a href="/terms">Terms</a>
+          ·
+          <a href="/feedback">Feedback</a>
+          ·
+          <a href="/explorer">L2 explorer</a>
+          · AGPL-3.0-or-later
+        </span>
+      </p>
+      <section class="footer-extra" aria-labelledby="footer-contact-label">
+        <p class="footer-contact-line">
+          <span class="footer-kicker" id="footer-contact-label" data-i18n="chrome.footerContact">Contact</span>
+          <a class="footer-mail" href="mailto:hello@zk-voting.org">hello@zk-voting.org</a>
+        </p>
+        <p class="footer-oss">
+          <a href="https://github.com/mrabino1/zk-voting" data-i18n="chrome.footerOpenSource">%BRAND_NAME% is 100% open source and free to use.</a>
+        </p>
+        <p class="footer-contract">
+          <span data-i18n="chrome.footerContract">We are available for contracting for your local implementation.</span>
+          <a class="btn footer-cta" href="mailto:hello@zk-voting.org" data-i18n="chrome.footerContractCta">Email us</a>
+        </p>
+      </section>
+      <div class="footer-social">
+        <a class="footer-github" href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer" aria-label="%BRAND_NAME% on GitHub" data-i18n-aria-label="chrome.footerGithub">
+          <svg class="footer-github-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        </a>
+      </div>
+    </footer>
+    <script src="/disclosure-ui.js"></script>
+    <script type="module" src="/signin.js"></script>
+    <script type="module" src="/office-gate.js"></script>
+    <script src="/admin.js" defer></script>
+    <script type="module" src="/plugin-runtime.js"></script>
+  </body>
+</html>

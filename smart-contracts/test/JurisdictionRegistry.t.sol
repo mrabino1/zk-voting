@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {JurisdictionRegistry} from "../src/JurisdictionRegistry.sol";
 import {Roles} from "../src/Roles.sol";
+import {IJurisdictionRegistry} from "../src/interfaces/IJurisdictionRegistry.sol";
 
 /// @notice Jurisdiction zero-id, zero-address, and clerk/officer role edges.
 contract JurisdictionRegistryTest is Test {
@@ -28,7 +29,7 @@ contract JurisdictionRegistryTest is Test {
     }
 
     function testConstructorRejectsZeroAdmin() public {
-        vm.expectRevert(JurisdictionRegistry.ZeroAddress.selector);
+        vm.expectRevert(IJurisdictionRegistry.ZeroAddress.selector);
         new JurisdictionRegistry(address(0));
     }
 
@@ -39,19 +40,19 @@ contract JurisdictionRegistryTest is Test {
 
     function testCreateJurisdictionZeroIdReverts() public {
         vm.prank(admin);
-        vm.expectRevert(JurisdictionRegistry.ZeroId.selector);
+        vm.expectRevert(IJurisdictionRegistry.ZeroId.selector);
         registry.createJurisdiction(bytes32(0), clerk, "Ward");
     }
 
     function testCreateJurisdictionZeroClerkReverts() public {
         vm.prank(admin);
-        vm.expectRevert(JurisdictionRegistry.ZeroAddress.selector);
+        vm.expectRevert(IJurisdictionRegistry.ZeroAddress.selector);
         registry.createJurisdiction(jid, address(0), "Ward");
     }
 
     function testStrangerCannotCreateJurisdiction() public {
         vm.prank(stranger);
-        vm.expectRevert(JurisdictionRegistry.NotAdmin.selector);
+        vm.expectRevert(IJurisdictionRegistry.NotAdmin.selector);
         registry.createJurisdiction(jid, clerk, "Ward");
     }
 
@@ -74,7 +75,7 @@ contract JurisdictionRegistryTest is Test {
 
     function testSetClerkUnknownJurisdictionReverts() public {
         vm.prank(admin);
-        vm.expectRevert(JurisdictionRegistry.UnknownJurisdiction.selector);
+        vm.expectRevert(IJurisdictionRegistry.UnknownJurisdiction.selector);
         registry.setClerk(jid, clerk);
     }
 
@@ -82,7 +83,7 @@ contract JurisdictionRegistryTest is Test {
         vm.prank(admin);
         registry.createJurisdiction(jid, clerk, "Ward");
         vm.prank(admin);
-        vm.expectRevert(JurisdictionRegistry.ZeroAddress.selector);
+        vm.expectRevert(IJurisdictionRegistry.ZeroAddress.selector);
         registry.setClerk(jid, address(0));
     }
 
@@ -114,7 +115,7 @@ contract JurisdictionRegistryTest is Test {
         vm.prank(admin);
         registry.createJurisdiction(jid, clerk, "Ward");
         vm.prank(clerk);
-        vm.expectRevert(JurisdictionRegistry.ZeroAddress.selector);
+        vm.expectRevert(IJurisdictionRegistry.ZeroAddress.selector);
         registry.grantOfficer(jid, address(0));
     }
 
@@ -122,7 +123,7 @@ contract JurisdictionRegistryTest is Test {
         vm.prank(admin);
         registry.createJurisdiction(jid, clerk, "Ward");
         vm.prank(stranger);
-        vm.expectRevert(JurisdictionRegistry.NotAdmin.selector);
+        vm.expectRevert(IJurisdictionRegistry.NotAdmin.selector);
         registry.grantOfficer(jid, stranger);
     }
 
@@ -130,13 +131,13 @@ contract JurisdictionRegistryTest is Test {
         vm.prank(admin);
         registry.createJurisdiction(jid, clerk, "Ward");
         vm.prank(stranger);
-        vm.expectRevert(JurisdictionRegistry.NotAdmin.selector);
+        vm.expectRevert(IJurisdictionRegistry.NotAdmin.selector);
         registry.setClerk(jid, stranger);
     }
 
     function testGrantRoleOnlyAdmin() public {
         vm.prank(stranger);
-        vm.expectRevert(JurisdictionRegistry.NotAdmin.selector);
+        vm.expectRevert(IJurisdictionRegistry.NotAdmin.selector);
         registry.grantRole(Roles.PLATFORM_ADMIN_ROLE, stranger);
 
         vm.prank(admin);

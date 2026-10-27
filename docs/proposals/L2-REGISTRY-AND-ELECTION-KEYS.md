@@ -2,8 +2,8 @@
 
 Status: **proposal for Matthew to apply by hand in `smart-contracts/`.** No file
 in `smart-contracts/` was changed. The off-chain side (sequencer, prover, Node)
-already computes the same hashes: `demo/l2/identity.mjs`, cross-checked with
-viem in `demo/l2/test/identity-admission.test.mjs`.
+already computes the same hashes: `voting_node/l2/identity.mjs`, cross-checked with
+viem in `voting_node/l2/test/identity-admission.test.mjs`.
 
 NOT FOR PROFIT — civic public good.
 
@@ -23,7 +23,7 @@ Also: the current prover's `dataHash`/`prevStateRoot` never matched
 `PrevRootMismatch` at `:117`). That is fixed off-chain; no contract change is
 needed for it.
 
-## Hashes (must match `demo/l2/identity.mjs`)
+## Hashes (must match `voting_node/l2/identity.mjs`)
 
 ```solidity
 bytes32 constant L2_ID_DOMAIN        = keccak256("zk-voting/l2-id/v1");
@@ -219,7 +219,7 @@ Notes:
 - The verifier interface above uses `uint256[]` public inputs; adapt to the
   real batch verifier's fixed-size signature when the circuit exists. Outside
   `mockMode` the circuit must prove the same keccak root as the prover's
-  `batch.settlement` (`demo/l2/identity.mjs` `computeSettlementStateRoot`).
+  `batch.settlement` (`voting_node/l2/identity.mjs` `computeSettlementStateRoot`).
 - Bond: `registrationBond` defaults to 0. Non-zero deters L1 spam but excludes
   small operators. Refund/slash rules are out of scope; leave it 0 for mainnet
   v1 unless spam is observed.
@@ -290,7 +290,7 @@ registry:
 +        emit ResultPostedByKey(electionKey, l2Id, resultHash, countsHash, l2StateRoot, batchIndex);
 +    }
 +
-+    /// @notice Read path used by the dashboard (demo/apps/node/src/l2Identity.mjs readOutcomeFromL1).
++    /// @notice Read path used by the dashboard (voting_node/apps/node/src/l2Identity.mjs readOutcomeFromL1).
 +    function resultOf(bytes32 electionKey)
 +        external
 +        view

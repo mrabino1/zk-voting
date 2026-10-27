@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {PasskeyAccount} from "../src/account/PasskeyAccount.sol";
 import {ZkVotingPaymaster} from "../src/account/ZkVotingPaymaster.sol";
-import {UserOp} from "../src/account/ZkVotingEntryPoint.sol";
+import {UserOp} from "../src/interfaces/UserOp.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IZkVotingPaymaster} from "../src/interfaces/IZkVotingPaymaster.sol";
 
 contract PaymasterSink {
     uint256 public value;
@@ -91,7 +92,7 @@ contract PaymasterTest is Deployer {
         unsponsored.paymaster = address(paymaster);
 
         vm.prank(address(entryPoint));
-        vm.expectRevert(ZkVotingPaymaster.NotSponsored.selector);
+        vm.expectRevert(IZkVotingPaymaster.NotSponsored.selector);
         paymaster.validateAndPay(unsponsored);
     }
 
@@ -101,7 +102,7 @@ contract PaymasterTest is Deployer {
         assertFalse(paymaster.alwaysSponsor());
 
         vm.prank(relayer);
-        vm.expectRevert(ZkVotingPaymaster.NotAdmin.selector);
+        vm.expectRevert(IZkVotingPaymaster.NotAdmin.selector);
         paymaster.setAlwaysSponsor(true);
 
         vm.prank(admin);

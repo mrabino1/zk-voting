@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {PersonRegistry} from "../src/PersonRegistry.sol";
 import {Roles} from "../src/Roles.sol";
+import {IPersonRegistry} from "../src/interfaces/IPersonRegistry.sol";
 
 /// @notice Many internally verified addresses; exactly one active per person.
 contract PersonRegistryTest is Test {
@@ -40,7 +41,7 @@ contract PersonRegistryTest is Test {
 
         vm.prank(registrar);
         vm.expectEmit(true, true, false, true, address(registry));
-        emit PersonRegistry.ActiveAddressSet(personA, addrA, address(0));
+        emit IPersonRegistry.ActiveAddressSet(personA, addrA, address(0));
         registry.setActive(personA, addrA);
         assertEq(registry.activeAddress(personA), addrA);
 
@@ -59,7 +60,7 @@ contract PersonRegistryTest is Test {
         registry.verifyAddress(personA, addrA);
 
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(PersonRegistry.AlreadyOwned.selector, personA));
+        vm.expectRevert(abi.encodeWithSelector(IPersonRegistry.AlreadyOwned.selector, personA));
         registry.verifyAddress(personB, addrA);
 
         assertEq(registry.personOf(addrA), personA);
@@ -72,7 +73,7 @@ contract PersonRegistryTest is Test {
 
     function testSetActiveRequiresVerified() public {
         vm.prank(registrar);
-        vm.expectRevert(PersonRegistry.NotVerified.selector);
+        vm.expectRevert(IPersonRegistry.NotVerified.selector);
         registry.setActive(personA, addrC);
     }
 
@@ -80,7 +81,7 @@ contract PersonRegistryTest is Test {
         vm.startPrank(registrar);
         registry.verifyAddress(personA, addrA);
         registry.setActive(personA, addrA);
-        vm.expectRevert(PersonRegistry.SameActive.selector);
+        vm.expectRevert(IPersonRegistry.SameActive.selector);
         registry.setActive(personA, addrA);
         vm.stopPrank();
     }
@@ -95,27 +96,27 @@ contract PersonRegistryTest is Test {
 
     function testNonRegistrarCannotVerifyOrSetActive() public {
         vm.prank(stranger);
-        vm.expectRevert(PersonRegistry.NotRegistrar.selector);
+        vm.expectRevert(IPersonRegistry.NotRegistrar.selector);
         registry.verifyAddress(personA, addrA);
 
         vm.prank(registrar);
         registry.verifyAddress(personA, addrA);
 
         vm.prank(stranger);
-        vm.expectRevert(PersonRegistry.NotRegistrar.selector);
+        vm.expectRevert(IPersonRegistry.NotRegistrar.selector);
         registry.setActive(personA, addrA);
     }
 
     function testZeroPersonAndZeroAddressRevert() public {
         vm.startPrank(registrar);
-        vm.expectRevert(PersonRegistry.ZeroPerson.selector);
+        vm.expectRevert(IPersonRegistry.ZeroPerson.selector);
         registry.verifyAddress(bytes32(0), addrA);
-        vm.expectRevert(PersonRegistry.ZeroAddress.selector);
+        vm.expectRevert(IPersonRegistry.ZeroAddress.selector);
         registry.verifyAddress(personA, address(0));
         registry.verifyAddress(personA, addrA);
-        vm.expectRevert(PersonRegistry.ZeroPerson.selector);
+        vm.expectRevert(IPersonRegistry.ZeroPerson.selector);
         registry.setActive(bytes32(0), addrA);
-        vm.expectRevert(PersonRegistry.ZeroAddress.selector);
+        vm.expectRevert(IPersonRegistry.ZeroAddress.selector);
         registry.setActive(personA, address(0));
         vm.stopPrank();
     }

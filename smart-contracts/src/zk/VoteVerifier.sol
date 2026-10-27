@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
+import {IVoteVerifier} from "../interfaces/IVoteVerifier.sol";
 
 /// @title VoteVerifier
 /// @notice Structural Groth16 verifier for the vote circuit (5 public inputs).
@@ -20,9 +21,7 @@ import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 ///      input[2] = nullifier
 ///      input[3] = ballotHash (uint256)
 ///      input[4] = electionId
-contract VoteVerifier is IGroth16Verifier {
-    error VerifierNotConfigured();
-
+contract VoteVerifier is IVoteVerifier {
     /// @notice Vote circuit public input count (eligible, disq, nullifier, ballotHash, electionId).
     uint256 public constant PUBLIC_INPUT_COUNT = 5;
 

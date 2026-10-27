@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,24 +7,25 @@ import {ElectionParams, TallyScheme} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
-import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
+import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
 
 /// @title Tally
 /// @notice Posts a proven (or mock-verified) option-count vector after cutoff.
 /// @dev Two additive schemes (ElectionParams.tallyScheme):
 ///      0 SUM_ONLY — any `counts` with sum == acceptedBallots (legacy demo).
-///      1 OPENS_BALLOTS — operator must submit `openings` whose histogram is
-///        `counts` and whose length is `acceptedBallots`. That rejects invented
-///        partitions that only match the sum. Decryption of ECIES envelopes is
-///        off-chain (Feldman t-of-n guardians, NON-PRODUCTION). On-chain
-///        this slice binds openings ↔ counts ↔ inbox ballotRoot. MockVerifier
-///        does not prove discrete-log decryption; do not treat it as a ceremony.
+///        This does not reveal an individual ciphertext. It also does not
+///        prove the histogram. A real aggregate proof is scheme 1.
+///      1 AGGREGATE — operator submits `counts` plus one `aggregateHash`
+///        of the homomorphic product. There is no per-ballot openings array,
+///        in calldata or in storage. Ranked ballots are not opened here;
+///        the application refuses ranked tally until a shuffle exists.
+///        MockVerifier does not prove decryption; do not treat it as a ceremony.
 ///
 ///      Public inputs: `TallyPublicInputs` (TALLY_SOL_V2, every word reduced
 ///      mod r). Not the same encoding as `circuits/tally.circom`. See that
-///      file's header.
+///      file's header. Word 5 is `aggregateHash`.
 ///
 ///      Audit H-01: tally proofs are verified by a dedicated, set-once
 ///      `tallyProofVerifier`, never by the election's *vote* verifier. Until a
@@ -32,44 +33,42 @@ import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 ///      `TallyVerifierNotSet`. A verifier reporting `isMock() == true` is
 ///      refused unless the factory explicitly allows mock verifiers (dev / test).
 contract Tally is ITallyVerifier {
-    error ZeroAddress();
-    error UnknownElection();
-    error NotTallyOperator();
-    error ElectionNotClosed();
-    error AlreadyTallied();
-    error EmptyCounts();
-    error CountMismatch();
-    error InvalidProof();
-    error OpeningsRequired();
-    error OpeningLengthMismatch();
-    error OpeningMismatch();
-    error OptionOutOfRange();
-    error NotSuperAdmin();
-    error TallyVerifierNotSet();
-    error TallyVerifierAlreadySet();
-    error MockVerifierNotAllowed();
+    /// @notice Option-vector bound. A histogram is not one integer per ballot.
+    uint256 public constant MAX_TALLY_OPTIONS = 256;
 
-    event TallyProofVerifierSet(address indexed verifier);
+    IElectionFactory private immutable _factory;
 
-    /// @notice Factory that maps `electionId` → Election clone.
-    IElectionFactory public immutable factory;
+    /// @inheritdoc ITallyVerifier
+    function factory() external view returns (address) {
+        return address(_factory);
+    }
 
     mapping(uint256 => uint256[]) private _counts;
     mapping(uint256 => bool) private _tallied;
-    mapping(uint256 => bytes32) private _openingsHash;
+    mapping(uint256 => bytes32) private _aggregateHash;
     mapping(uint256 => uint8) private _postedScheme;
 
     /// @notice Groth16 verifier for the `TallyPublicInputs` instance. Set once.
     address public tallyProofVerifier;
 
+    /// @dev Appended slot. 1 while a tally submission is inside `nonReentrant`.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
+
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
-        factory = IElectionFactory(factory_);
+        _factory = IElectionFactory(factory_);
     }
 
     /// @notice Install the tally proof verifier. Super admin only; set once.
     function setTallyProofVerifier(address verifier_) external {
-        if (!factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
+        if (!_factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
         if (verifier_ == address(0)) revert ZeroAddress();
         if (tallyProofVerifier != address(0)) revert TallyVerifierAlreadySet();
         if (_reportsMock(verifier_) && !_factoryAllowsMock()) revert MockVerifierNotAllowed();
@@ -84,12 +83,14 @@ contract Tally is ITallyVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external {
+    ) external nonReentrant {
+        _requireNotPaused();
         if (counts.length == 0) revert EmptyCounts();
+        if (counts.length > MAX_TALLY_OPTIONS) revert CountsTooLong();
         if (_tallied[electionId]) revert AlreadyTallied();
 
         (address inbox, address verifier, ElectionParams memory p) = _authorize(electionId);
-        if (p.tallyScheme == TallyScheme.OPENS_BALLOTS) revert OpeningsRequired();
+        if (p.tallyScheme == TallyScheme.AGGREGATE) revert AggregateRequired();
 
         uint256 accepted = IBallotInbox(inbox).acceptedBallots(electionId);
         uint256 total = _sum(counts);
@@ -120,28 +121,28 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
-    function submitOpenedTally(
+    function submitAggregateTally(
         uint256 electionId,
         uint256[] calldata counts,
-        uint256[] calldata openings,
+        bytes32 aggregateHash_,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external {
+    ) external nonReentrant {
+        _requireNotPaused();
         if (counts.length == 0) revert EmptyCounts();
+        if (counts.length > MAX_TALLY_OPTIONS) revert CountsTooLong();
+        if (aggregateHash_ == bytes32(0)) revert AggregateHashRequired();
         if (_tallied[electionId]) revert AlreadyTallied();
 
         (address inbox, address verifier, ElectionParams memory p) = _authorize(electionId);
+        if (p.tallyScheme != TallyScheme.AGGREGATE) revert NotAggregateScheme();
 
         uint256 accepted = IBallotInbox(inbox).acceptedBallots(electionId);
-        if (openings.length != accepted) revert OpeningLengthMismatch();
-
         uint256 total = _sum(counts);
         if (total != accepted) revert CountMismatch();
-        _requireHistogram(openings, counts);
 
         bytes32 countsHash = keccak256(abi.encodePacked(counts));
-        bytes32 openedHash = TallyPublicInputs.openingsHashOf(openings);
         bytes32 root = IBallotInbox(inbox).ballotRoot(electionId);
 
         _verify(
@@ -151,7 +152,7 @@ contract Tally is ITallyVerifier {
                 accepted,
                 countsHash,
                 root,
-                openedHash,
+                aggregateHash_,
                 TallyPublicInputs.tallyKeyHashOf(p.tallyPubKeyX, p.tallyPubKeyY)
             ),
             a,
@@ -161,11 +162,11 @@ contract Tally is ITallyVerifier {
 
         _tallied[electionId] = true;
         _counts[electionId] = counts;
-        _openingsHash[electionId] = openedHash;
-        _postedScheme[electionId] = TallyScheme.OPENS_BALLOTS;
+        _aggregateHash[electionId] = aggregateHash_;
+        _postedScheme[electionId] = TallyScheme.AGGREGATE;
 
         emit TallyPosted(electionId, countsHash, total);
-        emit OpenedTallyPosted(electionId, countsHash, openedHash, root, total);
+        emit AggregateTallyPosted(electionId, countsHash, aggregateHash_, root, total);
     }
 
     /// @inheritdoc ITallyVerifier
@@ -179,8 +180,9 @@ contract Tally is ITallyVerifier {
         return _tallied[electionId];
     }
 
-    function openingsHash(uint256 electionId) external view returns (bytes32) {
-        return _openingsHash[electionId];
+    /// @notice Single commitment to the aggregated ciphertext. Not a list of choices.
+    function aggregateHash(uint256 electionId) external view returns (bytes32) {
+        return _aggregateHash[electionId];
     }
 
     function postedScheme(uint256 electionId) external view returns (uint8) {
@@ -194,7 +196,7 @@ contract Tally is ITallyVerifier {
         view
         returns (address inbox, address verifier, ElectionParams memory p)
     {
-        address electionAddr = factory.getElection(electionId);
+        address electionAddr = _factory.getElection(electionId);
         if (electionAddr == address(0)) revert UnknownElection();
 
         IElection election = IElection(electionAddr);
@@ -207,13 +209,18 @@ contract Tally is ITallyVerifier {
         inbox = election.inbox();
     }
 
+    function _requireNotPaused() internal view {
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("isPaused()"));
+        if (ok && ret.length >= 32 && abi.decode(ret, (bool))) revert ContractPaused();
+    }
+
     function _reportsMock(address verifier_) internal view returns (bool) {
         (bool ok, bytes memory ret) = verifier_.staticcall(abi.encodeWithSignature("isMock()"));
         return ok && ret.length >= 32 && abi.decode(ret, (bool));
     }
 
     function _factoryAllowsMock() internal view returns (bool) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("allowMockVerifiers()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("allowMockVerifiers()"));
         return ok && ret.length >= 32 && abi.decode(ret, (bool));
     }
 
@@ -224,22 +231,6 @@ contract Tally is ITallyVerifier {
         }
     }
 
-    function _requireHistogram(uint256[] calldata openings, uint256[] calldata counts) internal pure {
-        uint256 nOptions = counts.length;
-        uint256[] memory hist = new uint256[](nOptions);
-        uint256 n = openings.length;
-        for (uint256 i; i < n; ++i) {
-            uint256 opt = openings[i];
-            if (opt >= nOptions) revert OptionOutOfRange();
-            unchecked {
-                hist[opt] += 1;
-            }
-        }
-        for (uint256 j; j < nOptions; ++j) {
-            if (hist[j] != counts[j]) revert OpeningMismatch();
-        }
-    }
-
     function _verify(
         address verifier,
         uint256[] memory input,
@@ -247,7 +238,6 @@ contract Tally is ITallyVerifier {
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) internal view {
-        bool ok = IGroth16Verifier(verifier).verifyProof(a, b, c, input);
-        if (!ok) revert InvalidProof();
+        if (!CappedVerifierCall.accepted(verifier, a, b, c, input)) revert InvalidProof();
     }
 }

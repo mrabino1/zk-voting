@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -9,6 +9,7 @@ import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {MockVerifier} from "../src/zk/MockVerifier.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 
 /// @notice Court-grade L1 copy of an L2 tally hash. No mainnet keys.
 contract L1TallyMirrorTest is Test {
@@ -44,7 +45,7 @@ contract L1TallyMirrorTest is Test {
         bytes32 hash = _countsHash(2, 0);
         vm.prank(admin);
         vm.expectEmit(true, false, false, true);
-        emit L1TallyMirror.ElectionCertified(1, hash, 2, bytes32(0));
+        emit IL1TallyMirror.ElectionCertified(1, hash, 2, bytes32(0));
         mirror.postResult(1, hash, 2, bytes32(0));
         assertEq(mirror.resultHashOf(1), hash);
         assertEq(mirror.totalBallotsOf(1), 2);
@@ -65,7 +66,7 @@ contract L1TallyMirrorTest is Test {
     function testStrangerCannotPost() public {
         bytes32 hash = _countsHash(3, 0);
         vm.prank(stranger);
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.postResult(1, hash, 3, bytes32(0));
         assertEq(mirror.resultHashOf(1), bytes32(0));
     }
@@ -75,13 +76,13 @@ contract L1TallyMirrorTest is Test {
         vm.prank(admin);
         mirror.postResult(1, hash, 2, bytes32(0));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.AlreadyPosted.selector);
+        vm.expectRevert(IL1TallyMirror.AlreadyPosted.selector);
         mirror.postResult(1, keccak256("other"), 2, bytes32(0));
     }
 
     function testStrangerCannotSetPublisher() public {
         vm.prank(stranger);
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.setPublisher(publisher, true);
     }
 

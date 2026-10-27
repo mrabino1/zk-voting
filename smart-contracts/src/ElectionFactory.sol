@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -17,39 +17,11 @@ import {Roles} from "./Roles.sol";
 ///         clones an ExternalPartyRegistry (unlimited external vote gates).
 ///         No token. No fee.
 contract ElectionFactory is IElectionFactory {
-    error ZeroAddress();
-    error NotAdmin();
-    error NotSuperAdmin();
-    error CannotRevokeSuper();
-    error InvalidWindow();
-    error InvalidTreeDepth();
-    error InvalidQuestionCount();
-    error MissingRole();
-    error ModulesNotSet();
-    error InvalidTallyScheme();
-    error InvalidJurisdiction();
-    error NotJurisdictionClerk();
-    error UnknownElection();
-    error MockVerifierNotAllowed();
-    error ModulesAlreadySet();
-    error VerifierNotApproved();
-    error CannotGrantSuperAdmin();
-    error NotPendingAdmin();
-
-    event AllowMockVerifiersSet(bool allowed);
-    /// @notice Audit M-03 / L-02: module wiring and admin changes are logged.
-    event ModulesSet(address voterRegistry, address disqualificationRegistry, address ballotInbox, address tally);
-    event ImplementationSet(address implementation);
-    event PartyRegistryImplementationSet(address implementation);
-    event JurisdictionRegistrySet(address jurisdictionRegistry);
-    event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
-    event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
-    event VerifierApprovalSet(address indexed verifier, bool approved);
-    event AdminTransferStarted(address indexed currentAdmin, address indexed pendingAdmin);
-    event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
-
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;
+
+    /// @notice One pause cannot outlive this. Voting resumes if the admin key is lost.
+    uint64 public constant MAX_PAUSE_DURATION = 72 hours;
 
     address public admin;
     address public implementation;
@@ -72,11 +44,22 @@ contract ElectionFactory is IElectionFactory {
     ///         (chain id 31337); elsewhere a super admin must opt in explicitly.
     bool public allowMockVerifiers;
 
+    /// @notice Shared relayers allowed to submit ballots. A voter account is not a relayer.
+    mapping(address => bool) public isRelayer;
+
+    /// @notice Seconds between ballot batches. Zero keeps single `submitVote` (tests).
+    ///         Non-zero forces `submitVoteBatch` so one transaction does not timestamp one voter.
+    uint64 public disclosureInterval;
+
     uint256 public electionCount;
     mapping(uint256 => address) private _elections;
     mapping(uint256 => address) private _partyRegistries;
     mapping(uint256 => mapping(address => bool)) private _electionStaff;
     mapping(bytes32 => mapping(address => bool)) public roles;
+
+    /// @notice Start of the current emergency pause. Zero means not paused.
+    ///         Appended so earlier slots are unchanged. Expires after `MAX_PAUSE_DURATION`.
+    uint64 public pausedAt;
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
@@ -107,6 +90,41 @@ contract ElectionFactory is IElectionFactory {
     function setAllowMockVerifiers(bool allowed) external onlySuperAdmin {
         allowMockVerifiers = allowed;
         emit AllowMockVerifiersSet(allowed);
+    }
+
+    /// @notice Allow or remove a shared ballot relayer. Admin only.
+    function setRelayer(address account, bool allowed) external onlyAdmin {
+        if (account == address(0)) revert ZeroAddress();
+        isRelayer[account] = allowed;
+        emit RelayerSet(account, allowed);
+    }
+
+    /// @notice Minimum spacing for `submitVoteBatch`. Zero disables the batch-only rule.
+    function setDisclosureInterval(uint64 interval) external onlyAdmin {
+        disclosureInterval = interval;
+        emit DisclosureIntervalSet(interval);
+    }
+
+    /// @notice Stop ballot and tally submission. Reads stay open. The pause
+    ///         expires on its own so a lost admin key cannot freeze an election.
+    function pause() external onlyAdmin {
+        if (isPaused()) revert AlreadyPaused();
+        pausedAt = uint64(block.timestamp);
+        emit ContractPaused(msg.sender, pausedAt);
+    }
+
+    /// @notice End a pause before it expires.
+    function unpause() external onlyAdmin {
+        if (!isPaused()) revert NotPaused();
+        pausedAt = 0;
+        emit ContractUnpaused(msg.sender);
+    }
+
+    /// @notice True only inside the current pause window.
+    function isPaused() public view returns (bool) {
+        uint64 at = pausedAt;
+        if (at == 0) return false;
+        return block.timestamp < uint256(at) + MAX_PAUSE_DURATION;
     }
 
     /// @notice Audit H-02 / M-02: approve or withdraw a vote verifier for
@@ -281,9 +299,8 @@ contract ElectionFactory is IElectionFactory {
         election = Clones.clone(implementation);
         _elections[electionId] = election;
 
-        IElection(election).initialize(
-            electionId, params, address(this), voterRegistry, disqualificationRegistry, ballotInbox
-        );
+        IElection(election)
+            .initialize(electionId, params, address(this), voterRegistry, disqualificationRegistry, ballotInbox);
 
         address parties = Clones.clone(partyRegistryImplementation);
         ExternalPartyRegistry(parties).initialize(electionId, address(this));
@@ -312,9 +329,8 @@ contract ElectionFactory is IElectionFactory {
         if (params.tallyScheme > 1) revert InvalidTallyScheme();
         if (params.jurisdictionId == bytes32(0)) revert InvalidJurisdiction();
         if (
-            params.clerk == address(0) || params.registrar == address(0)
-                || params.disqualificationOfficer == address(0) || params.tallyOperator == address(0)
-                || params.verifier == address(0)
+            params.clerk == address(0) || params.registrar == address(0) || params.disqualificationOfficer == address(0)
+                || params.tallyOperator == address(0) || params.verifier == address(0)
         ) revert ZeroAddress();
     }
 

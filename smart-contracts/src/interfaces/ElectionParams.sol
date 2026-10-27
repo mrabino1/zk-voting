@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -23,13 +23,17 @@ struct ElectionParams {
     bytes32 tallyPubKeyX;
     /// @notice P-256 tally encryption pubkey Y.
     bytes32 tallyPubKeyY;
-    /// @notice 0 = SUM_ONLY (any `counts` that sum to acceptedBallots). 1 = OPENS_BALLOTS (openings required).
+    /// @notice 0 = SUM_ONLY (any `counts` that sum to acceptedBallots).
+    ///         1 = AGGREGATE (one aggregate ciphertext hash; no per-ballot openings).
     uint8 tallyScheme;
 }
 
 /// @notice Tally binding mode. Additive: existing elections default to SUM_ONLY (0).
 library TallyScheme {
     uint8 internal constant SUM_ONLY = 0;
+    /// @notice Counts plus one aggregate hash. Individual ballot openings are not an input.
+    uint8 internal constant AGGREGATE = 1;
+    /// @dev Historical name for `AGGREGATE`. Per-ballot openings are no longer accepted.
     uint8 internal constant OPENS_BALLOTS = 1;
 }
 

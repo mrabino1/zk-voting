@@ -1,26 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {IZkVotingPaymaster, UserOp} from "./ZkVotingEntryPoint.sol";
+import {IZkVotingPaymaster} from "../interfaces/IZkVotingPaymaster.sol";
+import {UserOp} from "../interfaces/UserOp.sol";
 
 /// @title ZkVotingPaymaster
 /// @notice Civic gas sponsor. Voters do not hold an L2 gas token and are
 ///         never charged. The jurisdiction funds this contract at cost.
 ///         There is no fee, no markup, and no admin skimming of voter funds.
 contract ZkVotingPaymaster is IZkVotingPaymaster {
-    error ZeroAddress();
-    error NotEntryPoint();
-    error NotAdmin();
-    error NotSponsored();
-    error WithdrawFailed();
-
-    event Deposited(address indexed from, uint256 amount);
-    event Withdrawn(address indexed to, uint256 amount);
-    event SponsoredTargetsUpdated(address ballotInbox, address voterRegistry, address accountFactory);
-    event AlwaysSponsorSet(bool alwaysSponsor);
-
     address public immutable entryPoint;
     address public immutable admin;
 
@@ -37,6 +27,16 @@ contract ZkVotingPaymaster is IZkVotingPaymaster {
     address public ballotInbox;
     address public voterRegistry;
     address public accountFactory;
+
+    /// @dev Appended slot. 1 while `withdraw` is sending ETH.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
@@ -65,7 +65,7 @@ contract ZkVotingPaymaster is IZkVotingPaymaster {
 
     /// @notice Admin (jurisdiction treasury) may withdraw unused sponsorship ETH.
     ///         Never called against a voter; voters are not charged.
-    function withdraw(address payable to, uint256 amount) external onlyAdmin {
+    function withdraw(address payable to, uint256 amount) external nonReentrant onlyAdmin {
         if (to == address(0)) revert ZeroAddress();
         emit Withdrawn(to, amount);
         (bool ok,) = to.call{value: amount}("");

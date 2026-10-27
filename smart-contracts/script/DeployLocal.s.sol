@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -180,6 +180,10 @@ abstract contract ZkVotingStackScript is DeployOnce {
             .setModules(
                 address(s.voterRegistry), address(s.disqualificationRegistry), address(s.inbox), address(s.tally)
             );
+        address relayerAddr = vm.envOr("RELAYER", address(0));
+        if (relayerAddr != address(0)) s.factory.setRelayer(relayerAddr, true);
+        uint256 disclosure = vm.envOr("DISCLOSURE_INTERVAL", uint256(0));
+        if (disclosure != 0) s.factory.setDisclosureInterval(uint64(disclosure));
 
         s.entryPoint = new ZkVotingEntryPoint();
         s.accountFactory = new PasskeyAccountFactory(address(s.entryPoint));
@@ -209,7 +213,15 @@ abstract contract ZkVotingStackScript is DeployOnce {
 
 /// @notice Broadcast the full local stack to Anvil, then create one sample election.
 contract DeployLocal is ZkVotingStackScript {
+    error LocalDeployOnly(uint256 chainId);
+
     function run() external {
+        // This script deploys a sample election and, on the mock path, an
+        // accept-all verifier. It is for chain 31337. A public chain needs
+        // ZK_VOTING_ALLOW_PUBLIC_DEPLOY=1 and still has to pass the mock gate.
+        if (block.chainid != ANVIL_CHAIN_ID && !_envTruthy("ZK_VOTING_ALLOW_PUBLIC_DEPLOY")) {
+            revert LocalDeployOnly(block.chainid);
+        }
         _refuseIfAlreadyDeployed();
         vm.startBroadcast();
         address admin = msg.sender;

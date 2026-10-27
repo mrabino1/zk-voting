@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {Test} from "forge-std/Test.sol";
 
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
+import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 
 /// @notice L1 mirror ctor zeros, publisher revoke, and zero-hash slot behavior.
 contract L1TallyMirrorEdgesTest is Test {
@@ -22,7 +23,7 @@ contract L1TallyMirrorEdgesTest is Test {
     }
 
     function testConstructorRejectsZeroAdmin() public {
-        vm.expectRevert(L1TallyMirror.ZeroAddress.selector);
+        vm.expectRevert(IL1TallyMirror.ZeroAddress.selector);
         new L1TallyMirror(address(0), address(1));
     }
 
@@ -39,14 +40,14 @@ contract L1TallyMirrorEdgesTest is Test {
         mirror.setPublisher(publisher, false);
 
         vm.prank(publisher);
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.postResult(1, keccak256("result"), 3, bytes32(uint256(1)));
     }
 
     function testPostingZeroHashDoesNotLockSlot() public {
         // Zero resultHash is rejected; the slot stays empty so a real post can follow.
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.ZeroResultHash.selector);
+        vm.expectRevert(IL1TallyMirror.ZeroResultHash.selector);
         mirror.postResult(1, bytes32(0), 0, bytes32(0));
         assertEq(mirror.resultHashOf(1), bytes32(0));
 
@@ -67,7 +68,7 @@ contract L1TallyMirrorEdgesTest is Test {
 
     function testStrangerCannotSetPublisher() public {
         vm.prank(stranger);
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.setPublisher(stranger, true);
     }
 }

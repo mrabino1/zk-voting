@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IDisqualificationRegistry} from "./interfaces/IDisqualificationRegistry.sol";
+import {IExternalPartyRegistry} from "./interfaces/IExternalPartyRegistry.sol";
 import {IHasher} from "./interfaces/IHasher.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
@@ -32,23 +33,6 @@ import {Roles} from "./Roles.sol";
 contract VoterRegistry is IVoterRegistry {
     using IncrementalMerkleTree for IncrementalMerkleTree.Data;
 
-    error ZeroAddress();
-    error UnknownElection();
-    error NotRegistrar();
-    error ZeroCommitment();
-    error AlreadyRegistered();
-    error RollFrozen();
-    error CapReached();
-    error RegistrationClosed();
-    error NotDisqualificationRegistry();
-    error NoRebuildPending();
-
-    event EligibleRebuildStarted(uint256 indexed electionId, uint256 rollSize);
-    event EligibleRebuildProgress(uint256 indexed electionId, uint256 cursor, uint256 rollSize);
-    event EligibleRootPublished(uint256 indexed electionId, bytes32 eligibleRoot, uint256 eligibleCount);
-    event RoleGranted(bytes32 indexed role, address indexed account);
-    event RoleRevoked(bytes32 indexed role, address indexed account);
-
     /// @notice Roll entries processed per rebuild page.
     uint256 public constant REBUILD_BATCH = 64;
 
@@ -57,8 +41,18 @@ contract VoterRegistry is IVoterRegistry {
         uint256 cursor;
     }
 
-    IHasher public immutable hasher;
-    IElectionFactory public immutable factory;
+    IHasher private immutable _hasher;
+    IElectionFactory private immutable _factory;
+
+    /// @inheritdoc IVoterRegistry
+    function hasher() external view returns (address) {
+        return address(_hasher);
+    }
+
+    /// @inheritdoc IVoterRegistry
+    function factory() external view returns (address) {
+        return address(_factory);
+    }
 
     mapping(uint256 => IncrementalMerkleTree.Data) private _trees;
     mapping(uint256 => mapping(uint256 => bool)) private _registered;
@@ -75,8 +69,8 @@ contract VoterRegistry is IVoterRegistry {
     ///      DisqualificationRegistry. No runtime guessing.
     constructor(address hasher_, address factory_) {
         if (hasher_ == address(0) || factory_ == address(0)) revert ZeroAddress();
-        hasher = IHasher(hasher_);
-        factory = IElectionFactory(factory_);
+        _hasher = IHasher(hasher_);
+        _factory = IElectionFactory(factory_);
     }
 
     function grantRole(bytes32 role, address account) external {
@@ -107,10 +101,10 @@ contract VoterRegistry is IVoterRegistry {
 
         IncrementalMerkleTree.Data storage tree = _trees[electionId];
         if (!tree.initialized) {
-            IncrementalMerkleTree.init(tree, election.params().treeDepth, hasher);
+            IncrementalMerkleTree.init(tree, election.params().treeDepth, _hasher);
         }
 
-        (uint256 index,) = IncrementalMerkleTree.insert(tree, identityCommitment, hasher);
+        (uint256 index,) = IncrementalMerkleTree.insert(tree, identityCommitment, _hasher);
         _registered[electionId][identityCommitment] = true;
         _leafIndex[electionId][identityCommitment] = index;
         _roll[electionId].push(identityCommitment);
@@ -123,9 +117,9 @@ contract VoterRegistry is IVoterRegistry {
             _advanceRebuild(electionId, election, REBUILD_BATCH);
         } else {
             FrontierTree.Data storage eligibleTree = _eligibleTrees[electionId];
-            if (eligibleTree.depth == 0) FrontierTree.reset(eligibleTree, election.params().treeDepth, hasher);
-            if (!_currentlyDisqualified(electionId, identityCommitment)) {
-                FrontierTree.append(eligibleTree, identityCommitment, hasher);
+            if (eligibleTree.depth == 0) FrontierTree.reset(eligibleTree, election.params().treeDepth, _hasher);
+            if (!_currentlyExcluded(electionId, identityCommitment)) {
+                FrontierTree.append(eligibleTree, identityCommitment, _hasher);
             }
             _publishEligibleRoot(electionId, election);
         }
@@ -142,7 +136,7 @@ contract VoterRegistry is IVoterRegistry {
     /// @inheritdoc IVoterRegistry
     function isEligible(uint256 electionId, uint256 identityCommitment) external view returns (bool) {
         if (!_registered[electionId][identityCommitment]) return false;
-        return !_currentlyDisqualified(electionId, identityCommitment);
+        return !_currentlyExcluded(electionId, identityCommitment);
     }
 
     /// @inheritdoc IVoterRegistry
@@ -160,9 +154,11 @@ contract VoterRegistry is IVoterRegistry {
     ///      Returns the published eligible root (the new one when the rebuild
     ///      finished in this call, otherwise the previous one).
     function rebuildEligibleRoot(uint256 electionId) external returns (bytes32) {
-        if (msg.sender != address(_disqualificationRegistry())) revert NotDisqualificationRegistry();
+        if (msg.sender != address(_disqualificationRegistry()) && msg.sender != _partyRegistry(electionId)) {
+            revert NotDisqualificationRegistry();
+        }
         IElection election = _election(electionId);
-        FrontierTree.reset(_eligibleTrees[electionId], election.params().treeDepth, hasher);
+        FrontierTree.reset(_eligibleTrees[electionId], election.params().treeDepth, _hasher);
         _rebuilds[electionId] = Rebuild({pending: true, cursor: 0});
         emit EligibleRebuildStarted(electionId, _roll[electionId].length);
         _advanceRebuild(electionId, election, REBUILD_BATCH);
@@ -198,11 +194,10 @@ contract VoterRegistry is IVoterRegistry {
         uint256 i = rb.cursor;
         uint256 end = n - i > maxLeaves ? i + maxLeaves : n;
         FrontierTree.Data storage tree = _eligibleTrees[electionId];
-        IDisqualificationRegistry dq = _disqualificationRegistry();
         for (; i < end; ++i) {
             uint256 leaf = roll[i];
-            if (address(dq) == address(0) || !dq.isDisqualified(electionId, leaf)) {
-                FrontierTree.append(tree, leaf, hasher);
+            if (!_currentlyExcluded(electionId, leaf)) {
+                FrontierTree.append(tree, leaf, _hasher);
             }
         }
         rb.cursor = end;
@@ -217,13 +212,13 @@ contract VoterRegistry is IVoterRegistry {
 
     function _publishEligibleRoot(uint256 electionId, IElection election) internal returns (bytes32 eligible) {
         FrontierTree.Data storage tree = _eligibleTrees[electionId];
-        eligible = bytes32(FrontierTree.root(tree, hasher));
+        eligible = bytes32(FrontierTree.root(tree, _hasher));
         _eligibleCounts[electionId] = tree.count;
         bytes32 disq = election.disqualificationRoot();
         // Unset root is not the empty indexed chain. Publish Hash(0, 0) so a
         // vote can prove non-membership before anyone is disqualified.
         if (disq == bytes32(0)) {
-            disq = bytes32(DisqualificationSet.rootOf(new uint256[](0), tree.depth, hasher));
+            disq = bytes32(DisqualificationSet.rootOf(new uint256[](0), tree.depth, _hasher));
         }
         election.setRoots(eligible, disq);
         emit EligibleRootPublished(electionId, eligible, tree.count);
@@ -235,8 +230,32 @@ contract VoterRegistry is IVoterRegistry {
         return dq.isDisqualified(electionId, identityCommitment);
     }
 
+    /// @dev Officer or party disqualification, or a missing must-attest clearance.
+    function _currentlyExcluded(uint256 electionId, uint256 identityCommitment) internal view returns (bool) {
+        if (_currentlyDisqualified(electionId, identityCommitment)) return true;
+        return _missingAttestation(electionId, identityCommitment);
+    }
+
+    function _missingAttestation(uint256 electionId, uint256 identityCommitment) internal view returns (bool) {
+        address parties = _partyRegistry(electionId);
+        if (parties == address(0)) return false;
+        (bool ok, bytes memory ret) = parties.staticcall(
+            abi.encodeWithSelector(IExternalPartyRegistry.missingRequiredAttestation.selector, identityCommitment)
+        );
+        // A wired party registry that cannot answer is treated as not cleared.
+        if (!ok || ret.length < 32) return true;
+        return abi.decode(ret, (bool));
+    }
+
+    function _partyRegistry(uint256 electionId) internal view returns (address) {
+        (bool ok, bytes memory ret) =
+            address(_factory).staticcall(abi.encodeWithSignature("getPartyRegistry(uint256)", electionId));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+        return address(0);
+    }
+
     function _disqualificationRegistry() internal view returns (IDisqualificationRegistry) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("disqualificationRegistry()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("disqualificationRegistry()"));
         if (ok && ret.length >= 32) {
             return IDisqualificationRegistry(abi.decode(ret, (address)));
         }
@@ -244,7 +263,7 @@ contract VoterRegistry is IVoterRegistry {
     }
 
     function _election(uint256 electionId) internal view returns (IElection election) {
-        address addr = factory.getElection(electionId);
+        address addr = _factory.getElection(electionId);
         if (addr == address(0)) revert UnknownElection();
         election = IElection(addr);
     }
@@ -257,7 +276,7 @@ contract VoterRegistry is IVoterRegistry {
     }
 
     function _admin() internal view returns (address) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("admin()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("admin()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
     }

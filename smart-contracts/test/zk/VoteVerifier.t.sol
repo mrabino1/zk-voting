@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -8,7 +8,9 @@ import {Test} from "forge-std/Test.sol";
 import {MockVerifier} from "../../src/zk/MockVerifier.sol";
 import {VoteVerifier} from "../../src/zk/VoteVerifier.sol";
 import {Groth16VerifierAdapter} from "../../src/zk/Groth16VerifierAdapter.sol";
+import {IGroth16VerifierAdapter} from "../../src/interfaces/IGroth16VerifierAdapter.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IVoteVerifier} from "../../src/interfaces/IVoteVerifier.sol";
 
 /// @notice Fake snarkjs-shaped verifier used only to test the adapter ABI bridge.
 contract FakeSnarkVerifier {
@@ -37,7 +39,7 @@ contract VoteVerifierTest is Test {
         VoteVerifier v = new VoteVerifier(address(0));
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory input = new uint256[](5);
-        vm.expectRevert(VoteVerifier.VerifierNotConfigured.selector);
+        vm.expectRevert(IVoteVerifier.VerifierNotConfigured.selector);
         v.verifyProof(a, b, c, input);
     }
 
@@ -75,7 +77,7 @@ contract VoteVerifierTest is Test {
     }
 
     function testAdapterRejectsZeroImpl() public {
-        vm.expectRevert(Groth16VerifierAdapter.ZeroAddress.selector);
+        vm.expectRevert(IGroth16VerifierAdapter.ZeroAddress.selector);
         new Groth16VerifierAdapter(address(0), 5);
     }
 
@@ -88,7 +90,7 @@ contract VoteVerifierTest is Test {
         VoteVerifier v = new VoteVerifier(address(0));
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory input = new uint256[](5);
-        vm.expectRevert(VoteVerifier.VerifierNotConfigured.selector);
+        vm.expectRevert(IVoteVerifier.VerifierNotConfigured.selector);
         v.verifyProof(a, b, c, input);
         assertTrue(!proving || !v.hasKey());
     }

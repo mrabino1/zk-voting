@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" data-layout-runtime="manual">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <title>Site admin · %BRAND_NAME%</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/office.css" />
+    <link rel="stylesheet" href="/site-admin.css" />
+  </head>
+  <body>
+    <!-- NOT FOR PROFIT — civic public good. Not a commercial product. -->
+    <!-- Strict CSP page: no inline script or style. Logic lives in /site-admin.js. -->
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <span class="brand-text">
+            <span class="brand-name" data-product-name>%BRAND_NAME%</span>
+            <span class="brand-sub">Site admin</span>
+          </span>
+        </a>
+        <nav class="nav-main sa-nav" aria-label="Site admin">
+          <ul id="sa-nav">
+            <li><a href="/site-admin/roles" data-view="roles">Roles &amp; users</a></li>
+            <li><a href="/site-admin/layout" data-view="layout">Layout</a></li>
+            <li><a href="/site-admin/plugins" data-view="plugins">Plugins</a></li>
+            <li><a href="/site-admin/audit" data-view="audit">Audit</a></li>
+          </ul>
+        </nav>
+        <div class="session-chrome" id="sa-session"></div>
+      </div>
+    </header>
+    <main id="main" class="site-main sa-main" tabindex="-1">
+      <h1 id="sa-title">Site admin</h1>
+      <p id="sa-status" class="sa-status" role="status" aria-live="polite"></p>
+      <div id="sa-view">
+        <p>Loading…</p>
+      </div>
+    </main>
+    <dialog id="sa-dialog" class="sa-dialog" aria-labelledby="sa-dialog-title">
+      <form method="dialog" id="sa-dialog-form">
+        <h2 id="sa-dialog-title">Confirm</h2>
+        <div id="sa-dialog-body"></div>
+        <div class="sa-actions">
+          <button type="submit" value="cancel" class="btn btn-secondary">Cancel</button>
+          <button type="submit" value="ok" class="btn btn-primary" id="sa-dialog-ok">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+    <footer class="site-footer">
+      <p class="footer-meta"><span data-product-name>%BRAND_NAME%</span> · Site admin · AGPL-3.0-or-later</p>
+      <section class="footer-extra" aria-labelledby="footer-contact-label">
+        <p class="footer-contact-line">
+          <span class="footer-kicker" id="footer-contact-label" data-i18n="chrome.footerContact">Contact</span>
+          <a class="footer-mail" href="mailto:hello@zk-voting.org">hello@zk-voting.org</a>
+        </p>
+        <p class="footer-oss">
+          <a href="https://github.com/mrabino1/zk-voting" data-i18n="chrome.footerOpenSource">%BRAND_NAME% is 100% open source and free to use.</a>
+        </p>
+        <p class="footer-contract">
+          <span data-i18n="chrome.footerContract">We are available for contracting for your local implementation.</span>
+          <a class="btn footer-cta" href="mailto:hello@zk-voting.org" data-i18n="chrome.footerContractCta">Email us</a>
+        </p>
+      </section>
+      <div class="footer-social">
+        <a class="footer-github" href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer" aria-label="%BRAND_NAME% on GitHub" data-i18n-aria-label="chrome.footerGithub">
+          <svg class="footer-github-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        </a>
+      </div>
+    </footer>
+    <script type="module" src="/site-admin.js"></script>
+  </body>
+</html>

@@ -7,7 +7,7 @@
   <meta name="description" content="ZK Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="favicon.svg?v=2bd6214156" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=12f08160bb">
+  <link rel="stylesheet" href="styles.css?v=b73a953654">
 </head>
 <body>
   <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets, no embedded demo. -->
@@ -246,9 +246,27 @@ curl -fsS http://127.0.0.1:3000/health</pre>
   </main>
 
   <footer>
+    <div class="wrap foot-main">
+      <div class="foot-block" role="region" aria-labelledby="footer-contact-label">
+        <p class="foot-label" id="footer-contact-label">Contact</p>
+        <a class="foot-mail" href="mailto:hello@zk-voting.org">hello@zk-voting.org</a>
+      </div>
+      <div class="foot-block">
+        <p class="foot-oss"><a href="https://github.com/mrabino1/zk-voting">ZK-Voting is 100% open source and free to use.</a></p>
+      </div>
+      <div class="foot-block">
+        <p>We are available for contracting for your local implementation.</p>
+        <a class="btn btn-sm" href="mailto:hello@zk-voting.org">Email us</a>
+      </div>
+    </div>
     <div class="wrap foot">
       <span>&copy; ZK Voting contributors &middot; AGPL-3.0-or-later &middot; Not for profit</span>
-      <span><a href="https://community.zk-voting.org">Community forum</a> &middot; <a href="https://demo.zk-voting.org">Voting demo</a></span>
+      <span class="foot-end">
+        <span><a href="https://community.zk-voting.org">Community forum</a> &middot; <a href="https://demo.zk-voting.org">Voting demo</a></span>
+        <a class="gh-link" href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer" aria-label="ZK-Voting on GitHub">
+          <svg class="gh-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        </a>
+      </span>
     </div>
   </footer>
 </body>
