@@ -1,6 +1,7 @@
 /* NOT FOR PROFIT — civic public good, not a commercial product.
  * Shared hourly disclosure snapshot (polling-place unlinkability).
- * Vote proofs appear only after the hour that contained them has closed.
+ * Vote proofs appear only after the hour closes, the disclosure delay elapses,
+ * the results gate opens, and the block meets the floor.
  */
 (function (global) {
   "use strict";

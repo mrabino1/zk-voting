@@ -49,6 +49,9 @@ describe('L2 skip empty blocks', () => {
     const config = loadConfig();
     config.dataDir = tmp;
     config.disclosureIntervalSeconds = patch.disclosureIntervalSeconds ?? HOUR;
+    config.disclosureDelaySeconds = patch.disclosureDelaySeconds ?? 0;
+    config.resultsMinVotes = patch.resultsMinVotes ?? 0;
+    config.disclosureMinBlockVotes = patch.disclosureMinBlockVotes ?? 1;
     config.skipEmptyBlocks = patch.skipEmptyBlocks ?? true;
     config.heartbeatSeconds = patch.heartbeatSeconds ?? HOUR;
     config.nowFn = () => clock.t;

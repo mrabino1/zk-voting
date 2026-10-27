@@ -989,7 +989,7 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
     h(
       "p",
       {
-        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour that contained this ballot closes.",
+        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
       }
     ),
     h("p", {

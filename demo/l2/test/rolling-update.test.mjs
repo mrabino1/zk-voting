@@ -51,6 +51,9 @@ describe('L2 rolling-update lease', () => {
     base.skipEmptyBlocks = patch.skipEmptyBlocks ?? true;
     base.heartbeatSeconds = patch.heartbeatSeconds ?? 3600;
     base.disclosureIntervalSeconds = patch.disclosureIntervalSeconds ?? 3600;
+    base.disclosureDelaySeconds = patch.disclosureDelaySeconds ?? 0;
+    base.resultsMinVotes = patch.resultsMinVotes ?? 0;
+    base.disclosureMinBlockVotes = patch.disclosureMinBlockVotes ?? 1;
     base.nowFn = () => clock.t;
     base.zkVotingNodeUrl = '';
     base.leaseTtlMs = patch.leaseTtlMs ?? 8_000;

@@ -44,6 +44,9 @@ describe('L2 token poll txs', () => {
     const config = loadConfig();
     config.dataDir = tmp;
     config.disclosureIntervalSeconds = HOUR;
+    config.disclosureDelaySeconds = 0;
+    config.resultsMinVotes = 0;
+    config.disclosureMinBlockVotes = 1;
     config.nowFn = () => clock;
     config.zkVotingNodeUrl = '';
     config.pollsEnabled = true;

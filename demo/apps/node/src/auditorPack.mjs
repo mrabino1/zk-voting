@@ -4,7 +4,7 @@
 
 import { brandName } from './branding.mjs';
 import { electionState, presentElection } from './electionState.mjs';
-import { publicVoteRecord } from './store.mjs';
+import { electionDisclosurePolicy, publicVoteRecord } from './store.mjs';
 
 export const AUDITOR_SCHEMA = 'zk-voting.auditor.v1';
 export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
@@ -16,9 +16,11 @@ export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 export function buildAuditorPack(election, deps) {
   const dto = presentElection(election, deps);
   const now = deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
   const tallied = electionState(election, now) >= 4;
-  const disclosed = deps.store.listPublishedVotes(election.id, now, interval).map((vote) => publicVoteRecord(vote));
+  const policy = electionDisclosurePolicy(election, deps.config, now);
+  const disclosed = deps.store
+    .listPublishedVotes(election.id, now, policy.intervalSeconds, policy)
+    .map((vote) => publicVoteRecord(vote));
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,

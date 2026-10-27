@@ -9,8 +9,12 @@ import {
   publicDisclosureView,
   isDisclosed,
   isHeldVoteType,
+  planPublicBlocks,
   publishedThrough,
+  resolveDisclosureDelaySeconds,
   resolveDisclosureIntervalSeconds,
+  resolveDisclosureMinBlockVotes,
+  resolveResultsMinVotes,
 } from '../disclosure.mjs';
 import { StaleFenceError, WriterLease } from '../lease/lease.mjs';
 import { isAdminTxType, verifyAdminCivic } from '../adminAuth.mjs';
@@ -393,6 +397,18 @@ export function loadConfig(root = L2_ROOT) {
       process.env.DISCLOSURE_INTERVAL_SECONDS ?? file.disclosureIntervalSeconds,
       { isTest: process.env.NODE_ENV === 'test' },
     ),
+    disclosureDelaySeconds: resolveDisclosureDelaySeconds(
+      process.env.DISCLOSURE_DELAY_SECONDS ?? file.disclosureDelaySeconds,
+      { isTest: process.env.NODE_ENV === 'test' },
+    ),
+    resultsMinVotes: resolveResultsMinVotes(
+      process.env.RESULTS_MIN_VOTES ?? file.resultsMinVotes,
+      { isTest: process.env.NODE_ENV === 'test' },
+    ),
+    disclosureMinBlockVotes: resolveDisclosureMinBlockVotes(
+      process.env.DISCLOSURE_MIN_BLOCK_VOTES ?? file.disclosureMinBlockVotes,
+      { isTest: process.env.NODE_ENV === 'test' },
+    ),
     pollsEnabled: parseBool(process.env.POLLS_ENABLED, false),
     // Seal only when there is a tx, the disclosure hour closes, or the heartbeat
     // interval has elapsed. L2_SKIP_EMPTY_BLOCKS=0 restores a block every period.
@@ -531,7 +547,11 @@ export class ChainState {
   }
 
   disclosureView() {
-    return publicDisclosureView(this.now(), this.config.disclosureIntervalSeconds);
+    return publicDisclosureView(this.now(), this.config.disclosureIntervalSeconds, {
+      delaySeconds: this.config.disclosureDelaySeconds,
+      resultsMinVotes: this.config.resultsMinVotes,
+      minBlockVotes: this.config.disclosureMinBlockVotes,
+    });
   }
 
   blockPath(number) {
@@ -905,13 +925,7 @@ export class ChainState {
   }
 
   readySealedCount() {
-    const now = this.now();
-    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
-    let n = 0;
-    for (const tx of this.sealed) {
-      if (interval <= 0 || isDisclosed(tx.receivedAt, now, interval)) n += 1;
-    }
-    return n;
+    return this.promoteReadyVotes({ apply: false }).length;
   }
 
   // Producer gate. Explicit produceBlock() still seals immediately so tests and
@@ -923,7 +937,7 @@ export class ChainState {
     const now = this.now();
     const headTs = Number(this.head?.timestamp || 0);
     const interval = Number(this.config.disclosureIntervalSeconds) || 0;
-    if (interval > 0 && headTs < publishedThrough(now, interval)) return true;
+    if (interval > 0 && headTs < publishedThrough(now, interval, this.config.disclosureDelaySeconds)) return true;
     const heartbeat = Number(this.config.heartbeatSeconds) || 0;
     if (heartbeat > 0 && now - headTs >= heartbeat) return true;
     return false;
@@ -938,17 +952,68 @@ export class ChainState {
     return this.produceBlock();
   }
 
-  promoteReadyVotes() {
+  electionDisclosureContext(electionId) {
+    const raw = String(electionId ?? '');
+    const key = raw.toLowerCase();
+    const entry = this.electionRegistry.get(key);
+    let submitted = 0;
+    for (const tx of this.sealed) {
+      if (String(tx.civicType || '').toLowerCase() !== 'vote') continue;
+      if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
+    }
+    for (const block of this.blocks) {
+      for (const tx of block.transactions || []) {
+        if (!tx || typeof tx !== 'object') continue;
+        if (String(tx.civicType || tx.civic?.type || '').toLowerCase() !== 'vote') continue;
+        if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
+      }
+    }
+    return {
+      submittedVotes: submitted,
+      endTime: entry?.cutoffTime ?? null,
+      tallied: this.tallyIndex.has(raw) || this.tallyIndex.has(key),
+    };
+  }
+
+  promoteReadyVotes({ apply = true } = {}) {
     const now = this.now();
     const interval = Number(this.config.disclosureIntervalSeconds) || 0;
-    const ready = [];
-    const keep = [];
+    const delay = Number(this.config.disclosureDelaySeconds) || 0;
+    const votes = [];
+    const other = [];
     for (const tx of this.sealed) {
-      if (interval <= 0 || isDisclosed(tx.receivedAt, now, interval)) ready.push(tx);
-      else keep.push(tx);
+      if (String(tx.civicType || '').toLowerCase() === 'vote') votes.push(tx);
+      else other.push(tx);
     }
-    this.sealed = keep;
-    this.sealedHashes = new Set(keep.map((t) => t.hash.toLowerCase()));
+    const planned = planPublicBlocks(
+      votes.map((tx) => ({
+        tx,
+        receivedAt: tx.receivedAt,
+        electionId: String(tx.civic?.electionId ?? ''),
+      })),
+      {
+        now,
+        intervalSeconds: interval,
+        delaySeconds: delay,
+        minBlockVotes: this.config.disclosureMinBlockVotes ?? 1,
+        minVotes: this.config.resultsMinVotes || 0,
+        electionContext: (id) => this.electionDisclosureContext(id),
+      },
+    );
+    const ready = [];
+    for (const tx of other) {
+      if (interval <= 0 || isDisclosed(tx.receivedAt, now, interval)) ready.push(tx);
+      else planned.hold.push({ tx });
+    }
+    for (const block of planned.publish) {
+      for (const item of block.items) {
+        if (apply) item.tx.disclosureTimestamp = block.timestamp;
+        ready.push(item.tx);
+      }
+    }
+    if (!apply) return ready;
+    this.sealed = planned.hold.map((item) => item.tx);
+    this.sealedHashes = new Set(this.sealed.map((t) => t.hash.toLowerCase()));
     ready.sort((a, b) => String(a.hash).toLowerCase().localeCompare(String(b.hash).toLowerCase()));
     for (const tx of ready) {
       delete tx.receivedAt;
@@ -1082,11 +1147,22 @@ export class ChainState {
       this.assertWritable();
       const parent = this.head;
       const number = parent.number + 1;
-      const timestamp = this.now();
       const promoted = this.promoteReadyVotes();
+      const disclosureStamps = promoted
+        .map((tx) => tx.disclosureTimestamp)
+        .filter((n) => Number.isFinite(n));
       const room = Math.max(0, this.config.maxTxsPerBlock - promoted.length);
-      const taken = [...promoted, ...this.mempool.splice(0, room)];
-      for (const tx of taken) this.mempoolHashes.delete(tx.hash.toLowerCase());
+      const fromPool = this.mempool.splice(0, room);
+      const taken = [...promoted, ...fromPool];
+      for (const tx of taken) {
+        this.mempoolHashes.delete(tx.hash.toLowerCase());
+        delete tx.disclosureTimestamp;
+      }
+      let timestamp = this.now();
+      if (fromPool.length === 0 && promoted.length > 0 && disclosureStamps.length === promoted.length) {
+        const clock = Math.max(...disclosureStamps);
+        timestamp = Math.max(Number(parent.timestamp) || 0, Math.min(this.now(), clock));
+      }
       const stateRoot = this.computeStateRoot(taken);
       const extraData = '0x' + Buffer.from('NOT-FOR-PROFIT').toString('hex');
       const hash = keccak256Hex(
@@ -1399,9 +1475,13 @@ export class ChainState {
           openTx: tx.hash,
           eligibleRoots: new Set(),
           approvedSenders: new Set(),
+          cutoffTime: null,
         });
       }
       const entry = this.electionRegistry.get(key);
+      if (civic.cutoffTime != null && Number.isFinite(Number(civic.cutoffTime))) {
+        entry.cutoffTime = Number(civic.cutoffTime);
+      }
       if (civic.eligibleRoot != null) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
       for (const a of Array.isArray(civic.approvedSenders) ? civic.approvedSenders : []) {
         entry.approvedSenders.add(normalizeAddress(a));

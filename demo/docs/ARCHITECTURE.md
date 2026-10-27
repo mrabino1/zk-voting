@@ -116,10 +116,10 @@ ballot hash, no attachment — and nothing about the send is stored. The PDF use
 so it cannot be edited (print and copy remain allowed). The Node records
 SHA-256 of the exact bytes; `/receipt` accepts the proof or the file and
 rejects a modified PDF. A public `/receipt` portal answers whether the ballot
-counted, plus hourly turnout (when hours closed, how many ballots were
-disclosed) — never a candidate or option. A holder token on the receipt can
-confirm a count before the hour closes; looking up public hashes still waits
-for disclosure. Double voting remains impossible. A separate public `/outcomes`
+counted, plus disclosed turnout (after the hour, the disclosure delay, the
+results gate, and the block floor) — never a candidate or option. A holder token
+on the receipt can confirm a count before that publication; looking up public
+hashes still waits for disclosure. Double voting remains impossible. A separate public `/outcomes`
 portal monitors every election before, during, and after voting from chain
 status, running the same auditor pack plus freeze-root and L1 checks. During
 the open window it still does not invent unofficial option counts. After
@@ -136,17 +136,28 @@ still wins that ballot.
 
 Votes are **accepted immediately** (each nullifier **once**; a second ballot is
 rejected). Public proof of those votes — explorer rows, jurisdiction
-`acceptedBallots`, any dashboard turnout tick — is published **only after the
-hour that contained the vote has closed** (UTC). At 14:23, only events with
-timestamp `< 14:00` are public; a 14:05 vote appears at 15:00.
+`acceptedBallots`, any dashboard turnout tick — waits for three server-side
+checks:
+
+- The UTC hour has closed and `DISCLOSURE_DELAY_SECONDS` (default **1800**)
+  has elapsed. A vote at 08:59 publishes at **09:30**. An earlier note that a
+  14:05 vote appears at 15:00 is replaced by **15:30**, and only if the next
+  two checks also pass.
+- The results gate is open: `RESULTS_MIN_VOTES` ballots (default **100**) or
+  the scheduled end, whichever is earlier. A certified tally also opens it.
+- The disclosure block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots
+  (default **10**). Smaller hours merge forward. A remainder publishes at
+  election end when the election met that floor; a short election publishes
+  at the certified tally.
 
 - Do not leak a pending-per-election count (that still identifies the
   jurisdiction).
-- Do not publish original intra-hour timestamps. Votes of that hour are
-  lumped into **one disclosure block**, timestamped at the hour boundary,
+- Do not publish original intra-hour timestamps. Ready hours are lumped into
+  a disclosure block, timestamped at the disclosure clock (hour end + delay),
   ordered by nullifier (not arrival).
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
-  and local instant demo may set `0`.
+  and local instant demo may set the interval to `0` (and the gate and block
+  floor to their test defaults).
 
 Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`zk-voting.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 

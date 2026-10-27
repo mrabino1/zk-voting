@@ -775,7 +775,7 @@ export const BOT_OPERATIONS = [
   R('/api/me/outcome-subscriptions', {
     tag: 'Outcomes',
     auth: true,
-    summary: 'Elections whose official PDF this person will be emailed. Voting subscribes them by default.',
+    summary: 'Elections whose official PDF this person will be emailed. Subscription is opt-in; voting never subscribes anyone.',
   }),
   V('PUT', '/api/me/outcome-subscriptions/:electionId', {
     tag: 'Outcomes',
@@ -1184,7 +1184,7 @@ function guideBody() {
   lines.push('```');
   lines.push('');
   lines.push(
-    'JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour that contained the vote has closed.',
+    'JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor.',
   );
   lines.push('');
   lines.push('Machine-readable copies:');

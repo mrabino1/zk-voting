@@ -3,7 +3,8 @@
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
-import { publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
+import { disclosureSettings, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
+import { electionDisclosurePolicy } from './store.mjs';
 import { publicIdFields } from './electionIds.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
@@ -31,12 +32,12 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
   if (!election) return null;
   const state = electionState(election, now);
   const interval = Number(disclosure.intervalSeconds ?? 0);
+  const delay = Number(disclosure.delaySeconds) || 0;
   let acceptedBallots = election.acceptedBallots;
-  if (interval > 0) {
-    acceptedBallots =
-      typeof disclosure.publishedAcceptedBallots === 'number'
-        ? disclosure.publishedAcceptedBallots
-        : 0;
+  if (typeof disclosure.publishedAcceptedBallots === 'number') {
+    acceptedBallots = disclosure.publishedAcceptedBallots;
+  } else if (interval > 0) {
+    acceptedBallots = 0;
   }
   return {
     ...publicIdFields(election),
@@ -115,6 +116,9 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
       : null,
     createdAt: election.createdAt,
     disclosure: publicDisclosureView(now, interval, {
+      delaySeconds: delay,
+      resultsMinVotes: disclosure.resultsMinVotes,
+      minBlockVotes: disclosure.minBlockVotes,
       acceptedBallotsDisclosed: acceptedBallots,
     }),
     nfp: true,
@@ -123,38 +127,54 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
 
 export async function publishDue(deps) {
   const now = deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
+  const settings = disclosureSettings(deps.config);
+  const interval = settings.intervalSeconds;
   const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
-    : publicDisclosureView(now, interval);
-  return { now, interval, view };
+    : publicDisclosureView(now, interval, {
+        delaySeconds: settings.delaySeconds,
+        resultsMinVotes: settings.minVotes,
+        minBlockVotes: settings.minBlockVotes,
+      });
+  return { now, interval, view, settings };
 }
 
 export function electionDisclosure(election, deps, view) {
   const now = deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
+  const policy = electionDisclosurePolicy(election, deps.config, now);
   const acceptedBallotsDisclosed = deps.store.publishedAcceptedBallots(
     election.id,
     now,
-    interval,
+    policy.intervalSeconds,
+    policy,
   );
-  const base = view || publicDisclosureView(now, interval);
+  const base =
+    view ||
+    publicDisclosureView(now, policy.intervalSeconds, {
+      delaySeconds: policy.delaySeconds,
+      resultsMinVotes: policy.minVotes,
+      minBlockVotes: policy.minBlockVotes,
+    });
   return withDisclosedCount(base, acceptedBallotsDisclosed);
 }
 
 export function presentElection(election, deps, opts = {}) {
   if (!election) return null;
   const now = opts.now ?? deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
+  const policy = electionDisclosurePolicy(election, deps.config, now);
   const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
     election.id,
     now,
-    interval,
+    policy.intervalSeconds,
+    policy,
   );
   const dto = publicElection(election, now, {
-    intervalSeconds: interval,
+    intervalSeconds: policy.intervalSeconds,
+    delaySeconds: policy.delaySeconds,
+    resultsMinVotes: policy.minVotes,
+    minBlockVotes: policy.minBlockVotes,
     publishedAcceptedBallots,
   });
   dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);

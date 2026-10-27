@@ -26,7 +26,7 @@ import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { uuidParam } from '../recordIds.mjs';
-import { publicVoteRecord } from '../store.mjs';
+import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
 import { acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
 import { publicCeremonyView } from '../tallyCrypto.mjs';
@@ -428,7 +428,8 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       const { now, interval, view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
-      const published = store.listPublishedVotes(election.id, now, interval);
+      const policy = electionDisclosurePolicy(election, deps.config, now);
+      const published = store.listPublishedVotes(election.id, now, policy.intervalSeconds, policy);
       res.json({
         electionId: String(election.id),
         acceptedBallots: published.length,

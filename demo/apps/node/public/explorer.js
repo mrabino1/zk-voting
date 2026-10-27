@@ -304,7 +304,7 @@
     return `<p class="privacy-callout"><strong>Ballot privacy</strong>
       This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
       Choice plaintext is not a field on this L2 and is never rendered here.
-      Vote rows appear only after the hour that contained them has closed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
+      Vote rows appear only after the hour that contained them has closed, the disclosure delay has elapsed, and the results gate is open, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 
   let disclosurePayload = null;
@@ -725,7 +725,7 @@
           : ""}
       </dl>
       ${aspectList}
-      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed. Plurality totals are labeled per question.</p>
+      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed and the disclosure delay has elapsed. Plurality totals are labeled per question.</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>

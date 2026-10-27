@@ -1,7 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Append-only L2 log. Vote proofs stay sealed until the hour that contained
-// them closes, then land in one disclosure block (bucketed timestamp, ordered
-// by nullifier). Payloads never include a voter choice or a passkey user id.
+// Append-only L2 log. Vote proofs stay sealed until the hour that contained them
+// has closed, the disclosure delay has elapsed, the results gate is open, and the
+// block meets the floor. Ready rows land in one disclosure block (disclosure-clock
+// timestamp, ordered by nullifier). Payloads never include a voter choice or a passkey user id.
 
 import { randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -14,6 +15,7 @@ import {
   hourBucket,
   isDelayedPublicType,
   isDisclosed,
+  planPublicBlocks,
 } from './disclosure.mjs';
 import { PgDocument, migrate, recordImport, usingPostgres } from './db.mjs';
 
@@ -250,31 +252,40 @@ export class Explorer {
     return { sealed: true, published: false };
   }
 
+  disclosurePolicySnapshot() {
+    const policy = typeof this.disclosurePolicy === 'function' ? this.disclosurePolicy() : this.disclosurePolicy;
+    return policy && typeof policy === 'object' ? policy : {};
+  }
+
   async disclose(now, intervalSeconds) {
     await this.refresh();
     const interval = Number(intervalSeconds) || 0;
     this.chain.sealed = this.chain.sealed || [];
-    if (!this.chain.sealed.length) return [];
-
-    const remaining = [];
-    const groups = new Map();
-    for (const item of this.chain.sealed) {
-      if (interval <= 0 || isDisclosed(item.receivedAt, now, interval)) {
-        const bucket = interval > 0 ? hourBucket(item.receivedAt, interval) : Number(item.receivedAt) || now;
-        if (!groups.has(bucket)) groups.set(bucket, []);
-        groups.get(bucket).push(item);
-      } else {
-        remaining.push(item);
-      }
+    if (!this.chain.sealed.length) {
+      await this.disclosePolls(now, intervalSeconds);
+      return [];
     }
 
-    this.chain.sealed = remaining;
+    const policy = this.disclosurePolicySnapshot();
+    const tagged = this.chain.sealed.map((item) => {
+      const payload = votePayload(item.payload);
+      return { ...item, electionId: String(payload.electionId ?? '') };
+    });
+    const planned = planPublicBlocks(tagged, {
+      now,
+      intervalSeconds: interval,
+      delaySeconds: policy.delaySeconds || 0,
+      minBlockVotes: policy.minBlockVotes ?? 1,
+      minVotes: policy.minVotes || 0,
+      electionContext: policy.electionContext || (() => ({})),
+    });
+    this.chain.sealed = planned.hold.map(({ electionId: _id, ...item }) => item);
     await this.persist();
 
     const published = [];
-    const buckets = [...groups.keys()].sort((a, b) => a - b);
-    for (const bucket of buckets) {
-      const items = groups.get(bucket).filter((item) => {
+    const blocks = planned.publish.slice().sort((a, b) => a.timestamp - b.timestamp);
+    for (const block of blocks) {
+      const items = block.items.filter((item) => {
         const p = votePayload(item.payload);
         return !this.findByNullifier(p.nullifier);
       });
@@ -282,11 +293,10 @@ export class Explorer {
       items.sort((a, b) =>
         payloadNullifier(a.payload).localeCompare(payloadNullifier(b.payload), 'en'),
       );
-      const ts = interval > 0 ? bucket + interval : now;
       const result = await this.appendMany(
         'vote',
         items.map((item) => votePayload(item.payload)),
-        ts,
+        block.timestamp,
       );
       if (result) published.push(result.block);
     }
@@ -507,7 +517,11 @@ export class Explorer {
   }
 
   publicDisclosure(now, intervalSeconds) {
+    const policy = this.disclosurePolicySnapshot();
     return publicDisclosureView(now, intervalSeconds, {
+      delaySeconds: Number(policy.delaySeconds) || 0,
+      resultsMinVotes: typeof policy.minVotes === 'number' ? policy.minVotes : undefined,
+      minBlockVotes: typeof policy.minBlockVotes === 'number' ? policy.minBlockVotes : undefined,
       acceptedBallotsDisclosed: this.countPublishedVoteTxs(),
     });
   }

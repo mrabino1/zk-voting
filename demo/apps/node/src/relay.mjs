@@ -18,7 +18,8 @@ import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isTallyEnvelope } from './tallyCrypto.mjs';
-import { isDisclosed, nextPublishAt } from './disclosure.mjs';
+import { nextPublishAt } from './disclosure.mjs';
+import { electionDisclosurePolicy } from './store.mjs';
 import {
   buildReceiptPdf,
   mintHolderToken,
@@ -318,8 +319,11 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     interval,
   );
 
-  const published = isDisclosed(vote.acceptedAt, ts, interval);
-  const nextAt = nextPublishAt(ts, interval);
+  const policy = electionDisclosurePolicy(election, config, ts);
+  const published = store
+    .listPublishedVotes(election.id, ts, policy.intervalSeconds, policy)
+    .some((row) => String(row.nullifier) === String(vote.nullifier));
+  const nextAt = nextPublishAt(ts, interval, policy.delaySeconds);
   return {
     ok: true,
     vote: publicVoteRecord(vote),

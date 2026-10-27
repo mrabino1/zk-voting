@@ -52,7 +52,7 @@ curl -sS \
   "$ORIGIN/api/me"
 ```
 
-JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour that contained the vote has closed.
+JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor.
 
 Machine-readable copies:
 
