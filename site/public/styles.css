@@ -52,14 +52,18 @@ footer{border-top:1px solid var(--line);padding:36px 0 28px;color:var(--muted);f
 .foot-mail{display:inline-block;color:var(--text);font-size:18px;font-weight:700;overflow-wrap:anywhere;padding:4px 0}
 .foot-block .foot-oss{margin:0;font-size:16px;font-weight:600;line-height:1.45}
 .foot-oss a{color:var(--accent2);text-decoration:underline;text-underline-offset:3px}
-.foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.foot-end{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.gh-link{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;color:var(--muted);border-radius:8px}
+.gh-link:hover{color:var(--text);text-decoration:none}
+.gh-mark{display:block;width:16px;height:16px;fill:currentColor}
 .stats{list-style:none;margin:56px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:880px}
 .stats li{border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;background:rgba(20,20,24,.7)}
 .stats strong{display:block;font:700 28px ui-monospace,monospace;color:var(--text)}
 .stats span{color:var(--muted);font-size:14px}
 .final{background:radial-gradient(ellipse 60% 80% at 50% 100%,rgba(139,92,246,.18),transparent 70%),var(--bg2)}
 @media (max-width:960px){.stats{grid-template-columns:1fr 1fr}.steps{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr;gap:32px}.foot-main{grid-template-columns:1fr 1fr}.foot-main .foot-block:last-child{grid-column:1 / -1}}
-@media (max-width:640px){nav a:not(.btn){display:none}.steps,.grid{grid-template-columns:1fr}section{padding:64px 0}.foot-main{grid-template-columns:1fr;gap:22px}.foot-main .foot-block:last-child{grid-column:auto}.foot{flex-direction:column;align-items:flex-start}footer .btn{display:inline-flex;align-items:center;min-height:44px}}
+@media (max-width:640px){nav a:not(.btn){display:none}.steps,.grid{grid-template-columns:1fr}section{padding:64px 0}.foot-main{grid-template-columns:1fr;gap:22px}.foot-main .foot-block:last-child{grid-column:auto}.foot{flex-direction:column;align-items:flex-start}footer .btn{display:inline-flex;align-items:center;min-height:44px}.gh-link{width:44px;height:44px}}
 .vision{border-top:1px solid var(--line)}
 .vision-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 .vz{margin:0;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:20px}

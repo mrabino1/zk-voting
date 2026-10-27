@@ -68,6 +68,7 @@ export default {
     footerOpenSource: "{brand} 100% ओपन सोर्स है और उपयोग के लिए मुफ़्त है।",
     footerContract: "हम आपके स्थानीय क्रियान्वयन के लिए ठेके पर उपलब्ध हैं।",
     footerContractCta: "हमें ईमेल करें",
+    footerGithub: "GitHub पर {brand}",
     noscript:
       "{brand} को आपके उपकरण की passkey (WebAuthn) से बात करने के लिए JavaScript चाहिए। JavaScript चालू करें और पुनः लोड करें, या अपने क्लर्क द्वारा संचालित सुलभ मतदान साइट का उपयोग करें।",
     metaDescription:

@@ -68,6 +68,7 @@ export default {
     footerOpenSource: "{brand} est 100 % open source et gratuit.",
     footerContract: "Nous sommes disponibles pour une mission de mise en œuvre locale.",
     footerContractCta: "Écrivez-nous",
+    footerGithub: "{brand} sur GitHub",
     noscript:
       "{brand} a besoin de JavaScript pour parler à la passkey de votre appareil (WebAuthn). Activez JavaScript et rechargez, ou utilisez un site de scrutin accessible géré par votre greffier.",
     metaDescription:
