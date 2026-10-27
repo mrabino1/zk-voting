@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
+import {IMockVerifier} from "../interfaces/IMockVerifier.sol";
 import {IHasher} from "../interfaces/IHasher.sol";
 import {DisqualificationSet} from "../tree/DisqualificationSet.sol";
 import {EligibleSet} from "../tree/EligibleSet.sol";
@@ -28,20 +29,19 @@ import {EligibleSet} from "../tree/EligibleSet.sol";
 ///      Non-membership hook: when armed, `verifyProof` also evaluates the
 ///      indexed-chain gap against `input[1]` (`disqRoot`). A disqualified leaf
 ///      has no satisfying gap, so the armed proof returns false.
-contract MockVerifier is IGroth16Verifier {
-    error NotOwner();
-    error InvalidInputLength();
-    error WitnessLengthMismatch();
-    error InvalidWitnessDepth();
-
+contract MockVerifier is IMockVerifier {
     address public immutable owner;
     bool public acceptAll = true;
 
     /// @notice Optional denylist keyed by `bytes32(nullifier)` (publicInputs[2]).
     mapping(bytes32 => bool) public deniedNullifiers;
 
-    /// @notice Hasher for the optional inclusion hook. Keccak in Foundry tests.
-    IHasher public inclusionHasher;
+    IHasher private _inclusionHasher;
+
+    /// @inheritdoc IMockVerifier
+    function inclusionHasher() external view returns (address) {
+        return address(_inclusionHasher);
+    }
 
     /// @notice Tree depth (16–32) armed witnesses are checked at. Paths of any
     ///         other length are rejected, as in the fixed-depth vote circuit.
@@ -94,7 +94,7 @@ contract MockVerifier is IGroth16Verifier {
     }
 
     function setInclusionHasher(address hasher_) external onlyOwner {
-        inclusionHasher = IHasher(hasher_);
+        _inclusionHasher = IHasher(hasher_);
     }
 
     function setWitnessTreeDepth(uint8 depth) external onlyOwner {
@@ -171,16 +171,16 @@ contract MockVerifier is IGroth16Verifier {
         // 6-word TALLY_SOL_MOCK_V1 instance and must not share that denylist slot.
         if (input.length == 5 && deniedNullifiers[bytes32(input[2])]) return false;
         if (input.length == 5 && _inclusionByNullifier[input[2]].armed) {
-            if (address(inclusionHasher) == address(0)) return false;
+            if (address(_inclusionHasher) == address(0)) return false;
             InclusionWitness storage w = _inclusionByNullifier[input[2]];
             if (!EligibleSet.verifyInclusion(
-                    w.leaf, w.pathElements, w.pathIndices, input[0], witnessTreeDepth, inclusionHasher
+                    w.leaf, w.pathElements, w.pathIndices, input[0], witnessTreeDepth, _inclusionHasher
                 )) {
                 return false;
             }
         }
         if (input.length == 5 && _nonMembershipByNullifier[input[2]].armed) {
-            if (address(inclusionHasher) == address(0)) return false;
+            if (address(_inclusionHasher) == address(0)) return false;
             NonMembershipWitness storage gap = _nonMembershipByNullifier[input[2]];
             if (!DisqualificationSet.verifyNonMembership(
                     gap.leaf,
@@ -190,7 +190,7 @@ contract MockVerifier is IGroth16Verifier {
                     gap.pathIndices,
                     input[1],
                     witnessTreeDepth,
-                    inclusionHasher
+                    _inclusionHasher
                 )) {
                 return false;
             }

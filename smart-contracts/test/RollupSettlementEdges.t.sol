@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {MockVerifier} from "../src/zk/MockVerifier.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IRollupSettlement} from "../src/interfaces/IRollupSettlement.sol";
 
 /// @notice Settlement auth, genesis lock, and fail-closed batch proof.
 contract RollupSettlementEdgesTest is Deployer {
@@ -17,17 +18,17 @@ contract RollupSettlementEdgesTest is Deployer {
     }
 
     function testCtorRejectsZeroAdmin() public {
-        vm.expectRevert(RollupSettlement.ZeroAddress.selector);
+        vm.expectRevert(IRollupSettlement.ZeroAddress.selector);
         new RollupSettlement(address(0), sequencer, prover, address(verifier), true);
     }
 
     function testCtorRejectsZeroSequencer() public {
-        vm.expectRevert(RollupSettlement.ZeroAddress.selector);
+        vm.expectRevert(IRollupSettlement.ZeroAddress.selector);
         new RollupSettlement(admin, address(0), prover, address(verifier), true);
     }
 
     function testCtorRejectsZeroProver() public {
-        vm.expectRevert(RollupSettlement.ZeroAddress.selector);
+        vm.expectRevert(IRollupSettlement.ZeroAddress.selector);
         new RollupSettlement(admin, sequencer, address(0), address(verifier), true);
     }
 
@@ -35,13 +36,13 @@ contract RollupSettlementEdgesTest is Deployer {
         bytes32 dataHash = settlement.computeDataHash(0, bytes32(0), bytes32(uint256(1)));
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(RollupSettlement.NotAuthorized.selector);
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
         settlement.submitBatch(0, bytes32(0), bytes32(uint256(1)), dataHash, a, b, c);
     }
 
     function testStrangerCannotSetGenesis() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(RollupSettlement.NotAuthorized.selector);
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
         settlement.setGenesis(bytes32(uint256(1)));
     }
 
@@ -60,7 +61,7 @@ contract RollupSettlementEdgesTest is Deployer {
         bytes32 dataHash = settlement.computeDataHash(0, bytes32(0), next);
         submitBatch(0, bytes32(0), next, dataHash);
         vm.prank(admin);
-        vm.expectRevert(RollupSettlement.GenesisAlreadySet.selector);
+        vm.expectRevert(IRollupSettlement.GenesisAlreadySet.selector);
         settlement.setGenesis(bytes32(uint256(9)));
     }
 
@@ -71,17 +72,17 @@ contract RollupSettlementEdgesTest is Deployer {
         bytes32 dataHash = live.computeDataHash(0, bytes32(0), bytes32(uint256(1)));
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(sequencer);
-        vm.expectRevert(RollupSettlement.InvalidProof.selector);
+        vm.expectRevert(IRollupSettlement.InvalidProof.selector);
         live.submitBatch(0, bytes32(0), bytes32(uint256(1)), dataHash, a, b, c);
         assertEq(live.batchCount(), 0);
     }
 
     function testGrantRoleRotatesSequencerAndProverOnly() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(RollupSettlement.NotAuthorized.selector);
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
         settlement.grantRole(bytes32(0), makeAddr("x"));
         vm.prank(admin);
-        vm.expectRevert(RollupSettlement.UnsupportedRole.selector);
+        vm.expectRevert(IRollupSettlement.UnsupportedRole.selector);
         settlement.grantRole(bytes32(0), makeAddr("x"));
         bytes32 seqRole = settlement.SEQUENCER_ROLE();
         bytes32 proverRole = settlement.PROVER_ROLE();
@@ -98,7 +99,7 @@ contract RollupSettlementEdgesTest is Deployer {
         bytes32 dataHash = settlement.computeDataHash(0, bytes32(0), next);
         uint256 blockBefore = block.number;
         submitBatch(0, bytes32(0), next, dataHash);
-        RollupSettlement.Batch memory got = settlement.getBatch(0);
+        IRollupSettlement.Batch memory got = settlement.getBatch(0);
         assertEq(got.prevStateRoot, bytes32(0));
         assertEq(got.newStateRoot, next);
         assertEq(got.dataHash, dataHash);

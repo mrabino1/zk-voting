@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {ExternalPartyRegistry} from "../src/ExternalPartyRegistry.sol";
 import {ReasonCodes} from "../src/ReasonCodes.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IExternalPartyRegistry} from "../src/interfaces/IExternalPartyRegistry.sol";
 
 /// @notice Party zero-address, attestation expiry, duplicates, and isolation.
 /// @dev Edge cases: pause/suspend, unique-key, and deadline.
@@ -27,19 +28,19 @@ contract ExternalPartyEdgesTest is Deployer {
 
     function testAddPartyZeroOperatorReverts() public {
         vm.prank(clerk);
-        vm.expectRevert(ExternalPartyRegistry.ZeroAddress.selector);
+        vm.expectRevert(IExternalPartyRegistry.ZeroAddress.selector);
         parties.addParty(address(0), "Oracle", "", 0);
     }
 
     function testAddPartyInvalidModeReverts() public {
         vm.prank(clerk);
-        vm.expectRevert(ExternalPartyRegistry.InvalidMode.selector);
+        vm.expectRevert(IExternalPartyRegistry.InvalidMode.selector);
         parties.addParty(operator, "Oracle", "", 2);
     }
 
     function testStrangerCannotAddParty() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(ExternalPartyRegistry.NotStaff.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotStaff.selector);
         parties.addParty(operator, "Oracle", "", 0);
     }
 
@@ -47,7 +48,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         uint256 idx = parties.addParty(operator, "Oracle", "", 0);
         vm.prank(clerk);
-        vm.expectRevert(ExternalPartyRegistry.ZeroAddress.selector);
+        vm.expectRevert(IExternalPartyRegistry.ZeroAddress.selector);
         parties.setPartyOperator(idx, address(0));
     }
 
@@ -55,7 +56,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         uint256 idx = parties.addParty(operator, "Veto", "", 0);
         vm.prank(operator);
-        vm.expectRevert(ExternalPartyRegistry.ZeroCommitment.selector);
+        vm.expectRevert(IExternalPartyRegistry.ZeroCommitment.selector);
         parties.reject(idx, 0, ReasonCodes.FRAUD_HOLD, bytes32(0));
     }
 
@@ -63,7 +64,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         uint256 idx = parties.addParty(operator, "Veto", "", 0);
         vm.prank(operator);
-        vm.expectRevert(ExternalPartyRegistry.InvalidReasonCode.selector);
+        vm.expectRevert(IExternalPartyRegistry.InvalidReasonCode.selector);
         parties.reject(idx, commitment, ReasonCodes.NONE, bytes32(0));
     }
 
@@ -72,7 +73,7 @@ contract ExternalPartyEdgesTest is Deployer {
         uint256 idx = parties.addParty(operator, "Veto", "", 0);
         vm.startPrank(operator);
         parties.reject(idx, commitment, ReasonCodes.FRAUD_HOLD, bytes32(0));
-        vm.expectRevert(ExternalPartyRegistry.AlreadyRejected.selector);
+        vm.expectRevert(IExternalPartyRegistry.AlreadyRejected.selector);
         parties.reject(idx, commitment, ReasonCodes.COURT_ORDER, bytes32(0));
         vm.stopPrank();
     }
@@ -81,7 +82,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         uint256 idx = parties.addParty(operator, "Veto", "", 0);
         vm.prank(operator);
-        vm.expectRevert(ExternalPartyRegistry.NotRejected.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotRejected.selector);
         parties.clearRejection(idx, commitment, bytes32(0));
     }
 
@@ -89,7 +90,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         uint256 idx = parties.addParty(operator, "Veto", "", 0);
         vm.prank(makeAddr("other"));
-        vm.expectRevert(ExternalPartyRegistry.NotPartyOperator.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotPartyOperator.selector);
         parties.reject(idx, commitment, ReasonCodes.FRAUD_HOLD, bytes32(0));
     }
 
@@ -99,7 +100,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         parties.setPartyActive(idx, false);
         vm.prank(operator);
-        vm.expectRevert(ExternalPartyRegistry.PartyNotActive.selector);
+        vm.expectRevert(IExternalPartyRegistry.PartyNotActive.selector);
         parties.reject(idx, commitment, ReasonCodes.FRAUD_HOLD, bytes32(0));
     }
 
@@ -107,7 +108,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         uint256 idx = parties.addParty(operator, "Veto", "", 0);
         vm.prank(operator);
-        vm.expectRevert(ExternalPartyRegistry.InvalidMode.selector);
+        vm.expectRevert(IExternalPartyRegistry.InvalidMode.selector);
         parties.attest(idx, commitment, 0, bytes32(0));
     }
 
@@ -127,7 +128,7 @@ contract ExternalPartyEdgesTest is Deployer {
         parties.assertCastAllowed(commitment, ids);
 
         vm.warp(uint256(exp) + 1);
-        vm.expectRevert(ExternalPartyRegistry.ExpiredAttestation.selector);
+        vm.expectRevert(IExternalPartyRegistry.ExpiredAttestation.selector);
         parties.assertCastAllowed(commitment, ids);
     }
 
@@ -153,21 +154,21 @@ contract ExternalPartyEdgesTest is Deployer {
         uint256[] memory ids = new uint256[](2);
         ids[0] = a;
         ids[1] = a;
-        vm.expectRevert(ExternalPartyRegistry.DuplicateAttestationId.selector);
+        vm.expectRevert(IExternalPartyRegistry.DuplicateAttestationId.selector);
         parties.assertCastAllowed(commitment, ids);
     }
 
     function testUnexpectedAttestationIdsWhenNoneRequired() public {
         uint256[] memory ids = new uint256[](1);
         ids[0] = 0;
-        vm.expectRevert(ExternalPartyRegistry.UnexpectedAttestationIds.selector);
+        vm.expectRevert(IExternalPartyRegistry.UnexpectedAttestationIds.selector);
         parties.assertCastAllowed(commitment, ids);
     }
 
     function testMissingAttestationWhenRequired() public {
         vm.prank(clerk);
         parties.addParty(operator, "Age", "", 1);
-        vm.expectRevert(ExternalPartyRegistry.MissingAttestation.selector);
+        vm.expectRevert(IExternalPartyRegistry.MissingAttestation.selector);
         parties.assertCastAllowed(commitment);
     }
 
@@ -176,7 +177,7 @@ contract ExternalPartyEdgesTest is Deployer {
         parties.addParty(operator, "Age", "", 1);
         uint256[] memory ids = new uint256[](1);
         ids[0] = 99;
-        vm.expectRevert(ExternalPartyRegistry.UnknownParty.selector);
+        vm.expectRevert(IExternalPartyRegistry.UnknownParty.selector);
         parties.assertCastAllowed(commitment, ids);
     }
 
@@ -199,7 +200,7 @@ contract ExternalPartyEdgesTest is Deployer {
         vm.prank(clerk);
         parties.setPartyOperator(idx, nextOp);
         vm.prank(operator);
-        vm.expectRevert(ExternalPartyRegistry.NotPartyOperator.selector);
+        vm.expectRevert(IExternalPartyRegistry.NotPartyOperator.selector);
         parties.reject(idx, commitment, ReasonCodes.FRAUD_HOLD, bytes32(0));
         vm.prank(nextOp);
         parties.reject(idx, commitment, ReasonCodes.FRAUD_HOLD, bytes32(0));

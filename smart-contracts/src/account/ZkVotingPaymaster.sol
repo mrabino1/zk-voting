@@ -1,26 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {IZkVotingPaymaster, UserOp} from "./ZkVotingEntryPoint.sol";
+import {IZkVotingPaymaster} from "../interfaces/IZkVotingPaymaster.sol";
+import {UserOp} from "../interfaces/UserOp.sol";
 
 /// @title ZkVotingPaymaster
 /// @notice Civic gas sponsor. Voters do not hold an L2 gas token and are
 ///         never charged. The jurisdiction funds this contract at cost.
 ///         There is no fee, no markup, and no admin skimming of voter funds.
 contract ZkVotingPaymaster is IZkVotingPaymaster {
-    error ZeroAddress();
-    error NotEntryPoint();
-    error NotAdmin();
-    error NotSponsored();
-    error WithdrawFailed();
-
-    event Deposited(address indexed from, uint256 amount);
-    event Withdrawn(address indexed to, uint256 amount);
-    event SponsoredTargetsUpdated(address ballotInbox, address voterRegistry, address accountFactory);
-    event AlwaysSponsorSet(bool alwaysSponsor);
-
     address public immutable entryPoint;
     address public immutable admin;
 

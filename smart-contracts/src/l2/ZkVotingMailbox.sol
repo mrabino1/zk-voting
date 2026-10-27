@@ -1,22 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
+
+import {IZkVotingMailbox} from "../interfaces/IZkVotingMailbox.sol";
 
 /// @title ZkVotingMailbox
 /// @notice L2 ↔ L1 messages and a sequencer-stall force-inclusion hatch.
 ///         Price is ZERO. Not for profit. No fee on sendToL2.
-contract ZkVotingMailbox {
-    error ZeroAddress();
-    error NotAdmin();
-    error NotReady();
-    error EmptyMessage();
-
-    event MessageToL2(uint256 indexed nonce, address indexed sender, bytes message);
-    event MessageToL1(uint256 indexed nonce, address indexed sender, bytes message);
-    event Enqueued(uint256 indexed nonce, address indexed sender, uint256 readyAt, bytes message);
-    event ForceIncluded(uint256 indexed nonce, address indexed includer);
-
+contract ZkVotingMailbox is IZkVotingMailbox {
     uint256 public immutable inclusionDelay;
     address public admin;
     uint256 public toL2Nonce;

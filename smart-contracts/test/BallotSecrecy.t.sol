@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -10,6 +10,7 @@ import {ElectionParams, TallyScheme} from "../src/interfaces/ElectionParams.sol"
 import {IElection} from "../src/interfaces/IElection.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Regressions for ballot-secrecy leaks: clearance calldata, self-submit,
 ///         per-ballot openings, and one-timestamp-per-voter submission.
@@ -32,7 +33,7 @@ contract BallotSecrecyTest is Deployer {
         uint256[] memory inputs = voteInputs(id, el, 1, enc);
         address voter = makeAddr("voterWallet");
         vm.prank(voter);
-        vm.expectRevert(BallotInbox.NotRelayer.selector);
+        vm.expectRevert(IBallotInbox.NotRelayer.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
         assertFalse(factory.isRelayer(voter));
         assertTrue(factory.isRelayer(relayer));
@@ -46,7 +47,7 @@ contract BallotSecrecyTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(1);
         uint256[] memory inputs = voteInputs(id, el, 1, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NotRelayer.selector);
+        vm.expectRevert(IBallotInbox.NotRelayer.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
     }
 
@@ -58,7 +59,7 @@ contract BallotSecrecyTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(1);
         uint256[] memory inputs = voteInputs(id, el, 1, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.UseVoteBatch.selector);
+        vm.expectRevert(IBallotInbox.UseVoteBatch.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
     }
 
@@ -86,7 +87,7 @@ contract BallotSecrecyTest is Deployer {
         bytes[] memory ballots = _ballots(submitted);
 
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.BatchTooEarly.selector);
+        vm.expectRevert(IBallotInbox.BatchTooEarly.selector);
         inbox.submitVoteBatch(id, proofA, proofB, proofC, inputs, ballots);
 
         vm.warp(IElection(el).params().startTime + 1 hours);
@@ -133,7 +134,7 @@ contract BallotSecrecyTest is Deployer {
         uint256[] memory inputs = voteInputs(id, el, 4, enc);
         inputs[3] = uint256(keccak256(enc));
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.BallotHashMismatch.selector);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
 
         inputs[3] = tag;

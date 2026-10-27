@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -12,6 +12,8 @@ import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {Roles} from "../src/Roles.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IElectionFactory} from "../src/interfaces/IElectionFactory.sol";
+import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 
 /// @notice UUID copies and forged factory ids must not share an L1 proof slot.
 contract ElectionIdentitySeparationTest is Deployer {
@@ -48,7 +50,7 @@ contract ElectionIdentitySeparationTest is Deployer {
     function _cert(address factory_, uint256 electionId, bytes32 jurisdictionId, bytes32 publicIdHash, bytes32 resultHash)
         internal
         pure
-        returns (L1TallyMirror.Certification memory c)
+        returns (IL1TallyMirror.Certification memory c)
     {
         c.factory = factory_;
         c.electionId = electionId;
@@ -65,7 +67,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.jurisdictionId = bytes32(0);
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.InvalidJurisdiction.selector);
+        vm.expectRevert(IElectionFactory.InvalidJurisdiction.selector);
         factory.createElection(p);
     }
 
@@ -74,7 +76,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         p.jurisdictionId = jurisdictionB;
         p.clerk = clerk;
         vm.prank(clerk);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(p);
     }
 
@@ -83,7 +85,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         p.jurisdictionId = jurisdictionA;
         p.clerk = attacker;
         vm.prank(attacker);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(p);
     }
 
@@ -94,7 +96,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         p.jurisdictionId = jurisdictionA;
         p.clerk = attacker;
         vm.prank(attacker);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(p);
     }
 
@@ -113,13 +115,13 @@ contract ElectionIdentitySeparationTest is Deployer {
         ElectionFactory naked = new ElectionFactory(admin, address(0));
         ElectionParams memory p = defaultParams();
         vm.prank(p.clerk);
-        vm.expectRevert(ElectionFactory.MissingRole.selector);
+        vm.expectRevert(IElectionFactory.MissingRole.selector);
         naked.createElection(p);
 
         vm.prank(admin);
         naked.grantRole(Roles.CLERK_ROLE, p.clerk);
         vm.prank(p.clerk);
-        vm.expectRevert(ElectionFactory.VerifierNotApproved.selector);
+        vm.expectRevert(IElectionFactory.VerifierNotApproved.selector);
         naked.createElection(p);
 
         vm.prank(admin);
@@ -183,10 +185,10 @@ contract ElectionIdentitySeparationTest is Deployer {
     function testPinnedFactoryRejectsRogueFactory() public {
         vm.prank(admin);
         mirror.setL2Factory(address(factory));
-        L1TallyMirror.Certification memory c =
+        IL1TallyMirror.Certification memory c =
             _cert(address(0xB0B), 1, jurisdictionA, bytes32(0), _countsHash(1, 0));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.WrongFactory.selector);
+        vm.expectRevert(IL1TallyMirror.WrongFactory.selector);
         mirror.postCertifiedResult(c);
     }
 
@@ -194,7 +196,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         vm.prank(admin);
         mirror.setL2Factory(address(factory));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.UseIdentityPost.selector);
+        vm.expectRevert(IL1TallyMirror.UseIdentityPost.selector);
         mirror.postResult(1, _countsHash(1, 0), 1, bytes32(0));
     }
 
@@ -204,10 +206,10 @@ contract ElectionIdentitySeparationTest is Deployer {
         vm.prank(admin);
         mirror.setL2Factory(address(factory));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.ZeroAddress.selector);
+        vm.expectRevert(IL1TallyMirror.ZeroAddress.selector);
         mirror.setL2Factory(address(0));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.FactoryAlreadyPinned.selector);
+        vm.expectRevert(IL1TallyMirror.FactoryAlreadyPinned.selector);
         mirror.setL2Factory(address(0xB0B));
         assertEq(mirror.l2Factory(), address(factory));
     }
@@ -219,7 +221,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         vm.prank(admin);
         mirror.setPublisher(publisherA, true);
         vm.prank(publisherA);
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.postCertifiedResult(_cert(address(factory), idA, jurisdictionA, bytes32(0), _countsHash(1, 0)));
     }
 
@@ -229,7 +231,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.clerk = attacker;
         vm.prank(attacker);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(p);
     }
 
@@ -240,7 +242,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         ElectionParams memory p = defaultParams();
         p.clerk = clerk;
         vm.prank(clerk);
-        vm.expectRevert(ElectionFactory.NotJurisdictionClerk.selector);
+        vm.expectRevert(IElectionFactory.NotJurisdictionClerk.selector);
         factory.createElection(p);
         p.clerk = successor;
         vm.prank(successor);
@@ -253,10 +255,10 @@ contract ElectionIdentitySeparationTest is Deployer {
         mirror.setJurisdictionPublisher(jurisdictionA, publisherA, true);
         // No code at the factory: L1 cannot read Election.params, so publisher ACL is the defense.
         address rogueFactory = address(uint160(uint256(keccak256("rogue-factory"))));
-        L1TallyMirror.Certification memory foreign =
+        IL1TallyMirror.Certification memory foreign =
             _cert(rogueFactory, 1, jurisdictionB, bytes32(0), _countsHash(1, 0));
         vm.prank(publisherA);
-        vm.expectRevert(L1TallyMirror.NotAuthorized.selector);
+        vm.expectRevert(IL1TallyMirror.NotAuthorized.selector);
         mirror.postCertifiedResult(foreign);
     }
 
@@ -274,10 +276,10 @@ contract ElectionIdentitySeparationTest is Deployer {
     function testOnChainVerifyRejectsJurisdictionSpoofWhenFactoryIsReadable() public {
         (uint256 idA,) = createElection();
         bytes32 hash = _countsHash(2, 0);
-        L1TallyMirror.Certification memory spoof =
+        IL1TallyMirror.Certification memory spoof =
             _cert(address(factory), idA, jurisdictionB, bytes32(0), hash);
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.JurisdictionMismatch.selector);
+        vm.expectRevert(IL1TallyMirror.JurisdictionMismatch.selector);
         mirror.postCertifiedResult(spoof);
     }
 
@@ -296,7 +298,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         vm.prank(admin);
         mirror.postCertifiedResult(_cert(address(factory), idA, jurisdictionA, bytes32(0), hash));
         vm.prank(admin);
-        vm.expectRevert(L1TallyMirror.AlreadyPosted.selector);
+        vm.expectRevert(IL1TallyMirror.AlreadyPosted.selector);
         mirror.postCertifiedResult(_cert(address(factory), idA, jurisdictionA, bytes32(0), _countsHash(0, 2)));
     }
 

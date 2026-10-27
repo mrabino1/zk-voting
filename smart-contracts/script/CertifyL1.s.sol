@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {ElectionIdentity} from "../src/ElectionIdentity.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
+import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 
 /// @notice Post a tally hash to L1TallyMirror.
 ///
@@ -50,7 +51,7 @@ contract CertifyL1 is Script {
 
         if (factory == address(0)) revert MissingFactory();
 
-        L1TallyMirror.Certification memory cert;
+        IL1TallyMirror.Certification memory cert;
         cert.factory = factory;
         cert.electionId = electionId;
         cert.jurisdictionId = vm.envOr("JURISDICTION_ID", keccak256("CIVIC"));

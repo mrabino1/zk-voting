@@ -1,30 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {IJurisdictionRegistry} from "./interfaces/IJurisdictionRegistry.sol";
 import {Roles} from "./Roles.sol";
 
 /// @title JurisdictionRegistry
 /// @notice Maps a jurisdiction id to its clerks and reason-catalog owner.
 ///         Platform admin bootstraps; clerks create elections for that body.
-contract JurisdictionRegistry {
-    error ZeroId();
-    error ZeroAddress();
-    error NotAdmin();
-    error UnknownJurisdiction();
-    error LastClerk();
-    error JurisdictionExists();
-
-    event JurisdictionCreated(bytes32 indexed jurisdictionId, address clerk, string name);
-    event ClerkSet(bytes32 indexed jurisdictionId, address clerk);
-    event ClerkGranted(bytes32 indexed jurisdictionId, address clerk);
-    event ClerkRevoked(bytes32 indexed jurisdictionId, address clerk);
-    event OfficerGranted(bytes32 indexed jurisdictionId, address officer);
-    event OfficerRevoked(bytes32 indexed jurisdictionId, address officer);
-    event RoleGranted(bytes32 indexed role, address indexed account);
-    event RoleRevoked(bytes32 indexed role, address indexed account);
-
+contract JurisdictionRegistry is IJurisdictionRegistry {
     address public admin;
     mapping(bytes32 => address) public clerkOf;
     mapping(bytes32 => string) public nameOf;

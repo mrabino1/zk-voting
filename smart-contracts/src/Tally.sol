@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -33,26 +33,12 @@ import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 ///      `TallyVerifierNotSet`. A verifier reporting `isMock() == true` is
 ///      refused unless the factory explicitly allows mock verifiers (dev / test).
 contract Tally is ITallyVerifier {
-    error ZeroAddress();
-    error UnknownElection();
-    error NotTallyOperator();
-    error ElectionNotClosed();
-    error AlreadyTallied();
-    error EmptyCounts();
-    error CountMismatch();
-    error InvalidProof();
-    error AggregateRequired();
-    error AggregateHashRequired();
-    error NotAggregateScheme();
-    error NotSuperAdmin();
-    error TallyVerifierNotSet();
-    error TallyVerifierAlreadySet();
-    error MockVerifierNotAllowed();
+    IElectionFactory private immutable _factory;
 
-    event TallyProofVerifierSet(address indexed verifier);
-
-    /// @notice Factory that maps `electionId` → Election clone.
-    IElectionFactory public immutable factory;
+    /// @inheritdoc ITallyVerifier
+    function factory() external view returns (address) {
+        return address(_factory);
+    }
 
     mapping(uint256 => uint256[]) private _counts;
     mapping(uint256 => bool) private _tallied;
@@ -64,12 +50,12 @@ contract Tally is ITallyVerifier {
 
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
-        factory = IElectionFactory(factory_);
+        _factory = IElectionFactory(factory_);
     }
 
     /// @notice Install the tally proof verifier. Super admin only; set once.
     function setTallyProofVerifier(address verifier_) external {
-        if (!factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
+        if (!_factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
         if (verifier_ == address(0)) revert ZeroAddress();
         if (tallyProofVerifier != address(0)) revert TallyVerifierAlreadySet();
         if (_reportsMock(verifier_) && !_factoryAllowsMock()) revert MockVerifierNotAllowed();
@@ -193,7 +179,7 @@ contract Tally is ITallyVerifier {
         view
         returns (address inbox, address verifier, ElectionParams memory p)
     {
-        address electionAddr = factory.getElection(electionId);
+        address electionAddr = _factory.getElection(electionId);
         if (electionAddr == address(0)) revert UnknownElection();
 
         IElection election = IElection(electionAddr);
@@ -212,7 +198,7 @@ contract Tally is ITallyVerifier {
     }
 
     function _factoryAllowsMock() internal view returns (bool) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("allowMockVerifiers()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("allowMockVerifiers()"));
         return ok && ret.length >= 32 && abi.decode(ret, (bool));
     }
 

@@ -1,10 +1,42 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 interface IBallotInbox {
+    error ZeroAddress();
+    error UnknownElection();
+    error EmptyBallot();
+    error InvalidPublicInputs();
+    error RollNotFrozen();
+    error OutsideVotingWindow();
+    error ZeroVerifier();
+    error EligibleRootMismatch();
+    error DisqualificationRootMismatch();
+    error ElectionIdMismatch();
+    error BallotHashMismatch();
+    error NullifierUsed();
+    error InvalidProof();
+    error AlreadyTallied();
+    error EligibleRootPending();
+    error TallyStatusUnavailable();
+    error NotRelayer();
+    error UseVoteBatch();
+    error EmptyBatch();
+    error BatchTooLarge();
+    error BatchLengthMismatch();
+    error BatchTooEarly();
+    error DuplicateNullifier();
+
     event VoteAccepted(uint256 indexed electionId, uint256 indexed nullifier, bytes32 ballotHash, address relayer);
+
+    function MAX_VOTE_BATCH() external view returns (uint256);
+
+    /// @notice BN254 scalar field modulus r.
+    function SNARK_SCALAR_FIELD() external view returns (uint256);
+
+    /// @notice Factory that maps `electionId` to the Election clone.
+    function factory() external view returns (address);
 
     function submitVote(
         uint256 electionId,
@@ -37,4 +69,6 @@ interface IBallotInbox {
         uint256[][] calldata publicInputs,
         bytes[] calldata encryptedBallots
     ) external;
+
+    function ballotHashOfCiphertext(bytes calldata encryptedBallot) external pure returns (uint256);
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -8,6 +8,7 @@ import {VoterRegistry} from "../src/VoterRegistry.sol";
 import {Roles} from "../src/Roles.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IVoterRegistry} from "../src/interfaces/IVoterRegistry.sol";
 
 /// @notice Registry zero-commitment, unauthorized, closed-window, and cap-at-one edges.
 contract VoterRegistryEdgesTest is Deployer {
@@ -21,34 +22,34 @@ contract VoterRegistryEdgesTest is Deployer {
     }
 
     function testCtorRejectsZeroAddresses() public {
-        vm.expectRevert(VoterRegistry.ZeroAddress.selector);
+        vm.expectRevert(IVoterRegistry.ZeroAddress.selector);
         new VoterRegistry(address(0), address(factory));
-        vm.expectRevert(VoterRegistry.ZeroAddress.selector);
+        vm.expectRevert(IVoterRegistry.ZeroAddress.selector);
         new VoterRegistry(address(hasher), address(0));
     }
 
     function testZeroCommitmentReverts() public {
         vm.prank(registrar);
-        vm.expectRevert(VoterRegistry.ZeroCommitment.selector);
+        vm.expectRevert(IVoterRegistry.ZeroCommitment.selector);
         voterRegistry.register(electionId, 0);
     }
 
     function testStrangerCannotRegister() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(VoterRegistry.NotRegistrar.selector);
+        vm.expectRevert(IVoterRegistry.NotRegistrar.selector);
         voterRegistry.register(electionId, Fixtures.identityCommitment(uint256(1)));
     }
 
     function testUnknownElectionReverts() public {
         vm.prank(registrar);
-        vm.expectRevert(VoterRegistry.UnknownElection.selector);
+        vm.expectRevert(IVoterRegistry.UnknownElection.selector);
         voterRegistry.register(99, Fixtures.identityCommitment(uint256(1)));
     }
 
     function testRegistrationClosedAfterCutoffWithoutFreeze() public {
         warpClosed(election);
         vm.prank(registrar);
-        vm.expectRevert(VoterRegistry.RegistrationClosed.selector);
+        vm.expectRevert(IVoterRegistry.RegistrationClosed.selector);
         voterRegistry.register(electionId, Fixtures.identityCommitment(uint256(1)));
     }
 
@@ -69,7 +70,7 @@ contract VoterRegistryEdgesTest is Deployer {
 
     function testStrangerCannotGrantRegistrarRole() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(VoterRegistry.NotRegistrar.selector);
+        vm.expectRevert(IVoterRegistry.NotRegistrar.selector);
         voterRegistry.grantRole(Roles.REGISTRAR_ROLE, makeAddr("x"));
     }
 
@@ -79,7 +80,7 @@ contract VoterRegistryEdgesTest is Deployer {
         assertEq(voterRegistry.participantCount(id), 1);
         assertEq(IElection(el).participantCount(), 1);
         vm.prank(registrar);
-        vm.expectRevert(VoterRegistry.CapReached.selector);
+        vm.expectRevert(IVoterRegistry.CapReached.selector);
         voterRegistry.register(id, Fixtures.identityCommitment(uint256(2)));
     }
 

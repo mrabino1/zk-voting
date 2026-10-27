@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {Test} from "forge-std/Test.sol";
 
 import {ZkVotingMailbox} from "../src/l2/ZkVotingMailbox.sol";
+import {IZkVotingMailbox} from "../src/interfaces/IZkVotingMailbox.sol";
 
 /// @notice Mailbox empty-input, time-boundary, and one-shot force-include edges.
 /// @dev Edge cases: empty array, warp(t-1)/t/t+1, already-used keys.
@@ -27,22 +28,22 @@ contract ZkVotingMailboxTest is Test {
     }
 
     function testConstructorRejectsZeroAdmin() public {
-        vm.expectRevert(ZkVotingMailbox.ZeroAddress.selector);
+        vm.expectRevert(IZkVotingMailbox.ZeroAddress.selector);
         new ZkVotingMailbox(address(0));
     }
 
     function testSendToL2EmptyReverts() public {
-        vm.expectRevert(ZkVotingMailbox.EmptyMessage.selector);
+        vm.expectRevert(IZkVotingMailbox.EmptyMessage.selector);
         mailbox.sendToL2("");
     }
 
     function testSendToL1EmptyReverts() public {
-        vm.expectRevert(ZkVotingMailbox.EmptyMessage.selector);
+        vm.expectRevert(IZkVotingMailbox.EmptyMessage.selector);
         mailbox.sendToL1("");
     }
 
     function testEnqueueEmptyReverts() public {
-        vm.expectRevert(ZkVotingMailbox.EmptyMessage.selector);
+        vm.expectRevert(IZkVotingMailbox.EmptyMessage.selector);
         mailbox.enqueue("");
     }
 
@@ -78,7 +79,7 @@ contract ZkVotingMailboxTest is Test {
     }
 
     function testForceIncludeMissingNonceReverts() public {
-        vm.expectRevert(ZkVotingMailbox.NotReady.selector);
+        vm.expectRevert(IZkVotingMailbox.NotReady.selector);
         mailbox.forceInclude(1);
     }
 
@@ -91,7 +92,7 @@ contract ZkVotingMailboxTest is Test {
         assertFalse(included);
 
         vm.warp(readyAt - 1);
-        vm.expectRevert(ZkVotingMailbox.NotReady.selector);
+        vm.expectRevert(IZkVotingMailbox.NotReady.selector);
         mailbox.forceInclude(1);
     }
 
@@ -127,7 +128,7 @@ contract ZkVotingMailboxTest is Test {
         (, uint256 readyAt,,) = mailbox.queue(1);
         vm.warp(readyAt);
         mailbox.forceInclude(1);
-        vm.expectRevert(ZkVotingMailbox.NotReady.selector);
+        vm.expectRevert(IZkVotingMailbox.NotReady.selector);
         mailbox.forceInclude(1);
     }
 

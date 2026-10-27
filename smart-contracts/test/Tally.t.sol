@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -9,6 +9,7 @@ import {Tally} from "../src/Tally.sol";
 import {TallyPublicInputs} from "../src/zk/TallyPublicInputs.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {ITallyVerifier} from "../src/interfaces/ITallyVerifier.sol";
 
 /// @notice Tally posting: legacy SUM_ONLY vs aggregate hash (no per-ballot openings).
 contract TallyTest is Deployer {
@@ -64,7 +65,7 @@ contract TallyTest is Deployer {
         counts[1] = 0;
 
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.CountMismatch.selector);
+        vm.expectRevert(ITallyVerifier.CountMismatch.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
@@ -73,7 +74,7 @@ contract TallyTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.ElectionNotClosed.selector);
+        vm.expectRevert(ITallyVerifier.ElectionNotClosed.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
@@ -83,7 +84,7 @@ contract TallyTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
         vm.prank(clerk);
-        vm.expectRevert(Tally.NotTallyOperator.selector);
+        vm.expectRevert(ITallyVerifier.NotTallyOperator.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
@@ -94,7 +95,7 @@ contract TallyTest is Deployer {
         counts[0] = 3;
         counts[1] = 0;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.AggregateRequired.selector);
+        vm.expectRevert(ITallyVerifier.AggregateRequired.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
@@ -143,7 +144,7 @@ contract TallyTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 2;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.AggregateHashRequired.selector);
+        vm.expectRevert(ITallyVerifier.AggregateHashRequired.selector);
         tally.submitAggregateTally(id, counts, bytes32(0), a, b, c);
     }
 
@@ -153,7 +154,7 @@ contract TallyTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.NotAggregateScheme.selector);
+        vm.expectRevert(ITallyVerifier.NotAggregateScheme.selector);
         tally.submitAggregateTally(id, counts, bytes32(uint256(1)), a, b, c);
     }
 
@@ -165,7 +166,7 @@ contract TallyTest is Deployer {
         vm.prank(tallyOperator);
         tally.submitTally(id, counts, a, b, c);
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.AlreadyTallied.selector);
+        vm.expectRevert(ITallyVerifier.AlreadyTallied.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 

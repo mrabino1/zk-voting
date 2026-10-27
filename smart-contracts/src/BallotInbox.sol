@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -33,37 +33,18 @@ import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 ///      `disclosureInterval` is non-zero, only `submitVoteBatch` is accepted,
 ///      and the batch is recorded in nullifier order inside one transaction.
 contract BallotInbox is IBallotInbox {
-    error ZeroAddress();
-    error UnknownElection();
-    error EmptyBallot();
-    error InvalidPublicInputs();
-    error RollNotFrozen();
-    error OutsideVotingWindow();
-    error ZeroVerifier();
-    error EligibleRootMismatch();
-    error DisqualificationRootMismatch();
-    error ElectionIdMismatch();
-    error BallotHashMismatch();
-    error NullifierUsed();
-    error InvalidProof();
-    error AlreadyTallied();
-    error EligibleRootPending();
-    error TallyStatusUnavailable();
-    error NotRelayer();
-    error UseVoteBatch();
-    error EmptyBatch();
-    error BatchTooLarge();
-    error BatchLengthMismatch();
-    error BatchTooEarly();
-    error DuplicateNullifier();
-
     uint256 public constant MAX_VOTE_BATCH = 64;
 
     /// @notice BN254 scalar field modulus r.
     uint256 public constant SNARK_SCALAR_FIELD =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
-    IElectionFactory public immutable factory;
+    IElectionFactory private immutable _factory;
+
+    /// @inheritdoc IBallotInbox
+    function factory() external view returns (address) {
+        return address(_factory);
+    }
 
     mapping(uint256 => mapping(uint256 => bool)) private _nullifierUsed;
     mapping(uint256 => uint256) private _acceptedBallots;
@@ -74,7 +55,7 @@ contract BallotInbox is IBallotInbox {
 
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
-        factory = IElectionFactory(factory_);
+        _factory = IElectionFactory(factory_);
     }
 
     /// @inheritdoc IBallotInbox
@@ -161,7 +142,7 @@ contract BallotInbox is IBallotInbox {
         // (M-03); a failing read or a reverting `isTallied` blocks the ballot
         // instead of silently skipping the check. Zero means no tally module
         // is wired, so nothing can have been tallied yet.
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("tallyVerifier()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("tallyVerifier()"));
         if (!ok || ret.length < 32) revert TallyStatusUnavailable();
         address tally = abi.decode(ret, (address));
         if (tally == address(0)) return;
@@ -173,7 +154,7 @@ contract BallotInbox is IBallotInbox {
     }
 
     function _getElection(uint256 electionId) internal view returns (IElection election) {
-        address electionAddr = factory.getElection(electionId);
+        address electionAddr = _factory.getElection(electionId);
         if (electionAddr == address(0)) revert UnknownElection();
         election = IElection(electionAddr);
     }
@@ -215,12 +196,12 @@ contract BallotInbox is IBallotInbox {
 
     function _requireRelayer() internal view {
         (bool ok, bytes memory ret) =
-            address(factory).staticcall(abi.encodeWithSignature("isRelayer(address)", msg.sender));
+            address(_factory).staticcall(abi.encodeWithSignature("isRelayer(address)", msg.sender));
         if (!ok || ret.length < 32 || !abi.decode(ret, (bool))) revert NotRelayer();
     }
 
     function _disclosureInterval() internal view returns (uint64) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("disclosureInterval()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("disclosureInterval()"));
         if (!ok || ret.length < 32) return 0;
         return uint64(abi.decode(ret, (uint256)));
     }

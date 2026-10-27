@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -18,24 +18,6 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     uint8 internal constant MODE_VETO = 0;
     uint8 internal constant MODE_MUST_ATTEST = 1;
 
-    error AlreadyInitialized();
-    error NotFactory();
-    error NotStaff();
-    error NotPartyOperator();
-    error PartyNotActive();
-    error ZeroAddress();
-    error ZeroCommitment();
-    error InvalidMode();
-    error InvalidReasonCode();
-    error UnknownParty();
-    error AlreadyRejected();
-    error NotRejected();
-    error VoteRejectedByExternalParty();
-    error MissingAttestation();
-    error DuplicateAttestationId();
-    error ExpiredAttestation();
-    error UnexpectedAttestationIds();
-
     struct Party {
         address operator;
         string name;
@@ -44,7 +26,12 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
         bool active;
     }
 
-    IElectionFactory public factory;
+    IElectionFactory private _factory;
+
+    /// @inheritdoc IExternalPartyRegistry
+    function factory() external view returns (address) {
+        return address(_factory);
+    }
     uint256 public electionId;
     bool private _initialized;
 
@@ -66,7 +53,7 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     }
 
     modifier onlyStaff() {
-        if (!factory.isElectionStaff(electionId, msg.sender)) revert NotStaff();
+        if (!_factory.isElectionStaff(electionId, msg.sender)) revert NotStaff();
         _;
     }
 
@@ -77,7 +64,7 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
         if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         electionId = electionId_;
-        factory = IElectionFactory(factory_);
+        _factory = IElectionFactory(factory_);
     }
 
     /// @inheritdoc IExternalPartyRegistry
@@ -159,7 +146,7 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
         // Audit M-07: election staff may also clear (e.g. after an appeal, or
         // when the rejecting party was paused and its operator is gone).
         Party storage party = _party(partyIndex);
-        if (msg.sender != party.operator && !factory.isElectionStaff(electionId, msg.sender)) {
+        if (msg.sender != party.operator && !_factory.isElectionStaff(electionId, msg.sender)) {
             revert NotPartyOperator();
         }
         if (!_rejectedBy[identityCommitment][partyIndex]) revert NotRejected();
@@ -324,13 +311,13 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     }
 
     function _disqualificationRegistry() internal view returns (address) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("disqualificationRegistry()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("disqualificationRegistry()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
     }
 
     function _voterRegistry() internal view returns (address) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
     }

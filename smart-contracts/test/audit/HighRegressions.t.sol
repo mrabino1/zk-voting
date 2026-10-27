@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -19,6 +19,10 @@ import {TallyPublicInputs} from "../../src/zk/TallyPublicInputs.sol";
 import {VoteVerifier} from "../../src/zk/VoteVerifier.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IBallotInbox} from "../../src/interfaces/IBallotInbox.sol";
+import {IElectionFactory} from "../../src/interfaces/IElectionFactory.sol";
+import {IRollupSettlement} from "../../src/interfaces/IRollupSettlement.sol";
+import {ITallyVerifier} from "../../src/interfaces/ITallyVerifier.sol";
 
 /// @dev Emulates a snarkjs verifier's field check: rejects any public input >= r.
 contract FieldStrictVerifier {
@@ -88,22 +92,22 @@ contract HighRegressionsTest is Deployer {
         uint256[] memory counts = new uint256[](2);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.TallyVerifierNotSet.selector);
+        vm.expectRevert(ITallyVerifier.TallyVerifierNotSet.selector);
         fresh.submitTally(id, counts, a, b, c);
     }
 
     function testH01_TallyVerifierIsSuperAdminOnlyAndSetOnce() public {
         Tally fresh = new Tally(address(factory));
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(Tally.NotSuperAdmin.selector);
+        vm.expectRevert(ITallyVerifier.NotSuperAdmin.selector);
         fresh.setTallyProofVerifier(address(verifier));
         vm.prank(admin);
-        vm.expectRevert(Tally.ZeroAddress.selector);
+        vm.expectRevert(ITallyVerifier.ZeroAddress.selector);
         fresh.setTallyProofVerifier(address(0));
         vm.prank(admin);
         fresh.setTallyProofVerifier(address(verifier));
         vm.prank(admin);
-        vm.expectRevert(Tally.TallyVerifierAlreadySet.selector);
+        vm.expectRevert(ITallyVerifier.TallyVerifierAlreadySet.selector);
         fresh.setTallyProofVerifier(address(verifier));
     }
 
@@ -112,7 +116,7 @@ contract HighRegressionsTest is Deployer {
         factory.setAllowMockVerifiers(false);
         Tally fresh = new Tally(address(factory));
         vm.prank(admin);
-        vm.expectRevert(Tally.MockVerifierNotAllowed.selector);
+        vm.expectRevert(ITallyVerifier.MockVerifierNotAllowed.selector);
         fresh.setTallyProofVerifier(address(verifier));
         // A non-mock verifier is accepted.
         FieldStrictVerifier real = new FieldStrictVerifier();
@@ -182,7 +186,7 @@ contract HighRegressionsTest is Deployer {
         factory.setAllowMockVerifiers(false);
         ElectionParams memory p = defaultParams();
         vm.prank(admin);
-        vm.expectRevert(ElectionFactory.MockVerifierNotAllowed.selector);
+        vm.expectRevert(IElectionFactory.MockVerifierNotAllowed.selector);
         factory.createElection(p);
     }
 
@@ -252,7 +256,7 @@ contract HighRegressionsTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(id, el, 5, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.EligibleRootPending.selector);
+        vm.expectRevert(IBallotInbox.EligibleRootPending.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
 
         // Anyone can finish the rebuild.
@@ -295,7 +299,7 @@ contract HighRegressionsTest is Deployer {
         uint256[] memory inputs = voteInputs(id, el, 1, enc);
         inputs[0] = uint256(before);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.EligibleRootMismatch.selector);
+        vm.expectRevert(IBallotInbox.EligibleRootMismatch.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
         assertEq(inbox.acceptedBallots(id), 0);
 
@@ -349,14 +353,14 @@ contract HighRegressionsTest is Deployer {
         inputs[3] = uint256(keccak256(enc)); // old, unreduced binding
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.BallotHashMismatch.selector);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
     }
 
     // ------------------------------------------------------------------ H-06
 
     function testH06_ExploitUnverifiedSettlementNowRefused() public {
-        vm.expectRevert(RollupSettlement.VerifierRequired.selector);
+        vm.expectRevert(IRollupSettlement.VerifierRequired.selector);
         new RollupSettlement(admin, sequencer, prover, address(0), false);
     }
 
@@ -382,7 +386,7 @@ contract HighRegressionsTest is Deployer {
         live.grantRole(seqRole, makeAddr("newSeq"));
         assertEq(live.sequencer(), makeAddr("newSeq"));
         vm.prank(admin);
-        vm.expectRevert(RollupSettlement.UnsupportedRole.selector);
+        vm.expectRevert(IRollupSettlement.UnsupportedRole.selector);
         live.grantRole(keccak256("OTHER"), makeAddr("x"));
     }
 }

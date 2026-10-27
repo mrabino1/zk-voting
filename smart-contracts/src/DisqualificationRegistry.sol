@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -38,24 +38,18 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;
 
-    error ZeroAddress();
-    error UnknownElection();
-    error NotDisqualificationOfficer();
-    error NotClerk();
-    error RollFrozen();
-    error InvalidReasonCode();
-    error ZeroCommitment();
-    error AlreadyDisqualified();
-    error NotDisqualified();
-    error InvalidTreeDepth();
-    error VotingStarted();
-    error NotPartyRegistry();
+    IHasher private immutable _hasher;
+    IElectionFactory private immutable _factory;
 
-    /// @notice Audit M-01: the late-update switch is public and logged.
-    event LateUpdateAllowedSet(uint256 indexed electionId, bool allowed);
+    /// @inheritdoc IDisqualificationRegistry
+    function hasher() external view returns (address) {
+        return address(_hasher);
+    }
 
-    IHasher public immutable hasher;
-    IElectionFactory public immutable factory;
+    /// @inheritdoc IDisqualificationRegistry
+    function factory() external view returns (address) {
+        return address(_factory);
+    }
 
     /// @notice After freeze, updates revert unless this flag is set (default false).
     mapping(uint256 => bool) public lateUpdateAllowed;
@@ -74,8 +68,8 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     constructor(address hasher_, address factory_) {
         if (hasher_ == address(0) || factory_ == address(0)) revert ZeroAddress();
         // Audit L-08: fixed argument order (hasher, factory). No guessing.
-        hasher = IHasher(hasher_);
-        factory = IElectionFactory(factory_);
+        _hasher = IHasher(hasher_);
+        _factory = IElectionFactory(factory_);
     }
 
     /// @inheritdoc IDisqualificationRegistry
@@ -197,7 +191,7 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     }
 
     function _election(uint256 electionId) internal view returns (IElection election) {
-        address addr = factory.getElection(electionId);
+        address addr = _factory.getElection(electionId);
         if (addr == address(0)) revert UnknownElection();
         election = IElection(addr);
     }
@@ -230,14 +224,14 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         uint8 depth = election.params().treeDepth;
         if (depth < MIN_DEPTH || depth > MAX_DEPTH) revert InvalidTreeDepth();
         uint256[] memory sorted = _sortedActive(electionId);
-        uint256[] memory leaves = DisqualificationSet.chainLeaves(sorted, hasher);
+        uint256[] memory leaves = DisqualificationSet.chainLeaves(sorted, _hasher);
 
         FrontierTree.Data storage tree = _trees[electionId];
-        FrontierTree.reset(tree, depth, hasher);
+        FrontierTree.reset(tree, depth, _hasher);
         for (uint256 i; i < leaves.length; ++i) {
-            FrontierTree.append(tree, leaves[i], hasher);
+            FrontierTree.append(tree, leaves[i], _hasher);
         }
-        bytes32 chainRoot = bytes32(FrontierTree.root(tree, hasher));
+        bytes32 chainRoot = bytes32(FrontierTree.root(tree, _hasher));
         _chainRoots[electionId] = chainRoot;
 
         // Publish the new chain first so the voter registry reads it when its
@@ -290,14 +284,14 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     }
 
     function _voterRegistry() internal view returns (address) {
-        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
     }
 
     function _partyRegistry(uint256 electionId) internal view returns (address) {
         (bool ok, bytes memory ret) =
-            address(factory).staticcall(abi.encodeWithSignature("getPartyRegistry(uint256)", electionId));
+            address(_factory).staticcall(abi.encodeWithSignature("getPartyRegistry(uint256)", electionId));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
     }

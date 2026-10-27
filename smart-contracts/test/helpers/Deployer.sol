@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -21,7 +21,8 @@ import {Tally} from "../../src/Tally.sol";
 import {RollupSettlement} from "../../src/l2/RollupSettlement.sol";
 import {PasskeyAccount} from "../../src/account/PasskeyAccount.sol";
 import {PasskeyAccountFactory} from "../../src/account/PasskeyAccountFactory.sol";
-import {ZkVotingEntryPoint, UserOp} from "../../src/account/ZkVotingEntryPoint.sol";
+import {ZkVotingEntryPoint} from "../../src/account/ZkVotingEntryPoint.sol";
+import {UserOp} from "../../src/interfaces/UserOp.sol";
 import {ZkVotingPaymaster} from "../../src/account/ZkVotingPaymaster.sol";
 
 import {Fixtures} from "./Fixtures.sol";

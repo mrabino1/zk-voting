@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,10 +7,8 @@ import {ElectionIdentity} from "../ElectionIdentity.sol";
 import {ElectionParams} from "../interfaces/ElectionParams.sol";
 import {IElection} from "../interfaces/IElection.sol";
 import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
-
-interface ISettledRoots {
-    function isSettledRoot(bytes32 root) external view returns (bool);
-}
+import {IL1TallyMirror} from "../interfaces/IL1TallyMirror.sol";
+import {ISettledRoots} from "../interfaces/ISettledRoots.sol";
 
 /// @title L1TallyMirror
 /// @notice Court-grade copy of an L2 tally hash. Individual ballots are not posted.
@@ -18,76 +16,10 @@ interface ISettledRoots {
 ///      and not a bare uint256. A nefarious jurisdiction that copies another
 ///      body's UUID, or deploys its own factory with the same `electionId`,
 ///      cannot occupy the honest certification.
-contract L1TallyMirror {
-    error ZeroAddress();
-    error NotAuthorized();
-    error AlreadyPosted();
-    error ZeroResultHash();
-    error ZeroJurisdiction();
-    error ZeroFactory();
-    error WrongFactory();
-    error UnknownElection();
-    error ElectionMismatch();
-    error JurisdictionMismatch();
-    error BallotSpecMismatch();
-    error UseIdentityPost();
-    error FactoryAlreadyPinned();
-    error SettlementAlreadySet();
-    error UnsettledStateRoot();
-    error NotPosted();
-    error DisputeWindowClosed();
-
-    struct Certification {
-        address factory;
-        uint256 electionId;
-        bytes32 jurisdictionId;
-        address election;
-        bytes32 publicIdHash;
-        bytes32 ballotSpecHash;
-        bytes32 resultHash;
-        uint256 totalBallots;
-        bytes32 l2StateRoot;
-    }
-
-    struct CertifiedResult {
-        bytes32 resultHash;
-        uint256 totalBallots;
-        bytes32 l2StateRoot;
-        address factory;
-        uint256 electionId;
-        bytes32 jurisdictionId;
-        address election;
-        bytes32 publicIdHash;
-        bytes32 ballotSpecHash;
-    }
-
-    event ElectionCertified(uint256 indexed electionId, bytes32 resultHash, uint256 totalBallots, bytes32 l2StateRoot);
-    event ElectionIdentityCertified(
-        bytes32 indexed certificationId,
-        uint256 indexed electionId,
-        bytes32 indexed jurisdictionId,
-        address factory,
-        address election,
-        bytes32 publicIdHash,
-        bytes32 ballotSpecHash,
-        bytes32 resultHash,
-        uint256 totalBallots,
-        bytes32 l2StateRoot
-    );
-
+contract L1TallyMirror is IL1TallyMirror {
     /// @notice Audit M-05: window in which the admin may supersede a posted
     ///         certification. After it, the certification is final.
     uint256 public constant DISPUTE_WINDOW = 7 days;
-
-    event SettlementSet(address indexed settlement);
-    event CertificationSuperseded(
-        bytes32 indexed certificationId,
-        bytes32 previousResultHash,
-        bytes32 resultHash,
-        uint256 totalBallots,
-        bytes32 l2StateRoot,
-        bytes32 reasonHash
-    );
 
     address public admin;
     /// @notice Optional `RollupSettlement`. When set, every post must cite an

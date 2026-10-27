@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {DisqualificationRegistry} from "../src/DisqualificationRegistry.sol";
 import {ReasonCodes} from "../src/ReasonCodes.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IDisqualificationRegistry} from "../src/interfaces/IDisqualificationRegistry.sol";
 
 /// @notice Disqualification auth, unique-key, late-update, and isolation edges.
 /// @dev Edge cases: already-used, pause-vs-suspend, per-instance halt.
@@ -27,25 +28,25 @@ contract DisqualificationEdgesTest is Deployer {
 
     function testStrangerCannotDisqualify() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(DisqualificationRegistry.NotDisqualificationOfficer.selector);
+        vm.expectRevert(IDisqualificationRegistry.NotDisqualificationOfficer.selector);
         disqualification.disqualify(electionId, commitment, ReasonCodes.DECEASED, evidence);
     }
 
     function testClerkCannotDisqualify() public {
         vm.prank(clerk);
-        vm.expectRevert(DisqualificationRegistry.NotDisqualificationOfficer.selector);
+        vm.expectRevert(IDisqualificationRegistry.NotDisqualificationOfficer.selector);
         disqualification.disqualify(electionId, commitment, ReasonCodes.DECEASED, evidence);
     }
 
     function testZeroCommitmentReverts() public {
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.ZeroCommitment.selector);
+        vm.expectRevert(IDisqualificationRegistry.ZeroCommitment.selector);
         disqualification.disqualify(electionId, 0, ReasonCodes.DECEASED, evidence);
     }
 
     function testUnknownElectionReverts() public {
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.UnknownElection.selector);
+        vm.expectRevert(IDisqualificationRegistry.UnknownElection.selector);
         disqualification.disqualify(99, commitment, ReasonCodes.DECEASED, evidence);
     }
 
@@ -53,19 +54,19 @@ contract DisqualificationEdgesTest is Deployer {
         vm.prank(officer);
         disqualification.disqualify(electionId, commitment, ReasonCodes.FRAUD_HOLD, evidence);
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.AlreadyDisqualified.selector);
+        vm.expectRevert(IDisqualificationRegistry.AlreadyDisqualified.selector);
         disqualification.disqualify(electionId, commitment, ReasonCodes.COURT_ORDER, evidence);
     }
 
     function testRevokeWhenNotDisqualifiedReverts() public {
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.NotDisqualified.selector);
+        vm.expectRevert(IDisqualificationRegistry.NotDisqualified.selector);
         disqualification.revoke(electionId, commitment, evidence);
     }
 
     function testRevokeZeroCommitmentReverts() public {
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.ZeroCommitment.selector);
+        vm.expectRevert(IDisqualificationRegistry.ZeroCommitment.selector);
         disqualification.revoke(electionId, 0, evidence);
     }
 
@@ -97,7 +98,7 @@ contract DisqualificationEdgesTest is Deployer {
     function testFreezeBlocksUnlessLateUpdateAllowed() public {
         freezeRoll(election);
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.RollFrozen.selector);
+        vm.expectRevert(IDisqualificationRegistry.RollFrozen.selector);
         disqualification.disqualify(electionId, commitment, ReasonCodes.DECEASED, evidence);
 
         vm.prank(clerk);
@@ -110,13 +111,13 @@ contract DisqualificationEdgesTest is Deployer {
 
     function testStrangerCannotSetLateUpdate() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(DisqualificationRegistry.NotClerk.selector);
+        vm.expectRevert(IDisqualificationRegistry.NotClerk.selector);
         disqualification.setLateUpdateAllowed(electionId, true);
     }
 
     function testOfficerCannotSetLateUpdate() public {
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.NotClerk.selector);
+        vm.expectRevert(IDisqualificationRegistry.NotClerk.selector);
         disqualification.setLateUpdateAllowed(electionId, true);
     }
 
@@ -134,7 +135,7 @@ contract DisqualificationEdgesTest is Deployer {
         disqualification.disqualify(electionId, commitment, ReasonCodes.DECEASED, evidence);
 
         vm.prank(officer);
-        vm.expectRevert(DisqualificationRegistry.RollFrozen.selector);
+        vm.expectRevert(IDisqualificationRegistry.RollFrozen.selector);
         disqualification.disqualify(idB, other, ReasonCodes.DECEASED, evidence);
     }
 
@@ -154,9 +155,9 @@ contract DisqualificationEdgesTest is Deployer {
     }
 
     function testCtorRejectsZeroAddresses() public {
-        vm.expectRevert(DisqualificationRegistry.ZeroAddress.selector);
+        vm.expectRevert(IDisqualificationRegistry.ZeroAddress.selector);
         new DisqualificationRegistry(address(0), address(factory));
-        vm.expectRevert(DisqualificationRegistry.ZeroAddress.selector);
+        vm.expectRevert(IDisqualificationRegistry.ZeroAddress.selector);
         new DisqualificationRegistry(address(hasher), address(0));
     }
 }

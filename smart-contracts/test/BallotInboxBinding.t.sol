@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -8,6 +8,7 @@ import {IElection} from "../src/interfaces/IElection.sol";
 import {ElectionState} from "../src/interfaces/ElectionParams.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Proof-binding, window boundaries, fail-closed proof, and vote-after-tally.
 /// @dev Edge cases: wrong public inputs, empty/short payload,
@@ -31,7 +32,7 @@ contract BallotInboxBindingTest is Deployer {
     function testEmptyBallotReverts() public {
         uint256[] memory inputs = voteInputs(electionId, election, 7, Fixtures.encryptedBallot(7));
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.EmptyBallot.selector);
+        vm.expectRevert(IBallotInbox.EmptyBallot.selector);
         inbox.submitVote(electionId, a, b, c, inputs, bytes(""));
     }
 
@@ -48,20 +49,20 @@ contract BallotInboxBindingTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(7);
         uint256[] memory inputs = voteInputs(electionId, election, 7, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.UnknownElection.selector);
+        vm.expectRevert(IBallotInbox.UnknownElection.selector);
         inbox.submitVote(999, a, b, c, inputs, enc);
     }
 
     function testEligibleRootMismatchRevertsAndDoesNotConsume() public {
-        _corruptAndAssertUnused(0, 1, BallotInbox.EligibleRootMismatch.selector);
+        _corruptAndAssertUnused(0, 1, IBallotInbox.EligibleRootMismatch.selector);
     }
 
     function testDisqualificationRootMismatchRevertsAndDoesNotConsume() public {
-        _corruptAndAssertUnused(1, 1, BallotInbox.DisqualificationRootMismatch.selector);
+        _corruptAndAssertUnused(1, 1, IBallotInbox.DisqualificationRootMismatch.selector);
     }
 
     function testElectionIdMismatchRevertsAndDoesNotConsume() public {
-        _corruptAndAssertUnused(4, electionId + 1, BallotInbox.ElectionIdMismatch.selector);
+        _corruptAndAssertUnused(4, electionId + 1, IBallotInbox.ElectionIdMismatch.selector);
     }
 
     function testBallotHashMismatchRevertsAndDoesNotConsume() public {
@@ -69,7 +70,7 @@ contract BallotInboxBindingTest is Deployer {
         uint256[] memory inputs = voteInputs(electionId, election, 11, enc);
         inputs[3] = 0xdead;
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.BallotHashMismatch.selector);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 11));
         assertEq(inbox.acceptedBallots(electionId), 0);
@@ -81,7 +82,7 @@ contract BallotInboxBindingTest is Deployer {
 
         verifier.setAccept(false);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.InvalidProof.selector);
+        vm.expectRevert(IBallotInbox.InvalidProof.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 13));
         assertEq(inbox.acceptedBallots(electionId), 0);
@@ -98,7 +99,7 @@ contract BallotInboxBindingTest is Deployer {
         uint256[] memory inputs = voteInputs(electionId, election, 17, enc);
         verifier.setDeniedNullifier(bytes32(uint256(17)), true);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.InvalidProof.selector);
+        vm.expectRevert(IBallotInbox.InvalidProof.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 17));
     }
@@ -165,7 +166,7 @@ contract BallotInboxBindingTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(47);
         uint256[] memory inputs = voteInputs(electionId, election, 47, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.AlreadyTallied.selector);
+        vm.expectRevert(IBallotInbox.AlreadyTallied.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 47));
     }
@@ -175,7 +176,7 @@ contract BallotInboxBindingTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(53);
         uint256[] memory inputs = voteInputs(electionId, election, 53, enc);
         vm.prank(stranger);
-        vm.expectRevert(BallotInbox.NotRelayer.selector);
+        vm.expectRevert(IBallotInbox.NotRelayer.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 53));
 
@@ -201,7 +202,7 @@ contract BallotInboxBindingTest is Deployer {
 
     function _expectInvalidPublicInputs(uint256[] memory inputs) internal {
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.InvalidPublicInputs.selector);
+        vm.expectRevert(IBallotInbox.InvalidPublicInputs.selector);
         inbox.submitVote(electionId, a, b, c, inputs, Fixtures.encryptedBallot(1));
     }
 
@@ -220,7 +221,7 @@ contract BallotInboxBindingTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(nullifier);
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
     }
 
@@ -228,7 +229,7 @@ contract BallotInboxBindingTest is Deployer {
         bytes memory enc = Fixtures.encryptedBallot(nullifier);
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.OutsideVotingWindow.selector);
+        vm.expectRevert(IBallotInbox.OutsideVotingWindow.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertEq(inbox.acceptedBallots(electionId), 0);
     }

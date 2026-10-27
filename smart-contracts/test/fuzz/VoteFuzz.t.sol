@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -7,6 +7,7 @@ import {ElectionParams} from "../../src/interfaces/ElectionParams.sol";
 import {BallotInbox} from "../../src/BallotInbox.sol";
 import {Deployer} from "../helpers/Deployer.sol";
 import {Fixtures} from "../helpers/Fixtures.sol";
+import {IBallotInbox} from "../../src/interfaces/IBallotInbox.sol";
 
 /// @title VoteFuzz
 /// @notice Fuzz timestamps, nullifiers, and encrypted ballots.
@@ -51,7 +52,7 @@ contract VoteFuzz is Deployer {
         assertEq(inbox.acceptedBallots(electionId), 1);
 
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
         assertEq(inbox.acceptedBallots(electionId), 1, "double-vote accepted in same election");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
@@ -89,7 +90,7 @@ contract VoteFuzz is Deployer {
 
         uint256[] memory secondInputs = voteInputs(electionId, election, nullifier, secondBallot);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.NullifierUsed.selector);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
         assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot in this election");
         assertEq(inbox.ballotHashOf(electionId, nullifier), stored, "first ballot must not be superseded");

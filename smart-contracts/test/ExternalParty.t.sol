@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -11,6 +11,7 @@ import {ReasonCodes} from "../src/ReasonCodes.sol";
 import {EligibleSet} from "../src/tree/EligibleSet.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 
 /// @notice Super admin / admin / election staff approvals and the per-election
 ///         external-party factory that can veto a registered voter at cast time.
@@ -250,7 +251,7 @@ contract ExternalPartyTest is Deployer {
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
         inputs[0] = uint256(staleEligible);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.EligibleRootMismatch.selector);
+        vm.expectRevert(IBallotInbox.EligibleRootMismatch.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
     }
 }

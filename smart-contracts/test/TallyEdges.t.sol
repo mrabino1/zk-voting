@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
@@ -8,6 +8,7 @@ import {ElectionState} from "../src/interfaces/ElectionParams.sol";
 import {Tally} from "../src/Tally.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
+import {ITallyVerifier} from "../src/interfaces/ITallyVerifier.sol";
 
 /// @notice Tally empty-input, fail-closed proof, unknown election, exact cutoff.
 /// @dev Edge cases: empty array, failed-proof state consistency, warp boundary.
@@ -24,7 +25,7 @@ contract TallyEdgesTest is Deployer {
     }
 
     function testCtorRejectsZeroFactory() public {
-        vm.expectRevert(Tally.ZeroAddress.selector);
+        vm.expectRevert(ITallyVerifier.ZeroAddress.selector);
         new Tally(address(0));
     }
 
@@ -33,7 +34,7 @@ contract TallyEdgesTest is Deployer {
         warpClosed(el);
         uint256[] memory empty;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.EmptyCounts.selector);
+        vm.expectRevert(ITallyVerifier.EmptyCounts.selector);
         tally.submitTally(id, empty, a, b, c);
         assertFalse(tally.isTallied(id));
     }
@@ -42,7 +43,7 @@ contract TallyEdgesTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 0;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.UnknownElection.selector);
+        vm.expectRevert(ITallyVerifier.UnknownElection.selector);
         tally.submitTally(99, counts, a, b, c);
     }
 
@@ -53,7 +54,7 @@ contract TallyEdgesTest is Deployer {
         counts[0] = 1;
         verifier.setAccept(false);
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.InvalidProof.selector);
+        vm.expectRevert(ITallyVerifier.InvalidProof.selector);
         tally.submitTally(id, counts, a, b, c);
         assertFalse(tally.isTallied(id));
         assertEq(uint256(IElection(el).state()), uint256(ElectionState.CLOSED));
@@ -80,7 +81,7 @@ contract TallyEdgesTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.ElectionNotClosed.selector);
+        vm.expectRevert(ITallyVerifier.ElectionNotClosed.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
@@ -101,7 +102,7 @@ contract TallyEdgesTest is Deployer {
         warpClosed(el);
         uint256[] memory empty;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.EmptyCounts.selector);
+        vm.expectRevert(ITallyVerifier.EmptyCounts.selector);
         tally.submitAggregateTally(id, empty, bytes32(uint256(1)), a, b, c);
     }
 

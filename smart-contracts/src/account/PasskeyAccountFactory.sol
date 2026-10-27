@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {IPasskeyAccountFactory} from "../interfaces/IPasskeyAccountFactory.sol";
 import {PasskeyAccount} from "./PasskeyAccount.sol";
 
 /// @title PasskeyAccountFactory
@@ -10,12 +11,7 @@ import {PasskeyAccount} from "./PasskeyAccount.sol";
 /// @dev `credIdHash` is keccak256(WebAuthn credential id). It is a device
 ///      handle for the gasless account. It is NOT the vote identity
 ///      (identityCommitment) and MUST NOT be used as a Merkle leaf.
-contract PasskeyAccountFactory {
-    error ZeroAddress();
-
-    /// @notice Emitted when a new account is deployed. `credIdHash` is NOT a vote identity.
-    event AccountCreated(address indexed account, bytes32 indexed credIdHash);
-
+contract PasskeyAccountFactory is IPasskeyAccountFactory {
     address public immutable entryPoint;
 
     constructor(address entryPoint_) {
