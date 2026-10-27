@@ -20,6 +20,9 @@ contract ElectionFactory is IElectionFactory {
     uint8 internal constant MIN_DEPTH = 16;
     uint8 internal constant MAX_DEPTH = 32;
 
+    /// @notice One pause cannot outlive this. Voting resumes if the admin key is lost.
+    uint64 public constant MAX_PAUSE_DURATION = 72 hours;
+
     address public admin;
     address public implementation;
     address public partyRegistryImplementation;
@@ -53,6 +56,10 @@ contract ElectionFactory is IElectionFactory {
     mapping(uint256 => address) private _partyRegistries;
     mapping(uint256 => mapping(address => bool)) private _electionStaff;
     mapping(bytes32 => mapping(address => bool)) public roles;
+
+    /// @notice Start of the current emergency pause. Zero means not paused.
+    ///         Appended so earlier slots are unchanged. Expires after `MAX_PAUSE_DURATION`.
+    uint64 public pausedAt;
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
@@ -96,6 +103,28 @@ contract ElectionFactory is IElectionFactory {
     function setDisclosureInterval(uint64 interval) external onlyAdmin {
         disclosureInterval = interval;
         emit DisclosureIntervalSet(interval);
+    }
+
+    /// @notice Stop ballot and tally submission. Reads stay open. The pause
+    ///         expires on its own so a lost admin key cannot freeze an election.
+    function pause() external onlyAdmin {
+        if (isPaused()) revert AlreadyPaused();
+        pausedAt = uint64(block.timestamp);
+        emit ContractPaused(msg.sender, pausedAt);
+    }
+
+    /// @notice End a pause before it expires.
+    function unpause() external onlyAdmin {
+        if (!isPaused()) revert NotPaused();
+        pausedAt = 0;
+        emit ContractUnpaused(msg.sender);
+    }
+
+    /// @notice True only inside the current pause window.
+    function isPaused() public view returns (bool) {
+        uint64 at = pausedAt;
+        if (at == 0) return false;
+        return block.timestamp < uint256(at) + MAX_PAUSE_DURATION;
     }
 
     /// @notice Audit H-02 / M-02: approve or withdraw a vote verifier for

@@ -7,9 +7,9 @@ import {ElectionParams, TallyScheme} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
-import {IGroth16Verifier} from "./interfaces/IGroth16Verifier.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
+import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
 
 /// @title Tally
 /// @notice Posts a proven (or mock-verified) option-count vector after cutoff.
@@ -33,6 +33,9 @@ import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 ///      `TallyVerifierNotSet`. A verifier reporting `isMock() == true` is
 ///      refused unless the factory explicitly allows mock verifiers (dev / test).
 contract Tally is ITallyVerifier {
+    /// @notice Option-vector bound. A histogram is not one integer per ballot.
+    uint256 public constant MAX_TALLY_OPTIONS = 256;
+
     IElectionFactory private immutable _factory;
 
     /// @inheritdoc ITallyVerifier
@@ -47,6 +50,16 @@ contract Tally is ITallyVerifier {
 
     /// @notice Groth16 verifier for the `TallyPublicInputs` instance. Set once.
     address public tallyProofVerifier;
+
+    /// @dev Appended slot. 1 while a tally submission is inside `nonReentrant`.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
 
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
@@ -70,8 +83,10 @@ contract Tally is ITallyVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external {
+    ) external nonReentrant {
+        _requireNotPaused();
         if (counts.length == 0) revert EmptyCounts();
+        if (counts.length > MAX_TALLY_OPTIONS) revert CountsTooLong();
         if (_tallied[electionId]) revert AlreadyTallied();
 
         (address inbox, address verifier, ElectionParams memory p) = _authorize(electionId);
@@ -113,8 +128,10 @@ contract Tally is ITallyVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external {
+    ) external nonReentrant {
+        _requireNotPaused();
         if (counts.length == 0) revert EmptyCounts();
+        if (counts.length > MAX_TALLY_OPTIONS) revert CountsTooLong();
         if (aggregateHash_ == bytes32(0)) revert AggregateHashRequired();
         if (_tallied[electionId]) revert AlreadyTallied();
 
@@ -192,6 +209,11 @@ contract Tally is ITallyVerifier {
         inbox = election.inbox();
     }
 
+    function _requireNotPaused() internal view {
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("isPaused()"));
+        if (ok && ret.length >= 32 && abi.decode(ret, (bool))) revert ContractPaused();
+    }
+
     function _reportsMock(address verifier_) internal view returns (bool) {
         (bool ok, bytes memory ret) = verifier_.staticcall(abi.encodeWithSignature("isMock()"));
         return ok && ret.length >= 32 && abi.decode(ret, (bool));
@@ -216,7 +238,6 @@ contract Tally is ITallyVerifier {
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) internal view {
-        bool ok = IGroth16Verifier(verifier).verifyProof(a, b, c, input);
-        if (!ok) revert InvalidProof();
+        if (!CappedVerifierCall.accepted(verifier, a, b, c, input)) revert InvalidProof();
     }
 }

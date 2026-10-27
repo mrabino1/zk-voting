@@ -16,6 +16,16 @@ contract ZkVotingEntryPoint is IZkVotingEntryPoint {
     /// @notice Audit M-08: cap on copied returndata (return-bomb guard).
     uint256 public constant MAX_RETURN_BYTES = 256;
 
+    /// @dev 1 while `handleOps` is on the stack. An account execute cannot reenter it.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
+
     /// @notice Pack a UserOp hash bound to this chain and this EntryPoint.
     function getUserOpHash(UserOp calldata op) public view returns (bytes32) {
         return keccak256(
@@ -40,7 +50,7 @@ contract ZkVotingEntryPoint is IZkVotingEntryPoint {
     ///      signature, paymaster) still reverts the batch — the bundler should
     ///      have simulated it — but an execution revert is isolated: it emits
     ///      `UserOpReverted` and the remaining ops still run.
-    function handleOps(UserOp[] calldata ops) external {
+    function handleOps(UserOp[] calldata ops) external nonReentrant {
         uint256 n = ops.length;
         for (uint256 i; i < n; ++i) {
             _handle(ops[i]);

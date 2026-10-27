@@ -19,6 +19,9 @@ interface ITallyVerifier {
     error TallyVerifierNotSet();
     error TallyVerifierAlreadySet();
     error MockVerifierNotAllowed();
+    error ContractPaused();
+    error ReentrantCall();
+    error CountsTooLong();
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
@@ -33,6 +36,9 @@ interface ITallyVerifier {
 
     /// @notice Groth16 verifier for the `TallyPublicInputs` instance. Set once.
     function tallyProofVerifier() external view returns (address);
+
+    /// @notice Largest option vector `submitTally` / `submitAggregateTally` accepts.
+    function MAX_TALLY_OPTIONS() external view returns (uint256);
 
     function setTallyProofVerifier(address verifier_) external;
 

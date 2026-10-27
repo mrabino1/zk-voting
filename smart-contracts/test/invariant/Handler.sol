@@ -235,7 +235,13 @@ contract Handler is Deployer, Ghost {
         bytes memory ballot = encryptedBallot;
         if (ballot.length > 1024) return;
         if (ballot.length == 0) ballot = hex"01";
-        if (nullifier == 0) nullifier = uint256(keccak256(abi.encode(electionSeed, votesAccepted, ballot)));
+        // A residue of zero is rejected. Remap it so the campaign still votes.
+        if (nullifier % 21888242871839275222246405745257275088548364400416034343698204186575808495617 == 0) {
+            nullifier = uint256(keccak256(abi.encode(electionSeed, votesAccepted, ballot)));
+            if (nullifier % 21888242871839275222246405745257275088548364400416034343698204186575808495617 == 0) {
+                nullifier = 1;
+            }
+        }
 
         uint256 commitment = uint256(keccak256(abi.encode(nullifier, "commitment")));
         bool enrolled = voterRegistry.isRegistered(electionId, commitment);

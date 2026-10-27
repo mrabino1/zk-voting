@@ -28,6 +28,16 @@ contract ZkVotingPaymaster is IZkVotingPaymaster {
     address public voterRegistry;
     address public accountFactory;
 
+    /// @dev Appended slot. 1 while `withdraw` is sending ETH.
+    uint256 private _reentrancyLock;
+
+    modifier nonReentrant() {
+        if (_reentrancyLock != 0) revert ReentrantCall();
+        _reentrancyLock = 1;
+        _;
+        _reentrancyLock = 0;
+    }
+
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
         _;
@@ -55,7 +65,7 @@ contract ZkVotingPaymaster is IZkVotingPaymaster {
 
     /// @notice Admin (jurisdiction treasury) may withdraw unused sponsorship ETH.
     ///         Never called against a voter; voters are not charged.
-    function withdraw(address payable to, uint256 amount) external onlyAdmin {
+    function withdraw(address payable to, uint256 amount) external nonReentrant onlyAdmin {
         if (to == address(0)) revert ZeroAddress();
         emit Withdrawn(to, amount);
         (bool ok,) = to.call{value: amount}("");
