@@ -8,11 +8,7 @@ pragma solidity ^0.8.24;
 ///         verification, …). A party may veto a registered person at cast time.
 interface IExternalPartyRegistry {
     event PartyAdded(
-        uint256 indexed electionId,
-        uint256 indexed partyIndex,
-        address indexed operator,
-        uint8 mode,
-        string name
+        uint256 indexed electionId, uint256 indexed partyIndex, address indexed operator, uint8 mode, string name
     );
     event PartyStatusSet(uint256 indexed electionId, uint256 indexed partyIndex, bool active);
     event PartyOperatorSet(uint256 indexed electionId, uint256 indexed partyIndex, address operator);
@@ -41,8 +37,7 @@ interface IExternalPartyRegistry {
 
     function setPartyActive(uint256 partyIndex, bool active) external;
 
-    function reject(uint256 partyIndex, uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash)
-        external;
+    function reject(uint256 partyIndex, uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash) external;
 
     function clearRejection(uint256 partyIndex, uint256 identityCommitment, bytes32 evidenceHash) external;
 
@@ -51,6 +46,10 @@ interface IExternalPartyRegistry {
     function partyCount() external view returns (uint256);
 
     function hasActiveGates() external view returns (bool);
+
+    /// @notice True when any active must-attest party has no current attestation.
+    ///         Used while building `eligibleRoot`. Not a vote-time argument.
+    function missingRequiredAttestation(uint256 identityCommitment) external view returns (bool);
 
     function isRejected(uint256 identityCommitment) external view returns (bool);
 

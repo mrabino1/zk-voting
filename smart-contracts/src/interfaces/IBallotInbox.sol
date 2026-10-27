@@ -26,18 +26,15 @@ interface IBallotInbox {
 
     function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
 
-    /// @notice Same as submitVote, plus a live external-party gate.
-    /// @dev `identityCommitment` is used only for the gate. It is not stored
-    ///      and is not in VoteAccepted. Calldata on an EVM is still public;
-    ///      the civic L2 path checks then discards the commitment.
-    function submitVoteWithClearance(
+    /// @notice Relayer-only batch. When the factory disclosure interval is
+    ///         non-zero, `submitVote` reverts and ballots must arrive together.
+    ///         Acceptance is recorded in nullifier order, in this one transaction.
+    function submitVoteBatch(
         uint256 electionId,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[] calldata publicInputs,
-        bytes calldata encryptedBallot,
-        uint256 identityCommitment,
-        uint256[] calldata mustAttestIds
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots
     ) external;
 }

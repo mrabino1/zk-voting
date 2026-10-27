@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "제품 이름 {brand}. 선택은 여기에 인쇄되지 않습니다.",
     footerExplorerMeta: "{brand} L2 탐색기. 투표용지 평문은 이 체인의 필드가 아닙니다.",
     footerResults: "선거 결과",
+    footerContact: "연락처",
+    footerOpenSource: "{brand}은 100% 오픈 소스이며 무료로 사용할 수 있습니다.",
+    footerContract: "로컬 구현을 위한 계약 작업을 맡습니다.",
+    footerContractCta: "이메일 보내기",
     noscript:
       "{brand}은 기기 passkey(WebAuthn)와 대화하려면 JavaScript가 필요합니다. JavaScript를 켜고 다시 로드하거나, 서기가 운영하는 접근 가능한 투표 사이트를 사용하세요.",
     metaDescription:

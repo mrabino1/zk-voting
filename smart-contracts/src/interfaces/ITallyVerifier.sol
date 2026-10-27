@@ -5,8 +5,10 @@ pragma solidity ^0.8.24;
 
 interface ITallyVerifier {
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
-    event OpenedTallyPosted(
-        uint256 indexed electionId, bytes32 countsHash, bytes32 openingsHash, bytes32 ballotRoot, uint256 total
+    /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
+    ///         not to a per-ballot opening list.
+    event AggregateTallyPosted(
+        uint256 indexed electionId, bytes32 countsHash, bytes32 aggregateHash, bytes32 ballotRoot, uint256 total
     );
 
     function submitTally(
@@ -17,12 +19,12 @@ interface ITallyVerifier {
         uint256[2] calldata c
     ) external;
 
-    /// @notice OPENS_BALLOTS path: `openings[i]` is the option index of accepted ballot `i`.
-    ///         `histogram(openings) == counts` and `openings.length == acceptedBallots`.
-    function submitOpenedTally(
+    /// @notice Aggregate path: `counts` is the option histogram and `aggregateHash`
+    ///         binds the homomorphic product. There is no per-ballot openings array.
+    function submitAggregateTally(
         uint256 electionId,
         uint256[] calldata counts,
-        uint256[] calldata openings,
+        bytes32 aggregateHash_,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
