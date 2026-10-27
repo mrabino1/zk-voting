@@ -1,4 +1,4 @@
-# Repo-wide. App-specific rules live in demo/.gitignore.
+# Repo-wide. App-specific rules live in voting_node/.gitignore.
 
 # Dependencies
 node_modules/

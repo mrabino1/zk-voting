@@ -2,7 +2,7 @@
 
 The informational landing page for **zk-voting.org**: what ZK Voting is, who it's for, why it matters, and a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no JavaScript, no build step, no tracking and no third-party assets.
 
-The voting demo is a separate app (`demo/`). This site only links to it; never embed or iframe it here.
+The voting demo is a separate app (`voting_node/`). This site only links to it; never embed or iframe it here.
 
 - `public/`: the site itself (`index.html`, `styles.css`, `favicon.svg`).
 - `Dockerfile` + `nginx.conf`: serves `public/` with nginx on port 80, with a `GET /health` endpoint.

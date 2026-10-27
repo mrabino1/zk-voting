@@ -46,10 +46,10 @@ const check = await parseEntropyString(pasted, { allowHex: true }); // { ok, sou
 
 Domain-separated hashing: `zk-entropy/v1/{init,absorb,output,commit}` for the pool and `zk-entropy/ceremony/v1/{genesis,step,final}` for the chain. The local transcript records event counts and an estimate of collected bits, never key codes, coordinates or text.
 
-The demo vendors `src/index.js` as `demo/apps/node/public/vendor/zk-entropy.js`; a demo test fails if the two drift. After editing the library run:
+The demo vendors `src/index.js` as `voting_node/apps/node/public/vendor/zk-entropy.js`; a demo test fails if the two drift. After editing the library run:
 
 ```bash
-cp zk-entropy/src/index.js demo/apps/node/public/vendor/zk-entropy.js
+cp zk-entropy/src/index.js voting_node/apps/node/public/vendor/zk-entropy.js
 ```
 
 ## Tests
