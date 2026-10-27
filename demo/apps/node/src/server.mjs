@@ -53,6 +53,7 @@ import { feedbackRouter } from './routes/feedback.mjs';
 import { ceremonyAdminRouter, ceremonyPublicRouter } from './routes/ceremony.mjs';
 import { createCeremonyService } from './ceremony/service.mjs';
 import { ceremonyCsp, ceremonyHtmlFile, snarkjsVendorRoute } from './ceremony/web.mjs';
+import { zkArtifactRoute } from './voteProof.mjs';
 import { layoutPublicRouter, siteAdminRouter } from './routes/siteAdmin.mjs';
 import { escapeHtml, getBranding, renderBrandedHtml, setBrandingProvider } from './branding.mjs';
 import { createLayoutService } from './layout.mjs';
@@ -396,6 +397,7 @@ export async function createApp(overrides = {}) {
   app.use(repoLlmsRouter());
   app.use(selfHostingDocsRouter());
   app.get('/vendor/snarkjs.min.js', snarkjsVendorRoute());
+  app.use(zkArtifactRoute());
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'not found', nfp: true });
   });

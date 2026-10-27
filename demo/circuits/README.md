@@ -39,6 +39,8 @@ Foundry unit tests and the demo Node tree still use `KeccakHasher` (`keccak-dev-
 - `pathIndices[levels]` (0 = current is left child, 1 = right)
 - `disqLow`, `disqNext` — indexed-chain gap around the leaf
 - `disqPathElements[levels]`, `disqPathIndices[levels]` — inclusion of `Hash(disqLow, disqNext)` under `disqRoot`
+- `choice` — one option index in 0..15
+- `choiceRandomness` — private, so `Poseidon(choice, choiceRandomness)` does not reveal the option
 
 Public instance — **same order** as `@zk-voting/proof-helpers` `serializePublicInputs` and `IBallotInbox.submitVote`:
 
@@ -52,7 +54,7 @@ Constraints:
 2. Merkle inclusion of `leaf` under `root` (the **eligible** tree: registered ∩ ¬disqualified).
 3. `nullifier = Hash(nullifierSecret, electionId)`.
 4. Non-membership of `leaf` in the disqualification chain under `disqRoot`. The chain is sorted currently-disqualified commitments with a 0 sentinel: `Hash(0, v0) … Hash(vLast, 0)`, or `Hash(0, 0)` when nobody is disqualified. The witness is one link whose open interval contains `leaf`. A disqualified leaf is a boundary, so the range check fails. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). `MockVerifier` evaluates this only when a test arms the witness.
-5. `ballotHash` is a public commitment to the encrypted ballot. Choice bits are not plaintext public inputs.
+5. `ballotHash = Poseidon(choice, choiceRandomness)`, with `choice` in 0..15. Choice is not a public input. The ElGamal body after an `AG` tag is not constrained in this circuit.
 
 The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier; not last-vote-counts). The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.
 
@@ -78,14 +80,12 @@ Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to matc
 **Solidity (`TALLY_SOL_MOCK_V1`, `TallyPublicInputs.sol` / `Tally.sol`):**
 
 ```text
-[version=1, electionId, acceptedCount, countsHash, ballotRoot, openingsHash]
+[version=2, electionId, acceptedCount, countsHash, ballotRoot, aggregateHash, tallyKeyHash]
 ```
 
-These encodings are versioned separately. Circom fixes `nOptions` at compile time. Solidity hashes a variable-length `counts` vector and binds `ballotRoot` / `openingsHash` for the OPENS_BALLOTS path. Do not export a Groth16 Solidity verifier from this R1CS and set `ElectionParams.verifier` to it without a translating wrapper. Foundry tests keep `MockVerifier`.
+Word 5 is one aggregate hash. It is not a list of per-ballot openings. Plurality tally multiplies one-hot P-256 ElGamal ciphertexts and decrypts the product. Ranked tally is disabled until a verified shuffle exists (`RANKED_TALLY_DISABLED`). Do not publish decrypted ballots linked to nullifiers.
 
-Production tallying is homomorphic: inbox ciphertexts (ElGamal or equivalent) are multiplied, then a decryption proof (or mixnet) shows the same counts. The summation constraints stay; the ballot wires become decrypted shares. Do not publish decrypted ballots linked to nullifiers.
-
-The first vertical slice that **opens** ballots is off-circuit: Node P-256 ECIES under a Feldman t-of-n guardian key (**NON-PRODUCTION**) plus `Tally.submitOpenedTally` histogram checks. Homomorphic aggregation versus a mixnet is not selected. See [`docs/TALLY_GUARDIANS.md`](../docs/TALLY_GUARDIANS.md) and the root README “Tally encryption (honest status)”.
+The vote circuit binds `ballotHash` to `Poseidon(choice, choiceRandomness)` with `choice` in 0..15 and the randomness private. The ElGamal bytes after an `AG` tag are not checked inside this circuit. A ceremony circuit has to add that curve check. `circuits:smoke` writes an **UNTRUSTED** Vote(4) dev zkey under `circuits/build/` (gitignored). Production replaces that file with a ceremony Vote(20) zkey and regenerates the Solidity verifier. The committed Vote(4) fixture is stale until `circuits:smoke` is re-run against this circuit.
 
 ---
 

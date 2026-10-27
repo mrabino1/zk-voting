@@ -1,17 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Open accepted envelopes with t verified guardian partials.
-// Aggregation is delegated; the only usable adapter is `undecided`.
+// Plurality tally decrypts the product of one-hot ciphertexts.
+// Individual envelopes are not opened. Ranked ballots are not tallied here.
 
-import { getAggregator } from './guardians/aggregate.mjs';
-import { decryptEnvelopeWithPartials } from './guardians/threshold.mjs';
+import { aggregateCiphertexts, decryptAggregateCounts } from './aggregateBallot.mjs';
+import { electionHasRanked } from './ballot.mjs';
 import { HttpError } from './http.mjs';
-import {
-  TALLY_SCHEME_OPENS_BALLOTS,
-  countsEqual,
-  expectedCountLength,
-  histogramFromOpenings,
-  unpackChoices,
-} from './tallyCrypto.mjs';
+import { TALLY_SCHEME_OPENS_BALLOTS, countsEqual, expectedCountLength } from './tallyCrypto.mjs';
 
 export function isOpensBallots(election) {
   return (
@@ -33,27 +27,20 @@ function httpFromCrypto(err) {
 }
 
 /**
- * Decrypt each aggregation unit. Opened choices are returned to the caller
- * and are not written onto vote rows.
- * @param {object[]} partialGroups `{ index, partials: [{ ballotHash, point, proof }] }[]`
+ * Sum AG envelopes and threshold-decrypt each option total.
+ * The returned object has counts only. There is no per-ballot openings list.
  */
 export async function openBallots(election, envelopes, partialGroups, questions) {
+  if (electionHasRanked(election)) {
+    throw new HttpError(
+      409,
+      'ranked tally is disabled until a verified shuffle exists; individual envelopes are not opened',
+      { code: 'RANKED_TALLY_DISABLED' },
+    );
+  }
   const ceremony = election?.tallyCeremony;
   if (!ceremony || ceremony.status !== 'ready' || !ceremony.publicKey || !ceremony.verificationKeys) {
     throw new HttpError(409, 'guardian ceremony is not ready', { code: 'CEREMONY_INCOMPLETE' });
-  }
-  let units;
-  try {
-    units = getAggregator(ceremony.aggregation || 'undecided').prepare(envelopes);
-  } catch (err) {
-    httpFromCrypto(err);
-  }
-  if (units.length !== envelopes.length) {
-    throw new HttpError(
-      409,
-      'the selected aggregator did not return one ciphertext per ballot',
-      { code: 'AGGREGATION_UNDECIDED' },
-    );
   }
   if (envelopes.length !== election.acceptedBallots) {
     throw new HttpError(409, 'envelope count does not match acceptedBallots', {
@@ -62,55 +49,44 @@ export async function openBallots(election, envelopes, partialGroups, questions)
       acceptedBallots: election.acceptedBallots,
     });
   }
-  const nSlots = Math.max(expectedCountLength(questions || election.questions), 1);
-  const openings = [];
-  for (const unit of units) {
-    const partials = [];
-    for (const group of partialGroups || []) {
-      const match = (group.partials || []).find((row) => String(row.ballotHash) === String(unit.ballotHash));
-      if (match) partials.push({ ...match, index: group.index, ballotHash: unit.ballotHash });
-    }
-    let plain;
-    try {
-      plain = await decryptEnvelopeWithPartials({
-        envelopeHex: unit.encryptedBallot,
-        electionId: election.id,
-        ballotHash: unit.ballotHash,
-        jointPublicKey: ceremony.publicKey,
-        verificationKeys: ceremony.verificationKeys,
-        partials,
-        threshold: ceremony.threshold,
-      });
-    } catch (err) {
-      httpFromCrypto(err);
-    }
-    let choices;
-    try {
-      choices = unpackChoices(plain);
-    } catch (err) {
-      throw new HttpError(400, 'opened ballot plaintext is not a packed choice vector', {
-        code: 'PLAINTEXT_INVALID',
-        detail: err.message,
-      });
-    }
-    const idx = Number(choices[0]);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= nSlots) {
-      throw new HttpError(400, 'opened choice out of range', { code: 'OPTION_RANGE', idx, nSlots });
-    }
-    openings.push(idx);
+  let product;
+  try {
+    product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
+  } catch (err) {
+    httpFromCrypto(err);
   }
-  const counts = histogramFromOpenings(openings, nSlots);
+  const nSlots = Math.max(expectedCountLength(questions || election.questions), 1);
+  if (product.nOptions !== nSlots) {
+    throw new HttpError(400, 'aggregate envelope width does not match the ballot', {
+      code: 'OPTION_RANGE',
+      nOptions: product.nOptions,
+      nSlots,
+    });
+  }
+  let counts;
+  try {
+    counts = decryptAggregateCounts({
+      product,
+      electionId: election.id,
+      jointPublicKey: ceremony.publicKey,
+      verificationKeys: ceremony.verificationKeys,
+      partialGroups,
+      threshold: ceremony.threshold,
+      maxCount: election.acceptedBallots,
+    });
+  } catch (err) {
+    httpFromCrypto(err);
+  }
   return {
-    openings,
     counts,
     nSlots,
-    aggregation: ceremony.aggregation || 'undecided',
+    aggregation: 'homomorphic',
   };
 }
 
 export function rejectInventedCounts(submitted, derived) {
   if (!countsEqual(submitted, derived)) {
-    throw new HttpError(400, 'counts[] do not match opened ballots', {
+    throw new HttpError(400, 'counts[] do not match the aggregate tally', {
       code: 'INVENTED_COUNTS',
       submitted,
       derived,

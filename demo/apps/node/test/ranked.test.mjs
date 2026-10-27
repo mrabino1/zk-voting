@@ -226,13 +226,13 @@ describe('Ranked-choice ballots and IRV tally', () => {
     assert.equal(ok.status, 201, ok.json?.error);
     assert.equal(ok.json.vote.choice, undefined);
     assert.equal(ok.json.vote.ranking, undefined);
-    const env = store.listEnvelopes(id).find((row) => Array.isArray(row.rankingPayload));
-    assert.deepEqual(env.rankingPayload[0].ranking, ['b', 'c', 'a']);
+    const env = store.listEnvelopes(id).find((row) => row.nullifier);
+    assert.equal(env.rankingPayload, undefined);
     assert.equal(env.choice, undefined);
     assert.equal(env.userId, undefined);
   });
 
-  test('IRV tally stores winner and round transcript', async () => {
+  test('ranked tally is refused instead of opening envelopes', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -271,20 +271,11 @@ describe('Ranked-choice ballots and IRV tally', () => {
       jar: adminJar,
       body: {},
     });
-    assert.equal(tallied.status, 200, tallied.json?.error);
-    assert.equal(tallied.json.election.stateName, 'Tallied');
-    assert.equal(tallied.json.election.tally.ballotMethod, 'ranked_choice');
-    assert.deepEqual(tallied.json.election.tally.counts, [5, 4, 3]);
-    const irv = tallied.json.election.tally.questions[0];
-    assert.equal(irv.winner, 'a');
-    assert.equal(irv.winnerLabel, 'Alex Rivera');
-    assert.equal(irv.rounds[0].eliminated, 'c');
-    assert.equal(irv.rounds[1].winner, 'a');
-    assert.equal(irv.rounds[1].counts.a, 8);
-
-    const publicRow = await api('GET', `/api/elections/${id}`);
-    assert.equal(publicRow.json.tally.questions[0].winner, 'a');
-    assert.equal(publicRow.json.tally.questions[0].ranking, undefined);
+    assert.equal(tallied.status, 409, tallied.json?.error);
+    assert.equal(tallied.json.code, 'RANKED_TALLY_DISABLED');
+    const stored = store.listEnvelopes(id);
+    assert.ok(stored.length > 1);
+    assert.equal(stored.some((row) => row.rankingPayload), false);
   });
 
   test('plurality tally is unchanged', async () => {

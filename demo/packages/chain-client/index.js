@@ -120,6 +120,20 @@ const INBOX_ABI = [
   },
   {
     type: "function",
+    name: "submitVoteBatch",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2][]" },
+      { name: "b", type: "uint256[2][2][]" },
+      { name: "c", type: "uint256[2][]" },
+      { name: "publicInputs", type: "uint256[][]" },
+      { name: "encryptedBallots", type: "bytes[]" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "nullifierUsed",
     stateMutability: "view",
     inputs: [
@@ -144,33 +158,6 @@ const INBOX_ABI = [
       { name: "nullifier", type: "uint256" },
     ],
     outputs: [{ type: "bytes32" }],
-  },
-];
-
-/**
- * Opt-in only. `submitVoteWithClearance` puts the voter's plaintext
- * identityCommitment in calldata next to the nullifier — a permanent public
- * link from roll entry to ballot. It is NOT part of INBOX_ABI so no default
- * client path can call it. Import CLEARANCE_INBOX_ABI explicitly only for
- * contract tests; the fix is in-circuit clearance
- * (docs/proposals/ballot-unlinkability-contracts.md).
- */
-const CLEARANCE_INBOX_ABI = [
-  {
-    type: "function",
-    name: "submitVoteWithClearance",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "electionId", type: "uint256" },
-      { name: "a", type: "uint256[2]" },
-      { name: "b", type: "uint256[2][2]" },
-      { name: "c", type: "uint256[2]" },
-      { name: "publicInputs", type: "uint256[]" },
-      { name: "encryptedBallot", type: "bytes" },
-      { name: "identityCommitment", type: "uint256" },
-      { name: "mustAttestIds", type: "uint256[]" },
-    ],
-    outputs: [],
   },
 ];
 
@@ -723,7 +710,6 @@ module.exports = {
   ZK_VOTING_CHAIN_ID,
   FACTORY_ABI,
   INBOX_ABI,
-  CLEARANCE_INBOX_ABI,
   PARTY_REGISTRY_ABI,
   ELECTION_ABI,
   rpc,

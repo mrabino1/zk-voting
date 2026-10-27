@@ -278,7 +278,7 @@ describe('multi-question ballots (aspects)', () => {
     assert.equal(publicPage.json.tally.questions[2].prompt, 'Park board — choose up to two');
   });
 
-  test('RANKED questions are skipped in plurality tally', async () => {
+  test('a ranked question disables the whole tally instead of opening envelopes', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -325,10 +325,10 @@ describe('multi-question ballots (aspects)', () => {
       jar: adminJar,
       body: { counts: [1, 0] },
     });
-    assert.equal(tallied.status, 200, tallied.json?.error);
-    assert.equal(tallied.json.election.tally.questions[1].tallied, true);
-    assert.equal(tallied.json.election.tally.questions[1].tallyMethod, 'irv');
-    assert.ok(tallied.json.election.tally.questions[1].winner);
-    assert.deepEqual(tallied.json.election.tally.counts, [1, 0]);
+    assert.equal(tallied.status, 409, tallied.json?.error);
+    assert.equal(tallied.json.code, 'RANKED_TALLY_DISABLED');
+    const stored = store.listEnvelopes(id);
+    assert.equal(stored.some((row) => row.rankingPayload), false);
+    assert.equal(store.requireElection(id).tally, null);
   });
 });

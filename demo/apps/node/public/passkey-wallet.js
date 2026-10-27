@@ -27,8 +27,9 @@
  */
 
 import { brandName } from "./brand.js";
+import { encryptAggregateBallot } from "./aggregate-ballot.js";
+import { P256_G, p256Mul, pointToRaw, randomScalar } from "./p256-math.js";
 import { POSEIDON_HASH_SCHEME, poseidonCommitmentHex } from "./poseidon.js";
-import { encryptToTallyPub, packChoices } from "./tally-crypto.js";
 const DB_NAME = "zk-voting-wallet";
 const DB_VERSION = 2;
 const STORE = "wallet";
@@ -46,7 +47,31 @@ export const DEFAULT_JURISDICTION_ID = "demo";
 
 const WRAP_INFO = ACCOUNT_HKDF_INFO;
 const FALLBACK_INFO = "zk-voting-prf-fallback-v1";
-const FALLBACK_IDENTITY_INFO = "zk-voting-prf-fallback-identity-v1";
+const FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Circuit nullifier: Poseidon(nullifierSecret, electionId). The election id
+ * is the on-chain field element, not a Node uuid. There is no credential-id
+ * derivation of this value.
+ */
+export function electionNullifierHex(nullifierSecret, electionId) {
+  const bytes = nullifierSecret instanceof Uint8Array ? nullifierSecret : new Uint8Array(nullifierSecret);
+  let secret = 0n;
+  for (const b of bytes) secret = (secret << 8n) + BigInt(b);
+  const raw = String(electionId);
+  const eid = (raw.startsWith("0x") || raw.startsWith("0X") ? BigInt(raw) : BigInt(raw)) % FIELD;
+  return poseidonCommitmentHex(secret % FIELD, eid);
+}
+
+export function privateChoiceRandomness() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) + BigInt(b);
+  n %= FIELD;
+  if (n === 0n) n = 1n;
+  return n;
+}
 const PRF_ENABLE_INFO = "zk-voting:prf-enable:v1";
 
 export const STALE_WALLET_MESSAGE =
@@ -525,15 +550,6 @@ async function aesKeyFromFallback(credentialIdBytes) {
   return aesKeyFromHkdf(digest, { salt: ACCOUNT_PRF_DOMAIN, info: FALLBACK_INFO });
 }
 
-async function fallbackIdentityIkm(credentialIdBytes) {
-  return new Uint8Array(
-    await crypto.subtle.digest(
-      "SHA-256",
-      concatBytes(utf8(FALLBACK_IDENTITY_INFO), coerceBytes(credentialIdBytes))
-    )
-  );
-}
-
 async function encryptSeed(aesKey, seed) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(
@@ -892,9 +908,6 @@ async function provisionFromCredential(credential, { displayName, chainId, juris
       const aesKey = await aesKeyFromFallback(credentialId);
       const wrappedSeed = await encryptSeed(aesKey, seed);
       const publicParts = await publicFromSeed(seed);
-      const identityIkm = await fallbackIdentityIkm(credentialId);
-      const identity = await deriveIdentitySecrets(identityIkm);
-      zeroFill(identityIkm);
       await idbPut(
         walletRecordFields({
           credentialId,
@@ -909,13 +922,10 @@ async function provisionFromCredential(credential, { displayName, chainId, juris
             jurisdictionId: ctx.jurisdictionId,
           }),
           publicParts,
-          identityParts: publicFromIdentity(identity),
           fallbackNote:
-            "PRF was unavailable. The account seed is wrapped with a key derived from the credential id after userVerification, and the ZK identity uses a *separate* HKDF domain of that credential id. This is weaker than WebAuthn PRF and is a demo-only path. The trapdoor is still not the account seed.",
+            "IDENTITY_PRF_REQUIRED. The account seed can be wrapped after userVerification, but this authenticator did not return an identity-domain PRF output. The credential id is not a vote identity.",
         })
       );
-      zeroFill(identity.trapdoor);
-      zeroFill(identity.nullifierSecret);
     }
   } finally {
     zeroFill(seed);
@@ -970,14 +980,9 @@ async function unwrapWalletMaterial({ needIdentity = false } = {}) {
       const aesKey = await aesKeyFromFallback(credentialId);
       seed = await decryptSeed(aesKey, rec.wrappedSeed);
       if (needIdentity) {
-        const identityIkm = await fallbackIdentityIkm(credentialId);
-        identity = await deriveIdentitySecrets(identityIkm);
-        zeroFill(identityIkm);
-        if (rec.identityCommitment && identity.commitment !== rec.identityCommitment) {
-          throw new Error(
-            "Identity commitment from the fallback identity domain does not match the stored wallet. Reset the demo wallet and register again."
-          );
-        }
+        throw new Error(
+          "IDENTITY_PRF_REQUIRED. This authenticator has no identity-domain PRF output. The credential id is not used as a vote identity."
+        );
       }
     }
     return { rec, seed, identity };
@@ -1254,84 +1259,64 @@ export async function signUserOp(hash) {
 }
 
 /**
- * Unlock identity secrets under the **identity** PRF/HKDF domain, compute a
- * per-election nullifier, and optionally encrypt a ballot. When `tallyPubKey`
- * is set, the posted envelope is P-256 ECIES to that key (tally-opens path).
- * Otherwise the legacy seed-keyed AES-GCM stand-in is used (only the voter can
- * open it). Zeroes trapdoor and account seed before return. The trapdoor is never
- * included in the returned object.
+ * Unlock identity secrets under the identity PRF domain and compute the
+ * circuit nullifier Poseidon(nullifierSecret, chainElectionId). A plurality
+ * choice is sealed as an AG aggregate envelope. The return value has no
+ * account address, credential id, or userOp hash.
  */
-export async function authorizeBallot({ electionId, ballotBytes, tallyPubKey, choiceIndex } = {}) {
-  const { rec, seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
+export async function authorizeBallot({
+  electionId,
+  chainElectionId,
+  ballotBytes,
+  tallyPubKey,
+  choiceIndex,
+  nOptions,
+} = {}) {
+  const { seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
   let trapdoor = identity.trapdoor;
   let nullifierSecret = identity.nullifierSecret;
   try {
-    const electionKey = keccak256(String(electionId));
-    const nullifier = keccak256Hex(concatBytes(nullifierSecret, electionKey));
+    if (!identity?.nullifierSecret) {
+      throw new Error("IDENTITY_PRF_REQUIRED. Refusing to vote without an identity-domain PRF output.");
+    }
+    const idForNullifier = chainElectionId ?? electionId;
+    let nullifier = null;
+    if (idForNullifier != null && !String(idForNullifier).includes("-")) {
+      nullifier = electionNullifierHex(nullifierSecret, idForNullifier);
+    }
     let encryptedBallot = null;
     let ballotHash = null;
-    if (ballotBytes || choiceIndex != null) {
-      if (tallyPubKey) {
-        let packed;
-        if (choiceIndex != null) packed = packChoices([Number(choiceIndex)]);
-        else packed = coerceBytes(ballotBytes);
-        encryptedBallot = await encryptToTallyPub(tallyPubKey, packed);
-        ballotHash = ballotHashHex(hexToBytes(encryptedBallot));
-      } else {
-        const packed = coerceBytes(ballotBytes);
-        const ikm = await importHkdfIkm(seed);
-        const aesKey = await crypto.subtle.deriveKey(
-          {
-            name: "HKDF",
-            hash: "SHA-256",
-            salt: electionKey,
-            info: textEncoder.encode("zk-voting-ballot-elgamal-standin"),
-          },
-          ikm,
-          { name: "AES-GCM", length: 256 },
-          false,
-          ["encrypt"]
-        );
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const ciphertext = new Uint8Array(
-          await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, packed)
-        );
-        const blob = concatBytes(iv, ciphertext);
-        encryptedBallot = "0x" + bytesToHex(blob);
-        ballotHash = ballotHashHex(blob);
+    let choice = null;
+    let choiceRandomness = null;
+    if (choiceIndex != null) {
+      const n = Number(nOptions ?? Number(choiceIndex) + 1);
+      choice = Number(choiceIndex);
+      choiceRandomness = privateChoiceRandomness();
+      let joint = tallyPubKey;
+      if (!joint) {
+        joint = "0x" + bytesToHex(pointToRaw(p256Mul(randomScalar(), P256_G)));
       }
+      const sealed = encryptAggregateBallot({
+        jointPublicKey: joint,
+        choice,
+        choiceRandomness,
+        nOptions: n,
+      });
+      encryptedBallot = sealed.encryptedBallot;
+      ballotHash = sealed.ballotHash;
+    } else if (ballotBytes) {
+      const blob = coerceBytes(ballotBytes);
+      encryptedBallot = "0x" + bytesToHex(blob);
+      ballotHash = ballotHashHex(blob);
     }
-    // v2: a fresh random salt per authorization, so the hash cannot be
-    // recomputed from the (registration-time) address and the public ballot
-    // hash. The hash and signature are local-only; the vote POST omits them.
-    const userOpSalt = crypto.getRandomValues(new Uint8Array(32));
-    const userOpMaterial = keccak256(
-      concatBytes(
-        textEncoder.encode("zk-voting.userop.v2"),
-        userOpSalt,
-        coerceBytes(rec.address),
-        electionKey,
-        ballotHash ? hexToBytes(ballotHash) : new Uint8Array(32)
-      )
-    );
-    const key = await crypto.subtle.importKey(
-      "raw",
-      seed,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, userOpMaterial));
     return {
       identityCommitment: identity.commitment,
-      address: rec.address,
-      addressScheme: rec.addressScheme || ADDRESS_SCHEME,
       nullifier,
       encryptedBallot,
       ballotHash,
-      signature: "0x" + bytesToHex(signature),
-      userOpHash: keccak256Hex(userOpMaterial),
-      credentialId: rec.credentialId,
+      choice,
+      choiceRandomness: choiceRandomness == null ? null : choiceRandomness.toString(),
+      hasher: POSEIDON_HASH_SCHEME,
     };
   } finally {
     zeroFill(seed);
