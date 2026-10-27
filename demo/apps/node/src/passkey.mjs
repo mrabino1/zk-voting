@@ -77,14 +77,22 @@ export function createPasskeyService(config, store, hooks = {}) {
     }));
   }
 
-  async function beginRegister({ user, handle, acceptedTerms }) {
+  function ceremonyBinding(webauthn) {
+    const rpID = webauthn?.rpID || config.rpID;
+    const origins =
+      Array.isArray(webauthn?.origins) && webauthn.origins.length ? webauthn.origins.slice() : config.origins;
+    return { rpID, origins };
+  }
+
+  async function beginRegister({ user, handle, acceptedTerms, webauthn }) {
     if (!user && !handle) throw new HttpError(400, 'handle required');
     const userName = user?.handle || String(handle).trim();
     if (!userName) throw new HttpError(400, 'handle required');
     if (user) assertPasskeyRoom(user);
+    const binding = ceremonyBinding(webauthn);
     const options = await generateReg({
       rpName: config.rpName,
-      rpID: config.rpID,
+      rpID: binding.rpID,
       userName,
       userDisplayName: userName,
       userID: user ? new TextEncoder().encode(user.id) : undefined,
@@ -93,7 +101,7 @@ export function createPasskeyService(config, store, hooks = {}) {
       authenticatorSelection: {
         residentKey: 'required',
         requireResidentKey: true,
-        userVerification: 'preferred',
+        userVerification: 'required',
       },
       extensions: { prf: {} },
     });
@@ -105,6 +113,8 @@ export function createPasskeyService(config, store, hooks = {}) {
       userId: user?.id || null,
       handle: userName,
       acceptedTerms: Boolean(acceptedTerms),
+      rpID: binding.rpID,
+      origins: binding.origins,
     });
     return options;
   }
@@ -121,9 +131,9 @@ export function createPasskeyService(config, store, hooks = {}) {
       verification = await verifyReg({
         response: body,
         expectedChallenge: pending.challenge,
-        expectedOrigin: config.origins,
-        expectedRPID: config.rpID,
-        requireUserVerification: false,
+        expectedOrigin: pending.origins || config.origins,
+        expectedRPID: pending.rpID || config.rpID,
+        requireUserVerification: true,
       });
     } catch (err) {
       throw new HttpError(400, `passkey registration failed: ${err.message || err}`);
@@ -213,17 +223,18 @@ export function createPasskeyService(config, store, hooks = {}) {
     return await store.ensureUser({ handle: pending.handle, role: 'voter' });
   }
 
-  async function beginLogin({ user, handle } = {}) {
+  async function beginLogin({ user, handle, webauthn } = {}) {
     const trimmedHandle = handle != null && String(handle).trim() ? String(handle).trim() : '';
     const account = user || (trimmedHandle ? store.getUserByHandle(trimmedHandle) : null);
     if (trimmedHandle && !account) throw new HttpError(404, 'unknown handle');
     const creds = account ? existingCredentials(account) : [];
+    const binding = ceremonyBinding(webauthn);
     // Discoverable / resident-key login: omit allowCredentials so
     // the authenticator can present the passkey. Handle-scoped login only
     // lists that person's credentials when they already exist.
     const options = await generateAuth({
-      rpID: config.rpID,
-      userVerification: 'preferred',
+      rpID: binding.rpID,
+      userVerification: 'required',
       ...(creds.length ? { allowCredentials: creds } : {}),
       extensions: { prf: {} },
     });
@@ -233,6 +244,8 @@ export function createPasskeyService(config, store, hooks = {}) {
       challenge: options.challenge,
       key: account ? `auth:${account.id}` : `auth:${options.challenge}`,
       userId: account?.id || null,
+      rpID: binding.rpID,
+      origins: binding.origins,
     });
     return options;
   }
@@ -255,9 +268,9 @@ export function createPasskeyService(config, store, hooks = {}) {
       verification = await verifyAuth({
         response: body,
         expectedChallenge: pending.challenge,
-        expectedOrigin: config.origins,
-        expectedRPID: config.rpID,
-        requireUserVerification: false,
+        expectedOrigin: pending.origins || config.origins,
+        expectedRPID: pending.rpID || config.rpID,
+        requireUserVerification: true,
         credential: {
           id: credential.id,
           publicKey: bytesFromB64url(credential.publicKey),

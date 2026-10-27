@@ -40,6 +40,10 @@ export async function renderSetup(main, ctx) {
     handle: "",
     setupToken: "",
     acceptedTerms: false,
+    prepared: null,
+    preparedKey: "",
+    prepFailedKey: "",
+    preparingKey: "",
     mfa: null,
     chainChoice: null,
     chainCustom: "",
@@ -69,14 +73,8 @@ export async function renderSetup(main, ctx) {
     try {
       await fn();
     } catch (err) {
-      const code = err?.data?.code;
-      state.error =
-        code === "SETUP_ADMIN_EXISTS"
-          ? "A super admin already exists. First-run setup is closed. Sign in instead."
-          : /cancel|not allowed|abort/i.test(err?.message || "")
-            ? "The passkey prompt was cancelled."
-            : err?.message || "That did not work.";
-      if (code === "SETUP_ADMIN_EXISTS") await refresh();
+      state.error = wallet.webAuthnErrorMessage(err);
+      if (err?.data?.code === "SETUP_ADMIN_EXISTS") await refresh();
     } finally {
       state.busy = false;
       paint();
@@ -95,13 +93,85 @@ export async function renderSetup(main, ctx) {
     return true;
   }
 
+  function adminHandle() {
+    return (state.handle || state.status?.suggestedHandle || "admin").trim();
+  }
+
+  function ceremonyKey() {
+    const token = state.status?.setupTokenRequired ? String(state.setupToken || "") : "";
+    return JSON.stringify({
+      handle: adminHandle(),
+      token,
+      terms: state.acceptedTerms,
+      needs: Boolean(state.status?.needsAdmin),
+    });
+  }
+
+  function formReady() {
+    if (!state.status?.needsAdmin || state.mfa) return false;
+    if (!state.acceptedTerms) return false;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,31}$/.test(adminHandle())) return false;
+    if (state.status?.setupTokenRequired && !String(state.setupToken || "").trim()) return false;
+    return true;
+  }
+
+  async function prefetchCeremony({ force = false } = {}) {
+    if (!wallet.hasWebAuthn() || !formReady()) return;
+    const key = ceremonyKey();
+    if (force) state.prepFailedKey = "";
+    if (state.prepared && state.preparedKey === key) return;
+    if (state.prepFailedKey === key || state.preparingKey === key) return;
+    state.preparingKey = key;
+    const handle = adminHandle();
+    const extraBody = state.status?.setupTokenRequired ? { setupToken: state.setupToken } : {};
+    try {
+      const server = await api("/api/setup/admin/begin", {
+        method: "POST",
+        body: { displayName: handle, handle, acceptedTerms: true, ...(extraBody || {}) },
+      });
+      const options = server?.publicKey ? server : server?.options ? server.options : server || {};
+      options.displayName = handle;
+      const prepared = await wallet.prepareRegistrationCeremony(options);
+      if (ceremonyKey() !== key) return;
+      state.prepared = prepared;
+      state.preparedKey = key;
+      state.prepFailedKey = "";
+    } catch {
+      if (ceremonyKey() === key) {
+        state.prepared = null;
+        state.preparedKey = "";
+        state.prepFailedKey = key;
+      }
+    } finally {
+      if (state.preparingKey === key) state.preparingKey = "";
+    }
+  }
+
   async function createAdmin(event) {
     event.preventDefault();
-    await run(async () => {
-      if (!state.acceptedTerms) throw new Error("Accept the Terms of Use to continue.");
-      const handle = (state.handle || state.status?.suggestedHandle || "admin").trim();
-      const extraBody = state.status?.setupTokenRequired ? { setupToken: state.setupToken } : {};
-      const record = await wallet.registerPasskey({
+    if (state.busy) return;
+    if (!state.acceptedTerms) {
+      state.error = "Accept the Terms of Use to continue.";
+      paint();
+      announce?.(state.error);
+      return;
+    }
+    const key = ceremonyKey();
+    if (!(state.prepared && state.preparedKey === key)) {
+      state.error = wallet.webAuthnErrorMessage({ code: "PASSKEY_NOT_READY" });
+      prefetchCeremony({ force: true });
+      paint();
+      announce?.(state.error);
+      return;
+    }
+    const handle = adminHandle();
+    const extraBody = state.status?.setupTokenRequired ? { setupToken: state.setupToken } : {};
+    const prepared = state.prepared;
+    state.prepared = null;
+    state.preparedKey = "";
+    let pending;
+    try {
+      pending = wallet.registerPasskey({
         api,
         displayName: handle,
         acceptedTerms: true,
@@ -109,7 +179,16 @@ export async function renderSetup(main, ctx) {
         finishPath: "/api/setup/admin/finish",
         extraBody,
         strict: true,
+        prepared,
       });
+    } catch (err) {
+      state.error = wallet.webAuthnErrorMessage(err);
+      paint();
+      announce?.(state.error);
+      return;
+    }
+    await run(async () => {
+      const record = await pending;
       if (afterSession(record.finishResult || {})) {
         state.info = `Super admin ${handle} created. Next: choose the chain id.`;
       }
@@ -197,6 +276,9 @@ export async function renderSetup(main, ctx) {
             required: true,
             onInput: (e) => {
               state.handle = e.target.value;
+              state.prepared = null;
+              state.preparedKey = "";
+              prefetchCeremony();
             },
           }),
           h("span", { class: "field-hint", text: "2–32 letters, digits, dot, dash or underscore. Default comes from ADMIN_HANDLE." })
@@ -212,11 +294,21 @@ export async function renderSetup(main, ctx) {
                 type: "password",
                 autocomplete: "off",
                 required: true,
+                value: state.setupToken || "",
                 onInput: (e) => {
                   state.setupToken = e.target.value;
+                  state.prepared = null;
+                  state.preparedKey = "";
+                  prefetchCeremony();
                 },
               }),
-              h("span", { class: "field-hint", text: "The SETUP_TOKEN value the operator set on the server." })
+              h("span", {
+                class: "field-hint",
+                text:
+                  s.setupTokenSource === "generated"
+                    ? "Printed once in the server log for this process. It is not shown here. A restart before you finish this step replaces it."
+                    : "The SETUP_TOKEN value from the server environment.",
+              })
             )
           : null,
         h(
@@ -228,6 +320,7 @@ export async function renderSetup(main, ctx) {
             checked: state.acceptedTerms,
             onChange: (e) => {
               state.acceptedTerms = Boolean(e.target.checked);
+              prefetchCeremony();
             },
           }),
           h("span", {}, "I agree to the ", h("a", { href: "/terms", "data-nav": "", text: "Terms of Use" }), ".")

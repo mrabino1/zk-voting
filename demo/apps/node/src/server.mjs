@@ -10,10 +10,11 @@ import express from 'express';
 
 import { attachAuth, enforceApiKeyAccess, isBallotRequest } from './auth.mjs';
 import { corsOptionsDelegate } from './corsPolicy.mjs';
-import { installConsoleCapture, recordLog, setLogLevel } from './superAdmin/logs.mjs';
+import { installConsoleCapture, recordLog, setLogLevel, watchSecrets } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
 import { getConfig } from './config.mjs';
+import { announceGeneratedSetupToken } from './setupToken.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
@@ -253,6 +254,8 @@ export async function createApp(overrides = {}) {
     ...configOverrides
   } = overrides;
   const config = getConfig(configOverrides);
+  watchSecrets([config.setupToken]);
+  announceGeneratedSetupToken(config);
   const writer = openNodeWriter(config);
   config.writerActive = writer.active;
   config.writerLeaseHandle = writer.lease;
@@ -274,7 +277,7 @@ export async function createApp(overrides = {}) {
     }
   }
   if (typeof runtime.archiveEnabled === 'boolean') config.archiveEnabled = runtime.archiveEnabled;
-  installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper]);
+  installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper, config.setupToken]);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);

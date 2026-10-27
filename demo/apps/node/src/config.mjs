@@ -14,6 +14,7 @@ import {
 import { normalizeEmail } from './identity.mjs';
 import { resolveEnvCeremonyUrl, resolveEnvEntropy } from './entropy.mjs';
 import { DEFAULT_CHAIN_ID, resolveEnvChainId } from './setup.mjs';
+import { resolveSetupToken } from './setupToken.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -161,6 +162,122 @@ function resolveVoteAuthority(overrides, defaultOrigins) {
   const publicBaseUrl = publicRaw || (voteFqdn ? `https://${voteFqdn}` : '');
 
   return { voteFqdn, rpID, origins, publicBaseUrl };
+}
+
+/**
+ * Parent domains whose subdomains may host this Node. A rotating test
+ * hostname is allowed when it equals a suffix or is one label-path under it.
+ * Values come from `WEBAUTHN_HOST_SUFFIXES` (comma-separated). No host is
+ * built into the source.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+export function parseHostSuffixes(value) {
+  const items = Array.isArray(value) ? value : String(value || '').split(',');
+  const out = [];
+  for (const item of items) {
+    const host = String(item || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, '')
+      .replace(/^\*\./, '')
+      .replace(/^\./, '');
+    if (!host || host.includes('://') || host.includes('/') || host.includes(':') || host.includes('*')) continue;
+    if (!/^[a-z0-9.-]+$/.test(host) || !host.includes('.') || host.startsWith('.') || host.endsWith('.') || host.includes('..')) {
+      continue;
+    }
+    if (isDevHost(host) || isIpv4Literal(host)) continue;
+    if (!out.includes(host)) out.push(host);
+  }
+  return out;
+}
+
+function headerFirst(req, name) {
+  const headers = req?.headers || {};
+  const value = typeof req?.get === 'function' ? req.get(name) : headers[name];
+  return String(value || '')
+    .split(',')[0]
+    .trim();
+}
+
+function hostnameOf(hostHeader) {
+  const raw = String(hostHeader || '')
+    .trim()
+    .toLowerCase();
+  if (!raw) return '';
+  if (raw.startsWith('[')) {
+    const end = raw.indexOf(']');
+    return end === -1 ? '' : raw.slice(1, end);
+  }
+  return raw.replace(/:\d+$/, '').replace(/\.$/, '');
+}
+
+function requestProto(config, req) {
+  if (config?.trustProxy) {
+    const forwarded = headerFirst(req, 'x-forwarded-proto');
+    if (forwarded === 'https' || forwarded === 'http') return forwarded;
+  }
+  if (req?.protocol === 'https' || req?.protocol === 'http') return req.protocol;
+  if (req?.secure) return 'https';
+  return 'http';
+}
+
+function uniqueStrings(list) {
+  const out = [];
+  for (const item of list) {
+    if (item && !out.includes(item)) out.push(item);
+  }
+  return out;
+}
+
+function hostAllowed(config, hostname, origin, proto) {
+  if (isDevHost(hostname)) return proto === 'http' || proto === 'https';
+  if (proto !== 'https') return false;
+  if (config.voteFqdn && hostname === config.voteFqdn) return true;
+  if ((config.origins || []).includes(origin)) return true;
+  const rp = String(config.rpID || '');
+  if (rp && !isDevHost(rp) && (hostname === rp || hostname.endsWith(`.${rp}`))) return true;
+  for (const suffix of config.webauthnHostSuffixes || []) {
+    if (hostname === suffix || hostname.endsWith(`.${suffix}`)) return true;
+  }
+  return false;
+}
+
+function rpIdForHost(config, hostname) {
+  if (isDevHost(hostname)) return 'localhost';
+  const rp = String(config.rpID || '');
+  if (rp && !isDevHost(rp) && (hostname === rp || hostname.endsWith(`.${rp}`))) return rp;
+  return hostname;
+}
+
+/**
+ * RP ID and origins for one WebAuthn ceremony.
+ * The request host is used only when it is already allowed by config
+ * (`VOTE_FQDN`, `WEBAUTHN_ORIGINS`, `RP_ID`, or `WEBAUTHN_HOST_SUFFIXES`).
+ * An unknown Host header does not widen the allowlist.
+ * @param {Record<string, unknown>} config
+ * @param {object} [req]
+ */
+export function resolveRequestWebAuthn(config, req = {}) {
+  const fallbackOrigins = Array.isArray(config.origins) ? config.origins.slice() : [];
+  const fallback = {
+    rpID: config.rpID || 'localhost',
+    origins: fallbackOrigins,
+    origin: fallbackOrigins[0] || '',
+  };
+  const trust = Boolean(config?.trustProxy);
+  const forwardedHost = trust ? headerFirst(req, 'x-forwarded-host') : '';
+  const hostHeader = forwardedHost || headerFirst(req, 'host') || '';
+  const hostname = hostnameOf(hostHeader);
+  const proto = requestProto(config, req);
+  if (!hostname || !hostHeader) return fallback;
+  const origin = `${proto}://${hostHeader}`;
+  if (!hostAllowed(config, hostname, origin, proto)) return fallback;
+  return {
+    rpID: rpIdForHost(config, hostname),
+    origins: uniqueStrings([origin, ...fallbackOrigins]),
+    origin,
+  };
 }
 
 /**
@@ -360,6 +477,22 @@ export function getConfig(overrides = {}) {
   config.rpID = authority.rpID;
   config.origins = authority.origins;
   config.publicBaseUrl = authority.publicBaseUrl;
+  // Resolve after the spread so an override cannot leave an empty token in place
+  // of a generated one, and so the token string stays off JSON dumps.
+  const tokenState = resolveSetupToken(config.setupToken);
+  Object.defineProperty(config, 'setupToken', {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: tokenState.setupToken,
+  });
+  config.setupTokenGenerated = tokenState.setupTokenGenerated;
+  config.setupTokenConsumed = false;
+  config.webauthnHostSuffixes = parseHostSuffixes(
+    Object.prototype.hasOwnProperty.call(overrides, 'webauthnHostSuffixes')
+      ? overrides.webauthnHostSuffixes
+      : process.env.WEBAUTHN_HOST_SUFFIXES,
+  );
   config.trustProxy = resolveTrustProxy(
     overrides.trustProxy !== undefined ? overrides.trustProxy : process.env.TRUST_PROXY,
   );

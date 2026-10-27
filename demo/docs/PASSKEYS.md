@@ -193,6 +193,6 @@ POST /api/persons/:id/eth-accounts
 POST /api/persons/:id/eth-accounts/active
 ```
 
-Relying party id, origins, and attestation policy are jurisdiction / host configuration. Production (`master`) publishes the Node at `VOTE_FQDN` (for example `vote.domain.tld`) and uses that hostname as the RP id, so a passkey created there is a credential for that voting authority. Set `RP_ID` only when the relying party must be a parent of that subdomain. `test/unstable` may leave `VOTE_FQDN` empty and use localhost. See the root README [Voting subdomain](../README.md#voting-subdomain).
+Relying party id and origins follow the request host when that host is allowed by `VOTE_FQDN`, `WEBAUTHN_ORIGINS`, `RP_ID`, or `WEBAUTHN_HOST_SUFFIXES`. A public `RP_ID` is used only when it is the host or a parent of it. Otherwise the request hostname is the RP ID, so a rotating test host does not share passkeys with the voting hostname. An unknown `Host` does not widen the allowlist. Registration and login require user verification and a resident key. Attestation stays `none`: the server still checks the challenge, the origin, the RP ID hash, the user-presence and user-verification flags, and stores the COSE public key from the authenticator data. It does not store a public key supplied beside the attestation. See [OPERATOR.md](./OPERATOR.md) for `VOTE_FQDN` and the setup token.
 
 The Node stores credential ids and wrapped-key **ciphertexts** if the wrap-in-IndexedDB-plus-backup path is enabled. It must not store PRF output or trapdoors.

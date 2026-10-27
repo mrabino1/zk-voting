@@ -46,6 +46,11 @@ export async function renderRegister(main, ctx) {
     pin: null,
     selected: matchPre?.id || elections.find((e) => e.state <= 2)?.id || elections[0]?.id || "",
     acceptedTerms: false,
+    passkeyName: publicRecord?.displayName || "voter",
+    prepared: null,
+    preparedKey: "",
+    prepFailedKey: "",
+    preparingKey: "",
   };
 
   const signInHost = h("div", {
@@ -58,6 +63,49 @@ export async function renderRegister(main, ctx) {
   const root = h("div", { class: "register-page" });
   main.replaceChildren(signInHost, root);
   mountSignInPanel(signInHost);
+
+  function passkeyPrepKey() {
+    const name = String(state.passkeyName || "voter").trim() || "voter";
+    return `${name}|${me?.user ? "session" : "new"}`;
+  }
+
+  function passkeyPrefetchAllowed() {
+    if (state.methodTab !== "passkey" || state.busy || atPasskeyCap(state.identity)) return false;
+    if (!wallet.hasWebAuthn()) return false;
+    if (!me?.user && !state.acceptedTerms) return false;
+    return true;
+  }
+
+  async function prefetchPasskey({ force = false } = {}) {
+    if (!passkeyPrefetchAllowed()) return;
+    const key = passkeyPrepKey();
+    if (force) state.prepFailedKey = "";
+    if (state.prepared && state.preparedKey === key) return;
+    if (state.prepFailedKey === key || state.preparingKey === key) return;
+    state.preparingKey = key;
+    const displayName = String(state.passkeyName || "voter").trim() || "voter";
+    try {
+      const server = await api("/api/auth/passkey/register/begin", {
+        method: "POST",
+        body: { displayName, handle: displayName, acceptedTerms: true },
+      });
+      const options = server?.publicKey ? server : server?.options ? server.options : server || {};
+      options.displayName = displayName;
+      const prepared = await wallet.prepareRegistrationCeremony(options);
+      if (passkeyPrepKey() !== key) return;
+      state.prepared = prepared;
+      state.preparedKey = key;
+      state.prepFailedKey = "";
+    } catch {
+      if (passkeyPrepKey() === key) {
+        state.prepared = null;
+        state.preparedKey = "";
+        state.prepFailedKey = key;
+      }
+    } finally {
+      if (state.preparingKey === key) state.preparingKey = "";
+    }
+  }
 
   function paint() {
     const rec = state.record;
@@ -106,6 +154,7 @@ export async function renderRegister(main, ctx) {
             checked: state.acceptedTerms,
             onChange: (event) => {
               state.acceptedTerms = Boolean(event.target.checked);
+              prefetchPasskey();
             },
           }),
           h(
@@ -436,7 +485,13 @@ export async function renderRegister(main, ctx) {
                   type: "text",
                   maxlength: "64",
                   autocomplete: "username webauthn",
-                  value: rec?.displayName || "voter",
+                  value: state.passkeyName || rec?.displayName || "voter",
+                  onInput: (event) => {
+                    state.passkeyName = event.target.value;
+                    state.prepared = null;
+                    state.preparedKey = "";
+                    prefetchPasskey();
+                  },
                 })
               ),
               h(
@@ -677,6 +732,7 @@ export async function renderRegister(main, ctx) {
           )
         : null
     );
+    if (state.methodTab === "passkey") prefetchPasskey();
   }
 
   async function copyText(value, okMessage) {
@@ -954,20 +1010,42 @@ export async function renderRegister(main, ctx) {
     event.preventDefault();
     if (state.busy) return;
     if (!me?.user && !requireTerms()) return;
-    const displayName = event.target.displayName?.value?.trim() || "voter";
+    const displayName = event.target.displayName?.value?.trim() || state.passkeyName || "voter";
+    state.passkeyName = displayName;
+    const key = passkeyPrepKey();
+    if (!(state.prepared && state.preparedKey === key)) {
+      state.error = wallet.webAuthnErrorMessage({ code: "PASSKEY_NOT_READY" });
+      prefetchPasskey({ force: true });
+      paint();
+      announce(state.error);
+      return;
+    }
+    const prepared = state.prepared;
+    state.prepared = null;
+    state.preparedKey = "";
+    const election = elections.find((e) => e.id === state.selected);
+    let pending;
+    try {
+      pending = wallet.registerPasskey({
+        api,
+        displayName,
+        jurisdictionId: election?.jurisdictionId || undefined,
+        acceptedTerms: true,
+        prepared,
+      });
+    } catch (err) {
+      state.error = wallet.webAuthnErrorMessage(err);
+      paint();
+      announce(state.error);
+      return;
+    }
     state.busy = true;
     state.error = "";
     state.info = "";
     paint();
     announce("Waiting for the authenticator.");
     try {
-      const election = elections.find((e) => e.id === state.selected);
-      const record = await wallet.registerPasskey({
-        api,
-        displayName,
-        jurisdictionId: election?.jurisdictionId || undefined,
-        acceptedTerms: true,
-      });
+      const record = await pending;
       state.record = record;
       await refreshIdentity();
       if (record.finishError) {
@@ -977,7 +1055,7 @@ export async function renderRegister(main, ctx) {
       }
       announce("Passkey created. Commitment ready.");
     } catch (err) {
-      state.error = err.message || "Passkey creation failed.";
+      state.error = wallet.webAuthnErrorMessage(err);
       announce(state.error);
     } finally {
       state.busy = false;
