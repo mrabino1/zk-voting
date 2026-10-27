@@ -293,8 +293,19 @@ contract BallotInbox is IBallotInbox {
         }
     }
 
-    /// @notice Field-safe ballot hash: `uint256(keccak256(ciphertext)) mod r`.
+    /// @notice Field-safe ballot hash.
+    /// @dev Aggregate ballots start with `AG` and a 32-byte Poseidon tag. The
+    ///      tag is the hash, so the vote circuit can bind one choice without
+    ///      hashing the whole ciphertext with keccak. Any other ciphertext
+    ///      still uses `uint256(keccak256(ciphertext)) mod r`.
     function ballotHashOfCiphertext(bytes calldata encryptedBallot) public pure returns (uint256) {
+        if (encryptedBallot.length >= 34 && encryptedBallot[0] == 0x41 && encryptedBallot[1] == 0x47) {
+            bytes32 tag;
+            assembly {
+                tag := calldataload(add(encryptedBallot.offset, 2))
+            }
+            return uint256(tag) % SNARK_SCALAR_FIELD;
+        }
         return uint256(keccak256(encryptedBallot)) % SNARK_SCALAR_FIELD;
     }
 

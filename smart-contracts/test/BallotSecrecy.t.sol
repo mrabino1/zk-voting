@@ -121,6 +121,27 @@ contract BallotSecrecyTest is Deployer {
         assertEq(seen[2], nHi);
     }
 
+    function testAggregatePrefixBindsTagNotWholeCiphertext() public {
+        uint256 tag = 123456789;
+        bytes memory body = hex"00112233445566778899";
+        bytes memory enc = abi.encodePacked(bytes2(0x4147), bytes32(tag), body);
+        assertEq(inbox.ballotHashOfCiphertext(enc), tag);
+        assertTrue(inbox.ballotHashOfCiphertext(enc) != uint256(keccak256(enc)) % inbox.SNARK_SCALAR_FIELD());
+
+        uint256 commitment = Fixtures.identityCommitment(uint256(8));
+        (uint256 id, address el) = prepareOpenElection(commitment);
+        uint256[] memory inputs = voteInputs(id, el, 4, enc);
+        inputs[3] = uint256(keccak256(enc));
+        vm.prank(relayer);
+        vm.expectRevert(BallotInbox.BallotHashMismatch.selector);
+        inbox.submitVote(id, a, b, c, inputs, enc);
+
+        inputs[3] = tag;
+        vm.prank(relayer);
+        inbox.submitVote(id, a, b, c, inputs, enc);
+        assertEq(inbox.ballotHashOf(id, 4), bytes32(tag));
+    }
+
     function testAggregateCalldataGrowsWithOptionsNotBallots() public {
         ElectionParams memory p = defaultParams();
         p.tallyScheme = TallyScheme.AGGREGATE;
