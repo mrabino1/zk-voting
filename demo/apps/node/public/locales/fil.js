@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "Pangalan ng produkto: {brand}. Hindi kailanman naka-print dito ang iyong pinili.",
     footerExplorerMeta: "L2 explorer ng {brand}. Hindi field sa chain na ito ang plaintext ng balota.",
     footerResults: "Mga resulta ng halalan",
+    footerContact: "Makipag-ugnayan",
+    footerOpenSource: "Ang {brand} ay 100% open source at libre gamitin.",
+    footerContract: "Available kami para sa kontrata ng inyong lokal na implementasyon.",
+    footerContractCta: "Mag-email sa amin",
     noscript:
       "Kailangan ng {brand} ang JavaScript para kausapin ang passkey ng iyong device (WebAuthn). I-enable ang JavaScript at i-reload, o gumamit ng accessible na voting site na pinapatakbo ng inyong clerk.",
     metaDescription:

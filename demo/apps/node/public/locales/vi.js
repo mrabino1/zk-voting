@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "Tên sản phẩm {brand}. Lựa chọn không bao giờ được in ở đây.",
     footerExplorerMeta: "Trình khám phá L2 của {brand}. Văn bản rõ của phiếu không phải trường trên chuỗi này.",
     footerResults: "Kết quả bầu cử",
+    footerContact: "Liên hệ",
+    footerOpenSource: "{brand} là mã nguồn mở 100% và miễn phí sử dụng.",
+    footerContract: "Chúng tôi nhận hợp đồng cho phần triển khai tại chỗ của bạn.",
+    footerContractCta: "Gửi email cho chúng tôi",
     noscript:
       "{brand} cần JavaScript để nói chuyện với passkey thiết bị (WebAuthn). Bật JavaScript rồi tải lại, hoặc dùng trang bỏ phiếu dễ tiếp cận do thư ký của bạn vận hành.",
     metaDescription:

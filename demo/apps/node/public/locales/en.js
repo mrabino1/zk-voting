@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "Product name {brand}. Choice is never printed here.",
     footerExplorerMeta: "{brand} L2 explorer. Ballot plaintext is not a field on this chain.",
     footerResults: "Election results",
+    footerContact: "Contact",
+    footerOpenSource: "{brand} is 100% open source and free to use.",
+    footerContract: "We are available for contracting for your local implementation.",
+    footerContractCta: "Email us",
     noscript:
       "{brand} needs JavaScript to talk to your device passkey (WebAuthn). Enable JavaScript and reload, or use an accessible poll site operated by your clerk.",
     metaDescription:

@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "उत्पाद का नाम {brand}। चुनाव यहाँ कभी नहीं छपता।",
     footerExplorerMeta: "{brand} L2 एक्सप्लोरर। मतपत्र का सादा पाठ इस श्रृंखला पर कोई फ़ील्ड नहीं है।",
     footerResults: "चुनाव परिणाम",
+    footerContact: "संपर्क",
+    footerOpenSource: "{brand} 100% ओपन सोर्स है और उपयोग के लिए मुफ़्त है।",
+    footerContract: "हम आपके स्थानीय क्रियान्वयन के लिए ठेके पर उपलब्ध हैं।",
+    footerContractCta: "हमें ईमेल करें",
     noscript:
       "{brand} को आपके उपकरण की passkey (WebAuthn) से बात करने के लिए JavaScript चाहिए। JavaScript चालू करें और पुनः लोड करें, या अपने क्लर्क द्वारा संचालित सुलभ मतदान साइट का उपयोग करें।",
     metaDescription:
