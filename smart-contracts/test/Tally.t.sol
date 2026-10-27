@@ -10,7 +10,7 @@ import {TallyPublicInputs} from "../src/zk/TallyPublicInputs.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
-/// @notice Tally posting: legacy SUM_ONLY vs OPENS_BALLOTS histogram bind.
+/// @notice Tally posting: legacy SUM_ONLY vs aggregate hash (no per-ballot openings).
 contract TallyTest is Deployer {
     uint256[2] internal a;
     uint256[2][2] internal b;
@@ -87,98 +87,74 @@ contract TallyTest is Deployer {
         tally.submitTally(id, counts, a, b, c);
     }
 
-    function testOpensBallotsSubmitTallyRevertsWithoutOpenings() public {
-        (uint256 id, address el) = _openWithVotesScheme(3, TallyScheme.OPENS_BALLOTS);
+    function testAggregateSchemeRejectsSumOnlyEntry() public {
+        (uint256 id, address el) = _openWithVotesScheme(3, TallyScheme.AGGREGATE);
         warpClosed(el);
         uint256[] memory counts = new uint256[](2);
         counts[0] = 3;
         counts[1] = 0;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.OpeningsRequired.selector);
+        vm.expectRevert(Tally.AggregateRequired.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
-    function testOpensBallotsRejectsInventedCountsThatOnlyMatchTheSum() public {
-        (uint256 id, address el) = _openWithVotesScheme(3, TallyScheme.OPENS_BALLOTS);
+    function testAggregateTallyHasNoPerBallotOpenings() public {
+        (uint256 id, address el) = _openWithVotesScheme(5, TallyScheme.AGGREGATE);
         warpClosed(el);
-
-        // Real openings: two option-0, one option-1. Histogram [2,1].
-        uint256[] memory openings = new uint256[](3);
-        openings[0] = 0;
-        openings[1] = 0;
-        openings[2] = 1;
-
-        uint256[] memory invented = new uint256[](2);
-        invented[0] = 3;
-        invented[1] = 0; // sum == 3 == accepted, but not the histogram
-
-        vm.prank(tallyOperator);
-        vm.expectRevert(Tally.OpeningMismatch.selector);
-        tally.submitOpenedTally(id, invented, openings, a, b, c);
-
-        uint256[] memory alsoInvented = new uint256[](2);
-        alsoInvented[0] = 0;
-        alsoInvented[1] = 3;
-        vm.prank(tallyOperator);
-        vm.expectRevert(Tally.OpeningMismatch.selector);
-        tally.submitOpenedTally(id, alsoInvented, openings, a, b, c);
-    }
-
-    function testOpensBallotsHappyPathPlurality() public {
-        (uint256 id, address el) = _openWithVotesScheme(5, TallyScheme.OPENS_BALLOTS);
-        warpClosed(el);
-
-        // 0,0,1,0,2 → plurality option 0 with counts [3,1,1]
-        uint256[] memory openings = new uint256[](5);
-        openings[0] = 0;
-        openings[1] = 0;
-        openings[2] = 1;
-        openings[3] = 0;
-        openings[4] = 2;
 
         uint256[] memory counts = new uint256[](3);
         counts[0] = 3;
         counts[1] = 1;
         counts[2] = 1;
+        bytes32 aggregate = keccak256("homomorphic-product");
+        assertTrue(counts.length != inbox.acceptedBallots(id));
 
         vm.prank(tallyOperator);
-        tally.submitOpenedTally(id, counts, openings, a, b, c);
+        tally.submitAggregateTally(id, counts, aggregate, a, b, c);
 
         assertTrue(tally.isTallied(id));
-        assertEq(tally.postedScheme(id), TallyScheme.OPENS_BALLOTS);
+        assertEq(tally.postedScheme(id), TallyScheme.AGGREGATE);
         uint256[] memory got = tally.tally(id);
         assertEq(got.length, 3);
         assertEq(got[0], 3);
         assertEq(got[1], 1);
         assertEq(got[2], 1);
-        assertEq(tally.openingsHash(id), keccak256(abi.encodePacked(openings)));
+        assertEq(tally.aggregateHash(id), aggregate);
         assertEq(uint256(IElection(el).state()), uint256(ElectionState.TALLIED));
+
+        (bool ok,) = address(tally)
+            .call(
+                abi.encodeWithSignature(
+                    "submitOpenedTally(uint256,uint256[],uint256[],uint256[2],uint256[2][2],uint256[2])",
+                    id,
+                    counts,
+                    counts,
+                    a,
+                    b,
+                    c
+                )
+            );
+        assertFalse(ok, "per-ballot openings entry point must be gone");
     }
 
-    function testOpensBallotsOpeningLengthMustEqualAccepted() public {
-        (uint256 id, address el) = _openWithVotesScheme(2, TallyScheme.OPENS_BALLOTS);
+    function testAggregateHashRequired() public {
+        (uint256 id, address el) = _openWithVotesScheme(2, TallyScheme.AGGREGATE);
         warpClosed(el);
-        uint256[] memory openings = new uint256[](1);
-        openings[0] = 0;
-        uint256[] memory counts = new uint256[](2);
+        uint256[] memory counts = new uint256[](1);
         counts[0] = 2;
-        counts[1] = 0;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.OpeningLengthMismatch.selector);
-        tally.submitOpenedTally(id, counts, openings, a, b, c);
+        vm.expectRevert(Tally.AggregateHashRequired.selector);
+        tally.submitAggregateTally(id, counts, bytes32(0), a, b, c);
     }
 
-    function testOpensBallotsOptionOutOfRangeReverts() public {
-        (uint256 id, address el) = _openWithVotesScheme(1, TallyScheme.OPENS_BALLOTS);
+    function testAggregateOnSumOnlySchemeReverts() public {
+        (uint256 id, address el) = _openWithVotes(1);
         warpClosed(el);
-        uint256[] memory openings = new uint256[](1);
-        openings[0] = 9;
-        uint256[] memory counts = new uint256[](2);
+        uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
-        counts[1] = 0;
         vm.prank(tallyOperator);
-        vm.expectRevert(Tally.OptionOutOfRange.selector);
-        tally.submitOpenedTally(id, counts, openings, a, b, c);
+        vm.expectRevert(Tally.NotAggregateScheme.selector);
+        tally.submitAggregateTally(id, counts, bytes32(uint256(1)), a, b, c);
     }
 
     function testAlreadyTalliedReverts() public {

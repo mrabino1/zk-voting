@@ -37,6 +37,8 @@ contract ElectionFactory is IElectionFactory {
     error NotPendingAdmin();
 
     event AllowMockVerifiersSet(bool allowed);
+    event RelayerSet(address indexed account, bool allowed);
+    event DisclosureIntervalSet(uint64 interval);
     /// @notice Audit M-03 / L-02: module wiring and admin changes are logged.
     event ModulesSet(address voterRegistry, address disqualificationRegistry, address ballotInbox, address tally);
     event ImplementationSet(address implementation);
@@ -71,6 +73,13 @@ contract ElectionFactory is IElectionFactory {
     ///         are refused unless this is set. Defaults to true only on anvil
     ///         (chain id 31337); elsewhere a super admin must opt in explicitly.
     bool public allowMockVerifiers;
+
+    /// @notice Shared relayers allowed to submit ballots. A voter account is not a relayer.
+    mapping(address => bool) public isRelayer;
+
+    /// @notice Seconds between ballot batches. Zero keeps single `submitVote` (tests).
+    ///         Non-zero forces `submitVoteBatch` so one transaction does not timestamp one voter.
+    uint64 public disclosureInterval;
 
     uint256 public electionCount;
     mapping(uint256 => address) private _elections;
@@ -107,6 +116,19 @@ contract ElectionFactory is IElectionFactory {
     function setAllowMockVerifiers(bool allowed) external onlySuperAdmin {
         allowMockVerifiers = allowed;
         emit AllowMockVerifiersSet(allowed);
+    }
+
+    /// @notice Allow or remove a shared ballot relayer. Admin only.
+    function setRelayer(address account, bool allowed) external onlyAdmin {
+        if (account == address(0)) revert ZeroAddress();
+        isRelayer[account] = allowed;
+        emit RelayerSet(account, allowed);
+    }
+
+    /// @notice Minimum spacing for `submitVoteBatch`. Zero disables the batch-only rule.
+    function setDisclosureInterval(uint64 interval) external onlyAdmin {
+        disclosureInterval = interval;
+        emit DisclosureIntervalSet(interval);
     }
 
     /// @notice Audit H-02 / M-02: approve or withdraw a vote verifier for
@@ -281,9 +303,8 @@ contract ElectionFactory is IElectionFactory {
         election = Clones.clone(implementation);
         _elections[electionId] = election;
 
-        IElection(election).initialize(
-            electionId, params, address(this), voterRegistry, disqualificationRegistry, ballotInbox
-        );
+        IElection(election)
+            .initialize(electionId, params, address(this), voterRegistry, disqualificationRegistry, ballotInbox);
 
         address parties = Clones.clone(partyRegistryImplementation);
         ExternalPartyRegistry(parties).initialize(electionId, address(this));
@@ -312,9 +333,8 @@ contract ElectionFactory is IElectionFactory {
         if (params.tallyScheme > 1) revert InvalidTallyScheme();
         if (params.jurisdictionId == bytes32(0)) revert InvalidJurisdiction();
         if (
-            params.clerk == address(0) || params.registrar == address(0)
-                || params.disqualificationOfficer == address(0) || params.tallyOperator == address(0)
-                || params.verifier == address(0)
+            params.clerk == address(0) || params.registrar == address(0) || params.disqualificationOfficer == address(0)
+                || params.tallyOperator == address(0) || params.verifier == address(0)
         ) revert ZeroAddress();
     }
 

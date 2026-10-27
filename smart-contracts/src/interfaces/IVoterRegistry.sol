@@ -10,7 +10,7 @@ interface IVoterRegistry {
 
     function isRegistered(uint256 electionId, uint256 identityCommitment) external view returns (bool);
 
-    /// @notice Registered and not currently disqualified.
+    /// @notice Registered, not disqualified, and not missing a required attestation.
     function isEligible(uint256 electionId, uint256 identityCommitment) external view returns (bool);
 
     /// @notice Append-only registration roll. Includes disqualified commitments.
@@ -25,8 +25,9 @@ interface IVoterRegistry {
     function eligibleCount(uint256 electionId) external view returns (uint256);
 
     /// @notice Start republishing `Election.eligibleRoot` from the current
-    ///         intersection (paged, see `continueEligibleRebuild`). Only the
-    ///         disqualification registry may call this.
+    ///         intersection (paged, see `continueEligibleRebuild`). The
+    ///         disqualification registry or this election's party registry
+    ///         may call this.
     function rebuildEligibleRoot(uint256 electionId) external returns (bytes32);
 
     /// @notice Process up to `maxLeaves` (0 = default batch) roll entries of a

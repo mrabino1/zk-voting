@@ -96,14 +96,13 @@ contract TallyEdgesTest is Deployer {
         assertEq(tally.tally(id)[1], 0);
     }
 
-    function testOpenedTallyEmptyCountsReverts() public {
+    function testAggregateTallyEmptyCountsReverts() public {
         (uint256 id, address el) = _openWithVotes(1);
         warpClosed(el);
         uint256[] memory empty;
-        uint256[] memory openings = new uint256[](1);
         vm.prank(tallyOperator);
         vm.expectRevert(Tally.EmptyCounts.selector);
-        tally.submitOpenedTally(id, empty, openings, a, b, c);
+        tally.submitAggregateTally(id, empty, bytes32(uint256(1)), a, b, c);
     }
 
     function testTallyIsolationAcrossElections() public {

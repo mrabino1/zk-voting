@@ -3,8 +3,10 @@ pragma solidity ^0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {IDisqualificationRegistry} from "./interfaces/IDisqualificationRegistry.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IExternalPartyRegistry} from "./interfaces/IExternalPartyRegistry.sol";
+import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 import {ReasonCodes} from "./ReasonCodes.sol";
 
 /// @title ExternalPartyRegistry
@@ -55,6 +57,8 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     mapping(uint256 => mapping(uint256 => bool)) private _rejectedBy;
     mapping(uint256 => mapping(uint256 => uint16)) private _reasonBy;
     mapping(uint256 => mapping(uint256 => uint64)) private _attestationExpires;
+    /// @dev Commitments this party has rejected, so a pause can lift the veto.
+    mapping(uint256 => uint256[]) private _rejectedList;
 
     /// @dev Audit L-01: lock the implementation; clones initialize once.
     constructor() {
@@ -100,6 +104,7 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
         party.active = true;
 
         emit PartyAdded(electionId, partyIndex, operator, mode, name);
+        if (mode == MODE_MUST_ATTEST) _rebuildEligible();
     }
 
     /// @inheritdoc IExternalPartyRegistry
@@ -119,6 +124,8 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
             }
         }
         emit PartyStatusSet(electionId, partyIndex, active);
+        _resynParty(partyIndex);
+        _rebuildEligible();
     }
 
     function setPartyOperator(uint256 partyIndex, address operator) external onlyStaff {
@@ -129,9 +136,7 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     }
 
     /// @inheritdoc IExternalPartyRegistry
-    function reject(uint256 partyIndex, uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash)
-        external
-    {
+    function reject(uint256 partyIndex, uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash) external {
         if (identityCommitment == 0) revert ZeroCommitment();
         if (!ReasonCodes.isValid(reasonCode)) revert InvalidReasonCode();
         _requireActiveOperator(partyIndex);
@@ -142,7 +147,10 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
         unchecked {
             _rejectionCount[identityCommitment] += 1;
         }
+        _rejectedList[partyIndex].push(identityCommitment);
         emit VoteRejectedByParty(electionId, partyIndex, identityCommitment, reasonCode, evidenceHash);
+        _syncVeto(identityCommitment, reasonCode, evidenceHash);
+        _rebuildEligible();
     }
 
     /// @inheritdoc IExternalPartyRegistry
@@ -161,19 +169,21 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
         unchecked {
             _rejectionCount[identityCommitment] -= 1;
         }
+        _removeRejected(partyIndex, identityCommitment);
         emit PartyRejectionCleared(electionId, partyIndex, identityCommitment, evidenceHash);
+        _syncVeto(identityCommitment, ReasonCodes.INELIGIBLE_STATUS, evidenceHash);
+        _rebuildEligible();
     }
 
     /// @inheritdoc IExternalPartyRegistry
-    function attest(uint256 partyIndex, uint256 identityCommitment, uint64 expiresAt, bytes32 evidenceHash)
-        external
-    {
+    function attest(uint256 partyIndex, uint256 identityCommitment, uint64 expiresAt, bytes32 evidenceHash) external {
         if (identityCommitment == 0) revert ZeroCommitment();
         Party storage party = _requireActiveOperator(partyIndex);
         if (party.mode != MODE_MUST_ATTEST) revert InvalidMode();
         uint64 exp = expiresAt == 0 ? type(uint64).max : expiresAt;
         _attestationExpires[identityCommitment][partyIndex] = exp;
         emit PartyAttested(electionId, partyIndex, identityCommitment, exp, evidenceHash);
+        _rebuildEligible();
     }
 
     function getParty(uint256 partyIndex)
@@ -188,6 +198,20 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     /// @inheritdoc IExternalPartyRegistry
     function hasActiveGates() public view returns (bool) {
         return activePartyCount > 0;
+    }
+
+    /// @inheritdoc IExternalPartyRegistry
+    function missingRequiredAttestation(uint256 identityCommitment) external view returns (bool) {
+        if (identityCommitment == 0) return true;
+        uint256 n = partyCount;
+        for (uint256 i; i < n; ++i) {
+            Party storage party = _parties[i];
+            if (!party.active || party.mode != MODE_MUST_ATTEST) continue;
+            uint64 exp = _attestationExpires[identityCommitment][i];
+            if (exp == 0) return true;
+            if (exp != type(uint64).max && exp < block.timestamp) return true;
+        }
+        return false;
     }
 
     /// @inheritdoc IExternalPartyRegistry
@@ -251,5 +275,63 @@ contract ExternalPartyRegistry is IExternalPartyRegistry {
     function _requireActiveOperator(uint256 partyIndex) internal view returns (Party storage party) {
         party = _requireOperator(partyIndex);
         if (!party.active) revert PartyNotActive();
+    }
+
+    function _rejectedByActiveVeto(uint256 identityCommitment) internal view returns (bool) {
+        uint256 n = partyCount;
+        for (uint256 i; i < n; ++i) {
+            Party storage party = _parties[i];
+            if (party.active && party.mode == MODE_VETO && _rejectedBy[identityCommitment][i]) return true;
+        }
+        return false;
+    }
+
+    /// @dev Write or lift the disqualification root. The commitment stays off the ballot.
+    function _syncVeto(uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash) internal {
+        address dq = _disqualificationRegistry();
+        if (dq == address(0)) return;
+        if (_rejectedByActiveVeto(identityCommitment)) {
+            IDisqualificationRegistry(dq).disqualifyByParty(electionId, identityCommitment, reasonCode, evidenceHash);
+        } else {
+            IDisqualificationRegistry(dq).revokeByParty(electionId, identityCommitment, evidenceHash);
+        }
+    }
+
+    function _resynParty(uint256 partyIndex) internal {
+        uint256[] storage list = _rejectedList[partyIndex];
+        uint256 n = list.length;
+        for (uint256 i; i < n; ++i) {
+            _syncVeto(list[i], _reasonBy[list[i]][partyIndex], bytes32(0));
+        }
+    }
+
+    function _removeRejected(uint256 partyIndex, uint256 identityCommitment) internal {
+        uint256[] storage list = _rejectedList[partyIndex];
+        uint256 n = list.length;
+        for (uint256 i; i < n; ++i) {
+            if (list[i] == identityCommitment) {
+                list[i] = list[n - 1];
+                list.pop();
+                return;
+            }
+        }
+    }
+
+    function _rebuildEligible() internal {
+        address registry = _voterRegistry();
+        if (registry == address(0)) return;
+        IVoterRegistry(registry).rebuildEligibleRoot(electionId);
+    }
+
+    function _disqualificationRegistry() internal view returns (address) {
+        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("disqualificationRegistry()"));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+        return address(0);
+    }
+
+    function _voterRegistry() internal view returns (address) {
+        (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+        return address(0);
     }
 }
