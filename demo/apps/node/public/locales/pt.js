@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "Nome do produto: {brand}. A escolha nunca é impressa aqui.",
     footerExplorerMeta: "Explorador L2 da {brand}. O texto claro da cédula não é um campo desta cadeia.",
     footerResults: "Resultados da eleição",
+    footerContact: "Contato",
+    footerOpenSource: "{brand} é 100% de código aberto e gratuito.",
+    footerContract: "Estamos disponíveis para um contrato da sua implementação local.",
+    footerContractCta: "Escreva para nós",
     noscript:
       "A {brand} precisa de JavaScript para falar com a passkey do seu dispositivo (WebAuthn). Ative o JavaScript e recarregue, ou use um site de votação acessível operado pelo seu escrivão.",
     metaDescription:

@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "产品名称 {brand}。此处从不打印选择内容。",
     footerExplorerMeta: "{brand} L2 浏览器。选票明文不是本链上的字段。",
     footerResults: "选举结果",
+    footerContact: "联系",
+    footerOpenSource: "{brand} 100% 开源，可免费使用。",
+    footerContract: "我们可以承接您的本地实施合同。",
+    footerContractCta: "给我们发邮件",
     noscript:
       "{brand} 需要 JavaScript 才能与设备 passkey（WebAuthn）通信。请启用 JavaScript 并重新加载，或使用由选举事务官运营的无障碍投票站点。",
     metaDescription:
