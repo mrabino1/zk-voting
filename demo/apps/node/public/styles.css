@@ -3297,10 +3297,49 @@ tbody tr:hover > td {
   max-width: none;
 }
 
+.footer-social {
+  max-width: var(--page);
+  margin: 0.35rem auto 0;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.app-shell .footer-social {
+  max-width: none;
+}
+
+.site-footer a.footer-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target);
+  height: var(--target);
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+.site-footer a.footer-github:hover {
+  color: var(--fg);
+  background: var(--sidebar-accent);
+  text-decoration: none;
+}
+
+.footer-github-mark {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
+
 @media (min-width: 960px) {
   .footer-extra {
     grid-template-columns: minmax(12rem, 16rem) minmax(0, 1.5fr) minmax(14rem, 20rem);
     align-items: start;
+  }
+
+  .footer-social {
+    justify-content: flex-end;
   }
 }
 

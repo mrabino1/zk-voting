@@ -68,6 +68,7 @@ export default {
     footerOpenSource: "{brand} là mã nguồn mở 100% và miễn phí sử dụng.",
     footerContract: "Chúng tôi nhận hợp đồng cho phần triển khai tại chỗ của bạn.",
     footerContractCta: "Gửi email cho chúng tôi",
+    footerGithub: "{brand} trên GitHub",
     noscript:
       "{brand} cần JavaScript để nói chuyện với passkey thiết bị (WebAuthn). Bật JavaScript rồi tải lại, hoặc dùng trang bỏ phiếu dễ tiếp cận do thư ký của bạn vận hành.",
     metaDescription:
