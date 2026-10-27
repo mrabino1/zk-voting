@@ -4,6 +4,7 @@
 
 import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
+import { electionDisclosurePolicy } from './store.mjs';
 
 const RANKED_TYPES = new Set(['RANKED', 'IRV', 'RCV', 'RANKED_CHOICE']);
 
@@ -306,10 +307,18 @@ export function buildResults(election, extra = {}) {
 
 export function presentResults(election, deps, opts = {}) {
   const now = opts.now ?? deps.config.nowFn();
-  const interval = deps.config.disclosureIntervalSeconds;
-  const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(election.id, now, interval);
+  const policy = electionDisclosurePolicy(election, deps.config, now);
+  const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
+    election.id,
+    now,
+    policy.intervalSeconds,
+    policy,
+  );
   const dto = publicElection(election, now, {
-    intervalSeconds: interval,
+    intervalSeconds: policy.intervalSeconds,
+    delaySeconds: policy.delaySeconds,
+    resultsMinVotes: policy.minVotes,
+    minBlockVotes: policy.minBlockVotes,
     publishedAcceptedBallots,
   });
   return {

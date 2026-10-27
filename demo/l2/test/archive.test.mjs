@@ -86,6 +86,9 @@ describe('L2 hourly S3/R2 archive attic', () => {
     const config = loadConfig();
     config.dataDir = dataDir;
     config.disclosureIntervalSeconds = HOUR;
+    config.disclosureDelaySeconds = 0;
+    config.resultsMinVotes = 0;
+    config.disclosureMinBlockVotes = 1;
     config.zkVotingNodeUrl = '';
     return config;
   }

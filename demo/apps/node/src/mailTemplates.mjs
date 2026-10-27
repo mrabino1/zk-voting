@@ -65,7 +65,7 @@ const COPY = Object.freeze({
     headline: 'You were granted election clerk',
     duties: [
       'You create elections for this jurisdiction and freeze the roll when it is ready.',
-      'Public vote proofs publish after the hour that contained the ballot closes. This console does not show a live jurisdiction tick.',
+      'Public vote proofs publish after the hour closes and the disclosure delay elapses, once the results gate is open. This console does not show a live jurisdiction tick.',
     ],
     ctaPath: '/back-office',
     ctaLabel: 'Open the back office',

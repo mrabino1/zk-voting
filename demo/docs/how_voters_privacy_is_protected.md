@@ -97,14 +97,14 @@ Meant to be visible. Process, not preference.
 | --- | --- | --- |
 | **Eligibility / freeze roots** | `eligibleRoot`, `disqualificationRoot`, clerk, freeze time. Eligible set is `registered ∩ ¬disqualified`. | Election params, `/explorer`, auditor pack |
 | **Registration** | `identityCommitment` hex (leaf). **Never** a legal name. Immediate (not hour-delayed). | `VoterRegistered` / explorer `register` |
-| **Nullifiers** | That **this** uniqueness token was spent in election E. One row per nullifier. **After the containing hour closes** on the civic path. | `VoteAccepted`, `GET /api/explorer/nullifiers/:value` |
+| **Nullifiers** | That **this** uniqueness token was spent in election E. One row per nullifier. **After the containing hour closes, the disclosure delay elapses, and the results gate is open.** A block smaller than the minimum waits. | `VoteAccepted`, `GET /api/explorer/nullifiers/:value` |
 | **Disqualification** | Commitment, election, **reason code** (e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revokes. | `DisqualificationRegistry`, explorer |
 | **Ballot hashes** | `ballotHash = keccak256(encryptedBallot)` (or the public input bind). Not the option. | Inbox, explorer vote row |
 | **Tallies** | Per-option **counts** after a posted tally. IRV **round transcript** (aggregates), not individual rankings. | `TallyPosted`, `/elections/:id/results` |
-| **Hourly disclosure** | `lastClosedHourAt`, `acceptedBallotsDisclosed`, `nextPublishAt`. Policy `hourly-polling-place-unlinkability`. Default 3600 s. | [`disclosure.mjs`](./apps/node/src/disclosure.mjs), `GET /api/explorer/disclosure` |
+| **Hourly disclosure** | `lastClosedHourAt`, `delaySeconds`, `resultsMinVotes`, `minBlockVotes`, `acceptedBallotsDisclosed`, `nextPublishAt`. Policy `hourly-polling-place-unlinkability`. Defaults: hour `3600`, delay `1800`, gate `100`, block floor `10`. | [`disclosure.mjs`](./apps/node/src/disclosure.mjs), `GET /api/explorer/disclosure` |
 | **Parameters** | Start / cutoff, `ballotSpecHash`, verifier address, `maxParticipants`. | Election record |
 
-**Not a live precinct tick.** Public `acceptedBallots` on Node APIs is the last **closed-hour** snapshot ([`electionState.mjs`](./apps/node/src/electionState.mjs)). Do not publish “N unpublished in election E.”
+**Not a live precinct tick.** Public `acceptedBallots` on Node APIs is the last **published disclosure block** ([`electionState.mjs`](./apps/node/src/electionState.mjs)). Do not publish “N unpublished in election E.”
 
 **On-chain public inputs** for a vote ([`proof-helpers`](./packages/proof-helpers/index.js), `vote.circom`):
 
@@ -204,7 +204,7 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 | **Circuit vs disqualification** | `vote.circom` proves inclusion in `eligibleRoot` and non-membership in the indexed `disqRoot` chain. The Node stores that chain under keccak-dev-v1; a Poseidon election must publish the Poseidon chain or the roots will not match. The vote POST does not take a leaf, so it does not call `assertCanVote`. | Unarmed MockVerifier does not evaluate the witness. A JSON-path ballot can still be accepted without a real Groth16 proof ([README](./README.md) eligibility section). An officer who omits someone from the chain can publish a root that does not bar them. |
 | **Coercion / receipts** | Receipt = nullifier, `ballotHash`, holder token. Email copy is opt-in, token-only, no attachment. PDF locked against edit. `receiptsProveChoice: false`. | A coercer who watches the **screen**, copies the device, or demands the **witness** (trapdoor / marked paper) still wins. No last-vote-counts. Not MACI. |
 | **Hourly interval `0`** | Tests and local instant demo. | Publishes immediately. Do not use on a public polling place. |
-| **EVM `acceptedBallots()`** | Increments **immediately** on `submitVote`. | If BallotInbox is on a **public EVM RPC**, live inbox size / `VoteAccepted` is visible even while the Node explorer still waits for the hour. Civic JSON L2 **seals** vote txs until the hour closes (`eth_getTransactionByHash` → null). Know which path you deployed. |
+| **EVM `acceptedBallots()`** | Increments **immediately** on `submitVote`. | If BallotInbox is on a **public EVM RPC**, live inbox size / `VoteAccepted` is visible even while the Node explorer still waits. Civic JSON L2 **seals** vote txs until the delay, the results gate, and the block floor all allow publication (`eth_getTransactionByHash` → null). Know which path you deployed. |
 
 **What is not yet court-grade (short list):** MockVerifier, untrusted local Groth16 (Poseidon Vote(4) and Vote(20) dev keys, no ceremony), unaudited Feldman guardian tally (aggregation still undecided), JSON-path ballots accepted without a real Groth16 proof, JSON store as roll, no MACI, no production passkey curve, no EVM execution on chainId 27427.
 
@@ -218,25 +218,31 @@ The public is not entitled to a live “this person just voted” tick. Sometime
 
 ### When public rows wait
 
-Votes are **accepted immediately** (nullifier uniqueness). Proof of those votes is public **only after the UTC hour that contained them has closed** (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
+Votes are **accepted immediately** (nullifier uniqueness). Proof of those votes is public only after three checks, all enforced in the API and on the civic L2:
 
-- At 14:23, only events with timestamp **&lt; 14:00** are public. A 14:05 vote appears at **15:00**. A vote **exactly** at 14:00:00 is in the 14:00 hour and appears at 15:00.
-- All votes of that hour are lumped into **one** disclosure block. Public timestamp is the **hour boundary**, not 14:03 vs 14:17. Order is **by nullifier**, not arrival ([`explorer.mjs`](./apps/node/src/explorer.mjs), [`l2/disclosure.mjs`](./l2/disclosure.mjs)).
+1. **Hour plus delay.** The UTC hour that contained the vote has closed, then `DISCLOSURE_DELAY_SECONDS` (default **1800**) has elapsed. A vote at 08:59 publishes at **09:30**, not at 09:00. `DISCLOSURE_INTERVAL_SECONDS` stays **3600**.
+2. **Results gate.** Nothing about that election’s ballots (turnout, per-block rows, hourly counts) is public until the earlier of `RESULTS_MIN_VOTES` ballots (default **100**) or the scheduled `cutoffTime`. A certified tally also opens the gate.
+3. **Block floor.** A disclosure block needs at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default **10**). Smaller hours merge into the next block. After the election ends, a remainder is published when the election as a whole met that floor. If the whole election is below the floor, those rows stay sealed until the certified tally.
+
+An earlier note in this file said a 14:05 vote appears at 15:00, as soon as the hour closes. That guarantee is **replaced**. The same vote now appears at **15:30**, and only once the gate is open and the block floor is met.
+
+- At 14:23, with the 30-minute delay, only events with timestamp **&lt; 13:00** are time-ready. A 14:05 vote is time-ready at **15:30**. A vote **exactly** at 14:00:00 is in the 14:00 hour and is time-ready at 15:30.
+- Time-ready votes from one or more hours are lumped into a disclosure block. Public timestamp is the **disclosure clock** (hour end + delay), not 14:03 vs 14:17. Order is **by nullifier**, not arrival ([`explorer.mjs`](./apps/node/src/explorer.mjs), [`l2/disclosure.mjs`](./l2/disclosure.mjs)).
 - Unpublished nullifiers and tx hashes **404 like unknown ones**. Do not confirm that a sealed vote exists ([`BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md)).
 - L2 `pending` and `eth_getTransactionByHash` omit sealed votes.
 
-So: a watcher at the polling-place door **cannot** match “that person walked out” to a jurisdiction increment. They also **cannot** look up the nullifier yet. For that hour, the public cannot even see **that a ballot was accepted**.
+So: a watcher at the polling-place door **cannot** match “that person walked out at 08:59” to a 09:00 jurisdiction increment. They also **cannot** look up the nullifier yet. Until the gate opens, the public cannot see **that a ballot was accepted**.
 
 ### Explorer delayed turnout
 
-| Surface | During the open hour | After the hour closes |
+| Surface | Before the gate, delay, and block floor | After publication |
 | --- | --- | --- |
-| `/explorer`, `GET /api/explorer/disclosure` | Last closed hour + countdown. `acceptedBallotsDisclosed` only | Sealed votes flush, ordered by nullifier |
-| `GET /api/elections/:id/summary` | Disclosed turnout, no winner | Same + `resultsUrl` only after a certified tally |
-| `GET /api/elections/:id/ballots` | Empty / prior hours | `{ nullifier, ballotHash, electionId, relayer }` |
+| `/explorer`, `GET /api/explorer/disclosure` | Last published snapshot + countdown. `acceptedBallotsDisclosed` only | Sealed votes flush, ordered by nullifier |
+| `GET /api/elections/:id/summary` | Disclosed turnout (often 0), no winner | Same + `resultsUrl` only after a certified tally |
+| `GET /api/elections/:id/ballots` | Empty / already published blocks | `{ nullifier, ballotHash, electionId, relayer }` |
 | `/outcomes` while open | Disclosed turnout. **No** unofficial option counts | Certified counts only after tally |
 | `/receipt` public hash lookup | 404 until disclosed | Confirms **counted**, still no choice |
-| Holder **token** on the receipt | Can confirm **this** ballot counted before the hour closes | Still no option ids |
+| Holder **token** on the receipt | Can confirm **this** ballot counted before publication | Still no option ids |
 
 No dashboard should show “N waiting to publish in election E.” That still names the jurisdiction.
 
@@ -244,13 +250,13 @@ No dashboard should show “N waiting to publish in election E.” That still na
 
 | Actor | Can they see that **a** ballot was accepted (this hour)? | Can they see **who**? | Can they see **what** was marked? |
 | --- | --- | --- | --- |
-| **Public observer / explorer** | **Not until the hour seals.** Then: a nullifier + hash, not a name. | No (name). Commitment on the **roll** is public; it is not on the vote row. | No |
+| **Public observer / explorer** | **Not until delay, gate, and block floor all pass.** Then: a nullifier + hash, not a name. | No (name). Commitment on the **roll** is public; it is not on the vote row. | No |
 | **Holder of the receipt token** | Yes, for their ballot, before disclosure | Themselves (they already know) | No (receipt forbids it) |
 | **Node / relayer operator** | Yes, immediately (`acceptVote`, inbox `acceptedBallots`) | **Session** can show a signed-in person voted. The vote **body** does not name the leaf or the wallet. **Design of the stored vote row:** no. | **Ciphertext** they can decrypt, or a JSON envelope they can decode (`rankingPayload`). **Not** a plaintext `answers` field on the SPA POST. **Public APIs:** no |
 | **Tally operator after cutoff** | Real inbox size (needed for `sum(counts) == acceptedBallots`) | Not from public vote rows | `opens_ballots`: sees ciphertext and can post partials the guardians produced; cannot decrypt alone. `sum_only`: can invent a partition of the sum |
 | **Clerk with the legal file** | Knows who is **registered** (person ↔ commitment) | Yes, for the **roll** | Not from the public ballot. Same Node-host caveat as the operator |
 
-After the hour closes, the public learns **that some eligible secret voted** (a nullifier appeared). They still do not learn **which civil identity** that was, and they do not learn **the option**.
+After a disclosure block is published, the public learns **that some eligible secrets voted** (nullifiers appeared, at least the block floor, unless the certified tally released a short election). They still do not learn **which civil identity** that was, and they do not learn **the option**.
 
 Registration commitments are **not** hour-delayed. Seeing a new leaf means someone was added to the roll — not how they will vote, and not that they have voted.
 
@@ -258,9 +264,9 @@ Registration commitments are **not** hour-delayed. Seeing a new leaf means someo
 
 ## Commander checklist
 
-- **Tell the public:** choice is not on the explorer; receipts cannot prove “I voted for X”; turnout updates once an hour, after the hour closes.
+- **Tell the public:** choice is not on the explorer; receipts cannot prove “I voted for X”; turnout waits for the hour, the disclosure delay, the results gate, and a large enough block.
 - **Tell officers:** reason codes are public; evidence files are not; do not build a “voter profile” that lists nullifiers next to a name or passkey address.
-- **Tell the host:** vote POST bodies are election-critical; do not log them; do not run `DISCLOSURE_INTERVAL_SECONDS=0` on a public site; do not treat MockVerifier or the tally JWK as production.
+- **Tell the host:** vote POST bodies are election-critical; do not log them; do not run `DISCLOSURE_INTERVAL_SECONDS=0` on a public site; do not set `RESULTS_MIN_VOTES=0` or `DISCLOSURE_MIN_BLOCK_VOTES=1` there either; do not treat MockVerifier or the tally JWK as production.
 - **Do not say:** this build is ready for a binding, court-supervised election.
 
 License: AGPL-3.0-or-later. No token. No paid tier. Voter data is not a product.

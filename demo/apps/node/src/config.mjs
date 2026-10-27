@@ -5,7 +5,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { brandName } from './branding.mjs';
-import { resolveDisclosureIntervalSeconds } from './disclosure.mjs';
+import {
+  resolveDisclosureDelaySeconds,
+  resolveDisclosureIntervalSeconds,
+  resolveDisclosureMinBlockVotes,
+  resolveResultsMinVotes,
+} from './disclosure.mjs';
 import { normalizeEmail } from './identity.mjs';
 import { resolveEnvCeremonyUrl, resolveEnvEntropy } from './entropy.mjs';
 import { DEFAULT_CHAIN_ID, resolveEnvChainId } from './setup.mjs';
@@ -179,6 +184,18 @@ export function getConfig(overrides = {}) {
     overrides.disclosureIntervalSeconds ?? process.env.DISCLOSURE_INTERVAL_SECONDS,
     { isTest },
   );
+  const disclosureDelaySeconds = resolveDisclosureDelaySeconds(
+    overrides.disclosureDelaySeconds ?? process.env.DISCLOSURE_DELAY_SECONDS,
+    { isTest },
+  );
+  const resultsMinVotes = resolveResultsMinVotes(
+    overrides.resultsMinVotes ?? process.env.RESULTS_MIN_VOTES,
+    { isTest },
+  );
+  const disclosureMinBlockVotes = resolveDisclosureMinBlockVotes(
+    overrides.disclosureMinBlockVotes ?? process.env.DISCLOSURE_MIN_BLOCK_VOTES,
+    { isTest },
+  );
 
   const provingPath = envFlag(overrides.provingPath ?? process.env.ZK_VOTING_PROVING_PATH, false);
   const useMockVerifier = provingPath
@@ -213,6 +230,9 @@ export function getConfig(overrides = {}) {
     entropyCeremonyUrlEnv: resolveEnvCeremonyUrl(overrides.entropyCeremonyUrl ?? process.env.ENTROPY_CEREMONY_URL),
     firstRunRedirect: envFlag(overrides.firstRunRedirect ?? process.env.FIRST_RUN_REDIRECT, !isTest),
     disclosureIntervalSeconds,
+    disclosureDelaySeconds,
+    resultsMinVotes,
+    disclosureMinBlockVotes,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpID: authority.rpID,
     voteFqdn: authority.voteFqdn,

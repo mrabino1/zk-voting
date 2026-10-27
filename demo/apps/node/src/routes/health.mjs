@@ -18,9 +18,8 @@ export function healthRouter(deps) {
     const db = await pingDatabase(deps.config);
     db.backend = deps.store?.backend || db.backend;
     const now = deps.config.nowFn();
-    const interval = deps.config.disclosureIntervalSeconds;
     const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
-      ? deps.store.publishedAcceptedBallotsAll(now, interval)
+      ? deps.store.publishedAcceptedBallotsAll(now, deps.config)
       : undefined;
     const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
     const mode = deps.writer?.mode?.() || 'active';
@@ -44,7 +43,12 @@ export function healthRouter(deps) {
       electionFactoryAddress: contracts.factory || '',
       chainConfigured: deps.chain.isConfigured(),
       l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
-      disclosure: publicDisclosureView(now, interval, { acceptedBallotsDisclosed }),
+      disclosure: publicDisclosureView(now, deps.config.disclosureIntervalSeconds, {
+        delaySeconds: deps.config.disclosureDelaySeconds,
+        resultsMinVotes: deps.config.resultsMinVotes,
+        minBlockVotes: deps.config.disclosureMinBlockVotes,
+        acceptedBallotsDisclosed,
+      }),
     });
   }));
   return router;
@@ -150,8 +154,11 @@ export function configRouter(deps) {
         l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
         l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
         disclosure: publicDisclosureView(now, deps.config.disclosureIntervalSeconds, {
+          delaySeconds: deps.config.disclosureDelaySeconds,
+          resultsMinVotes: deps.config.resultsMinVotes,
+          minBlockVotes: deps.config.disclosureMinBlockVotes,
           acceptedBallotsDisclosed: deps.store?.publishedAcceptedBallotsAll
-            ? deps.store.publishedAcceptedBallotsAll(now, deps.config.disclosureIntervalSeconds)
+            ? deps.store.publishedAcceptedBallotsAll(now, deps.config)
             : undefined,
         }),
         identity: {

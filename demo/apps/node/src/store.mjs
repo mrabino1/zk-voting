@@ -31,7 +31,7 @@ import {
 } from './db.mjs';
 import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
 import { ensureSiteAdminCollections } from './siteAudit.mjs';
-import { isDisclosed } from './disclosure.mjs';
+import { disclosureSettings, isDisclosed, selectPublicVotes } from './disclosure.mjs';
 import {
   electionMatchesRef,
   mintScopedPublicId,
@@ -112,10 +112,25 @@ export function publicVoteRecord(vote) {
 }
 
 /** Hourly-safe view of a stored vote. Null if the accept is still sealed. */
-export function publishedVoteSlice(vote, now, intervalSeconds) {
+export function publishedVoteSlice(vote, now, intervalSeconds, delaySeconds = 0) {
   if (!vote) return null;
-  if (!isDisclosed(vote.acceptedAt, now, intervalSeconds)) return null;
+  if (!isDisclosed(vote.acceptedAt, now, intervalSeconds, delaySeconds)) return null;
   return vote;
+}
+
+export function electionDisclosurePolicy(election, config, now, submittedVotes) {
+  const settings = disclosureSettings(config || {});
+  const votes = submittedVotes ?? election?.acceptedBallots ?? 0;
+  return {
+    now,
+    intervalSeconds: settings.intervalSeconds,
+    delaySeconds: settings.delaySeconds,
+    minBlockVotes: settings.minBlockVotes,
+    minVotes: settings.minVotes,
+    endTime: election?.cutoffTime ?? null,
+    tallied: Boolean(election?.tally),
+    submittedVotes: votes,
+  };
 }
 
 function emptyData() {
@@ -2291,19 +2306,39 @@ export class Store {
    * Votes whose accept is past the disclosure horizon. Each nullifier appears
    * at most once.
    */
-  listPublishedVotes(electionId, now, intervalSeconds) {
-    return this.listVotes(electionId).flatMap((vote) => {
-      const slice = publishedVoteSlice(vote, now, intervalSeconds);
-      return slice ? [slice] : [];
-    });
+  listPublishedVotes(electionId, now, intervalSeconds, policy = null) {
+    const election = this.getElection(electionId);
+    const votes = this.listVotes(electionId);
+    const resolved = {
+      now,
+      intervalSeconds,
+      delaySeconds: 0,
+      minBlockVotes: 1,
+      minVotes: 0,
+      endTime: election?.cutoffTime ?? null,
+      tallied: Boolean(election?.tally),
+      submittedVotes: election?.acceptedBallots ?? votes.length,
+      ...(policy || {}),
+    };
+    return selectPublicVotes(votes, resolved);
   }
 
-  publishedAcceptedBallots(electionId, now, intervalSeconds) {
-    return this.listPublishedVotes(electionId, now, intervalSeconds).length;
+  publishedAcceptedBallots(electionId, now, intervalSeconds, policy = null) {
+    return this.listPublishedVotes(electionId, now, intervalSeconds, policy).length;
   }
 
-  publishedAcceptedBallotsAll(now, intervalSeconds) {
-    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalSeconds)).length;
+  publishedAcceptedBallotsAll(now, intervalOrConfig) {
+    if (intervalOrConfig && typeof intervalOrConfig === 'object') {
+      const ids = new Set((this.data.votes || []).map((v) => String(v.electionId)));
+      let n = 0;
+      for (const id of ids) {
+        const election = this.getElection(id);
+        const policy = electionDisclosurePolicy(election, intervalOrConfig, now);
+        n += this.publishedAcceptedBallots(id, now, policy.intervalSeconds, policy);
+      }
+      return n;
+    }
+    return this.data.votes.filter((v) => isDisclosed(v.acceptedAt, now, intervalOrConfig)).length;
   }
 
   listEnvelopes(electionId) {

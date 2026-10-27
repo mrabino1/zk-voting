@@ -157,6 +157,9 @@ describe('strict admission on the gasless L2', () => {
     const config = loadConfig();
     config.dataDir = tmp;
     config.disclosureIntervalSeconds = 0;
+    config.disclosureDelaySeconds = 0;
+    config.resultsMinVotes = 0;
+    config.disclosureMinBlockVotes = 1;
     config.nowFn = () => 1_700_000_000;
     config.zkVotingNodeUrl = '';
     config.admission = 'strict';

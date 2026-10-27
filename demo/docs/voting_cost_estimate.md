@@ -238,7 +238,7 @@ Tally mirror is cheap even on mainnet because it is **once per election**.
 | `maxParticipants` | UI **0**; `0` = unlimited (registry does not cap). Non-zero → insert reverts at cap | back-office hint “0 = unbounded roll”; [`packages/types`](./packages/types/index.js) |
 | Merkle full | `insertLeaf` throws `merkle tree full` at `2 ** depth` | [`apps/node/src/merkle.mjs`](./apps/node/src/merkle.mjs) |
 | L2 block | `maxTxsPerBlock` **4096** | [`l2/config.json`](./l2/config.json) |
-| Hourly flush | Sealed votes publish when the hour closes, lumped, ordered by hash/nullifier | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
+| Hourly flush | Sealed votes publish after the hour, the disclosure delay, the results gate, and the block floor. Lumpy, ordered by hash/nullifier | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 
 `maxParticipants = 0` does **not** mean infinite RAM. It means the **contract** will not apply a numeric cap; the **tree depth** still caps leaves at 2^d.
 
@@ -248,7 +248,7 @@ Tally mirror is cheap even on mainnet because it is **once per election**.
 | --- | --- | --- |
 | Node JSON store | Whole `zk-voting.json` pretty-printed on **every** persist; eligible tree keeps **all leaves** in that file | **Thousands–low tens of thousands** of people is the comfortable band on one Node 22 process. **~100k** is already a large pretty JSON rewrite per vote. **~1M** is the Merkle depth-20 *theory*, not a tested Node path. |
 | Sequencer RAM | Loads **all** historical blocks | Election-window: fine. Always-on months: RAM tracks ~1.4 KB × block count (JS objects larger). |
-| Hourly disclosure | Up to 4096 txs / 2s block after the hour closes | **50k votes in one hour** ≈ 13 blocks ≈ **~30 s** to unseal. **1M in one hour** ≈ 244 blocks ≈ **~8 min**. Throughput is OK; the JSON store is not. |
+| Hourly disclosure | Up to 4096 txs / 2s block once the delay, gate, and block floor allow it | **50k votes in one hour** ≈ 13 blocks ≈ **~30 s** to unseal. **1M in one hour** ≈ 244 blocks ≈ **~8 min**. Throughput is OK; the JSON store is not. |
 | Explorer | `l2-chain.json` full rewrite; public APIs on the **same** Node | Same order as voter count, not empty L2. |
 | Vote SNARK | Poseidon is wired. Committed check is untrusted `Vote(4)`, not `Vote(20)`, and not a ceremony. | Do not budget “1M Groth16 proves / hour on one laptop” until `Vote(20)` is measured. |
 | Single sequencer | Liveness / censorship assumption (v1: one sequencer) | [`docs/L2.md`](./docs/L2.md). A stall stops voting; it must not silently change a tally. |
@@ -309,7 +309,7 @@ Glacier / IA / R2 lifecycle can be cheaper for cold election archives; retrieval
 
 ### What “live” means here (**repo fact**)
 
-ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish **once an hour** after that hour closes (`DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests). A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish on the hourly block after `DISCLOSURE_DELAY_SECONDS` (default **1800**), and only once `RESULTS_MIN_VOTES` (default **100**) or the scheduled end is reached. Blocks under `DISCLOSURE_MIN_BLOCK_VOTES` (default **10**) merge forward. `DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests. A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 | Surface | During the poll | After certified tally |
 | --- | --- | --- |

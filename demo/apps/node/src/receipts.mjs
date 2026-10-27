@@ -9,7 +9,8 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { isDisclosed, nextPublishAt, hourBucket, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
+import { hourBucket, isDisclosed, nextPublishAt, planPublicBlocks, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
+import { electionDisclosurePolicy } from './store.mjs';
 import { HttpError } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { emailHint, normalizeEmail } from './identity.mjs';
@@ -171,12 +172,12 @@ export function pdfCreatedDay(unix) {
   return iso.slice(0, 10);
 }
 
-function disclosureHourClosedAt(acceptedAt, intervalSeconds) {
+function disclosureHourClosedAt(acceptedAt, intervalSeconds, delaySeconds = 0) {
   const interval = Number(intervalSeconds) || 0;
   const ts = Number(acceptedAt);
   if (!Number.isFinite(ts)) return null;
   if (!interval || interval <= 0) return ts;
-  return hourBucket(ts, interval) + interval;
+  return hourBucket(ts, interval) + interval + Math.max(0, Math.floor(Number(delaySeconds) || 0));
 }
 
 export function stripReceiptChoice(value) {
@@ -470,9 +471,9 @@ export function presentHolderReceipt({
   });
 }
 
-export function disclosedHourBuckets(votes, now, intervalSeconds) {
+export function disclosedHourBuckets(votes, now, intervalSeconds, delaySeconds = 0) {
   const interval = Number(intervalSeconds) || 0;
-  const published = (votes || []).filter((v) => isDisclosed(v.acceptedAt, now, interval));
+  const published = (votes || []).filter((v) => isDisclosed(v.acceptedAt, now, interval, delaySeconds));
   const counts = new Map();
   for (const vote of published) {
     const closedAt =
@@ -489,13 +490,50 @@ export function disclosedHourBuckets(votes, now, intervalSeconds) {
     .sort((a, b) => a.hourClosedAt - b.hourClosedAt);
 }
 
+function publishedBlocksForElection(election, deps, now) {
+  const policy = electionDisclosurePolicy(election, deps.config, now);
+  const votes = deps.store.listVotes(election.id);
+  const wrapped = votes.map((vote) => ({
+    vote,
+    receivedAt: vote.acceptedAt,
+    electionId: String(election.id),
+  }));
+  return planPublicBlocks(wrapped, {
+    ...policy,
+    electionContext: () => ({
+      submittedVotes: policy.submittedVotes,
+      endTime: policy.endTime,
+      tallied: policy.tallied,
+    }),
+  }).publish;
+}
+
 export function publicReceiptMetrics(election, deps, { now, interval, view } = {}) {
   const ts = now ?? deps.config.nowFn();
   const secs = interval ?? deps.config.disclosureIntervalSeconds;
-  const votes = election ? deps.store.listVotes(election.id) : deps.store.data.votes || [];
-  const hours = disclosedHourBuckets(votes, ts, secs);
+  const targets = election
+    ? [election]
+    : (deps.store.data.elections || []).filter((row) => deps.store.listVotes(row.id).length);
+  const hours = [];
+  for (const row of targets) {
+    for (const block of publishedBlocksForElection(row, deps, ts)) {
+      hours.push({
+        hourClosedAt: block.timestamp,
+        hourClosedAtIso: isoUtc(block.timestamp),
+        ballots: block.items.length,
+      });
+    }
+  }
+  hours.sort((a, b) => a.hourClosedAt - b.hourClosedAt);
   const acceptedBallotsDisclosed = hours.reduce((n, row) => n + row.ballots, 0);
-  const base = view || publicDisclosureView(ts, secs);
+  const policy = electionDisclosurePolicy(election, deps.config, ts);
+  const base =
+    view ||
+    publicDisclosureView(ts, secs, {
+      delaySeconds: policy.delaySeconds,
+      resultsMinVotes: policy.minVotes,
+      minBlockVotes: policy.minBlockVotes,
+    });
   const disclosure = withDisclosedCount(base, acceptedBallotsDisclosed);
   return stripReceiptChoice({
     nfp: true,
@@ -512,7 +550,14 @@ export function publicReceiptMetrics(election, deps, { now, interval, view } = {
   });
 }
 
-function matchingPublishedVotes(store, proof, now, interval) {
+function voteIsPublic(store, election, vote, now, policy) {
+  if (!store || !election || !vote) return false;
+  return store
+    .listPublishedVotes(election.id, now, policy.intervalSeconds, policy)
+    .some((row) => String(row.nullifier) === String(vote.nullifier));
+}
+
+function matchingPublishedVotes(store, proof, now, interval, config) {
   let rows = store.data.votes || [];
   if (proof.electionId) {
     const election = store.getElection(proof.electionId);
@@ -523,7 +568,10 @@ function matchingPublishedVotes(store, proof, now, interval) {
   const ballotHash = tryBytes32(proof.ballotHash);
   if (nullifier) rows = rows.filter((v) => tryBytes32(v.nullifier) === nullifier);
   if (ballotHash) rows = rows.filter((v) => tryBytes32(v.ballotHash) === ballotHash);
-  return rows.filter((v) => isDisclosed(v.acceptedAt, now, interval));
+  const election = proof.electionId ? store.getElection(proof.electionId) : null;
+  const policy = electionDisclosurePolicy(election, config, now);
+  if (election) return rows.filter((v) => voteIsPublic(store, election, v, now, policy));
+  return rows.filter((v) => isDisclosed(v.acceptedAt, now, interval, policy.delaySeconds));
 }
 
 export function lookupReceipt(deps, rawProof, extras = {}) {
@@ -559,7 +607,7 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     fromIssuedPdf = true;
     holder = true;
   } else {
-    const published = matchingPublishedVotes(deps.store, proof, now, interval);
+    const published = matchingPublishedVotes(deps.store, proof, now, interval, deps.config);
     if (published.length !== 1) {
       throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
     }
@@ -570,11 +618,12 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
   }
   const election = deps.store.getElection(vote.electionId);
-  const published = isDisclosed(vote.acceptedAt, now, interval);
-  const nextAt = published ? null : nextPublishAt(now, interval);
+  const votePolicy = electionDisclosurePolicy(election, deps.config, now);
+  const published = voteIsPublic(deps.store, election, vote, now, votePolicy);
+  const nextAt = published ? null : nextPublishAt(now, interval, votePolicy.delaySeconds);
   const metrics = publicReceiptMetrics(election, deps, { now, interval });
   const publicVote = publicVoteRecord(vote);
-  const hourClosed = published ? disclosureHourClosedAt(vote.acceptedAt, interval) : null;
+  const hourClosed = published ? disclosureHourClosedAt(vote.acceptedAt, interval, votePolicy.delaySeconds) : null;
   const storedPdfSha256 = receiptRow?.pdfSha256 || null;
   let pdfUnmodified = null;
   if (submittedPdfHash) {

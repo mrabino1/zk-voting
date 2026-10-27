@@ -32,21 +32,25 @@ These are **meant** to be public. The explorer should render them in plain langu
 | --- | --- |
 | Blocks | Number, hash, parent, timestamp, state root, sequencer address, tx count. |
 | Registration | `identityCommitment` (field element / bytes32) inserted into the election tree. Leaf **index** if the contract emits it. Never a legal name. |
-| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour that contained the vote has closed**. Timestamp is the hour boundary, not the minute they voted. Each nullifier appears once; a second ballot is not accepted. |
+| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour closes, the disclosure delay elapses, the results gate is open, and the block meets the floor**. Timestamp is the disclosure clock, not the minute they voted. Each nullifier appears once; a second ballot is not accepted. |
 | Disqualification | `identityCommitment`, `electionId`, **reason code** (and label, e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revoke events. |
 | Roll freeze | Eligible root, disqualification root, clerk, time. |
 | Tally | Per-option **counts** (after a valid tally proof), `countsHash`, operator. |
 | Rollup batch (L1) | `batchIndex`, `prevStateRoot`, `newStateRoot`, `dataHash`, prover. Anyone can re-hash posted calldata. |
 | Parameters | Start / cutoff, `maxParticipants` (0 = unlimited), `treeDepth`, `ballotSpecHash`, verifier address. |
 
-Live **counts that are safe to show** before tally: number registered, number disqualified (by code). **Not** a live accepted-ballot counter. Public `acceptedBallots` is the last **hourly snapshot**. A person who votes and then leaves a voting office must not be matchable to an increase in any jurisdiction on any dashboard.
+Live **counts that are safe to show** before tally: number registered, number disqualified (by code). **Not** a live accepted-ballot counter. Public `acceptedBallots` is the last **published disclosure block**. A person who votes and then leaves a voting office must not be matchable to an increase in any jurisdiction on any dashboard.
 
 ### Hourly disclosure (polling-place unlinkability)
 
-Votes are accepted immediately so a nullifier is unique. A second ciphertext for the same nullifier is rejected (`NullifierUsed`). Double voting is impossible. Proof of those votes is public only once the UTC hour that contained them has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600).
+Votes are accepted immediately so a nullifier is unique. A second ciphertext for the same nullifier is rejected (`NullifierUsed`). Double voting is impossible. Proof of those votes is public only when all of the following are true. The API enforces this; hiding it only in the page would not.
 
-- At 14:23, only events with timestamp `< 14:00` are public. A 14:05 vote appears at 15:00. A vote at **exactly** 14:00:00 is in the 14:00 hour and appears at 15:00.
-- All votes from that hour are lumped into **one** disclosure block. Public timestamp is the hour end. Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.
+- The UTC hour has closed and `DISCLOSURE_DELAY_SECONDS` (default 1800) has elapsed. `DISCLOSURE_INTERVAL_SECONDS` stays 3600. A vote at 08:59 publishes at 09:30. A vote at 14:05 is time-ready at 15:30. A vote at **exactly** 14:00:00 is in the 14:00 hour and is time-ready at 15:30. An earlier guarantee that the same vote appears at 15:00, on the hour, is withdrawn.
+- The results gate is open: at least `RESULTS_MIN_VOTES` ballots (default 100), or `cutoffTime` has passed, whichever is earlier. Until then, hourly turnout, live counts, and per-block vote rows for that election stay empty.
+- The block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default 10). Hours under that floor merge into the next block. At election end the remainder is published if the election met the floor. If the whole election is under the floor, nothing is published until the certified tally.
+
+Ready ballots share one disclosure block. Public timestamp is the disclosure clock (hour end + delay). Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.
+
 - Do **not** show “N unpublished in election E”. That still identifies the jurisdiction.
 - Unpublished nullifiers and tx hashes 404 like unknown ones. Do not confirm that a sealed vote exists.
 - L2 `pending` and `eth_getTransactionByHash` omit sealed votes. The voter still gets an accept receipt from the Node.
@@ -59,11 +63,14 @@ Observers should see a **hour-bucketed update**, not a live tick. The explorer b
 
 | Field | Meaning |
 | --- | --- |
-| `lastClosedHourAt` / `lastPublishedAt` | Unix time when the last UTC hour closed (e.g. 14:00). Snapshot “through” this instant. |
-| `lastClosedHourStart` | Start of that closed hour (13:00 when `lastClosedHourAt` is 14:00). |
-| `acceptedBallotsDisclosed` | Accepted ballots whose hour has closed. Explorer total is chain-wide; election APIs are per election. Never a pending remainder. |
-| `nextPublishAt` | Unix time of the next hour close (15:00). |
-| `secondsUntilNext` | Countdown to that close. The explorer UI ticks this locally. |
+| `lastClosedHourAt` / `lastPublishedAt` | Unix time the delay has cleared through (e.g. 14:00 once the clock reaches 14:30). |
+| `lastClosedHourStart` | Start of that hour (13:00 when `lastClosedHourAt` is 14:00). |
+| `delaySeconds` | Extra wait after the hour. Default `1800`. |
+| `resultsMinVotes` | Turnout stays hidden until this many ballots, or the scheduled end. Default `100`. |
+| `minBlockVotes` | Smallest disclosure block. Smaller hours merge forward. Default `10`. |
+| `acceptedBallotsDisclosed` | Ballots already in a published block. Explorer total is chain-wide; election APIs are per election. Never a pending remainder. |
+| `nextPublishAt` | Next disclosure clock (hour end + delay). |
+| `secondsUntilNext` | Countdown to that clock. The explorer UI ticks this locally. |
 | `intervalSeconds` | Default `3600`. `0` publishes immediately (tests / local demo). |
 
 `GET /api/elections/:id/summary` is the public election snapshot: title, state, **disclosed** `acceptedBallots`, the same disclosure object, `explorerUrl`, and `resultsUrl` **only after a certified tally exists**. This surface does not compute or display a winner; when a tally is posted it links to `/elections/:id/results` (that path is still **not** a voter-router page; tally JSON is on `GET /api/elections/:id`).

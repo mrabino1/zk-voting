@@ -279,6 +279,20 @@ export async function createApp(overrides = {}) {
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   explorer.writerActive = writer.active;
+  explorer.disclosurePolicy = () => ({
+    delaySeconds: config.disclosureDelaySeconds,
+    minBlockVotes: config.disclosureMinBlockVotes,
+    minVotes: config.resultsMinVotes,
+    electionContext(id) {
+      const election = store.getElection(id);
+      if (!election) return { submittedVotes: 0, endTime: null, tallied: false };
+      return {
+        submittedVotes: Number(election.acceptedBallots) || 0,
+        endTime: election.cutoffTime,
+        tallied: Boolean(election.tally),
+      };
+    },
+  });
   const chain = chainOverride || createChain(config);
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);

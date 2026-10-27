@@ -19,13 +19,13 @@ import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isAggregateEnvelope, parseAggregateEnvelope } from './aggregateBallot.mjs';
 import { assertVoteProof } from './voteProof.mjs';
-import { isDisclosed, nextPublishAt } from './disclosure.mjs';
+import { nextPublishAt } from './disclosure.mjs';
+import { electionDisclosurePolicy, publicVoteRecord } from './store.mjs';
 import {
   buildReceiptPdf,
   mintHolderToken,
   presentHolderReceipt,
 } from './receipts.mjs';
-import { publicVoteRecord } from './store.mjs';
 import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from './ballot.mjs';
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
@@ -333,8 +333,11 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     interval,
   );
 
-  const published = isDisclosed(vote.acceptedAt, ts, interval);
-  const nextAt = nextPublishAt(ts, interval);
+  const policy = electionDisclosurePolicy(election, config, ts);
+  const published = store
+    .listPublishedVotes(election.id, ts, policy.intervalSeconds, policy)
+    .some((row) => String(row.nullifier) === String(vote.nullifier));
+  const nextAt = nextPublishAt(ts, interval, policy.delaySeconds);
   return {
     ok: true,
     vote: publicVoteRecord(vote),
