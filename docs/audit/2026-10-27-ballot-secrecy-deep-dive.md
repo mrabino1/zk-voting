@@ -12,7 +12,7 @@
 
 This note treats that as a hypothesis. “How they voted” means the **option** (or ranking), not merely that a ballot was accepted. A join from a person to a nullifier is reported separately, because that join plus any later opening is the option.
 
-Related design notes already in the tree: `demo/docs/how_voters_privacy_is_protected.md`, `demo/docs/proposals/ballot-unlinkability-contracts.md`. Where those notes and the code disagree, this report follows the code.
+Related design notes already in the tree: `voting_node/docs/how_voters_privacy_is_protected.md`, `voting_node/docs/proposals/ballot-unlinkability-contracts.md`. Where those notes and the code disagree, this report follows the code.
 
 ---
 
@@ -27,7 +27,7 @@ The same contracts **do** publish that option, or the join that makes the option
 - `submitVoteWithClearance` places the identity commitment in the same public transaction as the nullifier and the ballot bytes.
 - `submitOpenedTally` places one plaintext option index per accepted ballot in transaction calldata, in inbox order, which lines up with `VoteAccepted` and `ballotHashAt`.
 
-Those two calls are not what `demo/apps/node/src/chain.mjs` sends. They are still live entry points. A tally operator, a relayer, or any account that can submit them can put the reconstruction on chain permanently.
+Those two calls are not what `voting_node/apps/node/src/chain.mjs` sends. They are still live entry points. A tally operator, a relayer, or any account that can submit them can put the reconstruction on chain permanently.
 
 Off the contracts, three demo mechanisms reconstruct the option for a narrower attacker: the PRF-unavailable identity fallback (operator who can read credential ids), threshold partials stored in the Node database (host, after `t` guardians have posted), and ERC-20 polls (anyone, after the disclosure hour, by design).
 
@@ -52,13 +52,13 @@ So the public claim “the contracts let a nefarious actor reverse-engineer an i
 
 **Status:** Fixed. The clearance entry point is gone; party gates move the roots. The client ABI does not export it.
 
-**Real today:** yes. `BallotInbox.submitVoteWithClearance` is in the ABI. Foundry tests call it. The Node’s chain client does **not** call it (`demo/apps/node/src/chain.mjs` only sends `submitVote`). An opt-in ABI still exports it (`demo/packages/chain-client/index.js`, `CLEARANCE_INBOX_ABI`).
+**Real today:** yes. `BallotInbox.submitVoteWithClearance` is in the ABI. Foundry tests call it. The Node’s chain client does **not** call it (`voting_node/apps/node/src/chain.mjs` only sends `submitVote`). An opt-in ABI still exports it (`voting_node/packages/chain-client/index.js`, `CLEARANCE_INBOX_ABI`).
 
 **Attacker:** any chain observer. The submitter can be the voter, a relayer, a bundler, or a jurisdiction integration that turned external-party gates on. No secret is required beyond the transaction, which is public. Joining the commitment to a civil name uses the roll the registrar already keeps (`identityLinks` in the Node store, or an off-chain clerk file). That file is the point of registration.
 
 **Reconstruction:**
 
-1. Registration emits `VoterRegistered(electionId, identityCommitment, index)` and stores the leaf (`smart-contracts/src/VoterRegistry.sol` lines 113–134). The Node stores `userId` ↔ commitment when a signed-in person registers (`demo/apps/node/src/store.mjs` lines 1512–1523).
+1. Registration emits `VoterRegistered(electionId, identityCommitment, index)` and stores the leaf (`smart-contracts/src/VoterRegistry.sol` lines 113–134). The Node stores `userId` ↔ commitment when a signed-in person registers (`voting_node/apps/node/src/store.mjs` lines 1512–1523).
 2. A clearance ballot calls `submitVoteWithClearance(..., publicInputs, encryptedBallot, identityCommitment, mustAttestIds)` (`smart-contracts/src/BallotInbox.sol` lines 99–125). `publicInputs[2]` is the nullifier. `encryptedBallot` is the ballot bytes. `identityCommitment` is an ABI argument in the same transaction.
 3. `_requireExternalClearance` checks that this commitment is eligible and clears the external-party gate (lines 189–201). It does **not** prove the commitment is the one inside the Groth16 witness. The vote circuit’s public instance is still `[root, disqRoot, nullifier, ballotHash, electionId]` (`circuits/vote.circom` line 15). The commitment is not a public input, so a caller can attach any eligible leaf to any proof.
 4. `_recordAcceptance` emits `VoteAccepted(electionId, nullifier, ballotHash, msg.sender)` (lines 244–254). The commitment is not in the event. It does not need to be: it remains in the transaction input forever.
@@ -66,7 +66,7 @@ So the public claim “the contracts let a nefarious actor reverse-engineer an i
 
 The interface comment says the commitment “is not stored and is not in VoteAccepted” and that “the civic L2 path checks then discards” it (`smart-contracts/src/interfaces/IBallotInbox.sol` lines 29–42). The first sentence is true of contract storage. The second is not true of the L2 sequencer: a vote payload that contains `identityCommitment` is kept (BS-8).
 
-**Fix:** delete `submitVoteWithClearance` and `_requireExternalClearance`. Put rejections into the disqualification root and require attestations before the eligible root is frozen, which `Vote(20)` already proves. Do not add the commitment as a public input. The sketch in `demo/docs/proposals/ballot-unlinkability-contracts.md` (option A) is the right shape.
+**Fix:** delete `submitVoteWithClearance` and `_requireExternalClearance`. Put rejections into the disqualification root and require attestations before the eligible root is frozen, which `Vote(20)` already proves. Do not add the commitment as a public input. The sketch in `voting_node/docs/proposals/ballot-unlinkability-contracts.md` (option A) is the right shape.
 
 ---
 
@@ -74,7 +74,7 @@ The interface comment says the commitment “is not stored and is not in VoteAcc
 
 **Status:** Fixed. Tallying is aggregate-only. Ranked opening is disabled (`RANKED_TALLY_DISABLED`).
 
-**Real today:** yes, in `Tally.submitOpenedTally`. The Node tally route does **not** call it. It decrypts locally, posts counts, and leaves `openings` out of the HTTP response (`demo/apps/node/src/routes/elections.mjs` lines 955–1081). Any tally-operator key can still call the contract.
+**Real today:** yes, in `Tally.submitOpenedTally`. The Node tally route does **not** call it. It decrypts locally, posts counts, and leaves `openings` out of the HTTP response (`voting_node/apps/node/src/routes/elections.mjs` lines 955–1081). Any tally-operator key can still call the contract.
 
 **Attacker:** any chain observer of that transaction. The caller must be `params.tallyOperator` (`Tally.sol` lines 190–207). No decryption key is required at read time: the options are arguments.
 
@@ -86,7 +86,7 @@ The interface comment says the commitment “is not stored and is not in VoteAcc
 4. The event `OpenedTallyPosted` stores only hashes (lines 167–168). The `uint256[] openings` array is still in the transaction input. On any EVM that retains inputs, that array is public.
 5. Align index `i` across `openings[i]`, `ballotHashAt(i)`, and the `VoteAccepted` log with that `ballotHash`. The result is nullifier → option index. BS-1, BS-3, BS-5, or BS-11 then names the person.
 
-There is no shuffle. `demo/apps/node/src/guardians/aggregate.mjs` lines 45–60 returns each ciphertext unchanged and says this is neither a homomorphic product nor a mix.
+There is no shuffle. `voting_node/apps/node/src/guardians/aggregate.mjs` lines 45–60 returns each ciphertext unchanged and says this is neither a homomorphic product nor a mix.
 
 **Fix:** stop accepting per-ballot openings on chain. For single-choice ballots, tally a homomorphic product and decrypt only the aggregate. For ranked ballots, require a shuffle proof and open only the shuffled list. Until that exists, do not deploy `TallyScheme.OPENS_BALLOTS`, and do not call `submitOpenedTally`.
 
@@ -98,11 +98,11 @@ There is no shuffle. `demo/apps/node/src/guardians/aggregate.mjs` lines 45–60 
 
 **Real today:** yes, on the client fallback path. The PRF path is not affected (see “Checked and sound”).
 
-**Attacker:** anyone who can read passkey credential ids from the Node database or from `publicAuthMethod` on a person record. That is the Node operator, a database backup, or a compromised host. Credential ids are stored on the user (`demo/apps/node/src/identity.mjs` lines 174–180 and 445). The Node does not store the PRF output. It does not need to, on this path.
+**Attacker:** anyone who can read passkey credential ids from the Node database or from `publicAuthMethod` on a person record. That is the Node operator, a database backup, or a compromised host. Credential ids are stored on the user (`voting_node/apps/node/src/identity.mjs` lines 174–180 and 445). The Node does not store the PRF output. It does not need to, on this path.
 
 **Reconstruction:**
 
-1. If the authenticator does not return a PRF output, `provisionFromCredential` derives the identity input as SHA-256 of the constant `zk-voting-prf-fallback-identity-v1` concatenated with the credential id (`demo/apps/node/public/passkey-wallet.js` lines 48–49, 528–534, 887–918). The same function runs again at vote time (lines 968–980).
+1. If the authenticator does not return a PRF output, `provisionFromCredential` derives the identity input as SHA-256 of the constant `zk-voting-prf-fallback-identity-v1` concatenated with the credential id (`voting_node/apps/node/public/passkey-wallet.js` lines 48–49, 528–534, 887–918). The same function runs again at vote time (lines 968–980).
 2. `deriveIdentitySecrets` HKDF-SHA-256s that input with salt `zk-voting:identity:v1` and info `trapdoor+nullifier`, then splits 64 bytes into trapdoor and `nullifierSecret` (lines 478–497). The Merkle leaf is Poseidon of those two field elements. Both are determined by the credential id.
 3. The value the SPA actually publishes is **not** the circuit nullifier. `authorizeBallot` sets
 
@@ -112,7 +112,7 @@ There is no shuffle. `demo/apps/node/src/guardians/aggregate.mjs` lines 45–60 
 4. The operator recomputes that keccak nullifier for each stored credential id and compares it to `votes[].nullifier` and `envelopes[].nullifier` (`store.mjs` lines 2234–2266). A match is person → ballot. Confirm the leaf against `identityLinks` so authenticators that did use PRF are skipped: only the fallback leaf will match.
 5. The option is still inside the ciphertext. The fallback does **not** put the account seed on the server, so the sum-only AES key (derived from that seed, lines 1280–1301) is not recoverable from the credential id alone. The option comes from BS-2, from BS-4, or from a plaintext payload (BS-9).
 
-`demo/docs/PASSKEYS.md` describes this fallback as a key derived from an assertion signature or from a device secret the Node never sees. The code derives it from the credential id, which the Node does see. That gap is the bug.
+`voting_node/docs/PASSKEYS.md` describes this fallback as a key derived from an assertion signature or from a device secret the Node never sees. The code derives it from the credential id, which the Node does see. That gap is the bug.
 
 **Fix:** if PRF identity output is missing, refuse to vote. Do not derive `nullifierSecret` from the credential id. Keep the documented rule: the trapdoor is not the account seed, and it is not a function of a server-held identifier.
 
@@ -128,12 +128,12 @@ There is no shuffle. `demo/apps/node/src/guardians/aggregate.mjs` lines 45–60 
 
 **Reconstruction:**
 
-1. The client encrypts a packed choice index under the joint P-256 key, with a fresh ephemeral key and a fresh AES-GCM IV (`passkey-wallet.js` lines 1274–1278; `demo/apps/node/public/tally-crypto.js` lines 178–192). The envelope is stored next to the nullifier (`store.mjs` lines 2259–2266). `GET /api/elections/:id/envelopes` returns that row to a tally operator after cutoff (`elections.mjs` lines 451–468), including `rankingPayload` when one was decoded.
-2. Guardians submit per-ballot partial points. `acceptPartials` stores `ballotHash`, `point`, and the DLEQ proof in the election bucket (`demo/apps/node/src/guardianFlow.mjs` lines 76–114). Those points are the decryption shares, not a ciphertext wrapped to the Node.
-3. `openBallots` walks every envelope, combines `t` points (`demo/apps/node/src/guardians/threshold.mjs` lines 127–159), and decrypts (`tallyOpen.mjs` lines 67–108). The aggregator does not shuffle (BS-2).
-4. The HTTP tally response omits the `openings` array. The process still computed nullifier → option, and the partials remain in the database, so a later reader can recompute it offline. `demo/docs/how_voters_privacy_is_protected.md` says the Node host alone cannot decrypt. That is true only until `t` partials have been stored.
+1. The client encrypts a packed choice index under the joint P-256 key, with a fresh ephemeral key and a fresh AES-GCM IV (`passkey-wallet.js` lines 1274–1278; `voting_node/apps/node/public/tally-crypto.js` lines 178–192). The envelope is stored next to the nullifier (`store.mjs` lines 2259–2266). `GET /api/elections/:id/envelopes` returns that row to a tally operator after cutoff (`elections.mjs` lines 451–468), including `rankingPayload` when one was decoded.
+2. Guardians submit per-ballot partial points. `acceptPartials` stores `ballotHash`, `point`, and the DLEQ proof in the election bucket (`voting_node/apps/node/src/guardianFlow.mjs` lines 76–114). Those points are the decryption shares, not a ciphertext wrapped to the Node.
+3. `openBallots` walks every envelope, combines `t` points (`voting_node/apps/node/src/guardians/threshold.mjs` lines 127–159), and decrypts (`tallyOpen.mjs` lines 67–108). The aggregator does not shuffle (BS-2).
+4. The HTTP tally response omits the `openings` array. The process still computed nullifier → option, and the partials remain in the database, so a later reader can recompute it offline. `voting_node/docs/how_voters_privacy_is_protected.md` says the Node host alone cannot decrypt. That is true only until `t` partials have been stored.
 
-The guardian deal inbox (`GET /api/elections/:id/guardians/:index/inbox`, `elections.mjs` lines 893–918) is unauthenticated. It returns shares sealed to each guardian’s transport key (`demo/apps/node/src/guardians/dkg.mjs` lines 63–84), not ballot plaintext. It becomes a ballot-secrecy break only together with `t` stolen transport keys, which is the same threshold as above.
+The guardian deal inbox (`GET /api/elections/:id/guardians/:index/inbox`, `elections.mjs` lines 893–918) is unauthenticated. It returns shares sealed to each guardian’s transport key (`voting_node/apps/node/src/guardians/dkg.mjs` lines 63–84), not ballot plaintext. It becomes a ballot-secrecy break only together with `t` stolen transport keys, which is the same threshold as above.
 
 **Fix:** do not persist per-ballot partials. Decrypt only an aggregate ciphertext, or a shuffled list, and discard shares after the aggregate is formed. Refuse `opens_ballots` while `aggregation` is `undecided`.
 
@@ -161,7 +161,7 @@ The guardian deal inbox (`GET /api/elections/:id/guardians/:index/inbox`, `elect
 
 **Status:** Documented by design. Token polls stay public. The UI and `docs/POLLS.md` say they are not anonymous ballots.
 
-**Real today:** yes. This is declared, not accidental: `privacyMode: 'public_weighted'` (`demo/apps/node/src/polls.mjs` line 78) and `demo/docs/THREAT_MODEL.md` (“Address-hiding is not offered”).
+**Real today:** yes. This is declared, not accidental: `privacyMode: 'public_weighted'` (`voting_node/apps/node/src/polls.mjs` line 78) and `voting_node/docs/THREAT_MODEL.md` (“Address-hiding is not offered”).
 
 **Attacker:** anyone who can read disclosed poll ballots, the Node database, or the token chain plus the poll record. No collusion.
 
@@ -181,17 +181,17 @@ A forum operator who only runs discussion software learns nothing from this. A t
 
 **Status:** Fixed when the disclosure interval is non-zero (one sorted batch). A one-ballot batch is still visible. Interval 0 is unchanged for tests.
 
-**Real today:** yes. Hourly disclosure is implemented in the Node explorer and the L2 sequencer. `BallotInbox` increments `acceptedBallots` and emits `VoteAccepted` inside `submitVote`, with `block.timestamp` as the chain’s clock (`BallotInbox.sol` lines 244–254). `demo/docs/how_voters_privacy_is_protected.md` section 7 already says this. It is still a reconstruction path when the anonymity set is small.
+**Real today:** yes. Hourly disclosure is implemented in the Node explorer and the L2 sequencer. `BallotInbox` increments `acceptedBallots` and emits `VoteAccepted` inside `submitVote`, with `block.timestamp` as the chain’s clock (`BallotInbox.sol` lines 244–254). `voting_node/docs/how_voters_privacy_is_protected.md` section 7 already says this. It is still a reconstruction path when the anonymity set is small.
 
 **Attacker:** a chain observer, or anyone watching a public RPC. They do not learn a name from the event alone, because the relayer is shared (BS-5). They learn the exact inclusion time of each nullifier.
 
 **Reconstruction:**
 
-1. The Node coarsens `acceptedAt` to the disclosure bucket and sorts a bucket by nullifier before publication (`relay.mjs` lines 214–218; `demo/apps/node/src/explorer.mjs` lines 275–289; `demo/apps/node/src/disclosure.mjs` lines 8–10 and 69–74).
+1. The Node coarsens `acceptedAt` to the disclosure bucket and sorts a bucket by nullifier before publication (`relay.mjs` lines 214–218; `voting_node/apps/node/src/explorer.mjs` lines 275–289; `voting_node/apps/node/src/disclosure.mjs` lines 8–10 and 69–74).
 2. If `CHAIN_RPC` is set, `relayVote` also sends one `submitVote` transaction per ballot (`relay.mjs` lines 267–273; `chain.mjs` lines 386–392). Each transaction has its own timestamp. The explorer delay does not rewrite that transaction.
 3. An observer who saw a single person vote during a quiet interval matches that person to the only `VoteAccepted` in the interval. After tally, a one-ballot election (or a one-ballot hour whose other ballots are already known) makes the published counts that person’s option. No cryptography is required. This is the usual anonymity-set limit; the contracts do not add padding, a mix, or a delayed inclusion list.
 
-**Fix:** if the inbox is on a public chain, submit ballots in a batch after the hour, in random order, from the relayer, and do not expose a live `acceptedBallots()` that ticks per vote. The L2 seal (`demo/l2/disclosure.mjs`, `isHeldVoteType`) is the model; the Solidity inbox does not implement it.
+**Fix:** if the inbox is on a public chain, submit ballots in a batch after the hour, in random order, from the relayer, and do not expose a live `acceptedBallots()` that ticks per vote. The L2 seal (`voting_node/l2/disclosure.mjs`, `isHeldVoteType`) is the model; the Solidity inbox does not implement it.
 
 ---
 
@@ -199,9 +199,9 @@ A forum operator who only runs discussion software learns nothing from this. A t
 
 **Status:** Fixed. Vote transactions are an allowlist and reject identity and answer keys.
 
-**Real today:** yes, for civic JSON submitted to the sequencer. The Node relay path strips those keys before it builds a vote (`demo/apps/node/src/http.mjs` lines 97–171; `relay.mjs` lines 99 and 220–232) and does not put them in the explorer row. A client or bundler that talks to the sequencer directly is not stripped the same way.
+**Real today:** yes, for civic JSON submitted to the sequencer. The Node relay path strips those keys before it builds a vote (`voting_node/apps/node/src/http.mjs` lines 97–171; `relay.mjs` lines 99 and 220–232) and does not put them in the explorer row. A client or bundler that talks to the sequencer directly is not stripped the same way.
 
-**Attacker:** a chain observer after the hour opens, and the sequencer operator immediately (sealed votes are persisted before disclosure, `demo/l2/sequencer/state.mjs` `rememberSealed`). The archive job copies sealed-hour block and proof objects (`demo/l2/archive/job.mjs`); it does not add a join, but it keeps whatever the block contained.
+**Attacker:** a chain observer after the hour opens, and the sequencer operator immediately (sealed votes are persisted before disclosure, `voting_node/l2/sequencer/state.mjs` `rememberSealed`). The archive job copies sealed-hour block and proof objects (`voting_node/l2/archive/job.mjs`); it does not add a join, but it keeps whatever the block contained.
 
 **Reconstruction:**
 
@@ -220,7 +220,7 @@ The Node’s own banned list is stricter (`answers`, `ranking`, `identityCommitm
 
 **Status:** Partial. The dev circuit binds a Poseidon tag of one choice and private randomness. The ElGamal body is not yet constrained in-circuit.
 
-**Real today:** yes. The Node refuses a UTF-8 JSON “ciphertext” unless `ZKV_ALLOW_PLAINTEXT_BALLOTS` is set, and that flag defaults off (`demo/apps/node/src/config.mjs` lines 287–288; `relay.mjs` lines 225–232). The contract has no such check.
+**Real today:** yes. The Node refuses a UTF-8 JSON “ciphertext” unless `ZKV_ALLOW_PLAINTEXT_BALLOTS` is set, and that flag defaults off (`voting_node/apps/node/src/config.mjs` lines 287–288; `relay.mjs` lines 225–232). The contract has no such check.
 
 **Attacker:** a chain observer, if the submitter put the option in `encryptedBallot`. That submitter is the voter’s client, a malicious wrapper, or a relayer that was given plaintext. A relayer that was given a real AES-GCM or ECIES blob cannot turn it back into an option (see the sound section).
 
@@ -230,7 +230,7 @@ The Node’s own banned list is stricter (`answers`, `ranking`, `identityCommitm
 2. The vote circuit forces `ballotHash` into the instance with a squaring constraint and does not open it (`vote_lib.circom` lines 234–240). Choice bits are explicitly out of scope.
 3. A transaction whose ballot bytes are the JSON of the marked options is the option, next to the nullifier, in calldata. BS-1 adds the commitment to the same call. BS-5 adds the sender.
 
-`decodeBallotEnvelope` on the Node will also recover rankings from hex-encoded JSON and store `rankingPayload` on the envelope (`demo/apps/node/src/ballot.mjs` lines 560–592 and 662–672; `store.mjs` lines 2259–2266). Production refusal happens first, so the shipped SPA’s AES-GCM and ECIES blobs do not take this branch.
+`decodeBallotEnvelope` on the Node will also recover rankings from hex-encoded JSON and store `rankingPayload` on the envelope (`voting_node/apps/node/src/ballot.mjs` lines 560–592 and 662–672; `store.mjs` lines 2259–2266). Production refusal happens first, so the shipped SPA’s AES-GCM and ECIES blobs do not take this branch.
 
 **Fix:** keep refusing plaintext at the Node. On chain, require a well-formedness proof that the ciphertext encrypts a valid option under the tally key. Do not accept raw ballot bytes as the secret.
 
@@ -248,7 +248,7 @@ The Node’s own banned list is stricter (`answers`, `ranking`, `identityCommitm
 
 1. The page always sends `identityCommitment` on `POST /api/elections/:id/vote-pass` when the wallet has one (`vote.js` lines 789–797; `vote-pass.js` lines 112–121). That request carries the session cookie. The handler may check the PIN and, when external parties are active, the commitment (`elections.mjs` lines 676–712).
 2. The ballot `POST` uses `credentials: "omit"` and a body of ciphertext, mock proof, nullifier, ballot hash, and the unblinded pass (`vote.js` lines 800–827). The route does not read `req.user` when a pass is present (`elections.mjs` lines 727–753).
-3. The app log skips the ballot POST entirely (`demo/apps/node/src/server.mjs` lines 350–364) and logs method, URL, and status for the vote-pass, not the body and not the user id. The two calls are still the same browser, usually the same connection, a moment apart. One voter in that window joins the session (and the commitment in the vote-pass body, if the proxy logs bodies) to the nullifier and ciphertext.
+3. The app log skips the ballot POST entirely (`voting_node/apps/node/src/server.mjs` lines 350–364) and logs method, URL, and status for the vote-pass, not the body and not the user id. The two calls are still the same browser, usually the same connection, a moment apart. One voter in that window joins the session (and the commitment in the vote-pass body, if the proxy logs bodies) to the nullifier and ciphertext.
 4. The option then requires BS-4, BS-9, or a singleton tally (BS-7).
 
 At rest, spent passes are a sorted list of token hashes with no nullifier and no timestamp (`votePass.mjs` lines 119–127 and 155–164; `store.mjs` lines 2268–2274). Reading the JSON later does not reconstruct step 3. Watching the process does.
@@ -267,8 +267,8 @@ At rest, spent passes are a sorted list of token hashes with no nullifier and no
 
 **Reconstruction:**
 
-1. The vote response and the local record store nullifier, ballot hash, and token, with `receiptsProveChoice: false` (`vote.js` lines 844–861; `demo/apps/node/public/app.js` lines 408–421). The choice preview is cleared and is not written to `localStorage`.
-2. The opt-in email contains the election id and the holder token. It does not contain the nullifier, the ballot hash, or an attachment (`demo/apps/node/src/receipts.mjs` lines 389–422). The send is not written to the mail outbox unless the capture mailer is on (`mailer.mjs` lines 222–224; `emailReceipt` lines 631–650). The mail provider still sees the recipient and the token.
+1. The vote response and the local record store nullifier, ballot hash, and token, with `receiptsProveChoice: false` (`vote.js` lines 844–861; `voting_node/apps/node/public/app.js` lines 408–421). The choice preview is cleared and is not written to `localStorage`.
+2. The opt-in email contains the election id and the holder token. It does not contain the nullifier, the ballot hash, or an attachment (`voting_node/apps/node/src/receipts.mjs` lines 389–422). The send is not written to the mail outbox unless the capture mailer is on (`mailer.mjs` lines 222–224; `emailReceipt` lines 631–650). The mail provider still sees the recipient and the token.
 3. `GET` receipt-by-token resolves token hash → nullifier (`receipts.mjs` lines 639–642 and the holder view around lines 600–616). The public explorer row for that nullifier is still only hashes (`store.mjs` `publicVoteRecord`, lines 104–111).
 4. The coercer has person → nullifier. The option requires BS-2 or BS-4. The receipt alone cannot buy a specific option. It can buy or compel **participation**, and it becomes vote-buying of an option as soon as openings are public.
 
@@ -334,7 +334,7 @@ Until those are true in the contracts and not only in the Node’s JSON path, a 
 
 ## Method limits
 
-- Reviewed the Solidity under `smart-contracts/src`, the Circom under `circuits/`, the Node under `demo/apps/node/src`, the browser vote and passkey scripts, `demo/l2` sequencer and archive, and `demo/packages/chain-client`. Dependency trees (`forge-std`, vendored poseidon constants) were not audited for hash collisions.
+- Reviewed the Solidity under `smart-contracts/src`, the Circom under `circuits/`, the Node under `voting_node/apps/node/src`, the browser vote and passkey scripts, `voting_node/l2` sequencer and archive, and `voting_node/packages/chain-client`. Dependency trees (`forge-std`, vendored poseidon constants) were not audited for hash collisions.
 - No deployment was probed. “Real today” means the source on this commit, not a particular chain’s storage.
 - No attempt was made to break Poseidon or AES-GCM. Unlinkability of the PRF path assumes those functions hide their inputs and that the authenticator’s PRF key is not extracted.
 - Forum software outside this repository was not reviewed. Only this tree’s integration, which is documentation plus the absence of a join.

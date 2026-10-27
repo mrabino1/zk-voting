@@ -6,7 +6,7 @@
 # A separate job runs an UNTRUSTED toy Groth16 phase-2 transcript
 # (published entropy). That job is not a ceremony.
 #
-# Local equivalents (repo root). Need Node 22+ and Foundry (`foundryup`):
+# Local equivalents (from voting_node/). Need Node 22+ and Foundry (`foundryup`):
 #
 #   npm install
 #   npm run test:node          # apps/node (includes WCAG 2.2 AA axe checks; needs Chrome)
@@ -44,6 +44,7 @@ permissions:
 defaults:
   run:
     shell: bash
+    working-directory: voting_node
 
 jobs:
   test:
@@ -61,7 +62,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: voting_node/package-lock.json
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -227,7 +228,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: voting_node/package-lock.json
 
       - name: Install npm workspaces
         run: npm install --no-audit --no-fund
