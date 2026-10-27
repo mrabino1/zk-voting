@@ -6,7 +6,13 @@
 
 import "./i18n.js";
 import { fetchWithStandbyRetry } from "./standby-retry.js";
-import { loginPasskey, hasWebAuthn, webAuthnUnavailableMessage } from "./passkey-wallet.js";
+import {
+  loginPasskey,
+  hasWebAuthn,
+  prepareAssertionCeremony,
+  webAuthnErrorMessage,
+  webAuthnUnavailableMessage,
+} from "./passkey-wallet.js";
 import { navigate } from "./router.js";
 import {
   isMfaChallenge,
@@ -134,9 +140,49 @@ function finishOrMfa(state, result, method) {
   return result;
 }
 
-export async function signInWithPasskey(handle, state) {
-  const result = await loginPasskey({ api: fetchJson, handle });
+export async function signInWithPasskey(handle, state, prepared) {
+  const result = await loginPasskey({ api: fetchJson, handle, prepared });
   return finishOrMfa(state, result, "passkey");
+}
+
+const loginPrep = {
+  key: "",
+  prepared: null,
+  failedKey: "",
+  inflight: "",
+};
+
+function loginPrepKey(handle) {
+  return String(handle || "").trim();
+}
+
+async function prefetchPasskeyLogin(state, { force = false } = {}) {
+  if (!hasWebAuthn() || state.busy || state.user || state.mfa) return;
+  if (state.tab && state.tab !== "passkey") return;
+  const key = loginPrepKey(state.handle);
+  if (force) loginPrep.failedKey = "";
+  if (loginPrep.prepared && loginPrep.key === key) return;
+  if (loginPrep.failedKey === key || loginPrep.inflight === key) return;
+  loginPrep.inflight = key;
+  try {
+    const server = await fetchJson("/api/auth/passkey/login/begin", {
+      method: "POST",
+      body: key ? { handle: key } : {},
+    });
+    const prepared = await prepareAssertionCeremony(server);
+    if (loginPrepKey(state.handle) !== key || (state.tab && state.tab !== "passkey")) return;
+    loginPrep.prepared = prepared;
+    loginPrep.key = key;
+    loginPrep.failedKey = "";
+  } catch {
+    if (loginPrepKey(state.handle) === key) {
+      loginPrep.prepared = null;
+      loginPrep.key = "";
+      loginPrep.failedKey = key;
+    }
+  } finally {
+    if (loginPrep.inflight === key) loginPrep.inflight = "";
+  }
 }
 
 export async function signInWithEthereum(state) {
@@ -314,6 +360,7 @@ function renderForm(state, opts, statusEl) {
   const webauthn = hasWebAuthn();
   const busy = Boolean(state.busy);
   const tab = state.tab || "email";
+  if (tab === "passkey" && webauthn && !busy) prefetchPasskeyLogin(state);
   const tabs = [
     { id: "email", label: "Email" },
     { id: "web3", label: "Ethereum" },
@@ -595,7 +642,27 @@ function renderForm(state, opts, statusEl) {
               "data-signin": "passkey",
               disabled: busy || !webauthn,
               text: state.busy === "passkey" ? "Waiting for passkey…" : "Sign in with passkey",
-              onClick: () => runAction(state, statusEl, "passkey", () => signInWithPasskey(state.handle, state)),
+              onClick: () => {
+                const key = loginPrepKey(state.handle);
+                if (!(loginPrep.prepared && loginPrep.key === key)) {
+                  prefetchPasskeyLogin(state, { force: true });
+                  setStatus(statusEl, "err", webAuthnErrorMessage({ code: "PASSKEY_NOT_READY" }));
+                  return;
+                }
+                const prepared = loginPrep.prepared;
+                loginPrep.prepared = null;
+                loginPrep.key = "";
+                let pending;
+                try {
+                  pending = loginPasskey({ api: fetchJson, handle: state.handle, prepared });
+                } catch (err) {
+                  setStatus(statusEl, "err", webAuthnErrorMessage(err));
+                  return;
+                }
+                runAction(state, statusEl, "passkey", () =>
+                  pending.then((result) => finishOrMfa(state, result, "passkey"))
+                );
+              },
             })
           ),
           el(
@@ -615,6 +682,9 @@ function renderForm(state, opts, statusEl) {
               value: state.handle || "",
               onInput: (event) => {
                 state.handle = event.target.value;
+                loginPrep.prepared = null;
+                loginPrep.key = "";
+                prefetchPasskeyLogin(state);
               },
             })
           )
@@ -691,12 +761,11 @@ async function runAction(state, statusEl, kind, fn) {
       result?.pinResetGranted ? `Signed in as ${who}. Set a new vote PIN on Identify yourself.` : `Signed in as ${who}.`
     );
   } catch (err) {
-    const cancelled = /cancel|not allowed|abort/i.test(err.message || "");
-    setStatus(
-      statusEl,
-      "err",
-      cancelled ? "Sign-in was cancelled." : err.message || "Sign-in failed."
-    );
+    const message =
+      kind === "passkey" ? webAuthnErrorMessage(err) : /cancel|not allowed|abort/i.test(err.message || "")
+        ? "Sign-in was cancelled."
+        : err.message || "Sign-in failed.";
+    setStatus(statusEl, "err", message);
   } finally {
     state.busy = false;
     await state.reload();

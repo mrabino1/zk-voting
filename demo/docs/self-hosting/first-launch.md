@@ -34,7 +34,7 @@ Re-check the L2 identity later with `npm run l2:identity -- show` and `npm run l
 Do this right after the first deploy, before you share the address:
 
 1. Open the site. While no super admin exists every page sends you to `/setup`.
-2. **Super admin.** Keep or change the handle (default from `ADMIN_HANDLE`), accept the Terms, and create a passkey. If `SETUP_TOKEN` is set, enter it first. Complete the email code if SES is configured.
+2. **Super admin.** Keep or change the handle (default from `ADMIN_HANDLE`), enter the setup token, accept the Terms, and create a passkey. If `SETUP_TOKEN` is set, type that value. If it is empty, type the one-time token the server printed in its process log at boot. Complete the email code if SES is configured.
 3. **Chain id.** If `CHAIN_ID` is set in the environment it is shown read-only ("fixed by the environment"). Otherwise pick 27427 (civic L2, default), 1 (Ethereum mainnet), 11155111 (Sepolia), 31337 (local) or a custom positive integer. It is stored server-side; `CHAIN_ID` in the environment always wins over it. Restart the Node after changing it so the wallet chain client picks it up.
 4. **Entropy ceremony.** Say whether a public entropy ceremony is used ([`zk-entropy/ceremony`](../../../zk-entropy/ceremony/README.md)) and, if so, its host (e.g. `ceremony.zk-voting.org`). `ENTROPY_CEREMONY_URL` in the environment fixes it.
 5. **Setup entropy.** If the ceremony is closed, paste its output (`zke1:ceremony:…`, checksum-validated as you type). Otherwise generate local entropy now on the pad (mouse, keys and `crypto.getRandomValues`, giving `zke1:local:…`) or skip. `ZK_ENTROPY` in the environment wins and makes this read-only. Only the super admin can read the saved value back; `/api/setup` shows only whether it is set and its transcript hash. It is prefilled in the "Entropy string" field of `/ceremony/<id>` and mixed into your contribution.
@@ -44,9 +44,9 @@ Do this right after the first deploy, before you share the address:
 
 Only the first super admin wins: once one exists, `POST /api/setup/admin/*` answers `409 SETUP_ADMIN_EXISTS`, including for a second visitor who started at the same time. `GET /api/setup` reports the state.
 
-Until the super admin exists, anyone who can reach the site could try to create it. Set `SETUP_TOKEN`, or keep the Node private while you claim it: use the [Tailscale sidecar](./tailscale.md), a firewall, or your PaaS's basic-auth option. Then open it to the public.
+The first-run claim always requires a setup token. When `SETUP_TOKEN` is set, type that value on `/setup`. When it is unset, the server prints a one-time token at boot, only in the process log. Type that on `/setup`. It is not served over HTTP. Restarting before the super admin is created replaces a generated token. An environment token stays valid until a super admin exists.
 
-The older path still works when `SETUP_TOKEN` is empty: go to **Register** (`/register`), enter the `ADMIN_HANDLE` value as your handle and create a passkey.
+`/register` cannot claim the seeded super admin. Use `/setup`. Keep the Node private until that claim is done if you want a smaller window: the [Tailscale sidecar](./tailscale.md), a firewall, or your PaaS's basic-auth option. Then open it to the public.
 
 ## Make it yours
 

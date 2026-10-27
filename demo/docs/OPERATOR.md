@@ -161,6 +161,17 @@ curl -fsS http://127.0.0.1:3000/api/config
 
 The value is a bare hostname. `https://vote.domain.tld`, a port, or a path is rejected at startup.
 
+`RP_ID`, when it is a public parent of the request host (the host equals it or ends with `.<RP_ID>`), stays the relying party for that host. Otherwise the request hostname is the RP ID, so a rotating test host does not share passkeys with the production name. `WEBAUTHN_HOST_SUFFIXES` is an optional comma-separated list of parent domains. A request is allowed when its host is `VOTE_FQDN`, its origin is already in `WEBAUTHN_ORIGINS`, `RP_ID` is a suffix of the host, or the host matches one of those suffixes. Any other `Host` keeps the configured RP ID and origins. The ceremony stores that RP ID and origin list and verifies the attestation against the stored values.
+
+### First-run setup token
+
+`/setup` always requires a setup token before it creates the super admin. The token is never included in an HTTP response.
+
+- When `SETUP_TOKEN` is set, type that value on `/setup`. It stays valid until a super admin exists, so a failed attempt can be retried. `./setup.sh` can write it to `demo/.env`. The script does not print it.
+- When `SETUP_TOKEN` is unset, the process mints a one-time token at boot and prints it only on the process log. Type that value on `/setup`. It is not written to `.env`. Restarting before the super admin is created replaces it. A successful claim invalidates it.
+
+The seeded super admin handle cannot be claimed through `/register` while a setup token is in force, which is every boot. Dev sign-in is unchanged and stays off in production.
+
 ---
 
 ## First-time machine

@@ -688,21 +688,74 @@ function prfEnableSalt() {
 }
 
 /**
- * @param {PublicKeyCredentialCreationOptions | object} [serverOptions]
- * @returns {Promise<PublicKeyCredential>}
+ * Map a WebAuthn or setup rejection to a sentence a visitor can act on.
+ * @param {unknown} err
  */
-export async function createCredential(serverOptions = {}) {
-  if (!hasWebAuthn()) {
-    throw new Error("This browser does not support passkeys (WebAuthn).");
+export function webAuthnErrorMessage(err) {
+  const code = err?.data?.code || err?.code || "";
+  const name = err?.name || "";
+  const message = String(err?.message || "");
+  if (code === "PASSKEY_NOT_READY" || message === "PASSKEY_NOT_READY") {
+    return "The passkey prompt is not ready yet. Stay on this page and click again.";
   }
-  const prfOk = await isPrfSupported();
-  const evalFirst =
-    serverOptions.prfEvalFirst != null
-      ? coerceBytes(serverOptions.prfEvalFirst)
-      : await prfEnableSalt();
-  const evalSecond =
-    serverOptions.prfEvalSecond != null ? coerceBytes(serverOptions.prfEvalSecond) : null;
+  if (code === "SETUP_TOKEN_REQUIRED") {
+    return "Enter the setup token from the server log, or the SETUP_TOKEN value, and try again.";
+  }
+  if (code === "SETUP_TOKEN_USED") {
+    return "That setup token was already used. If SETUP_TOKEN is unset, restart the server and use the new token from its log.";
+  }
+  if (code === "SETUP_ADMIN_EXISTS") {
+    return "A super admin already exists. First-run setup is closed. Sign in instead.";
+  }
+  if (name === "NotAllowedError" || /not focused|does not have focus/i.test(message)) {
+    return "The browser blocked the passkey because this page was not focused. Click the page, then try again.";
+  }
+  if (name === "SecurityError") {
+    return "The browser blocked the passkey for this address. Open the voting site directly, then try again.";
+  }
+  if (name === "AbortError" || /cancel|not allowed|abort/i.test(message)) {
+    return "The passkey prompt was cancelled.";
+  }
+  return message || "That did not work.";
+}
 
+function passkeyNotReady() {
+  const err = new Error("PASSKEY_NOT_READY");
+  err.code = "PASSKEY_NOT_READY";
+  return err;
+}
+
+/**
+ * WebKit refuses credentials.create/get when the document is not focused.
+ * Call this in the same turn as the ceremony, before create/get.
+ */
+function ensureDocumentFocused() {
+  if (typeof document === "undefined" || typeof document.hasFocus !== "function") return;
+  if (document.hasFocus()) return;
+  try {
+    if (typeof window !== "undefined" && typeof window.focus === "function") window.focus();
+  } catch {
+    /* the click handler continues */
+  }
+  if (document.hasFocus()) return;
+  if (typeof document.createElement !== "function" || !document.body) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.tabIndex = -1;
+  button.setAttribute("aria-hidden", "true");
+  button.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
+  document.body.appendChild(button);
+  try {
+    button.focus();
+  } catch {
+    /* create/get still runs in this turn */
+  }
+  queueMicrotask(() => {
+    button.remove?.();
+  });
+}
+
+function creationPublicKey(serverOptions, prfOk, evalFirst, evalSecond) {
   const pk = serverOptions.publicKey || serverOptions;
   const challenge = pk.challenge ? coerceBytes(pk.challenge) : randomChallenge();
   const userId = pk.user?.id ? coerceBytes(pk.user.id) : random32();
@@ -710,14 +763,12 @@ export async function createCredential(serverOptions = {}) {
   const rpName = pk.rp?.name || brandName();
   const userName = pk.user?.name || serverOptions.displayName || "voter";
   const displayName = pk.user?.displayName || userName;
-
   const extensions = { ...(pk.extensions || {}) };
   if (prfOk) {
     extensions.prf = { eval: { first: evalFirst } };
     if (evalSecond) extensions.prf.eval.second = evalSecond;
   }
-
-  const publicKey = {
+  return {
     challenge,
     rp: rpId ? { name: rpName, id: rpId } : { name: rpName },
     user: {
@@ -747,11 +798,59 @@ export async function createCredential(serverOptions = {}) {
     })),
     extensions,
   };
+}
 
-  const credential = await enqueueWebAuthn(() => navigator.credentials.create({ publicKey }));
+/**
+ * Await PRF capability and salt derivation before the click.
+ * This does not call navigator.credentials.create.
+ * @param {object} [serverOptions]
+ */
+export async function prepareRegistrationCeremony(serverOptions = {}) {
+  if (!hasWebAuthn()) {
+    throw new Error("This browser does not support passkeys (WebAuthn).");
+  }
+  const prfOk = await isPrfSupported();
+  const evalFirst =
+    serverOptions.prfEvalFirst != null
+      ? coerceBytes(serverOptions.prfEvalFirst)
+      : await prfEnableSalt();
+  const evalSecond =
+    serverOptions.prfEvalSecond != null ? coerceBytes(serverOptions.prfEvalSecond) : null;
+  return {
+    publicKey: creationPublicKey(serverOptions, prfOk, evalFirst, evalSecond),
+    evalFirst,
+    evalSecond,
+  };
+}
+
+/**
+ * Start navigator.credentials.create in this turn. Not async: the call happens
+ * before this function returns, so a click handler can invoke it before any await.
+ * @param {{ publicKey?: object, evalFirst?: Uint8Array, evalSecond?: Uint8Array | null }} prepared
+ * @returns {Promise<PublicKeyCredential>}
+ */
+export function startRegistrationCeremony(prepared) {
+  if (!prepared?.publicKey) throw passkeyNotReady();
+  ensureDocumentFocused();
+  const promise = navigator.credentials.create({ publicKey: prepared.publicKey });
+  return Promise.resolve(promise).then((credential) => {
+    if (!credential) throw new Error("Passkey creation was cancelled.");
+    credential._zkVotingPrfEvalFirst = prepared.evalFirst;
+    if (prepared.evalSecond) credential._zkVotingPrfEvalSecond = prepared.evalSecond;
+    return credential;
+  });
+}
+
+/**
+ * @param {PublicKeyCredentialCreationOptions | object} [serverOptions]
+ * @returns {Promise<PublicKeyCredential>}
+ */
+export async function createCredential(serverOptions = {}) {
+  const prepared = await prepareRegistrationCeremony(serverOptions);
+  const credential = await enqueueWebAuthn(() => navigator.credentials.create({ publicKey: prepared.publicKey }));
   if (!credential) throw new Error("Passkey creation was cancelled.");
-  credential._zkVotingPrfEvalFirst = evalFirst;
-  if (evalSecond) credential._zkVotingPrfEvalSecond = evalSecond;
+  credential._zkVotingPrfEvalFirst = prepared.evalFirst;
+  if (prepared.evalSecond) credential._zkVotingPrfEvalSecond = prepared.evalSecond;
   return credential;
 }
 
@@ -1083,22 +1182,33 @@ async function resolveDerivationContext({ api, chainId, jurisdictionId } = {}) {
  * Register a resident-key passkey, wrap a 32-byte account seed under the account
  * PRF domain, derive (trapdoor, nullifierSecret) under the identity PRF domain,
  * and optionally finish with the Node (`POST /api/auth/passkey/register/{begin,finish}`).
+ *
+ * Pass `prepared` from prepareRegistrationCeremony(). create() then runs in this
+ * turn, before any await. Omit it and the begin request runs first.
  */
-export async function registerPasskey({
-  api,
-  displayName,
-  chainId,
-  jurisdictionId,
-  acceptedTerms,
-  beginPath = "/api/auth/passkey/register/begin",
-  finishPath = "/api/auth/passkey/register/finish",
-  extraBody = null,
-  strict = false,
-} = {}) {
+export function registerPasskey(opts = {}) {
+  const credentialPromise = opts.prepared ? startRegistrationCeremony(opts.prepared) : null;
+  return registerPasskeyAfterGesture(opts, credentialPromise);
+}
+
+async function registerPasskeyAfterGesture(
+  {
+    api,
+    displayName,
+    chainId,
+    jurisdictionId,
+    acceptedTerms,
+    beginPath = "/api/auth/passkey/register/begin",
+    finishPath = "/api/auth/passkey/register/finish",
+    extraBody = null,
+    strict = false,
+  } = {},
+  credentialPromise,
+) {
   let server = null;
   let finishError = null;
   let finishResult = null;
-  if (typeof api === "function") {
+  if (!credentialPromise && typeof api === "function") {
     try {
       server = await api(beginPath, {
         method: "POST",
@@ -1123,7 +1233,7 @@ export async function registerPasskey({
       : server || {};
   if (displayName) options.displayName = displayName;
   const ctx = await resolveDerivationContext({ api, chainId, jurisdictionId });
-  const credential = await createCredential(options);
+  const credential = credentialPromise ? await credentialPromise : await createCredential(options);
   const publicRecord = await provisionFromCredential(credential, {
     displayName,
     chainId: ctx.chainId,
@@ -1183,40 +1293,77 @@ export function serializeAssertion(credential) {
   };
 }
 
-/**
- * Discoverable (username-less) passkey login. Optional handle scopes
- * allowCredentials when the authenticator is not resident-key capable.
- */
-export async function loginPasskey({ api, handle } = {}) {
-  if (!hasWebAuthn()) throw new Error(webAuthnUnavailableMessage());
-  if (typeof api !== "function") throw new Error("Passkey login needs the Node API helper.");
-  const trimmed = String(handle || "").trim();
-  const server = await api("/api/auth/passkey/login/begin", {
-    method: "POST",
-    body: trimmed ? { handle: trimmed } : {},
-  });
-  const pk = server?.publicKey || server || {};
+function assertionPublicKey(serverOptions = {}) {
+  const pk = serverOptions.publicKey || serverOptions || {};
   const allow = (pk.allowCredentials || []).map((c) => ({
     type: c.type || "public-key",
     id: coerceBytes(c.id),
     transports: c.transports,
   }));
-  const assertion = await enqueueWebAuthn(() =>
-    navigator.credentials.get({
-      publicKey: {
-        challenge: coerceBytes(pk.challenge),
-        timeout: pk.timeout || 120000,
-        rpId: pk.rpId || (typeof location !== "undefined" ? location.hostname : undefined),
-        userVerification: pk.userVerification || "preferred",
-        allowCredentials: allow.length ? allow : undefined,
-        extensions: pk.extensions || { prf: {} },
-      },
-    })
-  );
-  if (!assertion) throw new Error("Passkey sign-in was cancelled.");
+  return {
+    challenge: pk.challenge ? coerceBytes(pk.challenge) : randomChallenge(),
+    timeout: pk.timeout || 120000,
+    rpId: pk.rpId || (typeof location !== "undefined" ? location.hostname : undefined),
+    userVerification: pk.userVerification || "required",
+    allowCredentials: allow.length ? allow : undefined,
+    extensions: pk.extensions || { prf: {} },
+  };
+}
+
+/**
+ * Await the login challenge fetch before the click. Does not call credentials.get.
+ * @param {object} [serverOptions]
+ */
+export async function prepareAssertionCeremony(serverOptions = {}) {
+  if (!hasWebAuthn()) throw new Error(webAuthnUnavailableMessage());
+  if (!serverOptions?.challenge && !serverOptions?.publicKey?.challenge) throw passkeyNotReady();
+  return { publicKey: assertionPublicKey(serverOptions) };
+}
+
+/**
+ * Start navigator.credentials.get in this turn, before this function returns.
+ * @param {{ publicKey?: PublicKeyCredentialRequestOptions }} prepared
+ */
+export function startAssertionCeremony(prepared) {
+  if (!prepared?.publicKey?.challenge) throw passkeyNotReady();
+  ensureDocumentFocused();
+  const promise = navigator.credentials.get({ publicKey: prepared.publicKey });
+  return Promise.resolve(promise).then((assertion) => {
+    if (!assertion) throw new Error("Passkey sign-in was cancelled.");
+    return assertion;
+  });
+}
+
+/**
+ * Discoverable (username-less) passkey login. Optional handle scopes
+ * allowCredentials when the authenticator is not resident-key capable.
+ * Pass `prepared` from prepareAssertionCeremony() so get() runs in the click turn.
+ */
+export function loginPasskey({ api, handle, prepared } = {}) {
+  if (!hasWebAuthn()) throw new Error(webAuthnUnavailableMessage());
+  if (typeof api !== "function") throw new Error("Passkey login needs the Node API helper.");
+  const assertionPromise = prepared ? startAssertionCeremony(prepared) : null;
+  return loginPasskeyAfterGesture({ api, handle, assertionPromise });
+}
+
+async function loginPasskeyAfterGesture({ api, handle, assertionPromise }) {
+  let assertion = assertionPromise;
+  if (!assertion) {
+    const trimmed = String(handle || "").trim();
+    const server = await api("/api/auth/passkey/login/begin", {
+      method: "POST",
+      body: trimmed ? { handle: trimmed } : {},
+    });
+    const prepared = await prepareAssertionCeremony(server);
+    assertion = enqueueWebAuthn(() => navigator.credentials.get({ publicKey: prepared.publicKey })).then((value) => {
+      if (!value) throw new Error("Passkey sign-in was cancelled.");
+      return value;
+    });
+  }
+  const credential = await assertion;
   return api("/api/auth/passkey/login/finish", {
     method: "POST",
-    body: serializeAssertion(assertion),
+    body: serializeAssertion(credential),
   });
 }
 

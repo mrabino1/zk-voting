@@ -20,7 +20,8 @@ Never commit `.env`, and never bake secrets into an image.
 | `ZK_VOTING_IMAGE_TAG` | `local` (`latest` in the Tailscale file) | Tag for the locally built images. |
 | `VOTE_FQDN` | empty | Public voting hostname (`vote.example.org`). Bare hostname only. Empty means a `localhost` demo. |
 | `RP_ID` | `localhost` | Passkey relying party. Ignored as `localhost` when `VOTE_FQDN` is set. |
-| `WEBAUTHN_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed browser origins. `https://$VOTE_FQDN` is always added. |
+| `WEBAUTHN_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed browser origins. `https://$VOTE_FQDN` is always added. The request origin is accepted only when the host is already allowed. |
+| `WEBAUTHN_HOST_SUFFIXES` | empty | Comma-separated parent domains. A host equal to a suffix, or a subdomain of one, may run a passkey ceremony. The RP ID is the request host unless `RP_ID` is that host or a parent of it. |
 | `PUBLIC_BASE_URL` | empty → `https://$VOTE_FQDN` | Origin printed in official-outcome QR codes. |
 | `TRUST_PROXY` | empty | Set `1` behind a reverse proxy or Tailscale so rate limits see the real client. |
 
@@ -40,7 +41,7 @@ Never commit `.env`, and never bake secrets into an image.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADMIN_HANDLE` | `admin` | Handle of the platform administrator seeded on an empty store. See [First launch](./first-launch.md). |
-| `SETUP_TOKEN` | empty | **Secret.** When set, the first-run `/setup` screen asks for it before creating the super admin, and the seeded row cannot be claimed through `/register`. |
+| `SETUP_TOKEN` | empty | **Secret.** `/setup` always asks for a setup token before creating the super admin, and `/register` cannot claim the seeded row. When this is set, type that value. When it is empty, the server prints a one-time token at boot, only on the process log, and invalidates it after the super admin is created. The token is never served over HTTP. |
 | `FIRST_RUN_REDIRECT` | `true` (`false` in tests) | Send visitors to `/setup` while no super admin exists, and the super admin until they press Finish. |
 | `SUPER_ADMIN_EMAIL` | empty | Contact email of that administrator. Applied on every boot by the active writer. Invalid values refuse to start. |
 | `POLLS_ENABLED` | empty | `1` turns on token-weighted polls. |

@@ -2,6 +2,7 @@
 
 import { Router } from 'express';
 
+import { resolveRequestWebAuthn } from '../config.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { destroySession, publicUser, requireAuth } from '../auth.mjs';
 import {
@@ -56,6 +57,17 @@ export function authRouter(deps) {
       } else if (!req.user && !existing) {
         requireAcceptedTerms(req.body || {});
       }
+      if (
+        !req.user &&
+        existing &&
+        existing.role === 'platform_super_admin' &&
+        !isClaimedPerson(existing) &&
+        config.setupToken
+      ) {
+        throw new HttpError(403, 'use the first-run setup screen to create the super admin', {
+          code: 'SETUP_TOKEN_REQUIRED',
+        });
+      }
       // Unclaimed seed (e.g. ADMIN_HANDLE): first claim keeps prior terms rules.
       // Claimed → session user only. Unclaimed seed → that row. Else → new handle.
       const targetUser = req.user
@@ -67,6 +79,7 @@ export function authRouter(deps) {
         user: targetUser,
         handle: targetUser?.handle || handle,
         acceptedTerms: req.body?.acceptedTerms,
+        webauthn: resolveRequestWebAuthn(config, req),
       });
       res.json({ ...options, publicKey: options, rpName: config.rpName, nfp: true });
     }),
@@ -98,6 +111,7 @@ export function authRouter(deps) {
       const options = await passkeys.beginLogin({
         user: handle ? store.getUserByHandle(handle) : null,
         handle,
+        webauthn: resolveRequestWebAuthn(config, req),
       });
       res.json({ ...options, publicKey: options, rpName: config.rpName, nfp: true });
     }),

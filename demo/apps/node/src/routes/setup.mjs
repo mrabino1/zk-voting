@@ -27,12 +27,15 @@
 // only (./setup.sh or npm run l2:identity -- init); nothing here returns them.
 //
 // Once a super admin holds a sign-in factor, the admin endpoints answer 409
-// SETUP_ADMIN_EXISTS for ever. When SETUP_TOKEN is set, the admin endpoints
-// also require it (header x-setup-token or body.setupToken).
+// SETUP_ADMIN_EXISTS for ever. The admin endpoints always require a setup
+// token (header x-setup-token or body.setupToken). An environment token stays
+// valid until a super admin exists. A token minted because SETUP_TOKEN was
+// empty is consumed when the claim succeeds.
 
 import { Router } from 'express';
 
 import { requireSuperAdmin } from '../auth.mjs';
+import { resolveRequestWebAuthn } from '../config.mjs';
 import { BRAND_NAME_MAX, brandDefaults, cleanBrandText, isSafeBrandText } from '../branding.mjs';
 import { asyncHandler, HttpError } from '../http.mjs';
 import { isClaimedPerson } from '../identity.mjs';
@@ -96,6 +99,15 @@ export function setupStatus(deps, req) {
     // the super admin back to /setup until they finish the remaining steps.
     redirect: Boolean(config.firstRunRedirect) && (!adminExists || (viewerIsSuper && !setupComplete)),
     setupTokenRequired: !adminExists && Boolean(config.setupToken),
+    setupTokenSource: !adminExists
+      ? config.setupTokenConsumed
+        ? null
+        : config.setupTokenGenerated
+          ? 'generated'
+          : config.setupToken
+            ? 'environment'
+            : null
+      : null,
     suggestedHandle: !adminExists ? seed?.handle || config.adminHandle || 'admin' : null,
     chainId: { value: chain.chainId, source: chain.source, fixed: chain.fixed, env: 'CHAIN_ID' },
     chainIdPresets: CHAIN_ID_PRESETS,
@@ -118,9 +130,11 @@ export function setupRouter(deps) {
   }
 
   function checkSetupToken(req) {
-    if (!config.setupToken) return;
+    if (config.setupTokenConsumed) {
+      throw new HttpError(403, 'setup token already used', { code: 'SETUP_TOKEN_USED' });
+    }
     const provided = req.get('x-setup-token') || req.body?.setupToken || '';
-    if (!secretsEqual(config.setupToken, provided)) {
+    if (!config.setupToken || !secretsEqual(config.setupToken, provided)) {
       throw new HttpError(403, 'setup token required', { code: 'SETUP_TOKEN_REQUIRED' });
     }
   }
@@ -165,6 +179,7 @@ export function setupRouter(deps) {
         user: { ...seed, handle },
         handle,
         acceptedTerms: true,
+        webauthn: resolveRequestWebAuthn(config, req),
       });
       res.json({ ...options, publicKey: options, rpName: config.rpName, handle, nfp: true });
     }),
@@ -198,6 +213,7 @@ export function setupRouter(deps) {
       setup.adminCreatedAt = new Date().toISOString();
       setup.adminUserId = account.id;
       await store.persist();
+      if (config.setupTokenGenerated) config.setupTokenConsumed = true;
       if (!config.quiet) console.info('[zk-voting] first-run setup: platform super admin created');
       const payload = await mfa.completeFactor(res, {
         user: account,

@@ -262,6 +262,7 @@ export async function runSetup(opts = {}) {
       validate: (v) => (v === '-' || v === '' ? { ok: true, value: '' } : EMAIL_RE.test(v) ? { ok: true, value: v } : { ok: false, error: 'not an email address' }),
     });
     p.say('  The setup token is the credential /setup asks for before it creates the super admin.');
+    p.say('  Choosing "none" leaves SETUP_TOKEN empty. The server then prints a one-time token at boot. Type that on /setup. It is not written to .env and it is not served over HTTP.');
     const hasToken = Boolean(get('SETUP_TOKEN'));
     const tokenChoice = await choose(
       '  Setup token',
@@ -480,6 +481,7 @@ export async function runSetup(opts = {}) {
     }
     if (notes.some((n) => n.startsWith('L2_'))) p.say('  New L2 identity written (L2_UUID, L2_SALT, L2_ADMIN_SECRET). Back up demo/.env: losing L2_SALT or the key loses this l2Id.');
     if (notes.includes('setup-token')) p.say('  A setup token is in .env as SETUP_TOKEN. You type it on /setup; read it yourself from the file.');
+    if (!next.SETUP_TOKEN) p.say('  SETUP_TOKEN is empty. On boot the server prints a one-time setup token. Type it on /setup. Restarting before the super admin is created replaces it.');
     p.say('');
     printLaunch(p, { deploy, next, envFile, demoDir });
     return { code: 0, envFile, changed, deploy };

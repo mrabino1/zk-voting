@@ -3,6 +3,9 @@
 # Guided clone-and-launch setup. Asks six short questions, writes demo/.env,
 # and prints the exact launch command. Safe to re-run: your answers are the
 # defaults and secrets are never printed. Options: ./setup.sh --help
+# Choosing "none" for the setup token leaves SETUP_TOKEN empty. The server
+# then prints a one-time token at boot. /setup asks for it. It is not written
+# to .env and it is not served over HTTP.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! command -v node >/dev/null 2>&1; then

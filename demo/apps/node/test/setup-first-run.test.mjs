@@ -16,6 +16,16 @@ import { CHAIN_ID_PRESETS, parseChainId, resolveEnvChainId } from '../src/setup.
 
 const tmps = [];
 const servers = [];
+const setupTokens = new WeakMap();
+
+function withSetupToken(api, headers) {
+  const out = { ...(headers || {}) };
+  if (!out['x-setup-token'] && !out['X-Setup-Token']) {
+    const token = setupTokens.get(api);
+    if (token) out['x-setup-token'] = token;
+  }
+  return out;
+}
 
 after(async () => {
   for (const s of servers) await new Promise((r) => s.close(() => r()));
@@ -112,18 +122,31 @@ async function boot(extra = {}, { dataDir } = {}) {
     s.on('error', reject);
   });
   servers.push(server);
-  return { ...created, dir, api: client(`http://127.0.0.1:${server.address().port}`) };
+  const api = client(`http://127.0.0.1:${server.address().port}`);
+  setupTokens.set(api, created.config.setupToken);
+  return { ...created, dir, api };
 }
 
 async function createAdmin(api, { handle = 'admin', jar = {}, id = 'admin-cred', headers } = {}) {
-  const begin = await api('POST', '/api/setup/admin/begin', { body: { handle, acceptedTerms: true }, headers });
+  const hdrs = withSetupToken(api, headers);
+  const begin = await api('POST', '/api/setup/admin/begin', { body: { handle, acceptedTerms: true }, headers: hdrs });
   assert.equal(begin.status, 200, begin.text);
   const finish = await api('POST', '/api/setup/admin/finish', {
     jar,
-    headers,
+    headers: hdrs,
     body: { handle, ...registrationBody({ id, challenge: begin.json.challenge }) },
   });
   return { begin, finish, jar };
+}
+
+function unclaimSuperAdmin(store) {
+  const admin = store.data.users.find((u) => u.role === 'platform_super_admin');
+  admin.credentials = [];
+  admin.authMethods = [];
+  admin.ethAccounts = [];
+  admin.email = '';
+  admin.activeEthAddress = null;
+  return admin;
 }
 
 describe('chain id parsing', () => {
@@ -172,9 +195,13 @@ describe('first-run super admin', () => {
 
   test('begin validates terms and handle', async () => {
     const { api } = await boot();
-    const noTerms = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin' } });
+    const headers = withSetupToken(api);
+    const noTerms = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin' }, headers });
     assert.equal(noTerms.status, 400, noTerms.text);
-    const badHandle = await api('POST', '/api/setup/admin/begin', { body: { handle: 'a b!', acceptedTerms: true } });
+    const badHandle = await api('POST', '/api/setup/admin/begin', {
+      body: { handle: 'a b!', acceptedTerms: true },
+      headers,
+    });
     assert.equal(badHandle.status, 400);
     assert.equal(badHandle.json.code, 'SETUP_BAD_HANDLE');
   });
@@ -209,13 +236,14 @@ describe('first-run super admin', () => {
 
   test('race: of two parallel finishes only the first wins', async () => {
     const { api, store } = await boot({ hookOpts: { verifyDelayMs: 20 } });
-    const b1 = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true } });
-    const b2 = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true } });
+    const headers = withSetupToken(api);
+    const b1 = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true }, headers });
+    const b2 = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true }, headers });
     assert.equal(b1.status, 200);
     assert.equal(b2.status, 200);
     const [f1, f2] = await Promise.all([
-      api('POST', '/api/setup/admin/finish', { body: { handle: 'admin', ...registrationBody({ id: 'cred-a', challenge: b1.json.challenge }) } }),
-      api('POST', '/api/setup/admin/finish', { body: { handle: 'admin', ...registrationBody({ id: 'cred-b', challenge: b2.json.challenge }) } }),
+      api('POST', '/api/setup/admin/finish', { headers, body: { handle: 'admin', ...registrationBody({ id: 'cred-a', challenge: b1.json.challenge }) } }),
+      api('POST', '/api/setup/admin/finish', { headers, body: { handle: 'admin', ...registrationBody({ id: 'cred-b', challenge: b2.json.challenge }) } }),
     ]);
     const statuses = [f1.status, f2.status].sort();
     assert.deepEqual(statuses, [200, 409], `${f1.text} | ${f2.text}`);
@@ -232,8 +260,18 @@ describe('first-run super admin', () => {
     const o1 = await passkeys.beginRegister({ user: seed, handle: seed.handle, acceptedTerms: true });
     const o2 = await passkeys.beginRegister({ user: seed, handle: seed.handle, acceptedTerms: true });
     const results = await Promise.allSettled([
-      passkeys.finishRegister({ body: registrationBody({ id: 's-a', challenge: o1.challenge }), user: null, handle: seed.handle }),
-      passkeys.finishRegister({ body: registrationBody({ id: 's-b', challenge: o2.challenge }), user: null, handle: seed.handle }),
+      passkeys.finishRegister({
+        body: registrationBody({ id: 's-a', challenge: o1.challenge }),
+        user: null,
+        handle: seed.handle,
+        claimSeedOnly: seed.id,
+      }),
+      passkeys.finishRegister({
+        body: registrationBody({ id: 's-b', challenge: o2.challenge }),
+        user: null,
+        handle: seed.handle,
+        claimSeedOnly: seed.id,
+      }),
     ]);
     assert.deepEqual(results.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
     const rejected = results.find((r) => r.status === 'rejected');
@@ -241,31 +279,50 @@ describe('first-run super admin', () => {
     assert.equal(store.getUser(seed.id).credentials.length, 1);
   });
 
-  test('race with the legacy register route: setup and /api/auth cannot both claim', async () => {
+  test('bare register cannot claim the seed; setup can', async () => {
     const { api, store } = await boot({ hookOpts: { verifyDelayMs: 20 } });
-    const b1 = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true } });
+    const headers = withSetupToken(api);
+    const b1 = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true }, headers });
     const b2 = await api('POST', '/api/auth/passkey/register/begin', { body: { handle: 'admin', acceptedTerms: true } });
-    assert.equal(b2.status, 200, b2.text);
-    const [f1, f2] = await Promise.all([
-      api('POST', '/api/setup/admin/finish', { body: { handle: 'admin', ...registrationBody({ id: 'cred-a', challenge: b1.json.challenge }) } }),
-      api('POST', '/api/auth/passkey/register/finish', { body: { handle: 'admin', ...registrationBody({ id: 'cred-b', challenge: b2.json.challenge }) } }),
-    ]);
-    assert.equal([f1.status, f2.status].filter((s) => s === 200).length, 1, `${f1.text} | ${f2.text}`);
+    assert.equal(b1.status, 200, b1.text);
+    assert.equal(b2.status, 403, b2.text);
+    assert.equal(b2.json.code, 'SETUP_TOKEN_REQUIRED');
+    const f1 = await api('POST', '/api/setup/admin/finish', {
+      headers,
+      body: { handle: 'admin', ...registrationBody({ id: 'cred-a', challenge: b1.json.challenge }) },
+    });
+    assert.equal(f1.status, 200, f1.text);
     const admin = store.data.users.find((u) => u.role === 'platform_super_admin');
     assert.equal(admin.credentials.length, 1);
   });
 
-  test('env bootstrap still works: ADMIN_HANDLE seed claimable via /api/auth without SETUP_TOKEN', async () => {
-    const { api } = await boot({ adminHandle: 'ops' });
+  test('unset SETUP_TOKEN mints a one-time token and refuses the bare-handle claim', async () => {
+    const { api, config, store } = await boot({ adminHandle: 'ops', setupToken: '' });
+    assert.equal(config.setupTokenGenerated, true);
+    assert.equal(typeof config.setupToken, 'string');
+    assert.ok(config.setupToken.length >= 16);
     const s = await api('GET', '/api/setup');
     assert.equal(s.json.suggestedHandle, 'ops');
+    assert.equal(s.json.setupTokenRequired, true);
+    assert.equal(s.json.setupTokenSource, 'generated');
+    const echoed = [s.text, (await api('GET', '/health')).text, (await api('GET', '/api/config')).text].some((text) =>
+      text.includes(config.setupToken),
+    );
+    assert.equal(echoed, false);
     const begin = await api('POST', '/api/auth/passkey/register/begin', { body: { handle: 'ops', acceptedTerms: true } });
-    const finish = await api('POST', '/api/auth/passkey/register/finish', {
-      body: { handle: 'ops', ...registrationBody({ id: 'ops-cred', challenge: begin.json.challenge }) },
-    });
+    assert.equal(begin.status, 403);
+    assert.equal(begin.json.code, 'SETUP_TOKEN_REQUIRED');
+    const { finish } = await createAdmin(api, { handle: 'ops' });
     assert.equal(finish.status, 200, finish.text);
     assert.equal(finish.json.user.role, 'platform_super_admin');
-    assert.equal((await api('GET', '/api/setup')).json.needsAdmin, false);
+    unclaimSuperAdmin(store);
+    const again = await api('POST', '/api/setup/admin/begin', {
+      body: { handle: 'ops', acceptedTerms: true },
+      headers: { 'x-setup-token': config.setupToken },
+    });
+    assert.equal(again.status, 403);
+    assert.equal(again.json.code, 'SETUP_TOKEN_USED');
+    assert.equal(again.text.includes(config.setupToken), false);
   });
 
   test('SUPER_ADMIN_EMAIL bootstrap: contact email lands on the row setup claims', async () => {
@@ -282,6 +339,7 @@ describe('first-run super admin', () => {
     const { api } = await boot({ setupToken: 'test-setup-token-value' });
     const s = await api('GET', '/api/setup');
     assert.equal(s.json.setupTokenRequired, true);
+    assert.equal(s.json.setupTokenSource, 'environment');
     const none = await api('POST', '/api/setup/admin/begin', { body: { handle: 'admin', acceptedTerms: true } });
     assert.equal(none.status, 403);
     assert.equal(none.json.code, 'SETUP_TOKEN_REQUIRED');
@@ -292,15 +350,26 @@ describe('first-run super admin', () => {
     assert.equal(wrong.status, 403);
 
     const lb = await api('POST', '/api/auth/passkey/register/begin', { body: { handle: 'admin', acceptedTerms: true } });
-    const lf = await api('POST', '/api/auth/passkey/register/finish', {
-      body: { handle: 'admin', ...registrationBody({ id: 'legacy', challenge: lb.json.challenge }) },
-    });
-    assert.equal(lf.status, 403, lf.text);
-    assert.equal(lf.json.code, 'SETUP_TOKEN_REQUIRED');
+    assert.equal(lb.status, 403, lb.text);
+    assert.equal(lb.json.code, 'SETUP_TOKEN_REQUIRED');
 
     const ok = await createAdmin(api, { headers: { 'x-setup-token': 'test-setup-token-value' } });
     assert.equal(ok.finish.status, 200, ok.finish.text);
     assert.equal(JSON.stringify(ok.finish.json).includes('test-setup-token-value'), false, 'token never echoed');
+  });
+
+  test('an environment setup token can be retried until a super admin exists', async () => {
+    const { api, config, store } = await boot({ setupToken: 'test-setup-token-value' });
+    assert.equal(config.setupTokenGenerated, false);
+    const { finish } = await createAdmin(api, { headers: { 'x-setup-token': 'test-setup-token-value' } });
+    assert.equal(finish.status, 200, finish.text);
+    unclaimSuperAdmin(store);
+    const again = await api('POST', '/api/setup/admin/begin', {
+      body: { handle: 'admin', acceptedTerms: true },
+      headers: { 'x-setup-token': 'test-setup-token-value' },
+    });
+    assert.equal(again.status, 200, again.text);
+    assert.equal(again.text.includes('test-setup-token-value'), false);
   });
 });
 

@@ -22,7 +22,7 @@ curl -fsS http://127.0.0.1:3000/health
 
 `./setup.sh` (also `npm run setup`, or `./system_actions.sh setup`) asks for the super admin and setup token, the chain id, the entropy ceremony and setup entropy, the hostname, port, proxy and database, and the L2 identity and L1 submitter (`L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_UUID`, `L2_SALT`, `L2_ADMIN_SECRET`, then derives `L2_OPERATOR_ADDRESS` and `L2_ID` and warns when the submitter balance is low). Run it again any time: your answers are the defaults. `--deploy coolify` prints the Coolify settings instead (secret values by name only). By hand instead: `cp .env.example .env` and edit it.
 
-Then open the site and finish [first-run setup](./docs/self-hosting/first-launch.md) at `/setup`: create the super admin passkey (enter the `SETUP_TOKEN` from `.env`), confirm the steps and press **Finish setup**.
+Then open the site and finish [first-run setup](./docs/self-hosting/first-launch.md) at `/setup`: create the super admin passkey (enter `SETUP_TOKEN` from `.env`, or the one-time token printed in the server log when that variable is empty), confirm the steps and press **Finish setup**.
 
 Private by default: [`docker-compose.tailscale.yml`](./docker-compose.tailscale.yml) runs the same stack behind a `tailscale/tailscale:stable` sidecar with HTTPS on your tailnet and no public ports.
 

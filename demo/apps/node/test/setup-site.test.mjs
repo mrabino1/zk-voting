@@ -14,6 +14,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 const tmps = [];
 const servers = [];
+const setupTokens = new WeakMap();
+
+function withSetupToken(api, headers) {
+  const out = { ...(headers || {}) };
+  if (!out['x-setup-token'] && !out['X-Setup-Token']) {
+    const token = setupTokens.get(api);
+    if (token) out['x-setup-token'] = token;
+  }
+  return out;
+}
 
 after(async () => {
   for (const s of servers) await new Promise((r) => s.close(() => r()));
@@ -110,15 +120,18 @@ async function boot(extra = {}, { dataDir } = {}) {
     s.on('error', reject);
   });
   servers.push(server);
-  return { ...created, dir, api: client(`http://127.0.0.1:${server.address().port}`) };
+  const api = client(`http://127.0.0.1:${server.address().port}`);
+  setupTokens.set(api, created.config.setupToken);
+  return { ...created, dir, api };
 }
 
 async function createAdmin(api, { handle = 'admin', jar = {}, id = 'admin-cred', headers } = {}) {
-  const begin = await api('POST', '/api/setup/admin/begin', { body: { handle, acceptedTerms: true }, headers });
+  const hdrs = withSetupToken(api, headers);
+  const begin = await api('POST', '/api/setup/admin/begin', { body: { handle, acceptedTerms: true }, headers: hdrs });
   assert.equal(begin.status, 200, begin.text);
   const finish = await api('POST', '/api/setup/admin/finish', {
     jar,
-    headers,
+    headers: hdrs,
     body: { handle, ...registrationBody({ id, challenge: begin.json.challenge }) },
   });
   return { begin, finish, jar };

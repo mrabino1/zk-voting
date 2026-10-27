@@ -265,25 +265,16 @@ describe('passkey register requires auth for claimed handles', () => {
     assert.ok(jar['zk-voting.sid'] || finish.json?.ok || finish.json?.verified);
   });
 
-  test('unclaimed ADMIN_HANDLE seed can still be claimed without a session', async () => {
+  test('unclaimed ADMIN_HANDLE seed cannot be claimed on the bare register route', async () => {
     const admin = store.getUserByHandle('admin');
     assert.ok(admin, 'seeded admin row');
     assert.equal(admin.credentials.length, 0, 'admin starts unclaimed');
-    const jar = {};
     const begin = await api('POST', '/api/auth/passkey/register/begin', {
       body: { handle: 'admin', acceptedTerms: true },
     });
-    assert.equal(begin.status, 200, begin.text);
-    const finish = await api('POST', '/api/auth/passkey/register/finish', {
-      jar,
-      body: {
-        handle: 'admin',
-        acceptedTerms: true,
-        ...registrationBody({ id: 'admin-first-cred', challenge: begin.json.challenge }),
-      },
-    });
-    assert.equal(finish.status, 200, finish.text);
-    assert.ok(store.getUserByHandle('admin').credentials.some((c) => c.id === 'admin-first-cred'));
+    assert.equal(begin.status, 403, begin.text);
+    assert.equal(begin.json.code, 'SETUP_TOKEN_REQUIRED');
+    assert.equal(store.getUserByHandle('admin').credentials.length, 0);
   });
 
   test('original unauthenticated takeover path is closed end-to-end', async () => {
