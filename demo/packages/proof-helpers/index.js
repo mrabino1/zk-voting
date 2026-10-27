@@ -505,7 +505,7 @@ function toField(v) {
  * Serialize Tally.sol Groth16 public inputs (TALLY_SOL_V2).
  *
  * Order:
- * `[version, electionId, acceptedCount, countsHash, ballotRoot, openingsHash, tallyKeyHash]`,
+ * `[version, electionId, acceptedCount, countsHash, ballotRoot, aggregateHash, tallyKeyHash]`,
  * every word reduced mod r. `tallyKeyHash = keccak256(tallyPubKeyX ‖ tallyPubKeyY)`.
  *
  * This is **not** `circuits/tally.circom` public signals (those are
@@ -525,7 +525,7 @@ function serializeTallyPublicInputs(input) {
     toField(input.acceptedCount),
     toField(countsHash),
     toField(input.ballotRoot == null ? 0 : input.ballotRoot),
-    toField(input.openingsHash == null ? 0 : input.openingsHash),
+    toField(input.aggregateHash != null ? input.aggregateHash : input.openingsHash == null ? 0 : input.openingsHash),
     toField(input.tallyKeyHash == null ? 0 : input.tallyKeyHash),
   ];
 }
@@ -540,7 +540,7 @@ function parseTallyPublicInputs(publicInputs) {
     acceptedCount: toBigInt(publicInputs[2]),
     countsHash: toBigInt(publicInputs[3]),
     ballotRoot: toBigInt(publicInputs[4]),
-    openingsHash: toBigInt(publicInputs[5]),
+    aggregateHash: toBigInt(publicInputs[5]),
     tallyKeyHash: toBigInt(publicInputs[6]),
   };
 }

@@ -17,7 +17,8 @@ pragma circom 2.0.0;
 // Private witness:
 //   identityTrapdoor, nullifierSecret,
 //   pathElements, pathIndices,                         // eligible inclusion
-//   disqLow, disqNext, disqPathElements, disqPathIndices
+//   disqLow, disqNext, disqPathElements, disqPathIndices,
+//   choice, choiceRandomness                           // ballot tag, randomness private
 //
 // Disqualification non-membership (indexed chain against disqRoot)
 // ---------------------------------------------------------------
@@ -172,6 +173,10 @@ template Vote(levels) {
     signal input disqNext;
     signal input disqPathElements[levels];
     signal input disqPathIndices[levels];
+    // ballotHash = Poseidon(choice, choiceRandomness). Randomness stays private
+    // so the tag is hiding. choice is one index in 0..15.
+    signal input choice;
+    signal input choiceRandomness;
 
     // ---- public (declaration order == Groth16 / BallotInbox publicInputs) ----
     // serializePublicInputs: [root, disqRoot, nullifier, ballotHash, electionId]
@@ -231,13 +236,23 @@ template Vote(levels) {
     gapHigh <== (1 - nextIsZero.out) * leafLtNext.out;
     nextIsZero.out + gapHigh === 1;
 
-    // ballotHash is the public commitment / hash of the encrypted ballot
-    // (ElGamal or hashed commitment). Choice bits stay off this circuit
-    // in v1; well-formedness of option encodings is a later constraint.
-    // Force the signal into R1CS so it cannot be dropped from the instance.
-    signal ballotHashSquared;
-    ballotHashSquared <== ballotHash * ballotHash;
-    ballotHashSquared === ballotHash * ballotHash;
+    // The ElGamal body after an "AG" tag is not checked here. A ceremony
+    // circuit has to constrain the curve. A public Poseidon(choice) with no
+    // private randomness would be brute-forceable.
+    signal choiceDiff[16];
+    signal choiceAcc[16];
+    choiceDiff[0] <== choice;
+    choiceAcc[0] <== choiceDiff[0];
+    for (var k = 1; k < 16; k++) {
+        choiceDiff[k] <== choice - k;
+        choiceAcc[k] <== choiceAcc[k - 1] * choiceDiff[k];
+    }
+    choiceAcc[15] === 0;
+
+    component ballotTag = Hasher();
+    ballotTag.a <== choice;
+    ballotTag.b <== choiceRandomness;
+    ballotTag.out === ballotHash;
 }
 
 // No `main` here. circuits/vote.circom compiles Vote(20). The untrusted

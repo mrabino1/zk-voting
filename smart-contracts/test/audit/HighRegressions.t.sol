@@ -259,7 +259,10 @@ contract HighRegressionsTest is Deployer {
         vm.prank(makeAddr("anyone"));
         while (!voterRegistry.continueEligibleRebuild(id, 0)) {}
         assertFalse(voterRegistry.eligibleRootPending(id));
-        assertEq(uint256(IElection(el).eligibleRoot()), EligibleSet.rootOf(remaining, Fixtures.TREE_DEPTH, IHasher(address(hasher))));
+        assertEq(
+            uint256(IElection(el).eligibleRoot()),
+            EligibleSet.rootOf(remaining, Fixtures.TREE_DEPTH, IHasher(address(hasher)))
+        );
         assertEq(voterRegistry.eligibleCount(id), n - 1);
 
         submitVote(id, el, 5);
@@ -274,25 +277,44 @@ contract HighRegressionsTest is Deployer {
 
     // ------------------------------------------------------------------ H-04
 
-    function testH04_ExploitVetoBypassWithFakeCommitmentNowFails() public {
+    function testH04_VetoLandsInDisqualificationRootNotBallotCalldata() public {
         uint256 vetoed = Fixtures.identityCommitment(uint256(77));
         (uint256 id, address el) = prepareOpenElection(vetoed);
         ExternalPartyRegistry registry = ExternalPartyRegistry(factory.getPartyRegistry(id));
         address felony = makeAddr("felonyRecords");
+        bytes32 before = IElection(el).eligibleRoot();
         vm.prank(clerk);
         uint256 idx = registry.addParty(felony, "Felony", "", MODE_VETO);
         vm.prank(felony);
         registry.reject(idx, vetoed, ReasonCodes.INELIGIBLE_STATUS, keccak256("case"));
 
+        assertTrue(disqualification.isDisqualified(id, vetoed));
+        assertFalse(voterRegistry.isEligible(id, vetoed));
         bytes memory enc = Fixtures.encryptedBallot(1);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(id, el, 1, enc);
-        uint256[] memory ids;
-        // PoC: pass an arbitrary non-rejected commitment (1).
+        inputs[0] = uint256(before);
         vm.prank(relayer);
-        vm.expectRevert(BallotInbox.ClearanceCommitmentNotEligible.selector);
-        inbox.submitVoteWithClearance(id, a, b, c, inputs, enc, 1, ids);
+        vm.expectRevert(BallotInbox.EligibleRootMismatch.selector);
+        inbox.submitVote(id, a, b, c, inputs, enc);
         assertEq(inbox.acceptedBallots(id), 0);
+
+        // The old clearance selector is gone: a commitment cannot ride next to a nullifier.
+        (bool ok,) = address(inbox)
+            .call(
+                abi.encodeWithSignature(
+                    "submitVoteWithClearance(uint256,uint256[2],uint256[2][2],uint256[2],uint256[],bytes,uint256,uint256[])",
+                    id,
+                    a,
+                    b,
+                    c,
+                    inputs,
+                    enc,
+                    vetoed,
+                    new uint256[](0)
+                )
+            );
+        assertFalse(ok);
     }
 
     // ------------------------------------------------------------------ H-05

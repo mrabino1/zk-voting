@@ -65,6 +65,10 @@ export default {
     footerBackOfficeMeta: "اسم المنتج {brand}. الاختيار لا يُطبع هنا أبدًا.",
     footerExplorerMeta: "مستكشف {brand} L2. نص ورقة الاقتراع ليس حقلًا على هذه السلسلة.",
     footerResults: "نتائج الانتخابات",
+    footerContact: "تواصل",
+    footerOpenSource: "{brand} مفتوح المصدر بنسبة 100% ومجاني للاستخدام.",
+    footerContract: "نحن متاحون للتعاقد من أجل تنفيذكم المحلي.",
+    footerContractCta: "راسلونا",
     noscript:
       "يحتاج {brand} إلى JavaScript للتواصل مع passkey الجهاز (WebAuthn). فعّل JavaScript ثم أعد التحميل، أو استخدم موقع اقتراع ميسر يديره كاتب الانتخابات.",
     metaDescription:

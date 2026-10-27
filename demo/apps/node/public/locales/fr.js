@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "Nom du produit : {brand}. Le choix n’est jamais imprimé ici.",
     footerExplorerMeta: "Explorateur L2 de {brand}. Le texte en clair du bulletin n’est pas un champ de cette chaîne.",
     footerResults: "Résultats de l’élection",
+    footerContact: "Contact",
+    footerOpenSource: "{brand} est 100 % open source et gratuit.",
+    footerContract: "Nous sommes disponibles pour une mission de mise en œuvre locale.",
+    footerContractCta: "Écrivez-nous",
     noscript:
       "{brand} a besoin de JavaScript pour parler à la passkey de votre appareil (WebAuthn). Activez JavaScript et rechargez, ou utilisez un site de scrutin accessible géré par votre greffier.",
     metaDescription:

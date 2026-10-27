@@ -64,6 +64,10 @@ export default {
     footerBackOfficeMeta: "Product name {brand}. Choice is never printed here.",
     footerExplorerMeta: "{brand} L2 explorer. Ballot plaintext is not a field on this chain.",
     footerResults: "Election results",
+    footerContact: "Contact",
+    footerOpenSource: "{brand} is 100% open source and free to use.",
+    footerContract: "We are available for contracting for your local implementation.",
+    footerContractCta: "Email us",
     noscript:
       "{brand} needs JavaScript to talk to your device passkey (WebAuthn). Enable JavaScript and reload, or use an accessible poll site operated by your clerk.",
     metaDescription:
@@ -990,7 +994,7 @@ export default {
   polls: {
     nav: "Polls",
     listTitle: "Token polls",
-    listLede: "Signal polls weighted by an ERC-20 balance. Holding the token is the only credential. Results do not execute anything.",
+    listLede: "Signal polls weighted by an ERC-20 balance. These are public weighted signals, not anonymous ballots. Holding the token is the only credential. Results do not execute anything.",
     empty: "No token polls are published.",
     signal: "Signal only · non-binding",
     nfpFooter: "NOT FOR PROFIT — civic public good. Not a commercial product.",

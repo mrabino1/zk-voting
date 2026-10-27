@@ -8,9 +8,6 @@ import {
   electionHasRanked,
   normalizeBallotMethod,
   parseTallyCounts,
-  payloadsFromEnvelopes,
-  pluralityQuestions,
-  tallyBallots,
   withQuestionMethods,
 } from '../ballot.mjs';
 import {
@@ -953,6 +950,14 @@ export function electionsRouter(deps) {
       let opened = null;
       let irv = null;
 
+      if (electionHasRanked(election)) {
+        throw new HttpError(
+          409,
+          'ranked tally is disabled until a verified shuffle exists; individual envelopes are not opened',
+          { code: 'RANKED_TALLY_DISABLED' },
+        );
+      }
+
       if (isOpensBallots(election)) {
         const bucket = store.guardianMaterial(election.id);
         const envelopes = store.listEnvelopes(election.id);
@@ -966,55 +971,14 @@ export function electionsRouter(deps) {
         }
         nums = opened.counts;
         source = 'opens_ballots';
-        openedBallots = opened.openings.length;
+        openedBallots = null;
       } else {
-        const ranked = electionHasRanked(election);
-        const plurality = pluralityQuestions(election.questions || [], election.ballotMethod);
-        if (ranked) {
-          const envelopes = store.listEnvelopes(election.id);
-          const ballots = payloadsFromEnvelopes(envelopes);
-          while (ballots.length < election.acceptedBallots) ballots.push([]);
-          irv = tallyBallots(election, ballots);
-        }
-        if (plurality.length) {
-          nums = parseTallyCounts(
-            req.body || {},
-            election.questions || [],
-            election.acceptedBallots,
-            election.ballotMethod,
-          );
-        } else if (ranked && irv) {
-          const posted = req.body?.counts;
-          if (Array.isArray(posted) && posted.length) {
-            nums = posted.map((n) => Number(n));
-            if (nums.some((n) => !Number.isInteger(n) || n < 0)) {
-              throw new HttpError(400, 'counts must be non-negative integers');
-            }
-            if (nums.length !== irv.counts.length) {
-              throw new HttpError(400, `counts length must be ${irv.counts.length}`, {
-                code: 'TALLY_LENGTH',
-                expected: irv.counts.length,
-                actual: nums.length,
-              });
-            }
-            if (nums.some((n, i) => n !== irv.counts[i])) {
-              throw new HttpError(400, 'counts must match first-round ranked preferences', {
-                code: 'TALLY_MISMATCH',
-                expected: irv.counts,
-              });
-            }
-          } else {
-            nums = irv.counts;
-          }
-          if (!nums.length) throw new HttpError(400, 'counts[] required');
-        } else {
-          nums = parseTallyCounts(
-            req.body || {},
-            election.questions || [],
-            election.acceptedBallots,
-            election.ballotMethod,
-          );
-        }
+        nums = parseTallyCounts(
+          req.body || {},
+          election.questions || [],
+          election.acceptedBallots,
+          election.ballotMethod,
+        );
       }
 
       const countsHash = computeTallyHash(nums);

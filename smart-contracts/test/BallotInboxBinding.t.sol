@@ -170,10 +170,17 @@ contract BallotInboxBindingTest is Deployer {
         assertFalse(inbox.nullifierUsed(electionId, 47));
     }
 
-    function testAnyoneMayRelayNotJustDesignatedRelayer() public {
+    function testOnlyAllowlistedRelayerMaySubmit() public {
         address stranger = makeAddr("strangerRelayer");
         bytes memory enc = Fixtures.encryptedBallot(53);
         uint256[] memory inputs = voteInputs(electionId, election, 53, enc);
+        vm.prank(stranger);
+        vm.expectRevert(BallotInbox.NotRelayer.selector);
+        inbox.submitVote(electionId, a, b, c, inputs, enc);
+        assertFalse(inbox.nullifierUsed(electionId, 53));
+
+        vm.prank(admin);
+        factory.setRelayer(stranger, true);
         vm.prank(stranger);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertTrue(inbox.nullifierUsed(electionId, 53));
@@ -187,7 +194,9 @@ contract BallotInboxBindingTest is Deployer {
         bytes32 h1 = inbox.ballotHashOf(electionId, 67);
         assertEq(inbox.ballotHashAt(electionId, 0), h0);
         assertEq(inbox.ballotHashAt(electionId, 1), h1);
-        assertEq(inbox.ballotRoot(electionId), keccak256(abi.encodePacked(keccak256(abi.encodePacked(bytes32(0), h0)), h1)));
+        assertEq(
+            inbox.ballotRoot(electionId), keccak256(abi.encodePacked(keccak256(abi.encodePacked(bytes32(0), h0)), h1))
+        );
     }
 
     function _expectInvalidPublicInputs(uint256[] memory inputs) internal {

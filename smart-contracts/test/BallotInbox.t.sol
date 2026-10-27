@@ -49,8 +49,9 @@ contract BallotInboxTest is Deployer {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, enc);
 
+        uint256 canonical = nullifier % inbox.SNARK_SCALAR_FIELD();
         vm.expectEmit(true, true, false, false, address(inbox));
-        emit VoteAccepted(electionId, nullifier, bytes32(0), relayer);
+        emit VoteAccepted(electionId, canonical, bytes32(0), relayer);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
 
@@ -275,6 +276,10 @@ contract BallotInboxTest is Deployer {
 
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertEq(inbox.acceptedBallots(electionId), 1, "second ballot must not mint a second voter");
-        assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)), "first accepted hash is final");
+        assertEq(
+            inbox.ballotHashOf(electionId, nullifier),
+            bytes32(Fixtures.ballotHash(first)),
+            "first accepted hash is final"
+        );
     }
 }

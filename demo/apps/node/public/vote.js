@@ -4,9 +4,9 @@
  */
 
 import { brandName } from "./brand.js";
-import { openingIndexFromAnswers } from "./tally-crypto.js";
+import { expectedCountLength, openingIndexFromAnswers } from "./tally-crypto.js";
+import { proveVote } from "./vote-proof.js";
 import {
-  buildBallotObject,
   collectAnswers,
   cssQuestionName,
   isMultiSelect,
@@ -25,9 +25,9 @@ function tallyEncryptionBlurb(election) {
   const t = ceremony?.threshold;
   const n = ceremony?.guardians;
   if (t > 1 && n >= t) {
-    return `P-256 ECIES to a ${t}-of-${n} Feldman guardian key (NON-PRODUCTION). Homomorphic aggregation and a mixnet are not decided.`;
+    return `P-256 aggregate ElGamal to a ${t}-of-${n} Feldman guardian key (NON-PRODUCTION). Guardians decrypt only the summed totals.`;
   }
-  return "P-256 ECIES to the election tally pubkey (NON-PRODUCTION).";
+  return "P-256 aggregate ElGamal. Guardians decrypt only the summed totals (NON-PRODUCTION).";
 }
 
 export const SAMPLE_QUESTIONS = [
@@ -758,24 +758,26 @@ export async function renderVote(main, ctx) {
     paint();
     announce("Confirm your passkey. Your choices will not appear on the receipt.");
 
-    const ballotObject = buildBallotObject({
-      electionId: election.id,
-      ballotSpecHash: election.ballotSpecHash || null,
-      questions,
-      answers,
-    });
-    const ballotBytes = new TextEncoder().encode(JSON.stringify(ballotObject));
+    if (questions.some((q) => isRankedQuestion(q, election.ballotMethod))) {
+      state.busy = false;
+      state.error =
+        "Ranked tally is disabled. A verified shuffle is not available, so individual rankings are not collected or opened.";
+      paint();
+      return;
+    }
     const choiceIndex = openingIndexFromAnswers(answers, questions);
     const tallyPubKey = election.tallyPubKey || election.tallyCeremony?.publicKey || null;
+    const nOptions = expectedCountLength(questions);
 
     try {
+      const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
       const auth = await wallet.authorizeBallot({
         electionId: election.id,
-        ballotBytes,
+        chainElectionId: onChainId,
         tallyPubKey,
-        choiceIndex: tallyPubKey ? choiceIndex : undefined,
+        choiceIndex,
+        nOptions,
       });
-      const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
       const publicInputs = mockVotePublicInputs({
         eligibleRoot: election.eligibleRoot,
         disqRoot: election.disqualificationRoot,
@@ -783,36 +785,34 @@ export async function renderVote(main, ctx) {
         ballotHash: auth.ballotHash,
         electionId: onChainId,
       });
-      // Blind-signed, one-per-voter pass. Fetched with the session (PIN and
-      // eligibility are checked there); the Node signs without seeing the
-      // token, so the pass carried below cannot be mapped back to the account.
+      // Blind-signed, one-per-voter pass. The issuance request does not send
+      // the identity commitment. The ballot request below does not send the
+      // account address, the credential id, or a userOp hash.
       if (!state.votePass || state.votePass.electionId !== String(election.id)) {
         if (source === "sample") {
           state.votePass = null;
         } else {
           const pass = await obtainVotePass(api, election.id, {
             pinToken: state.pinToken || undefined,
-            identityCommitment: publicRecord?.identityCommitment,
           });
           state.votePass = { electionId: String(election.id), ...pass };
         }
       }
+      let chainId = 31337;
+      try {
+        const health = await api("/api/health");
+        if (health?.chainId != null) chainId = Number(health.chainId);
+      } catch {
+        chainId = source === "sample" ? 31337 : chainId;
+      }
+      const proof = await proveVote({ publicInputs, chainId });
       const body = buildVoteRequestBody({
         electionId: String(election.id),
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
         encryptedBallot: auth.encryptedBallot,
         votePass: state.votePass,
-        proof: {
-          mock: true,
-          a: ["0x0", "0x0"],
-          b: [
-            ["0x0", "0x0"],
-            ["0x0", "0x0"],
-          ],
-          c: ["0x0", "0x0"],
-          publicInputs,
-        },
+        proof: { ...proof, publicInputs },
       });
 
       let accepted = false;

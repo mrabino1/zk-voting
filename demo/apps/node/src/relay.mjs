@@ -17,15 +17,15 @@ import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
-import { isTallyEnvelope } from './tallyCrypto.mjs';
+import { isAggregateEnvelope, parseAggregateEnvelope } from './aggregateBallot.mjs';
+import { assertVoteProof } from './voteProof.mjs';
 import { nextPublishAt } from './disclosure.mjs';
-import { electionDisclosurePolicy } from './store.mjs';
+import { electionDisclosurePolicy, publicVoteRecord } from './store.mjs';
 import {
   buildReceiptPdf,
   mintHolderToken,
   presentHolderReceipt,
 } from './receipts.mjs';
-import { publicVoteRecord } from './store.mjs';
 import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from './ballot.mjs';
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
@@ -83,11 +83,17 @@ export const SNARK_SCALAR_FIELD =
   21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
 /**
- * Ballot hash bound as vote public input 3: `uint256(keccak256(ciphertext)) % r`.
- * Matches `BallotInbox.ballotHashOfCiphertext` (audit H-05).
+ * Ballot hash bound as vote public input 3.
+ * An AG envelope contributes the 32-byte Poseidon tag (the contracts bind that
+ * tag, not keccak of the whole blob). Every other ciphertext stays
+ * `uint256(keccak256(ciphertext)) % r`.
  */
 export function hashBallot(encryptedBallot) {
-  const h = BigInt(keccak256(toEncryptedHex(encryptedBallot)));
+  const hex = toEncryptedHex(encryptedBallot);
+  if (isAggregateEnvelope(hex)) {
+    return parseAggregateEnvelope(hex).ballotHash;
+  }
+  const h = BigInt(keccak256(hex));
   return toHex(h % SNARK_SCALAR_FIELD, { size: 32 });
 }
 
@@ -232,7 +238,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     });
   }
   if (answers) assertBallotAnswers(questions, answers);
-  const rankingPayload = extractRankingPayload(election, envelope, parsed.encryptedBallot);
+  // Validate a plaintext ranking when the fixture flag allows one, then drop
+  // it. The envelope row does not keep a per-ballot opening.
+  extractRankingPayload(election, envelope, parsed.encryptedBallot);
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
@@ -244,10 +252,12 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     if (election.tallyCeremony?.status !== 'ready' || !election.tallyPubKey) {
       throw new HttpError(409, 'guardian ceremony is not ready', { code: 'CEREMONY_INCOMPLETE' });
     }
-    if (!isTallyEnvelope(parsed.encryptedBallot)) {
-      throw new HttpError(400, 'opens_ballots ballots must be RTv1 tally envelopes', {
-        code: 'BAD_ENVELOPE',
-      });
+    if (!isAggregateEnvelope(parsed.encryptedBallot)) {
+      throw new HttpError(
+        400,
+        'opens_ballots ballots must be AG aggregate envelopes; per-ballot ECIES openings are refused',
+        { code: 'PER_BALLOT_OPEN_DISABLED' },
+      );
     }
   }
   if (store.nullifierUsed(election.id, parsed.nullifier)) {
@@ -265,12 +275,16 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     electionId: chainElectionId(election),
   });
 
+  await assertVoteProof({ proof: parsed.proof, publicSignals: publicInputs, config });
+
   if (chainConfigured) {
     await chain.submitVote({
       electionId: chainElectionId(election),
       proof: parsed.proof,
       publicInputs,
       encryptedBallot: parsed.encryptedBallot,
+      startTime: election.startTime,
+      now: ts,
     });
   }
 
@@ -305,7 +319,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       pdfSha256: artifact.pdfSha256,
       pdfIntegrity: artifact.integrity,
     },
-    { encryptedBallot: parsed.encryptedBallot, rankingPayload },
+    { encryptedBallot: parsed.encryptedBallot },
   );
 
   await explorer.recordVote(

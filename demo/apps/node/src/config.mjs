@@ -201,6 +201,13 @@ export function getConfig(overrides = {}) {
   const useMockVerifier = provingPath
     ? false
     : envFlag(overrides.useMockVerifier ?? process.env.ZK_VOTING_USE_MOCK_VERIFIER, true);
+  const chainIdForMock = chainIdEnv ?? DEFAULT_CHAIN_ID;
+  // Mock Groth16 (`proof.accept`) is the local Anvil verifier and the Node
+  // test suite. Any other chain id must present a real proof. An explicit
+  // allowMockProofs override is for a fixture that names its chain.
+  const allowMockProofs = Object.prototype.hasOwnProperty.call(overrides, 'allowMockProofs')
+    ? Boolean(overrides.allowMockProofs)
+    : Number(chainIdForMock) === 31337 || (isTest && Number(chainIdForMock) === DEFAULT_CHAIN_ID);
   const hashScheme =
     overrides.hashScheme ||
     process.env.ZK_VOTING_HASH_SCHEME ||
@@ -318,6 +325,7 @@ export function getConfig(overrides = {}) {
     distDir: path.join(PKG_ROOT, 'dist'),
     provingPath,
     useMockVerifier,
+    allowMockProofs,
     hashScheme,
     pollsEnabled:
       overrides.pollsEnabled !== undefined

@@ -275,7 +275,7 @@ export function publicFieldsForTx(tx) {
   if (c.nullifier != null) out.nullifier = topicWord(c.nullifier);
   if (c.ballotHash != null) out.ballotHash = topicWord(c.ballotHash);
   const partyTx = type === 'party_add' || type === 'party_reject' || type === 'party_attest';
-  if (c.identityCommitment != null) {
+  if (c.identityCommitment != null && type !== 'vote') {
     out.identityCommitment = partyTx ? String(c.identityCommitment) : topicWord(c.identityCommitment);
   }
   if (partyTx) {
@@ -856,14 +856,11 @@ export class ChainState {
         code: -32602,
       });
     }
-    if (type === 'vote' && containsBallotPlaintext(originalCivic)) {
-      throw Object.assign(new Error('ballot plaintext is forbidden'), { code: -32602 });
-    }
-    civic = stripForbidden(originalCivic);
-    civic.type = type;
     if (type === 'vote') {
-      delete civic.sender;
-      delete civic.from;
+      civic = allowVoteFields(originalCivic);
+    } else {
+      civic = stripForbidden(originalCivic);
+      civic.type = type;
     }
     if (pollType) assertPollShape(type, civic);
     const from =
@@ -1701,6 +1698,77 @@ function assertPollShape(type, civic) {
     if (!/^\d+$/.test(String(civic.participation ?? ''))) throw bad('participation required');
     if (!civic.outcome) throw bad('outcome required');
   }
+}
+
+const VOTE_ALLOWED_KEYS = new Set([
+  'type',
+  'electionid',
+  'nullifier',
+  'ballothash',
+  'ballotcommitment',
+  'eligibleroot',
+  'root',
+  'disqualificationroot',
+  'disqroot',
+  'proof',
+  'publicinputs',
+  'encryptedballot',
+]);
+
+const VOTE_REJECT_KEYS = new Set([
+  'identitycommitment',
+  'answers',
+  'ranking',
+  'rankingpayload',
+  'choice',
+  'option',
+  'optionid',
+  'plaintext',
+  'ballotplaintext',
+  'selected',
+  'selectedoption',
+  'voteplaintext',
+  'candidate',
+  'userophash',
+  'credentialid',
+  'address',
+  'userid',
+  'user_id',
+]);
+
+function rejectedVoteKey(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = rejectedVoteKey(item);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    const k = String(key).toLowerCase();
+    if (VOTE_REJECT_KEYS.has(k) || FORBIDDEN_KEYS.has(k)) return key;
+    const hit = rejectedVoteKey(child);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Vote txs keep only the statement, the proof, and the ciphertext. */
+export function allowVoteFields(civic) {
+  const refused = rejectedVoteKey(civic);
+  if (refused) {
+    throw Object.assign(new Error(`vote field refused: ${refused}`), { code: -32602 });
+  }
+  const out = { type: 'vote' };
+  for (const [key, value] of Object.entries(civic || {})) {
+    if (String(key).toLowerCase() === 'type') continue;
+    if (!VOTE_ALLOWED_KEYS.has(String(key).toLowerCase())) continue;
+    out[key] = value;
+  }
+  delete out.sender;
+  delete out.from;
+  return out;
 }
 
 function containsBallotPlaintext(value) {
