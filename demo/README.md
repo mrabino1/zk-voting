@@ -1181,6 +1181,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
    - **Auditor pack:** `tools/auditor` CLI + [`docs/AUDITOR.md`](./docs/AUDITOR.md) + `GET /api/elections/:id/artifacts` export public roots, disclosed ballot hashes, tally, and contract addresses and verify sum/invariants **without** the Node private DB. Packs assert unique nullifiers and `receiptsProveChoice: false`.
    - **Outcomes monitor:** a separate public portal at `/outcomes` (alias `/monitor`) lists every election in before / during / after columns from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). It runs the auditor pack plus freeze-root and L1 hash checks. During voting it shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. After cutoff and a tally, a locked official outcome PDF is emailed to subscribers (opt-in on `/me`; casting a ballot never subscribes anyone) and can be checked at `/outcomes/verify`. This is not `/receipt` and not a live horse race.
    - **Still later / Future:** MACI-style encrypted message queues / key-changing; guardian / forced-reveal if a tally operator stalls. Last-vote-counts / re-vote supersession is **out of scope** for this slice.
+11. **Vote delegation** (MakerDAO-style `delegate()` / `undelegate()`). **Not planned for implementation; open research question.** Trade-offs and risks: [`docs/research/vote-delegation.md`](./docs/research/vote-delegation.md).
 
 ---
 
