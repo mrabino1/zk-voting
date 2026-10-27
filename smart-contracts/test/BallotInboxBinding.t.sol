@@ -104,10 +104,14 @@ contract BallotInboxBindingTest is Deployer {
         assertFalse(inbox.nullifierUsed(electionId, 17));
     }
 
-    function testZeroNullifierIsAcceptedOnce() public {
-        submitVote(electionId, election, 0);
-        assertTrue(inbox.nullifierUsed(electionId, 0));
-        _expectNullifierUsed(0);
+    function testZeroNullifierIsRejected() public {
+        bytes memory enc = Fixtures.encryptedBallot(0);
+        uint256[] memory inputs = voteInputs(electionId, election, 0, enc);
+        vm.prank(relayer);
+        vm.expectRevert(IBallotInbox.InvalidNullifier.selector);
+        inbox.submitVote(electionId, a, b, c, inputs, enc);
+        assertFalse(inbox.nullifierUsed(electionId, 0));
+        assertEq(inbox.acceptedBallots(electionId), 0);
     }
 
     function testMaxUintNullifierIsAcceptedOnce() public {

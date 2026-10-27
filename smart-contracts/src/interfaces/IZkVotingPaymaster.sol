@@ -11,6 +11,7 @@ interface IZkVotingPaymaster {
     error NotAdmin();
     error NotSponsored();
     error WithdrawFailed();
+    error ReentrantCall();
 
     event Deposited(address indexed from, uint256 amount);
     event Withdrawn(address indexed to, uint256 amount);

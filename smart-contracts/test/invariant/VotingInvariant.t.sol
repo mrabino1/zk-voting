@@ -68,6 +68,7 @@ contract VotingInvariant is StdInvariant, Test {
             uint256 onChainAccepted = handler.getInbox().acceptedBallots(electionId);
             assertEq(onChainAccepted, handler.acceptedByElection(electionId));
             assertEq(onChainAccepted, used, "per-election: acceptedBallots == unique spent nullifiers");
+            assertFalse(handler.getInbox().nullifierUsed(electionId, 0), "zero nullifier must stay unspent");
         }
         assertEq(handler.votesAccepted(), ghostAccepted);
     }
