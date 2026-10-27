@@ -166,7 +166,7 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 
 | Scheme | What is posted | Who can open it |
 | --- | --- | --- |
-| **`opens_ballots`** | `RTv1` \|\| P-256 eph pub \|\| AES-GCM (`p256-ecies-aesgcm-v1`) to the Feldman joint public key | Any `t` guardians who publish verified partial decryptions. The Node stores encrypted shares only. **NON-PRODUCTION.** |
+| **`opens_ballots`** | `AG` \|\| Poseidon tag \|\| one-hot P-256 ElGamal ciphertexts under the Feldman joint public key | `t` guardians decrypt the **product** only. Per-ballot partials are refused. **NON-PRODUCTION.** |
 | **`sum_only` (legacy)** | Seed-keyed AES-GCM stand-in (`zk-voting-ballot-elgamal-standin`) when no tally pubkey | In the crypto, the **voter’s wrap seed**. The SPA does **not** also send plaintext `answers`. |
 | **EVM calldata** | `encryptedBallot` bytes on `submitVote` | Ciphertext is visible; option is not, unless someone has the opening key |
 | **Civic L2 JSON** | Vote tx is `nullifier` + `ballotHash` + roots. Ciphertext omitted from the proof batch | Sequencer may still have seen the submitted JSON |
@@ -178,11 +178,11 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 | Path | After cutoff | Invented `counts[]` that only match the **sum** |
 | --- | --- | --- |
 | **`sum_only` (default)** | Operator posts any vector with `sum(counts) == acceptedBallots` | **Accepted** (legacy demo). Operator cannot add or drop ballots; they **can** rearrange which option received them. |
-| **`opens_ballots`** | `t` guardians’ partials open accepted envelopes; the Node derives the histogram. `submitOpenedTally` requires `histogram(openings) == counts` | **Rejected** (`INVENTED_COUNTS` / `OpeningMismatch`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A bad proof fails `BAD_PARTIAL`. |
+| **`opens_ballots`** | `t` guardians’ partials open the **summed** option ciphertexts. The Node stores those aggregate partials only. Ranked contests return `RANKED_TALLY_DISABLED` and are not opened. | A histogram that is not the discrete log of the product is **rejected** (`INVENTED_COUNTS`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A partial for one ballot hash fails `PER_BALLOT_PARTIAL`. |
 
-Opened choices are **not** written back onto public vote rows ([`tallyOpen.mjs`](./apps/node/src/tallyOpen.mjs)). Certified totals appear on `/results` and the official outcome PDF **after** tally — aggregates, not “Jane voted for X.”
+Counts are aggregates. There is no per-ballot openings list on the tally response or in the envelope row ([`tallyOpen.mjs`](./apps/node/src/tallyOpen.mjs)).
 
-**Not done:** a selected homomorphic product or mixnet ([`docs/TALLY_GUARDIANS.md`](./docs/TALLY_GUARDIANS.md)), real Groth16 tally keys, MACI last-vote-counts. The Feldman ceremony is in-tree and still **NON-PRODUCTION**. Do not run a binding election on it.
+**Not done:** a verified shuffle for ranked ballots, an in-circuit check that the ElGamal body matches the Poseidon tag, a ceremony Groth16 tally key. The Feldman ceremony is still **NON-PRODUCTION**. Do not run a binding election on it. A one-voter election, or a one-ballot batch, still shows that person's choice in the total.
 
 ---
 
@@ -192,10 +192,10 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 
 | Gap | What is true today | Why it is not court-grade |
 | --- | --- | --- |
-| **MockVerifier** | Foundry / local inbox `acceptAll = true` unless a test arms an inclusion witness. Dummy proofs in the SPA (`proof.mock: true`). | Anyone who can reach `submitVote` with a fresh nullifier and the published roots can satisfy the unarmed verifier. That is not a ceremony-backed Groth16. The published eligible root still excludes coded disqualifications; the mock does not check the witness unless armed. |
+| **MockVerifier** | Foundry / local inbox `acceptAll = true` on chain id 31337. The Node accepts `proof.accept` on that chain and, when `NODE_ENV=test`, on the default test chain 27427. Any other chain id requires `snarkjs.groth16.verify` before the ballot is stored. | The dev verification key is an untrusted `circuits:smoke` artifact, not a ceremony. Swap a ceremony Vote(20) zkey and a regenerated Solidity verifier before a binding election. The browser prover loads `/zk/vote.wasm` and `/zk/vote.zkey` and keeps the witness on the device. |
 | **Untrusted Groth16** | Poseidon(2) is the vote hasher. `npm run circuits:verify` checks an untrusted local Vote(4) proof. `npm run circuits:prove` checks an untrusted **Vote(20)** proof and refreshes the committed verifying key. `npm run circuits:setup` is still a local powers-of-tau. | **UNTRUSTED.** No ceremony. Do not ship those keys for a binding election. |
 | **Passkey helper** | Account is `zk-voting-local-address` (SHA-256 of seed), HMAC UserOp. The leaf is Poseidon, matching the circuit. | Not secp256k1 / ERC-4337. Fine for UX demos. v1 wraps and v2 keccak commitments are stale. |
-| **SPA vote POST** | Envelope only: ciphertext, proof, public inputs, nullifier, election id, ballot hash, a one-use blind-signed `votePass`, sent without cookies ([`buildVoteRequestBody`](./apps/node/public/vote.js)). Banned keys are stripped and ignored. | A client that puts the marked ballot in the ciphertext as readable JSON (the ranked JSON demo) still lets the Node decode rankings into `rankingPayload` ([`store.acceptVote`](./apps/node/src/store.mjs)). AES-GCM / ECIES ciphertext does not, and production refuses plaintext envelopes (`PLAINTEXT_BALLOT`). No session cookie rides with the ballot. |
+| **SPA vote POST** | Envelope only: ciphertext, proof, public inputs, nullifier, election id, ballot hash, a one-use blind-signed `votePass`, sent without cookies ([`buildVoteRequestBody`](./apps/node/public/vote.js)). The request does not carry an address, a userOp hash, a credential id, or the identity commitment. | Production refuses a UTF-8 JSON ciphertext (`PLAINTEXT_BALLOT`). The Node does not store `rankingPayload`. A host that watches both the vote-pass request and the ballot request can still line them up; that pair is not written down. |
 | **Node operator / `zk-voting.json`** | Person file, `identityLinks`, envelopes (`encryptedBallot`), optional `rankingPayload`, outcome-report subscriptions (`source: vote-default`). `GET .../envelopes` is tally-operator **after cutoff**. | Hostile or sloppy host is a **trust sink** for this demo. Forked Nodes can lie to their own visitors; they cannot occupy another body’s L1 slot ([`THREAT_MODEL.md`](./docs/THREAT_MODEL.md)). |
 | **Logs / IP** | App log: `METHOD URL status duration`. No vote-body logger in-tree. | nginx / Caddy / reverse-proxy / AWS ALB access logs, packet capture, and support dumps are **operator policy**. Treat vote POSTs as election-critical. The Node does not access-log `POST /api/elections/:id/vote`; strip or disable proxy logs for that path too ([`OPERATOR.md`](./OPERATOR.md), "Ballot unlinkability"). |
 | **Single relayer** | JSON path sets `relayer: 'node'`. EVM path uses `RELAYER_PRIVATE_KEY`. All public senders look like the bundler. | Good for wallet unlinkability. Bad for **censorship / liveness** (one key can stall voting). Not a mixnet. |

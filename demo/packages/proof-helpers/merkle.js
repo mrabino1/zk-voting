@@ -220,7 +220,20 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
     const siblingTrapdoor = toFieldWord(opts.siblingTrapdoor ?? 5n, toBigInt);
     const siblingNullifierSecret = toFieldWord(opts.siblingNullifierSecret ?? 7n, toBigInt);
     const electionId = toFieldWord(opts.electionId ?? 1n, toBigInt);
-    const ballotHash = toFieldWord(opts.ballotHash ?? 7n, toBigInt);
+    const choice = toFieldWord(opts.choice ?? 0n, toBigInt);
+    const choiceRandomness = toFieldWord(opts.choiceRandomness ?? 9n, toBigInt);
+    if (choice < 0n || choice > 15n) {
+      throw new Error("vote witness: choice must be an integer in 0..15");
+    }
+    const tag = hashLeftRightField(choice, choiceRandomness, scheme);
+    let ballotHash = tag;
+    if (opts.ballotHash != null) {
+      ballotHash = toFieldWord(opts.ballotHash, toBigInt);
+      const callerBoundChoice = opts.choice != null || opts.choiceRandomness != null;
+      if (callerBoundChoice && ballotHash !== tag) {
+        throw new Error("vote witness: ballotHash is not Hash(choice, choiceRandomness)");
+      }
+    }
 
     const tree = createTree(depth, scheme, { minDepth: Math.min(16, depth) });
     const leaf = identityCommitment(trapdoor, nullifierSecret, scheme);
@@ -287,6 +300,8 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       nullifier,
       ballotHash,
       electionId,
+      choice,
+      choiceRandomness,
       leaf,
     };
   }
@@ -306,6 +321,8 @@ function createMerkleHelpers({ toBigInt, keccakHashLeftRight, toHex32 }) {
       nullifier: witness.nullifier.toString(),
       ballotHash: witness.ballotHash.toString(),
       electionId: witness.electionId.toString(),
+      choice: witness.choice.toString(),
+      choiceRandomness: witness.choiceRandomness.toString(),
     };
   }
 

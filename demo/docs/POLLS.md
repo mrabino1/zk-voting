@@ -16,7 +16,7 @@ ZK-Voting is stricter than a single snapshot. **Final weight is the minimum end-
 
 A token poll has **no** ZK-Voting account, passkey, PIN, registration roll, eligible root, nullifier, or disqualification check. The voter signs an EIP-712 `TokenPollBallot` with the address that holds the tokens (ERC-1271 for a contract wallet). That signature proves control of the address. It is not identity verification.
 
-One ballot per address. It cannot be changed. Every poll includes an Abstain option. Quorum and pass threshold default to none. Phase 1 privacy is `public_weighted` only. Approval voting is phase 2.
+One ballot per address. It cannot be changed. Every poll includes an Abstain option. Quorum and pass threshold default to none. Phase 1 privacy is `public_weighted` only. That is a public weighted signal, not an anonymous ballot. Approval voting is phase 2.
 
 Only the platform super admin creates, edits, or schedules a poll. A tally operator (or a platform operator) posts the official tally after close. There is **no live provisional tally**.
 

@@ -775,7 +775,7 @@ export const BOT_OPERATIONS = [
   R('/api/me/outcome-subscriptions', {
     tag: 'Outcomes',
     auth: true,
-    summary: 'Elections whose official PDF this person will be emailed. Voting subscribes them by default.',
+    summary: 'Elections whose official PDF this person will be emailed. Subscription is opt-in; voting never subscribes anyone.',
   }),
   V('PUT', '/api/me/outcome-subscriptions/:electionId', {
     tag: 'Outcomes',

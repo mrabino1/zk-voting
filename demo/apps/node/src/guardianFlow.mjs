@@ -3,10 +3,11 @@
 // deals carry Feldman commitments and shares encrypted to each guardian.
 
 import { HttpError } from './http.mjs';
+import { aggregateCiphertexts, aggregateOptionId, isAggregateEnvelope } from './aggregateBallot.mjs';
 import { isTallyEnvelope } from './tallyCrypto.mjs';
 import { expectedVerificationKey, jointPublicKey, pointToHex } from './guardians/index.mjs';
 import { pointFromHex, pointXBytes } from './guardians/p256.mjs';
-import { ephemeralFromEnvelope, verifyPartial } from './guardians/threshold.mjs';
+import { verifyPartial } from './guardians/threshold.mjs';
 
 function fail(status, message, code) {
   throw new HttpError(status, message, { code });
@@ -96,16 +97,30 @@ export async function acceptPartials(store, electionId, body) {
     },
   }));
   const envelopes = store.listEnvelopes(electionId);
+  if (envelopes.some((env) => !isAggregateEnvelope(env.encryptedBallot))) {
+    fail(400, 'accepted ballots are not AG aggregate envelopes', 'PER_BALLOT_OPEN_DISABLED');
+  }
+  let product;
+  try {
+    product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
+  } catch (err) {
+    fail(400, err.message, err.code || 'BAD_ENVELOPE');
+  }
   for (const row of partials) {
-    const env = envelopes.find((item) => String(item.ballotHash) === row.ballotHash);
-    if (!env) fail(400, 'partial does not match an accepted ballot', 'BAD_PARTIAL');
+    const option = /^aggregate:(\d+)$/.exec(row.ballotHash);
+    if (!option) {
+      fail(400, 'per-ballot decryption partials are refused', 'PER_BALLOT_PARTIAL');
+    }
+    const slot = Number(option[1]);
+    const summed = product.options[slot];
+    if (!summed) fail(400, 'partial does not match an aggregate option', 'BAD_PARTIAL');
     const ok = verifyPartial({
-      partial: row,
+      partial: { ...row, ballotHash: aggregateOptionId(slot) },
       electionId: election.id,
       index,
       jointPublicKey: ceremony.publicKey,
       expectedY: ceremony.verificationKeys[String(index)],
-      ephemeral: ephemeralFromEnvelope(env.encryptedBallot),
+      ephemeral: summed.c1Hex,
     });
     if (!ok) {
       fail(400, `partial decryption from guardian ${index} is not valid`, 'BAD_PARTIAL');

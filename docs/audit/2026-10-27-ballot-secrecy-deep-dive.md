@@ -1,6 +1,8 @@
 # Ballot secrecy deep dive
 
 **Verdict: Partially.** An individual's vote can be reconstructed on this branch when a live contract entry point or a demo mechanism below is used. It cannot be reconstructed by a passive chain observer of a PRF-path ballot that a shared relayer submitted with `submitVote` and that nobody later opens.
+**Follow-up:** each finding has a status line in [Fix status](#fix-status). The verdict above is the review of commit `1078207`.
+
 
 **Date:** 2026-10-27
 **Branch:** `test/unstable`
@@ -48,6 +50,8 @@ So the public claim “the contracts let a nefarious actor reverse-engineer an i
 
 ## BS-1 — Critical. Clearance votes publish the identity commitment next to the nullifier
 
+**Status:** Fixed. The clearance entry point is gone; party gates move the roots. The client ABI does not export it.
+
 **Real today:** yes. `BallotInbox.submitVoteWithClearance` is in the ABI. Foundry tests call it. The Node’s chain client does **not** call it (`demo/apps/node/src/chain.mjs` only sends `submitVote`). An opt-in ABI still exports it (`demo/packages/chain-client/index.js`, `CLEARANCE_INBOX_ABI`).
 
 **Attacker:** any chain observer. The submitter can be the voter, a relayer, a bundler, or a jurisdiction integration that turned external-party gates on. No secret is required beyond the transaction, which is public. Joining the commitment to a civil name uses the roll the registrar already keeps (`identityLinks` in the Node store, or an off-chain clerk file). That file is the point of registration.
@@ -68,6 +72,8 @@ The interface comment says the commitment “is not stored and is not in VoteAcc
 
 ## BS-2 — Critical. Opened tallies publish every option in calldata, in ballot order
 
+**Status:** Fixed. Tallying is aggregate-only. Ranked opening is disabled (`RANKED_TALLY_DISABLED`).
+
 **Real today:** yes, in `Tally.submitOpenedTally`. The Node tally route does **not** call it. It decrypts locally, posts counts, and leaves `openings` out of the HTTP response (`demo/apps/node/src/routes/elections.mjs` lines 955–1081). Any tally-operator key can still call the contract.
 
 **Attacker:** any chain observer of that transaction. The caller must be `params.tallyOperator` (`Tally.sol` lines 190–207). No decryption key is required at read time: the options are arguments.
@@ -87,6 +93,8 @@ There is no shuffle. `demo/apps/node/src/guardians/aggregate.mjs` lines 45–60 
 ---
 
 ## BS-3 — High. Without WebAuthn PRF, the vote identity is a public function of the credential id
+
+**Status:** Fixed. Voting without an identity-domain PRF throws `IDENTITY_PRF_REQUIRED`.
 
 **Real today:** yes, on the client fallback path. The PRF path is not affected (see “Checked and sound”).
 
@@ -112,6 +120,8 @@ There is no shuffle. `demo/apps/node/src/guardians/aggregate.mjs` lines 45–60 
 
 ## BS-4 — High. `opens_ballots` decrypts every ballot, and the shares are stored
 
+**Status:** Fixed. Only `aggregate:<option>` partials are accepted.
+
 **Real today:** yes, for elections whose `tallyScheme` is `opens_ballots`. Default tally scheme elsewhere is sum-only, which does not take this path.
 
 **Attacker:** any `t` guardians, acting together. After they POST partials, also the Node host and anyone with a copy of the database. One guardian, and the host before those partials exist, cannot open an envelope. The public tally-key endpoint returns commitments and verification keys, not shares.
@@ -131,6 +141,8 @@ The guardian deal inbox (`GET /api/elections/:id/guardians/:index/inbox`, `elect
 
 ## BS-5 — High. The account that submits, and any UserOp sender, is tied to that ballot
 
+**Status:** Fixed. Relayer-only submission. The vote request omits address, userOp hash, and credential id.
+
 **Real today:** yes, whenever a vote is not submitted by a shared relayer. The demo Node’s chain path **is** a shared relayer (`chain.mjs` lines 374–392 writes `submitVote` with `RELAYER_PRIVATE_KEY`; the stored row uses `relayer: 'node'`, `relay.mjs` lines 300–304). That default path does not put the voter’s account in `VoteAccepted`.
 
 **Attacker:** a chain observer. For a UserOp, also the bundler, who sees the op before it is included. The paymaster does not add a second identifier, and it does not remove this one.
@@ -146,6 +158,8 @@ The guardian deal inbox (`GET /api/elections/:id/guardians/:index/inbox`, `elect
 ---
 
 ## BS-6 — High. Token polls publish the holding address and the choices
+
+**Status:** Documented by design. Token polls stay public. The UI and `docs/POLLS.md` say they are not anonymous ballots.
 
 **Real today:** yes. This is declared, not accidental: `privacyMode: 'public_weighted'` (`demo/apps/node/src/polls.mjs` line 78) and `demo/docs/THREAT_MODEL.md` (“Address-hiding is not offered”).
 
@@ -165,6 +179,8 @@ A forum operator who only runs discussion software learns nothing from this. A t
 
 ## BS-7 — High. On a public EVM the hourly seal does not exist; vote transactions are timed
 
+**Status:** Fixed when the disclosure interval is non-zero (one sorted batch). A one-ballot batch is still visible. Interval 0 is unchanged for tests.
+
 **Real today:** yes. Hourly disclosure is implemented in the Node explorer and the L2 sequencer. `BallotInbox` increments `acceptedBallots` and emits `VoteAccepted` inside `submitVote`, with `block.timestamp` as the chain’s clock (`BallotInbox.sol` lines 244–254). `demo/docs/how_voters_privacy_is_protected.md` section 7 already says this. It is still a reconstruction path when the anonymity set is small.
 
 **Attacker:** a chain observer, or anyone watching a public RPC. They do not learn a name from the event alone, because the relayer is shared (BS-5). They learn the exact inclusion time of each nullifier.
@@ -180,6 +196,8 @@ A forum operator who only runs discussion software learns nothing from this. A t
 ---
 
 ## BS-8 — High. The L2 sequencer keeps identity and answer fields on a vote it was handed
+
+**Status:** Fixed. Vote transactions are an allowlist and reject identity and answer keys.
 
 **Real today:** yes, for civic JSON submitted to the sequencer. The Node relay path strips those keys before it builds a vote (`demo/apps/node/src/http.mjs` lines 97–171; `relay.mjs` lines 99 and 220–232) and does not put them in the explorer row. A client or bundler that talks to the sequencer directly is not stripped the same way.
 
@@ -200,6 +218,8 @@ The Node’s own banned list is stricter (`answers`, `ranking`, `identityCommitm
 
 ## BS-9 — Medium. Nothing on chain checks that the ballot bytes are a ciphertext
 
+**Status:** Partial. The dev circuit binds a Poseidon tag of one choice and private randomness. The ElGamal body is not yet constrained in-circuit.
+
 **Real today:** yes. The Node refuses a UTF-8 JSON “ciphertext” unless `ZKV_ALLOW_PLAINTEXT_BALLOTS` is set, and that flag defaults off (`demo/apps/node/src/config.mjs` lines 287–288; `relay.mjs` lines 225–232). The contract has no such check.
 
 **Attacker:** a chain observer, if the submitter put the option in `encryptedBallot`. That submitter is the voter’s client, a malicious wrapper, or a relayer that was given plaintext. A relayer that was given a real AES-GCM or ECIES blob cannot turn it back into an option (see the sound section).
@@ -217,6 +237,8 @@ The Node’s own banned list is stricter (`answers`, `ranking`, `identityCommitm
 ---
 
 ## BS-10 — Medium. The operator can join the signed-in vote-pass request to the cookieless ballot
+
+**Status:** Partial. The SPA no longer sends the commitment on either request. A host that sees both requests can still correlate them. That join is not stored.
 
 **Real today:** yes, as a traffic observation. It is not stored as a foreign key. The blind signature itself does not create the join (sound section).
 
@@ -237,6 +259,8 @@ At rest, spent passes are a sorted list of token hashes with no nullifier and no
 
 ## BS-11 — Medium. A receipt token names the ballot, not the option
 
+**Status:** Unchanged by design. The token names the nullifier, not the option.
+
 **Real today:** yes. Receipts do not contain the option. They do let a holder, and anyone they show the token to, learn the nullifier.
 
 **Attacker:** a coercer or buyer to whom the voter shows the receipt, the email, or the PDF. Also anyone who later obtains the token. Not a chain observer who lacks the token.
@@ -255,6 +279,8 @@ There is no second ballot. A spent nullifier reverts (`BallotInbox.sol` lines 93
 ---
 
 ## BS-12 — Low. Mock proofs and `MockVerifier` do not open a ballot, and they do not enforce the story the circuit tells
+
+**Status:** Fixed off the local dev chain. Mock proofs stay on chain id 31337 and on the Node test chain. The dev zkey is untrusted until a ceremony swap.
 
 **Real today:** yes.
 
@@ -312,3 +338,26 @@ Until those are true in the contracts and not only in the Node’s JSON path, a 
 - No deployment was probed. “Real today” means the source on this commit, not a particular chain’s storage.
 - No attempt was made to break Poseidon or AES-GCM. Unlinkability of the PRF path assumes those functions hide their inputs and that the authenticator’s PRF key is not extracted.
 - Forum software outside this repository was not reviewed. Only this tree’s integration, which is documentation plus the absence of a join.
+
+
+---
+
+## Fix status
+
+Status of the findings above after the aggregate-tally contracts change and the ballot-proof app change. Both target `test/unstable`. A one-voter election, or a one-ballot batch, still shows that person's choice. That limit is accepted.
+
+| ID | Status |
+| --- | --- |
+| BS-1 | **Fixed** in the contracts change. `submitVoteWithClearance` is removed. A veto or a missing attestation moves the eligible root and the disqualification root. The vote call does not take an identity commitment. This app change deletes `CLEARANCE_INBOX_ABI`. |
+| BS-2 | **Fixed.** `submitOpenedTally` is removed. Plurality tally is a homomorphic product; guardians decrypt the sums. The Node does not store or return per-ballot openings. Ranked tally returns `RANKED_TALLY_DISABLED` because a verified shuffle is not implemented. |
+| BS-3 | **Fixed** in this app change. A missing identity-domain PRF throws `IDENTITY_PRF_REQUIRED`. The credential id is not a vote identity. |
+| BS-4 | **Fixed** in this app change. Partials must be `aggregate:<option>`. A partial for one ballot hash is `PER_BALLOT_PARTIAL`. The guardian CLI refuses a per-ballot opening. |
+| BS-5 | **Fixed.** The vote request has no address, userOp hash, or credential id. Chain submission uses the relayer key. When the disclosure interval is non-zero the relayer sends `submitVoteBatch`. The L2 vote path drops `sender`. |
+| BS-6 | **Documented by design.** Token polls stay `public_weighted`. The poll lede and `docs/POLLS.md` say they are not anonymous ballots. The mechanism is unchanged. |
+| BS-7 | **Fixed** when the disclosure interval is non-zero: one nullifier-sorted batch after the hour, from the relayer, held off chain until then. Interval 0 still sends one `submitVote` so existing tests pass. A one-ballot batch is still a singleton. |
+| BS-8 | **Fixed** in this app change. A vote transaction is an allowlist. `identityCommitment`, `answers`, `ranking`, `rankingPayload`, and choice keys are rejected. The public vote view does not copy the commitment. |
+| BS-9 | **Partial.** The dev circuit binds `ballotHash` to `Poseidon(choice, choiceRandomness)` with the choice in 0..15 and the randomness private. AG envelopes put that tag in the bytes the contracts hash. The ElGamal body is not checked inside the circuit yet, so a dishonest ciphertext can disagree with the proven choice until a ceremony circuit checks the curve. That is an integrity gap. An honest envelope is not opened one ballot at a time. Plaintext JSON stays refused unless the test flag is on, and a decoded ranking is not stored. |
+| BS-10 | **Partial.** The SPA vote POST and the SPA vote-pass request do not send the identity commitment. The server still accepts a commitment on vote-pass for an external-party API client. A host that sees both requests can still correlate them. That pair is not stored. |
+| BS-11 | **Unchanged by design.** Receipts stay choice-free. The token still reveals the nullifier, which is participation. It does not reveal the option, because openings are not published. |
+| BS-12 | **Fixed** off the local dev chain. `proof.accept` is accepted on chain id 31337 and, when `NODE_ENV=test`, on the Node test chain 27427. Other chain ids require `snarkjs.groth16.verify` before accept. The dev key is `circuits:smoke` output, UNTRUSTED, not a ceremony. Replace it with a ceremony Vote(20) zkey and a regenerated Solidity verifier. `MockVerifier` remains the Anvil verifier. |
+

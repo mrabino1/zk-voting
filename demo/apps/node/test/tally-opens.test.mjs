@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
-import { ephemeralFromEnvelope, partialDecrypt } from '../src/guardians/threshold.mjs';
+import { aggregateCiphertexts, encryptAggregateBallot } from '../src/aggregateBallot.mjs';
+import { partialDecrypt } from '../src/guardians/threshold.mjs';
 import { createSealedDeal, finalizeShare, initGuardian } from '../src/guardians/index.mjs';
 import { createApp } from '../src/server.mjs';
 import { encryptToTallyPub, packChoices } from '../src/tallyCrypto.mjs';
@@ -140,16 +141,17 @@ async function establishGuardians(electionId, { guardians = 3, threshold = 2 } =
 }
 
 function partialBody(share, electionId, envelopes) {
+  const product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
   return {
     index: share.index,
-    partials: envelopes.map((env) =>
+    partials: product.options.map((opt, j) =>
       partialDecrypt({
         shareScalar: share.shareScalar,
         index: share.index,
         electionId,
-        ballotHash: env.ballotHash,
+        ballotHash: `aggregate:${j}`,
         jointPublicKey: share.jointPublicKey,
-        ephemeral: ephemeralFromEnvelope(env.encryptedBallot),
+        ephemeral: opt.c1Hex,
       }),
     ),
   };
@@ -257,9 +259,19 @@ describe('tally opens ballots (guardian threshold)', () => {
     const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.text);
 
+    const legacy = await encryptToTallyPub(pub, packChoices([0]));
+    const denied = await voteEncrypted(electionId, 7, legacy, commitments[0]);
+    assert.equal(denied.status, 400, denied.text);
+    assert.equal(denied.json.code, 'PER_BALLOT_OPEN_DISABLED');
+
     for (let i = 0; i < choices.length; i++) {
-      const env = await encryptToTallyPub(pub, packChoices([choices[i]]));
-      const cast = await voteEncrypted(electionId, 1000 + i, env, commitments[i]);
+      const env = encryptAggregateBallot({
+        jointPublicKey: pub,
+        choice: choices[i],
+        choiceRandomness: 1000n + BigInt(i),
+        nOptions: 3,
+      });
+      const cast = await voteEncrypted(electionId, 1000 + i, env.encryptedBallot, commitments[i]);
       assert.equal(cast.status, 201, cast.text);
     }
 
@@ -320,8 +332,9 @@ describe('tally opens ballots (guardian threshold)', () => {
     assert.deepEqual(ok.json.election.tally.counts, [3, 1, 1]);
     assert.equal(ok.json.election.tally.source, 'opens_ballots');
     assert.equal(ok.json.election.tally.production, false);
-    assert.equal(ok.json.election.tally.aggregation, 'undecided');
-    assert.equal(ok.json.tally.openedBallots, 5);
+    assert.equal(ok.json.election.tally.aggregation, 'homomorphic');
+    assert.equal(ok.json.tally.openedBallots, null);
+    assert.equal(JSON.stringify(ok.json).includes('openings'), false);
   });
 
   test('legacy sum_only still accepts a matching-sum invented vector', async () => {

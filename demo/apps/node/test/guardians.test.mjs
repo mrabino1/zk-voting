@@ -20,6 +20,7 @@ import {
 } from '../src/guardians/index.mjs';
 import { expectedVerificationKey } from '../src/guardians/dkg.mjs';
 import { hexToScalar, lagrangeAtZero, mod, pointFromHex, pointToHex, pointXBytes } from '../src/guardians/p256.mjs';
+import { encryptAggregateBallot } from '../src/aggregateBallot.mjs';
 import { ephemeralFromEnvelope, decryptEnvelopeWithPartials } from '../src/guardians/threshold.mjs';
 import {
   decryptTallyEnvelope,
@@ -289,12 +290,17 @@ describe('Feldman guardians', () => {
         sharePaths.push(sharePath);
       }
       const share = JSON.parse(await readFile(sharePaths[0], 'utf8'));
-      const env = await encryptToTallyPub(share.jointPublicKey, packChoices([3]));
+      const sealed = encryptAggregateBallot({
+        jointPublicKey: share.jointPublicKey,
+        choice: 0,
+        choiceRandomness: 9n,
+        nOptions: 2,
+      });
       const envPath = path.join(dir, 'envelopes.json');
       const { writeFile: write } = await import('node:fs/promises');
       await write(
         envPath,
-        JSON.stringify({ envelopes: [{ ballotHash: '0xcli', encryptedBallot: env }] }),
+        JSON.stringify({ envelopes: [{ ballotHash: sealed.ballotHash, encryptedBallot: sealed.encryptedBallot }] }),
       );
       const partialPath = path.join(dir, 'partial.json');
       await execFileAsync(process.execPath, [
@@ -326,9 +332,9 @@ describe('Feldman guardians', () => {
         '--ceremony',
         ceremonyPath,
         '--envelope',
-        env,
+        sealed.encryptedBallot,
         '--ballot-hash',
-        '0xcli',
+        'aggregate:0',
         '--election',
         'cli-election',
         '--index',

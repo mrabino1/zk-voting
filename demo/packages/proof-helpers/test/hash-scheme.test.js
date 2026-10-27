@@ -155,6 +155,12 @@ describe("stand-in merkle (proving path)", () => {
     assert.equal(w.disqLow, 0n);
     assert.equal(w.disqNext, 0n);
     assert.equal(w.nullifier, computeNullifier(3n, 1n, scheme));
+    assert.equal(w.choice, 0n);
+    assert.equal(w.choiceRandomness, 9n);
+    assert.equal(w.ballotHash, poseidonHashLeftRight(0n, 9n));
+    const snark = voteWitnessToSnarkInput(w);
+    assert.equal(snark.choice, "0");
+    assert.equal(snark.choiceRandomness, "9");
   });
 
   test("a disqualified voter's non-membership proof fails", () => {

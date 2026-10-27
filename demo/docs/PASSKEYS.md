@@ -119,7 +119,7 @@ v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) canno
 - The demo SPA commitment is **Poseidon(trapdoor, nullifierSecret)** (`poseidonCommitmentHex`), the same leaf as `circuits/identity.circom`. 32-byte HKDF outputs are reduced mod the bn254 scalar field. Foundry `IdentityCommitment.toLeaf` is still keccak for unit-test trees. Do not insert a keccak leaf into a Poseidon tree.
 - Account “address” is still `SHA-256(seed)[0:20]` (`zk-voting-local-address`), not secp256k1/keccak.
 - UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
-- When PRF is missing, account wrap and identity still use **two** HKDF domains of the credential id (not the same bytes). That path is weaker than authenticator PRF and is demo-only.
+- When the identity-domain PRF output is missing, the device may still wrap an account seed. It does **not** derive a vote identity from the credential id. Voting throws `IDENTITY_PRF_REQUIRED`.
 - Node HTTP still stores credential ids only; it does not see PRF output or trapdoors.
 
 ---

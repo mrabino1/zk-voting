@@ -503,13 +503,11 @@ identity commitment. The Node-side mechanics:
 - **No plaintext ballots.** A ciphertext that decodes as readable JSON is
   refused with `400 PLAINTEXT_BALLOT`. `ZKV_ALLOW_PLAINTEXT_BALLOTS=1`
   (`allowPlaintextBallots`) turns that off for ranked/IRV demos and tests only.
-  It is **NON-PRODUCTION**: with it on, the operator can read rankings.
+  It is **NON-PRODUCTION**. The Node does not copy a decoded ranking into `rankingPayload`.
 - **Relayer only.** Ballots reach the inbox through the Node relayer
   (`msg.sender` = relayer), never from the voter's own wallet. The chain-client
-  default `INBOX_ABI` does not include `submitVoteWithClearance`; it lives in
-  `CLEARANCE_INBOX_ABI` until the contract change in
-  [`proposals/ballot-unlinkability-contracts.md`](./proposals/ballot-unlinkability-contracts.md)
-  lands.
+  `INBOX_ABI` submits with `submitVote` or `submitVoteBatch`. It has no
+  clearance call and no identity commitment argument.
 
 ### `/vote` log policy (operators must enforce)
 
@@ -540,12 +538,12 @@ identity commitment. The Node-side mechanics:
   election in memory, so a restart resets the cap. The nullifier still stops a
   second counted ballot.
 - A voter who opts into the receipt email gives their mail provider the holder
-  token. With the token, `/api/receipts/verify` returns the nullifier, and
-  per-ballot tally opening (C2 below) would then reveal the choice.
-- On-chain: the tally opens each ciphertext (C2), and
-  `submitVoteWithClearance` puts the identity commitment in calldata next to
-  the nullifier (C1). Both need the contract and circuit changes in the
-  proposal. Until then the honest claim is limited to the Node.
+  token. With the token, `/api/receipts/verify` returns the nullifier. The
+  tally does not open that ballot, so the token does not reveal the option.
+  It can still show that the person voted.
+- The clearance entry point and per-ballot tally openings are not in the
+  client ABI. Plurality totals are an aggregate decryption. Ranked tally is
+  disabled until a verified shuffle exists.
 
 ## Secrets and production
 
@@ -554,7 +552,7 @@ identity commitment. The Node-side mechanics:
 - `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `zk-voting.json`. If the chain rejects a proof, the UI reports failure.
-- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. Decrypting takes `t` verified partials after cutoff. Guardians use `node apps/node/scripts/guardian.mjs`. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). Homomorphic aggregation and a mixnet are **not selected**. The ceremony is NON-PRODUCTION. Do not use it for a binding election.
+- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. After cutoff, `t` guardians decrypt the **summed** option ciphertexts (`aggregate:<option>`), not each ballot. The guardian CLI refuses a per-ballot partial. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). The ceremony is NON-PRODUCTION. Do not use it for a binding election. Ranked tally is disabled.
 
 ## L1 certification (tally hash on Ethereum)
 

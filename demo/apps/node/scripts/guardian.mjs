@@ -12,7 +12,8 @@ import {
   initGuardian,
   partialDecrypt,
 } from '../src/guardians/index.mjs';
-import { ephemeralFromEnvelope, verifyPartial } from '../src/guardians/threshold.mjs';
+import { aggregateCiphertexts, isAggregateEnvelope, parseAggregateEnvelope } from '../src/aggregateBallot.mjs';
+import { verifyPartial } from '../src/guardians/threshold.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -140,18 +141,20 @@ async function main() {
     const share = await readJson(args.share);
     const doc = await readJson(args.envelopes);
     const envelopes = Array.isArray(doc) ? doc : doc.envelopes;
-    const partials = [];
-    for (const env of envelopes) {
-      const row = partialDecrypt({
+    if (!envelopes.every((env) => isAggregateEnvelope(env.encryptedBallot))) {
+      throw new Error('PER_BALLOT_OPEN_DISABLED: partials are computed on the aggregate, not on one ballot');
+    }
+    const product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
+    const partials = product.options.map((opt, j) =>
+      partialDecrypt({
         shareScalar: share.shareScalar,
         index: share.index,
         electionId: args.election,
-        ballotHash: env.ballotHash,
+        ballotHash: `aggregate:${j}`,
         jointPublicKey: share.jointPublicKey,
-        ephemeral: ephemeralFromEnvelope(env.encryptedBallot),
-      });
-      partials.push(row);
-    }
+        ephemeral: opt.c1Hex,
+      }),
+    );
     await writeJson(args.out, { index: share.index, partials });
     process.stdout.write(`wrote ${args.out} partials=${partials.length}\n`);
     return;
@@ -170,13 +173,21 @@ async function main() {
     if (!row) throw new Error('partial for that ballot hash was not in the file');
     const keys = ceremony.verificationKeys || ceremony.ceremony?.verificationKeys;
     const joint = ceremony.publicKey || ceremony.ceremony?.publicKey;
+    const ballotHash = String(args['ballot-hash']);
+    if (!ballotHash.startsWith('aggregate:')) {
+      throw new Error('PER_BALLOT_OPEN_DISABLED: verify an aggregate:<option> partial');
+    }
+    const slot = Number(ballotHash.slice('aggregate:'.length));
+    const parsed = parseAggregateEnvelope(args.envelope);
+    const option = parsed.options[slot];
+    if (!option) throw new Error('aggregate option is outside this envelope');
     const ok = verifyPartial({
       partial: row,
       electionId: args.election,
       index,
       jointPublicKey: joint,
       expectedY: keys[String(index)],
-      ephemeral: ephemeralFromEnvelope(args.envelope),
+      ephemeral: option.c1Hex,
     });
     process.stdout.write(ok ? 'partial ok\n' : 'partial rejected\n');
     process.exit(ok ? 0 : 2);

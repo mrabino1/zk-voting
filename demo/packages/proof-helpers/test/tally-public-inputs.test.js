@@ -15,7 +15,7 @@ test("tally instance is V2 with 7 field words incl. tallyKeyHash", () => {
     acceptedCount: 3,
     countsHash: big,
     ballotRoot: big,
-    openingsHash: 5,
+    aggregateHash: 5,
     tallyKeyHash: big,
   });
   assert.equal(TALLY_INSTANCE_VERSION, 2n);

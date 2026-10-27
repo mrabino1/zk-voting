@@ -25,6 +25,20 @@ export const ballotInboxAbi = [
   },
   {
     type: 'function',
+    name: 'submitVoteBatch',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'electionId', type: 'uint256' },
+      { name: 'a', type: 'uint256[2][]' },
+      { name: 'b', type: 'uint256[2][2][]' },
+      { name: 'c', type: 'uint256[2][]' },
+      { name: 'publicInputs', type: 'uint256[][]' },
+      { name: 'encryptedBallots', type: 'bytes[]' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'nullifierUsed',
     stateMutability: 'view',
     inputs: [
@@ -154,6 +168,31 @@ function dummyPoints() {
     ],
     c: [5n, 6n],
   };
+}
+
+/**
+ * When the disclosure interval is 0, each ballot is its own transaction.
+ * Otherwise the relayer holds ballots off chain and submits one batch after
+ * the interval, sorted by nullifier. A one-ballot batch is still a singleton.
+ * @param {{ pending: object[], interval: number, now: number, startTime: number, lastBatchAt: number }} input
+ */
+export function planDisclosureBatch({ pending, interval, now, startTime, lastBatchAt }) {
+  const rows = Array.isArray(pending) ? pending : [];
+  const sorted = [...rows].sort((a, b) => {
+    const left = BigInt(a.nullifier);
+    const right = BigInt(b.nullifier);
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+  });
+  const wait = Number(interval) || 0;
+  if (wait <= 0) return { action: 'immediate', batch: sorted.slice(0, 64) };
+  const t = Number(now) || 0;
+  const start = Number(startTime) || 0;
+  const last = Number(lastBatchAt) || 0;
+  const due = last > 0 ? t >= last + wait : t >= start + wait;
+  if (!due) return { action: 'wait', batch: [] };
+  return { action: 'batch', batch: sorted.slice(0, 64) };
 }
 
 export function groth16Points(proof) {
@@ -289,12 +328,80 @@ export function createChain(config) {
   let wallet;
   let publicClient;
   let account;
+  const voteQueue = new Map();
+  const lastBatchAt = new Map();
 
   if (hasWallet) {
     const chain = zkVotingChain(config.chainId, rpc);
     account = privateKeyToAccount(key);
     publicClient = createPublicClient({ chain, transport: http(rpc) });
     wallet = createWalletClient({ account, chain, transport: http(rpc) });
+  }
+
+  async function writeSubmitVote({ inbox, electionId, a, b, c, inputs, encryptedBallot }) {
+    try {
+      const hash = await wallet.writeContract({
+        address: inbox,
+        abi: ballotInboxAbi,
+        functionName: 'submitVote',
+        args: [asBigInt(electionId), a, b, c, inputs, encryptedBallot],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      return { hash, receipt, batched: false };
+    } catch (err) {
+      throw new HttpError(502, `BallotInbox submitVote failed: ${err.message || err}`, {
+        code: 'CHAIN_VOTE_FAILED',
+      });
+    }
+  }
+
+  async function writeSubmitBatch({ inbox, electionId, batch }) {
+    try {
+      const hash = await wallet.writeContract({
+        address: inbox,
+        abi: ballotInboxAbi,
+        functionName: 'submitVoteBatch',
+        args: [
+          asBigInt(electionId),
+          batch.map((row) => row.a),
+          batch.map((row) => row.b),
+          batch.map((row) => row.c),
+          batch.map((row) => row.inputs),
+          batch.map((row) => row.encryptedBallot),
+        ],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      return { hash, receipt, batched: true, count: batch.length };
+    } catch (err) {
+      throw new HttpError(502, `BallotInbox submitVoteBatch failed: ${err.message || err}`, {
+        code: 'CHAIN_VOTE_FAILED',
+      });
+    }
+  }
+
+  async function flushElection(key, now) {
+    const queued = voteQueue.get(key) || [];
+    if (!queued.length) return { queued: false };
+    const interval = Number(config.disclosureIntervalSeconds) || 0;
+    const plan = planDisclosureBatch({
+      pending: queued,
+      interval,
+      now: now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000),
+      startTime: queued[0].startTime,
+      lastBatchAt: lastBatchAt.get(key) || 0,
+    });
+    if (plan.action === 'wait') {
+      return { queued: true, submitted: false, waiting: queued.length };
+    }
+    const inbox = inboxAddress();
+    const result = await writeSubmitBatch({ inbox, electionId: key, batch: plan.batch });
+    const sent = new Set(plan.batch);
+    voteQueue.set(
+      key,
+      queued.filter((row) => !sent.has(row)),
+    );
+    lastBatchAt.set(key, Number(now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000)));
+    return result;
   }
 
   return {
@@ -371,7 +478,7 @@ export function createChain(config) {
         });
       }
     },
-    async submitVote({ electionId, proof, publicInputs, encryptedBallot }) {
+    async submitVote({ electionId, proof, publicInputs, encryptedBallot, startTime, now }) {
       if (!configured) return null;
       const inbox = inboxAddress();
       if (!hasWallet || !inbox) {
@@ -381,22 +488,34 @@ export function createChain(config) {
           { code: 'CHAIN_NOT_READY' },
         );
       }
+      const interval = Number(config.disclosureIntervalSeconds) || 0;
+      const key = String(electionId);
       const { a, b, c } = groth16Points(proof);
       const inputs = publicInputs.map((x) => asBigInt(x));
-      try {
-        const hash = await wallet.writeContract({
-          address: inbox,
-          abi: ballotInboxAbi,
-          functionName: 'submitVote',
-          args: [asBigInt(electionId), a, b, c, inputs, encryptedBallot],
-        });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        return { hash, receipt };
-      } catch (err) {
-        throw new HttpError(502, `BallotInbox submitVote failed: ${err.message || err}`, {
-          code: 'CHAIN_VOTE_FAILED',
-        });
+      const nullifier = inputs[2];
+      if (interval <= 0) {
+        return writeSubmitVote({ inbox, electionId, a, b, c, inputs, encryptedBallot });
       }
+      const queued = voteQueue.get(key) || [];
+      queued.push({
+        nullifier,
+        a,
+        b,
+        c,
+        inputs,
+        encryptedBallot,
+        startTime: startTime ?? 0,
+      });
+      voteQueue.set(key, queued);
+      return flushElection(key, now);
+    },
+    async flushVoteQueue(now) {
+      if (!configured) return [];
+      const out = [];
+      for (const key of voteQueue.keys()) {
+        out.push(await flushElection(key, now));
+      }
+      return out;
     },
   };
 }

@@ -994,7 +994,7 @@ export default {
   polls: {
     nav: "Polls",
     listTitle: "Token polls",
-    listLede: "Signal polls weighted by an ERC-20 balance. Holding the token is the only credential. Results do not execute anything.",
+    listLede: "Signal polls weighted by an ERC-20 balance. These are public weighted signals, not anonymous ballots. Holding the token is the only credential. Results do not execute anything.",
     empty: "No token polls are published.",
     signal: "Signal only · non-binding",
     nfpFooter: "NOT FOR PROFIT — civic public good. Not a commercial product.",
