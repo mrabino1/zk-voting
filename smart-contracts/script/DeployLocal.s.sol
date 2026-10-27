@@ -180,6 +180,10 @@ abstract contract ZkVotingStackScript is DeployOnce {
             .setModules(
                 address(s.voterRegistry), address(s.disqualificationRegistry), address(s.inbox), address(s.tally)
             );
+        address relayerAddr = vm.envOr("RELAYER", address(0));
+        if (relayerAddr != address(0)) s.factory.setRelayer(relayerAddr, true);
+        uint256 disclosure = vm.envOr("DISCLOSURE_INTERVAL", uint256(0));
+        if (disclosure != 0) s.factory.setDisclosureInterval(uint64(disclosure));
 
         s.entryPoint = new ZkVotingEntryPoint();
         s.accountFactory = new PasskeyAccountFactory(address(s.entryPoint));

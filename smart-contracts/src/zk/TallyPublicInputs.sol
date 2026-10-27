@@ -21,13 +21,15 @@ pragma solidity ^0.8.24;
 ///   [3] countsHash     = keccak256(abi.encodePacked(counts))           mod r
 ///   [4] ballotRoot     = inbox hash-chain of accepted ballot hashes     mod r
 ///                        (bound for BOTH schemes since V2)
-///   [5] openingsHash   = keccak256(abi.encodePacked(openings))          mod r (0 if SUM_ONLY)
+///   [5] aggregateHash  = commitment to the summed ciphertext             mod r (0 if SUM_ONLY)
+///                        Never a hash of per-ballot openings.
 ///   [6] tallyKeyHash   = keccak256(abi.encodePacked(tallyPubKeyX, Y))   mod r
 ///
 /// V1 (`TALLY_SOL_MOCK_V1`, 6 words, raw keccak words, ballotRoot = 0 under
 /// SUM_ONLY) is retired. Circom fixes `nOptions` at compile time and exposes
 /// `counts[]` in the clear; Solidity supports a variable-length vector via
-/// `countsHash`. A production tally verifier must be generated from a circuit
+/// `countsHash`. Word 5 is an aggregate ciphertext commitment, not a list of
+/// openings. A production tally verifier must be generated from a circuit
 /// that exposes exactly this instance (or wrapped by a translating adapter)
 /// and installed with `Tally.setTallyProofVerifier`.
 library TallyPublicInputs {
@@ -43,7 +45,7 @@ library TallyPublicInputs {
         uint256 acceptedCount,
         bytes32 countsHash,
         bytes32 ballotRoot,
-        bytes32 openingsHash,
+        bytes32 aggregateHash,
         bytes32 tallyKeyHash
     ) internal pure returns (uint256[] memory input) {
         input = new uint256[](WORDS);
@@ -52,17 +54,12 @@ library TallyPublicInputs {
         input[2] = acceptedCount % SNARK_SCALAR_FIELD;
         input[3] = uint256(countsHash) % SNARK_SCALAR_FIELD;
         input[4] = uint256(ballotRoot) % SNARK_SCALAR_FIELD;
-        input[5] = uint256(openingsHash) % SNARK_SCALAR_FIELD;
+        input[5] = uint256(aggregateHash) % SNARK_SCALAR_FIELD;
         input[6] = uint256(tallyKeyHash) % SNARK_SCALAR_FIELD;
     }
 
     function countsHashOf(uint256[] memory counts) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(counts));
-    }
-
-    function openingsHashOf(uint256[] calldata openings) internal pure returns (bytes32) {
-        if (openings.length == 0) return bytes32(0);
-        return keccak256(abi.encodePacked(openings));
     }
 
     function tallyKeyHashOf(bytes32 pubX, bytes32 pubY) internal pure returns (bytes32) {

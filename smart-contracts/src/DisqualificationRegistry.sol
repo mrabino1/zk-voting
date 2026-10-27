@@ -49,6 +49,7 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     error NotDisqualified();
     error InvalidTreeDepth();
     error VotingStarted();
+    error NotPartyRegistry();
 
     /// @notice Audit M-01: the late-update switch is public and logged.
     event LateUpdateAllowedSet(uint256 indexed electionId, bool allowed);
@@ -60,6 +61,8 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
     mapping(uint256 => bool) public lateUpdateAllowed;
 
     mapping(uint256 => mapping(uint256 => bool)) private _isDisqualified;
+    mapping(uint256 => mapping(uint256 => bool)) private _officerCause;
+    mapping(uint256 => mapping(uint256 => bool)) private _partyCause;
     mapping(uint256 => mapping(uint256 => uint16)) private _reasonCodeOf;
     /// @dev Currently disqualified commitments. Order is not significant; the
     ///      published tree sorts them before hashing the indexed chain.
@@ -86,13 +89,15 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         _requireOfficer(election);
         _requireMutableRoll(electionId, election);
 
-        if (_isDisqualified[electionId][identityCommitment]) revert AlreadyDisqualified();
+        if (_officerCause[electionId][identityCommitment]) revert AlreadyDisqualified();
 
-        _isDisqualified[electionId][identityCommitment] = true;
+        _officerCause[electionId][identityCommitment] = true;
         _reasonCodeOf[electionId][identityCommitment] = reasonCode;
-        _active[electionId].push(identityCommitment);
-
-        _publishChain(electionId, election);
+        if (!_isDisqualified[electionId][identityCommitment]) {
+            _isDisqualified[electionId][identityCommitment] = true;
+            _active[electionId].push(identityCommitment);
+            _publishChain(electionId, election);
+        }
 
         emit Disqualified(electionId, identityCommitment, reasonCode, evidenceHash);
     }
@@ -106,7 +111,10 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
         _requireOfficer(election);
         _requireMutableRoll(electionId, election);
 
-        if (!_isDisqualified[electionId][identityCommitment]) revert NotDisqualified();
+        if (!_officerCause[electionId][identityCommitment]) revert NotDisqualified();
+
+        _officerCause[electionId][identityCommitment] = false;
+        if (_partyCause[electionId][identityCommitment]) return;
 
         _isDisqualified[electionId][identityCommitment] = false;
         _reasonCodeOf[electionId][identityCommitment] = ReasonCodes.NONE;
@@ -114,6 +122,47 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
         _publishChain(electionId, election);
 
+        emit DisqualificationRevoked(electionId, identityCommitment, evidenceHash);
+    }
+
+    /// @notice External-party veto. Callable only by that election's party registry.
+    /// @dev Allowed after the roll is frozen: the commitment is already public
+    ///      from registration, and the ballot transaction must not repeat it.
+    ///      Idempotent. An existing officer disqualification is left in place.
+    function disqualifyByParty(uint256 electionId, uint256 identityCommitment, uint16 reasonCode, bytes32 evidenceHash)
+        external
+    {
+        if (identityCommitment == 0) revert ZeroCommitment();
+        if (!ReasonCodes.isValid(reasonCode)) revert InvalidReasonCode();
+        if (msg.sender != _partyRegistry(electionId)) revert NotPartyRegistry();
+        if (_partyCause[electionId][identityCommitment]) return;
+
+        IElection election = _election(electionId);
+        _partyCause[electionId][identityCommitment] = true;
+        if (_isDisqualified[electionId][identityCommitment]) return;
+
+        _isDisqualified[electionId][identityCommitment] = true;
+        _reasonCodeOf[electionId][identityCommitment] = reasonCode;
+        _active[electionId].push(identityCommitment);
+        _publishChain(electionId, election);
+        emit Disqualified(electionId, identityCommitment, reasonCode, evidenceHash);
+    }
+
+    /// @notice Lift a party veto. No-op if an officer disqualification remains.
+    function revokeByParty(uint256 electionId, uint256 identityCommitment, bytes32 evidenceHash) external {
+        if (identityCommitment == 0) revert ZeroCommitment();
+        if (msg.sender != _partyRegistry(electionId)) revert NotPartyRegistry();
+        if (!_partyCause[electionId][identityCommitment]) return;
+
+        IElection election = _election(electionId);
+        _partyCause[electionId][identityCommitment] = false;
+        if (_officerCause[electionId][identityCommitment]) return;
+        if (!_isDisqualified[electionId][identityCommitment]) return;
+
+        _isDisqualified[electionId][identityCommitment] = false;
+        _reasonCodeOf[electionId][identityCommitment] = ReasonCodes.NONE;
+        _removeActive(electionId, identityCommitment);
+        _publishChain(electionId, election);
         emit DisqualificationRevoked(electionId, identityCommitment, evidenceHash);
     }
 
@@ -242,6 +291,13 @@ contract DisqualificationRegistry is IDisqualificationRegistry {
 
     function _voterRegistry() internal view returns (address) {
         (bool ok, bytes memory ret) = address(factory).staticcall(abi.encodeWithSignature("voterRegistry()"));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+        return address(0);
+    }
+
+    function _partyRegistry(uint256 electionId) internal view returns (address) {
+        (bool ok, bytes memory ret) =
+            address(factory).staticcall(abi.encodeWithSignature("getPartyRegistry(uint256)", electionId));
         if (ok && ret.length >= 32) return abi.decode(ret, (address));
         return address(0);
     }

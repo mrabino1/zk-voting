@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {IDisqualificationRegistry} from "./interfaces/IDisqualificationRegistry.sol";
+import {IExternalPartyRegistry} from "./interfaces/IExternalPartyRegistry.sol";
 import {IHasher} from "./interfaces/IHasher.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
@@ -124,7 +125,7 @@ contract VoterRegistry is IVoterRegistry {
         } else {
             FrontierTree.Data storage eligibleTree = _eligibleTrees[electionId];
             if (eligibleTree.depth == 0) FrontierTree.reset(eligibleTree, election.params().treeDepth, hasher);
-            if (!_currentlyDisqualified(electionId, identityCommitment)) {
+            if (!_currentlyExcluded(electionId, identityCommitment)) {
                 FrontierTree.append(eligibleTree, identityCommitment, hasher);
             }
             _publishEligibleRoot(electionId, election);
@@ -142,7 +143,7 @@ contract VoterRegistry is IVoterRegistry {
     /// @inheritdoc IVoterRegistry
     function isEligible(uint256 electionId, uint256 identityCommitment) external view returns (bool) {
         if (!_registered[electionId][identityCommitment]) return false;
-        return !_currentlyDisqualified(electionId, identityCommitment);
+        return !_currentlyExcluded(electionId, identityCommitment);
     }
 
     /// @inheritdoc IVoterRegistry
@@ -160,7 +161,9 @@ contract VoterRegistry is IVoterRegistry {
     ///      Returns the published eligible root (the new one when the rebuild
     ///      finished in this call, otherwise the previous one).
     function rebuildEligibleRoot(uint256 electionId) external returns (bytes32) {
-        if (msg.sender != address(_disqualificationRegistry())) revert NotDisqualificationRegistry();
+        if (msg.sender != address(_disqualificationRegistry()) && msg.sender != _partyRegistry(electionId)) {
+            revert NotDisqualificationRegistry();
+        }
         IElection election = _election(electionId);
         FrontierTree.reset(_eligibleTrees[electionId], election.params().treeDepth, hasher);
         _rebuilds[electionId] = Rebuild({pending: true, cursor: 0});
@@ -198,10 +201,9 @@ contract VoterRegistry is IVoterRegistry {
         uint256 i = rb.cursor;
         uint256 end = n - i > maxLeaves ? i + maxLeaves : n;
         FrontierTree.Data storage tree = _eligibleTrees[electionId];
-        IDisqualificationRegistry dq = _disqualificationRegistry();
         for (; i < end; ++i) {
             uint256 leaf = roll[i];
-            if (address(dq) == address(0) || !dq.isDisqualified(electionId, leaf)) {
+            if (!_currentlyExcluded(electionId, leaf)) {
                 FrontierTree.append(tree, leaf, hasher);
             }
         }
@@ -233,6 +235,30 @@ contract VoterRegistry is IVoterRegistry {
         IDisqualificationRegistry dq = _disqualificationRegistry();
         if (address(dq) == address(0)) return false;
         return dq.isDisqualified(electionId, identityCommitment);
+    }
+
+    /// @dev Officer or party disqualification, or a missing must-attest clearance.
+    function _currentlyExcluded(uint256 electionId, uint256 identityCommitment) internal view returns (bool) {
+        if (_currentlyDisqualified(electionId, identityCommitment)) return true;
+        return _missingAttestation(electionId, identityCommitment);
+    }
+
+    function _missingAttestation(uint256 electionId, uint256 identityCommitment) internal view returns (bool) {
+        address parties = _partyRegistry(electionId);
+        if (parties == address(0)) return false;
+        (bool ok, bytes memory ret) = parties.staticcall(
+            abi.encodeWithSelector(IExternalPartyRegistry.missingRequiredAttestation.selector, identityCommitment)
+        );
+        // A wired party registry that cannot answer is treated as not cleared.
+        if (!ok || ret.length < 32) return true;
+        return abi.decode(ret, (bool));
+    }
+
+    function _partyRegistry(uint256 electionId) internal view returns (address) {
+        (bool ok, bytes memory ret) =
+            address(factory).staticcall(abi.encodeWithSignature("getPartyRegistry(uint256)", electionId));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+        return address(0);
     }
 
     function _disqualificationRegistry() internal view returns (IDisqualificationRegistry) {
