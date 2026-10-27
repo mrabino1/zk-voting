@@ -69,6 +69,7 @@ export default {
     footerOpenSource: "{brand} مفتوح المصدر بنسبة 100% ومجاني للاستخدام.",
     footerContract: "نحن متاحون للتعاقد من أجل تنفيذكم المحلي.",
     footerContractCta: "راسلونا",
+    footerGithub: "{brand} على GitHub",
     noscript:
       "يحتاج {brand} إلى JavaScript للتواصل مع passkey الجهاز (WebAuthn). فعّل JavaScript ثم أعد التحميل، أو استخدم موقع اقتراع ميسر يديره كاتب الانتخابات.",
     metaDescription:

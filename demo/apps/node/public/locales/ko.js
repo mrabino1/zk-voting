@@ -68,6 +68,7 @@ export default {
     footerOpenSource: "{brand}은 100% 오픈 소스이며 무료로 사용할 수 있습니다.",
     footerContract: "로컬 구현을 위한 계약 작업을 맡습니다.",
     footerContractCta: "이메일 보내기",
+    footerGithub: "GitHub의 {brand}",
     noscript:
       "{brand}은 기기 passkey(WebAuthn)와 대화하려면 JavaScript가 필요합니다. JavaScript를 켜고 다시 로드하거나, 서기가 운영하는 접근 가능한 투표 사이트를 사용하세요.",
     metaDescription:

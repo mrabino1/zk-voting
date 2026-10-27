@@ -68,6 +68,7 @@ export default {
     footerOpenSource: "{brand} 100% 开源，可免费使用。",
     footerContract: "我们可以承接您的本地实施合同。",
     footerContractCta: "给我们发邮件",
+    footerGithub: "{brand} 的 GitHub",
     noscript:
       "{brand} 需要 JavaScript 才能与设备 passkey（WebAuthn）通信。请启用 JavaScript 并重新加载，或使用由选举事务官运营的无障碍投票站点。",
     metaDescription:
