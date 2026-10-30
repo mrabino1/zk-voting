@@ -97,6 +97,22 @@ function notExcluded(store, election, nullifier) {
   return !listed.some((item) => sameNullifier(item, nullifier));
 }
 
+/** Try again to drop a dead letter that was already recorded as excluded. */
+async function retryPendingExclusionReleases({ store, chain, election }) {
+  if (typeof chain?.releaseExcluded !== 'function') return;
+  const key = chainElectionId(election);
+  const rows = (election.excludedBallots || []).filter((row) => row && row.releasePending === true);
+  for (const row of rows) {
+    let released = false;
+    try {
+      released = await chain.releaseExcluded(key, row.nullifier);
+    } catch {
+      released = false;
+    }
+    if (released) await store.setExclusionReleasePending(election.id, row.nullifier, false);
+  }
+}
+
 /**
  * Offer pre-cutoff dead letters to the supplementary hook before the tally
  * is accepted. A refusal leaves the dead letter in place.
@@ -1319,6 +1335,16 @@ export function electionsRouter(deps) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
       await offerSupplementaryBatch({ store, chain, election, now, config });
+      await retryPendingExclusionReleases({ store, chain, election });
+      const pendingReleases = (store.requireElection(election.id).excludedBallots || []).filter(
+        (row) => row && row.releasePending === true,
+      ).length;
+      if (pendingReleases) {
+        throw new HttpError(409, 'an excluded ballot is still waiting to leave the hold list', {
+          code: 'EXCLUSION_RELEASE_PENDING',
+          pending: pendingReleases,
+        });
+      }
       if (typeof chain?.deadLettersFor === 'function') {
         const dead = (chain.deadLettersFor(chainElectionId(election)) || []).filter((item) =>
           notExcluded(store, election, item.nullifier),

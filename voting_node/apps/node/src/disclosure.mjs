@@ -2,9 +2,10 @@
 // Hourly public disclosure so a person leaving a polling place cannot be
 // matched to a live jurisdiction tick. Votes are accepted immediately (nullifier
 // uniqueness). A block stays sealed until the hour has closed and
-// DISCLOSURE_DELAY_SECONDS has elapsed, the election's results gate is open,
-// and the block has enough ballots. An earlier note that promised publication
-// at the hour boundary is replaced by this delay.
+// DISCLOSURE_DELAY_SECONDS has elapsed, and the block has enough ballots.
+// Turnout follows that clock from the first ballot. Poll per-choice counts
+// wait for the results gate. An earlier note that promised publication at
+// the hour boundary is replaced by this delay.
 
 import { sealedResultsMessage } from './electionType.mjs';
 
@@ -43,7 +44,7 @@ export function resolveDisclosureDelaySeconds(raw, { isTest = false } = {}) {
   });
 }
 
-/** Public turnout stays hidden until this many ballots, or the scheduled end. Tests default to 0 (gate open). */
+/** Poll per-choice counts wait until this many first ballots, or the scheduled end. Turnout does not. Tests default to 0 (gate open). */
 export function resolveResultsMinVotes(raw, { isTest = false } = {}) {
   return resolveDefaultInt(raw, {
     isTest,
@@ -155,8 +156,9 @@ export function resultsGateOpen({
  * Split sealed ballots into blocks that are safe to publish and rows that stay sealed.
  * Small hours merge forward. A trailing block under the minimum stays sealed until a
  * later hour fills it. At the deadline the still-open hour is the final block when
- * the election met the minimum. An election that never reached the minimum stays
- * sealed until a final tally. Both types use this clock.
+ * the election met the block floor. An election that never reached the block floor
+ * stays sealed until a final tally. Turnout uses this clock from the first ballot.
+ * The results gate is not applied here.
  */
 export function planPublicBlocks(items, policy = {}) {
   const now = policy.now;
@@ -164,7 +166,6 @@ export function planPublicBlocks(items, policy = {}) {
   const delay = Math.max(0, Math.floor(Number(policy.delaySeconds) || 0));
   const minRaw = Number(policy.minBlockVotes);
   const floor = Number.isFinite(minRaw) && minRaw > 1 ? Math.floor(minRaw) : 1;
-  const minVotes = Number(policy.minVotes) || 0;
   const electionContext = typeof policy.electionContext === 'function' ? policy.electionContext : () => ({});
   const byElection = new Map();
   for (const item of items || []) {
@@ -176,8 +177,8 @@ export function planPublicBlocks(items, policy = {}) {
   const hold = [];
   for (const [electionId, group] of byElection) {
     const ctx = electionContext(electionId) || {};
-    // Ballot rows are turnout. They follow the hourly gate for both types.
-    // Choice totals are withheld by the callers that serve tallies, not here.
+    // Ballot rows are turnout. They publish on the hourly clock from the first
+    // ballot. Per-choice counts stay with the callers that serve tallies.
     const submitted = ctx.submittedVotes ?? group.length;
     const tallied = Boolean(ctx.tallied);
     const endTime = ctx.endTime ?? null;
@@ -186,12 +187,6 @@ export function planPublicBlocks(items, policy = {}) {
       endTime !== '' &&
       Number.isFinite(Number(endTime)) &&
       Number(now) >= Number(endTime);
-    const electionMin =
-      ctx.minVotes == null || ctx.minVotes === '' ? minVotes : Number(ctx.minVotes) || 0;
-    if (!resultsGateOpen({ submittedVotes: submitted, now, endTime, minVotes: electionMin, tallied })) {
-      hold.push(...group);
-      continue;
-    }
     const buckets = new Map();
     let waitingOnClock = 0;
     for (const item of group) {
@@ -293,7 +288,7 @@ export function publicDisclosureView(now, intervalSeconds, extras = {}) {
     nextPublishAt: nextPublishAt(ts, interval, delay),
     secondsUntilNext: secondsUntilNext(ts, interval, delay),
     note:
-      'Vote proofs and jurisdiction ballot counts publish after the hour closes and the disclosure delay has elapsed. Turnout stays hidden until the results gate opens. A block smaller than the minimum merges into a later hour. A person leaving a voting office cannot be matched to the publish.',
+      'Vote proofs and turnout publish after the hour closes and the disclosure delay has elapsed, from the first ballot. Poll per-choice counts wait until the results gate opens. A block smaller than the minimum merges into a later hour. A person leaving a voting office cannot be matched to the publish.',
   };
   if (typeof extras.resultsMinVotes === 'number') view.resultsMinVotes = extras.resultsMinVotes;
   if (typeof extras.minBlockVotes === 'number') view.minBlockVotes = extras.minBlockVotes;

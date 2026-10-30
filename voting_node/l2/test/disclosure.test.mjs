@@ -167,17 +167,17 @@ describe('L2 results gate and minimum block size', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('two sealed votes stay hidden after the hour until a third exists', async () => {
+  test('two votes publish after the hour before the results minimum', async () => {
     state.enqueueRaw(civicHex({ type: 'vote', electionId: 'gate', nullifier: '0x1', ballotHash: '0x1' }));
     state.enqueueRaw(civicHex({ type: 'vote', electionId: 'gate', nullifier: '0x2', ballotHash: '0x2' }));
     clock = HOUR_START + HOUR;
     const early = await state.produceBlock();
-    assert.equal(voteTxs(early).length, 0);
+    assert.equal(voteTxs(early).length, 2);
 
     clock = HOUR_START + HOUR + 30;
     state.enqueueRaw(civicHex({ type: 'vote', electionId: 'gate', nullifier: '0x3', ballotHash: '0x3' }));
     const opened = await state.produceBlock();
-    assert.equal(voteTxs(opened).length, 2);
+    assert.equal(voteTxs(opened).length, 0);
   });
 
   test('a short hour waits, then merges, and a below-minimum election waits for tally', async () => {

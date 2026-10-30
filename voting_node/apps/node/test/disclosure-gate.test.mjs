@@ -196,30 +196,37 @@ describe('results gate on the public API', () => {
     await app.stop();
   });
 
-  test('turnout stays hidden until the Nth ballot, even after the hour closes', async () => {
+  test('turnout publishes after the hour before the results minimum, without per-choice counts', async () => {
     const id = await openElection(app.api, app.adminJar, clock, 'Count gate');
     await cast(app.api, id, 1);
     await cast(app.api, id, 2);
     clock.t = HOUR_START + HOUR;
     const early = await publicCount(app.api, id);
-    assert.equal(early.detail, 0);
-    assert.equal(early.voteTxs, 0);
-    assert.equal(early.ballots, 0);
+    assert.equal(early.detail, 2);
+    assert.equal(early.voteTxs, 2);
+    assert.equal(early.ballots, 2);
+    const results = await app.api('GET', `/api/elections/${id}/results`);
+    assert.equal(results.json.tally, null);
+    assert.equal(results.json.results.available, false);
+    assert.doesNotMatch(results.text, /"counts"\s*:/);
 
     clock.t = HOUR_START + HOUR + 30;
     await cast(app.api, id, 3);
     const still = await publicCount(app.api, id);
-    assert.equal(still.detail, 2, 'the two delay-ready ballots publish; the new hour stays sealed');
+    assert.equal(still.detail, 2, 'the two closed-hour ballots stay published; the new hour stays sealed');
     assert.equal(still.voteTxs, 2);
     assert.equal(still.ballots, 2);
   });
 
-  test('scheduled end opens the gate before the count is reached', async () => {
+  test('turnout is already public before the scheduled end, and choice counts stay unpublished', async () => {
     const id = await openElection(app.api, app.adminJar, clock, 'End gate');
     await cast(app.api, id, 11);
     clock.t = HOUR_START + 2 * HOUR;
     const beforeEnd = await publicCount(app.api, id);
-    assert.equal(beforeEnd.detail, 0);
+    assert.equal(beforeEnd.detail, 1);
+    const beforeResults = await app.api('GET', `/api/elections/${id}/results`);
+    assert.equal(beforeResults.json.tally, null);
+    assert.doesNotMatch(beforeResults.text, /"counts"\s*:/);
     const election = app.store.requireElection(id);
     election.cutoffTime = clock.t - 1;
     await app.store.persist();
@@ -227,6 +234,9 @@ describe('results gate on the public API', () => {
     assert.equal(afterEnd.detail, 1);
     assert.equal(afterEnd.voteTxs, 1);
     assert.equal(afterEnd.ballots, 1);
+    const afterResults = await app.api('GET', `/api/elections/${id}/results`);
+    assert.equal(afterResults.json.tally, null);
+    assert.doesNotMatch(afterResults.text, /"counts"\s*:/);
   });
 });
 

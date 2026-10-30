@@ -127,8 +127,8 @@ export function electionDisclosurePolicy(election, config, now, submittedVotes) 
   const settings = disclosureSettings(config || {});
   const sealed = voteResultsSealed(election, now);
   const vote = isVoteElection(election);
-  // RESULTS_MIN_VOTES is a POLL gate. A VOTE does not use it. submittedVotes
-  // is turnout for both types. Choice results are not on this object.
+  // RESULTS_MIN_VOTES is the poll per-choice gate. Turnout does not use it.
+  // A vote does not use it. Choice results are not on this object.
   const votes = submittedVotes ?? election?.acceptedBallots ?? 0;
   return {
     now,

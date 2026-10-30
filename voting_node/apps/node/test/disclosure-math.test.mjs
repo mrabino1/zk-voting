@@ -131,7 +131,16 @@ describe('hourly disclosure math', () => {
     assert.equal(resultsGateOpen({ submittedVotes: 1, now: end, endTime: end, minVotes: 100 }), true);
     assert.equal(resultsGateOpen({ submittedVotes: 1, now: end - 1, endTime: end, minVotes: 100 }), false);
     assert.equal(resultsGateOpen({ submittedVotes: 1, now: HOUR_START, endTime: end, minVotes: 100, tallied: true }), true);
-    const hidden = selectPublicVotes(
+    assert.equal(
+      resultsGateOpen({
+        submittedVotes: 1,
+        now: HOUR_START + HOUR + 1800,
+        endTime: end,
+        minVotes: 100,
+      }),
+      false,
+    );
+    const turnout = selectPublicVotes(
       [{ acceptedAt: HOUR_START + 10, electionId: 'e' }],
       {
         now: HOUR_START + HOUR + 1800,
@@ -143,7 +152,7 @@ describe('hourly disclosure math', () => {
         submittedVotes: 1,
       },
     );
-    assert.equal(hidden.length, 0);
+    assert.equal(turnout.length, 1);
     const opened = selectPublicVotes(
       [{ acceptedAt: HOUR_START + 10, electionId: 'e' }],
       {

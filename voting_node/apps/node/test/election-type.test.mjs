@@ -333,8 +333,10 @@ describe('vote interim data is refused', () => {
     const pollEarly = await app.api('GET', `/api/elections/${pollId}`);
     assert.equal(pollEarly.json.resultsSealed, false);
     assert.equal(pollEarly.json.electionType, 0);
-    assert.equal(pollEarly.json.acceptedBallots, 0);
-    assert.equal((await voteTxs(app.api, pollId)).length, 0);
+    assert.equal(pollEarly.json.acceptedBallots, 1);
+    assert.equal(pollEarly.json.tally, null);
+    assertNoChoice(JSON.stringify(pollEarly.json), 'poll turnout before the choice gate');
+    assert.equal((await voteTxs(app.api, pollId)).length, 1);
 
     const second = await cast(app.api, pollId, 12);
     assert.equal(second.vote.status, 201, second.vote.json?.error);
@@ -893,6 +895,44 @@ describe('sequencer open is idempotent', () => {
       assert.equal(chain.creates.length, 1);
       const visible = await app.api('GET', `/api/elections/${id}`);
       assert.equal(visible.status, 200, visible.text);
+    } finally {
+      await app.stop();
+    }
+  });
+});
+
+describe('poll turnout before the choice gate', () => {
+  test('a poll with fewer than 100 first ballots publishes hourly turnout but no per-choice counts', async () => {
+    const clock = { t: HOUR_START + 20 * 60 };
+    const app = await startApp(clock, { resultsMinVotes: 100, disclosureDelaySeconds: 1800 });
+    try {
+      const poll = await openElection(app.api, app.adminJar, clock, 'Under one hundred');
+      const castOne = await cast(app.api, poll.id, 81);
+      assert.equal(castOne.vote.status, 201, castOne.vote.json?.error || castOne.vote.text);
+
+      clock.t = HOUR_START + HOUR;
+      const beforeDelay = await app.api('GET', `/api/elections/${poll.id}`);
+      assert.equal(beforeDelay.json.acceptedBallots, 0);
+      assert.equal((await voteTxs(app.api, poll.id)).length, 0);
+
+      clock.t = HOUR_START + HOUR + 1800;
+      const published = await app.api('GET', `/api/elections/${poll.id}`);
+      assert.equal(published.json.acceptedBallots, 1);
+      assert.equal(published.json.tally, null);
+      assert.equal(published.json.resultsSealed, false);
+      assertNoChoice(JSON.stringify(published.json), 'poll detail under 100');
+      assert.equal((await voteTxs(app.api, poll.id)).length, 1);
+
+      const results = await app.api('GET', `/api/elections/${poll.id}/results`);
+      assert.equal(results.status, 200, results.text);
+      assert.equal(results.json.tally, null);
+      assert.equal(results.json.results.available, false);
+      assert.equal(results.json.acceptedBallots, 1);
+      assertNoChoice(results.text, 'poll results under 100');
+      for (const question of results.json.results.questions || []) {
+        assert.equal(question.outcome ?? null, null);
+        for (const option of question.options || []) assert.equal(option.count, null);
+      }
     } finally {
       await app.stop();
     }

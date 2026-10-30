@@ -1,10 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Append-only L2 log. Vote proofs stay sealed until the hour that contained them
-// has closed, the disclosure delay has elapsed, the results gate is open, and the
-// block meets the floor. Ready rows land in one disclosure block (disclosure-clock
+// has closed, the disclosure delay has elapsed, and the block meets the floor.
+// Turnout follows that clock from the first ballot. Choice rows stay on their
+// own rule. Ready rows land in one disclosure block (disclosure-clock
 // timestamp, ordered by nullifier). Payloads never include a voter choice or a passkey user id.
 
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -89,6 +90,7 @@ function emptyChain(chainId) {
     sealedPolls: [],
     seenBlockHashes: [],
     ingestedTxHashes: [],
+    ingestedTxByBlock: {},
   };
 }
 
@@ -99,6 +101,14 @@ function stable(value) {
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+/** Stable id for a row that arrived without a transaction hash. */
+function ingestKey(type, payload, blockHash, index) {
+  const listed = payload && payload.hash != null ? String(payload.hash).trim().toLowerCase() : '';
+  if (listed && listed !== 'undefined') return listed;
+  const tail = index == null ? stable(payload) : String(index);
+  return createHash('sha256').update(`${type}|${blockHash}|${tail}`).digest('hex');
 }
 
 function votePayload(payload) {
@@ -134,6 +144,9 @@ function normalizeChain(chain, chainId) {
   chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
   chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
   chain.ingestedTxHashes = Array.isArray(chain.ingestedTxHashes) ? chain.ingestedTxHashes : [];
+  if (!chain.ingestedTxByBlock || typeof chain.ingestedTxByBlock !== 'object' || Array.isArray(chain.ingestedTxByBlock)) {
+    chain.ingestedTxByBlock = {};
+  }
   return chain;
 }
 
@@ -457,11 +470,14 @@ export class Explorer {
     const l2Delayed = src.source === 'zk-voting-l2';
     const blockTs = block?.timestamp != null ? Number(block.timestamp) : now;
     let skipped = 0;
+    this.loadIngestedTxs();
 
-    for (const row of rows) {
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
       const payload = row.payload || row;
+      const rowIndex = row.index == null ? index : row.index;
       if (choiceRowBlocked(this, type, payload, blockTs)) {
         skipped += 1;
         continue;
@@ -474,55 +490,108 @@ export class Explorer {
         row.payload = withoutChoiceFields(payload);
       }
       if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
-        const payload = row.payload || row;
-        if (this.txAlreadyIngested(payload)) continue;
+        const body = row.payload || row;
+        if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
         if (type === 'poll_vote' && !l2Delayed) {
-          await this.recordPollVote(payload, now, intervalSeconds);
+          await this.recordPollVote(body, now, intervalSeconds);
         } else {
-          await this.append(type, payload, { timestamp: blockTs || now });
+          await this.append(type, body, { timestamp: blockTs || now });
         }
-        await this.noteIngestedTx(payload);
+        this.noteIngestedTx(type, body, blockHash, rowIndex);
         imported += 1;
       } else if (isDelayedPublicType(type) || type === 'vote_superseded') {
-        const payload = votePayload(row.payload);
-        if (!payload.nullifier) continue;
-        if (this.findByNullifier(payload.nullifier) || this.sealedHasNullifier(payload.nullifier)) continue;
+        const body = votePayload(row.payload);
+        if (!body.nullifier) continue;
+        if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) continue;
         if (l2Delayed) {
-          await this.append('vote', payload, { timestamp: blockTs || now });
+          await this.append('vote', body, { timestamp: blockTs || now });
           imported += 1;
         } else {
-          await this.recordVote(payload, now, intervalSeconds);
+          await this.recordVote(body, now, intervalSeconds);
           imported += 1;
         }
       } else if (type && type !== 'userop') {
-        const payload = row.payload || row;
-        if (this.txAlreadyIngested(payload)) continue;
-        await this.append(type, payload);
-        await this.noteIngestedTx(payload);
+        const body = row.payload || row;
+        if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
+        await this.append(type, body);
+        this.noteIngestedTx(type, body, blockHash, rowIndex);
         imported += 1;
       }
     }
     if (blockHash && skipped === 0) {
-      this.chain.seenBlockHashes.push(blockHash);
-      await this.persist();
+      this.pruneIngestedBlock(blockHash);
+      if (!this.chain.seenBlockHashes.some((item) => String(item).toLowerCase() === blockHash)) {
+        this.chain.seenBlockHashes.push(blockHash);
+      }
     }
+    await this.flushIngestedTxs();
     await this.disclose(now, intervalSeconds);
     return { ok: true, imported, duplicate: false };
   }
 
-  txAlreadyIngested(payload) {
-    const hash = payload && payload.hash != null ? String(payload.hash).toLowerCase() : '';
-    if (!hash) return false;
-    const seen = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
-    return seen.some((item) => String(item).toLowerCase() === hash);
+  loadIngestedTxs() {
+    const list = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
+    this._ingestedTxs = new Set(list.map((item) => String(item).toLowerCase()));
+    this._ingestedByBlock = new Map();
+    const owners = this.chain.ingestedTxByBlock;
+    if (owners && typeof owners === 'object' && !Array.isArray(owners)) {
+      for (const [block, keys] of Object.entries(owners)) {
+        if (!Array.isArray(keys)) continue;
+        const bucket = new Set();
+        for (const key of keys) {
+          const clean = String(key).toLowerCase();
+          if (this._ingestedTxs.has(clean)) bucket.add(clean);
+        }
+        if (bucket.size) this._ingestedByBlock.set(String(block).toLowerCase(), bucket);
+      }
+    }
   }
 
-  async noteIngestedTx(payload) {
-    const hash = payload && payload.hash != null ? String(payload.hash).toLowerCase() : '';
-    if (!hash) return;
-    if (!Array.isArray(this.chain.ingestedTxHashes)) this.chain.ingestedTxHashes = [];
-    if (this.chain.ingestedTxHashes.some((item) => String(item).toLowerCase() === hash)) return;
-    this.chain.ingestedTxHashes.push(hash);
+  txAlreadyIngested(type, payload, blockHash, index) {
+    const key = ingestKey(type, payload, blockHash, index);
+    if (!key) return false;
+    if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
+    return this._ingestedTxs.has(key);
+  }
+
+  noteIngestedTx(type, payload, blockHash, index) {
+    const key = ingestKey(type, payload, blockHash, index);
+    if (!key) return;
+    if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
+    this._ingestedTxs.add(key);
+    const block = blockHash ? String(blockHash).toLowerCase() : '';
+    if (!block) return;
+    let bucket = this._ingestedByBlock.get(block);
+    if (!bucket) {
+      bucket = new Set();
+      this._ingestedByBlock.set(block, bucket);
+    }
+    bucket.add(key);
+  }
+
+  pruneIngestedBlock(blockHash) {
+    const block = String(blockHash || '').toLowerCase();
+    const bucket = this._ingestedByBlock?.get(block);
+    if (!bucket) return;
+    this._ingestedByBlock.delete(block);
+    for (const key of bucket) {
+      let still = false;
+      for (const other of this._ingestedByBlock.values()) {
+        if (other.has(key)) {
+          still = true;
+          break;
+        }
+      }
+      if (!still) this._ingestedTxs.delete(key);
+    }
+  }
+
+  async flushIngestedTxs() {
+    if (!(this._ingestedTxs instanceof Set)) return;
+    this.chain.ingestedTxHashes = [...this._ingestedTxs];
+    const owners = {};
+    for (const [block, keys] of this._ingestedByBlock) owners[block] = [...keys];
+    this.chain.ingestedTxByBlock = owners;
     await this.persist();
   }
 
