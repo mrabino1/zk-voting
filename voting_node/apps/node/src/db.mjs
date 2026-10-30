@@ -294,126 +294,166 @@ export class PgDocument {
     return this.epoch;
   }
 
+  _classify(value, name) {
+    const rows = new Map();
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => rows.set(String(i), JSON.stringify(item ?? null)));
+      return { kind: 'array', rows };
+    }
+    if (this.mapKeys.has(name) && isPlainObject(value)) {
+      for (const [k, v] of Object.entries(value)) rows.set(k, JSON.stringify(v ?? null));
+      return { kind: 'map', rows };
+    }
+    rows.set('0', JSON.stringify(value ?? null));
+    return { kind: 'value', rows };
+  }
+
+  _diffCollection(name, value, ops) {
+    const { kind, rows } = this._classify(value, name);
+    const prev = this.cache.get(name);
+    if (!prev || prev.kind !== kind) ops.collections.push({ name, kind });
+    const prevRows = prev && prev.kind === kind ? prev.rows : new Map();
+    let pos = 0;
+    for (const [k, json] of rows) {
+      if (prevRows.get(k) !== json) ops.upserts.push({ collection: name, key: k, pos, json });
+      pos += 1;
+    }
+    for (const k of prevRows.keys()) if (!rows.has(k)) ops.deletes.push({ collection: name, key: k });
+    if (prev && prev.kind !== kind) {
+      for (const k of prev.rows.keys()) if (!rows.has(k)) ops.deletes.push({ collection: name, key: k });
+    }
+    return { kind, rows };
+  }
+
   _plan(doc) {
     const ops = { upserts: [], deletes: [], collections: [], dropCollections: [] };
     const next = new Map();
     for (const [name, value] of Object.entries(doc)) {
       if (value === undefined) continue;
-      let kind;
-      const rows = new Map();
-      if (Array.isArray(value)) {
-        kind = 'array';
-        value.forEach((item, i) => rows.set(String(i), JSON.stringify(item ?? null)));
-      } else if (this.mapKeys.has(name) && isPlainObject(value)) {
-        kind = 'map';
-        for (const [k, v] of Object.entries(value)) rows.set(k, JSON.stringify(v ?? null));
-      } else {
-        kind = 'value';
-        rows.set('0', JSON.stringify(value ?? null));
-      }
-      next.set(name, { kind, rows });
-      const prev = this.cache.get(name);
-      if (!prev || prev.kind !== kind) ops.collections.push({ name, kind });
-      const prevRows = prev && prev.kind === kind ? prev.rows : new Map();
-      let pos = 0;
-      for (const [k, json] of rows) {
-        if (prevRows.get(k) !== json) ops.upserts.push({ collection: name, key: k, pos, json });
-        pos += 1;
-      }
-      for (const k of prevRows.keys()) if (!rows.has(k)) ops.deletes.push({ collection: name, key: k });
-      if (prev && prev.kind !== kind) {
-        for (const k of prev.rows.keys()) if (!rows.has(k)) ops.deletes.push({ collection: name, key: k });
-      }
+      next.set(name, this._diffCollection(name, value, ops));
     }
     for (const name of this.cache.keys()) if (!next.has(name)) ops.dropCollections.push(name);
     return { ops, next };
+  }
+
+  /** Diff only the named collections. Other collections stay in the cache. */
+  _planPartial(partial) {
+    const ops = { upserts: [], deletes: [], collections: [], dropCollections: [] };
+    const next = new Map();
+    for (const [name, value] of Object.entries(partial)) {
+      if (value === undefined) continue;
+      next.set(name, this._diffCollection(name, value, ops));
+    }
+    return { ops, next };
+  }
+
+  async _apply(ops, next, { fenced = true, replaceCache = true } = {}) {
+    const dirty = ops.upserts.length || ops.deletes.length || ops.collections.length || ops.dropCollections.length;
+    if (!dirty) {
+      if (replaceCache) this.cache = next;
+      else for (const [name, entry] of next) this.cache.set(name, entry);
+      return;
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (fenced && this.epoch) {
+        const { rows } = await client.query('SELECT epoch FROM zkv_writer WHERE ns = $1 FOR UPDATE', [this.ns]);
+        const current = rows.length ? Number(rows[0].epoch) : 0;
+        if (current !== this.epoch) {
+          const err = new Error(`stale writer fence for ${this.ns}: db epoch ${current}, ours ${this.epoch}`);
+          err.code = 'STALE_FENCE';
+          throw err;
+        }
+      }
+      for (const c of ops.collections) {
+        await client.query(
+          `INSERT INTO zkv_collections (ns, name, kind, updated_at) VALUES ($1, $2, $3, now())
+           ON CONFLICT (ns, name) DO UPDATE SET kind = EXCLUDED.kind, updated_at = now()`,
+          [this.ns, c.name, c.kind],
+        );
+      }
+      for (const name of ops.dropCollections) {
+        await client.query('DELETE FROM zkv_rows WHERE ns = $1 AND collection = $2', [this.ns, name]);
+        await client.query('DELETE FROM zkv_collections WHERE ns = $1 AND name = $2', [this.ns, name]);
+      }
+      const delBy = new Map();
+      for (const d of ops.deletes) {
+        if (!delBy.has(d.collection)) delBy.set(d.collection, []);
+        delBy.get(d.collection).push(d.key);
+      }
+      for (const [collection, keys] of delBy) {
+        await client.query('DELETE FROM zkv_rows WHERE ns = $1 AND collection = $2 AND key = ANY($3::text[])', [
+          this.ns,
+          collection,
+          keys,
+        ]);
+      }
+      for (let i = 0; i < ops.upserts.length; i += 500) {
+        const chunk = ops.upserts.slice(i, i + 500);
+        const params = [this.ns];
+        const values = chunk.map((u, j) => {
+          const deleted = deletionOf(u.json);
+          params.push(
+            u.collection,
+            u.key,
+            u.pos,
+            u.json,
+            this.coarseTimes.has(u.collection),
+            deleted.isDeleted,
+            deleted.deletedAt,
+          );
+          const b = 2 + j * 7;
+          return `($1, $${b}, $${b + 1}, $${b + 2}, $${b + 3}::jsonb, CASE WHEN $${b + 4}::boolean THEN date_trunc('hour', now()) ELSE now() END, $${b + 5}::boolean, $${b + 6}::timestamptz)`;
+        });
+        await client.query(
+          `INSERT INTO zkv_rows (ns, collection, key, pos, doc, updated_at, is_deleted, deleted_at) VALUES ${values.join(', ')}
+           ON CONFLICT (ns, collection, key) DO UPDATE SET pos = EXCLUDED.pos, doc = EXCLUDED.doc, updated_at = EXCLUDED.updated_at, is_deleted = EXCLUDED.is_deleted, deleted_at = EXCLUDED.deleted_at`,
+          params,
+        );
+      }
+      const touched = new Set([...ops.upserts.map((u) => u.collection), ...ops.deletes.map((d) => d.collection)]);
+      if (touched.size) {
+        await client.query(
+          `UPDATE zkv_collections SET updated_at = CASE WHEN name = ANY($3::text[]) THEN date_trunc('hour', now()) ELSE now() END
+           WHERE ns = $1 AND name = ANY($2::text[])`,
+          [this.ns, [...touched], [...this.coarseTimes]],
+        );
+      }
+      await client.query('COMMIT');
+      if (replaceCache) this.cache = next;
+      else for (const [name, entry] of next) this.cache.set(name, entry);
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        /* connection already gone */
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   /** Save the changed rows. Serialized; resolves when committed. */
   save(doc, { fenced = true } = {}) {
     const run = async () => {
       const { ops, next } = this._plan(doc);
-      if (!ops.upserts.length && !ops.deletes.length && !ops.collections.length && !ops.dropCollections.length) return;
-      const client = await this.pool.connect();
-      try {
-        await client.query('BEGIN');
-        if (fenced && this.epoch) {
-          const { rows } = await client.query('SELECT epoch FROM zkv_writer WHERE ns = $1 FOR UPDATE', [this.ns]);
-          const current = rows.length ? Number(rows[0].epoch) : 0;
-          if (current !== this.epoch) {
-            const err = new Error(`stale writer fence for ${this.ns}: db epoch ${current}, ours ${this.epoch}`);
-            err.code = 'STALE_FENCE';
-            throw err;
-          }
-        }
-        for (const c of ops.collections) {
-          await client.query(
-            `INSERT INTO zkv_collections (ns, name, kind, updated_at) VALUES ($1, $2, $3, now())
-             ON CONFLICT (ns, name) DO UPDATE SET kind = EXCLUDED.kind, updated_at = now()`,
-            [this.ns, c.name, c.kind],
-          );
-        }
-        for (const name of ops.dropCollections) {
-          await client.query('DELETE FROM zkv_rows WHERE ns = $1 AND collection = $2', [this.ns, name]);
-          await client.query('DELETE FROM zkv_collections WHERE ns = $1 AND name = $2', [this.ns, name]);
-        }
-        // Batch deletes per collection.
-        const delBy = new Map();
-        for (const d of ops.deletes) {
-          if (!delBy.has(d.collection)) delBy.set(d.collection, []);
-          delBy.get(d.collection).push(d.key);
-        }
-        for (const [collection, keys] of delBy) {
-          await client.query('DELETE FROM zkv_rows WHERE ns = $1 AND collection = $2 AND key = ANY($3::text[])', [
-            this.ns,
-            collection,
-            keys,
-          ]);
-        }
-        // Batch upserts (500 rows per statement).
-        for (let i = 0; i < ops.upserts.length; i += 500) {
-          const chunk = ops.upserts.slice(i, i + 500);
-          const params = [this.ns];
-          const values = chunk.map((u, j) => {
-            const deleted = deletionOf(u.json);
-            params.push(
-              u.collection,
-              u.key,
-              u.pos,
-              u.json,
-              this.coarseTimes.has(u.collection),
-              deleted.isDeleted,
-              deleted.deletedAt,
-            );
-            const b = 2 + j * 7;
-            return `($1, $${b}, $${b + 1}, $${b + 2}, $${b + 3}::jsonb, CASE WHEN $${b + 4}::boolean THEN date_trunc('hour', now()) ELSE now() END, $${b + 5}::boolean, $${b + 6}::timestamptz)`;
-          });
-          await client.query(
-            `INSERT INTO zkv_rows (ns, collection, key, pos, doc, updated_at, is_deleted, deleted_at) VALUES ${values.join(', ')}
-             ON CONFLICT (ns, collection, key) DO UPDATE SET pos = EXCLUDED.pos, doc = EXCLUDED.doc, updated_at = EXCLUDED.updated_at, is_deleted = EXCLUDED.is_deleted, deleted_at = EXCLUDED.deleted_at`,
-            params,
-          );
-        }
-        const touched = new Set([...ops.upserts.map((u) => u.collection), ...ops.deletes.map((d) => d.collection)]);
-        if (touched.size) {
-          await client.query(
-            `UPDATE zkv_collections SET updated_at = CASE WHEN name = ANY($3::text[]) THEN date_trunc('hour', now()) ELSE now() END
-             WHERE ns = $1 AND name = ANY($2::text[])`,
-            [this.ns, [...touched], [...this.coarseTimes]],
-          );
-        }
-        await client.query('COMMIT');
-        this.cache = next;
-      } catch (err) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          /* connection already gone */
-        }
-        throw err;
-      } finally {
-        client.release();
-      }
+      await this._apply(ops, next, { fenced, replaceCache: true });
+    };
+    const p = this._write.then(run, run);
+    this._write = p.catch(() => {});
+    return p;
+  }
+
+  /**
+   * Save named collections only. A ballot queue write must not plan or rewrite
+   * the rest of the document.
+   */
+  saveCollections(partial, { fenced = true } = {}) {
+    const run = async () => {
+      const { ops, next } = this._planPartial(partial);
+      await this._apply(ops, next, { fenced, replaceCache: false });
     };
     const p = this._write.then(run, run);
     this._write = p.catch(() => {});

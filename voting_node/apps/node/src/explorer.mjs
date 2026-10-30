@@ -289,6 +289,7 @@ export class Explorer {
 
     const interval = Number(intervalSeconds) || 0;
     // Interval 0 publishes at once. A positive interval waits for the hour.
+    // A published block is never rewritten.
     if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }
@@ -298,6 +299,17 @@ export class Explorer {
     this.chain.sealed.splice(at, 0, { receivedAt: now, payload: body });
     await this.persist();
     return { sealed: true, published: false };
+  }
+
+  /** Drop one unpublished sealed ballot. Published blocks stay as they were. */
+  async dropSealedVote(nullifier) {
+    await this.refresh();
+    const sealed = this.chain.sealed || [];
+    const kept = sealed.filter((item) => !sameNullifier(payloadNullifier(item.payload || {}), nullifier));
+    if (kept.length === sealed.length) return false;
+    this.chain.sealed = kept;
+    await this.persist();
+    return true;
   }
 
   disclosurePolicySnapshot() {

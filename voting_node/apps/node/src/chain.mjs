@@ -351,9 +351,21 @@ export function factoryElectionParams(params, electionType) {
   return tuple;
 }
 
+/** Decimal string, so a hex nullifier and its bigint match. */
 function nullifierKey(value) {
-  return String(value);
+  try {
+    return BigInt(value).toString();
+  } catch {
+    return String(value);
+  }
 }
+
+function errorText(err) {
+  return err?.extra?.code || err?.code || err?.message || String(err);
+}
+
+/** A batch that fails this many times leaves the live queue. */
+const FLUSH_RETRY_CAP = 3;
 
 function rowToStored(electionKey, row) {
   return {
@@ -400,6 +412,9 @@ export function createChain(config, extras = {}) {
   const voteQueue = new Map();
   const lastBatchAt = new Map();
   const flushing = new Set();
+  const inFlight = new Map();
+  const attempts = new Map();
+  const deadLetter = [];
 
   if (rpc && key) {
     const chain = zkVotingChain(config.chainId, rpc);
@@ -411,6 +426,9 @@ export function createChain(config, extras = {}) {
   function loadQueue() {
     voteQueue.clear();
     lastBatchAt.clear();
+    inFlight.clear();
+    attempts.clear();
+    deadLetter.length = 0;
     if (!queueStore || typeof queueStore.loadChainVoteQueue !== 'function') return;
     const loaded = queueStore.loadChainVoteQueue() || {};
     for (const stored of loaded.rows || []) {
@@ -424,6 +442,20 @@ export function createChain(config, extras = {}) {
     for (const [id, at] of Object.entries(batchAt)) {
       lastBatchAt.set(id, Number(at) || 0);
     }
+    const markers = loaded.inFlight && typeof loaded.inFlight === 'object' ? loaded.inFlight : {};
+    for (const [id, marker] of Object.entries(markers)) {
+      if (!marker || typeof marker !== 'object') continue;
+      inFlight.set(String(id), {
+        txHash: marker.txHash ? String(marker.txHash) : null,
+        nullifiers: Array.isArray(marker.nullifiers) ? marker.nullifiers.map((n) => String(n)) : [],
+      });
+    }
+    const savedAttempts = loaded.attempts && typeof loaded.attempts === 'object' ? loaded.attempts : {};
+    for (const [id, n] of Object.entries(savedAttempts)) {
+      const num = Number(n);
+      if (Number.isFinite(num) && num > 0) attempts.set(String(id), Math.floor(num));
+    }
+    if (Array.isArray(loaded.deadLetter)) deadLetter.push(...loaded.deadLetter);
   }
 
   async function persistQueue() {
@@ -434,7 +466,17 @@ export function createChain(config, extras = {}) {
     }
     const batchAt = {};
     for (const [id, at] of lastBatchAt) batchAt[id] = at;
-    await queueStore.saveChainVoteQueue(rows, batchAt);
+    const markers = {};
+    for (const [id, marker] of inFlight) markers[id] = marker;
+    const attemptDoc = {};
+    for (const [id, n] of attempts) attemptDoc[id] = n;
+    await queueStore.saveChainVoteQueue({
+      rows,
+      batchAt,
+      inFlight: markers,
+      deadLetter: deadLetter.slice(),
+      attempts: attemptDoc,
+    });
   }
 
   loadQueue();
@@ -489,10 +531,106 @@ export function createChain(config, extras = {}) {
     return null;
   }
 
+  function dropNullifiers(key, nullifiers) {
+    const drop = new Set((nullifiers || []).map((n) => nullifierKey(n)));
+    const queued = voteQueue.get(key) || [];
+    const left = queued.filter((row) => !drop.has(nullifierKey(row.nullifier)));
+    if (left.length) voteQueue.set(key, left);
+    else voteQueue.delete(key);
+    return left.length;
+  }
+
+  function rememberFailure(key, batch, err) {
+    const next = (attempts.get(key) || 0) + 1;
+    attempts.set(key, next);
+    inFlight.delete(key);
+    if (next < FLUSH_RETRY_CAP) return { dead: false, attempts: next, error: errorText(err) };
+    deadLetter.push({
+      electionKey: key,
+      nullifiers: (batch || []).map((row) => nullifierKey(row.nullifier)),
+      error: errorText(err),
+      at: Math.floor(Date.now() / 1000),
+    });
+    dropNullifiers(key, (batch || []).map((row) => row.nullifier));
+    attempts.delete(key);
+    return { dead: true, attempts: next, error: errorText(err) };
+  }
+
+  async function receiptStatus(marker) {
+    if (typeof extras.settleInFlight === 'function') {
+      const status = await extras.settleInFlight(marker);
+      if (status === 'mined' || status === 'reverted' || status === 'unknown') return status;
+      return 'unknown';
+    }
+    if (!publicClient || !marker?.txHash) return 'unknown';
+    try {
+      const receipt = await publicClient.getTransactionReceipt({ hash: marker.txHash });
+      if (!receipt) return 'unknown';
+      return receipt.status === 'success' ? 'mined' : 'reverted';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  async function isNullifierSpent(electionId, nullifier) {
+    if (typeof extras.nullifierSpent === 'function') {
+      const spent = await extras.nullifierSpent(electionId, nullifier);
+      return spent == null ? null : Boolean(spent);
+    }
+    const inbox = inboxAddress();
+    if (!publicClient || !inbox) return null;
+    try {
+      const used = await publicClient.readContract({
+        address: inbox,
+        abi: ballotInboxAbi,
+        functionName: 'nullifierUsed',
+        args: [asBigInt(electionId), asBigInt(nullifier)],
+      });
+      return Boolean(used);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A crash after the transaction mines leaves the marker and the rows.
+   * A known receipt or a spent nullifier drops them. An unknown receipt
+   * stays put so the same nullifiers are not sent again.
+   * @returns {'ready'|'pending'}
+   */
+  async function settleMarker(key) {
+    const marker = inFlight.get(key);
+    if (!marker) return 'ready';
+    const nullifiers = marker.nullifiers || [];
+    if (marker.txHash) {
+      const status = await receiptStatus(marker);
+      if (status === 'unknown') return 'pending';
+      if (status === 'mined') dropNullifiers(key, nullifiers);
+      inFlight.delete(key);
+      if (status === 'mined') attempts.delete(key);
+      await persistQueue();
+      return 'ready';
+    }
+    const spent = [];
+    for (const n of nullifiers) {
+      const flag = await isNullifierSpent(key, n);
+      if (flag == null) return 'pending';
+      if (flag) spent.push(n);
+    }
+    if (spent.length) dropNullifiers(key, spent);
+    inFlight.delete(key);
+    if (spent.length === nullifiers.length) attempts.delete(key);
+    await persistQueue();
+    return 'ready';
+  }
+
   async function flushElection(key, now) {
     if (flushing.has(key)) return { queued: true, inFlight: true };
     flushing.add(key);
     try {
+      if ((await settleMarker(key)) === 'pending') {
+        return { queued: true, inFlight: true, pending: true };
+      }
       let first = null;
       const at = now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000);
       for (;;) {
@@ -510,12 +648,34 @@ export function createChain(config, extras = {}) {
         if (plan.action === 'wait' || plan.batch.length === 0) {
           return first || { queued: true, submitted: false, waiting: queued.length };
         }
-        const inbox = inboxAddress();
-        const result = await writeSubmitBatch({ inbox, electionId: key, batch: plan.batch });
+        const nullifiers = plan.batch.map((row) => nullifierKey(row.nullifier));
+        inFlight.set(key, { txHash: null, nullifiers });
+        await persistQueue();
+        let result;
+        try {
+          result = await writeSubmitBatch({ inbox: inboxAddress(), electionId: key, batch: plan.batch });
+        } catch (err) {
+          const failure = rememberFailure(key, plan.batch, err);
+          await persistQueue();
+          if (!failure.dead) throw err;
+          if (!config.quiet) {
+            console.warn(`[zk-voting] vote batch for election ${key} moved to the dead letter: ${failure.error}`);
+          }
+          const payload = { deadLetter: true, error: failure.error };
+          if (!first) first = payload;
+          else first.continued = payload;
+          continue;
+        }
+        // The receipt is already in. Record the hash before dropping the rows
+        // so a crash here cannot send the same nullifiers again.
+        inFlight.set(key, { txHash: result?.hash ? String(result.hash) : null, nullifiers });
+        await persistQueue();
         const sent = new Set(plan.batch);
         const left = queued.filter((row) => !sent.has(row));
         if (left.length) voteQueue.set(key, left);
         else voteQueue.delete(key);
+        inFlight.delete(key);
+        attempts.delete(key);
         lastBatchAt.set(key, Number(at));
         await persistQueue();
         const payload = plan.action === 'final' ? { ...result, final: true } : result;
@@ -645,14 +805,39 @@ export function createChain(config, extras = {}) {
       // cannot leave a second copy of the same nullifier in the queue.
       return { queued: true, submitted: false };
     },
+    /** Remove one queued nullifier that the node rejected. A mined marker stays. */
+    async dropQueuedVote(electionId, nullifier) {
+      const key = String(electionId);
+      const id = nullifierKey(nullifier);
+      const queued = voteQueue.get(key) || [];
+      const left = queued.filter((row) => nullifierKey(row.nullifier) !== id);
+      if (left.length === queued.length) return false;
+      if (left.length) voteQueue.set(key, left);
+      else voteQueue.delete(key);
+      const marker = inFlight.get(key);
+      if (marker && !marker.txHash) {
+        marker.nullifiers = (marker.nullifiers || []).filter((n) => nullifierKey(n) !== id);
+        if (!marker.nullifiers.length) inFlight.delete(key);
+      }
+      await persistQueue();
+      return true;
+    },
     reloadVoteQueue() {
       loadQueue();
     },
     async flushVoteQueue(now) {
       if (!configured) return [];
+      const keys = new Set([...voteQueue.keys(), ...inFlight.keys()]);
       const out = [];
-      for (const key of voteQueue.keys()) {
-        out.push(await flushElection(key, now));
+      for (const key of keys) {
+        try {
+          const result = await flushElection(key, now);
+          if (result) out.push({ electionId: key, ...result });
+        } catch (err) {
+          const error = errorText(err);
+          if (!config.quiet) console.warn(`[zk-voting] vote flush failed for election ${key}: ${error}`);
+          out.push({ electionId: key, error });
+        }
       }
       return out;
     },

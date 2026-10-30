@@ -260,11 +260,8 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       );
     }
   }
-  if (store.nullifierUsed(election.id, parsed.nullifier)) {
-    throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
-  }
-
   const chainConfigured = Boolean(chain?.isConfigured?.());
+  const onChainId = chainElectionId(election);
 
   const bound = assertBoundRoots(election, parsed, store);
   const publicInputs = asInputList({
@@ -272,24 +269,41 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     disqRoot: bound.disqRoot,
     nullifier: parsed.nullifier,
     ballotHash: parsed.ballotHash,
-    electionId: chainElectionId(election),
+    electionId: onChainId,
   });
 
   await assertVoteProof({ proof: parsed.proof, publicSignals: publicInputs, config });
 
-  // Same BallotInbox path for both types. Interval 0 is one transaction.
-  // A positive interval only enqueues. The writer timer submits submitVoteBatch,
-  // including one final batch of the remainder at cutoff.
-  if (chainConfigured) {
-    await chain.submitVote({
-      electionId: chainElectionId(election),
-      proof: parsed.proof,
-      publicInputs,
-      encryptedBallot: parsed.encryptedBallot,
-      startTime: election.startTime,
-      cutoffTime: election.cutoffTime,
-      now: ts,
-    });
+  const chainBallot = {
+    electionId: onChainId,
+    proof: parsed.proof,
+    publicInputs,
+    encryptedBallot: parsed.encryptedBallot,
+    startTime: election.startTime,
+    cutoffTime: election.cutoffTime,
+    now: ts,
+  };
+
+  // A ballot already stored here must still reach the chain. A crash after
+  // acceptVote and before the queue write is repaired by enqueueing, then 409.
+  if (store.nullifierUsed(election.id, parsed.nullifier)) {
+    if (chainConfigured && interval > 0) {
+      try {
+        await chain.submitVote(chainBallot);
+      } catch (err) {
+        if (!(config || {}).quiet) {
+          console.warn(`[zk-voting] could not queue an already accepted ballot: ${err.message || err}`);
+        }
+      }
+    }
+    throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+  }
+
+  // Interval 0 is one transaction, not a durable queue. It has to succeed
+  // before the node records the ballot. A positive interval records first
+  // and enqueues after, so a ballot the node rejects is not left on the queue.
+  if (chainConfigured && interval <= 0) {
+    await chain.submitVote(chainBallot);
   }
 
   const holder = mintHolderToken();
@@ -326,16 +340,50 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     { encryptedBallot: parsed.encryptedBallot },
   );
 
-  await explorer.recordVote(
-    {
-      nullifier: vote.nullifier,
-      ballotHash: vote.ballotHash,
-      electionId: vote.electionId,
-      relayer: 'node',
-    },
-    acceptedAt,
-    interval,
-  );
+  let recorded = null;
+  try {
+    recorded = await explorer.recordVote(
+      {
+        nullifier: vote.nullifier,
+        ballotHash: vote.ballotHash,
+        electionId: vote.electionId,
+        relayer: 'node',
+      },
+      acceptedAt,
+      interval,
+    );
+    if (chainConfigured && interval > 0) {
+      const outcome = await chain.submitVote(chainBallot);
+      // Already queued, and this request's rows are not the copy that should
+      // ship. Drop the orphan so a rejected ballot cannot reach the chain.
+      if (outcome?.duplicate) {
+        if (typeof chain.dropQueuedVote === 'function') await chain.dropQueuedVote(onChainId, parsed.nullifier);
+        throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+      }
+    }
+  } catch (err) {
+    // Interval 0 may already have published a block and mined a transaction.
+    // Published blocks stay. Only an unpublished queue ballot is rolled back.
+    if (interval > 0) {
+      if (recorded?.sealed && typeof explorer.dropSealedVote === 'function') {
+        try {
+          await explorer.dropSealedVote(vote.nullifier);
+        } catch (undoErr) {
+          if (!(config || {}).quiet) {
+            console.warn(`[zk-voting] could not roll back a sealed ballot: ${undoErr.message || undoErr}`);
+          }
+        }
+      }
+      try {
+        await store.revertAcceptedVote({ electionId: election.id, nullifier: vote.nullifier, spentPassHash });
+      } catch (undoErr) {
+        if (!(config || {}).quiet) {
+          console.warn(`[zk-voting] could not roll back an accepted ballot: ${undoErr.message || undoErr}`);
+        }
+      }
+    }
+    throw err;
+  }
 
   const policy = electionDisclosurePolicy(election, config, ts);
   const published = store

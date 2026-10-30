@@ -161,8 +161,13 @@ function emptyData() {
     receipts: [],
     envelopes: [],
     // Ballots waiting for the next BallotInbox batch. Proof points only.
+    // The JSON backend's live copy is chain-vote-queue.json; these fields are
+    // the copy a full persist writes, and the postgres collections.
     chainVoteQueue: [],
     chainVoteBatchAt: {},
+    chainVoteInFlight: {},
+    chainVoteDeadLetter: [],
+    chainVoteAttempts: {},
     notifications: [],
     tallyGuardians: [],
     pages: [],
@@ -339,11 +344,61 @@ async function readJsonFile(filePath) {
   }
 }
 
+function plainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Queue document. Rows are proof points; the chain layer owns the meaning. */
+export function normalizeChainVoteQueue(doc) {
+  const src = doc && typeof doc === 'object' ? doc : {};
+  const batchAt = {};
+  if (plainObject(src.batchAt)) {
+    for (const [id, at] of Object.entries(src.batchAt)) batchAt[id] = Number(at) || 0;
+  }
+  const inFlight = {};
+  if (plainObject(src.inFlight)) {
+    for (const [id, marker] of Object.entries(src.inFlight)) {
+      if (!plainObject(marker)) continue;
+      inFlight[id] = {
+        txHash: marker.txHash ? String(marker.txHash) : null,
+        nullifiers: Array.isArray(marker.nullifiers) ? marker.nullifiers.map((n) => String(n)) : [],
+      };
+    }
+  }
+  const attempts = {};
+  if (plainObject(src.attempts)) {
+    for (const [id, n] of Object.entries(src.attempts)) {
+      const num = Number(n);
+      if (Number.isFinite(num) && num > 0) attempts[id] = Math.floor(num);
+    }
+  }
+  return {
+    rows: Array.isArray(src.rows) ? src.rows : [],
+    batchAt,
+    inFlight,
+    deadLetter: Array.isArray(src.deadLetter) ? src.deadLetter.filter((item) => plainObject(item)) : [],
+    attempts,
+  };
+}
+
+function chainVoteQueueFromData(data) {
+  return normalizeChainVoteQueue({
+    rows: data?.chainVoteQueue,
+    batchAt: data?.chainVoteBatchAt,
+    inFlight: data?.chainVoteInFlight,
+    deadLetter: data?.chainVoteDeadLetter,
+    attempts: data?.chainVoteAttempts,
+  });
+}
+
 export class Store {
   constructor(filePath, data) {
     this.filePath = filePath;
+    this.queuePath = path.join(path.dirname(filePath), 'chain-vote-queue.json');
     this.data = data;
     this._write = Promise.resolve();
+    this._queueWrite = Promise.resolve();
+    this._chainQueue = chainVoteQueueFromData(data);
     /** 'json' (DATA_DIR file, dev fallback) or 'postgres' (DATABASE_URL). */
     this.backend = 'json';
     this.pg = null;
@@ -409,6 +464,7 @@ export class Store {
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 9);
+    await store.loadChainQueueFromDisk();
     if (store.writerActive) {
       if (store.pg) await store.pg.claimWriter();
       await store.persist();
@@ -458,6 +514,7 @@ export class Store {
     this.data = data;
     this.ensureJurisdictionIds();
     this.rebuildAllEligibility();
+    await this.loadChainQueueFromDisk();
   }
 
   async persist() {
@@ -684,21 +741,61 @@ export class Store {
     return this.listElections().filter((row) => row && !isSoftDeleted(row) && row.l2OpenStatus !== 'pending');
   }
 
-  loadChainVoteQueue() {
-    const rows = Array.isArray(this.data.chainVoteQueue) ? this.data.chainVoteQueue : [];
-    const batchAt =
-      this.data.chainVoteBatchAt &&
-      typeof this.data.chainVoteBatchAt === 'object' &&
-      !Array.isArray(this.data.chainVoteBatchAt)
-        ? this.data.chainVoteBatchAt
-        : {};
-    return { rows, batchAt };
+  applyChainVoteQueue(doc) {
+    const next = normalizeChainVoteQueue(doc);
+    this._chainQueue = next;
+    this.data.chainVoteQueue = next.rows;
+    this.data.chainVoteBatchAt = next.batchAt;
+    this.data.chainVoteInFlight = next.inFlight;
+    this.data.chainVoteDeadLetter = next.deadLetter;
+    this.data.chainVoteAttempts = next.attempts;
+    return next;
   }
 
-  async saveChainVoteQueue(rows, batchAt) {
-    this.data.chainVoteQueue = Array.isArray(rows) ? rows : [];
-    this.data.chainVoteBatchAt = batchAt && typeof batchAt === 'object' && !Array.isArray(batchAt) ? batchAt : {};
-    await this.persist();
+  /**
+   * JSON: chain-vote-queue.json wins over the embedded copy so a crash between
+   * a ballot and the next full persist still has the queue. Postgres keeps the
+   * queue in its own collections; the sidecar is not read there.
+   */
+  async loadChainQueueFromDisk() {
+    if (!this.pg) {
+      const sidecar = await readJsonFile(this.queuePath);
+      if (sidecar && typeof sidecar === 'object') {
+        this.applyChainVoteQueue(sidecar);
+        return this._chainQueue;
+      }
+    }
+    this.applyChainVoteQueue(chainVoteQueueFromData(this.data));
+    return this._chainQueue;
+  }
+
+  loadChainVoteQueue() {
+    return this._chainQueue || chainVoteQueueFromData(this.data);
+  }
+
+  /**
+   * Persist the ballot queue only. The JSON backend rewrites chain-vote-queue.json.
+   * Postgres writes the queue collections. Neither path rewrites the whole store.
+   */
+  async saveChainVoteQueue(doc) {
+    this.refuseIfStandby();
+    const next = this.applyChainVoteQueue(doc);
+    if (this.pg) {
+      await this.pg.saveCollections({
+        chainVoteQueue: next.rows,
+        chainVoteBatchAt: next.batchAt,
+        chainVoteInFlight: next.inFlight,
+        chainVoteDeadLetter: next.deadLetter,
+        chainVoteAttempts: next.attempts,
+      });
+      return;
+    }
+    this._queueWrite = this._queueWrite.then(async () => {
+      const tmp = `${this.queuePath}.${process.pid}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(next));
+      await fs.rename(tmp, this.queuePath);
+    });
+    return this._queueWrite;
   }
 
   getUser(id) {
@@ -2387,6 +2484,36 @@ export class Store {
     election.acceptedBallots += 1;
     await this.persist();
     return record;
+  }
+
+  /**
+   * Undo one acceptVote that never made it onto the queue. Removes that
+   * ballot's vote, receipt, and envelope, unspends its vote pass, and
+   * decrements the counter. A published explorer block is left alone.
+   */
+  async revertAcceptedVote({ electionId, nullifier, spentPassHash = null } = {}) {
+    this.refuseIfStandby();
+    const key = toBytes32(nullifier);
+    const electionKey = String(electionId);
+    const keepVote = (row) =>
+      isSoftDeleted(row) || String(row?.electionId) !== electionKey || toBytes32(row?.nullifier) !== key;
+    const before = this.data.votes.length;
+    this.data.votes = this.data.votes.filter(keepVote);
+    const removed = before - this.data.votes.length;
+    if (!removed) return false;
+    this.data.receipts = (this.data.receipts || []).filter(keepVote);
+    this.data.envelopes = (this.data.envelopes || []).filter(
+      (row) => String(row?.electionId) !== electionKey || toBytes32(row?.nullifier) !== key,
+    );
+    if (spentPassHash) {
+      const hash = String(spentPassHash).toLowerCase();
+      const list = this.data.votePassSpent?.[electionKey];
+      if (Array.isArray(list)) this.data.votePassSpent[electionKey] = list.filter((item) => item !== hash);
+    }
+    const election = this.getElection(electionId);
+    if (election) election.acceptedBallots = Math.max(0, Number(election.acceptedBallots || 0) - removed);
+    await this.persist();
+    return true;
   }
 
   votePassSpent(electionId, hash) {
