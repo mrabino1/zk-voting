@@ -1,6 +1,6 @@
 # site: zk-voting.org
 
-The informational landing page for **zk-voting.org**: what ZK Voting is, who it's for, why it matters, when a poll shows per-choice counts and turnout and when a vote stays sealed, and a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no JavaScript, no build step, no tracking and no third-party assets.
+The informational landing page for **zk-voting.org**: what ZK Voting is, who it's for, why it matters, when a poll shows per-choice counts and turnout and when a vote shows turnout during the election and choices only at the deadline, and a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no JavaScript, no build step, no tracking and no third-party assets.
 
 The voting demo is a separate app (`voting_node/`). This site only links to it; never embed or iframe it here.
 
