@@ -51,6 +51,9 @@ contract Tally is ITallyVerifier {
     mapping(uint256 => bytes32) private _decryptionHash;
     mapping(uint256 => bytes32) private _interimHash;
     mapping(uint256 => bytes32) private _disclosureHash;
+    /// @dev Set by the one post-cutoff write. A pre-cutoff value does not set it.
+    mapping(uint256 => bool) private _interimFinal;
+    mapping(uint256 => bool) private _disclosureFinal;
     mapping(uint256 => bytes32[]) private _components;
 
     /// @notice Groth16 verifier for the `TallyPublicInputs` instance. Set once.
@@ -193,7 +196,11 @@ contract Tally is ITallyVerifier {
         if (resultHash == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
-        _revertIfFinal(electionId, p, _interimHash[electionId]);
+        // A pre-cutoff interim may be replaced until cutoff. The one write at or
+        // after cutoff is the certified final value, even when an interim is
+        // already stored. A later write reverts.
+        _revertIfFinal(electionId, p, _interimFinal[electionId]);
+        if (block.timestamp >= p.cutoffTime) _interimFinal[electionId] = true;
         _interimHash[electionId] = resultHash;
         emit InterimResultPosted(electionId, resultHash);
     }
@@ -204,7 +211,8 @@ contract Tally is ITallyVerifier {
         if (disclosureHash_ == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
-        _revertIfFinal(electionId, p, _disclosureHash[electionId]);
+        _revertIfFinal(electionId, p, _disclosureFinal[electionId]);
+        if (block.timestamp >= p.cutoffTime) _disclosureFinal[electionId] = true;
         _disclosureHash[electionId] = disclosureHash_;
         emit DisclosurePosted(electionId, disclosureHash_);
     }
@@ -303,9 +311,10 @@ contract Tally is ITallyVerifier {
         }
     }
 
-    /// @dev At or after cutoff a non-zero hash is final. POLL may still replace it before then.
-    function _revertIfFinal(uint256 electionId, ElectionParams memory p, bytes32 stored) internal view {
-        if (block.timestamp >= p.cutoffTime && stored != bytes32(0)) {
+    /// @dev The post-cutoff write of this field has already happened.
+    ///      A hash stored only before cutoff does not count.
+    function _revertIfFinal(uint256 electionId, ElectionParams memory p, bool alreadyFinal) internal view {
+        if (block.timestamp >= p.cutoffTime && alreadyFinal) {
             revert ResultAlreadyFinal(electionId);
         }
     }

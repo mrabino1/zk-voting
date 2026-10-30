@@ -182,9 +182,35 @@ contract ElectionTypeTest is Deployer {
     function testPollInterimUpdatesBeforeCutoffAndFreezesAfterClose() public {
         (uint256 id, address el) = _create(ElectionType.POLL);
         _replaceBeforeClose(id);
+        vm.prank(tallyOperator);
+        tally.addTallyComponent(id, keccak256("while-open"));
         warpClosed(el);
+
+        bytes32 finalInterim = keccak256("final-interim");
+        bytes32 finalDisc = keccak256("final-disc");
+        vm.startPrank(tallyOperator);
+        tally.postInterimResult(id, finalInterim);
+        tally.disclose(id, finalDisc);
+        vm.stopPrank();
+        assertEq(tally.interimResult(id), finalInterim);
+        assertEq(tally.disclosureHash(id), finalDisc);
+
         _expectReplaceReverts(id);
+        vm.prank(tallyOperator);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.TallyComponentsClosed.selector, id));
+        tally.addTallyComponent(id, keccak256("after-close"));
+        assertEq(tally.tallyComponentCount(id), 1);
+
         _expectDecryptOnce(id, 0);
+        _expectSecondTallyReverts(id);
+    }
+
+    function _expectSecondTallyReverts(uint256 id) internal {
+        uint256[] memory again = new uint256[](1);
+        again[0] = 0;
+        vm.prank(tallyOperator);
+        vm.expectRevert(ITallyVerifier.AlreadyTallied.selector);
+        tally.submitTally(id, again, a, b, c);
     }
 
     function testVoteResultHashesAreWriteOnceAfterClose() public {

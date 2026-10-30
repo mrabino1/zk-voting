@@ -28,7 +28,7 @@ interface ITallyVerifier {
     error TallyComponentsClosed(uint256 electionId);
     error EmptyCommitment();
     error TooManyTallyComponents();
-    /// @notice The stored hash is final at or after cutoff and cannot be replaced.
+    /// @notice This field already received its one write at or after cutoff.
     error ResultAlreadyFinal(uint256 electionId);
     /// @notice Aggregate decryption is accepted only after a tally is posted.
     error DecryptionBeforeTally(uint256 electionId);
@@ -93,11 +93,13 @@ interface ITallyVerifier {
     function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external;
 
     /// @notice Running result commitment. POLL may replace it before cutoff. VOTE may not
-    ///         post before cutoff. At or after cutoff the stored hash is write-once.
+    ///         post before cutoff. At or after cutoff it may be written once, even if a
+    ///         pre-cutoff interim is already stored. That write is the certified final
+    ///         value. A second post-cutoff write reverts `ResultAlreadyFinal`.
     function postInterimResult(uint256 electionId, bytes32 resultHash) external;
 
-    /// @notice Result disclosure commitment. POLL may replace it before cutoff. VOTE may not
-    ///         post before cutoff. At or after cutoff the stored hash is write-once.
+    /// @notice Result disclosure commitment. Same clock as `postInterimResult`:
+    ///         replaceable before cutoff for a POLL, one write at or after cutoff.
     function disclose(uint256 electionId, bytes32 disclosureHash_) external;
 
     /// @notice Append one tally component while the window is open.
