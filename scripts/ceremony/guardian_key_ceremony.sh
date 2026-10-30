@@ -234,7 +234,7 @@ ceremony_assign_outside_repo() {
         parent=$(dirname -- "$parent")
     done
     if ! command -v git >/dev/null 2>&1; then
-        ceremony_note "warning: git not found; cannot check that --out is outside a repository."
+        ceremony_note "warning: git not found; cannot check that --out is outside a repository. Make sure --out is not inside a repository."
     elif top=$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$parent" rev-parse --show-toplevel 2>/dev/null); then
         top=$(realpath -m -- "$top") || ceremony_die "Could not resolve the git working tree."
         case "$abs/" in

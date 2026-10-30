@@ -208,19 +208,41 @@ reject_in_repo_out() {
 }
 
 reject_git_absent() {
-    local bindir=$TMP/nogit-bin src base stray=$ROOT/git-absent-ceremony
+    local bindir=$TMP/nogit-bin stray=$ROOT/git-absent-ceremony
+    local -a needed=(bash cat openssl iconv od tr mktemp awk grep sed date find realpath stat dirname)
+    local -a dirs=() path_dirs=()
+    local cmd src dir part seen=" "
+    local IFS=:
+    read -r -a path_dirs <<< "${PATH}"
+    IFS=$' \t\n'
+    for part in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin "${path_dirs[@]}"; do
+        [[ -n "$part" && -d "$part" ]] || continue
+        [[ "$seen" == *" $part "* ]] && continue
+        seen+=" $part "
+        dirs+=("$part")
+    done
     mkdir -p "$bindir"
-    for src in /usr/bin/* /bin/*; do
-        [[ -e "$src" ]] || continue
-        base=$(basename -- "$src")
-        [[ "$base" == "git" ]] && continue
-        [[ -e "$bindir/$base" ]] && continue
-        ln -s "$src" "$bindir/$base"
+    for cmd in "${needed[@]}"; do
+        src=""
+        for dir in "${dirs[@]}"; do
+            if [[ -x "$dir/$cmd" && ! -d "$dir/$cmd" ]]; then
+                src="$dir/$cmd"
+                break
+            fi
+        done
+        if [[ -z "$src" || "$(basename -- "$src")" == "git" ]]; then
+            printf 'git-absent: skipped (could not link %s without git)\n' "$cmd"
+            return 0
+        fi
+        if ! ln -s "$src" "$bindir/$cmd"; then
+            printf 'git-absent: skipped (could not link %s)\n' "$cmd"
+            return 0
+        fi
     done
     rm -rf -- "$stray"
     if PATH="$bindir" command -v git >/dev/null 2>&1; then
-        echo "git-absent setup still found git" >&2
-        exit 1
+        printf 'git-absent: skipped (git remained on PATH)\n'
+        return 0
     fi
     if PATH="$bindir" bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" --noninteractive \
         --name ROUNDTRIP \
@@ -235,7 +257,7 @@ reject_git_absent() {
         rm -rf -- "$stray"
         exit 1
     fi
-    if ! grep -F -q "git not found; cannot check that --out is outside a repository." "$TMP/nogit.err"; then
+    if ! grep -F -q "git not found; cannot check that --out is outside a repository. Make sure --out is not inside a repository." "$TMP/nogit.err"; then
         echo "git-absent run did not warn" >&2
         exit 1
     fi

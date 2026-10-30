@@ -137,7 +137,7 @@ The digests match when the round trip is intact. Compare the public-key fingerpr
 1. An OPSEC warning and a check that openssl, iconv, od, tr, realpath, and the other required commands are installed. git is optional. If it is missing, the script warns that it cannot check whether the output path is inside a repository, and then it continues.
 2. A ceremony name.
 3. A new 4096-bit RSA key, or an imported unencrypted PEM.
-4. `public.pem` and the SHA-256 fingerprint, published for reference only and not used on chain. Record them where the ceremony log lives (for example the L2). The script does not publish them. The L2 operator gets public/ only, never a share.
+4. `public.pem` and the SHA-256 fingerprint, for reference only and not used on chain. Publish them yourself where the ceremony log lives (for example the L2). The script does not publish anything. The L2 operator gets public/ only, never a share.
 5. A key passphrase of at least 32 characters, entered twice, or one generated with `openssl rand -base64 48` and not printed. That passphrase encrypts the private key with AES-256-CBC, PBKDF2-HMAC-SHA256, and 600000 iterations.
 6. A threshold and a guardian count, from 2 to 26. Guardians are named with NATO phonetic codenames: ALFA, BRAVO, CHARLIE, and so on through ZULU.
 7. A share check (`ssss_secret_matches`) before any ceremony directory is written. If the check fails, the script stops and writes nothing.
