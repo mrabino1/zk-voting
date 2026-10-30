@@ -181,6 +181,8 @@ contract Tally is ITallyVerifier {
         // Same clock as tally posting: closed window, and VOTE stays sealed until then.
         // The argument is one aggregate hash. There is no openings array.
         _authorize(electionId);
+        if (!_tallied[electionId]) revert DecryptionBeforeTally(electionId);
+        if (_decryptionHash[electionId] != bytes32(0)) revert ResultAlreadyFinal(electionId);
         _decryptionHash[electionId] = aggregatePlaintextHash;
         emit AggregateDecrypted(electionId, aggregatePlaintextHash);
     }
@@ -191,6 +193,7 @@ contract Tally is ITallyVerifier {
         if (resultHash == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
+        _revertIfFinal(electionId, p, _interimHash[electionId]);
         _interimHash[electionId] = resultHash;
         emit InterimResultPosted(electionId, resultHash);
     }
@@ -201,6 +204,7 @@ contract Tally is ITallyVerifier {
         if (disclosureHash_ == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
+        _revertIfFinal(electionId, p, _disclosureHash[electionId]);
         _disclosureHash[electionId] = disclosureHash_;
         emit DisclosurePosted(electionId, disclosureHash_);
     }
@@ -240,6 +244,7 @@ contract Tally is ITallyVerifier {
 
     /// @inheritdoc ITallyVerifier
     function tallyComponentAt(uint256 electionId, uint256 index) external view returns (bytes32) {
+        if (index >= _components[electionId].length) revert TallyComponentOutOfRange(index);
         return _components[electionId][index];
     }
 
@@ -295,6 +300,13 @@ contract Tally is ITallyVerifier {
     function _revertIfVoteSealed(uint256 electionId, ElectionParams memory p) internal view {
         if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) {
             revert ResultsSealedUntilEnd(electionId);
+        }
+    }
+
+    /// @dev At or after cutoff a non-zero hash is final. POLL may still replace it before then.
+    function _revertIfFinal(uint256 electionId, ElectionParams memory p, bytes32 stored) internal view {
+        if (block.timestamp >= p.cutoffTime && stored != bytes32(0)) {
+            revert ResultAlreadyFinal(electionId);
         }
     }
 

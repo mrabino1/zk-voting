@@ -28,6 +28,12 @@ interface ITallyVerifier {
     error TallyComponentsClosed(uint256 electionId);
     error EmptyCommitment();
     error TooManyTallyComponents();
+    /// @notice The stored hash is final at or after cutoff and cannot be replaced.
+    error ResultAlreadyFinal(uint256 electionId);
+    /// @notice Aggregate decryption is accepted only after a tally is posted.
+    error DecryptionBeforeTally(uint256 electionId);
+    /// @notice `tallyComponentAt` index is past the stored list.
+    error TallyComponentOutOfRange(uint256 index);
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
@@ -82,14 +88,16 @@ interface ITallyVerifier {
     function postedScheme(uint256 electionId) external view returns (uint8);
 
     /// @notice Record a hash of the decrypted aggregate. No per-ballot plaintext.
-    ///         Before cutoff, VOTE reverts `ResultsSealedUntilEnd` and POLL reverts
-    ///         `ElectionNotClosed` (the same clock as tally posting).
+    ///         Requires a posted tally. Before cutoff, VOTE reverts `ResultsSealedUntilEnd`
+    ///         and POLL reverts `ElectionNotClosed`. After cutoff the hash is write-once.
     function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external;
 
-    /// @notice Running result commitment. POLL may post before cutoff. VOTE may not.
+    /// @notice Running result commitment. POLL may replace it before cutoff. VOTE may not
+    ///         post before cutoff. At or after cutoff the stored hash is write-once.
     function postInterimResult(uint256 electionId, bytes32 resultHash) external;
 
-    /// @notice Result disclosure commitment. POLL may post before cutoff. VOTE may not.
+    /// @notice Result disclosure commitment. POLL may replace it before cutoff. VOTE may not
+    ///         post before cutoff. At or after cutoff the stored hash is write-once.
     function disclose(uint256 electionId, bytes32 disclosureHash_) external;
 
     /// @notice Append one tally component while the window is open.

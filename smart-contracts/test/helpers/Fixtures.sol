@@ -16,11 +16,13 @@ library Fixtures {
     bytes32 internal constant DEFAULT_BALLOT_SPEC = keccak256("canonical-ballot-json");
 
     /// @notice Default civic election: unlimited roll, one-day window starting one day after origin.
-    function sampleParams(address clerk, address registrar, address officer, address tallyOperator, address verifier)
-        internal
-        pure
-        returns (ElectionParams memory p)
-    {
+    function sampleParams(
+        address clerk,
+        address registrar,
+        address officer,
+        address tallyOperator,
+        address verifier
+    ) internal pure returns (ElectionParams memory p) {
         p = build({
             title: "ZK-Voting Civic Election",
             metadataURI: "ipfs://zk-voting/ballot",
@@ -112,7 +114,11 @@ library Fixtures {
         return p;
     }
 
-    function withTallyScheme(ElectionParams memory p, uint8 scheme) internal pure returns (ElectionParams memory) {
+    function withTallyScheme(ElectionParams memory p, uint8 scheme)
+        internal
+        pure
+        returns (ElectionParams memory)
+    {
         p.tallyScheme = scheme;
         return p;
     }
@@ -141,9 +147,7 @@ library Fixtures {
     }
 
     function ballotHash(bytes memory encrypted) internal pure returns (uint256) {
-        return
-            uint256(keccak256(encrypted))
-                % 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+        return uint256(keccak256(encrypted)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     }
 
     /// @dev Circuit / proof-helpers order: [root, disqRoot, nullifier, ballotHash, electionId]
@@ -160,7 +164,11 @@ library Fixtures {
         inputs[4] = electionId;
     }
 
-    function dummyProof() internal pure returns (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) {
+    function dummyProof()
+        internal
+        pure
+        returns (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c)
+    {
         a = [uint256(1), uint256(2)];
         b = [[uint256(3), uint256(4)], [uint256(5), uint256(6)]];
         c = [uint256(7), uint256(8)];
