@@ -140,6 +140,26 @@ describe('hourly disclosure math', () => {
       }),
       false,
     );
+    assert.equal(
+      resultsGateOpen({
+        submittedVotes: 1,
+        now: HOUR_START,
+        endTime: end,
+        minVotes: 100,
+        openedAt: HOUR_START + HOUR,
+      }),
+      false,
+    );
+    assert.equal(
+      resultsGateOpen({
+        submittedVotes: 1,
+        now: HOUR_START + HOUR,
+        endTime: end,
+        minVotes: 100,
+        openedAt: HOUR_START,
+      }),
+      true,
+    );
     const turnout = selectPublicVotes(
       [{ acceptedAt: HOUR_START + 10, electionId: 'e' }],
       {

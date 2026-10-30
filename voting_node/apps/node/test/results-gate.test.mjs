@@ -224,4 +224,72 @@ describe('poll results gate', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  test('a soft-deleted ballot does not count toward opening the results gate', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-gate-'));
+    const H2 = H0 + 2 * HOUR;
+    try {
+      const store = await openStore(dir);
+      const poll = await createPoll(store, H0 + 10 * HOUR);
+      await castMany(store, poll.id, 0, 99, H0 + 10);
+      const hidden = store.data.votes.find((vote) => vote.nullifier === toBytes32(1));
+      assert.ok(hidden);
+      hidden.is_deleted = true;
+      await castFirst(store, poll.id, 99, H1 + 20);
+      const mid = store.requireElection(poll.id);
+      assert.equal(mid.acceptedBallots, 100);
+      assert.equal(store.visibleAcceptedBallots(mid), 99);
+      assert.equal(mid.resultsGateOpenedAt ?? null, null);
+      const closed = published(store, poll.id, H2 + HOUR + DELAY);
+      assert.equal(closed.choiceBlocks.gateOpen, false);
+      assert.equal(closed.choiceBlocks.blocks.length, 0);
+      await castFirst(store, poll.id, 100, H2 + 30);
+      const opened = store.requireElection(poll.id);
+      assert.equal(store.visibleAcceptedBallots(opened), 100);
+      assert.equal(opened.resultsGateOpenedAt, H2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('reopening a store with no latch backfills the 100th visible ballot hour', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-gate-'));
+    const H2 = H0 + 2 * HOUR;
+    try {
+      const store = await openStore(dir);
+      const poll = await createPoll(store, H0 + 10 * HOUR);
+      await castMany(store, poll.id, 0, 99, H0 + 10);
+      await castFirst(store, poll.id, 99, H1 + 20);
+      await castFirst(store, poll.id, 100, H2 + 30);
+      const election = store.requireElection(poll.id);
+      assert.equal(election.resultsGateOpenedAt, H1);
+      delete election.resultsGateOpenedAt;
+      await store.persist();
+      const reloaded = await openStore(dir);
+      const again = reloaded.requireElection(poll.id);
+      assert.equal(again.acceptedBallots, 101);
+      assert.equal(again.resultsGateOpenedAt, H1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a latch hour in the future does not open the results gate', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-gate-'));
+    try {
+      const store = await openStore(dir);
+      const poll = await createPoll(store, H0 + 10 * HOUR);
+      await castMany(store, poll.id, 0, 8, H0 + 10);
+      const election = store.requireElection(poll.id);
+      election.resultsGateOpenedAt = H1;
+      await store.persist();
+      const early = published(store, poll.id, H0 + 10);
+      assert.equal(early.choiceBlocks.gateOpen, false);
+      assert.equal(early.choiceBlocks.blocks.length, 0);
+      const reached = published(store, poll.id, H1);
+      assert.equal(reached.choiceBlocks.gateOpen, true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

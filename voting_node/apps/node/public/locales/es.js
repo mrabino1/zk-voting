@@ -717,7 +717,7 @@ export default {
       "Valor predeterminado de la elección. YES_NO permanece en pluralidad. Las preguntas RANKED siempre usan IRV. Las elecciones creadas obtienen un id público UUID y un enlace corto <code>/v/…</code>; el <code>uint256</code> de la fábrica permanece como <code>onChainElectionId</code>.",
     electionType: "Tipo de elección",
     typePoll: "Encuesta",
-    typePollHelp: "Cuando se abre la puerta de resultados (100 boletas, o el fin programado, lo que ocurra primero), las sumas por opción se publican por hora, 30 minutos después de cada hora. Las horas con menos de 10 boletas se fusionan con la siguiente. Un bloque publicado no cambia. El escrutinio certificado al cierre es el final. Una votación no publica estas sumas.",
+    typePollHelp: "Cuando se abre la puerta de resultados (100 boletas, o el fin programado, lo que ocurra primero), las sumas por opción se publican por hora, 30 minutos después de cada hora. Las horas con menos de 10 boletas se fusionan con la siguiente. Un bloque publicado no cambia. El escrutinio final al cierre cuenta la boleta más reciente. Una votación no publica estas sumas.",
     typeVote: "Votación",
     typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Antes del plazo, nadie, incluidos los funcionarios, puede ver los conteos por opción ni un escrutinio parcial. La participación es visible.",
     typeLocked: "El tipo queda fijo al crear la elección y no se puede cambiar.",

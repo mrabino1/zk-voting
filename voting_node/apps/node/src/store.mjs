@@ -595,6 +595,7 @@ export class Store {
     store.ensureJurisdictionIds();
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
+    store.backfillResultsGates();
     for (const key of ARRAY_COLLECTIONS) {
       if (!Array.isArray(store.data[key])) store.data[key] = [];
     }
@@ -2654,16 +2655,49 @@ export class Store {
   }
 
   /**
-   * The first time a poll's distinct ballots reach the results minimum, remember
-   * that hour. A later removal decrements acceptedBallots and must not close the gate.
+   * The first time a poll's visible ballots reach the results minimum, remember
+   * that hour. Hidden rows do not count. A later removal must not close the gate.
    */
   latchResultsGate(election, acceptedAt) {
     if (!election || isVoteElection(election)) return;
     const existing = election.resultsGateOpenedAt;
     if (existing != null && existing !== '' && Number.isFinite(Number(existing))) return;
     const min = Number(this.resultsMinVotes) || 0;
-    if (min <= 0 || Number(election.acceptedBallots) < min) return;
+    if (min <= 0 || this.visibleAcceptedBallots(election) < min) return;
     election.resultsGateOpenedAt = hourBucket(acceptedAt, this.disclosureIntervalSeconds);
+  }
+
+  /**
+   * Older stores may have crossed the minimum before the latch existed.
+   * Use the results-minimum-th visible ballot's accept time, not a later one.
+   */
+  backfillResultsGates() {
+    const min = Number(this.resultsMinVotes) || 0;
+    if (min <= 0) return;
+    for (const election of this.data.elections || []) {
+      if (!election || isVoteElection(election)) continue;
+      const existing = election.resultsGateOpenedAt;
+      if (existing != null && existing !== '' && Number.isFinite(Number(existing))) continue;
+      if (this.visibleAcceptedBallots(election) < min) continue;
+      const acceptedAt = this.nthVisibleAcceptedAt(election, min);
+      if (acceptedAt == null) continue;
+      election.resultsGateOpenedAt = hourBucket(acceptedAt, this.disclosureIntervalSeconds);
+    }
+  }
+
+  /** Accept time of the 1-based nth visible ballot, ordered by acceptedAt. */
+  nthVisibleAcceptedAt(election, rank) {
+    const want = Math.floor(Number(rank));
+    if (!election || want < 1) return null;
+    const id = String(election.id);
+    const times = [];
+    for (const vote of this.data.votes || []) {
+      if (!vote || isSoftDeleted(vote) || String(vote.electionId) !== id) continue;
+      const ts = Number(vote.acceptedAt);
+      if (Number.isFinite(ts)) times.push(ts);
+    }
+    times.sort((a, b) => a - b);
+    return times.length >= want ? times[want - 1] : null;
   }
 
   /**

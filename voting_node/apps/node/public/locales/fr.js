@@ -715,7 +715,7 @@ export default {
       "Défaut de l’élection. YES_NO reste en pluralité. Les questions RANKED utilisent toujours IRV. Les élections créées reçoivent un id public UUID et un court lien <code>/v/…</code> ; le <code>uint256</code> d’usine reste <code>onChainElectionId</code>.",
     electionType: "Type d’élection",
     typePoll: "Sondage",
-    typePollHelp: "Une fois le seuil de résultats ouvert (100 bulletins, ou la fin prévue, selon le premier), les sommes par choix sont publiées par heure, 30 minutes après chaque heure. Les heures de moins de 10 bulletins fusionnent avec la suivante. Un bloc publié ne change pas. Le dépouillement certifié à la clôture est définitif. Un vote ne publie pas ces sommes.",
+    typePollHelp: "Une fois le seuil de résultats ouvert (100 bulletins, ou la fin prévue, selon le premier), les sommes par choix sont publiées par heure, 30 minutes après chaque heure. Les heures de moins de 10 bulletins fusionnent avec la suivante. Un bloc publié ne change pas. Le dépouillement final à la clôture compte le dernier bulletin. Un vote ne publie pas ces sommes.",
     typeVote: "Vote",
     typeVoteHelp: "Le résultat n’est affiché qu’après la fin de l’élection. Avant la date limite, personne, y compris les responsables, ne peut voir les décomptes par choix ni un dépouillement partiel. La participation est visible.",
     typeLocked: "Le type est fixé à la création et ne peut plus être modifié.",

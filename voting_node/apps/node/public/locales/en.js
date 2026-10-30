@@ -718,7 +718,7 @@ export default {
     electionType: "Election type",
     typePoll: "Poll",
     typePollHelp:
-      "After the results gate opens (once 100 voters have cast their first ballot, or the scheduled end, whichever comes first), hourly choice sums publish 30 minutes after each hour. Hours with fewer than 10 ballots merge forward. A published block stays as first published. The final tally at close is final. A vote does not publish these sums.",
+      "After the results gate opens (once 100 voters have cast their first ballot, or the scheduled end, whichever comes first), hourly choice sums publish 30 minutes after each hour. Hours with fewer than 10 ballots merge forward. A published block stays as first published. The final tally at close counts the latest ballot. A vote does not publish these sums.",
     typeVote: "Vote",
     typeVoteHelp: "The outcome is shown only after the election ends. Before the deadline, nobody, including officials, can see choice counts or a partial tally. Turnout is visible.",
     typeLocked: "The type is fixed when the election is created and cannot be changed.",

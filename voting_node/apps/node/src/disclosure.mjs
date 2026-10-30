@@ -134,7 +134,8 @@ export function isDisclosed(eventTs, now, intervalSeconds, delaySeconds = 0) {
 /**
  * Poll per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled
  * end has passed. minVotes <= 0 leaves the gate open. A persisted openedAt
- * hour keeps the gate open after that. Hourly choice blocks call this. Turnout does not.
+ * hour keeps the gate open once that hour has been reached. Hourly choice blocks
+ * call this. Turnout does not.
  */
 export function resultsGateOpen({
   submittedVotes = 0,
@@ -147,7 +148,14 @@ export function resultsGateOpen({
   const min = Number(minVotes) || 0;
   if (min <= 0) return true;
   if (tallied) return true;
-  if (openedAt != null && openedAt !== '' && Number.isFinite(Number(openedAt))) return true;
+  if (
+    openedAt != null &&
+    openedAt !== '' &&
+    Number.isFinite(Number(openedAt)) &&
+    Number(openedAt) <= Number(now)
+  ) {
+    return true;
+  }
   if (Number(submittedVotes) >= min) return true;
   if (endTime != null && endTime !== '' && Number.isFinite(Number(endTime)) && Number(now) >= Number(endTime)) {
     return true;

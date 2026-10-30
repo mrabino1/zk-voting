@@ -715,7 +715,7 @@ export default {
       "Default ng halalan. Nanatiling plurality ang YES_NO. Palaging gumagamit ng IRV ang RANKED na tanong. Nakakakuha ang mga nagawang halalan ng UUID public id at maikling <code>/v/…</code> link; nananatiling <code>onChainElectionId</code> ang factory <code>uint256</code>.",
     electionType: "Uri ng halalan",
     typePoll: "Poll",
-    typePollHelp: "Pagkatapos magbukas ang results gate (100 balota, o ang nakatakdang wakas, alinman ang mauna), inilalathala ang oras-oras na suma ng pagpipilian 30 minuto pagkatapos ng bawat oras. Ang mga oras na wala pang 10 balota ay isinasama sa susunod. Hindi nagbabago ang nailathalang bloke. Ang sertipikadong tally sa pagsasara ang pinal. Hindi inilalathala ng isang boto ang mga sumang ito.",
+    typePollHelp: "Pagkatapos magbukas ang results gate (100 balota, o ang nakatakdang wakas, alinman ang mauna), inilalathala ang oras-oras na suma ng pagpipilian 30 minuto pagkatapos ng bawat oras. Ang mga oras na wala pang 10 balota ay isinasama sa susunod. Hindi nagbabago ang nailathalang bloke. Ang huling tally sa pagsasara ay binibilang ang pinakahuling balota. Hindi inilalathala ng isang boto ang mga sumang ito.",
     typeVote: "Vote",
     typeVoteHelp: "Ipinapakita ang resulta pagkatapos lang matapos ang halalan. Bago ang deadline, walang sinuman, kasama ang mga opisyal, ang makakakita ng bilang ng pagpipilian o bahagyang tally. Nakikita ang turnout.",
     typeLocked: "Naka-lock ang uri noong ginawa ang halalan at hindi na mababago.",

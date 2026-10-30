@@ -715,7 +715,7 @@ export default {
       "Mặc định cuộc bầu cử. YES_NO giữ đa số tương đối. Câu RANKED luôn dùng IRV. Cuộc bầu cử đã tạo nhận id công khai UUID và liên kết ngắn <code>/v/…</code>; <code>uint256</code> nhà máy vẫn là <code>onChainElectionId</code>.",
     electionType: "Loại bầu cử",
     typePoll: "Thăm dò",
-    typePollHelp: "Sau khi cổng kết quả mở (100 phiếu, hoặc thời điểm kết thúc đã định, cái nào đến trước), tổng lựa chọn theo giờ được công bố 30 phút sau mỗi giờ. Giờ có ít hơn 10 phiếu được gộp vào giờ sau. Khối đã công bố không đổi. Kiểm phiếu chứng nhận lúc đóng là kết quả cuối. Một cuộc bỏ phiếu không công bố các tổng này.",
+    typePollHelp: "Sau khi cổng kết quả mở (100 phiếu, hoặc thời điểm kết thúc đã định, cái nào đến trước), tổng lựa chọn theo giờ được công bố 30 phút sau mỗi giờ. Giờ có ít hơn 10 phiếu được gộp vào giờ sau. Khối đã công bố không đổi. Kiểm phiếu cuối lúc đóng tính lá phiếu mới nhất. Một cuộc bỏ phiếu không công bố các tổng này.",
     typeVote: "Bỏ phiếu",
     typeVoteHelp: "Kết quả chỉ được hiển thị sau khi cuộc bầu cử kết thúc. Trước hạn chót, không ai, kể cả cán bộ, có thể thấy số phiếu theo lựa chọn hoặc kết quả tạm. Tỷ lệ đi bỏ phiếu thì thấy được.",
     typeLocked: "Loại được chốt khi tạo và không thể đổi.",
