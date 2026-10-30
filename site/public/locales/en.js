@@ -1,0 +1,73 @@
+/** Landing page copy (English). */
+
+export default {
+  lang: {
+    label: "Language",
+    en: "English",
+    es: "Español",
+    zh: "中文",
+    fil: "Filipino",
+    vi: "Tiếng Việt",
+    ar: "العربية",
+    fr: "Français",
+    ko: "한국어",
+    pt: "Português",
+    hi: "हिन्दी",
+  },
+  nav: {
+    pollVsVote: "Poll vs Vote",
+  },
+  pollVote: {
+    eyebrow: "Poll vs Vote",
+    title: "Poll vs Vote",
+    intro:
+      "The creator chooses a poll or a vote. A poll publishes almost-live per-choice counts after a gate. A vote keeps choices sealed until the deadline. Both end with one final batch, a challenge window, and the final tally.",
+    poll: {
+      name: "Poll",
+      summary: "Almost-live per-choice counts after the gate.",
+      gate: "Counts stay hidden until 100 ballots are in, or the scheduled end, whichever comes first.",
+      hourly: "After that gate, per-choice counts publish for each hourly block, 30 minutes after the hour closes.",
+      merge: "An hour with fewer than 10 ballots merges forward into the next block.",
+      freeze: "Results freeze at close.",
+      example: "Example",
+      choiceA: "Choice A",
+      choiceB: "Choice B",
+      choiceC: "Choice C",
+    },
+    vote: {
+      name: "Vote",
+      summary: "Choices stay sealed until the deadline.",
+      sealed: "Choices stay sealed until the deadline.",
+      guardians: "They are decrypted only as an aggregate, by k-of-n guardians.",
+      turnout: "Hourly turnout is public.",
+      noInterim: "There are no interim per-choice counts.",
+      sealedLabel: "Sealed",
+      turnoutLabel: "Turnout",
+    },
+    both: {
+      title: "Both",
+      revote: "A voter can re-vote until the deadline. The last vote counts.",
+      receipt: "Every ballot has a receipt.",
+      batch: "One final batch is published at the deadline.",
+      challenge: "A challenge window comes before the final tally.",
+    },
+    flow: {
+      heading: "How a ballot moves",
+      caption:
+        "A poll publishes hourly results after the batch. A vote stays sealed and shows turnout only. The deadline, the challenge window, and the final tally are shared.",
+      name: "Ballot flow for a poll and a vote",
+      desc: "Cast, then a receipt, then an hourly batch. A poll publishes hourly results. A vote stays sealed and shows turnout only. Then the deadline, a challenge window, and the final tally.",
+      cast: "Cast",
+      receipt: "Receipt",
+      batch: "Hourly batch",
+      pollLane: "Poll",
+      voteLane: "Vote",
+      pollResults: "Hourly results",
+      voteSealed: "Sealed",
+      voteTurnout: "Turnout only",
+      deadline: "Deadline",
+      challenge: "Challenge window",
+      tally: "Final tally",
+    },
+  },
+};

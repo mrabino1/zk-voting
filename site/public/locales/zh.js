@@ -1,0 +1,71 @@
+/** Landing page copy (Chinese, simplified). */
+
+const names = {
+  en: "English",
+  es: "Español",
+  zh: "中文",
+  fil: "Filipino",
+  vi: "Tiếng Việt",
+  ar: "العربية",
+  fr: "Français",
+  ko: "한국어",
+  pt: "Português",
+  hi: "हिन्दी",
+};
+
+export default {
+  lang: { label: "语言", ...names },
+  nav: { pollVsVote: "民意调查与表决" },
+  pollVote: {
+    eyebrow: "民意调查与表决",
+    title: "民意调查与表决",
+    intro:
+      "创建者选择民意调查或表决。民意调查在达到门槛后公布近乎实时的各选项计数。表决在截止前始终封存选项。两者都以一个最终批次、一段质疑期和最终计票结束。",
+    poll: {
+      name: "民意调查",
+      summary: "过门槛后，各选项计数近乎实时公开。",
+      gate: "在收到 100 张选票或到达预定结束时间（以先到者为准）之前，计数保持隐藏。",
+      hourly: "过了这道门槛后，每个小时区块在该小时结束后 30 分钟公布各选项计数。",
+      merge: "不足 10 张选票的小时并入下一个区块。",
+      freeze: "结束时结果冻结。",
+      example: "示例",
+      choiceA: "选项 A",
+      choiceB: "选项 B",
+      choiceC: "选项 C",
+    },
+    vote: {
+      name: "表决",
+      summary: "选项在截止前保持封存。",
+      sealed: "选项在截止前保持封存。",
+      guardians: "只能由 k-of-n 名密钥守护人将其作为合计解密。",
+      turnout: "每小时投票率是公开的。",
+      noInterim: "没有中途的各选项计数。",
+      sealedLabel: "已封存",
+      turnoutLabel: "投票率",
+    },
+    both: {
+      title: "两者",
+      revote: "截止前可以重新投票。以最后一次为准。",
+      receipt: "每张选票都有回执。",
+      batch: "截止时公布一个最终批次。",
+      challenge: "最终计票之前有一段质疑期。",
+    },
+    flow: {
+      heading: "一张选票如何前进",
+      caption: "民意调查在批次之后公布每小时结果。表决保持封存，只显示投票率。截止、质疑期和最终计票是共同的。",
+      name: "民意调查与表决的选票流程",
+      desc: "先投出选票，然后获得回执，再进入每小时批次。民意调查公布每小时结果。表决保持封存，只显示投票率。随后是截止、质疑期和最终计票。",
+      cast: "投出",
+      receipt: "回执",
+      batch: "每小时批次",
+      pollLane: "民意调查",
+      voteLane: "表决",
+      pollResults: "每小时结果",
+      voteSealed: "已封存",
+      voteTurnout: "只显示投票率",
+      deadline: "截止",
+      challenge: "质疑期",
+      tally: "最终计票",
+    },
+  },
+};
