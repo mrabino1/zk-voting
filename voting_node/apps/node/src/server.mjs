@@ -198,8 +198,20 @@ function electionShortLinks(store) {
  * Server-render branding into a page: replace the %BRAND_*% placeholders and
  * add <meta name="brand-*"> tags so client scripts (i18n `{brand}`) agree.
  */
+const BRAND_ICON_LINKS = [
+  '<link rel="icon" href="/brand-mark.svg" type="image/svg+xml"/>',
+  '<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32"/>',
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180"/>',
+  '<link rel="manifest" href="/site.webmanifest"/>',
+].join('\n    ');
+
+function withBrandIcons(html) {
+  if (/rel="(?:icon|manifest|apple-touch-icon)"/.test(html)) return html;
+  return html.replace(/<head([^>]*)>/i, (match) => `${match}\n    ${BRAND_ICON_LINKS}`);
+}
+
 function brandHtml(html, branding) {
-  let out = renderBrandedHtml(html, branding);
+  let out = withBrandIcons(renderBrandedHtml(html, branding));
   if (!/<meta name="brand-name"/.test(out)) {
     const meta =
       `<meta name="brand-name" content="${escapeHtml(branding.name)}"/>\n` +
@@ -420,6 +432,25 @@ export async function createApp(overrides = {}) {
     res.status(404).json({ error: 'not found', nfp: true });
   });
 
+  app.get('/site.webmanifest', (_req, res) => {
+    const branding = getBranding();
+    res.set('Cache-Control', 'no-cache');
+    res.type('application/manifest+json');
+    res.json({
+      name: branding.name,
+      short_name: branding.shortName,
+      icons: [
+        { src: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+        { src: '/brand-mark.svg', sizes: 'any', type: 'image/svg+xml' },
+      ],
+      theme_color: '#03173A',
+      background_color: '#ffffff',
+      display: 'standalone',
+    });
+  });
   app.get('/plugins-assets/:name/*', plugins.assetHandler());
   app.use(siteAdminCsp());
   app.use(electionShortLinks(store));

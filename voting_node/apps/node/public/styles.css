@@ -3480,3 +3480,64 @@ tbody tr:hover > td {
   overflow-wrap: anywhere;
   word-break: break-all;
 }
+
+/* Header wordmark. The mark is the shield image. The display name is text:
+   a leading ZK is navy and the rest is teal, on a light plate so those
+   colors stay readable on the dark canvas. A custom name with no ZK prefix
+   uses the navy color for the whole string. */
+.app-topbar a.brand,
+.site-header a.brand {
+  background: #fff;
+  color: #03173A;
+  border-radius: 0.65rem;
+  padding-block: 0.12rem;
+  padding-inline: 0.15rem 0.55rem;
+}
+
+.app-topbar a.brand:hover,
+.site-header a.brand:hover {
+  background: #f3f6f8;
+}
+
+.brand-mark img {
+  display: block;
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.app-topbar .brand-mark img {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.app-topbar .brand-name,
+.site-header .brand-name {
+  max-width: min(42vw, 16rem);
+  overflow: hidden;
+  color: #03173A;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.brand-name:has(.brand-zk) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.brand-zk {
+  color: #03173A;
+  font-weight: 800;
+}
+
+.brand-rest {
+  color: #0B7285;
+  font-weight: 800;
+}
+
+.app-topbar .brand-sub,
+.site-header .brand-sub {
+  color: #3e5166;
+  opacity: 1;
+}
