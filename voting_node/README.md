@@ -50,10 +50,12 @@ Day-two operations, keys, and incident handling: [`docs/OPERATOR.md`](./docs/OPE
 
 A vote tells you *what* people want. A conversation tells you *why*. We encourage every operator to run an open-source [Discourse](https://www.discourse.org) forum ([source](https://github.com/discourse/discourse)) next to zk-voting so constituents can discuss polls and elections with each other. It is **optional**: zk-voting works the same without it, and nothing in the app depends on it.
 
+The creator of each contest chooses a **poll** or a **vote**. A poll shows its result on the dashboard while it is open, and the closing date stops new votes. A vote (an election) shows the outcome only after it ends. Before that close, nobody, including admins, can see or obtain an interim count, turnout, a per-block disclosure, or a partial tally. That refusal is enforced on chain, in the API and relayer, and in the UI. The forum must not post those figures for a vote.
+
 **Why**
 
 - **Deliberation before a vote:** read the question, ask what it means, hear the arguments before the poll opens.
-- **Reflection after a vote:** the tally shows the result; the forum shows the reasons and the next question.
+- **Reflection once a result may be shown:** a poll's tally is visible while it is open; a vote's tally appears only after it ends. The forum shows the reasons and the next question.
 - **Transparency:** one public place for ballot text, timelines, eligibility rules, and published results.
 - **Q&A with candidates and organizers:** officers, candidates, and the independent auditor answer in public.
 
@@ -67,6 +69,7 @@ A vote tells you *what* people want. A conversation tells you *why*. We encourag
 **Rules that protect the ballot**
 
 - Nobody is ever required to say how they voted, and organizers must never ask.
+- For a vote, do not post interim counts, turnout, per-block disclosures, or partial tallies. Nobody, including admins, is given those figures before the close.
 - A forum identity is separate from the anonymous ballot. **Forum accounts must never be linked to ballots, receipts, nullifiers, or voting credentials**, by the operator or anyone else.
 - Remove vote-buying offers, coercion, and demands for proof of how someone voted.
 

@@ -9,10 +9,18 @@ This is **optional**. zk-voting works the same with or without a forum, and noth
 ## Why run a forum
 
 - **Deliberation before a vote.** Voters can read the question, ask what it means, and hear arguments from neighbours before the poll opens.
-- **Reflection after a vote.** The tally shows *what* people chose. The forum shows *why*, and where the next question should come from.
+- **Reflection once a result may be shown.** A poll's tally is on the dashboard while it is open. A vote's tally appears only after the election ends. The forum shows *why*, and where the next question should come from.
 - **Transparency.** Organizers can publish the ballot text, timeline, eligibility rules, and disqualification reason codes in one public, linkable place.
 - **Q&A with candidates and organizers.** A per-election category gives candidates, election officers, and the independent auditor a place to answer questions in public.
 - **Open source end to end.** Discourse is self-hosted and free, in the same spirit as zk-voting: no vendor owns the conversation.
+
+## Polls and votes
+
+The person who creates a contest chooses the kind. Say which kind it is in the category title or the pinned post, and follow that kind when anyone talks about numbers.
+
+**Poll.** Use a poll when the group wants an open picture while people are still responding: a temperature check, a non-binding question, a club show of hands. The dashboard shows the result the whole time the poll is open. Voters and admins see the same running result. After the closing date, no more votes can be added. The forum may discuss that running result, because it is already on the dashboard.
+
+**Vote (an election).** Use a vote when the outcome must stay hidden until the end: leadership, a binding decision, or any contest where an early count could change who still turns out or how they vote. The outcome is shown only after the election ends. Before the close, nobody, including admins, can see or obtain an interim count, turnout, a per-block disclosure, or a partial tally. The chain, the API and relayer, and the pages people use all refuse those figures. There is no private preview to copy onto the forum. Do not post them in an announcement, a pinned topic, or a reply. After the election ends, announcements may link to the published outcome and the auditor report.
 
 ## How to run it
 
@@ -39,8 +47,8 @@ Discourse supports [DiscourseConnect](https://meta.discourse.org/t/setup-discour
 
 | Category | Use |
 | --- | --- |
-| **Announcements** | Read-only for organizers. New polls, opening and closing times, published results, and links to the public tally and auditor reports. |
-| **One category per election or poll** | For example `2027 Budget Poll`. Pin the ballot text, timeline, and eligibility rules. Use it for questions, arguments, and candidate Q&A. Close it (read-only) after results are certified. |
+| **Announcements** | Read-only for organizers. New polls and elections, and opening and closing times. For a poll, a link to the running result is fine while it is open. For a vote, link the outcome and the auditor report only after the election ends. |
+| **One category per election or poll** | For example `2027 Budget Poll` or `2027 Board Election`. Name the kind in the title. Pin the ballot text, timeline, and eligibility rules. Use it for questions, arguments, and candidate Q&A. For a vote, do not pin or discuss counts before the close. Close the category (read-only) after the outcome is published. |
 | **Feedback** | Bugs, accessibility problems, and ideas for the voting site itself. |
 | **Meta / How this forum works** | Rules, moderation policy, and who the moderators are. |
 
@@ -49,6 +57,7 @@ Discourse supports [DiscourseConnect](https://meta.discourse.org/t/setup-discour
 Post these rules in the forum and enforce them.
 
 - **Nobody has to say how they voted.** Sharing your own choice is allowed, but it is never required, never rewarded, and never asked for by organizers, employers, candidates, or moderators.
+- **Do not leak a vote's hidden numbers.** For a vote, interim counts, turnout, per-block disclosures, and partial tallies are not available to organizers either. Do not ask an admin for them, and do not post a rumor of them as if it were an official figure. A poll's running result is public and may be discussed.
 - **The forum identity is separate from the ballot.** zk-voting keeps ballots anonymous with zero-knowledge proofs. A forum account must **never** be linked to a ballot, a nullifier, a receipt, or a voting credential, by the operator or by anyone else. Do not build plugins, exports, or analytics that join forum data with voting data. Do not ask people to post receipts or screenshots of their ballot.
 - **No vote buying and no coercion.** Remove offers to pay for votes, threats, and demands for proof of how someone voted. Ban repeat offenders and report crimes to the relevant authority.
 - **Keep personal data out.** Do not post voter-roll entries, addresses, or identity documents. Disqualification appeals go through the app's due-process flow, not public threads.
