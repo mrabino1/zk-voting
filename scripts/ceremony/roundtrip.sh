@@ -236,11 +236,6 @@ reject_git_absent() {
             SKIPS=$((SKIPS + 1))
             return 0
         fi
-        if [[ "$(basename -- "$src")" == "git" ]]; then
-            printf 'git-absent: skipped (could not link %s without git)\n' "$cmd"
-            SKIPS=$((SKIPS + 1))
-            return 0
-        fi
         if ! ln -s "$src" "$bindir/$cmd"; then
             printf 'git-absent: skipped (could not link %s)\n' "$cmd"
             SKIPS=$((SKIPS + 1))
@@ -321,9 +316,9 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "$TMP/original
 chmod 400 "$TMP/original.pem"
 direct_round_trip
 ceremony_round_trip
-printf 'round-trip: ok\n'
 printf 'skips: %s\n' "$SKIPS"
-if [[ "${CI:-}" == "1" ]] && (( SKIPS > 0 )); then
-    echo "A skipped check is a failure when CI=1." >&2
+if [[ -n "${CI:-}" && "${CI}" != "0" && "${CI}" != "false" ]] && (( SKIPS > 0 )); then
+    echo "A skipped check is a failure when CI is set." >&2
     exit 1
 fi
+printf 'round-trip: ok\n'
