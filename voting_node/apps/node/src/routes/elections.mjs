@@ -99,6 +99,20 @@ function notExcluded(store, election, nullifier) {
 
 const EXCLUSION_RELEASE_ATTEMPTS = 3;
 
+function exclusionReleaseAlerted(chain, electionId, nullifier) {
+  if (typeof chain?.diagnostics !== 'function') return false;
+  const electionKey = String(electionId);
+  const id = String(nullifier);
+  const alerts = chain.diagnostics().alerts || [];
+  return alerts.some(
+    (row) =>
+      row &&
+      row.kind === 'exclusion_release_failed' &&
+      String(row.electionKey) === electionKey &&
+      String(row.nullifier) === id,
+  );
+}
+
 /** Try again to drop a dead letter that was already recorded as excluded. */
 async function retryPendingExclusionReleases({ store, chain, election }) {
   if (typeof chain?.releaseExcluded !== 'function') return;
@@ -117,7 +131,7 @@ async function retryPendingExclusionReleases({ store, chain, election }) {
       await store.setExclusionReleasePending(election.id, row.nullifier, false);
     } else {
       console.warn(`ballot exclusion release failed for election ${election.id} nullifier ${row.nullifier}`);
-      if (typeof chain.noteAlert === 'function') {
+      if (typeof chain.noteAlert === 'function' && !exclusionReleaseAlerted(chain, election.id, row.nullifier)) {
         await chain.noteAlert({
           kind: 'exclusion_release_failed',
           electionKey: String(election.id),

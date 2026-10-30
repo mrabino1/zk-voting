@@ -2309,6 +2309,18 @@ describe('ALLOW_REVOTE', () => {
       assert.equal(added.nullifier, String(listed));
       assert.equal(Number.isInteger(added.at), true);
       assert.equal(added.error, undefined);
+      const stuck = chain.diagnostics().alerts.filter(
+        (row) => row.kind === 'exclusion_release_failed' && String(row.nullifier) === String(listed),
+      );
+      assert.equal(stuck.length, 1);
+      const again = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [0, 0] } });
+      assert.equal(again.status, 409, again.text);
+      assert.equal(again.json.code, 'EXCLUSION_RELEASE_PENDING');
+      const stuckAfter = chain.diagnostics().alerts.filter(
+        (row) => row.kind === 'exclusion_release_failed' && String(row.nullifier) === String(listed),
+      );
+      assert.equal(stuckAfter.length, 1);
+      assert.equal(chain.diagnostics().alerts.length, before + 1);
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
       await rm(tmp, { recursive: true, force: true });

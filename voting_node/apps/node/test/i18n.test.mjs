@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 
+import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from '../src/config.mjs';
 import {
   DEFAULT_LOCALE,
   HTML_LANG,
@@ -15,6 +16,7 @@ import {
   flattenKeys,
   getLocale,
   localeTag,
+  receiptHelpKey,
   resetLocaleForTests,
   setLocale,
   t,
@@ -158,6 +160,55 @@ describe('website i18n', () => {
     resetLocaleForTests('hi');
     assert.equal(t('vote.officialBallot', { count: 1 }), 'आधिकारिक मतपत्र · 1 प्रश्न');
     assert.equal(t('vote.officialBallot', { count: 2 }), 'आधिकारिक मतपत्र · 2 प्रश्न');
+  });
+
+  test('receipt help follows ALLOW_REVOTE in every locale', () => {
+    const once = {
+      en: 'You may vote only once; a second ballot for the same nullifier is rejected.',
+      es: 'Solo puede votar una vez; una segunda boleta para el mismo nullifier es rechazada.',
+      zh: '您只能投票一次；同一 nullifier 的第二张选票会被拒绝。',
+      fil: 'Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota para sa parehong nullifier.',
+      vi: 'Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai cho cùng nullifier bị từ chối.',
+      ar: 'يمكنك التصويت مرة واحدة فقط؛ تُرفض ورقة ثانية لنفس الـ nullifier.',
+      fr: 'Vous ne pouvez voter qu’une fois ; un second bulletin pour le même nullifier est rejeté.',
+      ko: '한 번만 투표할 수 있으며, 같은 nullifier의 두 번째 투표용지는 거부됩니다.',
+      pt: 'Você pode votar apenas uma vez; uma segunda cédula para o mesmo nullifier é rejeitada.',
+      hi: 'आप केवल एक बार मत दे सकते हैं; उसी nullifier के लिए दूसरा मतपत्र अस्वीकार किया जाता है।',
+    };
+    const revote = {
+      en: 'may re-vote until the deadline, with the last vote counting',
+      es: 'puede volver a votar hasta la fecha límite, y cuenta el último voto',
+      zh: '截止前可以重新投票，最后一次投票计入',
+      fil: 'maaaring bumoto muli hanggang sa deadline; ang huling boto ang binibilang',
+      vi: 'có thể bỏ phiếu lại cho đến hạn chót; phiếu cuối cùng được tính',
+      ar: 'يمكنه إعادة التصويت حتى الموعد النهائي، ويُحتسب آخر تصويت',
+      fr: 'peut revoter jusqu’à la date limite ; le dernier vote compte',
+      ko: '마감 전까지 다시 투표할 수 있고, 마지막 투표가 집계됩니다',
+      pt: 'pode votar de novo até o prazo; o último voto é o que conta',
+      hi: 'समय सीमा तक फिर मत दे सकता है; अंतिम मत गिना जाता है',
+    };
+    assert.equal(receiptHelpKey(false), 'vote.receiptHelp');
+    assert.equal(receiptHelpKey(undefined), 'vote.receiptHelp');
+    assert.equal(receiptHelpKey(true), 'vote.receiptHelpRevote');
+    assert.equal(getConfig({}).allowRevote, false);
+    assert.equal(receiptHelpKey(getConfig({}).allowRevote), 'vote.receiptHelp');
+    assert.equal(receiptHelpKey(getConfig({ allowRevote: true }).allowRevote), 'vote.receiptHelpRevote');
+    assert.throws(
+      () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
+      new RegExp(ALLOW_REVOTE_CHAIN_CONFIGURED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    );
+    const dicts = catalogs();
+    for (const code of SUPPORTED_LOCALES) {
+      resetLocaleForTests(code);
+      const single = dicts[code].vote.receiptHelp;
+      const again = dicts[code].vote.receiptHelpRevote;
+      assert.equal(t(receiptHelpKey(false)), single);
+      assert.equal(t(receiptHelpKey(true)), again);
+      assert.equal(single.includes(once[code]), true, code);
+      assert.equal(again.includes(revote[code]), true, code);
+      assert.equal(single.includes(revote[code]), false, code);
+      assert.equal(again.includes(once[code]), false, code);
+    }
   });
 
   test('unsupported locale stays English', () => {

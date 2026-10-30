@@ -137,7 +137,7 @@ describe('explorer ingest', () => {
     }
   });
 
-  test('the latest poll_params and poll_tally replace the earlier row for that election', async () => {
+  test('a newer poll row is appended and readers follow block order', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
     try {
       const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
@@ -146,22 +146,102 @@ describe('explorer ingest', () => {
       const p1 = { outcomes: { poll_params: [{ electionId: 'poll-1', floor: 1 }] } };
       const p2 = { outcomes: { poll_params: [{ electionId: 'poll-1', floor: 2 }] } };
       const first = await explorer.ingest(p1, now, 0);
+      const published = explorer.chain.blocks.map((block) => ({
+        hash: block.hash,
+        parentHash: block.parentHash,
+        transactions: [...block.transactions],
+      }));
       const second = await explorer.ingest(p2, now, 0);
       const replay = await explorer.ingest(p2, now, 0);
       assert.equal(first.imported, 1);
       assert.equal(second.imported, 1);
       assert.equal(replay.imported, 0);
-      const params = () => Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_params');
-      assert.equal(params().length, 1);
-      assert.equal(params()[0].payload.floor, 2);
+      const params = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_params');
+      assert.equal(params.length, 2);
+      assert.equal(explorer.latestPollRecord('poll_params', 'poll-1').payload.floor, 2);
+      assert.deepEqual(
+        explorer.chain.blocks.slice(0, published.length).map((block) => ({
+          hash: block.hash,
+          parentHash: block.parentHash,
+          transactions: [...block.transactions],
+        })),
+        published,
+      );
+      const earlier = params.find((tx) => tx.payload.floor === 1);
+      const latest = explorer.latestPollRecord('poll_params', 'poll-1');
+      assert.equal(explorer.chain.supersededBy[earlier.hash], latest.hash);
+      assert.equal(JSON.stringify(earlier).includes('supersededBy'), false);
       const t1 = await explorer.ingest({ outcomes: { poll_tally: [{ electionId: 'poll-1', yes: 1 }] } }, now, 0);
       const t2 = await explorer.ingest({ outcomes: { poll_tally: [{ electionId: 'poll-1', yes: 2 }] } }, now, 0);
       assert.equal(t1.imported, 1);
       assert.equal(t2.imported, 1);
       const tallies = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_tally');
-      assert.equal(tallies.length, 1);
-      assert.equal(tallies[0].payload.yes, 2);
-      assert.equal(params().length, 1);
+      assert.equal(tallies.length, 2);
+      assert.equal(explorer.latestPollRecord('poll_tally', 'poll-1').payload.yes, 2);
+      assert.equal(params.length, 2);
+      const reversed = {};
+      const entries = Object.entries(explorer.chain.txs);
+      for (let i = entries.length - 1; i >= 0; i -= 1) reversed[entries[i][0]] = entries[i][1];
+      explorer.chain.txs = reversed;
+      assert.equal(explorer.latestPollRecord('poll_tally', 'poll-1').payload.yes, 2);
+      const sameBlock = await explorer.appendMany(
+        'poll_tally',
+        [
+          { electionId: 'poll-idx', counts: [1] },
+          { electionId: 'poll-idx', counts: [2] },
+        ],
+        now,
+      );
+      assert.equal(sameBlock.block.transactions.length, 2);
+      assert.deepEqual(explorer.latestPollRecord('poll_tally', 'poll-idx').payload.counts, [2]);
+      assert.equal(explorer.verifyBlockHashes(), true);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('an older tally replay after the outcome cap does not replace the latest', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      const tally = (counts) => ({ outcomes: { poll_tally: [{ electionId: 'poll-1', counts }] } });
+      const first = await explorer.ingest(tally([1]), now, 0);
+      const second = await explorer.ingest(tally([2]), now, 0);
+      assert.equal(first.imported, 1);
+      assert.equal(second.imported, 1);
+      for (let i = 0; i < 65; i += 1) {
+        const extra = await explorer.ingest(
+          { outcomes: { poll_params: [{ electionId: `other-${i}`, floor: i }] } },
+          now,
+          0,
+        );
+        assert.equal(extra.imported, 1);
+      }
+      const before = explorer.chain.blocks.map((block) => ({
+        hash: block.hash,
+        parentHash: block.parentHash,
+        txCount: block.txCount,
+        transactions: [...block.transactions],
+      }));
+      const replay = await explorer.ingest(tally([1]), now, 0);
+      assert.equal(replay.imported, 0);
+      assert.deepEqual(explorer.latestPollRecord('poll_tally', 'poll-1').payload.counts, [2]);
+      const stored = Object.values(explorer.chain.txs).filter(
+        (tx) => tx.type === 'poll_tally' && String(tx.payload.electionId) === 'poll-1',
+      );
+      assert.equal(stored.length, 2);
+      assert.deepEqual(
+        explorer.chain.blocks.map((block) => ({
+          hash: block.hash,
+          parentHash: block.parentHash,
+          txCount: block.txCount,
+          transactions: [...block.transactions],
+        })),
+        before,
+      );
+      assert.equal(explorer.verifyBlockHashes(), true);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

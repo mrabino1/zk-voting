@@ -32,7 +32,7 @@ These are **meant** to be public. The explorer should render them in plain langu
 | --- | --- |
 | Blocks | Number, hash, parent, timestamp, state root, sequencer address, tx count. |
 | Registration | `identityCommitment` (field element / bytes32) inserted into the election tree. Leaf **index** if the contract emits it. Never a legal name. |
-| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor**. Timestamp is the disclosure clock, not the minute they voted. Each voter is counted once and may re-vote until the deadline, with the last vote counting. |
+| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor**. Timestamp is the disclosure clock, not the minute they voted. Each voter is counted once. Where the election allows it, a voter may re-vote until the deadline, with the last vote counting; otherwise a second ballot is rejected. |
 | Disqualification | `identityCommitment`, `electionId`, **reason code** (and label, e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revoke events. |
 | Roll freeze | Eligible root, disqualification root, clerk, time. |
 | Tally | Per-option **counts** (after a valid tally proof), `countsHash`, operator. |

@@ -392,7 +392,7 @@ export default {
     maxOptions: "You may choose at most {count} options.",
     receiptTitle: "Ballot receipt",
     receiptHelp:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. Each voter is counted once and may re-vote until the deadline, with the last vote counting. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     recorded: "Recorded",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",
@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted.",
     receiptHelpRevote:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. Each voter is counted once and may re-vote until the deadline, with the last vote counting. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     envelopeHelpRevote:
       "Mark every question. One envelope covers the whole ballot. You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. Two ballots are not both counted. The receipt cannot prove how you voted.",
     envelopeHelpTallyRevote:

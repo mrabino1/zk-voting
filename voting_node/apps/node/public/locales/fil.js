@@ -392,7 +392,7 @@ export default {
     maxOptions: "Maaari kang pumili ng hanggang {count} opsyon.",
     receiptTitle: "Resibo ng balota",
     receiptHelp:
-      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Isang beses lang binibilang ang bawat botante at maaaring bumoto muli hanggang sa deadline; ang huling boto ang binibilang. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras na naglalaman ng balotang ito.",
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota para sa parehong nullifier. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras na naglalaman ng balotang ito.",
     recorded: "Naitala",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",
@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa tally public key ng mga guardian. Ang pagbukas nito pagkatapos ng cutoff ay nangangailangan ng t na beripikadong partial decryption (HINDI PRODUKSYON). Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     receiptHelpRevote:
-      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa final tally. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras at lumipas ang disclosure delay.",
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Isang beses lang binibilang ang bawat botante at maaaring bumoto muli hanggang sa deadline; ang huling boto ang binibilang. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras at lumipas ang disclosure delay.",
     envelopeHelpRevote:
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa final tally. Hindi parehong binibilang ang dalawa. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     envelopeHelpTallyRevote:

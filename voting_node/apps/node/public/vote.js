@@ -20,7 +20,7 @@ import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
-import { t } from "./i18n.js";
+import { receiptHelpKey, t } from "./i18n.js";
 
 function tallyEncryptionBlurb(election) {
   const ceremony = election.tallyCeremony;
@@ -587,7 +587,7 @@ export async function renderVote(main, ctx) {
     }
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
-      children.push(renderReceipt(state, { h, api, announce, election, paint, voteCopy }));
+      children.push(renderReceipt(state, { h, api, announce, election, paint, allowRevote }));
       children.push(
         h(
           "p",
@@ -893,7 +893,7 @@ export async function renderVote(main, ctx) {
   paint();
 }
 
-function renderReceipt(state, { h, api, announce, election, paint, voteCopy }) {
+function renderReceipt(state, { h, api, announce, election, paint, allowRevote }) {
   const receipt = state.receipt || {};
   const proof =
     receipt.proofText ||
@@ -1001,7 +1001,7 @@ function renderReceipt(state, { h, api, announce, election, paint, voteCopy }) {
     h(
       "p",
       {
-        text: voteCopy("vote.receiptHelp"),
+        text: t(receiptHelpKey(allowRevote)),
       }
     ),
     h("p", {

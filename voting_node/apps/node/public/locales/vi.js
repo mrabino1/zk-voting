@@ -392,7 +392,7 @@ export default {
     maxOptions: "Bạn được chọn tối đa {count} lựa chọn.",
     receiptTitle: "Biên lai phiếu",
     receiptHelp:
-      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Mỗi cử tri được tính một lần và có thể bỏ phiếu lại cho đến hạn chót; phiếu cuối cùng được tính. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai cho cùng nullifier bị từ chối. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
     recorded: "Đã ghi",
     ballotHash: "Hash phiếu",
     nullifier: "Nullifier",
@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của các giám hộ. Mở nó sau hết hạn cần t giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     receiptHelpRevote:
-      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Hàng trình khám phá công khai chờ đến khi giờ đóng và độ trễ công bố trôi qua.",
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Mỗi cử tri được tính một lần và có thể bỏ phiếu lại cho đến hạn chót; phiếu cuối cùng được tính. Hàng trình khám phá công khai chờ đến khi giờ đóng và độ trễ công bố trôi qua.",
     envelopeHelpRevote:
       "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Không tính cả hai. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     envelopeHelpTallyRevote:
