@@ -392,7 +392,7 @@ export default {
     maxOptions: "Vous pouvez choisir au plus {count} options.",
     receiptTitle: "Reçu du bulletin",
     receiptHelp:
-      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous ne pouvez voter qu’une fois ; un second bulletin pour le même nullifier est rejeté. Les lignes publiques de l’explorateur attendent la clôture de l’heure qui contenait ce bulletin.",
+      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous ne pouvez voter qu’une fois ; un second bulletin de votre part est rejeté. Les lignes publiques de l’explorateur attendent la clôture de l’heure qui contenait ce bulletin.",
     recorded: "Enregistré",
     ballotHash: "Hachage du bulletin",
     nullifier: "Nullifier",

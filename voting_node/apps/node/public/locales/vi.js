@@ -392,7 +392,7 @@ export default {
     maxOptions: "Bạn được chọn tối đa {count} lựa chọn.",
     receiptTitle: "Biên lai phiếu",
     receiptHelp:
-      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai cho cùng nullifier bị từ chối. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai của bạn bị từ chối. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
     recorded: "Đã ghi",
     ballotHash: "Hash phiếu",
     nullifier: "Nullifier",

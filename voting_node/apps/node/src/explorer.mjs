@@ -51,9 +51,15 @@ function withoutChoiceFields(payload) {
 }
 
 /** Vote rows follow the same hourly import as a poll. An unknown election fails closed. */
+function pollIdOf(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const id = payload.pollId ?? payload.electionId;
+  return id != null ? String(id) : '';
+}
+
 function voteImportBlocked(explorer, payload) {
   const policy = explorer.disclosurePolicySnapshot();
-  const id = String((payload && payload.electionId) ?? '');
+  const id = pollIdOf(payload);
   const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
   return ctx.known === false;
 }
@@ -66,7 +72,7 @@ function voteImportBlocked(explorer, payload) {
 function choiceRowBlocked(explorer, type, payload, at) {
   if (!isChoiceDisclosure(type, payload)) return false;
   const policy = explorer.disclosurePolicySnapshot();
-  const id = String((payload && payload.electionId) ?? '');
+  const id = pollIdOf(payload);
   const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
   if (ctx.known === false) return true;
   if (ctx.vote === true) {
@@ -94,6 +100,8 @@ function emptyChain(chainId) {
     ingestedOutcomeKeys: [],
     // Not part of a block hash. Maps an earlier poll row hash to the later one.
     supersededBy: {},
+    // Not part of a block hash. Source L2 height, sequence, or postedAt per tx.
+    sourceOrder: {},
   };
 }
 
@@ -111,6 +119,53 @@ function stable(value) {
 
 function payloadIndexKey(type, payload) {
   return `${String(type || '').toLowerCase()}|${stable(payload)}`;
+}
+
+function finiteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Source L2 height and index, or a sequence, or postedAt when the source has no height. */
+function sourceOrderOf(payload, block, index) {
+  const body = payload && typeof payload === 'object' ? payload : {};
+  const height = finiteNumber(block?.number ?? block?.height ?? body.l2Block ?? body.blockNumber ?? body.sourceBlock);
+  const listed = finiteNumber(body.txIndex);
+  const at = listed != null ? listed : finiteNumber(index) ?? 0;
+  if (height != null) return { height, index: at };
+  const sequence = finiteNumber(body.sequence ?? body.tallySequence);
+  if (sequence != null) return { sequence, index: 0 };
+  const postedAt = finiteNumber(body.postedAt);
+  if (postedAt != null) return { postedAt, index: 0 };
+  return null;
+}
+
+/** Negative when `a` is older than `b`. Null when the two orders cannot be compared. */
+function compareSource(a, b) {
+  if (!a || !b) return null;
+  if (a.height != null && b.height != null) {
+    if (a.height !== b.height) return a.height < b.height ? -1 : 1;
+    const ai = a.index ?? 0;
+    const bi = b.index ?? 0;
+    if (ai !== bi) return ai < bi ? -1 : 1;
+    return 0;
+  }
+  if (a.sequence != null && b.sequence != null) {
+    if (a.sequence !== b.sequence) return a.sequence < b.sequence ? -1 : 1;
+    return 0;
+  }
+  if (a.postedAt != null && b.postedAt != null) {
+    if (a.postedAt !== b.postedAt) return a.postedAt < b.postedAt ? -1 : 1;
+    return 0;
+  }
+  return null;
+}
+
+function pollCandidateWins(next, prev) {
+  const cmp = compareSource(next.order, prev.order);
+  if (cmp != null) return cmp > 0;
+  if (next.position.number !== prev.position.number) return next.position.number > prev.position.number;
+  return next.position.index > prev.position.index;
 }
 
 /** Stable id for a row that arrived without a transaction hash. */
@@ -161,6 +216,9 @@ function normalizeChain(chain, chainId) {
   chain.ingestedOutcomeKeys = Array.isArray(chain.ingestedOutcomeKeys) ? chain.ingestedOutcomeKeys : [];
   if (!chain.supersededBy || typeof chain.supersededBy !== 'object' || Array.isArray(chain.supersededBy)) {
     chain.supersededBy = {};
+  }
+  if (!chain.sourceOrder || typeof chain.sourceOrder !== 'object' || Array.isArray(chain.sourceOrder)) {
+    chain.sourceOrder = {};
   }
   return chain;
 }
@@ -250,9 +308,19 @@ export class Explorer {
     // the chain, so its in-memory copy is authoritative: skip the full reload
     // the JSON backend does before each append. Standbys still reload.
     if (this.pg && this.writerActive !== false && this.pg.epoch > 0) return this.chain;
+    const side = this.chain
+      ? {
+          supersededBy: { ...(this.chain.supersededBy || {}) },
+          sourceOrder: { ...(this.chain.sourceOrder || {}) },
+        }
+      : null;
     const stored = this.pg ? await this.pg.load() : await readChainFile(this.filePath);
     if (stored && Array.isArray(stored.blocks)) {
       this.chain = normalizeChain(stored, this.chain.chainId);
+      if (side) {
+        this.chain.supersededBy = { ...(this.chain.supersededBy || {}), ...side.supersededBy };
+        this.chain.sourceOrder = { ...(this.chain.sourceOrder || {}), ...side.sourceOrder };
+      }
     }
     return this.chain;
   }
@@ -298,6 +366,7 @@ export class Explorer {
       this.chain.txs[hash] = tx;
       hashes.push(hash);
       this.rememberPayload(type, payload, hash);
+      this.noteTrackedTx(type, payload, hash, { number, index: i });
     }
     const blockHash = keccak256(
       stringToHex(stable({ number, parentHash, timestamp: ts, transactions: hashes })),
@@ -506,21 +575,29 @@ export class Explorer {
       }
       if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
         const body = row.payload || row;
+        if (type === 'poll_params' || type === 'poll_tally') {
+          // Source order first, so a late copy of an earlier row is not appended.
+          const order = sourceOrderOf(body, block, rowIndex);
+          if (this.olderThanLatestPoll(type, body, order)) {
+            this.noteIngestedTx(type, body, blockHash, rowIndex);
+            continue;
+          }
+        }
         if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
         if (type === 'poll_vote' && !l2Delayed) {
           await this.recordPollVote(body, now, intervalSeconds);
         } else if (type === 'poll_params' || type === 'poll_tally') {
-          // Published rows stay in their blocks. A replay of an earlier row is
-          // not appended, or block order would treat it as the new latest.
-          if (this.olderThanLatestPoll(type, body)) continue;
-          const electionId = body && body.electionId != null ? String(body.electionId) : '';
-          const previous = electionId ? this.latestPollRecord(type, electionId) : null;
+          const pollId = body?.pollId ?? body?.electionId;
+          const id = pollId != null ? String(pollId) : '';
+          const previous = id ? this.latestPollRecord(type, id) : null;
+          const order = sourceOrderOf(body, block, rowIndex);
           const appended = await this.append(type, body, { timestamp: blockTs || now });
           const hash = appended?.tx?.hash;
-          if (previous?.hash && hash && previous.hash !== hash) {
-            this.noteSuperseded(previous.hash, hash);
-            await this.persist();
+          if (hash) {
+            this.noteSource(hash, order);
+            this.noteTrackedTx(type, body, hash, { number: Number(appended.block?.number), index: 0 });
           }
+          if (previous?.hash && hash && previous.hash !== hash) this.noteSuperseded(previous.hash, hash);
         } else {
           await this.append(type, body, { timestamp: blockTs || now });
         }
@@ -597,20 +674,25 @@ export class Explorer {
   }
 
   /**
-   * type|stable(payload) → earliest tx hash. Built from block order once per
-   * load so a lookup does not scan every row.
+   * type|stable(payload) → earliest tx hash, plus the latest poll row per id.
+   * Built once per load so a lookup does not scan every row.
    */
   indexStoredPayloads() {
     this._payloadIndex = new Map();
+    this._txAt = new Map();
+    this._pollLatest = new Map();
     const blocks = [...(this.chain?.blocks || [])].sort((a, b) => Number(a.number) - Number(b.number));
     for (const block of blocks) {
       const hashes = block.transactions || [];
       for (let index = 0; index < hashes.length; index += 1) {
-        const hash = hashes[index];
+        const hash = String(hashes[index]);
         const tx = this.chain.txs?.[hash];
         if (!tx) continue;
+        const position = { number: Number(block.number), index };
+        this._txAt.set(hash, position);
         const key = payloadIndexKey(tx.type, tx.payload);
-        if (!this._payloadIndex.has(key)) this._payloadIndex.set(key, String(hash));
+        if (!this._payloadIndex.has(key)) this._payloadIndex.set(key, hash);
+        this.considerPoll(tx, hash, position);
       }
     }
   }
@@ -619,6 +701,25 @@ export class Explorer {
     if (!(this._payloadIndex instanceof Map) || !hash) return;
     const key = payloadIndexKey(type, payload);
     if (!this._payloadIndex.has(key)) this._payloadIndex.set(key, String(hash));
+  }
+
+  noteTrackedTx(type, payload, hash, position) {
+    if (!(this._txAt instanceof Map) || !hash) return;
+    this._txAt.set(String(hash), position);
+    if (!(this._pollLatest instanceof Map)) return;
+    this.considerPoll({ type, payload }, hash, position);
+  }
+
+  considerPoll(tx, hash, position) {
+    const name = String(tx?.type || '').toLowerCase();
+    if (name !== 'poll_params' && name !== 'poll_tally') return;
+    const id = pollIdOf(tx.payload);
+    if (!id || !(this._pollLatest instanceof Map)) return;
+    const order = this.chain.sourceOrder?.[hash] || null;
+    const candidate = { hash: String(hash), order, position };
+    const key = `${name}|${id}`;
+    const prev = this._pollLatest.get(key);
+    if (!prev || pollCandidateWins(candidate, prev)) this._pollLatest.set(key, candidate);
   }
 
   /** Side index only. Block and transaction hashes do not cover this map. */
@@ -632,60 +733,53 @@ export class Explorer {
     this.chain.supersededBy[from] = to;
   }
 
+  /** Side index only. Source order is not part of the block hash. */
+  noteSource(hash, order) {
+    if (!hash || !order) return;
+    if (!this.chain.sourceOrder || typeof this.chain.sourceOrder !== 'object' || Array.isArray(this.chain.sourceOrder)) {
+      this.chain.sourceOrder = {};
+    }
+    this.chain.sourceOrder[String(hash)] = order;
+  }
+
   blockPosition(hash) {
     const want = String(hash || '');
     if (!want) return null;
-    for (const block of this.chain?.blocks || []) {
-      const list = block.transactions || [];
-      for (let index = 0; index < list.length; index += 1) {
-        if (String(list[index]) === want) return { number: Number(block.number), index };
-      }
-    }
-    return null;
+    if (!(this._txAt instanceof Map)) this.indexStoredPayloads();
+    return this._txAt.get(want) || null;
   }
 
   /**
-   * Latest poll_params or poll_tally for one election. Block height, then
-   * the index inside that block. Object insertion order is not consulted.
+   * Latest poll_params or poll_tally for one poll. Source L2 height, then
+   * index. A sequence or postedAt is used when the source has no height.
    */
   latestPollRecord(type, electionId) {
     const name = String(type || '').toLowerCase();
-    const id = electionId != null ? String(electionId) : '';
+    const body = electionId && typeof electionId === 'object' ? electionId : { pollId: electionId };
+    const listed = body?.pollId ?? body?.electionId;
+    const id = listed != null && listed !== '' ? String(listed) : '';
     if (!id || (name !== 'poll_params' && name !== 'poll_tally')) return null;
-    const blocks = [...(this.chain?.blocks || [])].sort((a, b) => Number(a.number) - Number(b.number));
-    let found = null;
-    for (const block of blocks) {
-      const hashes = block.transactions || [];
-      for (let index = 0; index < hashes.length; index += 1) {
-        const tx = this.chain.txs?.[hashes[index]];
-        if (!tx || String(tx.type || '').toLowerCase() !== name) continue;
-        const rowId = tx.payload && tx.payload.electionId != null ? String(tx.payload.electionId) : '';
-        if (rowId !== id) continue;
-        found = tx;
-      }
-    }
-    return found;
+    if (!(this._pollLatest instanceof Map)) this.indexStoredPayloads();
+    const hit = this._pollLatest.get(`${name}|${id}`);
+    if (!hit) return null;
+    return this.chain.txs?.[hit.hash] || null;
   }
 
   /**
-   * True when this payload is already published at or before the latest row
-   * for that election. Appending it again would make the older row win.
+   * True when this row's source order is not strictly newer than the latest
+   * stored row for that poll. Appending it would make the older row win.
    */
-  olderThanLatestPoll(type, payload) {
+  olderThanLatestPoll(type, payload, order) {
     const name = String(type || '').toLowerCase();
     if (name !== 'poll_params' && name !== 'poll_tally') return false;
-    const electionId = payload && payload.electionId != null ? String(payload.electionId) : '';
-    if (!electionId) return false;
-    const latest = this.latestPollRecord(name, electionId);
+    const id = payload?.pollId ?? payload?.electionId;
+    if (id == null || id === '') return false;
+    const latest = this.latestPollRecord(name, id);
     if (!latest) return false;
-    if (!(this._payloadIndex instanceof Map)) this.indexStoredPayloads();
-    const existing = this._payloadIndex.get(payloadIndexKey(name, payload));
-    if (!existing) return false;
-    const pos = this.blockPosition(existing);
-    const latestPos = this.blockPosition(latest.hash);
-    if (!pos || !latestPos) return true;
-    if (pos.number !== latestPos.number) return pos.number < latestPos.number;
-    return pos.index <= latestPos.index;
+    const latestOrder = this.chain.sourceOrder?.[latest.hash] || null;
+    const cmp = compareSource(order, latestOrder);
+    if (cmp == null) return false;
+    return cmp <= 0;
   }
 
   /** Recompute every published block and transaction hash. */
@@ -798,7 +892,7 @@ export class Explorer {
   presentTx(tx) {
     if (!tx) return null;
     const payload = tx.payload && typeof tx.payload === 'object' ? tx.payload : {};
-    return {
+    const presented = {
       ...payload,
       hash: tx.hash,
       blockNumber: tx.blockNumber,
@@ -808,6 +902,12 @@ export class Explorer {
       relayer: tx.relayer || payload.relayer,
       payload,
     };
+    const supersededBy = this.chain.supersededBy?.[tx.hash];
+    if (supersededBy) {
+      presented.superseded = true;
+      presented.supersededBy = supersededBy;
+    }
+    return presented;
   }
 
   listBlocks() {

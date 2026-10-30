@@ -392,7 +392,7 @@ export default {
     maxOptions: "Você pode escolher no máximo {count} opções.",
     receiptTitle: "Recibo da cédula",
     receiptHelp:
-      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode votar apenas uma vez; uma segunda cédula para o mesmo nullifier é rejeitada. As linhas públicas do explorador esperam a hora que continha esta cédula se encerrar.",
+      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode votar apenas uma vez; uma segunda cédula sua é rejeitada. As linhas públicas do explorador esperam a hora que continha esta cédula se encerrar.",
     recorded: "Registrado",
     ballotHash: "Hash da cédula",
     nullifier: "Nullifier",

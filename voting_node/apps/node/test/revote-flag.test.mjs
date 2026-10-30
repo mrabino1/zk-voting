@@ -2321,6 +2321,28 @@ describe('ALLOW_REVOTE', () => {
       );
       assert.equal(stuckAfter.length, 1);
       assert.equal(chain.diagnostics().alerts.length, before + 1);
+      chain.releaseExcluded = async () => true;
+      const cleared = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [0, 0] } });
+      assert.notEqual(cleared.status, 502);
+      assert.equal(created.store.requireElection(id).excludedBallots[0].releasePending, undefined);
+      const clearedAlerts = chain.diagnostics().alerts.filter(
+        (row) => row.kind === 'exclusion_release_failed' && String(row.nullifier) === String(listed),
+      );
+      assert.equal(clearedAlerts.length, 0);
+      const heldAgain = created.store.requireElection(id);
+      heldAgain.excludedBallots[0].releasePending = true;
+      await created.store.persist();
+      chain.releaseExcluded = async () => false;
+      const beforeRetry = chain.diagnostics().alerts.filter(
+        (row) => row.kind === 'exclusion_release_failed' && String(row.nullifier) === String(listed),
+      ).length;
+      const retried = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [0, 0] } });
+      assert.equal(retried.status, 409, retried.text);
+      assert.equal(retried.json.code, 'EXCLUSION_RELEASE_PENDING');
+      const afterRetry = chain.diagnostics().alerts.filter(
+        (row) => row.kind === 'exclusion_release_failed' && String(row.nullifier) === String(listed),
+      ).length;
+      assert.equal(afterRetry, beforeRetry + 1);
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
       await rm(tmp, { recursive: true, force: true });

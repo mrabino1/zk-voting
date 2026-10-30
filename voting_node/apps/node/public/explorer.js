@@ -191,6 +191,10 @@
       out.stateRoot = pick(tx, ["newStateRoot", "stateRoot", "eligibleRoot"]);
       out.title = pick(tx, ["title", "payload.title"]);
     }
+    if (tx.superseded) {
+      out.superseded = true;
+      out.supersededBy = tx.supersededBy;
+    }
     return out;
   }
 
@@ -402,6 +406,7 @@
         tx.blockNumber != null ? `<a href="#/block/${esc(tx.blockNumber)}">${esc(tx.blockNumber)}</a>` : "—",
       ],
       ["Timestamp", esc(fmtTime(tx.timestamp))],
+      ...(tx.superseded ? [["Status", "superseded"]] : []),
       [
         "Election",
         tx.electionId != null

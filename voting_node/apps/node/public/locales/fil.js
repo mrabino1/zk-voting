@@ -392,7 +392,7 @@ export default {
     maxOptions: "Maaari kang pumili ng hanggang {count} opsyon.",
     receiptTitle: "Resibo ng balota",
     receiptHelp:
-      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota para sa parehong nullifier. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras na naglalaman ng balotang ito.",
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota mula sa iyo. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras na naglalaman ng balotang ito.",
     recorded: "Naitala",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",

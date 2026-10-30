@@ -392,7 +392,7 @@ export default {
     maxOptions: "您最多可选择 {count} 项。",
     receiptTitle: "选票收据",
     receiptHelp:
-      "此收据无法证明您如何投票。它只列出哈希。不含您勾选的选项、密文开口或 trapdoor。您只能投票一次；同一 nullifier 的第二张选票会被拒绝。公开浏览器行要等到包含此选票的小时结束。",
+      "此收据无法证明您如何投票。它只列出哈希。不含您勾选的选项、密文开口或 trapdoor。您只能投票一次；您的第二张选票会被拒绝。公开浏览器行要等到包含此选票的小时结束。",
     recorded: "已记录",
     ballotHash: "选票哈希",
     nullifier: "Nullifier",

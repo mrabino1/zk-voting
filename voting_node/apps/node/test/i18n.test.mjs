@@ -164,16 +164,16 @@ describe('website i18n', () => {
 
   test('receipt help follows ALLOW_REVOTE in every locale', () => {
     const once = {
-      en: 'You may vote only once; a second ballot for the same nullifier is rejected.',
-      es: 'Solo puede votar una vez; una segunda boleta para el mismo nullifier es rechazada.',
-      zh: '您只能投票一次；同一 nullifier 的第二张选票会被拒绝。',
-      fil: 'Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota para sa parehong nullifier.',
-      vi: 'Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai cho cùng nullifier bị từ chối.',
-      ar: 'يمكنك التصويت مرة واحدة فقط؛ تُرفض ورقة ثانية لنفس الـ nullifier.',
-      fr: 'Vous ne pouvez voter qu’une fois ; un second bulletin pour le même nullifier est rejeté.',
-      ko: '한 번만 투표할 수 있으며, 같은 nullifier의 두 번째 투표용지는 거부됩니다.',
-      pt: 'Você pode votar apenas uma vez; uma segunda cédula para o mesmo nullifier é rejeitada.',
-      hi: 'आप केवल एक बार मत दे सकते हैं; उसी nullifier के लिए दूसरा मतपत्र अस्वीकार किया जाता है।',
+      en: 'You may vote only once; a second ballot from you is rejected.',
+      es: 'Solo puede votar una vez; una segunda boleta de usted es rechazada.',
+      zh: '您只能投票一次；您的第二张选票会被拒绝。',
+      fil: 'Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota mula sa iyo.',
+      vi: 'Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai của bạn bị từ chối.',
+      ar: 'يمكنك التصويت مرة واحدة فقط؛ تُرفض ورقة ثانية منك.',
+      fr: 'Vous ne pouvez voter qu’une fois ; un second bulletin de votre part est rejeté.',
+      ko: '한 번만 투표할 수 있으며, 당신이 낸 두 번째 투표용지는 거부됩니다.',
+      pt: 'Você pode votar apenas uma vez; uma segunda cédula sua é rejeitada.',
+      hi: 'आप केवल एक बार मत दे सकते हैं; आपका दूसरा मतपत्र अस्वीकार किया जाता है।',
     };
     const revote = {
       en: 'may re-vote until the deadline, with the last vote counting',

@@ -98,8 +98,15 @@ function notExcluded(store, election, nullifier) {
 }
 
 const EXCLUSION_RELEASE_ATTEMPTS = 3;
+const exclusionReleaseAlertedKeys = new Set();
+
+function exclusionAlertKey(electionId, nullifier) {
+  return `${String(electionId)}:${String(nullifier)}`;
+}
 
 function exclusionReleaseAlerted(chain, electionId, nullifier) {
+  const key = exclusionAlertKey(electionId, nullifier);
+  if (exclusionReleaseAlertedKeys.has(key)) return true;
   if (typeof chain?.diagnostics !== 'function') return false;
   const electionKey = String(electionId);
   const id = String(nullifier);
@@ -111,6 +118,20 @@ function exclusionReleaseAlerted(chain, electionId, nullifier) {
       String(row.electionKey) === electionKey &&
       String(row.nullifier) === id,
   );
+}
+
+function rememberExclusionReleaseAlert(electionId, nullifier) {
+  exclusionReleaseAlertedKeys.add(exclusionAlertKey(electionId, nullifier));
+}
+
+async function clearExclusionReleaseAlert(chain, electionId, nullifier) {
+  exclusionReleaseAlertedKeys.delete(exclusionAlertKey(electionId, nullifier));
+  if (typeof chain?.clearAlert !== 'function') return;
+  await chain.clearAlert({
+    kind: 'exclusion_release_failed',
+    electionKey: String(electionId),
+    nullifier: String(nullifier),
+  });
 }
 
 /** Try again to drop a dead letter that was already recorded as excluded. */
@@ -129,6 +150,7 @@ async function retryPendingExclusionReleases({ store, chain, election }) {
     }
     if (released) {
       await store.setExclusionReleasePending(election.id, row.nullifier, false);
+      await clearExclusionReleaseAlert(chain, election.id, row.nullifier);
     } else {
       console.warn(`ballot exclusion release failed for election ${election.id} nullifier ${row.nullifier}`);
       if (typeof chain.noteAlert === 'function' && !exclusionReleaseAlerted(chain, election.id, row.nullifier)) {
@@ -138,6 +160,7 @@ async function retryPendingExclusionReleases({ store, chain, election }) {
           nullifier: String(row.nullifier),
           at: Math.floor(Date.now() / 1000),
         });
+        rememberExclusionReleaseAlert(election.id, row.nullifier);
       }
     }
   }

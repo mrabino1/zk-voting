@@ -1331,6 +1331,20 @@ export function createChain(config, extras = {}) {
       pushAlert(alert && typeof alert === 'object' ? alert : { kind: 'note', error: String(alert || '') });
       await persistQueue();
     },
+    async clearAlert(match) {
+      const kind = match && match.kind;
+      const electionKey = match && match.electionKey != null ? String(match.electionKey) : null;
+      const nullifier = match && match.nullifier != null ? String(match.nullifier) : null;
+      const before = alerts.length;
+      for (let i = alerts.length - 1; i >= 0; i -= 1) {
+        const row = alerts[i];
+        if (!row || row.kind !== kind) continue;
+        if (electionKey != null && String(row.electionKey) !== electionKey) continue;
+        if (nullifier != null && String(row.nullifier) !== nullifier) continue;
+        alerts.splice(i, 1);
+      }
+      if (alerts.length !== before) await persistQueue();
+    },
     reloadVoteQueue() {
       loadQueue();
     },

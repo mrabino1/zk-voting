@@ -392,7 +392,7 @@ export default {
     maxOptions: "Puede elegir como máximo {count} opciones.",
     receiptTitle: "Recibo de la boleta",
     receiptHelp:
-      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Solo puede votar una vez; una segunda boleta para el mismo nullifier es rechazada. Las filas públicas del explorador esperan a que cierre la hora que contuvo esta boleta.",
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Solo puede votar una vez; una segunda boleta de usted es rechazada. Las filas públicas del explorador esperan a que cierre la hora que contuvo esta boleta.",
     recorded: "Registrado",
     ballotHash: "Hash de la boleta",
     nullifier: "Nullifier",
