@@ -252,6 +252,32 @@ describe('poll results gate', () => {
     }
   });
 
+  test('reopening a store backfills past a soft-deleted row to the 100th visible hour', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-gate-'));
+    const H2 = H0 + 2 * HOUR;
+    try {
+      const store = await openStore(dir);
+      const poll = await createPoll(store, H0 + 10 * HOUR);
+      await castMany(store, poll.id, 0, 99, H0 + 10);
+      await castFirst(store, poll.id, 99, H1 + 20);
+      const hidden = store.data.votes.find((vote) => vote.nullifier === toBytes32(100));
+      assert.ok(hidden);
+      hidden.is_deleted = true;
+      await castFirst(store, poll.id, 100, H2 + 30);
+      const election = store.requireElection(poll.id);
+      assert.equal(store.visibleAcceptedBallots(election), 100);
+      delete election.resultsGateOpenedAt;
+      await store.persist();
+      const reloaded = await openStore(dir);
+      const again = reloaded.requireElection(poll.id);
+      assert.equal(again.acceptedBallots, 101);
+      assert.equal(reloaded.visibleAcceptedBallots(again), 100);
+      assert.equal(again.resultsGateOpenedAt, H2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('reopening a store with no latch backfills the 100th visible ballot hour', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-gate-'));
     const H2 = H0 + 2 * HOUR;

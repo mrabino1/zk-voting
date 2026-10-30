@@ -595,7 +595,7 @@ export class Store {
     store.ensureJurisdictionIds();
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
-    store.backfillResultsGates();
+    if (store.backfillResultsGates() && store.writerActive) await store.persist();
     for (const key of ARRAY_COLLECTIONS) {
       if (!Array.isArray(store.data[key])) store.data[key] = [];
     }
@@ -2670,10 +2670,12 @@ export class Store {
   /**
    * Older stores may have crossed the minimum before the latch existed.
    * Use the results-minimum-th visible ballot's accept time, not a later one.
+   * Returns true when this pass wrote at least one latch.
    */
   backfillResultsGates() {
     const min = Number(this.resultsMinVotes) || 0;
-    if (min <= 0) return;
+    if (min <= 0) return false;
+    let latched = false;
     for (const election of this.data.elections || []) {
       if (!election || isVoteElection(election)) continue;
       const existing = election.resultsGateOpenedAt;
@@ -2682,7 +2684,9 @@ export class Store {
       const acceptedAt = this.nthVisibleAcceptedAt(election, min);
       if (acceptedAt == null) continue;
       election.resultsGateOpenedAt = hourBucket(acceptedAt, this.disclosureIntervalSeconds);
+      latched = true;
     }
+    return latched;
   }
 
   /** Accept time of the 1-based nth visible ballot, ordered by acceptedAt. */
