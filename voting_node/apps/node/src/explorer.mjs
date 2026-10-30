@@ -150,9 +150,7 @@ function compareSource(a, b) {
   if (!a || !b) return null;
   if (a.closeBlock != null && b.closeBlock != null) {
     if (a.closeBlock !== b.closeBlock) return a.closeBlock < b.closeBlock ? -1 : 1;
-    const ai = a.index ?? 0;
-    const bi = b.index ?? 0;
-    if (ai !== bi) return ai < bi ? -1 : 1;
+    // Same closeBlock is a tie. The batch-local index is not a source order.
     return 0;
   }
   if (a.height != null && b.height != null) {
@@ -383,7 +381,11 @@ export class Explorer {
       this.chain.txs[hash] = tx;
       hashes.push(hash);
       this.rememberPayload(type, payload, hash);
-      this.noteSource(hash, sourceOrderOf(payload, null, i));
+      // Ballots have no source order. Only poll params and tallies do.
+      const listed = String(type || '').toLowerCase();
+      if (listed === 'poll_params' || listed === 'poll_tally') {
+        this.noteSource(hash, sourceOrderOf(payload, null, i));
+      }
       this.noteTrackedTx(type, payload, hash, { number, index: i });
     }
     const blockHash = keccak256(
@@ -597,6 +599,15 @@ export class Explorer {
         if (type === 'poll_params' || type === 'poll_tally') {
           // Source order first, so a late copy of an earlier row is not appended.
           order = sourceOrderOf(body, block, rowIndex);
+          const pollId = body?.pollId ?? body?.electionId;
+          const id = pollId != null ? String(pollId) : '';
+          const cmp = this.compareWithLatest(type, body, order);
+          if (cmp === 0 && type === 'poll_tally' && id && !this.storedPayload(type, body)) {
+            const latest = this.latestPollRecord(type, id);
+            await this.noteAlert({ kind: 'poll_tally_conflict', pollId: id, hash: latest?.hash || '' });
+            this.noteIngestedTx(type, body, blockHash, rowIndex);
+            continue;
+          }
           if (this.olderThanLatestPoll(type, body, order)) {
             this.noteIngestedTx(type, body, blockHash, rowIndex);
             continue;
@@ -617,10 +628,14 @@ export class Explorer {
             this.noteSource(hash, order);
             this.noteTrackedTx(type, body, hash, { number: Number(appended.block?.number), index: 0 });
           }
-          const latestOrder = previous ? this.chain.sourceOrder?.[previous.hash] || null : null;
+          const latestOrder = previous
+            ? this.chain.sourceOrder?.[previous.hash] || sourceOrderOf(this.chain.txs?.[previous.hash]?.payload, null, 0)
+            : null;
           const ranked = compareSource(order, latestOrder);
           if (previous?.hash && hash && ranked == null) {
             await this.noteAlert({ kind: 'poll_order_unknown', pollId: id, hash });
+          } else if (previous?.hash && hash && ranked === 0 && type === 'poll_tally') {
+            await this.noteAlert({ kind: 'poll_tally_conflict', pollId: id, hash });
           } else if (previous?.hash && hash && previous.hash !== hash && ranked > 0) {
             this.noteSuperseded(previous.hash, hash);
           }
@@ -718,6 +733,11 @@ export class Explorer {
         this._txAt.set(hash, position);
         const key = payloadIndexKey(tx.type, tx.payload);
         if (!this._payloadIndex.has(key)) this._payloadIndex.set(key, hash);
+        const name = String(tx.type || '').toLowerCase();
+        if ((name === 'poll_params' || name === 'poll_tally') && !this.chain.sourceOrder?.[hash]) {
+          const recovered = sourceOrderOf(tx.payload, null, 0);
+          if (recovered) this.noteSource(hash, recovered);
+        }
         this.considerPoll(tx, hash, position);
       }
     }
@@ -741,7 +761,7 @@ export class Explorer {
     if (name !== 'poll_params' && name !== 'poll_tally') return;
     const id = pollIdOf(tx.payload);
     if (!id || !(this._pollLatest instanceof Map)) return;
-    const order = this.chain.sourceOrder?.[hash] || null;
+    const order = this.chain.sourceOrder?.[hash] || sourceOrderOf(this.chain.txs?.[hash]?.payload, null, 0);
     const candidate = { hash: String(hash), order, position };
     const key = `${name}|${id}`;
     const prev = this._pollLatest.get(key);
@@ -749,7 +769,7 @@ export class Explorer {
       this._pollLatest.set(key, candidate);
       return;
     }
-    const prevOrder = this.chain.sourceOrder?.[prev.hash] || null;
+    const prevOrder = this.chain.sourceOrder?.[prev.hash] || sourceOrderOf(this.chain.txs?.[prev.hash]?.payload, null, 0);
     if (pollCandidateWins(candidate, { hash: prev.hash, order: prevOrder, position: prev.position })) {
       this._pollLatest.set(key, candidate);
     }
@@ -764,6 +784,7 @@ export class Explorer {
     };
     if (!Array.isArray(this.chain.alerts)) this.chain.alerts = [];
     this.chain.alerts.push(row);
+    if (this.chain.alerts.length > 20) this.chain.alerts.splice(0, this.chain.alerts.length - 20);
   }
 
   /** Side index only. Block and transaction hashes do not cover this map. */
@@ -820,10 +841,24 @@ export class Explorer {
     if (id == null || id === '') return false;
     const latest = this.latestPollRecord(name, id);
     if (!latest) return false;
-    const latestOrder = this.chain.sourceOrder?.[latest.hash] || null;
+    const latestOrder =
+      this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0);
     const cmp = compareSource(order, latestOrder);
     if (cmp == null) return false;
     return cmp <= 0;
+  }
+
+  /** Null when there is no latest row or the orders cannot be compared. */
+  compareWithLatest(type, payload, order) {
+    const name = String(type || '').toLowerCase();
+    if (name !== 'poll_params' && name !== 'poll_tally') return null;
+    const id = payload?.pollId ?? payload?.electionId;
+    if (id == null || id === '') return null;
+    const latest = this.latestPollRecord(name, id);
+    if (!latest) return null;
+    const latestOrder =
+      this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0);
+    return compareSource(order, latestOrder);
   }
 
   /** Recompute every published block and transaction hash. */
@@ -950,6 +985,10 @@ export class Explorer {
     if (supersededBy) {
       presented.superseded = true;
       presented.supersededBy = supersededBy;
+    }
+    const kind = String(tx.type || '').toLowerCase();
+    if ((kind === 'poll_params' || kind === 'poll_tally') && !sourceOrderOf(tx.payload, null, 0)) {
+      presented.orderUnknown = true;
     }
     return presented;
   }

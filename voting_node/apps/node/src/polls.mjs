@@ -309,6 +309,7 @@ export async function schedulePoll(deps, actor, id) {
   return presentPoll(poll, now);
 }
 
+/** Per process. Two Node processes can hand out the same sequence. postedAt still orders a later clock. */
 function nextPollParamsSequence(explorer) {
   let max = Number(explorer?.pollParamsSequence) || 0;
   const txs = explorer?.chain?.txs && typeof explorer.chain.txs === 'object' ? Object.values(explorer.chain.txs) : [];

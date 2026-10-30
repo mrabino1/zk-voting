@@ -972,6 +972,7 @@ export default {
     notTallied: "집계되지 않음({note})",
     status: "상태",
     superseded: "대체됨",
+    orderUnknown: "순서 알 수 없음",
     irvShort: "IRV",
   },
   sample: {

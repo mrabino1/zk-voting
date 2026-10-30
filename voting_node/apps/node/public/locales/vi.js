@@ -972,6 +972,7 @@ export default {
     notTallied: "chưa kiểm phiếu ({note})",
     status: "Trạng thái",
     superseded: "đã bị thay thế",
+    orderUnknown: "không rõ thứ tự",
     irvShort: "IRV",
   },
   sample: {

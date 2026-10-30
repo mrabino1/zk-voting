@@ -974,6 +974,7 @@ export default {
     notTallied: "गणना नहीं ({note})",
     status: "स्थिति",
     superseded: "प्रतिस्थापित",
+    orderUnknown: "क्रम अज्ञात",
     irvShort: "IRV",
   },
   sample: {

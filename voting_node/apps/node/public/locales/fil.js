@@ -972,6 +972,7 @@ export default {
     notTallied: "hindi nabilang ({note})",
     status: "Katayuan",
     superseded: "napalitan",
+    orderUnknown: "hindi alam ang pagkakasunod",
     irvShort: "IRV",
   },
   sample: {

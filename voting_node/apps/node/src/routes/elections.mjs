@@ -268,6 +268,7 @@ export function electionsRouter(deps) {
   const votePass = deps.votePass || createVotePassService(config);
   const exclusionReleaseAlertedKeys = new Set();
   const router = Router();
+  // Test-only. Dedupe for this router instance, not a public API.
   router.exclusionReleaseAlertedKeys = exclusionReleaseAlertedKeys;
   router.param('id', uuidParam('id'));
   router.param('requestId', uuidParam('requestId'));

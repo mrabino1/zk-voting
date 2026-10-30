@@ -972,6 +972,7 @@ export default {
     notTallied: "não apurado ({note})",
     status: "Estado",
     superseded: "substituído",
+    orderUnknown: "ordem desconhecida",
     irvShort: "IRV",
   },
   sample: {

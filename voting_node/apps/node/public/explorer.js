@@ -195,6 +195,7 @@
       out.superseded = true;
       out.supersededBy = tx.supersededBy;
     }
+    if (tx.orderUnknown) out.orderUnknown = true;
     return out;
   }
 
@@ -413,6 +414,12 @@
               (tx.supersededBy
                 ? ` <a href="#/tx/${encodeURIComponent(tx.supersededBy)}">${esc(tx.supersededBy)}</a>`
                 : ""),
+          ]]
+        : []),
+      ...(tx.orderUnknown
+        ? [[
+            t("explorer.status", null, "Status"),
+            esc(t("explorer.orderUnknown", null, "order unknown")),
           ]]
         : []),
       [

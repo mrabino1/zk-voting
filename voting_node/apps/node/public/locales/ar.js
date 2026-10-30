@@ -975,6 +975,7 @@ export default {
     notTallied: "غير مفروز ({note})",
     status: "الحالة",
     superseded: "مُستبدَل",
+    orderUnknown: "الترتيب غير معروف",
     irvShort: "IRV",
   },
   sample: {

@@ -279,6 +279,7 @@ export function l2Diag(deps) {
       headTimestamp: headTs || null,
       lagSeconds: headTs ? Math.max(0, now - headTs) : null,
       sealedCount: count(chain.sealed),
+      alerts: Array.isArray(chain.alerts) ? chain.alerts.slice(-20) : [],
     },
     inbox: typeof deps.chain?.diagnostics === 'function'
       ? deps.chain.diagnostics()
