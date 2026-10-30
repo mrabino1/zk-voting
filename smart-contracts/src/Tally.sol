@@ -88,18 +88,7 @@ contract Tally is ITallyVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external {
-        _rejectSealed(electionId);
-        _submitTally(electionId, counts, a, b, c);
-    }
-
-    function _submitTally(
-        uint256 electionId,
-        uint256[] calldata counts,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c
-    ) internal nonReentrant {
+    ) external nonReentrant {
         _requireNotPaused();
         if (counts.length == 0) revert EmptyCounts();
         if (counts.length > MAX_TALLY_OPTIONS) revert CountsTooLong();
@@ -144,19 +133,7 @@ contract Tally is ITallyVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external {
-        _rejectSealed(electionId);
-        _submitAggregateTally(electionId, counts, aggregateHash_, a, b, c);
-    }
-
-    function _submitAggregateTally(
-        uint256 electionId,
-        uint256[] calldata counts,
-        bytes32 aggregateHash_,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c
-    ) internal nonReentrant {
+    ) external nonReentrant {
         _requireNotPaused();
         if (counts.length == 0) revert EmptyCounts();
         if (counts.length > MAX_TALLY_OPTIONS) revert CountsTooLong();
@@ -198,12 +175,7 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
-    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external {
-        _rejectSealed(electionId);
-        _submitDecryption(electionId, aggregatePlaintextHash);
-    }
-
-    function _submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) internal nonReentrant {
+    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external nonReentrant {
         _requireNotPaused();
         if (aggregatePlaintextHash == bytes32(0)) revert EmptyCommitment();
         // Same clock as tally posting: closed window, and VOTE stays sealed until then.
@@ -216,12 +188,7 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
-    function postInterimResult(uint256 electionId, bytes32 resultHash) external {
-        _rejectSealed(electionId);
-        _postInterimResult(electionId, resultHash);
-    }
-
-    function _postInterimResult(uint256 electionId, bytes32 resultHash) internal nonReentrant {
+    function postInterimResult(uint256 electionId, bytes32 resultHash) external nonReentrant {
         _requireNotPaused();
         if (resultHash == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
@@ -232,12 +199,7 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
-    function disclose(uint256 electionId, bytes32 disclosureHash_) external {
-        _rejectSealed(electionId);
-        _disclose(electionId, disclosureHash_);
-    }
-
-    function _disclose(uint256 electionId, bytes32 disclosureHash_) internal nonReentrant {
+    function disclose(uint256 electionId, bytes32 disclosureHash_) external nonReentrant {
         _requireNotPaused();
         if (disclosureHash_ == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
@@ -248,12 +210,7 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
-    function addTallyComponent(uint256 electionId, bytes32 componentHash) external {
-        _rejectSealed(electionId);
-        _addTallyComponent(electionId, componentHash);
-    }
-
-    function _addTallyComponent(uint256 electionId, bytes32 componentHash) internal nonReentrant {
+    function addTallyComponent(uint256 electionId, bytes32 componentHash) external nonReentrant {
         _requireNotPaused();
         if (componentHash == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
@@ -309,15 +266,6 @@ contract Tally is ITallyVerifier {
 
     function postedScheme(uint256 electionId) external view returns (uint8) {
         return _postedScheme[electionId];
-    }
-
-    /// @dev VOTE never posts through this contract. Read-only; runs before the lock.
-    function _rejectSealed(uint256 electionId) internal view {
-        address electionAddr = _factory.getElection(electionId);
-        if (electionAddr == address(0)) return;
-        if (IElection(electionAddr).electionType() == ElectionType.VOTE) {
-            revert SealedVoteUsesOtherTally(electionId);
-        }
     }
 
     /// @dev Operator-only, after cutoff. Returns the election inbox, the tally

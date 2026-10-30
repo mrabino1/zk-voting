@@ -1,10 +1,6 @@
-# SUPERSEDED
-
-This note is not the spec. The sealed VOTE path that followed it is [sealed-vote-hold.md](sealed-vote-hold.md). Ballots stay off chain until cutoff and are revealed then. Turnout is not knowable on chain before that. Re-voting was not adopted. `NullifierUsed` still spends a nullifier once. The text below is the earlier scope and is kept only as history.
-
 # Sealed batches, re-votes, and the tally key
 
-Status: **superseded**. Do not implement this note.
+Status: **scope only**. Contract code for this note stays paused until Matthew accepts it. This file does not change `BallotInbox`, the vote circuit, deployments, or the tally key.
 
 Already on this branch, and not waiting on this note:
 

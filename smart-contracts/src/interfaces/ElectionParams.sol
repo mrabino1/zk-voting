@@ -33,7 +33,7 @@ struct ElectionParams {
 /// @notice Kind of election. Zero is POLL and keeps today's rules.
 library ElectionType {
     uint8 internal constant POLL = 0;
-    /// @notice Ballots stay off chain until cutoff. Results use the sealed tally, not `Tally`.
+    /// @notice No tally, decryption, interim result, or disclosure before `cutoffTime`.
     uint8 internal constant VOTE = 1;
 }
 
