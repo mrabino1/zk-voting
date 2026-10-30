@@ -303,6 +303,9 @@ export function resolveRequestWebAuthn(config, req = {}) {
   };
 }
 
+export const ALLOW_REVOTE_CHAIN_CONFIGURED =
+  'ALLOW_REVOTE cannot be on while a chain is configured. The inbox accepts each nullifier once, so a replacement counted on the node cannot be recomputed from the chain. Leave ALLOW_REVOTE off until the inbox accepts replacements.';
+
 /**
  * @param {Record<string, unknown>} [overrides]
  */
@@ -336,6 +339,22 @@ export function getConfig(overrides = {}) {
     overrides.disclosureMinBlockVotes ?? process.env.DISCLOSURE_MIN_BLOCK_VOTES,
     { isTest },
   );
+  // Off until the inbox can store the latest ballot. The node must not count
+  // a replacement the chain still rejects.
+  const allowRevote = envFlag(
+    Object.prototype.hasOwnProperty.call(overrides, 'allowRevote')
+      ? overrides.allowRevote
+      : process.env.ALLOW_REVOTE,
+    false,
+  );
+  const chainRpcConfigured = String(
+    Object.prototype.hasOwnProperty.call(overrides, 'chainRpc')
+      ? overrides.chainRpc ?? ''
+      : process.env.CHAIN_RPC ?? '',
+  ).trim();
+  if (allowRevote && chainRpcConfigured) {
+    throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
+  }
 
   const provingPath = envFlag(overrides.provingPath ?? process.env.ZK_VOTING_PROVING_PATH, false);
   const useMockVerifier = provingPath
@@ -384,6 +403,7 @@ export function getConfig(overrides = {}) {
     disclosureDelaySeconds,
     resultsMinVotes,
     disclosureMinBlockVotes,
+    allowRevote,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpID: authority.rpID,
     voteFqdn: authority.voteFqdn,

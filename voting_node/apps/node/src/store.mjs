@@ -101,12 +101,16 @@ export function electionIdMatches(election, id) {
   return electionAliases(election).some((v) => String(v) === want);
 }
 
-/** Public ballot row: no acceptedAt, no choice, no user id. */
+/**
+ * Public ballot row: no acceptedAt, no choice, no user id.
+ * The hash is the one first stored. A re-vote does not change it, so a
+ * public record never pairs a nullifier with a later ballot hash.
+ */
 export function publicVoteRecord(vote) {
   if (!vote) return null;
   return {
     nullifier: vote.nullifier,
-    ballotHash: vote.ballotHash,
+    ballotHash: vote.publishedBallotHash || vote.ballotHash,
     electionId: String(vote.electionId),
     relayer: vote.relayer || 'node',
   };
@@ -439,6 +443,7 @@ export class Store {
       );
     }
     store.writerActive = config.writerActive !== false;
+    store.allowRevote = config.allowRevote === true;
     store.lease = config.writerLeaseHandle || null;
     for (const user of store.data.users) {
       ensurePersonFields(user);
@@ -2369,11 +2374,16 @@ export class Store {
     return (this.data.receipts || []).find((r) => !isSoftDeleted(r) && String(r.tokenHash || '').toLowerCase() === key) || null;
   }
 
-  findReceiptForVote(electionId, nullifier) {
+  findReceiptForVote(electionId, nullifier, ballotHash) {
     const key = toBytes32(nullifier);
+    const hash = ballotHash == null || ballotHash === '' ? null : toBytes32(ballotHash);
     return (
       (this.data.receipts || []).find(
-        (r) => !isSoftDeleted(r) && String(r.electionId) === String(electionId) && toBytes32(r.nullifier) === key,
+        (r) =>
+          !isSoftDeleted(r) &&
+          String(r.electionId) === String(electionId) &&
+          toBytes32(r.nullifier) === key &&
+          (hash == null || toBytes32(r.ballotHash) === hash),
       ) || null
     );
   }
@@ -2413,14 +2423,17 @@ export class Store {
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
    * they wait for hourly disclosure. No passkey user id, no choice.
    *
-   * One ballot per nullifier: any second submit (including a new ciphertext)
-   * is 409 NULLIFIER_USED. Double voting is impossible.
+   * One ballot per nullifier. A later submit is rejected unless allowRevote
+   * is on. That flag stays off until the inbox can store the latest ballot.
    */
   async acceptVote(vote, envelope) {
     this.refuseIfStandby();
     const existing = this.findVote(vote.electionId, vote.nullifier);
     if (existing) {
-      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+      if (this.allowRevote !== true) {
+        throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+      }
+      return this.replaceVote(vote, envelope);
     }
     const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
     if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash)) {
@@ -2442,6 +2455,7 @@ export class Store {
     const record = {
       nullifier: toBytes32(vote.nullifier),
       ballotHash,
+      publishedBallotHash: ballotHash,
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
@@ -2484,6 +2498,84 @@ export class Store {
     election.acceptedBallots += 1;
     await this.persist();
     return record;
+  }
+
+  /**
+   * Latest ciphertext for the certified tally only. The published ballot
+   * hash, accept hour, and block ciphertext stay as first stored.
+   * acceptedBallots stays a unique-nullifier count.
+   */
+  async replaceVote(vote, envelope) {
+    this.refuseIfStandby();
+    if (this.allowRevote !== true) {
+      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+    }
+    const existing = this.findVote(vote.electionId, vote.nullifier);
+    if (!existing) {
+      throw new HttpError(404, 'ballot not found', { code: 'NOT_FOUND' });
+    }
+    const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
+    if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash)) {
+      throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
+    }
+    const electionId = String(existing.electionId);
+    const nullifier = existing.nullifier;
+    if (!existing.publishedBallotHash) existing.publishedBallotHash = existing.ballotHash;
+    const sameBallot = (row) =>
+      row && String(row.electionId) === electionId && toBytes32(row.nullifier) === toBytes32(nullifier);
+    let env = null;
+    for (const row of this.data.envelopes) {
+      if (sameBallot(row)) {
+        env = row;
+        break;
+      }
+    }
+    if (envelope) {
+      if (!env) {
+        env = {
+          electionId,
+          nullifier,
+          ballotHash: existing.ballotHash,
+          encryptedBallot: envelope.encryptedBallot,
+        };
+        insertAtRandom(this.data.envelopes, env);
+      }
+      env.tallyEncryptedBallot = envelope.encryptedBallot;
+      if (Array.isArray(envelope.rankingPayload)) env.tallyRankingPayload = envelope.rankingPayload;
+    }
+    if (spentPassHash && !this.votePassSpent(vote.electionId, spentPassHash)) {
+      const key = String(vote.electionId);
+      const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
+      list.push(spentPassHash);
+      list.sort();
+      this.data.votePassSpent[key] = list;
+    }
+    if (vote.receiptTokenHash) {
+      let pdfSha256 = null;
+      if (vote.pdfSha256) {
+        pdfSha256 = String(vote.pdfSha256).toLowerCase();
+        if (!/^[0-9a-f]{64}$/.test(pdfSha256)) {
+          throw new HttpError(500, 'receipt PDF fingerprint missing', { code: 'RECEIPT_PDF_DRIFT' });
+        }
+      }
+      if (!Array.isArray(this.data.receipts)) this.data.receipts = [];
+      const receiptAcceptedAt = Number.isFinite(Number(vote.acceptedAt))
+        ? Math.floor(Number(vote.acceptedAt))
+        : existing.acceptedAt;
+      insertAtRandom(this.data.receipts, {
+        id: randomUUID(),
+        electionId,
+        nullifier,
+        ballotHash: toBytes32(vote.ballotHash),
+        tokenHash: String(vote.receiptTokenHash),
+        acceptedAt: receiptAcceptedAt,
+        pdfSha256,
+        pdfProtected: true,
+        pdfIntegrity: vote.pdfIntegrity ? String(vote.pdfIntegrity) : null,
+      });
+    }
+    await this.persist();
+    return existing;
   }
 
   /**

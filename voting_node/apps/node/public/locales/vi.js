@@ -402,6 +402,12 @@ export default {
       "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể đổi ý trên biểu mẫu này cho đến khi gửi. Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Không thể bỏ phiếu kép. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     envelopeHelpTally:
       "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu để người vận hành mở phiếu sau hết hạn (khóa demo, KHÔNG PHẢI SẢN XUẤT). Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+    receiptHelpRevote:
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Hàng trình khám phá công khai chờ đến khi giờ đóng, độ trễ công bố trôi qua, và cổng kết quả mở.",
+    envelopeHelpRevote:
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Không tính cả hai. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+    envelopeHelpTallyRevote:
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của người giám hộ. Mở tổng sau hết hạn cần t phần giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     aspectsCount: "{count} câu trên phiếu này",
     aspectsCount_one: "{count} câu trên phiếu này",
     nonePublished: "Chưa công bố",

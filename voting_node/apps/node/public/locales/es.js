@@ -402,6 +402,12 @@ export default {
       "Marque cada pregunta. Un sobre cubre toda la boleta. Puede cambiar de opinión en este formulario hasta enviarlo. Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El voto doble es imposible. El recibo no puede probar cómo votó.",
     envelopeHelpTally:
       "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio para que el operador pueda abrir boletas después del cierre (clave de demostración, NO PRODUCCIÓN). Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El recibo no puede probar cómo votó.",
+    receiptHelpRevote:
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. Las filas públicas del explorador esperan a que cierre la hora, pase el retraso de divulgación y se abra la puerta de resultados.",
+    envelopeHelpRevote:
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. No se cuentan las dos. El recibo no puede probar cómo votó.",
+    envelopeHelpTallyRevote:
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. El recibo no puede probar cómo votó.",
     aspectsCount: "{count} preguntas en esta boleta",
     aspectsCount_one: "{count} pregunta en esta boleta",
     nonePublished: "Ninguna publicada",

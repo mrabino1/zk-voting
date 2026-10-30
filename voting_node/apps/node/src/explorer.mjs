@@ -289,7 +289,7 @@ export class Explorer {
 
     const interval = Number(intervalSeconds) || 0;
     // Interval 0 publishes at once. A positive interval waits for the hour.
-    // A published block is never rewritten.
+    // A published block is never rewritten. A re-vote must not call this.
     if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }

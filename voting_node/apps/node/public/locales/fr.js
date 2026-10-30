@@ -402,6 +402,12 @@ export default {
       "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez changer d’avis sur ce formulaire jusqu’à la soumission. Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le double vote est impossible. Le reçu ne peut pas prouver comment vous avez voté.",
     envelopeHelpTally:
       "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement pour que l’opérateur puisse ouvrir les bulletins après la clôture (clé de démo, NON PRODUCTION). Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le reçu ne peut pas prouver comment vous avez voté.",
+    receiptHelpRevote:
+      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement certifié. Les lignes publiques de l’explorateur attendent la clôture de l’heure, le délai de publication, et l’ouverture du seuil de résultats.",
+    envelopeHelpRevote:
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement certifié. Les deux ne sont pas comptés ensemble. Le reçu ne peut pas prouver comment vous avez voté.",
+    envelopeHelpTallyRevote:
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. Ouvrir l’agrégat après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement certifié. Le reçu ne peut pas prouver comment vous avez voté.",
     aspectsCount: "{count} questions sur ce bulletin",
     aspectsCount_one: "{count} question sur ce bulletin",
     nonePublished: "Aucune publiée",

@@ -926,8 +926,12 @@ export function electionsRouter(deps) {
         vote: result.vote,
         receipt: result.receipt,
         message: result.published
-          ? 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
-          : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.',
+          ? config.allowRevote === true
+            ? 'Ballot accepted. Choice is not stored in the clear. A later ballot before the deadline updates the certified tally only. A published block keeps the first ballot. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
+            : 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
+          : config.allowRevote === true
+            ? 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. A later ballot before the deadline updates the certified tally only. A published block keeps the first ballot. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
+            : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.',
         nfp: true,
       });
     }),

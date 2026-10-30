@@ -402,6 +402,12 @@ export default {
       "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
     envelopeHelpTally:
       "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted.",
+    receiptHelpRevote:
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may submit a later ballot until the deadline. A published poll block keeps the first ballot. The replacement counts only in the certified tally. Public explorer rows wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+    envelopeHelpRevote:
+      "Mark every question. One envelope covers the whole ballot. You may submit a later ballot until the deadline. A published poll block keeps the first ballot. The replacement counts only in the certified tally. Two ballots are not both counted. The receipt cannot prove how you voted.",
+    envelopeHelpTallyRevote:
+      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening the aggregate after cutoff takes t verified partial decryptions (NON-PRODUCTION). You may submit a later ballot until the deadline. A published poll block keeps the first ballot. The replacement counts only in the certified tally. The receipt cannot prove how you voted.",
     aspectsCount: "{count} questions on this ballot",
     aspectsCount_one: "{count} question on this ballot",
     nonePublished: "None published",

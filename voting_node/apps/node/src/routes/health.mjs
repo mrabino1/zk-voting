@@ -110,6 +110,7 @@ export function configRouter(deps) {
           verifier: contracts.verifier || null,
         },
         contracts,
+        allowRevote: deps.config.allowRevote === true,
         coercion: {
           policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,

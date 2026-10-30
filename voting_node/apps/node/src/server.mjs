@@ -14,7 +14,7 @@ import { installConsoleCapture, recordLog, setLogLevel, watchSecrets } from './s
 import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
 import { startVoteFlushTimer } from './electionState.mjs';
-import { getConfig } from './config.mjs';
+import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from './config.mjs';
 import { announceGeneratedSetupToken } from './setupToken.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
@@ -307,6 +307,9 @@ export async function createApp(overrides = {}) {
     },
   });
   const chain = chainOverride || createChain(config, { queueStore: store });
+  if (config.allowRevote === true && chain?.isConfigured?.()) {
+    throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
+  }
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
   const mailer = configOverrides.mailer || createMailer(config);

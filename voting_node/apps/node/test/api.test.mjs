@@ -328,6 +328,7 @@ describe('ZK-Voting Node API', () => {
         'ballotHash',
         'electionId',
         'nullifier',
+        'publishedBallotHash',
         'relayer',
       ]);
     }

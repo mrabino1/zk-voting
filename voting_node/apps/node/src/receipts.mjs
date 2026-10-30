@@ -373,7 +373,12 @@ export async function issueAndStoreReceiptPdf(deps, { election, vote, receiptRow
   const secret = deps.config.receiptPdfSecret;
   const artifact = buildReceiptPdf({
     election,
-    vote: { ...vote, userOpHash: receiptRow?.userOpHash || vote?.userOpHash },
+    vote: {
+      ...vote,
+      ballotHash: receiptRow?.ballotHash || vote?.ballotHash,
+      acceptedAt: receiptRow?.acceptedAt ?? vote?.acceptedAt,
+      userOpHash: receiptRow?.userOpHash || vote?.userOpHash,
+    },
     receipt: receiptRow,
     token,
     hmacSecret: secret,
@@ -570,6 +575,19 @@ function voteIsPublic(store, election, vote, now, policy) {
     .some((row) => String(row.nullifier) === String(vote.nullifier));
 }
 
+function receiptsWithBallotHash(store, proof, ballotHash) {
+  const election = proof.electionId ? store.getElection(proof.electionId) : null;
+  if (proof.electionId && !election) return [];
+  const nullifier = tryBytes32(proof.nullifier);
+  return (store.data.receipts || []).filter((row) => {
+    if (!row || row.is_deleted === true) return false;
+    if (tryBytes32(row.ballotHash) !== ballotHash) return false;
+    if (election && String(row.electionId) !== String(election.id)) return false;
+    if (nullifier && tryBytes32(row.nullifier) !== nullifier) return false;
+    return true;
+  });
+}
+
 function matchingPublishedVotes(store, proof, now, interval, config) {
   let rows = (store.data.votes || []).filter((row) => row && row.is_deleted !== true);
   if (proof.electionId) {
@@ -622,12 +640,27 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     fromIssuedPdf = true;
     holder = true;
   } else {
-    const published = matchingPublishedVotes(deps.store, proof, now, interval, deps.config);
-    if (published.length !== 1) {
-      throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+    const wantedHash = tryBytes32(proof.ballotHash);
+    const hashRows = wantedHash ? receiptsWithBallotHash(deps.store, proof, wantedHash) : [];
+    if (wantedHash && hashRows.length === 1) {
+      receiptRow = hashRows[0];
+      vote = deps.store.findVote(receiptRow.electionId, receiptRow.nullifier);
+      if (!vote) {
+        throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+      }
+      const electionRow = deps.store.getElection(vote.electionId);
+      const hashPolicy = electionDisclosurePolicy(electionRow, deps.config, now);
+      if (!voteIsPublic(deps.store, electionRow, vote, now, hashPolicy)) {
+        throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+      }
+    } else {
+      const published = matchingPublishedVotes(deps.store, proof, now, interval, deps.config);
+      if (published.length !== 1) {
+        throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+      }
+      vote = published[0];
+      receiptRow = deps.store.findReceiptForVote(vote.electionId, vote.nullifier, wantedHash || vote.ballotHash);
     }
-    vote = published[0];
-    receiptRow = deps.store.findReceiptForVote(vote.electionId, vote.nullifier);
   }
   if (!vote) {
     throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });

@@ -402,6 +402,12 @@ export default {
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Maaari kang magbago ng isip sa form na ito hanggang magsumite ka. Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Imposible ang dobleng pagboto. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     envelopeHelpTally:
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa tally public key para mabuksan ng operator ang mga balota pagkatapos ng cutoff (demo key, HINDI PRODUKSYON). Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
+    receiptHelpRevote:
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa sertipikadong tally. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras, lumipas ang disclosure delay, at magbukas ang results gate.",
+    envelopeHelpRevote:
+      "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa sertipikadong tally. Hindi parehong binibilang ang dalawa. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
+    envelopeHelpTallyRevote:
+      "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa guardian tally public key. Ang pagbukas ng pinagsama pagkatapos ng cutoff ay nangangailangan ng t na beripikadong partial decryption (HINDI PRODUKSYON). Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa sertipikadong tally. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     aspectsCount: "{count} tanong sa balotang ito",
     aspectsCount_one: "{count} tanong sa balotang ito",
     nonePublished: "Walang nai-publish",

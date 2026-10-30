@@ -30,6 +30,12 @@ function httpFromCrypto(err) {
  * Sum AG envelopes and threshold-decrypt each option total.
  * The returned object has counts only. There is no per-ballot openings list.
  */
+/** Certified tally uses the latest ciphertext. Published blocks keep the original. */
+export function ciphertextForTally(env) {
+  if (!env) return null;
+  return env.tallyEncryptedBallot || env.encryptedBallot;
+}
+
 function splitSoftDeleted(envelopes) {
   const all = Array.isArray(envelopes) ? envelopes : [];
   const hidden = all.filter((env) => env && env.is_deleted === true).length;
@@ -64,7 +70,7 @@ export async function openBallots(election, envelopes, partialGroups, questions)
   }
   let product;
   try {
-    product = aggregateCiphertexts(live.map((env) => env.encryptedBallot));
+    product = aggregateCiphertexts(live.map((env) => ciphertextForTally(env)));
   } catch (err) {
     httpFromCrypto(err);
   }

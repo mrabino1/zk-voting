@@ -12,6 +12,7 @@ import { keccak256, toHex } from 'viem';
 
 import proofHelpers from '@zk-voting/proof-helpers';
 
+import { ALLOW_REVOTE_CHAIN_CONFIGURED } from './config.mjs';
 import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
@@ -284,9 +285,17 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     now: ts,
   };
 
-  // A ballot already stored here must still reach the chain. A crash after
-  // acceptVote and before the queue write is repaired by enqueueing, then 409.
-  if (store.nullifierUsed(election.id, parsed.nullifier)) {
+  // A second proof is rejected unless allowRevote is on. That flag stays
+  // off until the inbox can store the latest ballot. A replacement is not
+  // submitted again and does not rewrite a published block.
+  const already = store.findVote(election.id, parsed.nullifier);
+  const replacing = Boolean(already) && config?.allowRevote === true;
+  if (replacing && chainConfigured) {
+    throw new HttpError(503, ALLOW_REVOTE_CHAIN_CONFIGURED, { code: 'ALLOW_REVOTE_CHAIN_CONFIGURED' });
+  }
+  if (already && !replacing) {
+    // A ballot already stored here must still reach the chain. A crash after
+    // acceptVote and before the queue write is repaired by enqueueing, then 409.
     if (chainConfigured && interval > 0) {
       try {
         await chain.submitVote(chainBallot);
@@ -302,7 +311,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   // Interval 0 is one transaction, not a durable queue. It has to succeed
   // before the node records the ballot. A positive interval records first
   // and enqueues after, so a ballot the node rejects is not left on the queue.
-  if (chainConfigured && interval <= 0) {
+  if (chainConfigured && interval <= 0 && !replacing) {
     await chain.submitVote(chainBallot);
   }
 
@@ -325,24 +334,25 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     token: holder.token,
     hmacSecret: (config || {}).receiptPdfSecret,
   });
-  const vote = await store.acceptVote(
-    {
-      nullifier,
-      ballotHash,
-      electionId: election.id,
-      relayer: 'node',
-      acceptedAt,
-      receiptTokenHash: holder.receiptTokenHash,
-      spentPassHash,
-      pdfSha256: artifact.pdfSha256,
-      pdfIntegrity: artifact.integrity,
-    },
-    { encryptedBallot: parsed.encryptedBallot },
-  );
+  const storedBallot = {
+    nullifier,
+    ballotHash,
+    electionId: election.id,
+    relayer: 'node',
+    acceptedAt,
+    receiptTokenHash: holder.receiptTokenHash,
+    spentPassHash,
+    pdfSha256: artifact.pdfSha256,
+    pdfIntegrity: artifact.integrity,
+  };
+  const storedEnvelope = { encryptedBallot: parsed.encryptedBallot };
+  const vote = replacing
+    ? await store.replaceVote(storedBallot, storedEnvelope)
+    : await store.acceptVote(storedBallot, storedEnvelope);
 
   let recorded = null;
   try {
-    recorded = await explorer.recordVote(
+    if (!replacing) recorded = await explorer.recordVote(
       {
         nullifier: vote.nullifier,
         ballotHash: vote.ballotHash,
@@ -352,7 +362,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       acceptedAt,
       interval,
     );
-    if (chainConfigured && interval > 0) {
+    if (!replacing && chainConfigured && interval > 0) {
       const outcome = await chain.submitVote(chainBallot);
       // Already queued, and this request's rows are not the copy that should
       // ship. Drop the orphan so a rejected ballot cannot reach the chain.
@@ -363,8 +373,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     }
   } catch (err) {
     // Interval 0 may already have published a block and mined a transaction.
-    // Published blocks stay. Only an unpublished queue ballot is rolled back.
-    if (interval > 0) {
+    // Published blocks stay. A replacement is not rolled back into a delete.
+    // Only an unpublished queue ballot is rolled back.
+    if (!replacing && interval > 0) {
       if (recorded?.sealed && typeof explorer.dropSealedVote === 'function') {
         try {
           await explorer.dropSealedVote(vote.nullifier);
@@ -390,6 +401,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     .listPublishedVotes(election.id, ts, policy.intervalSeconds, policy)
     .some((row) => String(row.nullifier) === String(vote.nullifier));
   const nextAt = nextPublishAt(ts, interval, policy.delaySeconds);
+  // The public vote row keeps the first hash. The holder receipt uses the
+  // hash of the ballot just accepted.
+  const receiptVote = replacing ? { ...vote, ballotHash, acceptedAt } : vote;
   return {
     ok: true,
     vote: publicVoteRecord(vote),
@@ -397,7 +411,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     nextPublishAt: nextAt,
     receipt: presentHolderReceipt({
       election,
-      vote,
+      vote: receiptVote,
       token: holder.token,
       published,
       nextPublishAt: nextAt,

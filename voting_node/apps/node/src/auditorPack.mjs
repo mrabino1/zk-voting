@@ -64,8 +64,9 @@ export function buildAuditorPack(election, deps) {
     coercion: {
       policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
-      note:
-        'Each nullifier is accepted once. A second ballot, including a new ciphertext, is rejected. Double voting is impossible. A receipt lists hashes only; it cannot prove which option was marked. Voters may change their mind on the ballot form before submit. This is not MACI.',
+      note: deps.config?.allowRevote
+        ? 'One ballot per nullifier. A later ballot before the deadline updates the certified tally only. Published blocks keep the original ballot. acceptedBallots does not increase. A receipt lists hashes only and cannot prove which option was marked. The inbox still accepts a nullifier once, so the node does not submit the replacement again. This is not MACI.'
+        : 'One ballot per nullifier. A second ballot is rejected until the inbox can store the latest ballot. A receipt lists hashes only and cannot prove which option was marked. This is not MACI.',
     },
   };
 }
