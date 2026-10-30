@@ -17,12 +17,16 @@
 # passphrase. The encrypted PEM stays beside the shares. Both choices use
 # this format.
 #
+# Splitting the passphrase means the full private key sits in
+# payload/secured, encrypted. A share is useless without that encrypted
+# PEM. Keep at least two offline copies of the sealed private key. The
+# safety of the PEM rests on the passphrase entropy and on the KDF:
+# AES-256-CBC, PBKDF2-HMAC-SHA256, 600000 iterations.
+#
 # Requires bash, openssl, iconv, od, and tr.
 
-SSSS_SH_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-
 ssss_openssl_decrypt_command() {
-    printf '%s\n' "openssl enc -d -aes-256-cbc -pbkdf2 -iter 10000 -a -in {inputfile}"
+    printf '%s\n' "openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -a -in {inputfile}"
 }
 
 ssss_gf_init() {
@@ -391,8 +395,16 @@ Threshold: $threshold of $count
 This directory is the output of the guardian key ceremony tooling.
 This private key is a ceremony and backup key.
 It is not wired into contracts or the application.
+This key is separate from the ballot encryption key.
+This ceremony does not produce the ballot encryption key.
+The L2 operator gets public/ only, never a share.
 Record the public key and its fingerprint yourself.
 This tooling does not connect to a network.
+
+This directory can rebuild the private key by itself. It holds the
+sealed private key, the sealed shares, and the communication sheets.
+Distribute the sheets and the sealed shares separately. Then shred
+the communication sheets from the ceremony machine.
 
 Publish these files only:
   public/public.pem
@@ -415,6 +427,11 @@ What the shares hold
 --------------------
 Each share is a share of the key passphrase, not a piece of the PEM.
 That passphrase decrypts the sealed private key above.
+Splitting the passphrase means the full private key sits in
+payload/secured, encrypted. A share is useless without that encrypted
+PEM. Keep at least two offline copies of the sealed private key.
+The safety of the PEM rests on the passphrase entropy and on the KDF:
+AES-256-CBC with PBKDF2-HMAC-SHA256 and 600000 iterations.
 The share format can hold a PEM as one text secret. Do not hex-encode
 or base64-encode the PEM first. The 1024-bit pad is a minimum width,
 not a maximum, so a 4096-bit PEM is not rejected. This shell code loops
@@ -447,9 +464,14 @@ Date: $date
 Threshold: $threshold of $count
 
 Recover only on an offline machine.
+This private key is a ceremony and backup key.
+It is not wired into contracts or the application.
+This key is separate from the ballot encryption key.
+This ceremony does not produce the ballot encryption key.
 You need the encrypted private key, at least $threshold sealed shares,
 and the matching communication sheets. Bring the sheets and the sealed
-files together only on that machine.
+files together only on that machine. A ceremony directory that still
+holds all of them can rebuild the key alone.
 
 1. Check the public fingerprint you recorded against public/fingerprint.txt.
 

@@ -31,7 +31,6 @@ name: CI
 # CI-DISABLED original triggers:     branches:
 # CI-DISABLED original triggers:       - test/unstable
 # CI-DISABLED original triggers:       - master
-# Guardian key ceremony checks also run from guardian-key-ceremony.yml.
 on:
   workflow_dispatch:
 
@@ -276,21 +275,3 @@ jobs:
 
       - name: Docker build and boot smoke
         run: ./scripts/migrations-verify.sh smoke
-
-  guardian-key-ceremony:
-    name: guardian key ceremony scripts
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Shamir selftest
-        working-directory: ${{ github.workspace }}
-        run: bash scripts/ceremony/ssss.sh selftest
-
-      - name: Ceremony round trip
-        working-directory: ${{ github.workspace }}
-        run: bash scripts/ceremony/roundtrip.sh

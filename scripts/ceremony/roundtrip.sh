@@ -40,11 +40,11 @@ extract_combined_secret() {
 }
 
 direct_round_trip() {
-    local pass plain sealed recovered share_dir i
+    local pass plain recovered share_dir i
     pass=$(new_passphrase)
     printf '%s' "$pass" > "$TMP/direct-secret.txt"
     printf '%s\n' "$pass" > "$TMP/direct-pass.line"
-    openssl enc -aes-256-cbc -pbkdf2 -iter 10000 -a -salt \
+    openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -a -salt \
         -in "$TMP/original.pem" -out "$TMP/direct.b64" -pass "file:$TMP/direct-pass.line"
     bash "$ROOT/scripts/ceremony/ssss.sh" split -t 3 -n 5 -f "$TMP/direct-secret.txt" > "$TMP/direct-shares.txt"
     share_dir="$TMP/direct-shares"
@@ -61,7 +61,7 @@ direct_round_trip() {
     extract_combined_secret "$TMP/direct-combined.raw" "$TMP/direct-combined.txt"
     cmp -s "$TMP/direct-secret.txt" "$TMP/direct-combined.txt"
     printf '%s\n' "$(cat "$TMP/direct-combined.txt")" > "$TMP/direct-combined.line"
-    openssl enc -d -aes-256-cbc -pbkdf2 -iter 10000 -a \
+    openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -a \
         -in "$TMP/direct.b64" -out "$TMP/direct-recovered.pem" -pass "file:$TMP/direct-combined.line"
     cmp -s "$TMP/original.pem" "$TMP/direct-recovered.pem"
     plain=$(sha256_file "$TMP/original.pem")
@@ -71,7 +71,7 @@ direct_round_trip() {
 }
 
 ceremony_round_trip() {
-    local i pass dir fp before after subset_a subset_b
+    local i pass dir fp before after subset_a subset_b derived
     : > "$TMP/guardians.txt"
     for i in 1 2 3 4 5; do
         pass=$(new_passphrase)
@@ -82,6 +82,7 @@ ceremony_round_trip() {
     before=$(sha256_file "$TMP/original.pem")
     bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" --noninteractive \
         --name "ROUNDTRIP" \
+        --type VOTE \
         --out "$TMP/out" \
         --threshold 3 \
         --shares 5 \
@@ -112,15 +113,30 @@ ceremony_round_trip() {
     check_text "$dir/DISTRIBUTION.txt" "One sealed share per guardian."
     check_text "$dir/DISTRIBUTION.txt" "Never email or message a plaintext share."
     check_text "$dir/DISTRIBUTION.txt" "It is not wired into contracts or the application."
+    check_text "$dir/DISTRIBUTION.txt" "This key is separate from the ballot encryption key."
+    check_text "$dir/DISTRIBUTION.txt" "This ceremony does not produce the ballot encryption key."
+    check_text "$dir/DISTRIBUTION.txt" "The L2 operator gets public/ only, never a share."
+    check_text "$dir/DISTRIBUTION.txt" "This directory can rebuild the private key by itself."
+    check_text "$dir/DISTRIBUTION.txt" "600000"
+    check_text "$dir/metadata.txt" "key_type=VOTE"
     check_text "$dir/RECOVERY.txt" "Recover only on an offline machine."
     check_text "$dir/RECOVERY.txt" "scripts/ceremony/ssss.sh combine"
+    check_text "$dir/RECOVERY.txt" "iter 600000"
+    if [[ "$(basename -- "$dir")" != "ROUNDTRIP-VOTE" ]]; then
+        printf 'ceremony directory name was %s\n' "$(basename -- "$dir")" >&2
+        exit 1
+    fi
     if grep -R -F -q -e "BEGIN PRIVATE KEY" -e "BEGIN RSA PRIVATE KEY" "$dir"; then
         echo "ceremony directory contains a private key" >&2
         exit 1
     fi
     # The key passphrase must not appear outside sealed ciphertext.
     # Communication sheets hold guardian passphrases, not this one.
-    if grep -R -F -q --exclude-dir=secured -e "$(tr -d '\n' < "$TMP/key-passphrase.txt")" "$dir"; then
+    # The pattern file keeps the passphrase off the grep command line.
+    tr -d '\n' < "$TMP/key-passphrase.txt" > "$TMP/key-pass.pat"
+    printf '\n' >> "$TMP/key-pass.pat"
+    chmod 600 "$TMP/key-pass.pat"
+    if grep -R -F -q -f "$TMP/key-pass.pat" --exclude-dir=secured -- "$dir"; then
         echo "key passphrase leaked into a ceremony file" >&2
         exit 1
     fi
@@ -142,8 +158,10 @@ ceremony_round_trip() {
     subset_a=$(sha256_file "$TMP/recovered-a.pem")
     subset_b=$(sha256_file "$TMP/recovered-b.pem")
     [[ "$subset_a" == "$before" && "$subset_b" == "$before" ]]
-    grep -F -q "fingerprint_match=yes" "$TMP/recover-a.stdout"
-    grep -F -q "fingerprint_match=yes" "$TMP/recover-b.stdout"
+    check_text "$TMP/recover-a.stdout" "fingerprint_match=yes"
+    check_text "$TMP/recover-b.stdout" "fingerprint_match=yes"
+    check_text "$TMP/recover-a.stdout" "key_type=VOTE"
+    check_text "$TMP/ceremony.stdout" "key_type=VOTE"
 
     if bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" recover \
         --dir "$dir" \
@@ -166,6 +184,64 @@ ceremony_round_trip() {
     printf 'below-threshold: rejected\n'
 }
 
+reject_in_repo_out() {
+    if bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" --noninteractive \
+        --name ROUNDTRIP \
+        --out "$ROOT/in-repo-ceremony" \
+        > "$TMP/in-repo.out" 2> "$TMP/in-repo.err"; then
+        echo "in-repo --out should have failed" >&2
+        exit 1
+    fi
+    if [[ -e "$ROOT/in-repo-ceremony" ]]; then
+        echo "in-repo --out created a path" >&2
+        exit 1
+    fi
+    if ! grep -F -q "git working tree" "$TMP/in-repo.err"; then
+        echo "in-repo --out did not report the git working tree" >&2
+        exit 1
+    fi
+    if ! grep -F -q "No ceremony directory was written." "$TMP/in-repo.err"; then
+        echo "in-repo --out did not report that nothing was written" >&2
+        exit 1
+    fi
+    printf 'in-repo-out: rejected\n'
+}
+
+reject_multi_match() {
+    local multi=$TMP/multi
+    mkdir -p "$multi/shards/ALFA/secured" "$multi/public" "$multi/payload/secured"
+    cat > "$multi/metadata.txt" <<'EOF'
+ceremony_name=MULTI
+ceremony_date=20260101
+threshold=2
+share_count=2
+codenames=ALFA BRAVO
+key_bits=4096
+fingerprint_sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+EOF
+    printf 'a\n' > "$multi/shards/ALFA/secured/one_secured_share.txt"
+    printf 'b\n' > "$multi/shards/ALFA/secured/two_secured_share.txt"
+    if bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" recover \
+        --dir "$multi" \
+        --out "$TMP/multi-should-not.pem" \
+        --guardians ALFA,BRAVO \
+        > "$TMP/multi.out" 2> "$TMP/multi.err"; then
+        echo "multi-match recover should have failed" >&2
+        exit 1
+    fi
+    if [[ -e "$TMP/multi-should-not.pem" ]]; then
+        echo "multi-match recover wrote a private key" >&2
+        exit 1
+    fi
+    if ! grep -F -q "more than one file matches" "$TMP/multi.err"; then
+        echo "multi-match recover did not report multiple files" >&2
+        exit 1
+    fi
+    printf 'multi-match: rejected\n'
+}
+
+reject_in_repo_out
+reject_multi_match
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "$TMP/original.pem" >/dev/null 2>&1
 chmod 400 "$TMP/original.pem"
 direct_round_trip

@@ -4,16 +4,23 @@
 # Generates or imports a 4096-bit RSA key, encrypts the private key with a
 # passphrase, and splits that passphrase into one sealed share per guardian.
 # The private key is ceremony and backup tooling. It is not wired into
-# contracts or the application.
+# contracts or the application. This key is separate from the ballot
+# encryption key. This ceremony does not produce the ballot encryption key.
+# The L2 operator gets public/ only, never a share.
 #
 # Passphrases are read from the terminal or from mode 600 files. They are
-# not accepted on the command line.
+# not accepted on the command line. A key passphrase of at least 32
+# characters may be generated with openssl rand -base64 48. That value is
+# not printed. The private key is encrypted with AES-256-CBC, PBKDF2-HMAC-SHA256,
+# 600000 iterations. Splitting the passphrase means the full private key
+# sits in payload/secured. A share is useless without that encrypted PEM.
+# Keep at least two offline copies of the sealed private key.
 
 set -euo pipefail
 umask 077
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=ssss.sh
+# shellcheck source=scripts/ceremony/ssss.sh
 source "$SCRIPT_DIR/ssss.sh"
 
 WORK=""
@@ -35,8 +42,17 @@ RECOVER_DIR=""
 RECOVER_OUT=""
 GUARDIANS=""
 KEY_PASS=""
+KEY_TYPE=""
 FINGERPRINT=""
 DATE=""
+META_NAME=""
+META_DATE=""
+META_THRESHOLD=""
+META_COUNT=""
+META_CODENAMES=""
+META_FINGERPRINT=""
+META_BITS=""
+META_KEY_TYPE=""
 declare -a NATO=()
 declare -a GUARDIAN_PASS=()
 declare -a SHARE_AT=()
@@ -89,8 +105,8 @@ Usage:
   guardian_key_ceremony.sh
   guardian_key_ceremony.sh --noninteractive --name NAME --out DIR \
       --threshold K --shares N \
-      --key-passphrase-file FILE --guardian-passphrase-file FILE \
-      [--import PEM]
+      --guardian-passphrase-file FILE \
+      [--key-passphrase-file FILE] [--type VOTE|POLL] [--import PEM]
   guardian_key_ceremony.sh recover --dir DIR --out PRIVATE_PEM \
       --guardians ALFA,BRAVO,CHARLIE [--guardian-passphrase-file FILE]
 
@@ -98,24 +114,40 @@ The interactive run asks for a ceremony name, generates a new 4096-bit RSA
 key or imports an unencrypted PEM, encrypts the private key with a
 passphrase, and splits that passphrase into guardian shares.
 
---key-passphrase-file is one line. One trailing newline is removed.
+--name is the election name. --type VOTE or --type POLL appends that
+suffix, so the ceremony directory is NAME-VOTE or NAME-POLL, and writes
+key_type= into metadata.txt. Recover prints key_type= when it is set.
+Omit --type to leave the name unchanged.
+
+--out must be outside the git working tree. The script refuses a path
+inside the repository. There is no default directory inside the tree.
+
+--key-passphrase-file is one line of at least 32 characters. One trailing
+newline is removed. When the file is omitted, the script generates a
+passphrase with: openssl rand -base64 48
+That generated value is not printed.
 --guardian-passphrase-file has one line per guardian, in codename order
 (ALFA, then BRAVO, and so on). It must contain exactly N lines.
+Each line is at least 32 characters. The file must be mode 600 or 400.
 Do not pass a passphrase on the command line.
 
 recover reads communication sheets unless --guardian-passphrase-file is
 set. That file then has one line per codename listed in --guardians, in
 that order. A private key is written only after the public fingerprint
-matches.
+matches. --out for recover is the private-key path, and it must also be
+outside the git working tree.
 
 This key is ceremony and backup tooling. It is not wired into contracts
 or the application.
+This key is separate from the ballot encryption key.
+This ceremony does not produce the ballot encryption key.
+The L2 operator gets public/ only, never a share.
 
 When a flag is omitted, the matching environment variable is used:
   CEREMONY_NONINTERACTIVE=1
   CEREMONY_NAME CEREMONY_OUT CEREMONY_THRESHOLD CEREMONY_SHARES
   CEREMONY_KEY_PASSPHRASE_FILE CEREMONY_GUARDIAN_PASSPHRASE_FILE
-  CEREMONY_IMPORT_PEM
+  CEREMONY_IMPORT_PEM CEREMONY_TYPE
 
 Suggested passphrase generator (this is a command, not a passphrase):
   openssl rand -base64 48
@@ -131,6 +163,9 @@ Disconnect the network before you generate a key or print a share.
 
 This private key is a ceremony and backup key for this tooling.
 It is not wired into contracts or the application.
+This key is separate from the ballot encryption key.
+This ceremony does not produce the ballot encryption key.
+The L2 operator gets public/ only, never a share.
 
 - Never commit a private key, a passphrase, or a share.
 - Never email or message a plaintext share.
@@ -155,10 +190,80 @@ ceremony_load_nato() {
     (( ${#NATO[@]} == 26 )) || ceremony_die "The codename list is incomplete."
 }
 
+ceremony_require_passphrase_file_mode() {
+    local file=$1
+    [[ -f "$file" ]] || ceremony_die "Passphrase file not found."
+    [[ $(stat -c %a -- "$file") == 600 || $(stat -c %a -- "$file") == 400 ]] \
+        || ceremony_die "Passphrase file must be mode 600."
+}
+
+ceremony_require_mode_600() {
+    local file=$1
+    [[ -f "$file" ]] || ceremony_die "Secret file not found."
+    [[ $(stat -c %a -- "$file") == 600 ]] || ceremony_die "Secret file must be mode 600."
+}
+
+ceremony_require_mode_700() {
+    local dir=$1
+    [[ -d "$dir" ]] || ceremony_die "Directory not found."
+    [[ $(stat -c %a -- "$dir") == 700 ]] || ceremony_die "Directory must be mode 700."
+}
+
+ceremony_chmod_tree_dirs() {
+    local tree=$1 d
+    while IFS= read -r -d '' d; do
+        chmod 700 "$d" || ceremony_die "Could not set directory mode."
+        ceremony_require_mode_700 "$d"
+    done < <(find "$tree" -type d -print0)
+}
+
+ceremony_assign_outside_repo() {
+    local __dest=$1 target=$2 abs parent top
+    if [[ "$target" != /* ]]; then
+        target="$PWD/$target"
+    fi
+    command -v realpath >/dev/null 2>&1 || ceremony_die "realpath is required."
+    abs=$(realpath -m -- "$target") || ceremony_die "Could not resolve the output path."
+    if [[ -d "$abs" ]]; then
+        parent=$abs
+    else
+        parent=$(dirname -- "$abs")
+    fi
+    while [[ ! -d "$parent" && "$parent" != "/" ]]; do
+        parent=$(dirname -- "$parent")
+    done
+    if top=$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$parent" rev-parse --show-toplevel 2>/dev/null); then
+        top=$(realpath -m -- "$top") || ceremony_die "Could not resolve the git working tree."
+        case "$abs/" in
+            "$top/"*)
+                ceremony_die "Refusing to write inside the git working tree ($top)."
+                ;;
+        esac
+    fi
+    printf -v "$__dest" '%s' "$abs"
+}
+
+ceremony_apply_key_type() {
+    [[ -n "$KEY_TYPE" ]] || return 0
+    KEY_TYPE=${KEY_TYPE^^}
+    [[ "$KEY_TYPE" == "VOTE" || "$KEY_TYPE" == "POLL" ]] || ceremony_die "--type must be VOTE or POLL."
+    if [[ "$NAME" != *-"$KEY_TYPE" ]]; then
+        NAME="${NAME}-${KEY_TYPE}"
+    fi
+    [[ "$NAME" =~ ^[A-Z0-9][A-Z0-9_-]{0,63}$ ]] || ceremony_die "The ceremony name with the type suffix must be 1 to 64 characters."
+}
+
+ceremony_generate_key_passphrase() {
+    local generated
+    generated=$(openssl rand -base64 48 | tr -d '\n') || return 1
+    ceremony_check_passphrase "$generated" || return 1
+    printf '%s' "$generated"
+}
+
 ceremony_check_passphrase() {
     local p=$1
-    if (( ${#p} < 16 )); then
-        echo "Use a passphrase of at least 16 characters." >&2
+    if (( ${#p} < 32 )); then
+        echo "Use a passphrase of at least 32 characters." >&2
         return 1
     fi
     if (( ${#p} > 1024 )); then
@@ -175,7 +280,7 @@ ceremony_check_passphrase() {
 ceremony_read_passphrase_file() {
     local file=$1
     local data
-    [[ -f "$file" ]] || ceremony_die "Passphrase file not found."
+    ceremony_require_passphrase_file_mode "$file"
     data=$(cat -- "$file"; printf x) || ceremony_die "Could not read the passphrase file."
     data=${data%x}
     data=${data%$'\n'}
@@ -261,6 +366,7 @@ ceremony_passfile() {
     local dest=$1 pass=$2
     printf '%s\n' "$pass" > "$dest"
     chmod 600 "$dest"
+    ceremony_require_mode_600 "$dest"
 }
 
 ceremony_extract_ciphertext() {
@@ -276,13 +382,14 @@ ceremony_decrypt_sealed() {
         rm -f -- "$b64"
         return 1
     }
-    openssl enc -d -aes-256-cbc -pbkdf2 -iter 10000 -a \
+    openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -a \
         -in "$b64" -out "$out" -pass "file:${passfile}" || {
         rm -f -- "$b64"
         return 1
     }
     rm -f -- "$b64"
     chmod 600 "$out"
+    ceremony_require_mode_600 "$out"
 }
 
 ceremony_seal() {
@@ -291,7 +398,7 @@ ceremony_seal() {
     local -a extra=("$@")
     local b64 decrypt_cmd line
     b64=$(mktemp "$WORK/seal.XXXXXX")
-    openssl enc -aes-256-cbc -pbkdf2 -iter 10000 -a -salt \
+    openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -a -salt \
         -in "$in" -out "$b64" -pass "file:${passfile}"
     decrypt_cmd=$(ssss_openssl_decrypt_command)
     decrypt_cmd=${decrypt_cmd//\{inputfile\}/ciphertext.b64}
@@ -311,17 +418,25 @@ ceremony_seal() {
     } > "$out"
     rm -f -- "$b64"
     chmod 600 "$out"
+    ceremony_require_mode_600 "$out"
 }
 
 ceremony_first_file() {
-    local dir=$1 pattern=$2 f found=""
+    local dir=$1 pattern=$2 f
+    local -a found=()
     [[ -d "$dir" ]] || return 1
     while IFS= read -r -d '' f; do
-        found=$f
-        break
+        found+=("$f")
     done < <(find "$dir" -type f -name "$pattern" -print0)
-    [[ -n "$found" ]] || return 1
-    printf '%s' "$found"
+    if (( ${#found[@]} == 0 )); then
+        printf 'error: no file matches %s in %s\n' "$pattern" "$dir" >&2
+        return 1
+    fi
+    if (( ${#found[@]} > 1 )); then
+        printf 'error: more than one file matches %s in %s\n' "$pattern" "$dir" >&2
+        return 1
+    fi
+    printf '%s' "${found[0]}"
 }
 
 ceremony_sheet_passphrase() {
@@ -340,6 +455,7 @@ ceremony_load_guardian_passphrases() {
     GUARDIAN_PASS=()
     if (( NONINTERACTIVE )); then
         [[ -n "$GUARDIAN_PASS_FILE" && -f "$GUARDIAN_PASS_FILE" ]] || ceremony_die "A guardian passphrase file is required."
+        ceremony_require_passphrase_file_mode "$GUARDIAN_PASS_FILE"
         local -a lines=()
         mapfile -t lines < "$GUARDIAN_PASS_FILE"
         if (( ${#lines[@]} != SHARES )); then
@@ -366,37 +482,35 @@ ceremony_write_roster_lines() {
     local i code
     for (( i=1; i<=SHARES; i++ )); do
         code=${NATO[i-1]}
-        printf '%d %s Guardian %s — placeholder contact\n' "$i" "$code" "$code"
+        printf '%d %s Guardian %s - placeholder contact\n' "$i" "$code" "$code"
     done
 }
 
 ceremony_assert_plaintext_clean() {
-    local tree=$1 f token i
-    local -a files=()
-    while IFS= read -r -d '' f; do
-        case "$f" in
-            */secured/*) continue ;;
-        esac
-        files+=("$f")
-    done < <(find "$tree" -type f -print0)
-    for f in "${files[@]}"; do
-        if grep -F -q -e "$KEY_PASS" -- "$f"; then
-            ceremony_die "A plaintext ceremony file contains the key passphrase."
-        fi
-        if grep -F -q -e "BEGIN PRIVATE KEY" -e "BEGIN RSA PRIVATE KEY" -- "$f"; then
-            ceremony_die "A ceremony file contains a private key."
-        fi
+    local tree=$1 i pat
+    pat="$WORK/forbidden.pat"
+    : > "$pat"
+    chmod 600 "$pat"
+    {
+        printf '%s\n' "$KEY_PASS"
         for (( i=1; i<=SHARES; i++ )); do
-            token=${SHARE_AT[i]}
-            if grep -F -q -e "$token" -- "$f"; then
-                ceremony_die "A plaintext ceremony file contains a share token."
-            fi
+            printf '%s\n' "${SHARE_AT[i]}"
         done
-    done
+    } > "$pat"
+    chmod 600 "$pat"
+    ceremony_require_mode_600 "$pat"
+    # Patterns stay in the mode 700 work directory. grep reads them from
+    # the file so the passphrase and share tokens are not process arguments.
+    if grep -R -F -q -f "$pat" --exclude-dir=secured -- "$tree"; then
+        ceremony_die "A plaintext ceremony file contains the key passphrase or a share token."
+    fi
+    if grep -R -F -q -e "BEGIN PRIVATE KEY" -e "BEGIN RSA PRIVATE KEY" -- "$tree"; then
+        ceremony_die "A ceremony file contains a private key."
+    fi
 }
 
 ceremony_build_tree() {
-    local tree=$1 i code token passfile sealed plain out check notes comm
+    local tree=$1 i code token passfile sealed plain out notes comm
     local -a codes=()
     rm -rf -- "$tree"
     mkdir -p "$tree/public" "$tree/payload/secured" "$tree/payload/unsecured"
@@ -405,6 +519,7 @@ ceremony_build_tree() {
         codes+=("$code")
         mkdir -p "$tree/shards/$code/secured" "$tree/shards/$code/unsecured" "$tree/shards/$code/communication"
     done
+    ceremony_chmod_tree_dirs "$tree"
 
     cp -- "$WORK/public.pem" "$tree/public/public.pem"
     chmod 644 "$tree/public/public.pem"
@@ -426,6 +541,9 @@ EOF
         done
         printf '\n'
         printf 'key_bits=4096\n'
+        if [[ -n "$KEY_TYPE" ]]; then
+            printf 'key_type=%s\n' "$KEY_TYPE"
+        fi
         printf 'fingerprint_sha256=%s\n' "$FINGERPRINT"
     } > "$tree/metadata.txt"
     chmod 644 "$tree/metadata.txt"
@@ -456,8 +574,14 @@ The private key is encrypted in the secured directory beside this file.
 The key passphrase was split into one sealed share per guardian.
 This private key is a ceremony and backup key.
 It is not wired into contracts or the application.
+This key is separate from the ballot encryption key.
+This ceremony does not produce the ballot encryption key.
+The L2 operator gets public/ only, never a share.
 Record public/public.pem and public/fingerprint.txt on the L2 yourself.
 This tooling does not connect to a network.
+Splitting the passphrase means the full private key sits in payload/secured.
+A share is useless without that encrypted PEM.
+Keep at least two offline copies of the sealed private key.
 Never email or message a plaintext share.
 Recover only on an offline machine.
 ##### END CEREMONY NOTES #####
@@ -478,6 +602,7 @@ EOF
         plain="$WORK/share.$i.txt"
         printf '%s\n' "$token" > "$plain"
         chmod 600 "$plain"
+        ceremony_require_mode_600 "$plain"
         passfile="$WORK/gpass.$i"
         ceremony_passfile "$passfile" "${GUARDIAN_PASS[i]}"
         sealed="$tree/shards/$code/secured/${DATE}_${NAME}_${code}_secured_share.txt"
@@ -528,9 +653,14 @@ Any $THRESHOLD of $SHARES guardians can reconstruct the key passphrase.
 This sheet is not a share. The sealed share is a separate file.
 One sealed share per guardian.
 Never email or message a plaintext share.
+This ceremony directory holds the sealed private key, the sealed shares, and these sheets.
+Together they can rebuild the private key with no other secret.
+Distribute this sheet and the sealed share separately.
+After the handoff, shred this sheet from the ceremony machine.
 ##### END COMMUNICATION SHEET #####
 EOF
         chmod 600 "$comm"
+        ceremony_require_mode_600 "$comm"
     done
 
     ssss_write_distribution_guide "$tree" "$NAME" "$DATE" "$THRESHOLD" "$SHARES" "${codes[@]}" \
@@ -548,10 +678,23 @@ ceremony_publish_tree() {
         ceremony_die "Refusing to overwrite $FINAL_DIR"
     fi
     mkdir -p -- "$parent"
+    chmod 700 "$parent"
+    ceremony_require_mode_700 "$parent"
     STAGE=$(mktemp -d "$parent/.stage.XXXXXX")
+    chmod 700 "$STAGE"
+    ceremony_require_mode_700 "$STAGE"
     cp -a -- "$tree/." "$STAGE/" || ceremony_die "Could not stage the ceremony directory."
+    ceremony_chmod_tree_dirs "$STAGE"
     mv -- "$STAGE" "$FINAL_DIR" || ceremony_die "Could not publish the ceremony directory."
     STAGE=""
+    chmod 700 "$FINAL_DIR" || {
+        ceremony_shred_tree "$FINAL_DIR"
+        ceremony_die "Could not set directory mode."
+    }
+    if [[ $(stat -c %a -- "$FINAL_DIR") != 700 ]]; then
+        ceremony_shred_tree "$FINAL_DIR"
+        ceremony_die "Directory must be mode 700."
+    fi
     PUBLISHED=1
 }
 
@@ -559,6 +702,7 @@ ceremony_prepare_key() {
     local fp_priv fp_pub pubtext
     WORK=$(mktemp -d)
     chmod 700 "$WORK"
+    ceremony_require_mode_700 "$WORK"
     if [[ -n "$IMPORT" ]]; then
         [[ -f "$IMPORT" ]] || ceremony_die "Import file not found."
         ceremony_assert_rsa_4096 "$IMPORT" || ceremony_die "The import file is not a 4096-bit RSA private key."
@@ -569,6 +713,7 @@ ceremony_prepare_key() {
             || ceremony_die "openssl could not generate a key."
     fi
     chmod 600 "$WORK/private.pem"
+    ceremony_require_mode_600 "$WORK/private.pem"
     ceremony_assert_rsa_4096 "$WORK/private.pem" || ceremony_die "Key generation did not produce a 4096-bit RSA key."
     openssl pkey -in "$WORK/private.pem" -pubout -out "$WORK/public.pem"
     chmod 644 "$WORK/public.pem"
@@ -599,7 +744,7 @@ ceremony_run() {
     ceremony_note ""
     ceremony_opsec
     ceremony_note ""
-    ssss_require_tools openssl iconv od tr mktemp awk grep sed date find \
+    ssss_require_tools openssl iconv od tr mktemp awk grep sed date find realpath git stat \
         || ceremony_die "Install the missing commands and run this again."
     if (( ! NONINTERACTIVE )); then
         ceremony_require_yes "Type YES to continue: " || ceremony_die "Stopped."
@@ -611,14 +756,19 @@ ceremony_run() {
     fi
     NAME=${NAME^^}
     [[ "$NAME" =~ ^[A-Z0-9][A-Z0-9_-]{0,63}$ ]] || ceremony_die "The ceremony name must be 1 to 64 characters: letters, digits, underscore, or hyphen."
+    if (( ! NONINTERACTIVE )) && [[ -z "$KEY_TYPE" ]]; then
+        ceremony_note "Optional type: VOTE or POLL. Leave blank to keep the ceremony name unchanged."
+        ceremony_prompt_line KEY_TYPE "Type" || ceremony_die "A type is required."
+    fi
+    ceremony_apply_key_type
 
     if [[ -z "$OUT" ]]; then
         (( NONINTERACTIVE )) && ceremony_die "--out is required."
-        OUT="$PWD/guardian-ceremony-out"
+        ceremony_note "Choose a directory outside the git working tree."
+        ceremony_prompt_line OUT "Output directory" || ceremony_die "--out is required."
+        [[ -n "$OUT" ]] || ceremony_die "--out is required."
     fi
-    if [[ "$OUT" != /* ]]; then
-        OUT="$PWD/$OUT"
-    fi
+    ceremony_assign_outside_repo OUT "$OUT"
     ceremony_note "Do not commit the ceremony directory."
 
     if [[ -z "$SHARES" ]]; then
@@ -649,8 +799,12 @@ ceremony_run() {
     fi
 
     if (( NONINTERACTIVE )); then
-        [[ -n "$KEY_PASS_FILE" ]] || ceremony_die "A key passphrase file is required."
-        KEY_PASS=$(ceremony_read_passphrase_file "$KEY_PASS_FILE")
+        if [[ -n "$KEY_PASS_FILE" ]]; then
+            KEY_PASS=$(ceremony_read_passphrase_file "$KEY_PASS_FILE")
+        else
+            KEY_PASS=$(ceremony_generate_key_passphrase) || ceremony_die "Could not generate a key passphrase."
+            ceremony_note "Generated a key passphrase. It is not printed."
+        fi
         ceremony_load_guardian_passphrases
     fi
 
@@ -660,7 +814,19 @@ ceremony_run() {
         ceremony_note "The public key and this fingerprint are the files to record on the L2."
         ceremony_note "This program does not connect to a network."
         ceremony_require_yes "Type YES to encrypt this key and split the passphrase: " || ceremony_die "Stopped."
-        ceremony_prompt_passphrase KEY_PASS "Key passphrase" || ceremony_die "Key passphrase was not accepted."
+        ceremony_note "Key passphrase:"
+        ceremony_note "  1  Enter a passphrase twice (32 to 1024 characters)"
+        ceremony_note "  2  Generate one with openssl rand -base64 48 (it is not printed)"
+        ceremony_prompt_line choice "Choice [2]" || ceremony_die "A key passphrase choice is required."
+        choice=${choice:-2}
+        if [[ "$choice" == "2" ]]; then
+            KEY_PASS=$(ceremony_generate_key_passphrase) || ceremony_die "Could not generate a key passphrase."
+            ceremony_note "Generated a key passphrase. It is not printed."
+        elif [[ "$choice" == "1" ]]; then
+            ceremony_prompt_passphrase KEY_PASS "Key passphrase" || ceremony_die "Key passphrase was not accepted."
+        else
+            ceremony_die "Choose 1 or 2."
+        fi
     fi
 
     SHARE_AT=()
@@ -687,9 +853,18 @@ ceremony_run() {
     ceremony_note "Ceremony directory: $final"
     ceremony_note "Public fingerprint: $FINGERPRINT"
     ceremony_note "This private key is a ceremony and backup key. It is not wired into contracts or the application."
+    ceremony_note "This key is separate from the ballot encryption key."
+    ceremony_note "This ceremony does not produce the ballot encryption key."
+    ceremony_note "The L2 operator gets public/ only, never a share."
+    ceremony_note "WARNING: this ceremony directory holds the sealed private key, the sealed shares, and the communication sheets."
+    ceremony_note "Together they can rebuild the private key with no other secret."
+    ceremony_note "Distribute the sheets and the sealed shares separately, then shred the communication sheets from this machine."
     ceremony_note "Transfer only sealed files. Print the communication sheets. Read DISTRIBUTION.txt."
     ceremony_note "Recovery steps are in RECOVERY.txt."
     printf 'ceremony_dir=%s\n' "$final"
+    if [[ -n "$KEY_TYPE" ]]; then
+        printf 'key_type=%s\n' "$KEY_TYPE"
+    fi
     printf 'fingerprint_sha256=%s\n' "$FINGERPRINT"
 }
 
@@ -702,6 +877,7 @@ ceremony_load_metadata() {
     META_CODENAMES=""
     META_FINGERPRINT=""
     META_BITS=""
+    META_KEY_TYPE=""
     [[ -f "$file" ]] || return 1
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ "$line" == *=* ]] || continue
@@ -715,8 +891,12 @@ ceremony_load_metadata() {
             codenames) META_CODENAMES=$val ;;
             fingerprint_sha256) META_FINGERPRINT=$val ;;
             key_bits) META_BITS=$val ;;
+            key_type) META_KEY_TYPE=$val ;;
         esac
     done < "$file"
+    if [[ -n "$META_KEY_TYPE" && "$META_KEY_TYPE" != "VOTE" && "$META_KEY_TYPE" != "POLL" ]]; then
+        return 1
+    fi
     [[ "$META_NAME" =~ ^[A-Z0-9][A-Z0-9_-]{0,63}$ ]] || return 1
     [[ "$META_DATE" =~ ^[0-9]{8}$ ]] || return 1
     [[ "$META_THRESHOLD" =~ ^[0-9]+$ ]] || return 1
@@ -731,8 +911,9 @@ ceremony_recover() {
     local part code sealed comm pass passfile payload fp filefp i seen=" " outdir stage line=""
     [[ -n "$RECOVER_DIR" && -n "$RECOVER_OUT" && -n "$GUARDIANS" ]] \
         || ceremony_die "recover needs --dir, --out, and --guardians."
-    [[ -d "$RECOVER_DIR" ]] || ceremony_die "Ceremony directory not found."
+    ceremony_assign_outside_repo RECOVER_OUT "$RECOVER_OUT"
     [[ ! -e "$RECOVER_OUT" ]] || ceremony_die "Refusing to overwrite the output file."
+    [[ -d "$RECOVER_DIR" ]] || ceremony_die "Ceremony directory not found."
     ceremony_load_metadata "$RECOVER_DIR/metadata.txt" || ceremony_die "metadata.txt is missing or not valid."
     local IFS=','
     read -r -a want <<< "$GUARDIANS"
@@ -753,6 +934,7 @@ ceremony_recover() {
     done
     if [[ -n "$GUARDIAN_PASS_FILE" ]]; then
         [[ -f "$GUARDIAN_PASS_FILE" ]] || ceremony_die "Guardian passphrase file not found."
+        ceremony_require_passphrase_file_mode "$GUARDIAN_PASS_FILE"
         mapfile -t passlines < "$GUARDIAN_PASS_FILE"
         if (( ${#passlines[@]} != ${#codes[@]} )); then
             ceremony_die "The guardian passphrase file must have one line per listed guardian."
@@ -760,15 +942,16 @@ ceremony_recover() {
     fi
     WORK=$(mktemp -d)
     chmod 700 "$WORK"
+    ceremony_require_mode_700 "$WORK"
     for i in "${!codes[@]}"; do
         code=${codes[i]}
         sealed=$(ceremony_first_file "$RECOVER_DIR/shards/$code/secured" '*_secured_share.txt') \
-            || ceremony_die "Sealed share not found for $code."
+            || ceremony_die "Could not select one sealed share for $code."
         if [[ -n "$GUARDIAN_PASS_FILE" ]]; then
             pass=${passlines[i]%$'\r'}
         else
             comm=$(ceremony_first_file "$RECOVER_DIR/shards/$code/communication" '*_communication.txt') \
-                || ceremony_die "Communication sheet not found for $code."
+                || ceremony_die "Could not select one communication sheet for $code."
             pass=$(ceremony_sheet_passphrase "$comm") || ceremony_die "Communication sheet for $code has no passphrase line."
         fi
         ceremony_check_passphrase "$pass" || ceremony_die "Passphrase for $code is not valid."
@@ -786,7 +969,7 @@ ceremony_recover() {
     fi
     ceremony_passfile "$WORK/key.pass" "$pass"
     payload=$(ceremony_first_file "$RECOVER_DIR/payload/secured" '*_secured_private_key.txt') \
-        || ceremony_die "Sealed private key not found."
+        || ceremony_die "Could not select one sealed private key."
     ceremony_decrypt_sealed "$payload" "$WORK/recovered.pem" "$WORK/key.pass" \
         || ceremony_die "Could not decrypt the private key."
     ceremony_assert_rsa_4096 "$WORK/recovered.pem" || ceremony_die "Recovered key is not a 4096-bit RSA private key."
@@ -800,16 +983,17 @@ ceremony_recover() {
         fi
     done < "$RECOVER_DIR/public/fingerprint.txt"
     [[ "$filefp" == "$fp" ]] || ceremony_die "fingerprint.txt does not match the recovered key."
-    if [[ "$RECOVER_OUT" != /* ]]; then
-        RECOVER_OUT="$PWD/$RECOVER_OUT"
-    fi
     outdir=$(dirname -- "$RECOVER_OUT")
     mkdir -p -- "$outdir"
     stage=$(mktemp "$outdir/.recovered.XXXXXX")
     cp -- "$WORK/recovered.pem" "$stage"
     chmod 600 "$stage"
     mv -- "$stage" "$RECOVER_OUT"
+    ceremony_require_mode_600 "$RECOVER_OUT"
     RECOVER_PUBLISHED=1
+    if [[ -n "$META_KEY_TYPE" ]]; then
+        printf 'key_type=%s\n' "$META_KEY_TYPE"
+    fi
     printf 'fingerprint_sha256=%s\n' "$fp"
     printf 'fingerprint_match=yes\n'
     printf 'recovered_private_key=%s\n' "$RECOVER_OUT"
@@ -826,6 +1010,7 @@ apply_env() {
     [[ -n "$KEY_PASS_FILE" ]] || KEY_PASS_FILE=${CEREMONY_KEY_PASSPHRASE_FILE:-}
     [[ -n "$GUARDIAN_PASS_FILE" ]] || GUARDIAN_PASS_FILE=${CEREMONY_GUARDIAN_PASSPHRASE_FILE:-}
     [[ -n "$IMPORT" ]] || IMPORT=${CEREMONY_IMPORT_PEM:-}
+    [[ -n "$KEY_TYPE" ]] || KEY_TYPE=${CEREMONY_TYPE:-}
 }
 
 parse_args() {
@@ -853,6 +1038,9 @@ parse_args() {
             --import)
                 [[ $# -ge 2 ]] || ceremony_die "--import needs a value."
                 IMPORT=$2; shift 2 ;;
+            --type)
+                [[ $# -ge 2 ]] || ceremony_die "--type needs a value."
+                KEY_TYPE=$2; shift 2 ;;
             --dir)
                 [[ $# -ge 2 ]] || ceremony_die "--dir needs a value."
                 RECOVER_DIR=$2; shift 2 ;;
