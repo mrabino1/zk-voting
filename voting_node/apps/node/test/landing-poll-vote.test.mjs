@@ -152,9 +152,9 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.match(lookup(dicts.en, 'pollVote.poll.merge'), /at least 10/);
   assert.match(lookup(dicts.en, 'how.s5body'), /stay as first published/);
   assert.match(lookup(dicts.en, 'how.s5body'), /Anyone can check that the published totals match the accepted ballots/);
-  assert.match(html, /once 100 distinct voters have cast a ballot or the poll ends/);
-  assert.match(html, /once 100 distinct voters have cast a ballot or the scheduled end arrives, whichever comes first/);
-  assert.match(html, /Counts stay hidden until 100 distinct voters have cast a ballot, or until the scheduled end, whichever comes first/);
+  assert.match(html, /once 100 distinct voters have cast a ballot or the scheduled end, whichever comes first/);
+  assert.match(html, /Counts stay hidden until 100 distinct voters have cast a ballot, or the scheduled end, whichever comes first/);
+  assert.doesNotMatch(html, /or the poll ends/);
   assert.doesNotMatch(html, /100 first ballots/);
   assert.doesNotMatch(lookup(dicts.en, 'hero.lead'), /100 first ballots/);
   assert.doesNotMatch(lookup(dicts.en, 'how.s4body'), /100 first ballots/);
@@ -198,16 +198,16 @@ const BOTH_TURNOUT =
 const POLL_TURNOUT = 'Turnout is public every hour, as in a poll.';
 
 const TURNOUT_GATE = {
-  en: { turnout: /\bturnout\b/i, gate: /\b(?:first 100 ballots|100 first ballots)\b/i, tied: /\b(?:100 voters have cast their first ballot|the gate|a gate|delayed)\b/i },
-  es: { turnout: /participaci[oó]n/i, gate: /primeras 100 boletas/i, tied: /100 votantes|umbral|diferido/i },
-  fr: { turnout: /participation/i, gate: /100 premiers bulletins/i, tied: /100 votants|diff[eé]r[eé]|seuil/i },
-  pt: { turnout: /participa[cç][aã]o/i, gate: /primeiras 100 c[eé]dulas/i, tied: /100 eleitores|atrasad|limiar|barreira/i },
-  zh: { turnout: /投票率/, gate: /最先的 100/, tied: /100 名投票人|门槛|延迟/ },
-  ar: { turnout: /إقبال/, gate: /أول 100/, tied: /100 ناخب|عتبة|مؤج/ },
-  ko: { turnout: /투표율/, gate: /처음 100장/, tied: /100명|문턱|지연/ },
-  hi: { turnout: /उपस्थिति/, gate: /पहले 100 मत/, tied: /100 मतदाता|द्वार|विलंब/ },
-  vi: { turnout: /tỷ lệ đi/i, gate: /100 phiếu đầu/i, tied: /100 cử tri|cửa|trễ/i },
-  fil: { turnout: /pagdalo/i, gate: /unang 100 balota/i, tied: /100 botante|tarangkahan|antala/i },
+  en: { turnout: /\bturnout\b/i, gate: /\b(?:first 100 ballots|100 first ballots)\b/i, tied: /100 distinct voters/i },
+  es: { turnout: /participaci[oó]n/i, gate: /primeras 100 boletas/i, tied: /100 votantes distintos/i },
+  fr: { turnout: /participation/i, gate: /100 premiers bulletins/i, tied: /100 votants distincts/i },
+  pt: { turnout: /comparecimento/i, gate: /primeiras 100 c[eé]dulas/i, tied: /100 eleitores distintos/i },
+  zh: { turnout: /投票率/, gate: /最先的 100/, tied: /100 位不同的投票人/ },
+  ar: { turnout: /نسبة المشاركة/, gate: /أول 100/, tied: /100 ناخب مختلف/ },
+  ko: { turnout: /투표율/, gate: /처음 100장/, tied: /서로 다른 투표자 100명/ },
+  hi: { turnout: /मतदान प्रतिशत/, gate: /पहले 100 मत/, tied: /100 अलग-अलग मतदाता/ },
+  vi: { turnout: /Tỷ lệ tham gia/, gate: /100 phiếu đầu/i, tied: /100 cử tri khác nhau/ },
+  fil: { turnout: /\bturnout\b/i, gate: /unang 100 balota/i, tied: /100 magkakaibang botante/i },
 };
 
 function sentencesOf(value) {
@@ -217,16 +217,22 @@ function sentencesOf(value) {
 test('turnout, re-voting and privacy copy match the agreed wording', () => {
   const html = pageHtml();
   const dicts = catalogs();
+  const voterKeys = ['hero.lead', 'why.publicBody', 'why.coerceBody', 'who.clubsBody', 'who.auditorsBody', 'how.s4body', 'pollVote.poll.gate'];
   for (const key of ['hero.lead', 'why.publicBody', 'who.clubsBody', 'who.auditorsBody']) {
     assert.match(lookup(dicts.en, key), /Turnout is published on a delayed hourly schedule for both kinds\./);
-    assert.match(lookup(dicts.en, key), /once 100 distinct voters have cast a ballot or the poll ends, whichever comes first/);
+    assert.match(lookup(dicts.en, key), /once 100 distinct voters have cast a ballot or the scheduled end, whichever comes first/);
   }
-  for (const key of ['why.oneBody', 'how.s3body']) {
-    assert.match(lookup(dicts.en, key), /The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends\./);
+  for (const key of ['why.oneBody', 'how.s3body', 'pollVote.both.revote']) {
+    assert.match(lookup(dicts.en, key), /The operator decides at creation whether re-voting is allowed, and that setting can't be changed afterward\./);
     assert.match(lookup(dicts.en, key), /If not, a second ballot is rejected\./);
   }
+  assert.match(lookup(dicts.en, 'hero.lead'), /That setting can't be changed afterward\./);
   assert.match(lookup(dicts.en, 'hero.lead'), /Individual choices are designed not to be published\./);
   assert.match(lookup(dicts.en, 'hero.lead'), /\(tests currently use a mock verifier\)/);
+  assert.match(lookup(dicts.en, 'why.privateBody'), /designed so they don't show how you voted/);
+  assert.match(lookup(dicts.en, 'vision.l2p2'), /with the mock verifier in tests, this check is not yet enforced/);
+  assert.match(html, /designed so they don't show how you voted/);
+  assert.match(html, /with the mock verifier in tests, this check is not yet enforced/);
   assert.equal(lookup(dicts.en, 'hero.title'), 'Ballots designed so nobody can read them.');
   assert.match(html, /Ballots designed so nobody can read them/);
   assert.match(lookup(dicts.en, 'pollVote.vote.guardians'), /The design gives the operator no key share\./);
@@ -234,18 +240,44 @@ test('turnout, re-voting and privacy copy match the agreed wording', () => {
   assert.match(lookup(dicts.en, 'pollVote.vote.shamir'), /Shamir/);
   assert.match(html, /data-i18n="pollVote.vote.keyL2"/);
   assert.match(html, /data-i18n="pollVote.vote.shamir"/);
-  for (const banned of [/Nobody's choice is ever published/, /can't show how you voted/, /Individual choices are not published/, /Turnout is public every hour/]) {
+  const keyL2At = html.indexOf('data-i18n="pollVote.vote.keyL2"');
+  const shamirAt = html.indexOf('data-i18n="pollVote.vote.shamir"');
+  assert.ok(keyL2At !== -1 && shamirAt !== -1 && keyL2At < shamirAt);
+  for (const banned of [/Nobody's choice is ever published/, /can't show how you voted/, /Individual choices are not published/, /Turnout is public every hour/, /or the poll ends/, /locked until the election ends/]) {
     assert.doesNotMatch(html, banned);
   }
+  const marks = {
+    en: { voters: /100 distinct voters/, end: /or the scheduled end, whichever comes first/, locked: /that setting can't be changed afterward/i, l2p2: /mock verifier in tests/, privateBody: /designed so they don't show how you voted/ },
+    es: { voters: /100 votantes distintos/, end: /o el final previsto, lo que ocurra primero/, locked: /no se puede cambiar después/, l2p2: /verificador simulado/, privateBody: /no mostrar cómo votaste/ },
+    fr: { voters: /100 votants distincts/, end: /ou la fin prévue, selon ce qui arrive en premier/, locked: /ne peut plus être modifié par la suite/, l2p2: /vérificateur fictif/, privateBody: /ne pas révéler votre vote/ },
+    pt: { voters: /100 eleitores distintos/, end: /ou o fim previsto, o que vier primeiro/, locked: /não pode ser alterada depois/, l2p2: /verificador simulado/, privateBody: /não mostrar como você votou/ },
+    zh: { voters: /100 位不同的投票人/, end: /或预定结束时（以先到者为准）/, locked: /该设置之后不能更改/, l2p2: /模拟验证器/, privateBody: /不显示你如何投票/ },
+    ar: { voters: /100 ناخب مختلف/, end: /أو النهاية المقررة، أيهما أسبق/, locked: /لا يمكن تغيير هذا الإعداد بعد ذلك/, l2p2: /المُحقق الوهمي/, privateBody: /لا تُظهر كيف صوّتّ/ },
+    ko: { voters: /서로 다른 투표자 100명/, end: /예정된 종료\(먼저 오는 쪽\)/, locked: /이후에는 바꿀 수 없습니다/, l2p2: /모의 검증기/, privateBody: /어떻게 투표했는지/ },
+    hi: { voters: /100 अलग-अलग मतदाता/, end: /या तय समाप्ति, जो पहले हो/, locked: /बाद में नहीं बदली जा सकती/, l2p2: /नकली सत्यापक/, privateBody: /आपने कैसे वोट किया/ },
+    vi: { voters: /100 cử tri khác nhau/, end: /hoặc thời điểm kết thúc dự kiến, tùy điều nào đến trước/, locked: /không thể thay đổi sau đó/, l2p2: /xác minh giả/, privateBody: /bạn đã bầu thế nào/ },
+    fil: { voters: /100 magkakaibang botante/, end: /o ang nakatakdang pagtatapos, alinman ang mauna/, locked: /Hindi na mababago ang setting na iyon pagkatapos|hindi na mababago ang setting na iyon pagkatapos/, l2p2: /kunwang tagapagpatunay/, privateBody: /kung paano ka bumoto/ },
+  };
   for (const code of LOCALE_CODES) {
-    for (const key of ['hero.lead', 'pollVote.poll.gate', 'pollVote.vote.keyL2', 'pollVote.vote.shamir', 'pollVote.both.revote', 'pollVote.both.turnout']) {
-      assert.equal(typeof lookup(dicts[code], key), 'string', `${code} ${key}`);
+    const mark = marks[code];
+    for (const key of voterKeys) {
+      assert.match(lookup(dicts[code], key), mark.voters, `${code} ${key}`);
+      assert.match(lookup(dicts[code], key), mark.end, `${code} ${key}`);
     }
-    assert.match(lookup(dicts[code], 'pollVote.poll.gate'), /100/, code);
+    for (const key of ['hero.lead', 'why.oneBody', 'how.s3body', 'pollVote.both.revote']) {
+      assert.match(lookup(dicts[code], key), mark.locked, `${code} ${key}`);
+    }
+    assert.match(lookup(dicts[code], 'vision.l2p2'), mark.l2p2, `${code} vision.l2p2`);
+    assert.match(lookup(dicts[code], 'why.privateBody'), mark.privateBody, `${code} why.privateBody`);
+    assert.match(lookup(dicts.en, 'why.coerceBody'), /Turnout is published on a delayed hourly schedule, as in a poll\./);
     const rules = TURNOUT_GATE[code];
     for (const key of flattenKeys(dicts[code])) {
       for (const sentence of sentencesOf(lookup(dicts[code], key))) {
         assert.doesNotMatch(sentence, rules.gate, `${code} ${key} counts the first 100 ballots: ${sentence}`);
+        assert.ok(
+          !(rules.turnout.test(sentence) && rules.tied.test(sentence)),
+          `${code} ${key} ties turnout to the gate: ${sentence}`,
+        );
       }
     }
   }
