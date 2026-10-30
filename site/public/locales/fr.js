@@ -26,6 +26,7 @@ export default {
     why: "Pourquoi c'est utile",
     who: "À qui ça s'adresse",
     how: "Fonctionnement",
+    pollVsVote: "Sondage et scrutin",
     selfHost: "Auto-héberger",
     forum: "Forum communautaire",
   },
@@ -34,7 +35,7 @@ export default {
     title:
       'Un vote que vos membres peuvent <span class="accent">vérifier</span>.<br>Des bulletins que personne ne peut <span class="accent">lire</span>.',
     lead:
-      "{brand} permet à tout groupe de mener ses élections et ses sondages. La personne qui crée choisit un sondage ou un scrutin. Un sondage publie les totaux par choix et la participation sur un rythme horaire différé dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine. Un scrutin publie la participation sur ce même rythme, et ne publie les choix qu'à l'échéance. Les preuves à divulgation nulle de connaissance montrent que seules des personnes éligibles ont voté, chacune une fois, et que le décompte publié correspond aux bulletins. Le choix de personne n'est jamais publié.",
+      "{brand} permet à tout groupe de mener ses élections et ses sondages. La personne qui crée choisit un sondage ou un scrutin. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine. Un scrutin ne publie les choix qu'à l'échéance. Les preuves à divulgation nulle de connaissance sont conçues pour montrer que seules des personnes éligibles ont voté, chacune une fois, et que le décompte publié correspond aux bulletins (les tests utilisent actuellement un vérificateur fictif). Les choix individuels ne sont pas publiés.",
     discuss: "Rejoindre la discussion",
     demo: "Essayer la démo de vote →",
     statsLabel: "En bref",
@@ -104,13 +105,13 @@ export default {
       "L'option choisie n'est jamais un champ lisible dans une transaction ou une base. Les reçus sont des hachages : ils ne montrent pas comment vous avez voté.",
     publicTitle: "Vérifiable publiquement",
     publicBody:
-      "Les inscriptions et les codes de disqualification sont publics. Un sondage publie les totaux par choix et la participation sur un rythme horaire différé dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine. Un scrutin publie la participation sur le même rythme différé. Ses choix restent scellés jusqu'à l'échéance. Un audit indépendant peut reconstruire un résultat publié sans la base privée de l'opérateur.",
+      "Les inscriptions et les codes de disqualification sont publics. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine. Les choix d'un scrutin restent scellés jusqu'à l'échéance. Un audit indépendant peut reconstruire un résultat publié sans la base privée de l'opérateur.",
     oneTitle: "Une personne, une voix",
     oneBody:
       "Chaque bulletin porte une preuve que la personne est sur la liste figée et n'est pas disqualifiée. Dans un sondage ou un scrutin, on peut changer son choix jusqu'à l'échéance, et l'annulateur ne compte que le dernier.",
     coerceTitle: "Conçu contre la contrainte",
     coerceBody:
-      "Rien de ce qui est remis à une personne ne prouve son choix à quelqu'un qui la presse. Choisissez un scrutin quand un total en cours ajouterait de la pression. La participation suit le même rythme horaire différé qu'un sondage. Les choix restent chiffrés jusqu'à l'échéance, et un vote peut être remplacé jusque-là. Un sondage publie les totaux par choix et la participation sur un rythme horaire différé dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine.",
+      "Rien de ce qui est remis à une personne ne prouve son choix à quelqu'un qui la presse. Choisissez un scrutin quand un total en cours ajouterait de la pression. La participation est publique chaque heure, comme dans un sondage. Les choix restent chiffrés jusqu'à l'échéance, et un vote peut être remplacé jusque-là. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine.",
     dueTitle: "Procédure pour disqualifier",
     dueBody: "Écarter quelqu'un est un changement public, codé et sur la chaîne, avec un motif énoncé, pas un drapeau silencieux dans une base.",
     vendorTitle: "Sans enfermement fournisseur",
@@ -130,10 +131,10 @@ export default {
     schoolsBody: "Menez des gouvernements étudiants et des votes du corps enseignant avec une clé d'accès et un bulletin utilisable sur tout appareil.",
     clubsTitle: "Communautés et clubs",
     clubsBody:
-      "Sondages rapides oui/non, à choix unique ou multiple, pour tout groupe qui veut un bulletin privé et un décompte honnête. Un sondage publie les totaux par choix et la participation sur un rythme horaire différé dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine.",
+      "Sondages rapides oui/non, à choix unique ou multiple, pour tout groupe qui veut un bulletin privé et un décompte honnête. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine.",
     auditorsTitle: "Observateurs et auditeurs",
     auditorsBody:
-      "Suivez les inscriptions et les codes de disqualification sur l'explorateur public, et vérifiez un rapport de résultat dès que ce scrutin peut l'afficher. Un sondage publie les totaux par choix et la participation sur un rythme horaire différé dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine. Un scrutin publie la participation sur le même rythme différé qu'un sondage, et ne publie les choix qu'à l'échéance.",
+      "Suivez les inscriptions et les codes de disqualification sur l'explorateur public, et vérifiez un rapport de résultat dès que ce scrutin peut l'afficher. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que les 100 premiers bulletins sont arrivés ou que le sondage se termine. Un scrutin ne publie les choix qu'à l'échéance.",
   },
   how: {
     title: "Fonctionnement",
@@ -191,7 +192,7 @@ export default {
       gate: "Les totaux restent cachés jusqu'à l'arrivée des 100 premiers bulletins, ou jusqu'à la fin prévue, selon ce qui arrive en premier.",
       hourly: "Après ce seuil, les totaux par choix sont publiés pour chaque bloc horaire, 30 minutes après la fin de l'heure.",
       merge: "Une heure de moins de 10 bulletins fusionne vers l'avant jusqu'à ce qu'un bloc en ait au moins 10.",
-      freeze: "Les blocs horaires publiés ne changent plus. Les votes remplacés n'apparaissent que dans le décompte final.",
+      freeze: "Les blocs horaires publiés ne changent plus. Les nouveaux votes (changements de vote) n'apparaissent que dans le décompte final.",
       example: "Exemple",
       choiceA: "Choix A",
       choiceB: "Choix B",
@@ -201,7 +202,7 @@ export default {
       name: "Scrutin",
       summary: "Les choix restent scellés jusqu'à l'échéance.",
       sealed: "Les choix restent scellés jusqu'à l'échéance.",
-      guardians: "Ils ne sont déchiffrés que comme un agrégat, par des gardiens k-of-n.",
+      guardians: "Ils ne sont déchiffrés que comme un agrégat, par des gardiens k-of-n. L'opérateur ne détient aucune clé.",
       noInterim: "Il n'y a pas de totaux provisoires par choix.",
       sealedLabel: "Scellé",
       turnoutLabel: "Participation",

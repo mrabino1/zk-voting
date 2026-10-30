@@ -153,7 +153,8 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.match(lookup(dicts.en, 'how.s5body'), /Anyone can check that the published totals match the accepted ballots/);
   assert.match(html, /100 first ballots are in/);
   assert.match(html, /A poll's published hourly blocks stay as published/);
-  assert.doesNotMatch(html, /data-i18n="nav\.pollVsVote"/);
+  assert.match(html, /data-i18n="nav\.pollVsVote"/);
+  assert.equal(lookup(dicts.en, 'nav.pollVsVote'), 'Poll vs Vote');
   assert.doesNotMatch(html, /class="ballot-visual" dir="ltr"/);
   assert.match(html, /id="flow-poll-lane"/);
   assert.match(html, /id="flow-vote-lane"/);
@@ -183,6 +184,90 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.match(lookup(dicts.zh, 'pollVote.poll.name'), /[\u4e00-\u9fff]/);
   assert.match(lookup(dicts.ko, 'pollVote.poll.name'), /[\uac00-\ud7af]/);
   assert.match(lookup(dicts.hi, 'pollVote.poll.name'), /[\u0900-\u097F]/);
+});
+
+const BOTH_TURNOUT =
+  'Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends.';
+const POLL_TURNOUT = 'Turnout is public every hour, as in a poll.';
+
+const TURNOUT_GATE = {
+  en: { turnout: /\bturnout\b/i, gate: /\b(?:100 first ballots|the gate|a gate|delayed)\b/i },
+  es: { turnout: /participaci[oó]n/i, gate: /primeras 100|umbral|diferido/i },
+  fr: { turnout: /participation/i, gate: /100 premiers|diff[eé]r[eé]|seuil/i },
+  pt: { turnout: /participa[cç][aã]o/i, gate: /primeiras 100|atrasad|limiar|port[aã]o/i },
+  zh: { turnout: /投票率/, gate: /最先的 100|门槛|延迟/ },
+  ar: { turnout: /إقبال/, gate: /أول 100|عتبة|مؤج/ },
+  ko: { turnout: /투표율/, gate: /100장|문턱|지연/ },
+  hi: { turnout: /उपस्थिति/, gate: /100 मत|द्वार|विलंब/ },
+  vi: { turnout: /tỷ lệ đi/i, gate: /100 phiếu|cửa|trễ/i },
+  fil: { turnout: /pagdalo/i, gate: /100 balota|tarangkahan|antala/i },
+};
+
+function sentencesOf(value) {
+  return value.split(/[.!?。！？।۔]+/).map((part) => part.trim()).filter(Boolean);
+}
+
+test('turnout is public every hour and is not tied to the poll gate', () => {
+  const html = pageHtml();
+  const dicts = catalogs();
+  for (const key of ['hero.lead', 'why.publicBody', 'who.clubsBody', 'who.auditorsBody']) {
+    assert.match(lookup(dicts.en, key), new RegExp(BOTH_TURNOUT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(lookup(dicts.en, 'why.coerceBody'), new RegExp(POLL_TURNOUT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(html, /Turnout is public every hour for both kinds\./);
+  assert.match(html, /Turnout is public every hour, as in a poll\./);
+  assert.match(lookup(dicts.en, 'hero.lead'), /Individual choices are not published\./);
+  assert.match(lookup(dicts.en, 'hero.lead'), /Zero-knowledge proofs are designed to show that only eligible people voted/);
+  assert.match(lookup(dicts.en, 'hero.lead'), /\(tests currently use a mock verifier\)/);
+  assert.doesNotMatch(lookup(dicts.en, 'hero.lead'), /Nobody's choice is ever published/);
+  assert.match(html, /Individual choices are not published\./);
+  assert.match(html, /tests currently use a mock verifier/);
+  assert.doesNotMatch(html, /Nobody's choice is ever published/);
+  assert.match(lookup(dicts.en, 'pollVote.vote.guardians'), /The operator holds no key\./);
+  assert.match(html, /The operator holds no key\./);
+  assert.equal(
+    lookup(dicts.es, 'pollVote.poll.freeze').split('. ').pop(),
+    'Los votos cambiados aparecen solo en el escrutinio final.',
+  );
+  assert.equal(
+    lookup(dicts.fr, 'pollVote.poll.freeze').split('. ').pop(),
+    "Les nouveaux votes (changements de vote) n'apparaissent que dans le décompte final.",
+  );
+  assert.equal(
+    lookup(dicts.pt, 'pollVote.poll.freeze').split('. ').pop(),
+    'Os votos alterados só aparecem na apuração final.',
+  );
+  const marks = {
+    es: ['La participación es pública cada hora para ambos tipos.', 'verificador simulado', 'Las opciones individuales no se publican.', 'El operador no tiene ninguna clave.'],
+    fr: ['La participation est publique chaque heure pour les deux types.', 'vérificateur fictif', 'Les choix individuels ne sont pas publiés.', "L'opérateur ne détient aucune clé."],
+    pt: ['A participação é pública a cada hora para os dois tipos.', 'verificador simulado', 'As escolhas individuais não são publicadas.', 'O operador não tem chave.'],
+    zh: ['两种的投票率每小时都公开。', '模拟验证器', '不公布个人的选择。', '运营者不持有密钥。'],
+    ar: ['الإقبال علني كل ساعة لكلا النوعين.', 'مُحققًا وهميًا', 'لا تُنشر الخيارات الفردية.', 'لا يحمل المشغّل أي مفتاح.'],
+    ko: ['두 종류 모두 투표율은 매시간 공개됩니다.', '모의 검증기', '개인의 선택은 공개되지 않습니다.', '운영자는 키를 갖고 있지 않습니다.'],
+    hi: ['दोनों प्रकारों में उपस्थिति हर घंटे सार्वजनिक है।', 'नकली सत्यापक', 'व्यक्तिगत विकल्प प्रकाशित नहीं होते।', 'संचालक के पास कोई कुंजी नहीं है।'],
+    vi: ['Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại.', 'bộ xác minh giả', 'Các lựa chọn cá nhân không được công bố.', 'Người vận hành không giữ khóa.'],
+    fil: ['Hayagan ang pagdalo kada oras para sa parehong uri.', 'kunwang tagapagpatunay', 'Hindi inilalathala ang mga indibidwal na pagpipilian.', 'Walang hawak na susi ang operator.'],
+  };
+  for (const [code, phrases] of Object.entries(marks)) {
+    const lead = lookup(dicts[code], 'hero.lead');
+    const guardians = lookup(dicts[code], 'pollVote.vote.guardians');
+    assert.match(lead, new RegExp(phrases[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(lead, new RegExp(phrases[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(lead, new RegExp(phrases[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(guardians, new RegExp(phrases[3].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(lookup(dicts[code], 'why.publicBody'), new RegExp(phrases[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  for (const code of LOCALE_CODES) {
+    const rules = TURNOUT_GATE[code];
+    for (const key of flattenKeys(dicts[code])) {
+      for (const sentence of sentencesOf(lookup(dicts[code], key))) {
+        assert.ok(
+          !(rules.turnout.test(sentence) && rules.gate.test(sentence)),
+          `${code} ${key} ties turnout to the gate: ${sentence}`,
+        );
+      }
+    }
+  }
 });
 
 test('comparison stacks on a narrow screen and motion can be reduced', () => {

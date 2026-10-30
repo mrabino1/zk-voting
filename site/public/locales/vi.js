@@ -26,6 +26,7 @@ export default {
     why: "Vì sao quan trọng",
     who: "Dành cho ai",
     how: "Cách hoạt động",
+    pollVsVote: "Thăm dò và bỏ phiếu",
     selfHost: "Tự lưu trữ",
     forum: "Diễn đàn cộng đồng",
   },
@@ -34,7 +35,7 @@ export default {
     title:
       'Cuộc bỏ phiếu mà thành viên có thể <span class="accent">kiểm</span>.<br>Phiếu mà không ai có thể <span class="accent">đọc</span>.',
     lead:
-      "{brand} để mọi nhóm tự tổ chức bầu cử và thăm dò. Người tạo chọn thăm dò hoặc bỏ phiếu. Thăm dò công bố số phiếu từng lựa chọn và tỷ lệ đi bỏ phiếu theo lịch giờ có trễ, sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc. Bỏ phiếu công bố tỷ lệ đi bỏ phiếu theo lịch đó, và chỉ công bố lựa chọn lúc hạn chót. Chứng minh không tiết lộ tri thức cho thấy chỉ người đủ tư cách bỏ phiếu, mỗi người một lần, và kết quả kiểm phiếu đã công bố khớp với phiếu. Lựa chọn của không ai bị công bố.",
+      "{brand} để mọi nhóm tự tổ chức bầu cử và thăm dò. Người tạo chọn thăm dò hoặc bỏ phiếu. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc. Bỏ phiếu chỉ công bố lựa chọn lúc hạn chót. Chứng minh không tiết lộ tri thức được thiết kế để cho thấy chỉ người đủ tư cách bỏ phiếu, mỗi người một lần, và kết quả kiểm phiếu đã công bố khớp với phiếu (kiểm thử hiện dùng bộ xác minh giả). Các lựa chọn cá nhân không được công bố.",
     discuss: "Tham gia thảo luận",
     demo: "Thử bản demo bỏ phiếu →",
     statsLabel: "Nhìn nhanh",
@@ -102,12 +103,12 @@ export default {
     privateBody: "Lựa chọn của bạn không bao giờ là trường đọc được trong một giao dịch hay cơ sở dữ liệu. Biên lai là hash, nên không cho thấy bạn đã chọn gì.",
     publicTitle: "Kiểm được công khai",
     publicBody:
-      "Đăng ký và mã loại tư cách là công khai. Thăm dò công bố số phiếu từng lựa chọn và tỷ lệ đi bỏ phiếu theo lịch giờ có trễ sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc. Bỏ phiếu công bố tỷ lệ đi bỏ phiếu theo cùng lịch trễ. Lựa chọn giữ kín đến hạn chót. Kiểm toán độc lập dựng lại kết quả đã công bố mà không cần cơ sở dữ liệu riêng của người vận hành.",
+      "Đăng ký và mã loại tư cách là công khai. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc. Lựa chọn của một cuộc bỏ phiếu giữ kín đến hạn chót. Kiểm toán độc lập dựng lại kết quả đã công bố mà không cần cơ sở dữ liệu riêng của người vận hành.",
     oneTitle: "Một người, một phiếu",
     oneBody: "Mỗi phiếu mang chứng minh rằng cử tri nằm trong danh sách đã đóng băng và không bị loại. Trong thăm dò hoặc bỏ phiếu, cử tri đổi lựa chọn được đến hạn chót, và bộ hủy chỉ tính phiếu cuối.",
     coerceTitle: "Xây để chống ép buộc",
     coerceBody:
-      "Không thứ gì đưa cho cử tri chứng minh lựa chọn của họ với người đang gây sức ép. Hãy chọn bỏ phiếu khi một bảng đếm đang chạy sẽ tăng sức ép. Tỷ lệ đi bỏ phiếu theo cùng lịch giờ có trễ như thăm dò. Lựa chọn giữ mã hóa đến hạn chót, và cử tri thay phiếu được đến lúc đó. Thăm dò công bố số phiếu từng lựa chọn và tỷ lệ đi bỏ phiếu theo lịch giờ có trễ sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc.",
+      "Không thứ gì đưa cho cử tri chứng minh lựa chọn của họ với người đang gây sức ép. Hãy chọn bỏ phiếu khi một bảng đếm đang chạy sẽ tăng sức ép. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ, như ở thăm dò. Lựa chọn giữ mã hóa đến hạn chót, và cử tri thay phiếu được đến lúc đó. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc.",
     dueTitle: "Thủ tục khi loại tư cách",
     dueBody: "Loại một người là thay đổi công khai, có mã, trên chuỗi, kèm lý do nêu rõ, không phải cờ im lặng trong cơ sở dữ liệu.",
     vendorTitle: "Không khóa nhà cung cấp",
@@ -126,10 +127,10 @@ export default {
     schoolsBody: "Tổ chức chính quyền học sinh và phiếu của giảng viên với đăng nhập khóa truy cập và phiếu dùng được trên mọi thiết bị.",
     clubsTitle: "Cộng đồng và câu lạc bộ",
     clubsBody:
-      "Thăm dò nhanh có/không, một lựa chọn hoặc nhiều lựa chọn, cho nhóm nào muốn phiếu kín và một cuộc giơ tay trung thực. Thăm dò công bố số phiếu từng lựa chọn và tỷ lệ đi bỏ phiếu theo lịch giờ có trễ sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc.",
+      "Thăm dò nhanh có/không, một lựa chọn hoặc nhiều lựa chọn, cho nhóm nào muốn phiếu kín và một cuộc giơ tay trung thực. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc.",
     auditorsTitle: "Người quan sát và kiểm toán",
     auditorsBody:
-      "Theo dõi đăng ký và mã loại tư cách trên trình khám phá công khai, và kiểm báo cáo kết quả khi cuộc tranh đó được phép hiện nó. Thăm dò công bố số phiếu từng lựa chọn và tỷ lệ đi bỏ phiếu theo lịch giờ có trễ sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc. Bỏ phiếu công bố tỷ lệ đi bỏ phiếu theo cùng lịch giờ có trễ như thăm dò, và chỉ công bố lựa chọn lúc hạn chót.",
+      "Theo dõi đăng ký và mã loại tư cách trên trình khám phá công khai, và kiểm báo cáo kết quả khi cuộc tranh đó được phép hiện nó. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 phiếu đầu đã vào hoặc thăm dò kết thúc. Bỏ phiếu chỉ công bố lựa chọn lúc hạn chót.",
   },
   how: {
     title: "Cách hoạt động",
@@ -196,7 +197,7 @@ export default {
       name: "Bỏ phiếu",
       summary: "Lựa chọn giữ kín đến hạn chót.",
       sealed: "Lựa chọn giữ kín đến hạn chót.",
-      guardians: "Chúng chỉ được giải mã thành một tổng hợp, bởi những người giữ khóa k-of-n.",
+      guardians: "Chúng chỉ được giải mã thành một tổng hợp, bởi những người giữ khóa k-of-n. Người vận hành không giữ khóa.",
       noInterim: "Không có số phiếu tạm theo từng lựa chọn.",
       sealedLabel: "Kín",
       turnoutLabel: "Tỷ lệ đi",

@@ -26,6 +26,7 @@ export default {
     why: "Por qué importa",
     who: "Para quién es",
     how: "Cómo funciona",
+    pollVsVote: "Encuesta y votación",
     selfHost: "Autoalojar",
     forum: "Foro de la comunidad",
   },
@@ -34,7 +35,7 @@ export default {
     title:
       'Votaciones que sus miembros pueden <span class="accent">verificar</span>.<br>Boletas que nadie puede <span class="accent">leer</span>.',
     lead:
-      "{brand} permite que cualquier grupo ejecute sus propias elecciones y encuestas. Quien la crea elige una encuesta o una votación. Una encuesta publica los recuentos por opción y la participación en un horario diferido, una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica la participación en ese mismo horario y publica las opciones solo en el cierre. Las pruebas de conocimiento cero muestran que solo votó gente elegible, cada persona una vez, y que el escrutinio publicado coincide con las boletas. La elección de nadie se publica jamás.",
+      "{brand} permite que cualquier grupo ejecute sus propias elecciones y encuestas. Quien la crea elige una encuesta o una votación. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica las opciones solo en el cierre. Las pruebas de conocimiento cero están diseñadas para mostrar que solo votó gente elegible, cada persona una vez, y que el escrutinio publicado coincide con las boletas (las pruebas usan actualmente un verificador simulado). Las opciones individuales no se publican.",
     discuss: "Únase a la conversación",
     demo: "Probar la demostración de votación →",
     statsLabel: "De un vistazo",
@@ -104,13 +105,13 @@ export default {
       "La opción que usted elige nunca es un campo legible en una transacción ni en una base de datos. Los recibos son hashes, así que no pueden mostrar cómo votó.",
     publicTitle: "Verificable en público",
     publicBody:
-      "Las inscripciones y los códigos de inhabilitación son públicos. Una encuesta publica los recuentos por opción y la participación en un horario diferido una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica la participación en el mismo horario diferido. Sus opciones permanecen selladas hasta el cierre. Una auditoría independiente puede reconstruir un resultado publicado sin la base privada del operador.",
+      "Las inscripciones y los códigos de inhabilitación son públicos. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta. Las opciones de una votación permanecen selladas hasta el cierre. Una auditoría independiente puede reconstruir un resultado publicado sin la base privada del operador.",
     oneTitle: "Una persona, un voto",
     oneBody:
       "Cada boleta lleva una prueba de que quien vota está en el padrón congelado y no está inhabilitado. En una encuesta o una votación se puede cambiar la opción hasta el cierre, y el anulador cuenta solo la última.",
     coerceTitle: "Hecha para resistir la coacción",
     coerceBody:
-      "Nada de lo que recibe quien vota demuestra su opción ante alguien que lo presiona. Elija una votación cuando un recuento en curso añadiría presión. La participación sigue el mismo horario diferido que una encuesta. Las opciones permanecen cifradas hasta el cierre, y se puede reemplazar el voto hasta entonces. Una encuesta publica los recuentos por opción y la participación en un horario diferido una vez que entran las primeras 100 boletas o termina la encuesta.",
+      "Nada de lo que recibe quien vota demuestra su opción ante alguien que lo presiona. Elija una votación cuando un recuento en curso añadiría presión. La participación es pública cada hora, como en una encuesta. Las opciones permanecen cifradas hasta el cierre, y se puede reemplazar el voto hasta entonces. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta.",
     dueTitle: "Debido proceso para inhabilitar",
     dueBody: "Excluir a alguien es un cambio público, codificado y en cadena, con un motivo declarado, no una marca silenciosa en una base de datos.",
     vendorTitle: "Sin dependencia de un proveedor",
@@ -130,10 +131,10 @@ export default {
     schoolsBody: "Ejecute gobiernos estudiantiles y votos del profesorado con acceso por clave de acceso y una boleta usable en cualquier dispositivo.",
     clubsTitle: "Comunidades y clubes",
     clubsBody:
-      "Encuestas rápidas de sí o no, de una opción o de varias, para cualquier grupo que quiera una boleta privada y un recuento honesto. Una encuesta publica los recuentos por opción y la participación en un horario diferido una vez que entran las primeras 100 boletas o termina la encuesta.",
+      "Encuestas rápidas de sí o no, de una opción o de varias, para cualquier grupo que quiera una boleta privada y un recuento honesto. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta.",
     auditorsTitle: "Observación y auditoría",
     auditorsBody:
-      "Siga inscripciones y códigos de inhabilitación en el explorador público, y verifique un informe de resultado cuando ese concurso ya puede mostrarlo. Una encuesta publica los recuentos por opción y la participación en un horario diferido una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica la participación en el mismo horario diferido que una encuesta, y publica las opciones solo en el cierre.",
+      "Siga inscripciones y códigos de inhabilitación en el explorador público, y verifique un informe de resultado cuando ese concurso ya puede mostrarlo. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica las opciones solo en el cierre.",
   },
   how: {
     title: "Cómo funciona",
@@ -191,7 +192,7 @@ export default {
       gate: "Los recuentos permanecen ocultos hasta que entran las primeras 100 boletas, o hasta el cierre programado, lo que ocurra primero.",
       hourly: "Después de ese umbral, los recuentos por opción se publican en cada bloque horario, 30 minutos después de que cierra la hora.",
       merge: "Una hora con menos de 10 boletas se fusiona hacia adelante hasta que un bloque tenga al menos 10.",
-      freeze: "Los bloques horarios publicados no cambian. Las repeticiones aparecen solo en el escrutinio final.",
+      freeze: "Los bloques horarios publicados no cambian. Los votos cambiados aparecen solo en el escrutinio final.",
       example: "Ejemplo",
       choiceA: "Opción A",
       choiceB: "Opción B",
@@ -201,7 +202,7 @@ export default {
       name: "Votación",
       summary: "Las opciones permanecen selladas hasta el cierre.",
       sealed: "Las opciones permanecen selladas hasta el cierre.",
-      guardians: "Se descifran solo como un agregado, mediante guardianes k-of-n.",
+      guardians: "Se descifran solo como un agregado, mediante guardianes k-of-n. El operador no tiene ninguna clave.",
       noInterim: "No hay recuentos provisionales por opción.",
       sealedLabel: "Sellado",
       turnoutLabel: "Participación",

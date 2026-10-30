@@ -26,6 +26,7 @@ export default {
     why: "Por que importa",
     who: "Para quem é",
     how: "Como funciona",
+    pollVsVote: "Enquete e votação",
     selfHost: "Auto-hospedar",
     forum: "Fórum da comunidade",
   },
@@ -34,7 +35,7 @@ export default {
     title:
       'Votação que os membros podem <span class="accent">verificar</span>.<br>Cédulas que ninguém pode <span class="accent">ler</span>.',
     lead:
-      "{brand} permite que qualquer grupo conduza suas eleições e enquetes. Quem cria escolhe uma enquete ou uma votação. Uma enquete publica as contagens por opção e a participação em um horário atrasado assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação publica a participação nesse mesmo horário e só publica as opções no prazo. Provas de conhecimento zero mostram que só pessoas elegíveis votaram, cada uma uma vez, e que a apuração publicada corresponde às cédulas. A escolha de ninguém é publicada.",
+      "{brand} permite que qualquer grupo conduza suas eleições e enquetes. Quem cria escolhe uma enquete ou uma votação. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação só publica as opções no prazo. Provas de conhecimento zero são concebidas para mostrar que só pessoas elegíveis votaram, cada uma uma vez, e que a apuração publicada corresponde às cédulas (os testes usam atualmente um verificador simulado). As escolhas individuais não são publicadas.",
     discuss: "Entre na conversa",
     demo: "Experimentar a demonstração de votação →",
     statsLabel: "Em resumo",
@@ -104,13 +105,13 @@ export default {
       "A opção escolhida nunca é um campo legível numa transação ou num banco. Os recibos são hashes, então não mostram como você votou.",
     publicTitle: "Verificável em público",
     publicBody:
-      "Inscrições e códigos de impedimento são públicos. Uma enquete publica as contagens por opção e a participação em um horário atrasado assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação publica a participação no mesmo horário atrasado. As opções ficam seladas até o prazo. Uma auditoria independente pode reconstruir um resultado publicado sem o banco privado do operador.",
+      "Inscrições e códigos de impedimento são públicos. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina. As opções de uma votação ficam seladas até o prazo. Uma auditoria independente pode reconstruir um resultado publicado sem o banco privado do operador.",
     oneTitle: "Uma pessoa, um voto",
     oneBody:
       "Cada cédula carrega uma prova de que a pessoa está na lista congelada e não está impedida. Numa enquete ou numa votação, dá para mudar a escolha até o prazo, e o anulador conta só a última.",
     coerceTitle: "Feita para resistir à coerção",
     coerceBody:
-      "Nada entregue a quem vota prova a escolha para alguém que esteja pressionando. Escolha uma votação quando uma contagem em andamento aumentaria a pressão. A participação segue o mesmo horário atrasado de uma enquete. As opções ficam cifradas até o prazo, e o voto pode ser substituído até lá. Uma enquete publica as contagens por opção e a participação em um horário atrasado assim que as primeiras 100 cédulas entram ou a enquete termina.",
+      "Nada entregue a quem vota prova a escolha para alguém que esteja pressionando. Escolha uma votação quando uma contagem em andamento aumentaria a pressão. A participação é pública a cada hora, como numa enquete. As opções ficam cifradas até o prazo, e o voto pode ser substituído até lá. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina.",
     dueTitle: "Devido processo para impedir",
     dueBody: "Barrar alguém é uma mudança pública, codificada e na cadeia, com motivo declarado, não uma marca silenciosa num banco.",
     vendorTitle: "Sem aprisionamento de fornecedor",
@@ -130,10 +131,10 @@ export default {
     schoolsBody: "Conduza grêmios e votações docentes com entrada por chave de acesso e uma cédula usável em qualquer aparelho.",
     clubsTitle: "Comunidades e clubes",
     clubsBody:
-      "Enquetes rápidas de sim/não, de escolha única ou múltipla, para qualquer grupo que queira uma cédula privada e uma contagem honesta. Uma enquete publica as contagens por opção e a participação em um horário atrasado assim que as primeiras 100 cédulas entram ou a enquete termina.",
+      "Enquetes rápidas de sim/não, de escolha única ou múltipla, para qualquer grupo que queira uma cédula privada e uma contagem honesta. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina.",
     auditorsTitle: "Observadores e auditores",
     auditorsBody:
-      "Acompanhe inscrições e códigos de impedimento no explorador público e confira um relatório de resultado quando aquela disputa já puder mostrá-lo. Uma enquete publica as contagens por opção e a participação em um horário atrasado assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação publica a participação no mesmo horário atrasado de uma enquete e só publica as opções no prazo.",
+      "Acompanhe inscrições e códigos de impedimento no explorador público e confira um relatório de resultado quando aquela disputa já puder mostrá-lo. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação só publica as opções no prazo.",
   },
   how: {
     title: "Como funciona",
@@ -191,7 +192,7 @@ export default {
       gate: "As contagens ficam ocultas até entrarem as primeiras 100 cédulas, ou até o fim programado, o que ocorrer primeiro.",
       hourly: "Depois dessa barreira, as contagens por opção são publicadas em cada bloco horário, 30 minutos após o fim da hora.",
       merge: "Uma hora com menos de 10 cédulas segue adiante até um bloco ter pelo menos 10.",
-      freeze: "Os blocos horários publicados não mudam. Novos votos só aparecem na apuração final.",
+      freeze: "Os blocos horários publicados não mudam. Os votos alterados só aparecem na apuração final.",
       example: "Exemplo",
       choiceA: "Opção A",
       choiceB: "Opção B",
@@ -201,7 +202,7 @@ export default {
       name: "Votação",
       summary: "As opções ficam seladas até o prazo.",
       sealed: "As opções ficam seladas até o prazo.",
-      guardians: "São decifradas só como um agregado, por guardiões k-of-n.",
+      guardians: "São decifradas só como um agregado, por guardiões k-of-n. O operador não tem chave.",
       noInterim: "Não há contagens provisórias por opção.",
       sealedLabel: "Selado",
       turnoutLabel: "Participação",
