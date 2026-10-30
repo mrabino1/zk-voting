@@ -500,6 +500,10 @@ identity commitment. The Node-side mechanics:
   `GET /api/elections/:id/vote-pass` and must stay the same for every voter.
   When external parties are active, a ballot without a pass gets
   `403 VOTE_PASS_REQUIRED`.
+  Older backups may still hold `votePassTags` keyed with `receiptPdfSecret`.
+  Those tags tie a pass to a nullifier. Purge them. Current data keeps spent
+  passes only as an unlinked hash list (`votePassSpent`), and load deletes
+  leftover tags and `spentPassHash` fields.
 - **No identity on the ballot request.** `sanitizeVoteBody` strips
   `identityCommitment`, `userId`, `pinToken`, `userOpHash`, `address`,
   `credentialId` and choice keys. The API-key "last used" stamp is not touched

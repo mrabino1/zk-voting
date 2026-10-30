@@ -21,6 +21,7 @@ import { dropPassToBallotLinks } from '../src/store.mjs';
 import {
   DEFAULT_TALLY_CHALLENGE_SECONDS,
   MIN_TALLY_CHALLENGE_SECONDS,
+  PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS,
   resolveTallyChallengeSeconds,
   tallyAllowedAt,
 } from '../src/supplementaryBatch.mjs';
@@ -139,6 +140,9 @@ describe('ALLOW_REVOTE', () => {
     assert.equal(getConfig({ tallyChallengeSeconds: 0 }).tallyChallengeSeconds, MIN_TALLY_CHALLENGE_SECONDS);
     assert.equal(getConfig({ tallyChallengeSeconds: 90 }).tallyChallengeSeconds, 90);
     assert.equal(resolveTallyChallengeSeconds(undefined, { isTest: false }), DEFAULT_TALLY_CHALLENGE_SECONDS);
+    assert.equal(resolveTallyChallengeSeconds(0, { isProduction: true }), PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS);
+    assert.equal(resolveTallyChallengeSeconds(90, { isProduction: true }), PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS);
+    assert.equal(resolveTallyChallengeSeconds(DEFAULT_TALLY_CHALLENGE_SECONDS, { isProduction: true }), DEFAULT_TALLY_CHALLENGE_SECONDS);
     assert.equal(tallyAllowedAt({ cutoffTime: 100 }, 60), 160);
     assert.throws(
       () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
@@ -1169,14 +1173,21 @@ describe('ALLOW_REVOTE', () => {
       await created.store.persist();
       assert.ok(acceptedAt < stored.cutoffTime);
       const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
+      const jarA = {};
+      const jarB = {};
+      assert.equal((await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-a', role: 'tally_operator' }, jar: jarA })).status, 200);
+      assert.equal((await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-b', role: 'tally_operator' }, jar: jarB })).status, 200);
+      const jurisdictionId = created.store.requireElection(id).jurisdictionId;
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-a', role: 'tally_operator' });
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-b', role: 'tally_operator' });
       const tooSoon = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
-        jar: adminJar,
+        jar: jarA,
         body: { nullifier, reason: 'too soon' },
       });
       stored.cutoffTime = tick + 3600;
       await created.store.persist();
       const open = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
-        jar: adminJar,
+        jar: jarA,
         body: { nullifier, reason: 'still open' },
       });
       assert.equal(open.status, 409, open.text);
@@ -1198,16 +1209,34 @@ describe('ALLOW_REVOTE', () => {
       assert.equal(refused.status, 409, refused.text);
       assert.equal(refused.json.code, 'CHAIN_DEAD_LETTER');
       assert.equal(created.store.listVotes(id).length, 1);
+      const note = 'The chain batch reverted and the supplementary batch is not available.';
+      const first = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarA,
+        body: { nullifier, reason: note },
+      });
+      assert.equal(first.status, 409, first.text);
+      assert.equal(first.json.code, 'SECOND_APPROVAL_REQUIRED');
+      const same = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarA,
+        body: { nullifier, reason: note },
+      });
+      assert.equal(same.status, 409, same.text);
+      assert.equal(same.json.code, 'SAME_OPERATOR');
       const excluded = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
-        jar: adminJar,
-        body: { nullifier, reason: 'The chain batch reverted and the supplementary batch is not available.' },
+        jar: jarB,
+        body: { nullifier, reason: note },
       });
       assert.equal(excluded.status, 200, excluded.text);
       assert.equal(excluded.json.excluded.count, 1);
+      assert.equal(excluded.json.excluded.reasons[0].reason, 'excluded');
+      assert.equal(JSON.stringify(excluded.json).includes(note), false);
       assert.equal(JSON.stringify(excluded.json).includes(String(nullifier)), false);
+      const privateNote = created.store.requireElection(id).exclusionNotes[0];
+      assert.equal(privateNote.reason.includes('reverted'), true);
+      assert.equal(privateNote.approverIds.length, 2);
       const audit = Object.values(created.explorer.chain.txs).find((tx) => tx.type === 'ballot_excluded');
       assert.equal(audit.payload.count, 1);
-      assert.equal(audit.payload.reason.includes('reverted'), true);
+      assert.equal(audit.payload.reason, 'excluded');
       assert.equal(Object.hasOwn(audit.payload, 'nullifier'), false);
       const counted = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
       assert.equal(counted.status, 400, counted.text);
@@ -1218,12 +1247,275 @@ describe('ALLOW_REVOTE', () => {
       const results = await api('GET', `/api/elections/${id}/results`);
       assert.equal(results.json.results.excludedCount, 1);
       assert.match(results.json.results.message, /not counted/i);
-      assert.equal(results.json.results.excludedReasons[0].reason.includes('reverted'), true);
+      assert.equal(results.json.results.excludedReasons[0].reason, 'excluded');
+      assert.equal(JSON.stringify(results.json).includes(note), false);
       const page = await renderExcludedNotice(results.json);
       assert.match(page, new RegExp(`${results.json.results.excludedCount}[^<]{0,80}not counted`, 'i'));
       const diag = electionsDiag(created.store, tick);
       assert.equal(diag.elections.find((row) => row.id === String(id)).excludedCount, 1);
       assert.equal(created.store.listVotes(id).length, 1);
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a replay after the deadline that fails again can be excluded by two operators', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'exclude-replay-'));
+    const adminJar = {};
+    const jarA = {};
+    const jarB = {};
+    const queue = {
+      saved: { rows: [], batchAt: {}, inFlight: {}, deadLetter: [], attempts: {}, supplementary: [] },
+      loadChainVoteQueue() {
+        return JSON.parse(JSON.stringify(this.saved));
+      },
+      async saveChainVoteQueue(doc) {
+        this.saved = JSON.parse(JSON.stringify(doc || {}));
+      },
+    };
+    const chain = createChain(
+      {
+        chainRpc: 'http://127.0.0.1:9',
+        ballotInboxAddress: '0x0000000000000000000000000000000000000001',
+        disclosureIntervalSeconds: 3600,
+        chainId: 31337,
+        quiet: true,
+      },
+      {
+        queueStore: queue,
+        nullifierSpent: async () => false,
+        writeSubmitBatch: async () => {
+          const err = new Error('execution reverted');
+          err.revert = true;
+          throw err;
+        },
+      },
+    );
+    chain.createElection = async () => ({ onChainElectionId: '1', params: {} });
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 3600,
+      chain,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-a', role: 'tally_operator' }, jar: jarA });
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-b', role: 'tally_operator' }, jar: jarB });
+      const now = Math.floor(Date.now() / 1000);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Replay exclude',
+          startTime: now - 10,
+          cutoffTime: now + 7200,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      const id = election.json.id;
+      const jurisdictionId = created.store.requireElection(id).jurisdictionId;
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-a', role: 'tally_operator' });
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-b', role: 'tally_operator' });
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const cast = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(cast.status, 201, cast.text);
+      const onChain = created.store.requireElection(id).onChainElectionId;
+      const at = now + 8000;
+      await chain.flushVoteQueue(at);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS * 2);
+      assert.equal(chain.deadLettersFor(onChain).length, 1);
+      const stored = created.store.requireElection(id);
+      const window = created.config.tallyChallengeSeconds;
+      stored.cutoffTime = Math.floor(Date.now() / 1000) - window;
+      await created.store.persist();
+      const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
+      const replay = await api('POST', `/api/elections/${id}/chain-dead-letter/replay`, {
+        jar: jarA,
+        body: { nullifier },
+      });
+      assert.equal(replay.status, 200, replay.text);
+      assert.equal(replay.json.restored, 1);
+      const again = at + 1000;
+      await chain.flushVoteQueue(again);
+      await chain.flushVoteQueue(again + REVERT_RETRY_BACKOFF_SECONDS);
+      await chain.flushVoteQueue(again + REVERT_RETRY_BACKOFF_SECONDS * 2);
+      const letter = chain.deadLettersFor(onChain)[0];
+      assert.ok(letter);
+      assert.ok(Number(letter.replayFailedAt) > 0);
+      const note = 'reverted again after the deadline';
+      const pending = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarA,
+        body: { nullifier, reason: note },
+      });
+      assert.equal(pending.status, 409, pending.text);
+      assert.equal(pending.json.code, 'SECOND_APPROVAL_REQUIRED');
+      const originalRelease = chain.releaseExcluded.bind(chain);
+      chain.releaseExcluded = async () => false;
+      const failed = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarB,
+        body: { nullifier, reason: note },
+      });
+      assert.equal(failed.status, 502, failed.text);
+      assert.equal(failed.json.code, 'EXCLUSION_FAILED');
+      assert.equal(chain.diagnostics().alerts.some((row) => row.kind === 'exclusion_release_failed'), true);
+      assert.equal(created.store.requireElection(id).excludedBallots || null, null);
+      chain.releaseExcluded = originalRelease;
+      const excluded = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarB,
+        body: { nullifier, reason: note },
+      });
+      assert.equal(excluded.status, 200, excluded.text);
+      assert.equal(excluded.json.excluded.reasons[0].reason, 'excluded');
+      assert.equal(JSON.stringify(excluded.json).includes(note), false);
+      assert.equal(created.store.requireElection(id).exclusionNotes[0].reason.includes(note), true);
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a supplementary hold can be excluded after the deadline without a replay', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'exclude-held-'));
+    const adminJar = {};
+    const jarA = {};
+    const jarB = {};
+    const queue = {
+      saved: { rows: [], batchAt: {}, inFlight: {}, deadLetter: [], attempts: {}, supplementary: [] },
+      loadChainVoteQueue() {
+        return JSON.parse(JSON.stringify(this.saved));
+      },
+      async saveChainVoteQueue(doc) {
+        this.saved = JSON.parse(JSON.stringify(doc || {}));
+      },
+    };
+    const chain = createChain(
+      {
+        chainRpc: 'http://127.0.0.1:9',
+        ballotInboxAddress: '0x0000000000000000000000000000000000000001',
+        disclosureIntervalSeconds: 3600,
+        chainId: 31337,
+        quiet: true,
+      },
+      {
+        queueStore: queue,
+        nullifierSpent: async () => false,
+        writeSubmitBatch: async () => {
+          const err = new Error('execution reverted');
+          err.revert = true;
+          throw err;
+        },
+      },
+    );
+    chain.createElection = async () => ({ onChainElectionId: '1', params: {} });
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 3600,
+      chain,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-a', role: 'tally_operator' }, jar: jarA });
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-b', role: 'tally_operator' }, jar: jarB });
+      const now = Math.floor(Date.now() / 1000);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Held exclude',
+          startTime: now - 10,
+          cutoffTime: now + 7200,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      const id = election.json.id;
+      const jurisdictionId = created.store.requireElection(id).jurisdictionId;
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-a', role: 'tally_operator' });
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-b', role: 'tally_operator' });
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const cast = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(cast.status, 201, cast.text);
+      const onChain = created.store.requireElection(id).onChainElectionId;
+      const at = now + 8000;
+      await chain.flushVoteQueue(at);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS * 2);
+      const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
+      await chain.holdSupplementary(onChain, [nullifier]);
+      assert.equal(chain.deadLettersFor(onChain).length, 0);
+      assert.equal(chain.supplementaryFor(onChain).length, 1);
+      const stored = created.store.requireElection(id);
+      stored.cutoffTime = Math.floor(Date.now() / 1000) - created.config.tallyChallengeSeconds;
+      await created.store.persist();
+      const early = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarA,
+        body: { nullifier, reason: 'held after the deadline' },
+      });
+      assert.equal(early.status, 409, early.text);
+      assert.equal(early.json.code, 'SECOND_APPROVAL_REQUIRED');
+      const done = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarB,
+        body: { nullifier, reason: 'held after the deadline' },
+      });
+      assert.equal(done.status, 200, done.text);
+      assert.equal(chain.supplementaryFor(onChain).length, 0);
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
       await rm(tmp, { recursive: true, force: true });

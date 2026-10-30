@@ -57,13 +57,24 @@ function voteImportBlocked(explorer, payload) {
   return ctx.known === false;
 }
 
-/** Choice rows stay out of the explorer until the election deadline. Unknown elections fail closed. */
-function choiceRowBlocked(explorer, type, payload) {
+/**
+ * Choice rows stay out of the explorer until the block timestamp is at the
+ * deadline. The node clock is not the seal: a late node must not drop a
+ * block the chain already released. Unknown elections fail closed.
+ */
+function choiceRowBlocked(explorer, type, payload, at) {
   if (!isChoiceDisclosure(type, payload)) return false;
   const policy = explorer.disclosurePolicySnapshot();
   const id = String((payload && payload.electionId) ?? '');
   const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
-  return Boolean(ctx.resultsSealed || ctx.known === false);
+  if (ctx.known === false) return true;
+  if (ctx.vote === true) {
+    const end = Number(ctx.endTime);
+    const when = Number(at);
+    if (!Number.isFinite(end) || !Number.isFinite(when)) return true;
+    return when < end;
+  }
+  return Boolean(ctx.resultsSealed);
 }
 
 function emptyChain(chainId) {
@@ -442,13 +453,18 @@ export class Explorer {
     const rows = fromOutcomes.length ? fromOutcomes : fromBlock;
     const l2Delayed = src.source === 'zk-voting-l2';
     const blockTs = block?.timestamp != null ? Number(block.timestamp) : now;
+    let skipped = 0;
 
     for (const row of rows) {
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
       const payload = row.payload || row;
-      if (choiceRowBlocked(this, type, payload)) continue;
+      if (choiceRowBlocked(this, type, payload, blockTs)) {
+        skipped += 1;
+        continue;
+      }
       if ((type === 'vote' || type === 'vote_superseded') && l2Delayed && voteImportBlocked(this, payload)) {
+        skipped += 1;
         continue;
       }
       if (type === 'vote' || type === 'vote_superseded') {
@@ -477,7 +493,7 @@ export class Explorer {
         imported += 1;
       }
     }
-    if (blockHash) {
+    if (blockHash && skipped === 0) {
       this.chain.seenBlockHashes.push(blockHash);
       await this.persist();
     }

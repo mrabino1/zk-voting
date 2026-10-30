@@ -405,6 +405,9 @@ function rowToStored(electionKey, row) {
     encryptedBallot: row.encryptedBallot,
     startTime: row.startTime ?? 0,
     cutoffTime: row.cutoffTime ?? null,
+    ...(Number(row.replayedAfterCutoffAt) > 0
+      ? { replayedAfterCutoffAt: Math.floor(Number(row.replayedAfterCutoffAt)) }
+      : {}),
   };
 }
 
@@ -418,6 +421,9 @@ function storedToRow(stored) {
     encryptedBallot: stored.encryptedBallot,
     startTime: stored.startTime ?? 0,
     cutoffTime: stored.cutoffTime ?? null,
+    ...(Number(stored.replayedAfterCutoffAt) > 0
+      ? { replayedAfterCutoffAt: Math.floor(Number(stored.replayedAfterCutoffAt)) }
+      : {}),
   };
 }
 
@@ -701,13 +707,17 @@ export function createChain(config, extras = {}) {
   function deadLetterRow(key, row, err, at) {
     const id = nullifierKey(row.nullifier);
     attempts.delete(attemptKey(key, id));
-    deadLetter.push({
+    const letter = {
       electionKey: key,
       nullifier: id,
       error: errorText(err),
       at,
       row: rowToStored(key, row),
-    });
+    };
+    // A replay after the deadline that fails again may be excluded.
+    const replayed = Number(row.replayedAfterCutoffAt);
+    if (Number.isFinite(replayed) && replayed > 0) letter.replayFailedAt = Math.floor(Number(at) || replayed);
+    deadLetter.push(letter);
     dropNullifiers(key, [row.nullifier]);
     backoffUntil.delete(revertBackoffKey(key, row.nullifier));
     splitLimit.delete(key);
@@ -1175,9 +1185,17 @@ export function createChain(config, extras = {}) {
             const list = voteQueue.get(key) || [];
             const row = storedToRow(item.row);
             if (row && row.nullifier != null) {
+              const at = Number(now);
+              const end = Number(cutoffTime);
+              if (Number.isFinite(at) && Number.isFinite(end) && at >= end) {
+                row.replayedAfterCutoffAt = Math.floor(at);
+              }
               if (!list.some((queued) => nullifierKey(queued.nullifier) === nullifierKey(row.nullifier))) {
                 list.push(row);
                 voteQueue.set(key, list);
+              } else {
+                const queued = list.find((item) => nullifierKey(item.nullifier) === nullifierKey(row.nullifier));
+                if (queued && row.replayedAfterCutoffAt) queued.replayedAfterCutoffAt = row.replayedAfterCutoffAt;
               }
               attempts.delete(attemptKey(key, row.nullifier));
               putBack = true;
@@ -1308,6 +1326,10 @@ export function createChain(config, extras = {}) {
       }
       await persistQueue();
       return true;
+    },
+    async noteAlert(alert) {
+      pushAlert(alert && typeof alert === 'object' ? alert : { kind: 'note', error: String(alert || '') });
+      await persistQueue();
     },
     reloadVoteQueue() {
       loadQueue();

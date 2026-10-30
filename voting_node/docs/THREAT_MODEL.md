@@ -28,6 +28,11 @@ Defense in depth: different ids on different layers, fail closed when a
 pin is missing, first L1 writer wins **and that is treated as a key-custody
 problem**, not a UUID problem.
 
+When re-vote is on, any already-spent valid pass can authorize a replacement.
+That does not tie the pass to a ballot. The stored ballot must exist, and the
+submitted proof must verify. The proof binds the nullifier, so a spent pass
+cannot invent a ballot for a voter who has not already voted.
+
 ---
 
 ## Canonical L1 identity

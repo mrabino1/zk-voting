@@ -394,7 +394,7 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
     tag: 'Elections',
     auth: true,
-    summary: 'Writer records a dead-lettered ballot as excluded after the deadline and a failed replay. The public audit log stores the count and reason. Excluded ballots are not counted. The ballot is not deleted.',
+    summary: 'Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted.',
     body: 'nullifier, reason',
   }),
   R('/api/elections/:id', {

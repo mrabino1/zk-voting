@@ -37,7 +37,7 @@ export const PHASE_NOTES = {
   during:
     'Voting is open. Public turnout is the last closed hour, not a live precinct tick. Option counts are not published until a final tally is posted.',
   after:
-    'Polls are closed. Final tally option counts appear only after a tally is posted. Excluded ballots are not counted. When L1 is configured, the tally hash may be mirrored on Ethereum.',
+    'Polls are closed. Option counts appear only after the final tally is posted. Excluded ballots are not counted. When L1 is configured, the tally hash may be mirrored on Ethereum.',
 };
 
 /**

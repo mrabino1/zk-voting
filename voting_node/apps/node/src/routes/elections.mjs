@@ -25,7 +25,7 @@ import { expireRepairAttempts, relayVote } from '../relay.mjs';
 import { chainElectionId } from '../electionIds.mjs';
 import { submitSupplementaryBatch, tallyAllowedAt } from '../supplementaryBatch.mjs';
 import { uuidParam } from '../recordIds.mjs';
-import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
+import { electionDisclosurePolicy, EXCLUSION_REASON_CODE, publicVoteRecord } from '../store.mjs';
 import {
   electionTypeOf,
   normalizeElectionType,
@@ -1223,30 +1223,74 @@ export function electionsRouter(deps) {
       const key = chainElectionId(election);
       const dead = typeof chain?.deadLettersFor === 'function' ? chain.deadLettersFor(key) : [];
       const held = typeof chain?.supplementaryFor === 'function' ? chain.supplementaryFor(key) : [];
-      const item = [...dead, ...held].find((row) => sameNullifier(row.nullifier, nullifier));
+      const deadItem = dead.find((row) => sameNullifier(row.nullifier, nullifier));
+      const heldItem = held.find((row) => sameNullifier(row.nullifier, nullifier));
+      const item = deadItem || heldItem;
       const already = (election.excludedBallots || []).some((row) => sameNullifier(row.nullifier, nullifier));
       if (!item && !already) {
         throw new HttpError(404, 'ballot is not dead-lettered', { code: 'NOT_DEAD_LETTER' });
       }
-      if (!already && !(Number(item?.replayFailedAt) > 0)) {
+      // A supplementary hold has no replay. After the deadline it can be excluded.
+      const supplementaryOnly = Boolean(heldItem) && !deadItem;
+      if (!already && !supplementaryOnly && !(Number(item?.replayFailedAt) > 0)) {
         throw new HttpError(409, 'replay the ballot after the deadline before excluding it', {
           code: 'REPLAY_REQUIRED',
         });
       }
+      let approverIds = [];
+      let notedReason = reason;
+      if (!already) {
+        const approval = await store.noteExclusionApproval(election.id, {
+          nullifier,
+          userId: req.user?.id,
+          reason,
+          at: now,
+        });
+        if (approval.status === 'pending') {
+          throw new HttpError(409, 'a second tally operator must approve this exclusion', {
+            code: 'SECOND_APPROVAL_REQUIRED',
+          });
+        }
+        approverIds = approval.approverIds || [];
+        notedReason = [approval.reason, reason].filter(Boolean).join('\n');
+      }
+      if (item && typeof chain?.releaseExcluded === 'function') {
+        let released = false;
+        let releaseError = null;
+        try {
+          released = await chain.releaseExcluded(key, nullifier);
+        } catch (err) {
+          releaseError = err;
+          released = false;
+        }
+        if (!released) {
+          const message = releaseError?.message || 'the dead letter was not released';
+          console.warn(`ballot exclusion release failed for election ${election.id}: ${message}`);
+          if (typeof chain.noteAlert === 'function') {
+            await chain.noteAlert({
+              kind: 'exclusion_release_failed',
+              electionKey: String(election.id),
+              error: message,
+              at: now,
+            });
+          }
+          throw new HttpError(502, 'could not release the excluded ballot', { code: 'EXCLUSION_FAILED' });
+        }
+      }
       const excluded = await store.recordBallotExclusion(election.id, {
         nullifier,
-        reason,
+        reason: notedReason,
         at: now,
+        approverIds,
       });
-      if (item && typeof chain?.releaseExcluded === 'function') {
-        await chain.releaseExcluded(key, nullifier);
+      if (!already) {
+        const fresh = store.requireElection(election.id);
+        await explorer.append('ballot_excluded', {
+          electionId: String(fresh.id),
+          reason: EXCLUSION_REASON_CODE,
+          count: excluded.count,
+        });
       }
-      const fresh = store.requireElection(election.id);
-      await explorer.append('ballot_excluded', {
-        electionId: String(fresh.id),
-        reason,
-        count: excluded.count,
-      });
       res.json({ ok: true, nfp: true, excluded });
     }),
   );

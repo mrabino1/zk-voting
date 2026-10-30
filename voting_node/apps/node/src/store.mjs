@@ -485,12 +485,16 @@ export function dropPassToBallotLinks(data) {
   return dirty;
 }
 
-/** Public exclusion summary: a count and reasons, not a nullifier list. */
+/** Public reason code. Free text stays in the private operator note. */
+export const EXCLUSION_REASON_CODE = 'excluded';
+
+/** Public exclusion summary: a count and a fixed reason code, not a nullifier or a note. */
 export function publicExclusion(election) {
   const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
   const byReason = new Map();
   for (const row of rows) {
-    const reason = String(row?.reason || '').trim() || 'unspecified';
+    const code = String(row?.reasonCode || '').trim();
+    const reason = /^[a-z0-9_]{1,40}$/.test(code) ? code : EXCLUSION_REASON_CODE;
     byReason.set(reason, (byReason.get(reason) || 0) + 1);
   }
   return {
@@ -2840,11 +2844,42 @@ export class Store {
   }
 
   /**
-   * Writer record that a dead-lettered ballot will not be forced onto the
-   * chain. The vote row stays. The public tally later copies the count and
-   * the reasons, not the nullifiers.
+   * First tally operator records intent. A second, different operator must
+   * call again before the ballot is excluded.
    */
-  async recordBallotExclusion(electionId, { nullifier, reason, at } = {}) {
+  async noteExclusionApproval(electionId, { nullifier, userId, reason, at } = {}) {
+    this.refuseIfStandby();
+    const election = this.requireElection(electionId);
+    const clean = String(reason || '').trim();
+    if (!clean) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
+    if (clean.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
+    const uid = String(userId || '').trim();
+    if (!uid) throw new HttpError(400, 'operator is required', { code: 'OPERATOR_REQUIRED' });
+    const id = toBytes32(nullifier);
+    if (!Array.isArray(election.exclusionApprovals)) election.exclusionApprovals = [];
+    const pending = election.exclusionApprovals.find((row) => row && toBytes32(row.nullifier) === id);
+    if (!pending) {
+      election.exclusionApprovals.push({
+        nullifier: id,
+        userId: uid,
+        reason: clean,
+        at: Math.floor(Number(at) || Date.now() / 1000),
+      });
+      await this.persist();
+      return { status: 'pending' };
+    }
+    if (String(pending.userId) === uid) {
+      throw new HttpError(409, 'a second tally operator must approve this exclusion', { code: 'SAME_OPERATOR' });
+    }
+    return { status: 'ready', approverIds: [String(pending.userId), uid], reason: pending.reason };
+  }
+
+  /**
+   * Writer record that a dead-lettered ballot will not be forced onto the
+   * chain. The vote row stays. The public tally copies the count and the
+   * fixed reason code. The operator's note stays on exclusionNotes.
+   */
+  async recordBallotExclusion(electionId, { nullifier, reason, at, approverIds } = {}) {
     this.refuseIfStandby();
     const election = this.requireElection(electionId);
     const clean = String(reason || '').trim();
@@ -2853,11 +2888,24 @@ export class Store {
     const id = toBytes32(nullifier);
     if (!Array.isArray(election.excludedBallots)) election.excludedBallots = [];
     if (!election.excludedBallots.some((row) => row && toBytes32(row.nullifier) === id)) {
+      const when = Math.floor(Number(at) || Date.now() / 1000);
       election.excludedBallots.push({
         nullifier: id,
-        reason: clean,
-        at: Math.floor(Number(at) || Date.now() / 1000),
+        reasonCode: EXCLUSION_REASON_CODE,
+        at: when,
       });
+      if (!Array.isArray(election.exclusionNotes)) election.exclusionNotes = [];
+      election.exclusionNotes.push({
+        nullifier: id,
+        reason: clean,
+        at: when,
+        approverIds: Array.isArray(approverIds) ? approverIds.map((item) => String(item)) : [],
+      });
+      if (Array.isArray(election.exclusionApprovals)) {
+        election.exclusionApprovals = election.exclusionApprovals.filter(
+          (row) => !(row && toBytes32(row.nullifier) === id),
+        );
+      }
       await this.persist();
     }
     return publicExclusion(election);

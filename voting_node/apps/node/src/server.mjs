@@ -302,6 +302,7 @@ export async function createApp(overrides = {}) {
         endTime: election.cutoffTime,
         tallied: sealed ? false : Boolean(election.tally),
         resultsSealed: sealed,
+        vote: isVoteElection(election),
         known: true,
         ...(isVoteElection(election) ? { minVotes: 0 } : {}),
       };

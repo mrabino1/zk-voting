@@ -78,6 +78,7 @@ Never commit `.env`, and never bake secrets into an image.
 | `L2_BATCH_SIZE`, `L2_SKIP_EMPTY_BLOCKS`, `L2_HEARTBEAT_SECONDS` | `4`, `1`, `3600` | Sequencer tuning. |
 | `DEV_MOCK_PROOF` | `true` | Mock proofs for the demo L2. |
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Hour length for public vote disclosure. `0` publishes immediately (demo only). |
+| `TALLY_CHALLENGE_SECONDS` | `86400` | Wait after cutoff before a tally. Production minimum is 1 hour. Test and development floor is 1 second. A shorter value is raised and logged. |
 | `DISCLOSURE_DELAY_SECONDS` | `1800` | Extra wait after the hour closes. Votes from 08:00–08:59 publish at 09:30. `0` publishes at the hour boundary (demo only). |
 | `RESULTS_MIN_VOTES` | `100` | Hide an election’s turnout and vote rows until this many ballots, or until `cutoffTime`. `0` leaves the gate open (demo only). |
 | `DISCLOSURE_MIN_BLOCK_VOTES` | `10` | Do not publish a disclosure block smaller than this. Short hours merge forward. A whole election under this floor waits for the final tally. |

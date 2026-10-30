@@ -6,24 +6,34 @@
 
 /**
  * Shortest challenge window after cutoff before a tally may be posted.
- * A configured 0 is raised to this floor so the window cannot ship as 0.
+ * Test and development use this 1-second floor. Production uses
+ * PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS. A configured 0 is raised.
  * TODO(#113): align this floor with the sealed-vote contracts challenge window.
  */
 export const MIN_TALLY_CHALLENGE_SECONDS = 1;
 
-/** Production default. Tests use the floor unless a window is set. */
-export const DEFAULT_TALLY_CHALLENGE_SECONDS = 60;
+/** Production minimum. A shorter configured value is raised to this and logged. */
+export const PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS = 60 * 60;
+
+/** Production default: 24 hours. Tests use the 1-second floor unless a window is set. */
+export const DEFAULT_TALLY_CHALLENGE_SECONDS = 24 * 60 * 60;
 
 /**
  * @param {unknown} value
- * @param {{ isTest?: boolean }} [opts]
+ * @param {{ isTest?: boolean, isProduction?: boolean }} [opts]
  */
-export function resolveTallyChallengeSeconds(value, { isTest = false } = {}) {
+export function resolveTallyChallengeSeconds(value, { isTest = false, isProduction = false } = {}) {
+  const floor = isProduction ? PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS : MIN_TALLY_CHALLENGE_SECONDS;
   if (value == null || value === '') {
     return isTest ? MIN_TALLY_CHALLENGE_SECONDS : DEFAULT_TALLY_CHALLENGE_SECONDS;
   }
   const n = Number(value);
-  if (!Number.isFinite(n) || n < MIN_TALLY_CHALLENGE_SECONDS) return MIN_TALLY_CHALLENGE_SECONDS;
+  if (!Number.isFinite(n) || n < floor) {
+    console.warn(
+      `TALLY_CHALLENGE_SECONDS value ${value} is below the minimum of ${floor} seconds; using ${floor}`,
+    );
+    return floor;
+  }
   return Math.floor(n);
 }
 

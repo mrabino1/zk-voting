@@ -406,13 +406,6 @@ export function getConfig(overrides = {}) {
     resultsMinVotes,
     disclosureMinBlockVotes,
     allowRevote,
-    // TODO(#113): align this window with the sealed-vote contracts challenge period.
-    tallyChallengeSeconds: resolveTallyChallengeSeconds(
-      Object.prototype.hasOwnProperty.call(overrides, 'tallyChallengeSeconds')
-        ? overrides.tallyChallengeSeconds
-        : process.env.TALLY_CHALLENGE_SECONDS,
-      { isTest },
-    ),
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpID: authority.rpID,
     voteFqdn: authority.voteFqdn,
@@ -531,13 +524,13 @@ export function getConfig(overrides = {}) {
     ceremonyBeaconMinBlocksAhead: strictPositiveInt(process.env.CEREMONY_BEACON_MIN_BLOCKS_AHEAD, 32),
     ...overrides,
   };
-  // The spread copies a raw override, including 0. Re-apply the nonzero floor.
+  // The spread copies a raw override, including 0. Re-apply the floor after it.
   // TODO(#113): align this window with the sealed-vote contracts challenge period.
   config.tallyChallengeSeconds = resolveTallyChallengeSeconds(
     Object.prototype.hasOwnProperty.call(overrides, 'tallyChallengeSeconds')
       ? overrides.tallyChallengeSeconds
       : process.env.TALLY_CHALLENGE_SECONDS,
-    { isTest },
+    { isTest, isProduction: process.env.NODE_ENV === 'production' },
   );
   // Display name (site admin > BRAND_NAME > "ZK-Voting"); live, so a rename in
   // site admin reaches mail, PDFs and the WebAuthn rpName without a restart.
