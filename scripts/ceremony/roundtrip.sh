@@ -207,6 +207,49 @@ reject_in_repo_out() {
     printf 'in-repo-out: rejected\n'
 }
 
+reject_git_absent() {
+    local bindir=$TMP/nogit-bin src base stray=$ROOT/git-absent-ceremony
+    mkdir -p "$bindir"
+    for src in /usr/bin/* /bin/*; do
+        [[ -e "$src" ]] || continue
+        base=$(basename -- "$src")
+        [[ "$base" == "git" ]] && continue
+        [[ -e "$bindir/$base" ]] && continue
+        ln -s "$src" "$bindir/$base"
+    done
+    rm -rf -- "$stray"
+    if PATH="$bindir" command -v git >/dev/null 2>&1; then
+        echo "git-absent setup still found git" >&2
+        exit 1
+    fi
+    if PATH="$bindir" bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" --noninteractive \
+        --name ROUNDTRIP \
+        --out "$stray" \
+        > "$TMP/nogit.out" 2> "$TMP/nogit.err"; then
+        echo "git-absent run should have stopped before writing a ceremony" >&2
+        rm -rf -- "$stray"
+        exit 1
+    fi
+    if [[ -e "$stray" ]]; then
+        echo "git-absent run created an in-repo path" >&2
+        rm -rf -- "$stray"
+        exit 1
+    fi
+    if ! grep -F -q "git not found; cannot check that --out is outside a repository." "$TMP/nogit.err"; then
+        echo "git-absent run did not warn" >&2
+        exit 1
+    fi
+    if grep -F -q "Refusing to write inside the git working tree" "$TMP/nogit.err"; then
+        echo "git-absent run still refused the path as a git working tree" >&2
+        exit 1
+    fi
+    if ! grep -F -q "No ceremony directory was written." "$TMP/nogit.err"; then
+        echo "git-absent run did not report that nothing was written" >&2
+        exit 1
+    fi
+    printf 'git-absent: warned\n'
+}
+
 reject_multi_match() {
     local multi=$TMP/multi
     mkdir -p "$multi/shards/ALFA/secured" "$multi/public" "$multi/payload/secured"
@@ -241,6 +284,7 @@ EOF
 }
 
 reject_in_repo_out
+reject_git_absent
 reject_multi_match
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "$TMP/original.pem" >/dev/null 2>&1
 chmod 400 "$TMP/original.pem"

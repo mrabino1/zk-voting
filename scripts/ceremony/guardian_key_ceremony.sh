@@ -119,8 +119,9 @@ suffix, so the ceremony directory is NAME-VOTE or NAME-POLL, and writes
 key_type= into metadata.txt. Recover prints key_type= when it is set.
 Omit --type to leave the name unchanged.
 
---out must be outside the git working tree. The script refuses a path
-inside the repository. There is no default directory inside the tree.
+--out must be outside the git working tree. When git is installed, the
+script refuses a path inside the repository. When git is not installed,
+it warns and continues. There is no default directory inside the tree.
 
 --key-passphrase-file is one line of at least 32 characters. One trailing
 newline is removed. When the file is omitted, the script generates a
@@ -134,8 +135,8 @@ Do not pass a passphrase on the command line.
 recover reads communication sheets unless --guardian-passphrase-file is
 set. That file then has one line per codename listed in --guardians, in
 that order. A private key is written only after the public fingerprint
-matches. --out for recover is the private-key path, and it must also be
-outside the git working tree.
+matches. --out for recover is the private-key path. When git is
+installed, that path must also be outside the git working tree.
 
 This key is ceremony and backup tooling. It is not wired into contracts
 or the application.
@@ -194,7 +195,7 @@ ceremony_require_passphrase_file_mode() {
     local file=$1
     [[ -f "$file" ]] || ceremony_die "Passphrase file not found."
     [[ $(stat -c %a -- "$file") == 600 || $(stat -c %a -- "$file") == 400 ]] \
-        || ceremony_die "Passphrase file must be mode 600."
+        || ceremony_die "Passphrase file must be mode 600 or 400."
 }
 
 ceremony_require_mode_600() {
@@ -232,7 +233,9 @@ ceremony_assign_outside_repo() {
     while [[ ! -d "$parent" && "$parent" != "/" ]]; do
         parent=$(dirname -- "$parent")
     done
-    if top=$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$parent" rev-parse --show-toplevel 2>/dev/null); then
+    if ! command -v git >/dev/null 2>&1; then
+        ceremony_note "warning: git not found; cannot check that --out is outside a repository."
+    elif top=$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$parent" rev-parse --show-toplevel 2>/dev/null); then
         top=$(realpath -m -- "$top") || ceremony_die "Could not resolve the git working tree."
         case "$abs/" in
             "$top/"*)
@@ -577,7 +580,8 @@ It is not wired into contracts or the application.
 This key is separate from the ballot encryption key.
 This ceremony does not produce the ballot encryption key.
 The L2 operator gets public/ only, never a share.
-Record public/public.pem and public/fingerprint.txt on the L2 yourself.
+Publish public/public.pem and public/fingerprint.txt for reference only. They are not used on chain.
+Record them where the ceremony log lives, for example the L2.
 This tooling does not connect to a network.
 Splitting the passphrase means the full private key sits in payload/secured.
 A share is useless without that encrypted PEM.
@@ -744,7 +748,7 @@ ceremony_run() {
     ceremony_note ""
     ceremony_opsec
     ceremony_note ""
-    ssss_require_tools openssl iconv od tr mktemp awk grep sed date find realpath git stat \
+    ssss_require_tools openssl iconv od tr mktemp awk grep sed date find realpath stat \
         || ceremony_die "Install the missing commands and run this again."
     if (( ! NONINTERACTIVE )); then
         ceremony_require_yes "Type YES to continue: " || ceremony_die "Stopped."
@@ -758,7 +762,7 @@ ceremony_run() {
     [[ "$NAME" =~ ^[A-Z0-9][A-Z0-9_-]{0,63}$ ]] || ceremony_die "The ceremony name must be 1 to 64 characters: letters, digits, underscore, or hyphen."
     if (( ! NONINTERACTIVE )) && [[ -z "$KEY_TYPE" ]]; then
         ceremony_note "Optional type: VOTE or POLL. Leave blank to keep the ceremony name unchanged."
-        ceremony_prompt_line KEY_TYPE "Type" || ceremony_die "A type is required."
+        ceremony_prompt_line KEY_TYPE "Type" || ceremony_die "Could not read the type."
     fi
     ceremony_apply_key_type
 
@@ -811,7 +815,8 @@ ceremony_run() {
     DATE=$(date -u +%Y%m%d)
     ceremony_prepare_key
     if (( ! NONINTERACTIVE )); then
-        ceremony_note "The public key and this fingerprint are the files to record on the L2."
+        ceremony_note "The public key and this fingerprint are published for reference only. They are not used on chain."
+        ceremony_note "Record them where the ceremony log lives, for example the L2."
         ceremony_note "This program does not connect to a network."
         ceremony_require_yes "Type YES to encrypt this key and split the passphrase: " || ceremony_die "Stopped."
         ceremony_note "Key passphrase:"

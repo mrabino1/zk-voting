@@ -134,10 +134,10 @@ The digests match when the round trip is intact. Compare the public-key fingerpr
 
 `scripts/ceremony/guardian_key_ceremony.sh` walks through the ceremony:
 
-1. An OPSEC warning and a check that openssl, iconv, od, tr, realpath, git, and the other required commands are installed.
+1. An OPSEC warning and a check that openssl, iconv, od, tr, realpath, and the other required commands are installed. git is optional. If it is missing, the script warns that it cannot check whether the output path is inside a repository, and then it continues.
 2. A ceremony name.
 3. A new 4096-bit RSA key, or an imported unencrypted PEM.
-4. `public.pem` and the SHA-256 fingerprint, for you to record on the L2. The script does not publish them. The L2 operator gets public/ only, never a share.
+4. `public.pem` and the SHA-256 fingerprint, published for reference only and not used on chain. Record them where the ceremony log lives (for example the L2). The script does not publish them. The L2 operator gets public/ only, never a share.
 5. A key passphrase of at least 32 characters, entered twice, or one generated with `openssl rand -base64 48` and not printed. That passphrase encrypts the private key with AES-256-CBC, PBKDF2-HMAC-SHA256, and 600000 iterations.
 6. A threshold and a guardian count, from 2 to 26. Guardians are named with NATO phonetic codenames: ALFA, BRAVO, CHARLIE, and so on through ZULU.
 7. A share check (`ssss_secret_matches`) before any ceremony directory is written. If the check fails, the script stops and writes nothing.
@@ -145,13 +145,15 @@ The digests match when the round trip is intact. Compare the public-key fingerpr
 9. A roster of placeholder contacts. The script does not ask for a real name or a real contact.
 10. `DISTRIBUTION.txt` and `RECOVERY.txt`.
 
+The sealed share file name ends in `_secured_share.txt`. The paper sheet ends in `_communication.txt`. Those suffixes differ from a classic layout that uses `_secured_shard.txt` and `_communication_shard.txt`.
+
 Interactive run:
 
 ```bash
 bash scripts/ceremony/guardian_key_ceremony.sh
 ```
 
-The script asks for an output directory. `--out` inside the git working tree is refused. Do not commit the ceremony directory.
+The script asks for an output directory. When git is installed, `--out` inside the git working tree is refused. When git is not installed, the script warns and continues. Do not commit the ceremony directory.
 
 Non-interactive run, for a test or a scripted rehearsal. Put each passphrase in a file. Do not pass the passphrase itself:
 
@@ -168,7 +170,7 @@ bash scripts/ceremony/guardian_key_ceremony.sh --noninteractive \
 
 `--type` is `VOTE` or `POLL`. The ceremony name becomes `CEREMONY-VOTE` or `CEREMONY-POLL`, and `metadata.txt` gains `key_type=`. Recover prints `key_type=` when the file has it. Omit `--type` to leave the name unchanged. `--name` is the election name. This key is still the ceremony and backup key. It is not the ballot encryption key.
 
-`--import /path/to/private.pem` uses an existing key instead of generating one. The guardian passphrase file has one line per guardian, ALFA first. One trailing newline on the key passphrase file is removed. Omit `--key-passphrase-file` and the script generates a key passphrase and does not print it. `--out` must be outside the git working tree.
+`--import /path/to/private.pem` uses an existing key instead of generating one. The guardian passphrase file has one line per guardian, ALFA first. One trailing newline on the key passphrase file is removed. Omit `--key-passphrase-file` and the script generates a key passphrase and does not print it. When git is installed, `--out` must be outside the git working tree.
 
 Flags may be omitted when the matching environment variable is set: `CEREMONY_NONINTERACTIVE`, `CEREMONY_NAME`, `CEREMONY_OUT`, `CEREMONY_THRESHOLD`, `CEREMONY_SHARES`, `CEREMONY_KEY_PASSPHRASE_FILE`, `CEREMONY_GUARDIAN_PASSPHRASE_FILE`, `CEREMONY_IMPORT_PEM`, `CEREMONY_TYPE`.
 
