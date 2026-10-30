@@ -16,11 +16,12 @@ import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
 /// @dev There is NO function that takes a voter address. The passkey smart
 ///      account is not an argument; unlinkability depends on that.
 ///
-///      Coercion slice (not MACI, not last-ballot-counts): a nullifier is
-///      accepted **once**. Any second `submitVote` for that nullifier reverts
-///      `NullifierUsed`, including a new ciphertext. Voters may change their
-///      mind privately on the ballot form before submit. Double voting remains
-///      impossible. Receipts list hashes only and cannot prove choice.
+///      A submission id (public input 2) is spent once. A new ballot hash is a
+///      new submission id, so a re-vote is a new row. When `settlement` is set,
+///      `acceptedBallots` is not incremented here: the hourly batch and the
+///      supplementary batch write it, and the final batch does not. When no
+///      settlement is linked, each acceptance still increments the count so a
+///      legacy election keeps a unique total. Receipts list hashes only.
 ///
 ///      Audit H-05: `ballotHash` (public input 3) is
 ///      `uint256(keccak256(encryptedBallot)) mod r` so it is always a BN254
@@ -58,6 +59,25 @@ contract BallotInbox is IBallotInbox {
 
     /// @dev Appended slot. 1 while a submission is inside `nonReentrant`.
     uint256 private _reentrancyLock;
+
+    /// @notice Linked settlement. Unset keeps the per-acceptance unique count.
+    address public settlement;
+    /// @notice Optional guardian ceremony. Unset does not refuse ballots.
+    address public ceremony;
+
+    struct Inclusion {
+        bytes32 boundRoot;
+        uint64 receivedAt;
+        bool pending;
+        bool included;
+    }
+
+    mapping(uint256 => mapping(uint256 => Inclusion)) private _forcedIn;
+    mapping(uint256 => uint256[]) private _pendingForced;
+    mapping(uint256 => mapping(uint256 => Inclusion)) private _held;
+    mapping(uint256 => uint256[]) private _pendingHeld;
+
+    uint256 private constant _MAX_PENDING = 64;
 
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
@@ -220,6 +240,7 @@ contract BallotInbox is IBallotInbox {
 
         if (!CappedVerifierCall.accepted(verifier, a, b, c, publicInputs)) revert InvalidProof();
         if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        _requireKey(electionId, election.params().electionType);
     }
 
     function _requireRelayer() internal view {
@@ -324,9 +345,256 @@ contract BallotInbox is IBallotInbox {
         _ballotHashOf[electionId][key] = ballotHash;
         _ballotHashList[electionId].push(ballotHash);
         _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
-        unchecked {
-            _acceptedBallots[electionId] += 1;
+        if (settlement == address(0)) {
+            unchecked {
+                _acceptedBallots[electionId] += 1;
+            }
         }
         emit VoteAccepted(electionId, nullifier, ballotHash, msg.sender);
+    }
+
+    function setSettlement(address settlement_) external {
+        _requireFactoryAdmin();
+        if (settlement_ == address(0)) revert ZeroAddress();
+        if (settlement != address(0) && settlement != settlement_) revert SettlementAlreadySet();
+        settlement = settlement_;
+    }
+
+    function setCeremony(address ceremony_) external {
+        _requireFactoryAdmin();
+        if (ceremony_ == address(0)) revert ZeroAddress();
+        if (ceremony != address(0) && ceremony != ceremony_) revert CeremonyAlreadySet();
+        ceremony = ceremony_;
+    }
+
+    function commitUniqueCount(uint256 electionId, uint256 uniqueCount) external {
+        if (msg.sender != settlement || settlement == address(0)) revert NotAuthorized();
+        _acceptedBallots[electionId] = uniqueCount;
+    }
+
+    function receiptDigest(uint256 electionId, RelayerReceipt calldata receipt) public pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                electionId,
+                receipt.submissionId,
+                receipt.ballotHash,
+                receipt.ciphertextHash,
+                receipt.boundRoot,
+                receipt.receivedAt
+            )
+        );
+    }
+
+    function forceIn(
+        uint256 electionId,
+        RelayerReceipt calldata receipt,
+        bytes calldata signature,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot
+    ) external nonReentrant {
+        _requireNotPaused();
+        _inclusionWindow(electionId, receipt);
+        _checkSigned(electionId, receipt, signature, publicInputs, encryptedBallot);
+        if (!_rootPosted(electionId, receipt.boundRoot)) revert UnknownBoundRoot();
+        _acceptIncluded(electionId, a, b, c, publicInputs, encryptedBallot);
+        _pushForced(electionId, receipt);
+    }
+
+    function submitHeldRevote(
+        uint256 electionId,
+        RelayerReceipt calldata receipt,
+        bytes calldata signature,
+        bytes32 reproofRoot,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot
+    ) external nonReentrant {
+        _requireNotPaused();
+        _inclusionWindow(electionId, receipt);
+        _checkSigned(electionId, receipt, signature, publicInputs, encryptedBallot);
+        if (reproofRoot != _finalRoot(electionId)) revert BoundRootMismatch();
+        _acceptIncluded(electionId, a, b, c, publicInputs, encryptedBallot);
+        _pushHeld(electionId, receipt, reproofRoot);
+    }
+
+    function pendingForcedIn(uint256 electionId) external view returns (uint256[] memory) {
+        return _pendingForced[electionId];
+    }
+
+    function pendingHeld(uint256 electionId) external view returns (uint256[] memory) {
+        return _pendingHeld[electionId];
+    }
+
+    function forcedInRoot(uint256 electionId, uint256 submissionId) external view returns (bytes32 root, bool pending) {
+        Inclusion storage row = _forcedIn[electionId][submissionId];
+        return (row.boundRoot, row.pending);
+    }
+
+    function heldRevote(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (bytes32 boundRoot, uint64 receivedAt, bool pending, bool included)
+    {
+        Inclusion storage row = _held[electionId][submissionId];
+        return (row.boundRoot, row.receivedAt, row.pending, row.included);
+    }
+
+    function markSealed(uint256 electionId, uint256[] calldata submissionIds) external {
+        if (msg.sender != settlement || settlement == address(0)) revert NotAuthorized();
+        _requireListed(_pendingForced[electionId], submissionIds);
+        _requireListed(_pendingHeld[electionId], submissionIds);
+        if (submissionIds.length != _pendingForced[electionId].length + _pendingHeld[electionId].length) {
+            revert UnknownInclusion();
+        }
+        for (uint256 i; i < submissionIds.length; ++i) {
+            uint256 id = submissionIds[i];
+            if (_forcedIn[electionId][id].pending) {
+                _forcedIn[electionId][id].pending = false;
+                _forcedIn[electionId][id].included = true;
+            } else if (_held[electionId][id].pending) {
+                _held[electionId][id].pending = false;
+                _held[electionId][id].included = true;
+            } else {
+                revert UnknownInclusion();
+            }
+        }
+        delete _pendingForced[electionId];
+        delete _pendingHeld[electionId];
+    }
+
+    function _requireFactoryAdmin() internal view {
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("admin()"));
+        if (!ok || ret.length < 32 || abi.decode(ret, (address)) != msg.sender) revert NotAuthorized();
+    }
+
+    function _requireKey(uint256 electionId, uint8 electionType) internal view {
+        if (ceremony == address(0)) return;
+        (bool ok, bytes memory ret) =
+            ceremony.staticcall(abi.encodeWithSignature("keyPosted(uint256,uint8)", electionId, electionType));
+        if (!ok || ret.length < 32 || !abi.decode(ret, (bool))) revert KeyNotPosted();
+    }
+
+    function _inclusionWindow(uint256 electionId, RelayerReceipt calldata receipt) internal view {
+        IElection election = _getElection(electionId);
+        ElectionParams memory p = election.params();
+        uint256 allowedAt = _tallyAllowedAt(electionId);
+        if (block.timestamp < p.cutoffTime || block.timestamp >= allowedAt) revert ForceInClosed();
+        if (receipt.receivedAt >= p.cutoffTime) revert ReceiptAfterCutoff();
+        _requireNotTallied(electionId);
+    }
+
+    function _tallyAllowedAt(uint256 electionId) internal view returns (uint256) {
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("tallyVerifier()"));
+        if (!ok || ret.length < 32) revert TallyStatusUnavailable();
+        address tally = abi.decode(ret, (address));
+        if (tally == address(0)) revert TallyStatusUnavailable();
+        (ok, ret) = tally.staticcall(abi.encodeWithSignature("tallyAllowedAt(uint256)", electionId));
+        if (!ok || ret.length < 32) revert TallyStatusUnavailable();
+        return abi.decode(ret, (uint256));
+    }
+
+    function _checkSigned(
+        uint256 electionId,
+        RelayerReceipt calldata receipt,
+        bytes calldata signature,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot
+    ) internal view {
+        if (keccak256(encryptedBallot) != receipt.ciphertextHash) revert ReceiptMismatch();
+        if (publicInputs.length != 5) revert InvalidPublicInputs();
+        if (publicInputs[2] % SNARK_SCALAR_FIELD != receipt.submissionId % SNARK_SCALAR_FIELD) {
+            revert ReceiptMismatch();
+        }
+        if (bytes32(publicInputs[3]) != receipt.ballotHash) revert ReceiptMismatch();
+        if (publicInputs[3] != ballotHashOfCiphertext(encryptedBallot)) revert BallotHashMismatch();
+        address who = _signer(receiptDigest(electionId, receipt), signature);
+        (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("isRelayer(address)", who));
+        if (!ok || ret.length < 32 || !abi.decode(ret, (bool))) revert BadSignature();
+    }
+
+    function _signer(bytes32 digest, bytes calldata signature) internal pure returns (address who) {
+        if (signature.length != 65) revert BadSignature();
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := calldataload(signature.offset)
+            s := calldataload(add(signature.offset, 32))
+            v := byte(0, calldataload(add(signature.offset, 64)))
+        }
+        if (v < 27) v += 27;
+        if (v != 27 && v != 28) revert BadSignature();
+        who = ecrecover(keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest)), v, r, s);
+        if (who == address(0)) revert BadSignature();
+    }
+
+    function _rootPosted(uint256 electionId, bytes32 root) internal view returns (bool) {
+        if (root == bytes32(0)) return true;
+        if (settlement == address(0)) return false;
+        (bool ok, bytes memory ret) =
+            settlement.staticcall(abi.encodeWithSignature("postedBallotRoot(uint256,bytes32)", electionId, root));
+        return ok && ret.length >= 32 && abi.decode(ret, (bool));
+    }
+
+    function _finalRoot(uint256 electionId) internal view returns (bytes32 root) {
+        if (settlement == address(0)) revert UnknownBoundRoot();
+        (bool ok, bytes memory ret) =
+            settlement.staticcall(abi.encodeWithSignature("finalBatchPosted(uint256)", electionId));
+        if (!ok || ret.length < 32 || !abi.decode(ret, (bool))) revert UnknownBoundRoot();
+        (ok, ret) = settlement.staticcall(abi.encodeWithSignature("finalBatchRoot(uint256)", electionId));
+        if (!ok || ret.length < 32) revert UnknownBoundRoot();
+        root = abi.decode(ret, (bytes32));
+    }
+
+    function _acceptIncluded(
+        uint256 electionId,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot
+    ) internal {
+        IElection election = _getElection(electionId);
+        if (!election.rollFrozen()) revert RollNotFrozen();
+        address verifier = election.params().verifier;
+        if (verifier == address(0)) revert ZeroVerifier();
+        _requireBoundInstance(election, electionId, publicInputs, encryptedBallot);
+        uint256 nullifier = publicInputs[2] % SNARK_SCALAR_FIELD;
+        if (nullifier == 0) revert InvalidNullifier();
+        if (!CappedVerifierCall.accepted(verifier, a, b, c, publicInputs)) revert InvalidProof();
+        if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+        _requireKey(electionId, election.params().electionType);
+        _recordAcceptance(electionId, nullifier, bytes32(publicInputs[3]));
+    }
+
+    function _pushForced(uint256 electionId, RelayerReceipt calldata receipt) internal {
+        if (_pendingForced[electionId].length >= _MAX_PENDING) revert PendingListFull();
+        uint256 id = receipt.submissionId % SNARK_SCALAR_FIELD;
+        _forcedIn[electionId][id] =
+            Inclusion({boundRoot: receipt.boundRoot, receivedAt: receipt.receivedAt, pending: true, included: false});
+        _pendingForced[electionId].push(id);
+    }
+
+    function _pushHeld(uint256 electionId, RelayerReceipt calldata receipt, bytes32 reproofRoot) internal {
+        if (_pendingHeld[electionId].length >= _MAX_PENDING) revert PendingListFull();
+        uint256 id = receipt.submissionId % SNARK_SCALAR_FIELD;
+        _held[electionId][id] =
+            Inclusion({boundRoot: reproofRoot, receivedAt: receipt.receivedAt, pending: true, included: false});
+        _pendingHeld[electionId].push(id);
+    }
+
+    function _requireListed(uint256[] storage pending, uint256[] calldata included) internal view {
+        for (uint256 i; i < pending.length; ++i) {
+            bool found;
+            for (uint256 j; j < included.length; ++j) {
+                if (pending[i] == included[j]) found = true;
+            }
+            if (!found) revert UnknownInclusion();
+        }
     }
 }

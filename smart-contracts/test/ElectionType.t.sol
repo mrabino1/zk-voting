@@ -102,10 +102,10 @@ contract ElectionTypeTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 0;
         vm.prank(tallyOperator);
-        vm.expectRevert(ITallyVerifier.ElectionNotClosed.selector);
+        vm.expectPartialRevert(ITallyVerifier.ChallengeWindowOpen.selector);
         tally.submitTally(id, counts, a, b, c);
         vm.prank(tallyOperator);
-        vm.expectRevert(ITallyVerifier.ElectionNotClosed.selector);
+        vm.expectPartialRevert(ITallyVerifier.ChallengeWindowOpen.selector);
         tally.submitDecryption(id, keccak256("early-plain"));
 
         _certify(el, id, keccak256("poll-result"));

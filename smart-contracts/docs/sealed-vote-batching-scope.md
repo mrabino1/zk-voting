@@ -1,6 +1,6 @@
 # Poll and Vote batches
 
-Status: **plan only**. Do not write the sections below into the contracts until Matthew confirms them. This pull request does not change `BallotInbox`, the vote circuit, deploy scripts, or the tally key.
+Status: sealed-vote batching from this document is in this diff, except deploy scripts and the app. When no settlement is linked, the inbox still increments `acceptedBallots` on each acceptance so an election that never enters the batch path keeps a unique count. When a settlement is linked, only an hourly batch and the supplementary batch write that count. The final batch does not. `rollupSettlement` unset means `_authorize` does not read `_supplementaryPosted`. When it is set, tally, decryption, and final partials require the flag.
 
 Already coded, and not part of the plan below:
 
@@ -14,11 +14,11 @@ Already coded, and not part of the plan below:
 2. Both types post one last L1 batch at the deadline, including when the last hour is short.
 3. A voter may cast again, for both types, until `cutoffTime`. The latest ballot is the only one that counts. Each ballot spends its own submission id. Turnout counts unique voters. A published hour is not revised.
 4. VOTE choices are encrypted to a public key posted on the L2. The private key is split Shamir k-of-n. Decryption releases only the aggregate total. The full private key is never published. Individual ballots stay undecryptable after that release, so the release is not a proof of one voter's choice. POLL hourly sums use a separate guardian key, described under "Tally key".
-5. The tally waits out a nonzero challenge window after cutoff so an omitted ballot can be added back. That window is planned code. It is not written.
+5. The tally waits out a nonzero challenge window after cutoff so an omitted ballot can be added back. That window is in this diff.
 
 ## Batch format and cadence
 
-Not code. Defaults for the later change:
+Defaults for the contracts in this diff:
 
 | Knob | Value | Why |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ The JSON sequencer (chain id 27427) has no gas token. Voters pay nothing. The EV
 
 ## Re-vote, without a public nullifier
 
-Today `BallotInbox._checkOne` reduces public input 2 into the field and stores it in `_nullifierUsed`. A second `submitVote` or batch entry with that value reverts `NullifierUsed`, including when the ciphertext is new. `_recordAcceptance` stores the ballot hash, appends it, updates the append-only `ballotRoot`, increments `acceptedBallots`, and emits `VoteAccepted`. The vote circuit sets public input 2 to `Poseidon(nullifierSecret, electionId)`, so it is the same value for every ballot that person casts in that election. The contract comment says this is one acceptance, not last-ballot-counts. In this plan the unique count is written only at batch time. That is a design change and is not coded.
+Today `BallotInbox._checkOne` reduces public input 2 into the field and stores it in `_nullifierUsed`. A second `submitVote` or batch entry with that value reverts `NullifierUsed`, including when the ciphertext is new. `_recordAcceptance` stores the ballot hash, appends it, updates the append-only `ballotRoot`, increments `acceptedBallots`, and emits `VoteAccepted`. The vote circuit sets public input 2 to `Poseidon(nullifierSecret, electionId)`, so it is the same value for every ballot that person casts in that election. When a settlement is linked, the unique count is written only at batch time. The final batch does not write it. When no settlement is linked, each acceptance still increments the count.
 
 That permanent voter lock is what changes, for POLL and for VOTE, until `cutoffTime`. After cutoff, `OutsideVotingWindow` still rejects a new ballot, except an omitted ballot that was cast before cutoff and is brought back inside the challenge window below. A new re-vote after cutoff is rejected. Re-voting is allowed only until the deadline.
 
@@ -83,7 +83,7 @@ Last-ballot-counts removes the first-ballot lock that today protects against coe
 
 What changes inside the vote circuit:
 
-- The constraint on public input 2 is no longer `Poseidon(nullifierSecret, electionId)`. It is `Poseidon(nullifierSecret, electionId, ballotHash)`.
+- The constraint on public input 2 is no longer `Poseidon(nullifierSecret, electionId)`. It is `Poseidon(nullifierSecret, electionId, ballotHash)`. This tree's Poseidon permutation takes two inputs (`t = 3`), so the circuit computes that id as `Poseidon(Poseidon(nullifierSecret, electionId), ballotHash)`.
 - `ballotHash` stays public input 3 (`Poseidon(choice, choiceRandomness)` in the circuit; the `AG` tag path on chain already treats that tag as the hash). Mixing it into the submission id does not add a public field.
 - Eligibility, the disqualification root, and the election id are unchanged.
 - The tally key, a re-vote flag, and the previous ballot hash are not added to this list. A public previous hash, or a reused nullifier, would link the two ballots.
@@ -94,15 +94,15 @@ What the vote circuit does not prove: that the ciphertext is ElGamal under the j
 
 ## Challenge window
 
-Status: planned, awaiting approval.
+Status: in this diff.
 
-Not written. A tally posted in the cutoff block can be ordered ahead of a ballot the relayer dropped. The planned check replaces the cutoff comparison in `_authorize` (today `if (block.timestamp < p.cutoffTime) revert ElectionNotClosed()`):
+A tally posted in the cutoff block can be ordered ahead of a ballot the relayer dropped. The check in `_authorize` is:
 
 ```solidity
 if (block.timestamp < p.cutoffTime + _challengeWindow[electionId]) revert ChallengeWindowOpen(electionId);
 ```
 
-`setChallengeWindow(uint256 electionId, uint64 secondsAfterCutoff)` is planned beside it:
+`setChallengeWindow(uint256 electionId, uint64 secondsAfterCutoff)` is beside it:
 
 - Caller is the tally operator.
 - It must be called before `startTime`. At or after `startTime` it reverts.
@@ -112,7 +112,7 @@ if (block.timestamp < p.cutoffTime + _challengeWindow[electionId]) revert Challe
 
 `submitTally`, `submitAggregateTally`, and `submitDecryption` take that path through `_authorize`, so they wait out the window. The one post-cutoff interim write and the one post-cutoff disclosure write already require a posted tally, so they cannot land before the tally does. They also require the supplementary batch below.
 
-At `tallyAllowedAt` the set freezes. The sequencer then posts exactly one supplementary batch, empty if nothing was forced in. It updates only the final product and the unique count, with no hourly block changes. The final batch at `cutoffTime` carries no turnout step. Its step and any merged-forward remainder are published once, in this supplementary batch. `submitTally`, `submitAggregateTally`, `submitDecryption` and the guardians' final partials require that batch to be posted and use the product it leaves. `RollupSettlement` records the post in `_supplementaryPosted[electionId]`. `_authorize` reads that flag.
+At `tallyAllowedAt` the set freezes. The sequencer then posts exactly one supplementary batch, empty if nothing was forced in. It updates only the final product and the unique count, with no hourly block changes. The final batch at `cutoffTime` carries no turnout step. Its step and any merged-forward remainder are published once, in this supplementary batch. `submitTally`, `submitAggregateTally`, `submitDecryption` and the guardians' final partials require that batch to be posted and use the product it leaves. `RollupSettlement` records the post in `_supplementaryPosted[electionId]`. `_authorize` reads that flag when `rollupSettlement` is set. An election that never linked a settlement does not take this path.
 
 `SUPPLEMENTARY_GRACE` is 1 hour, the same length as one hourly batch. If the sequencer has not posted the supplementary batch within that grace after `tallyAllowedAt`, anyone may post it with a valid batch proof. One hour is long enough for an honest sequencer to land the batch and short enough that a stall cannot hold the tally for longer than one missed hour.
 
@@ -123,13 +123,13 @@ At `tallyAllowedAt` the set freezes. The sequencer then posts exactly one supple
 
 ## Tally key
 
-Not coded. Shamir sharing. Not a time-lock. The joint scalar is not reconstructed on chain and is not an event argument. POLL and VOTE do not share a key.
+On chain in this diff: Feldman public keys, the `k` and `n` bounds, and the Chaum-Pedersen check on a guardian partial. Shamir sharing itself stays off chain. Not a time-lock. The joint scalar is not reconstructed on chain and is not an event argument. POLL and VOTE do not share a key.
 
 - **Setup.** Distributed Feldman sharing. Each guardian deals a polynomial of degree `k - 1`. No dealer holds the joint scalar. Bounds: `n` from 2 to 16, `k >= 2`, `k <= n`. Each election type gets its own joint public key, posted on the L2 before `startTime`. Ballots of that type are refused until its key is posted.
 - **Share distribution.** Shares are encrypted to each guardian's transport key and kept off chain. The chain stores Feldman commitments only. The operator's database must not gain a copy of a share.
 - **What is encrypted.** Choices are exponential ElGamal of a one-hot vector under that type's joint key, which is what makes `Enc(new) * Enc(old)^{-1}` a re-vote. POLL hourly sums are decrypted by a guardian k-of-n key separate from the VOTE key. The operator holds no opening key and never decrypts a single ballot. The POLL guardians decrypt the published hour only, and that hour is the difference between two posted running totals of the hourly product. That product leaves re-vote deltas out, so a published hour cannot show a negative count.
 - **POLL hourly.** After the gate (100 ballots or the end), 30 minutes after each hour closes, POLL guardians submit partials of that hour's hourly product. These are not `submitDecryption` and do not touch the certified result.
-- **Deadline.** Only at or after `tallyAllowedAt`, and only after the supplementary batch is posted, guardians submit partial decryptions of the final product, the one that includes re-vote deltas, each with a Chaum-Pedersen proof against that guardian's commitment. `k` valid partials combine, by Lagrange, to the plaintext counts. `submitDecryption` records a hash of those counts. It does not take the scalar. It does not take per-ballot openings.
+- **Deadline.** Only at or after `tallyAllowedAt`, and only after the supplementary batch is posted, guardians submit partial decryptions of the final product, the one that includes re-vote deltas, each with a Chaum-Pedersen proof against that guardian's commitment. `k` valid partials combine, by Lagrange, to the plaintext counts. `submitDecryption` records a hash of those counts. It does not take the scalar. It does not take per-ballot openings. Until a ceremony is posted for that election, `submitDecryption` stays the write-once hash it is on an election with no guardians.
 - **Never publish the private key.** No function returns it, stores it, or emits it. Publishing it would open every ciphertext. After release, individual ballots stay ciphertext. A voter cannot point at the tally transaction and prove which choice was theirs. The tally output is the option totals.
 - **What that does not hide.** A voter who retained the encryption randomness can still show an opening of their own ciphertext to someone else. The release does not create that proof, and it does not erase it. Receipt-freeness against a voter who kept the coins is a different ballot scheme. This plan does not add one.
 - **Guardian loss.** Fewer than `k` partials means there is no result for that key. Do not lower `k` and do not add an operator override.
@@ -137,7 +137,7 @@ Not coded. Shamir sharing. Not a time-lock. The joint scalar is not reconstructe
 
 ## Contract, ABI, and deployment changes
 
-Later pull request, after this plan is confirmed. Nothing in this list is in the current diff. The challenge-window check quoted above is in this list and is not written.
+The challenge-window check, the supplementary batch, and the ceremony partials are in this diff. Deploy scripts in this list are not.
 
 | Surface | Change |
 | --- | --- |
@@ -192,4 +192,4 @@ The app gate beside this (100 ballots or the scheduled end, 30 minutes, merge-fo
 
 ## Out of this plan
 
-Padding, dummy ballots, relayer-held ballots, commit-reveal, and a time-lock on the tally key are not in this plan. The joint scalar is not published. A public nullifier is not reused across a voter's ballots. Deployed addresses and submodules stay as they are. Contract code for the sections above, including the challenge window, waits for confirmation.
+Padding, dummy ballots, relayer-held ballots, commit-reveal, and a time-lock on the tally key are not in this plan. The joint scalar is not published. A public nullifier is not reused across a voter's ballots. Deployed addresses and submodules stay as they are. App code for the pending re-vote warning is out of scope here.

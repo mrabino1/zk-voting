@@ -36,6 +36,20 @@ interface ITallyVerifier {
     error DecryptionBeforeTally(uint256 electionId);
     /// @notice `tallyComponentAt` index is past the stored list.
     error TallyComponentOutOfRange(uint256 index);
+    /// @notice `block.timestamp` is still before `cutoffTime + challengeWindow`.
+    error ChallengeWindowOpen(uint256 electionId);
+    error ZeroChallengeWindow();
+    error ChallengeWindowLocked(uint256 electionId);
+    error ChallengeWindowAlreadySet(uint256 electionId);
+    /// @notice Tally, decryption, and final partials wait for the supplementary batch.
+    error SupplementaryBatchRequired(uint256 electionId);
+    error SettlementAlreadySet();
+    error CeremonyAlreadySet();
+    error InvalidPartial();
+    error PartialAlreadyPosted();
+    error NotGuardian();
+    error NotEnoughPartials(uint256 electionId);
+    error FinalPartialTooEarly(uint256 electionId);
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
@@ -91,7 +105,7 @@ interface ITallyVerifier {
 
     /// @notice Record a hash of the decrypted aggregate. No per-ballot plaintext.
     ///         Requires a posted tally. Before cutoff, VOTE reverts `ResultsSealedUntilEnd`
-    ///         and POLL reverts `ElectionNotClosed`. After cutoff the hash is write-once.
+    ///         and POLL reverts `ChallengeWindowOpen`. After the window the hash is write-once.
     function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external;
 
     /// @notice Running result commitment. POLL may replace it before cutoff. VOTE may not
@@ -119,4 +133,49 @@ interface ITallyVerifier {
     function tallyComponentCount(uint256 electionId) external view returns (uint256);
 
     function tallyComponentAt(uint256 electionId, uint256 index) external view returns (bytes32);
+
+    function setChallengeWindow(uint256 electionId, uint64 secondsAfterCutoff) external;
+
+    function challengeWindow(uint256 electionId) external view returns (uint64);
+
+    function tallyAllowedAt(uint256 electionId) external view returns (uint256);
+
+    function setRollupSettlement(address settlement_) external;
+
+    function rollupSettlement() external view returns (address);
+
+    function setCeremony(address ceremony_) external;
+
+    function ceremony() external view returns (address);
+
+    function submitHourlyPartial(
+        uint256 electionId,
+        uint256 hourIndex,
+        uint256 c1X,
+        uint256 c1Y,
+        uint256 dX,
+        uint256 dY,
+        uint256 aX,
+        uint256 aY,
+        uint256 bX,
+        uint256 bY,
+        uint256 z
+    ) external;
+
+    function hourlyPartialPosted(uint256 electionId, uint256 hourIndex, address guardian) external view returns (bool);
+
+    function submitFinalPartial(
+        uint256 electionId,
+        uint256 c1X,
+        uint256 c1Y,
+        uint256 dX,
+        uint256 dY,
+        uint256 aX,
+        uint256 aY,
+        uint256 bX,
+        uint256 bY,
+        uint256 z
+    ) external;
+
+    function finalPartialCount(uint256 electionId) external view returns (uint256);
 }

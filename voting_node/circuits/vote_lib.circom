@@ -199,11 +199,17 @@ template Vote(levels) {
     }
     merkle.root === root;
 
-    // nullifier === Hash(nullifierSecret, electionId)
-    component nullifierCheck = ComputeNullifier();
-    nullifierCheck.nullifierSecret <== nullifierSecret;
-    nullifierCheck.electionId <== electionId;
-    nullifierCheck.nullifier === nullifier;
+    // Submission id = Poseidon(Poseidon(nullifierSecret, electionId), ballotHash).
+    // This repo's Poseidon permutation is t = 3 (two inputs). A single
+    // three-input Poseidon needs t = 4 constants, which are not in this tree.
+    // The nested two-input hash is the submission id the inbox spends once.
+    component submissionInner = Hasher();
+    submissionInner.a <== nullifierSecret;
+    submissionInner.b <== electionId;
+    component submissionId = Hasher();
+    submissionId.a <== submissionInner.out;
+    submissionId.b <== ballotHash;
+    submissionId.out === nullifier;
 
     // Non-membership: Hash(disqLow, disqNext) is in the disqualification chain,
     // and the identity commitment sits strictly inside that gap.
