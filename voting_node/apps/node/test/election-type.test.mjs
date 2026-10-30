@@ -10,6 +10,7 @@ import { after, before, describe, test } from 'node:test';
 import { createApp } from '../src/server.mjs';
 import { planPublicBlocks } from '../src/disclosure.mjs';
 import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
+import { electionOpenCivic } from '../src/l2Identity.mjs';
 import { electionFactoryAbi, factoryElectionParams } from '../src/chain.mjs';
 import { electionsDiag, storeDiag } from '../src/superAdmin/diagnostics.mjs';
 
@@ -155,42 +156,49 @@ function assertNoMarks(text, marks, label) {
   for (const mark of marks) {
     assert.equal(text.includes(mark), false, `${label} leaked ${mark}`);
   }
-  assert.doesNotMatch(text, /"acceptedBallots":\s*7\b/, label);
-  assert.doesNotMatch(text, /"acceptedBallotsDisclosed":\s*7\b/, label);
-  assert.doesNotMatch(text, /"castCount":\s*7\b/, label);
-  assert.doesNotMatch(text, /"voteCount":\s*7\b/, label);
-  assert.doesNotMatch(text, /"count":\s*7\b/, label);
-  assert.doesNotMatch(text, /"certifiedBallots":\s*7\b/, label);
-  assert.doesNotMatch(text, /"publishedAcceptedBallots":\s*7\b/, label);
-  assert.doesNotMatch(text, /"publicAcceptedBallots":\s*7\b/, label);
+}
+
+function assertNoChoice(text, label) {
+  assert.doesNotMatch(text, /"counts"\s*:/, label);
+  assert.doesNotMatch(text, /"countsHash"\s*:/, label);
+  assert.doesNotMatch(text, /"winner"\s*:/, label);
+  assert.doesNotMatch(text, /"winners"\s*:/, label);
+  assert.doesNotMatch(text, /"openedBallots"\s*:/, label);
+  assert.doesNotMatch(text, /"plaintext"\s*:/, label);
+  assert.doesNotMatch(text, /"choice"\s*:/, label);
+  assert.doesNotMatch(text, /"count"\s*:\s*\d/, label);
+  assert.doesNotMatch(text, /"certifiedBallots"\s*:\s*\d/, label);
+}
+
+function assertNoLiveCounters(text, label) {
+  assert.doesNotMatch(text, /"castCount"\s*:\s*7\b/, label);
+  assert.doesNotMatch(text, /"voteCount"\s*:\s*7\b/, label);
+  assert.doesNotMatch(text, /"receiptCount"\s*:\s*7\b/, label);
+  assert.doesNotMatch(text, /"sealedCount"\s*:\s*7\b/, label);
 }
 
 function assertSealedShape(body, label) {
   assert.equal(body.resultsSealed, true, label);
   assert.equal(body.electionType, 1, label);
   assert.equal(body.electionTypeName, 'vote', label);
-  assert.equal(body.acceptedBallots ?? null, null, label);
   assert.equal(body.tally ?? null, null, label);
+  if (body.acceptedBallots != null) assert.equal(typeof body.acceptedBallots, 'number', label);
   const message = body.message || body.resultsMessage || body.note || body.disclosure?.note || '';
   assert.match(message, /^Results sealed until /, label);
-  if (body.disclosure) assert.equal(body.disclosure.acceptedBallotsDisclosed, undefined, label);
-  if (Array.isArray(body.ballots)) assert.equal(body.ballots.length, 0, label);
-  if (Array.isArray(body.disclosedBallots)) assert.equal(body.disclosedBallots.length, 0, label);
-  if (Array.isArray(body.hours)) assert.equal(body.hours.length, 0, label);
   if (body.results) {
     assert.equal(body.results.sealed, true, label);
     assert.equal(body.results.available, false, label);
     assert.equal(body.results.certifiedBallots, null, label);
-    assert.equal(body.results.publishedAcceptedBallots, null, label);
+    if (body.results.publishedAcceptedBallots != null) {
+      assert.equal(typeof body.results.publishedAcceptedBallots, 'number', label);
+    }
     for (const question of body.results.questions || []) {
+      assert.equal(question.outcome ?? null, null, label);
       for (const option of question.options || []) assert.equal(option.count, undefined, label);
     }
   }
-  if (body.turnout) {
-    assert.equal(body.turnout.acceptedBallots, null, label);
-    assert.equal(body.turnout.participantCount, null, label);
-  }
   if (body.code) assert.equal(body.code, 'RESULTS_SEALED', label);
+  assertNoChoice(JSON.stringify(body), label);
 }
 
 describe('election type is chosen once', () => {
@@ -320,7 +328,7 @@ describe('vote interim data is refused', () => {
     await app.stop();
   });
 
-  test('hourly disclosure publishes a poll that cleared the gate and skips a vote', async () => {
+  test('hourly disclosure publishes a poll and a vote, and withholds vote choice results', async () => {
     const pollEarly = await app.api('GET', `/api/elections/${pollId}`);
     assert.equal(pollEarly.json.resultsSealed, false);
     assert.equal(pollEarly.json.electionType, 0);
@@ -337,11 +345,13 @@ describe('vote interim data is refused', () => {
 
     const voteNow = await app.api('GET', `/api/elections/${voteId}`);
     assertSealedShape(voteNow.json, 'vote detail');
-    assert.equal((await voteTxs(app.api, voteId)).length, 0);
-    assertNoMarks(JSON.stringify(voteNow.json), marks, 'vote detail');
+    assert.equal(voteNow.json.acceptedBallots, CAST);
+    assert.equal(voteNow.json.tally, null);
+    assert.equal((await voteTxs(app.api, voteId)).length, CAST);
+    assertNoChoice(JSON.stringify(voteNow.json), 'vote detail');
   });
 
-  test('every role, including admin, receives a sealed vote and no interim rows', async () => {
+  test('every role sees disclosed turnout and no choice data before the deadline', async () => {
     const roles = [
       { name: 'anonymous', jar: null },
       { name: 'voter', handle: 'voter-one', role: 'voter' },
@@ -382,7 +392,11 @@ describe('vote interim data is refused', () => {
       for (const path of paths) {
         const res = await app.api('GET', path, { jar });
         assert.equal(res.status, 200, `${name} ${path} ${res.text}`);
-        assertNoMarks(res.text, marks, `${name} ${path}`);
+        assertNoChoice(res.text, `${name} ${path}`);
+        assertNoLiveCounters(res.text, `${name} ${path}`);
+        const showsRows =
+          path.endsWith('/ballots') || path.includes('/explorer/elections/') || path.endsWith('/artifacts');
+        if (!showsRows) assertNoMarks(res.text, marks, `${name} ${path}`);
         if (path.endsWith('/info')) {
           assert.equal(res.json.resultsSealed, true, path);
           assert.match(res.json.resultsMessage, /^Results sealed until /);
@@ -391,15 +405,20 @@ describe('vote interim data is refused', () => {
         if (path.includes('/explorer/elections/')) {
           assertSealedShape(res.json.election, `${name} explorer`);
           const votes = (res.json.txs || []).filter((tx) => String(tx.type).toUpperCase() === 'VOTE');
-          assert.equal(votes.length, 0, name);
+          assert.equal(votes.length, CAST, name);
           continue;
         }
         if (path.includes('/receipts/metrics')) {
           assert.equal(res.json.resultsSealed, true);
-          assert.equal(res.json.acceptedBallotsDisclosed, null);
-          assert.equal(res.json.participantCount, null);
-          assert.deepEqual(res.json.hours, []);
+          assert.equal(res.json.acceptedBallotsDisclosed, CAST);
+          assert.ok(Array.isArray(res.json.hours) && res.json.hours.length > 0);
           assert.match(res.json.message, /^Results sealed until /);
+          assertNoChoice(res.text, `${name} metrics`);
+          continue;
+        }
+        if (path.endsWith('/ballots')) {
+          assert.equal(res.json.acceptedBallots, CAST);
+          assert.equal(res.json.ballots.length, CAST);
           continue;
         }
         assertSealedShape(res.json, `${name} ${path}`);
@@ -411,7 +430,8 @@ describe('vote interim data is refused', () => {
       const board = await app.api('GET', '/api/outcomes', { jar });
       const outcome = (board.json.elections || []).find((row) => String(row.id) === String(voteId));
       assert.equal(outcome.resultsSealed, true);
-      assert.equal(outcome.acceptedBallots, null);
+      assert.equal(outcome.acceptedBallots, CAST);
+      assertNoChoice(JSON.stringify(outcome), `${name} outcomes`);
       assertNoMarks(JSON.stringify(outcome), marks, `${name} outcomes`);
       if (name === 'anonymous') anonDetail = await app.api('GET', `/api/elections/${voteId}`, { jar });
       if (name === 'platform_super_admin') adminDetail = await app.api('GET', `/api/elections/${voteId}`, { jar });
@@ -433,6 +453,11 @@ describe('vote interim data is refused', () => {
     assert.equal(store.status, 200, store.text);
     assert.notEqual(store.json.counts.voteCount, CAST);
     assert.ok(store.json.counts.voteCount < CAST);
+    assert.notEqual(store.json.counts.receiptCount, CAST);
+    assert.ok(store.json.counts.receiptCount < CAST);
+    const l2 = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
+    assert.equal(l2.status, 200, l2.text);
+    assert.notEqual(l2.json.explorer.sealedCount, CAST);
     const clerk = await app.api('GET', '/api/_sa/v1/elections', { jar: jars.clerk });
     assert.equal(clerk.status, 404);
     assertNoMarks(clerk.text, marks, 'clerk diagnostics');
@@ -450,6 +475,8 @@ describe('vote interim data is refused', () => {
     assert.equal(one.vote.status, 201, one.vote.json?.error);
     const sealed = await app.api('GET', `/api/elections/${small.id}/results`);
     assertSealedShape(sealed.json, 'under threshold');
+    assert.equal(sealed.json.acceptedBallots, 0);
+    assert.equal(sealed.json.tally, null);
     assert.equal((await voteTxs(app.api, small.id)).length, 0);
 
     clock.t = HOUR_START + 2 * HOUR;
@@ -485,7 +512,7 @@ describe('vote interim data is refused', () => {
   });
 });
 
-describe('interval 0 still holds a vote', () => {
+describe('interval 0 publishes ballot rows and still seals choice results', () => {
   let app;
   const clock = { t: HOUR_START + 5 * 60 };
 
@@ -496,7 +523,7 @@ describe('interval 0 still holds a vote', () => {
     await app.stop();
   });
 
-  test('a poll is public immediately and a vote waits for the close', async () => {
+  test('a poll and a vote both publish ballot rows, and the vote has no choice totals', async () => {
     const poll = await openElection(app.api, app.adminJar, clock, 'Instant poll');
     const vote = await openElection(app.api, app.adminJar, clock, 'Instant vote', 'vote');
     const pollCast = await cast(app.api, poll.id, 31);
@@ -504,7 +531,7 @@ describe('interval 0 still holds a vote', () => {
     assert.equal(pollCast.vote.status, 201, pollCast.vote.json?.error);
     assert.equal(voteCast.vote.status, 201, voteCast.vote.json?.error);
     assert.equal(pollCast.vote.json.published, true);
-    assert.equal(voteCast.vote.json.published, false);
+    assert.equal(voteCast.vote.json.published, true);
 
     const pollPublic = await app.api('GET', `/api/elections/${poll.id}`);
     assert.equal(pollPublic.json.acceptedBallots, 1);
@@ -513,8 +540,14 @@ describe('interval 0 still holds a vote', () => {
 
     const votePublic = await app.api('GET', `/api/elections/${vote.id}/ballots`);
     assertSealedShape(votePublic.json, 'interval 0');
-    assert.equal((await voteTxs(app.api, vote.id)).length, 0);
-    assert.equal(votePublic.text.includes(voteCast.nullifier), false);
+    assert.equal(votePublic.json.acceptedBallots, 1);
+    assert.equal(votePublic.json.tally ?? null, null);
+    assert.equal((await voteTxs(app.api, vote.id)).length, 1);
+    assert.equal(votePublic.text.includes(voteCast.nullifier), true);
+    assertNoChoice(votePublic.text, 'interval 0 ballots');
+    const live = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
+    assert.equal(live.json.counts.receiptCount, 1);
+    assert.equal(live.json.counts.voteCount, 1);
 
     const election = app.store.requireElection(vote.id);
     election.cutoffTime = clock.t - 1;
@@ -523,6 +556,39 @@ describe('interval 0 still holds a vote', () => {
     assert.equal(opened.json.resultsSealed, false);
     assert.equal(opened.json.acceptedBallots, 1);
     assert.equal((await voteTxs(app.api, vote.id)).length, 1);
+  });
+});
+
+describe('live diagnostics omit a sealed vote', () => {
+  let app;
+  const clock = { t: HOUR_START + 12 * 60 };
+
+  before(async () => {
+    app = await startApp(clock);
+  });
+  after(async () => {
+    await app.stop();
+  });
+
+  test('store and l2 counters ignore receipts and the hourly queue', async () => {
+    const vote = await openElection(app.api, app.adminJar, clock, 'Queued vote', 1);
+    const castRow = await cast(app.api, vote.id, 44);
+    assert.equal(castRow.vote.status, 201, castRow.vote.json?.error);
+    const store = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
+    assert.equal(store.status, 200, store.text);
+    assert.equal(store.json.counts.voteCount, 0);
+    assert.equal(store.json.counts.receiptCount, 0);
+    const l2 = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
+    assert.equal(l2.status, 200, l2.text);
+    assert.equal(l2.json.explorer.sealedCount, 0);
+    const diag = await app.api('GET', '/api/_sa/v1/elections', { jar: app.adminJar });
+    const meta = diag.json.elections.find((row) => String(row.id) === String(vote.id));
+    assert.equal(meta.castCount, null);
+    assert.equal(meta.resultsSealed, true);
+    const publicView = await app.api('GET', `/api/elections/${vote.id}`);
+    assert.equal(publicView.json.acceptedBallots, 0);
+    assert.equal(publicView.json.tally, null);
+    assertNoChoice(JSON.stringify(publicView.json), 'before the hour');
   });
 });
 
@@ -559,10 +625,25 @@ describe('on-chain create stays on the current factory tuple', () => {
     );
     assert.equal(Object.hasOwn(tuple, 'electionType'), false);
   });
+
+  test('the sequencer open carries type and cutoff while the factory flag stays off', () => {
+    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, false);
+    const civic = electionOpenCivic(
+      { l2Uuid: '11111111-1111-4111-8111-111111111111' },
+      {
+        electionUuid: '22222222-2222-4222-8222-222222222222',
+        electionType: 'vote',
+        cutoffTime: 1_700_000_000,
+      },
+    );
+    assert.equal(civic.electionType, 1);
+    assert.equal(civic.cutoffTime, 1_700_000_000);
+    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, false);
+  });
 });
 
-describe('sealed votes are not bucketed', () => {
-  test('planPublicBlocks holds a sealed vote without counting it into a block', () => {
+describe('hourly blocks are not held for a sealed vote', () => {
+  test('planPublicBlocks publishes ballot rows for a sealed vote and a poll', () => {
     const items = [
       { electionId: 'vote', receivedAt: HOUR_START + 10 },
       { electionId: 'vote', receivedAt: HOUR_START + 20 },
@@ -579,9 +660,10 @@ describe('sealed votes are not bucketed', () => {
           ? { resultsSealed: true, submittedVotes: 0, endTime: HOUR_START + 5 * HOUR, tallied: false, minVotes: 0 }
           : { resultsSealed: false, submittedVotes: 1, endTime: HOUR_START + 5 * HOUR, tallied: false, minVotes: 0 },
     });
-    assert.equal(planned.publish.length, 1);
-    assert.equal(planned.publish[0].electionId, 'poll');
-    assert.equal(planned.hold.length, 2);
-    assert.ok(planned.hold.every((row) => row.electionId === 'vote'));
+    assert.equal(planned.hold.length, 0);
+    assert.deepEqual(
+      planned.publish.map((block) => block.electionId).sort(),
+      ['poll', 'vote'],
+    );
   });
 });

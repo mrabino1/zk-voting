@@ -7,7 +7,7 @@
 // not depend on that change. PASS_ELECTION_TYPE_ON_CHAIN stays false, so
 // createElection encodes the tuple that is deployed today.
 
-/** When false, factory and L2 open txs omit electionType. Do not flip this alone. */
+/** When false, the factory tuple omits electionType. The L2 civic open still carries it. Do not flip this alone. */
 export const PASS_ELECTION_TYPE_ON_CHAIN = false;
 
 export const ELECTION_TYPE_POLL = 0;
@@ -61,8 +61,9 @@ export function isPollElection(election) {
 }
 
 /**
- * VOTE outcomes stay sealed until cutoff. Missing cutoff fails closed.
- * POLL is never sealed by this check; it keeps the results gate.
+ * Choice results for a VOTE stay sealed until cutoff. Missing cutoff fails closed.
+ * POLL is never sealed by this check. Turnout is not a choice result: disclosed
+ * ballot rows follow the hourly gate. Live diagnostic counters stay omitted.
  */
 export function voteResultsSealed(election, now) {
   if (!isVoteElection(election)) return false;

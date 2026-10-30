@@ -1018,11 +1018,12 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
         : null,
       resultsAreSealed(election)
         ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-        : receipt.published === false
-          ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))
-          : receipt.published
-            ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Disclosed" }))
-            : null
+        : null,
+      receipt.published === false
+        ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))
+        : receipt.published
+          ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Disclosed" }))
+          : null
     ),
     h("label", { class: "field", for: "receipt-proof-copy" }, "Copy-paste proof"),
     h("textarea", {

@@ -19,6 +19,45 @@ import {
 } from './disclosure.mjs';
 import { PgDocument, migrate, recordImport, usingPostgres } from './db.mjs';
 
+const CHOICE_FIELD_KEYS = new Set([
+  'counts',
+  'countshash',
+  'resulthash',
+  'winners',
+  'winner',
+  'openedballots',
+  'choice',
+  'plaintext',
+  'ranking',
+  'rankingpayload',
+]);
+
+function isChoiceDisclosure(type, payload) {
+  const name = String(type || '').toLowerCase();
+  if (name === 'tally' || name === 'l1_certify') return true;
+  if (!payload || typeof payload !== 'object') return false;
+  return Object.keys(payload).some((key) => CHOICE_FIELD_KEYS.has(String(key).toLowerCase()));
+}
+
+function withoutChoiceFields(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const out = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (CHOICE_FIELD_KEYS.has(String(key).toLowerCase())) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** Choice rows stay out of the explorer until the election deadline. Unknown elections fail closed. */
+function choiceRowBlocked(explorer, type, payload) {
+  if (!isChoiceDisclosure(type, payload)) return false;
+  const policy = explorer.disclosurePolicySnapshot();
+  const id = String((payload && payload.electionId) ?? '');
+  const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
+  return Boolean(ctx.resultsSealed || ctx.known === false);
+}
+
 function emptyChain(chainId) {
   return {
     chainId,
@@ -241,14 +280,8 @@ export class Explorer {
     }
 
     const interval = Number(intervalSeconds) || 0;
-    const policy = this.disclosurePolicySnapshot();
-    const ctx =
-      typeof policy.electionContext === 'function'
-        ? policy.electionContext(String(body.electionId ?? '')) || {}
-        : {};
-    // Interval 0 publishes a POLL at once. A sealed VOTE stays in the queue
-    // even then, so the hourly job cannot emit an interim row.
-    if ((!interval || interval <= 0) && !ctx.resultsSealed) {
+    // Interval 0 publishes at once. A positive interval waits for the hour.
+    if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }
     // Random position, so the sealed queue's order is not arrival order.
@@ -393,6 +426,11 @@ export class Explorer {
     for (const row of rows) {
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
+      const payload = row.payload || row;
+      if (choiceRowBlocked(this, type, payload)) continue;
+      if (type === 'vote' || type === 'vote_superseded') {
+        row.payload = withoutChoiceFields(payload);
+      }
       if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
         if (type === 'poll_vote' && !l2Delayed) {
           await this.recordPollVote(row.payload || {}, now, intervalSeconds);

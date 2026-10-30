@@ -6,7 +6,6 @@ import { Router } from 'express';
 
 import { asyncHandler, HttpError } from '../http.mjs';
 import { presentElection, publishDue } from '../electionState.mjs';
-import { voteResultsSealed } from '../electionType.mjs';
 import { refsOf } from '../electionIds.mjs';
 import { uuidParam } from '../recordIds.mjs';
 
@@ -144,11 +143,7 @@ export function explorerRouter(deps) {
         if (tx.hash && !seen.has(tx.hash)) result.txs.push(tx);
       }
       const presented = presentElection(election, deps);
-      const now = deps.config.nowFn();
-      let txs = result.txs || [];
-      if (presented.resultsSealed || voteResultsSealed(election, now)) {
-        txs = txs.filter((tx) => String(tx?.type || '').toUpperCase() !== 'VOTE');
-      }
+      const txs = result.txs || [];
       res.json({
         nfp: true,
         election: presented,

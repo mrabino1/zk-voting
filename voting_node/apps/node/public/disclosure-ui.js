@@ -50,11 +50,18 @@
     const d = disclosure || {};
     if (d.resultsSealed) {
       const end = d.sealedUntil;
+      const formatted = fmtTime(end);
+      const i18n = typeof window !== "undefined" ? window.ZkVotingI18n : null;
       const label =
-        end != null && end !== ""
-          ? "Results sealed until " + fmtTime(end)
-          : d.note || "Results sealed until the election ends";
-      return `<p class="disclosure-note">${esc(label)}</p>`;
+        i18n && typeof i18n.t === "function"
+          ? i18n.t("results.sealedUntil", { end: formatted })
+          : end != null && end !== ""
+            ? "Results sealed until " + formatted
+            : d.note || "Results sealed until the election ends";
+      const ballots = d.acceptedBallotsDisclosed;
+      const ballotsText = typeof ballots === "number" ? String(ballots) : "—";
+      return `<p class="disclosure-note">${esc(label)}</p>
+        <dl class="disclosure-stats"><div><dt>Ballots disclosed</dt><dd>${esc(ballotsText)}</dd></div></dl>`;
     }
     const last = d.lastClosedHourAt != null ? d.lastClosedHourAt : d.lastPublishedAt;
     const next = d.nextPublishAt;

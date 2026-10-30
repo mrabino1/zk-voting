@@ -334,11 +334,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   );
 
   const policy = electionDisclosurePolicy(election, config, ts);
-  const published = policy.resultsSealed
-    ? false
-    : store
-        .listPublishedVotes(election.id, ts, policy.intervalSeconds, policy)
-        .some((row) => String(row.nullifier) === String(vote.nullifier));
+  const published = store
+    .listPublishedVotes(election.id, ts, policy.intervalSeconds, policy)
+    .some((row) => String(row.nullifier) === String(vote.nullifier));
   const nextAt = nextPublishAt(ts, interval, policy.delaySeconds);
   return {
     ok: true,

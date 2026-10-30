@@ -37,6 +37,7 @@ import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash, certifyArgsForElection } from '../l1Certify.mjs';
 import { dispatchOfficialOutcomeReports } from '../outcomeReports.mjs';
 import { createVotePassService } from '../votePass.mjs';
+import { openElectionOnL2, readL2IdentityConfig } from '../l2Identity.mjs';
 import { partiesRouter } from './parties.mjs';
 import { publicUser } from '../roles.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
@@ -214,6 +215,20 @@ export function electionsRouter(deps) {
         createTxHash: chainResult?.createTxHash ?? null,
         chainId: chainResult?.chainId ?? (factoryAddress ? config.chainId : null),
       });
+      if (String(process.env.L2_CIVIC_RPC || '').trim()) {
+        try {
+          const cfg = await readL2IdentityConfig();
+          await openElectionOnL2(cfg, {
+            electionUuid: String(election.id),
+            electionType: election.electionType,
+            cutoffTime: election.cutoffTime,
+          });
+        } catch (err) {
+          throw new HttpError(502, `Could not record the election on the sequencer: ${err.message || err}`, {
+            code: 'L2_OPEN_FAILED',
+          });
+        }
+      }
       await explorer.append('election_created', {
         electionId: String(election.id),
         shortCode: election.shortCode,
@@ -441,7 +456,7 @@ export function electionsRouter(deps) {
         startTime: election.startTime,
         cutoffTime: election.cutoffTime,
         participantCount: election.participantCount,
-        acceptedBallots: dto.resultsSealed ? null : dto.acceptedBallots,
+        acceptedBallots: dto.acceptedBallots,
         resultsSealed: Boolean(dto.resultsSealed),
         sealedUntil: seal?.sealedUntil ?? null,
         message: seal?.message ?? null,
@@ -459,29 +474,17 @@ export function electionsRouter(deps) {
       const { now, view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
       const policy = electionDisclosurePolicy(election, deps.config, now);
-      if (policy.resultsSealed) {
-        const seal = sealedResultsBody(election, now);
-        res.json({
-          electionId: String(election.id),
-          electionType: seal.electionType,
-          electionTypeName: seal.electionTypeName,
-          acceptedBallots: null,
-          ballots: [],
-          disclosure: electionDisclosure(election, deps, view),
-          ...seal,
-          message: sealedResultsMessage(election),
-          nfp: true,
-        });
-        return;
-      }
       const published = store.listPublishedVotes(election.id, now, policy.intervalSeconds, policy);
+      const seal = policy.resultsSealed ? sealedResultsBody(election, now) : null;
       res.json({
         electionId: String(election.id),
         electionType: policy.electionType,
+        electionTypeName: seal?.electionTypeName,
         acceptedBallots: published.length,
         ballots: published.map(publicVoteRecord),
-        resultsSealed: false,
         disclosure: electionDisclosure(election, deps, view),
+        ...(seal || { resultsSealed: false }),
+        ...(seal ? { message: sealedResultsMessage(election) } : {}),
         nfp: true,
       });
     }),

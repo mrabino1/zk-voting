@@ -833,10 +833,33 @@ export class ChainState {
 
   shouldHoldVote(tx) {
     if (!isHeldVoteType(tx.civicType)) return false;
-    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
-    if (interval > 0) return true;
-    const ctx = this.electionDisclosureContext(tx.civic?.electionId);
-    return Boolean(ctx.resultsSealed);
+    return (Number(this.config.disclosureIntervalSeconds) || 0) > 0;
+  }
+
+  /**
+   * Ballot rows follow the hourly gate. A tally is choice data: refuse it
+   * while a vote is sealed. An unknown electionType is rejected on open.
+   */
+  _assertChoicePolicy(tx) {
+    const type = String(tx.civicType || '').toLowerCase();
+    const civic = tx.civic || {};
+    if (type === 'election_open') {
+      if (civic.electionType != null && civic.electionType !== '') {
+        normalizeElectionType(civic.electionType, { required: true });
+      }
+      return;
+    }
+    if (type !== 'tally') return;
+    const id = String(civic.electionId ?? '').toLowerCase();
+    const entry = this.electionRegistry.get(id);
+    if (!entry) return;
+    const typed = {
+      electionType: entry.typeInvalid ? 1 : entry.electionType,
+      cutoffTime: entry.typeInvalid ? null : entry.cutoffTime,
+    };
+    if (entry.typeInvalid || voteResultsSealed(typed, this.now())) {
+      throw Object.assign(new Error('choice results are sealed until cutoff'), { code: -32001 });
+    }
   }
 
   decodeCivicRaw(rawHex) {
@@ -915,6 +938,7 @@ export class ChainState {
     this.assertWritable();
     this._assertUniqueCivic(tx);
     this._assertAdmitted(tx);
+    this._assertChoicePolicy(tx);
     if (this.shouldHoldVote(tx)) {
       tx.receivedAt = this.now();
       this.rememberSealed(tx);
@@ -957,20 +981,6 @@ export class ChainState {
     const raw = String(electionId ?? '');
     const key = raw.toLowerCase();
     const entry = this.electionRegistry.get(key);
-    const now = this.now();
-    const typed = {
-      electionType: entry?.electionType ?? 0,
-      cutoffTime: entry?.cutoffTime ?? null,
-    };
-    if (voteResultsSealed(typed, now)) {
-      return {
-        submittedVotes: 0,
-        endTime: typed.cutoffTime,
-        tallied: false,
-        resultsSealed: true,
-        minVotes: 0,
-      };
-    }
     let submitted = 0;
     for (const tx of this.sealed) {
       if (String(tx.civicType || '').toLowerCase() !== 'vote') continue;
@@ -1503,8 +1513,12 @@ export class ChainState {
       if (civic.electionType != null && civic.electionType !== '') {
         try {
           entry.electionType = normalizeElectionType(civic.electionType, { required: true });
+          entry.typeInvalid = false;
         } catch {
-          /* An unknown type stays a poll so older open txs still replay. */
+          // Fail closed on replay: an unknown type keeps choice results sealed.
+          entry.electionType = 1;
+          entry.cutoffTime = null;
+          entry.typeInvalid = true;
         }
       }
       if (civic.eligibleRoot != null) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
@@ -1581,13 +1595,21 @@ export class ChainState {
         else if (t === 'register') registered += 1;
         else if (t === 'vote') votes += 1;
         else if (t === 'tally') {
-          tally = {
-            blockNumber: block.number,
-            txHash: tx.hash,
-            countsHash: c.countsHash != null ? topicWord(c.countsHash) : null,
-            resultHash: c.resultHash != null ? topicWord(c.resultHash) : null,
-            counts: Array.isArray(c.counts) || (c.counts && typeof c.counts === 'object') ? c.counts : null,
-          };
+          const choiceSealed =
+            entry.typeInvalid ||
+            voteResultsSealed(
+              { electionType: entry.electionType, cutoffTime: entry.cutoffTime },
+              this.now(),
+            );
+          if (!choiceSealed) {
+            tally = {
+              blockNumber: block.number,
+              txHash: tx.hash,
+              countsHash: c.countsHash != null ? topicWord(c.countsHash) : null,
+              resultHash: c.resultHash != null ? topicWord(c.resultHash) : null,
+              counts: Array.isArray(c.counts) || (c.counts && typeof c.counts === 'object') ? c.counts : null,
+            };
+          }
         }
       }
     }

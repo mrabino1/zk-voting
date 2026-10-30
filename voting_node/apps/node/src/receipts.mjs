@@ -493,7 +493,6 @@ export function disclosedHourBuckets(votes, now, intervalSeconds, delaySeconds =
 
 function publishedBlocksForElection(election, deps, now) {
   const policy = electionDisclosurePolicy(election, deps.config, now);
-  if (policy.resultsSealed || voteResultsSealed(election, now)) return [];
   const votes = deps.store.listVotes(election.id);
   const wrapped = votes.map((vote) => ({
     vote,
@@ -515,26 +514,9 @@ function publishedBlocksForElection(election, deps, now) {
 export function publicReceiptMetrics(election, deps, { now, interval, view } = {}) {
   const ts = now ?? deps.config.nowFn();
   const secs = interval ?? deps.config.disclosureIntervalSeconds;
-  if (election && voteResultsSealed(election, ts)) {
-    const seal = sealedResultsBody(election, ts);
-    return {
-      nfp: true,
-      receiptsProveChoice: false,
-      ...seal,
-      electionId: String(election.id),
-      electionTitle: election.title || null,
-      jurisdictionId: election.jurisdictionId || null,
-      participantCount: null,
-      acceptedBallotsDisclosed: null,
-      hours: [],
-      note: seal.message,
-    };
-  }
   const targets = election
     ? [election]
-    : (deps.store.data.elections || []).filter(
-        (row) => !voteResultsSealed(row, ts) && deps.store.listVotes(row.id).length,
-      );
+    : (deps.store.data.elections || []).filter((row) => deps.store.listVotes(row.id).length);
   const hours = [];
   for (const row of targets) {
     for (const block of publishedBlocksForElection(row, deps, ts)) {
@@ -556,7 +538,7 @@ export function publicReceiptMetrics(election, deps, { now, interval, view } = {
       minBlockVotes: policy.minBlockVotes,
     });
   const disclosure = withDisclosedCount(base, acceptedBallotsDisclosed);
-  return stripReceiptChoice({
+  const body = stripReceiptChoice({
     nfp: true,
     receiptsProveChoice: false,
     electionId: election ? String(election.id) : null,
@@ -569,6 +551,16 @@ export function publicReceiptMetrics(election, deps, { now, interval, view } = {
     note:
       'Hourly snapshots of how many ballots were accepted. Original intra-hour times are not published. This is not a count by candidate or option.',
   });
+  if (election && voteResultsSealed(election, ts)) {
+    const seal = sealedResultsBody(election, ts);
+    return {
+      ...body,
+      ...seal,
+      receiptsProveChoice: false,
+      note: seal.message,
+    };
+  }
+  return body;
 }
 
 function voteIsPublic(store, election, vote, now, policy) {
@@ -592,14 +584,9 @@ function matchingPublishedVotes(store, proof, now, interval, config) {
   const election = proof.electionId ? store.getElection(proof.electionId) : null;
   const policy = electionDisclosurePolicy(election, config, now);
   if (election) {
-    if (policy.resultsSealed) return [];
     return rows.filter((v) => voteIsPublic(store, election, v, now, policy));
   }
-  return rows.filter((v) => {
-    const rowElection = store.getElection(v.electionId);
-    if (voteResultsSealed(rowElection, now)) return false;
-    return isDisclosed(v.acceptedAt, now, interval, policy.delaySeconds);
-  });
+  return rows.filter((v) => isDisclosed(v.acceptedAt, now, interval, policy.delaySeconds));
 }
 
 export function lookupReceipt(deps, rawProof, extras = {}) {

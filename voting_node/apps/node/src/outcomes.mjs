@@ -268,9 +268,8 @@ function verifyOutcome(election, deps, now, state, phase) {
   const pack = buildAuditorPack(election, deps);
   const auditor = verifyAuditorBundle(pack);
   if (pack.resultsSealed && auditor.summary) {
-    delete auditor.summary.acceptedBallots;
-    delete auditor.summary.uniqueNullifiers;
     auditor.summary.resultsSealed = true;
+    auditor.summary.tallied = false;
   }
   const chain = verifyChainStatus(election, deps, now, state, phase);
   const errors = [...auditor.errors, ...chain.errors];
@@ -340,7 +339,7 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
     resultsSealed: Boolean(dto.resultsSealed),
     sealedUntil: dto.sealedUntil,
     resultsMessage: dto.resultsMessage,
-    acceptedBallots: dto.resultsSealed ? null : dto.acceptedBallots,
+    acceptedBallots: dto.acceptedBallots,
     participantCount: election.participantCount,
     eligibleCount:
       typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
@@ -371,7 +370,7 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
   const tallied = Boolean(election.tally);
   const official = deps.store.getOutcomeReportForElection?.(election.id) || null;
   const sealed = Boolean(dto.resultsSealed) || voteResultsSealed(election, now);
-  const publishedAcceptedBallots = sealed ? null : dto.acceptedBallots;
+  const publishedAcceptedBallots = dto.acceptedBallots;
   const certified =
     !sealed && phase === PHASE_AFTER && tallied
       ? buildResults(election, { now, publishedAcceptedBallots })
@@ -404,26 +403,19 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
     chain: chainStatusView(election, deps),
     freeze: freezeView(election),
     roots: rootsView(election),
-    turnout: sealed
-      ? {
-          sealed: true,
-          acceptedBallots: null,
-          participantCount: null,
-          eligibleCount: null,
-          disclosure: dto.disclosure,
-        }
-      : {
-          acceptedBallots: publishedAcceptedBallots,
-          participantCount: election.participantCount,
-          eligibleCount:
-            typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
-          disclosure: dto.disclosure,
-        },
+    turnout: {
+      acceptedBallots: publishedAcceptedBallots,
+      participantCount: election.participantCount,
+      eligibleCount:
+        typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
+      disclosure: dto.disclosure,
+      ...(sealed ? { resultsSealed: true } : {}),
+    },
     questions: presentAspects(election),
     verification,
     certified,
     tallyPostedAt: sealed ? null : election.tally?.postedAt || null,
-    countsHash: sealed ? null : election.tally?.countsHash || null,
+    ...(sealed ? {} : { countsHash: election.tally?.countsHash || null }),
     officialReport: official
       ? {
           id: official.id,

@@ -310,10 +310,17 @@ export function presentResults(election, deps, opts = {}) {
   const now = opts.now ?? deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
   if (policy.resultsSealed) {
+    const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
+      election.id,
+      now,
+      policy.intervalSeconds,
+      policy,
+    );
     const dto = publicElection(election, now, {
       intervalSeconds: policy.intervalSeconds,
       delaySeconds: policy.delaySeconds,
       minBlockVotes: policy.minBlockVotes,
+      publishedAcceptedBallots,
       resultsSealed: true,
     });
     const seal = sealedResultsBody(election, now);
@@ -321,7 +328,7 @@ export function presentResults(election, deps, opts = {}) {
       ...dto,
       ...seal,
       electionId: String(election.id),
-      acceptedBallots: null,
+      acceptedBallots: publishedAcceptedBallots,
       tally: null,
       results: {
         available: false,
@@ -342,7 +349,7 @@ export function presentResults(election, deps, opts = {}) {
         })),
         tallyPostedAt: null,
         certifiedBallots: null,
-        publishedAcceptedBallots: null,
+        publishedAcceptedBallots,
       },
       explorerPath: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
     };

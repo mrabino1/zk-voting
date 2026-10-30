@@ -20,6 +20,37 @@ function count(list) {
   return list.reduce((n, row) => n + (row && typeof row === 'object' && row.is_deleted === true ? 0 : 1), 0);
 }
 
+/** Live receipt rows for a sealed vote are a turnout counter. Leave them out. */
+function countUnsealedReceipts(store, receipts, now) {
+  if (!Array.isArray(receipts)) return 0;
+  return receipts.reduce((n, row) => {
+    if (!row || row.is_deleted === true) return n;
+    const election = store?.getElection?.(row.electionId);
+    if (voteResultsSealed(election, now)) return n;
+    return n + 1;
+  }, 0);
+}
+
+function sealedItemElectionId(item) {
+  if (!item || typeof item !== 'object') return null;
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : item;
+  const id = payload.electionId ?? item.electionId;
+  if (id == null || id === '') return null;
+  return String(id);
+}
+
+/** The explorer queue holds the current hour. Sealed-vote rows in it are live turnout. */
+function countUnsealedQueue(store, items, now) {
+  if (!Array.isArray(items)) return 0;
+  return items.reduce((n, item) => {
+    const id = sealedItemElectionId(item);
+    if (id == null) return n + 1;
+    const election = store?.getElection?.(id);
+    if (voteResultsSealed(election, now)) return n;
+    return n + 1;
+  }, 0);
+}
+
 export function healthDiag(deps) {
   const writer = deps.writer;
   const lease = writer?.lease || null;
@@ -132,7 +163,7 @@ export function storeDiag(store, nowSeconds) {
       voteCount,
       pollCount: count(data.polls),
       pollBallotCount: count(data.pollBallots),
-      receiptCount: count(data.receipts),
+      receiptCount: countUnsealedReceipts(store, data.receipts, now),
       personalApiKeyCount: count(data.apiKeys),
       superAdminKeyCount: count(data.superAdminKeys),
       auditCount: count(data.superAdminAudit),
@@ -281,7 +312,7 @@ export function l2Diag(deps) {
       height: blocks.length,
       headTimestamp: headTs || null,
       lagSeconds: headTs ? Math.max(0, now - headTs) : null,
-      sealedCount: Array.isArray(chain.sealed) ? chain.sealed.length : 0,
+      sealedCount: countUnsealedQueue(deps.store, chain.sealed, now),
     },
   };
 }

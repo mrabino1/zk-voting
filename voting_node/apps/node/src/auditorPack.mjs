@@ -18,49 +18,13 @@ export function buildAuditorPack(election, deps) {
   const dto = presentElection(election, deps);
   const now = deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
-  if (policy.resultsSealed || dto?.resultsSealed) {
-    const seal = sealedResultsBody(election, now);
-    return {
-      schema: AUDITOR_SCHEMA,
-      nfp: true,
-      product: brandName(),
-      chainId: deps.config.chainId,
-      electionId: String(election.id),
-      title: election.title,
-      electionType: dto.electionType,
-      electionTypeName: dto.electionTypeName,
-      ...seal,
-      contracts: {
-        factory: deps.config.electionFactoryAddress || null,
-        ballotInbox: deps.config.ballotInboxAddress || election.inbox || null,
-        verifier: election.verifier || null,
-        voterRegistry: election.voterRegistry || null,
-        disqualificationRegistry: election.disqualificationRegistry || null,
-        tallyVerifier: election.tallyVerifier || null,
-        election: election.contractAddress || null,
-      },
-      roots: {
-        eligibleRoot: election.eligibleRoot,
-        disqualificationRoot: election.disqualificationRoot,
-        ballotSpecHash: election.ballotSpecHash,
-      },
-      window: {
-        startTime: election.startTime,
-        cutoffTime: election.cutoffTime,
-      },
-      rollFrozen: Boolean(election.rollFrozen),
-      participantCount: election.participantCount,
-      publicAcceptedBallots: null,
-      acceptedBallots: null,
-      disclosedBallots: [],
-      tally: null,
-      disclosure: dto.disclosure,
-    };
-  }
-  const tallied = electionState(election, now) >= 4;
+  const sealed = Boolean(policy.resultsSealed || dto?.resultsSealed);
+  const seal = sealed ? sealedResultsBody(election, now) : null;
+  const tallied = !sealed && electionState(election, now) >= 4;
   const disclosed = deps.store
     .listPublishedVotes(election.id, now, policy.intervalSeconds, policy)
     .map((vote) => publicVoteRecord(vote));
+  const disclosedCount = typeof dto.acceptedBallots === 'number' ? dto.acceptedBallots : disclosed.length;
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,
@@ -70,7 +34,8 @@ export function buildAuditorPack(election, deps) {
     title: election.title,
     electionType: dto.electionType,
     electionTypeName: dto.electionTypeName,
-    resultsSealed: false,
+    resultsSealed: sealed,
+    ...(seal || {}),
     contracts: {
       factory: deps.config.electionFactoryAddress || null,
       ballotInbox: deps.config.ballotInboxAddress || election.inbox || null,
@@ -91,10 +56,10 @@ export function buildAuditorPack(election, deps) {
     },
     rollFrozen: Boolean(election.rollFrozen),
     participantCount: election.participantCount,
-    publicAcceptedBallots: dto.acceptedBallots,
-    acceptedBallots: tallied ? election.acceptedBallots : dto.acceptedBallots,
+    publicAcceptedBallots: disclosedCount,
+    acceptedBallots: sealed ? disclosedCount : tallied ? election.acceptedBallots : dto.acceptedBallots,
     disclosedBallots: disclosed,
-    tally: dto.tally,
+    tally: sealed ? null : dto.tally,
     disclosure: dto.disclosure,
     coercion: {
       policy: 'one-ballot-per-nullifier',

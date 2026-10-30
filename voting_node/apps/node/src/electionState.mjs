@@ -41,29 +41,24 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
   const delay = Number(disclosure.delaySeconds) || 0;
   const sealed = Boolean(disclosure.resultsSealed) || voteResultsSealed(election, now);
   let acceptedBallots = election.acceptedBallots;
-  if (sealed) {
-    acceptedBallots = null;
-  } else if (typeof disclosure.publishedAcceptedBallots === 'number') {
+  if (typeof disclosure.publishedAcceptedBallots === 'number') {
     acceptedBallots = disclosure.publishedAcceptedBallots;
-  } else if (interval > 0) {
+  } else if (sealed || interval > 0) {
+    // Disclosed snapshot only. Never the live accept counter.
     acceptedBallots = 0;
   }
   const type = electionTypeOf(election);
-  const disclosureView = sealed
-    ? sealDisclosureView(
-        publicDisclosureView(now, interval, {
-          delaySeconds: delay,
-          resultsMinVotes: type === 1 ? undefined : disclosure.resultsMinVotes,
-          minBlockVotes: disclosure.minBlockVotes,
-        }),
-        election,
-      )
-    : publicDisclosureView(now, interval, {
-        delaySeconds: delay,
-        resultsMinVotes: disclosure.resultsMinVotes,
-        minBlockVotes: disclosure.minBlockVotes,
-        acceptedBallotsDisclosed: acceptedBallots,
-      });
+  const disclosureView = publicDisclosureView(now, interval, {
+    delaySeconds: delay,
+    resultsMinVotes: sealed && type === 1 ? undefined : disclosure.resultsMinVotes,
+    minBlockVotes: disclosure.minBlockVotes,
+    acceptedBallotsDisclosed: acceptedBallots,
+  });
+  if (sealed) {
+    disclosureView.resultsSealed = true;
+    disclosureView.sealedUntil = Number.isFinite(Number(election?.cutoffTime)) ? Number(election.cutoffTime) : null;
+    disclosureView.note = sealedResultsMessage(election);
+  }
   return {
     ...publicIdFields(election),
     title: election.title,
@@ -171,21 +166,22 @@ export async function publishDue(deps) {
 export function electionDisclosure(election, deps, view) {
   const now = deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
-  if (policy.resultsSealed) {
-    const base =
-      view ||
-      publicDisclosureView(now, policy.intervalSeconds, {
-        delaySeconds: policy.delaySeconds,
-        minBlockVotes: policy.minBlockVotes,
-      });
-    return sealDisclosureView(base, election);
-  }
   const acceptedBallotsDisclosed = deps.store.publishedAcceptedBallots(
     election.id,
     now,
     policy.intervalSeconds,
     policy,
   );
+  if (policy.resultsSealed) {
+    const base =
+      view ||
+      publicDisclosureView(now, policy.intervalSeconds, {
+        delaySeconds: policy.delaySeconds,
+        minBlockVotes: policy.minBlockVotes,
+        acceptedBallotsDisclosed,
+      });
+    return withDisclosedCount(sealDisclosureView(base, election), acceptedBallotsDisclosed);
+  }
   const base =
     view ||
     publicDisclosureView(now, policy.intervalSeconds, {
@@ -200,20 +196,21 @@ export function presentElection(election, deps, opts = {}) {
   if (!election) return null;
   const now = opts.now ?? deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
-  const publishedAcceptedBallots = policy.resultsSealed
-    ? null
-    : deps.store.publishedAcceptedBallots(election.id, now, policy.intervalSeconds, policy);
+  const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
+    election.id,
+    now,
+    policy.intervalSeconds,
+    policy,
+  );
   const dto = publicElection(election, now, {
     intervalSeconds: policy.intervalSeconds,
     delaySeconds: policy.delaySeconds,
     resultsMinVotes: policy.minVotes,
     minBlockVotes: policy.minBlockVotes,
-    publishedAcceptedBallots: policy.resultsSealed ? null : publishedAcceptedBallots,
+    publishedAcceptedBallots,
     resultsSealed: policy.resultsSealed,
   });
-  if (!policy.resultsSealed) {
-    dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
-  }
+  dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
   if (
     !dto.resultsSealed &&
     opts.user &&
@@ -235,7 +232,7 @@ export function presentResults(election, deps, opts = {}) {
       jurisdictionId: election.jurisdictionId,
       state: dto.state,
       stateName: dto.stateName,
-      acceptedBallots: null,
+      acceptedBallots: dto.acceptedBallots,
       questionCount: dto.questionCount,
       aspects: dto.aspects,
       questions: dto.questions,

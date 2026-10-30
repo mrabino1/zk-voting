@@ -38,6 +38,15 @@
     return data;
   }
 
+  function t(key, vars, fallback) {
+    const i18n = window.ZkVotingI18n;
+    if (i18n && typeof i18n.t === "function") {
+      const value = i18n.t(key, vars);
+      if (value && value !== key) return value;
+    }
+    return fallback;
+  }
+
   function retryable(err) {
     return !err.status || err.status === 404 || err.status === 405 || err.status === 501;
   }
@@ -623,15 +632,13 @@
       (election && (election.resultsSealed || election.sealed)) ||
         (summary && (summary.resultsSealed || summary.sealed || summary.code === "RESULTS_SEALED"))
     );
-    if (!sealed) {
-      try {
-        const data = await request("/api/elections/" + encodeURIComponent(id) + "/ballots");
-        ballots = asList(data, ["ballots", "votes", "items"]).map((v) =>
-          normalizeTx({ type: "vote", ...v, electionId: id })
-        );
-      } catch {
-        ballots = [];
-      }
+    try {
+      const data = await request("/api/elections/" + encodeURIComponent(id) + "/ballots");
+      ballots = asList(data, ["ballots", "votes", "items"]).map((v) =>
+        normalizeTx({ type: "vote", ...v, electionId: id })
+      );
+    } catch {
+      ballots = [];
     }
     let chainTxs = [];
     try {
@@ -642,7 +649,7 @@
     if (sealed) {
       chainTxs = chainTxs.filter((tx) => {
         const kind = String(tx.type || "").toUpperCase();
-        return kind !== "VOTE" && kind !== "TALLY";
+        return kind !== "TALLY" && kind !== "L1";
       });
     }
     const byHash = new Map();
@@ -687,13 +694,14 @@
     }
     const disclosure = (summary && summary.disclosure) || (election && election.disclosure) || null;
     const sealedEnd = (election && (election.sealedUntil || election.cutoffTime)) || (summary && summary.sealedUntil) || (disclosure && disclosure.sealedUntil);
-    const sealedLine = sealed ? "Results sealed until " + fmtTime(sealedEnd) : "";
-    const accepted = sealed
-      ? null
-      : (summary && summary.acceptedBallots != null
-          ? summary.acceptedBallots
-          : pick(election, ["acceptedBallots"])) ??
-        (disclosure && disclosure.acceptedBallotsDisclosed);
+    const sealedLine = sealed
+      ? t("results.sealedUntil", { end: fmtTime(sealedEnd) }, "Results sealed until " + fmtTime(sealedEnd))
+      : "";
+    const accepted =
+      (summary && summary.acceptedBallots != null
+        ? summary.acceptedBallots
+        : pick(election, ["acceptedBallots"])) ??
+      (disclosure && disclosure.acceptedBallotsDisclosed);
     const resultsUrl = sealed
       ? "/elections/" + encodeURIComponent(id) + "/results"
       : (summary && summary.resultsUrl) ||
@@ -708,7 +716,7 @@
     const stateLabel =
       pick(election, ["stateName", "state", "status"]) || (summary && summary.stateName) || "—";
     const headerAction = sealed
-      ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">Results sealed</a>'
+      ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">' + esc(t("results.sealedStatus", null, "Results sealed")) + "</a>"
       : resultsUrl
         ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">Certified results</a>'
         : '<span class="field-hint">Tally not posted yet</span>';
@@ -718,15 +726,17 @@
     const resultsCell = resultsUrl
       ? '<a href="' + esc(resultsUrl) + '">Tally posted — view results</a>'
       : "not posted (winner page is linked after a certified tally)";
-    const countRows = sealed
-      ? "<dt>Results</dt><dd>" + esc(sealedLine) + "</dd>"
-      : "<dt>Last closed hour</dt><dd>" +
-        esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt))) +
-        "</dd><dt>Ballots disclosed</dt><dd>" +
-        esc(accepted != null ? accepted : "—") +
-        "</dd><dt>Next disclosure</dt><dd>" +
-        esc(nextLine) +
-        "</dd><dt>Public tally</dt><dd>" +
+    const turnoutRows =
+      "<dt>Last closed hour</dt><dd>" +
+      esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt))) +
+      "</dd><dt>Ballots disclosed</dt><dd>" +
+      esc(accepted != null ? accepted : "—") +
+      "</dd><dt>Next disclosure</dt><dd>" +
+      esc(nextLine) +
+      "</dd>";
+    const choiceRows = sealed
+      ? "<dt>Choice results</dt><dd>" + esc(sealedLine) + "</dd>"
+      : "<dt>Public tally</dt><dd>" +
         tallyCell +
         '</dd><dt>Tally hash</dt><dd class="hash">' +
         esc(pick(election, ["tally.countsHash"]) || "—") +
@@ -738,6 +748,7 @@
         (pick(election, ["tally.questions.0.winnerLabel"])
           ? "<dt>IRV winner</dt><dd>" + esc(pick(election, ["tally.questions.0.winnerLabel"])) + "</dd>"
           : "");
+    const countRows = turnoutRows + choiceRows;
     const hint = sealed
       ? esc(sealedLine)
       : "Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed and the disclosure delay has elapsed. Plurality totals are labeled per question.";

@@ -176,11 +176,8 @@ export function planPublicBlocks(items, policy = {}) {
   const hold = [];
   for (const [electionId, group] of byElection) {
     const ctx = electionContext(electionId) || {};
-    // A sealed VOTE is not bucketed, counted, or published. Hold the rows whole.
-    if (ctx.resultsSealed) {
-      hold.push(...group);
-      continue;
-    }
+    // Ballot rows are turnout. They follow the hourly gate for both types.
+    // Choice totals are withheld by the callers that serve tallies, not here.
     const submitted = ctx.submittedVotes ?? group.length;
     const tallied = Boolean(ctx.tallied);
     const endTime = ctx.endTime ?? null;
@@ -235,7 +232,6 @@ export function planPublicBlocks(items, policy = {}) {
 /** Ballots from one election that the public may see. */
 export function selectPublicVotes(votes, policy = {}) {
   const list = Array.isArray(votes) ? votes : [];
-  if (policy.resultsSealed) return [];
   const wrapped = list.map((vote) => ({
     vote,
     receivedAt: vote.acceptedAt ?? vote.receivedAt,
@@ -311,10 +307,9 @@ export function withDisclosedCount(view, acceptedBallotsDisclosed) {
   };
 }
 
-/** Drop turnout from a disclosure view. A sealed VOTE has no public count. */
+/** Mark a disclosure view as waiting on choice results. The disclosed ballot count stays. */
 export function sealDisclosureView(view, election) {
   const base = view && typeof view === 'object' ? { ...view } : {};
-  delete base.acceptedBallotsDisclosed;
   base.resultsSealed = true;
   base.sealedUntil = Number.isFinite(Number(election?.cutoffTime)) ? Number(election.cutoffTime) : null;
   base.note = sealedResultsMessage(election);
