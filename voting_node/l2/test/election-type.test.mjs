@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// A vote is held until cutoff. It is not grouped into hourly blocks. A poll still is.
+// A vote uses the same hourly clock as a poll. Choice results stay sealed until cutoff.
 
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
@@ -50,7 +50,7 @@ describe('L2 vote turnout and sealed choice results', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('a vote is not bucketed before cutoff, and a poll still publishes on the hour', async () => {
+  test('a vote publishes on the same hour as a poll, and choice results stay sealed', async () => {
     const cutoff = HOUR_START + 5 * HOUR;
     const voteOf = (block, id) =>
       voteTxs(block).filter((tx) => String(tx.civic?.electionId) === id);
@@ -89,11 +89,8 @@ describe('L2 vote turnout and sealed choice results', () => {
     const early = await state.produceBlock();
     assert.equal(voteOf(early, 'vote-1').length, 0);
     assert.equal(voteOf(early, 'poll-1').length, 0);
-    assert.equal(state.electionInfo('vote-1').votesSealedInBlocks, null);
+    assert.equal(state.electionInfo('vote-1').votesSealedInBlocks, 0);
     assert.equal(state.electionInfo('vote-1').tally, null);
-    const sealedCtx = state.electionDisclosureContext('vote-1');
-    assert.equal(sealedCtx.submittedVotes, null);
-    assert.equal(sealedCtx.minVotes, null);
 
     clock = HOUR_START + HOUR + 30;
     state.enqueueRaw(
@@ -105,10 +102,10 @@ describe('L2 vote turnout and sealed choice results', () => {
       }),
     );
     const hour = await state.produceBlock();
-    assert.equal(voteOf(hour, 'vote-1').length, 0);
+    assert.equal(voteOf(hour, 'vote-1').length, 1);
     assert.equal(voteOf(hour, 'poll-1').length, 1);
-    assert.equal(state.electionInfo('vote-1').votesSealedInBlocks, null);
-    assert.equal(JSON.stringify(state.electionInfo('vote-1')).includes('"votesSealedInBlocks":2'), false);
+    assert.equal(state.electionInfo('vote-1').votesSealedInBlocks, 1);
+    assert.equal(state.electionInfo('vote-1').tally, null);
 
     clock = HOUR_START + 2 * HOUR + 30;
     state.enqueueRaw(
@@ -120,9 +117,8 @@ describe('L2 vote turnout and sealed choice results', () => {
       }),
     );
     const later = await state.produceBlock();
-    assert.equal(voteOf(later, 'vote-1').length, 0);
-    const voteBlocksBefore = state.blocks.filter((block) => voteOf(block, 'vote-1').length > 0);
-    assert.equal(voteBlocksBefore.length, 0);
+    assert.equal(voteOf(later, 'vote-1').length, 1);
+    assert.equal(state.electionInfo('vote-1').votesSealedInBlocks, 2);
     assert.equal(state.electionInfo('vote-1').tally, null);
     assert.equal(JSON.stringify(later).includes('"counts"'), false);
 
@@ -141,9 +137,7 @@ describe('L2 vote turnout and sealed choice results', () => {
 
     clock = cutoff;
     const released = await state.produceBlock();
-    assert.equal(voteOf(released, 'vote-1').length, 3);
-    const voteBlocks = state.blocks.filter((block) => voteOf(block, 'vote-1').length > 0);
-    assert.equal(voteBlocks.length, 1);
+    assert.equal(voteOf(released, 'vote-1').length, 1);
     assert.equal(state.electionInfo('vote-1').votesSealedInBlocks, 3);
     state.enqueueRaw(
       civicHex({
@@ -158,7 +152,64 @@ describe('L2 vote turnout and sealed choice results', () => {
     assert.ok(state.electionInfo('vote-1').tally.countsHash);
   });
 
-  test('interval 0 still holds a vote and publishes a poll', async () => {
+  test('the open hour is the final block at the deadline for both types', async () => {
+    let finalClock = HOUR_START + 10 * 60;
+    const finalDir = path.join(tmp, 'final');
+    await mkdir(finalDir, { recursive: true });
+    const config = loadConfig();
+    config.dataDir = finalDir;
+    config.disclosureIntervalSeconds = HOUR;
+    config.disclosureDelaySeconds = 0;
+    config.resultsMinVotes = 0;
+    config.disclosureMinBlockVotes = 1;
+    config.admission = 'open';
+    config.nowFn = () => finalClock;
+    config.zkVotingNodeUrl = '';
+    const finalState = ChainState.open(config);
+    const end = HOUR_START + 40 * 60;
+    finalState.enqueueRaw(
+      civicHex({
+        type: 'election_open',
+        electionId: 'vote-final',
+        electionType: 1,
+        cutoffTime: end,
+      }),
+    );
+    finalState.enqueueRaw(
+      civicHex({
+        type: 'election_open',
+        electionId: 'poll-final',
+        electionType: 0,
+        cutoffTime: end,
+      }),
+    );
+    finalState.enqueueRaw(
+      civicHex({ type: 'vote', electionId: 'vote-final', nullifier: '0xv1', ballotHash: '0xb1' }),
+    );
+    finalState.enqueueRaw(
+      civicHex({ type: 'vote', electionId: 'poll-final', nullifier: '0xp1', ballotHash: '0xb2' }),
+    );
+    const held = await finalState.produceBlock();
+    const of = (block, id) => voteTxs(block).filter((tx) => String(tx.civic?.electionId) === id);
+    assert.equal(of(held, 'vote-final').length, 0);
+    assert.equal(of(held, 'poll-final').length, 0);
+    finalClock = end - 1;
+    assert.throws(
+      () =>
+        finalState.enqueueRaw(
+          civicHex({ type: 'tally', electionId: 'vote-final', countsHash: `0x${'33'.repeat(32)}` }),
+        ),
+      /choice results are sealed until cutoff/,
+    );
+    finalClock = end;
+    const finalBlock = await finalState.produceBlock();
+    assert.equal(of(finalBlock, 'vote-final').length, 1);
+    assert.equal(of(finalBlock, 'poll-final').length, 1);
+    assert.equal(finalState.electionInfo('vote-final').votesSealedInBlocks, 1);
+    assert.equal(finalState.electionInfo('vote-final').tally, null);
+  });
+
+  test('interval 0 publishes a vote and a poll, and the vote has no choice total', async () => {
     let instantClock = HOUR_START + 10 * 60;
     const instantDir = path.join(tmp, 'instant');
     await mkdir(instantDir, { recursive: true });
@@ -197,9 +248,10 @@ describe('L2 vote turnout and sealed choice results', () => {
     );
     const block = await instant.produceBlock();
     const votes = voteTxs(block);
-    assert.equal(votes.filter((tx) => tx.civic?.electionId === 'vote-now').length, 0);
+    assert.equal(votes.filter((tx) => tx.civic?.electionId === 'vote-now').length, 1);
     assert.equal(votes.filter((tx) => tx.civic?.electionId === 'poll-now').length, 1);
-    assert.equal(instant.electionInfo('vote-now').votesSealedInBlocks, null);
+    assert.equal(instant.electionInfo('vote-now').votesSealedInBlocks, 1);
+    assert.equal(instant.electionInfo('vote-now').tally, null);
   });
 
   test('a tally for an election this L2 never opened is refused', () => {
@@ -216,7 +268,7 @@ describe('L2 vote turnout and sealed choice results', () => {
     );
   });
 
-  test('a replayed invalid type is surfaced and its ballots stay held', () => {
+  test('a replayed invalid type seals choices and still publishes ballots', async () => {
     const warnings = [];
     const orig = console.warn;
     console.warn = (...args) => warnings.push(args.join(' '));
@@ -238,25 +290,27 @@ describe('L2 vote turnout and sealed choice results', () => {
     assert.equal(info.typeInvalid, true);
     assert.equal(info.electionType, null);
     assert.equal(info.tally, null);
-    assert.equal(info.votesSealedInBlocks, null);
-    assert.match(warnings.join('\n'), /invalid election type on this L2; ballots for bad-replay stay held/);
-    state.enqueueRaw(
-      civicHex({ type: 'vote', electionId: 'bad-replay', nullifier: '0xhold', ballotHash: '0xh' }),
+    assert.equal(info.votesSealedInBlocks, 0);
+    assert.match(warnings.join('\n'), /invalid election type on this L2; choice results for bad-replay stay sealed/);
+    assert.throws(
+      () =>
+        state.enqueueRaw(
+          civicHex({
+            type: 'tally',
+            electionId: 'bad-replay',
+            countsHash: `0x${'cd'.repeat(32)}`,
+          }),
+        ),
+      /choice results are sealed until cutoff/,
     );
-    return state.produceBlock().then((block) => {
-      assert.equal(voteTxs(block).filter((tx) => tx.civic?.electionId === 'bad-replay').length, 0);
-      assert.throws(
-        () =>
-          state.enqueueRaw(
-            civicHex({
-              type: 'tally',
-              electionId: 'bad-replay',
-              countsHash: `0x${'cd'.repeat(32)}`,
-            }),
-          ),
-        /choice results are sealed until cutoff/,
-      );
-    });
+    state.enqueueRaw(
+      civicHex({ type: 'vote', electionId: 'bad-replay', nullifier: '0xbadvote', ballotHash: '0xbadhash' }),
+    );
+    clock = HOUR_START + 6 * HOUR + 30;
+    const block = await state.produceBlock();
+    assert.equal(voteTxs(block).filter((tx) => tx.civic?.electionId === 'bad-replay').length, 1);
+    assert.equal(state.electionInfo('bad-replay').votesSealedInBlocks, 1);
+    assert.equal(state.electionInfo('bad-replay').tally, null);
   });
 
   test('an unknown election type is rejected', () => {

@@ -1,8 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Poll keeps today's disclosure. A vote stays sealed until cutoff for every role.
+// A vote's choice results stay sealed until cutoff for every role. Turnout is public hourly.
 
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -11,9 +11,8 @@ import { createApp } from '../src/server.mjs';
 import { planPublicBlocks } from '../src/disclosure.mjs';
 import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
 import { electionOpenCivic } from '../src/l2Identity.mjs';
-import { electionFactoryAbi, factoryElectionParams } from '../src/chain.mjs';
-import { electionsDiag, l2Diag, storeDiag } from '../src/superAdmin/diagnostics.mjs';
-import { submitHeldBallotsAtCutoff } from '../src/heldBallots.mjs';
+import { electionFactoryAbi, factoryElectionParams, planDisclosureBatch } from '../src/chain.mjs';
+import { electionsDiag, storeDiag } from '../src/superAdmin/diagnostics.mjs';
 
 const HOUR = 3600;
 const HOUR_START = 1_699_999_200;
@@ -448,27 +447,25 @@ describe('vote interim data is refused', () => {
     assert.equal(sa.status, 200, sa.text);
     const meta = (sa.json.elections || []).find((row) => String(row.id) === String(voteId));
     assert.equal(meta.resultsSealed, true);
-    assert.equal(meta.castCount, null);
+    assert.equal(meta.castCount, CAST);
     assert.equal(meta.tallied, false);
     assertNoMarks(JSON.stringify(meta), marks, 'admin elections diag');
     const store = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
     assert.equal(store.status, 200, store.text);
-    assert.notEqual(store.json.counts.voteCount, CAST);
-    assert.ok(store.json.counts.voteCount < CAST);
-    assert.notEqual(store.json.counts.receiptCount, CAST);
-    assert.ok(store.json.counts.receiptCount < CAST);
+    assert.ok(store.json.counts.voteCount >= CAST);
+    assert.ok(store.json.counts.receiptCount >= CAST);
     const l2 = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
     assert.equal(l2.status, 200, l2.text);
-    assert.notEqual(l2.json.explorer.sealedCount, CAST);
+    assert.equal(typeof l2.json.explorer.sealedCount, 'number');
     const clerk = await app.api('GET', '/api/_sa/v1/elections', { jar: jars.clerk });
     assert.equal(clerk.status, 404);
     assertNoMarks(clerk.text, marks, 'clerk diagnostics');
 
     const direct = electionsDiag(app.store, clock.t);
     const directMeta = direct.elections.find((row) => String(row.id) === String(voteId));
-    assert.equal(directMeta.castCount, null);
+    assert.equal(directMeta.castCount, CAST);
     const counts = storeDiag(app.store, clock.t);
-    assert.notEqual(counts.counts.voteCount, CAST);
+    assert.ok(counts.counts.voteCount >= CAST);
   });
 
   test('a vote under the poll threshold stays sealed, then both types reject ballots after close', async () => {
@@ -548,8 +545,8 @@ describe('interval 0 publishes ballot rows and still seals choice results', () =
     assert.equal(votePublic.text.includes(voteCast.nullifier), true);
     assertNoChoice(votePublic.text, 'interval 0 ballots');
     const live = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
-    assert.equal(live.json.counts.receiptCount, 1);
-    assert.equal(live.json.counts.voteCount, 1);
+    assert.equal(live.json.counts.receiptCount, 2);
+    assert.equal(live.json.counts.voteCount, 2);
 
     const election = app.store.requireElection(vote.id);
     election.cutoffTime = clock.t - 1;
@@ -561,7 +558,7 @@ describe('interval 0 publishes ballot rows and still seals choice results', () =
   });
 });
 
-describe('live diagnostics omit a sealed vote', () => {
+describe('live diagnostics count a sealed vote', () => {
   let app;
   const clock = { t: HOUR_START + 12 * 60 };
 
@@ -572,20 +569,20 @@ describe('live diagnostics omit a sealed vote', () => {
     await app.stop();
   });
 
-  test('store and l2 counters ignore receipts and the hourly queue', async () => {
+  test('store and l2 counters include the vote while choice data stays sealed', async () => {
     const vote = await openElection(app.api, app.adminJar, clock, 'Queued vote', 1);
     const castRow = await cast(app.api, vote.id, 44);
     assert.equal(castRow.vote.status, 201, castRow.vote.json?.error);
     const store = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
     assert.equal(store.status, 200, store.text);
-    assert.equal(store.json.counts.voteCount, 0);
-    assert.equal(store.json.counts.receiptCount, 0);
+    assert.equal(store.json.counts.voteCount, 1);
+    assert.equal(store.json.counts.receiptCount, 1);
     const l2 = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
     assert.equal(l2.status, 200, l2.text);
-    assert.equal(l2.json.explorer.sealedCount, 0);
+    assert.equal(l2.json.explorer.sealedCount, 1);
     const diag = await app.api('GET', '/api/_sa/v1/elections', { jar: app.adminJar });
     const meta = diag.json.elections.find((row) => String(row.id) === String(vote.id));
-    assert.equal(meta.castCount, null);
+    assert.equal(meta.castCount, 1);
     assert.equal(meta.resultsSealed, true);
     const publicView = await app.api('GET', `/api/elections/${vote.id}`);
     assert.equal(publicView.json.acceptedBallots, 0);
@@ -692,7 +689,7 @@ function mockChain() {
   };
 }
 
-describe('vote turnout counters are absent before close for every role', () => {
+describe('vote turnout is visible and every ballot is submitted', () => {
   let app;
   const clock = { t: HOUR_START + 12 * 60 };
   const chain = mockChain();
@@ -713,7 +710,7 @@ describe('vote turnout counters are absent before close for every role', () => {
     await app.stop();
   });
 
-  test('store, l2, and the relayer omit a sealed vote', async () => {
+  test('store and l2 count the vote, and the relayer submits it', async () => {
     const poll = await openElection(app.api, app.adminJar, clock, 'Counter poll');
     const vote = await openElection(app.api, app.adminJar, clock, 'Counter vote', 1);
     const pollCast = await cast(app.api, poll.id, 81);
@@ -725,7 +722,6 @@ describe('vote turnout counters are absent before close for every role', () => {
     const receiptBefore = beforeStore.json.counts.receiptCount;
     const sealedBefore = beforeL2.json.explorer.sealedCount;
     const voteBefore = beforeStore.json.counts.voteCount;
-    const heightBefore = beforeL2.json.explorer.height;
 
     for (let n = 0; n < 4; n += 1) {
       const row = await cast(app.api, vote.id, 900 + n);
@@ -758,61 +754,37 @@ describe('vote turnout counters are absent before close for every role', () => {
       }
       assert.equal(store.status, 200, store.text);
       assert.equal(l2.status, 200, l2.text);
-      assert.equal(store.json.counts.receiptCount, receiptBefore);
-      assert.equal(store.json.counts.voteCount, voteBefore);
-      assert.equal(l2.json.explorer.sealedCount, sealedBefore);
+      assert.equal(store.json.counts.receiptCount, receiptBefore + 4);
+      assert.equal(store.json.counts.voteCount, voteBefore + 4);
       assert.equal(store.text.includes('heldChainBallots'), false);
-      assert.equal(l2.text.includes('"sealedCount":4'), false);
-      assert.equal(store.text.includes('"receiptCount":4'), false);
       const diag = electionsDiag(app.store, clock.t);
       const meta = diag.elections.find((row) => String(row.id) === String(vote.id));
-      assert.equal(meta.castCount, null);
-      assert.equal(JSON.stringify(storeDiag(app.store, clock.t)).includes('"receiptCount":4'), false);
-      assert.equal(JSON.stringify(l2Diag({ store: app.store, explorer: app.store, config: { nowFn: () => clock.t } })).includes('"sealedCount":4'), false);
+      assert.equal(meta.castCount, 4);
+      assert.equal(meta.resultsSealed, true);
+      assert.equal(storeDiag(app.store, clock.t).counts.receiptCount, receiptBefore + 4);
     }
 
-    assert.equal(chain.calls.length, 1);
-    assert.equal(String(chain.calls[0].electionId), String(poll.created.onChainElectionId));
-    assert.notEqual(String(chain.calls[0].electionId), String(vote.created.onChainElectionId));
-
-    const saved = JSON.parse(await readFile(app.store.filePath, 'utf8'));
-    assert.equal(saved.heldChainBallots.length, 4);
-    for (const row of saved.heldChainBallots) {
-      assert.equal(Object.hasOwn(row, 'count'), false);
-      assert.ok(row.proof);
-      assert.equal(String(row.electionId), String(vote.id));
-    }
-
-    const earlyHook = submitHeldBallotsAtCutoff({
-      store: app.store,
-      election: app.store.requireElection(vote.id),
-      now: clock.t,
-    });
-    assert.equal(earlyHook.reason, 'not-due');
-    assert.equal(earlyHook.submitted, false);
-    assert.deepEqual(Object.keys(earlyHook), ['submitted', 'reason']);
+    assert.equal(chain.calls.length, 5);
+    const submittedIds = chain.calls.map((row) => String(row.electionId));
+    assert.equal(submittedIds.filter((id) => id === String(poll.created.onChainElectionId)).length, 1);
+    assert.equal(submittedIds.filter((id) => id === String(vote.created.onChainElectionId)).length, 4);
+    assert.equal(app.store.data.heldChainBallots, undefined);
 
     clock.t = HOUR_START + HOUR + 30;
     const mid = await app.api('GET', `/api/elections/${vote.id}`, { jar: app.adminJar });
     assert.equal(mid.status, 200, mid.text);
-    const afterHour = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
+    assert.equal(mid.json.tally, null);
+    assert.equal(mid.json.acceptedBallots, 4);
+    assertNoChoice(mid.text, 'after the hour');
     const afterStore = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
-    assert.equal(afterStore.json.counts.receiptCount, receiptBefore);
-    assert.equal(afterHour.json.explorer.sealedCount === 4, false);
-    assert.equal(afterHour.json.explorer.height, heightBefore);
-    assert.equal(chain.calls.length, 1);
+    assert.equal(afterStore.json.counts.receiptCount, receiptBefore + 4);
+    assert.equal(chain.calls.length, 5);
 
-    const election = app.store.requireElection(vote.id);
-    election.cutoffTime = clock.t - 1;
-    await app.store.persist();
-    const hook = submitHeldBallotsAtCutoff({ store: app.store, election, now: clock.t });
-    assert.equal(hook.submitted, false);
-    assert.equal(hook.reason, 'chain-batch-abi-not-final');
-    assert.equal(Object.hasOwn(hook, 'count'), false);
-    assert.deepEqual(Object.keys(hook), ['submitted', 'reason']);
     const opened = await app.api('GET', `/api/elections/${vote.id}/ballots`, { jar: app.adminJar });
     assert.equal(opened.status, 200, opened.text);
-    assert.equal(chain.calls.length, 1);
+    assert.equal(opened.json.resultsSealed, true);
+    assert.equal(opened.json.tally ?? null, null);
+    assertNoChoice(opened.text, 'sealed ballots');
   });
 });
 
@@ -837,6 +809,7 @@ describe('sequencer open is idempotent', () => {
       const first = await app.api('POST', '/api/elections', { jar: app.adminJar, body });
       assert.equal(first.status, 502, first.text);
       assert.equal(first.json.code, 'L2_OPEN_FAILED');
+      assert.equal(first.json.electionId, app.store.data.elections[0].id);
       assert.equal(app.store.data.elections.length, 1);
       assert.equal(chain.creates.length, 1);
       assert.equal(app.store.data.elections[0].l2OpenStatus, 'pending');
@@ -871,7 +844,7 @@ describe('sequencer open is idempotent', () => {
         body: electionBody(clock, 'No sequencer', 'vote'),
       });
       assert.equal(created.status, 201, created.text);
-      assert.equal(created.json.l2Open, 'skipped');
+      assert.equal(created.json.l2Open, 'unconfigured');
       assert.equal(called, false);
       assert.equal(app.store.requireElection(created.json.id).l2OpenStatus, 'unconfigured');
       assert.match(warnings.join('\n'), /L2_CIVIC_RPC is unset/);
@@ -879,5 +852,83 @@ describe('sequencer open is idempotent', () => {
       console.warn = orig;
       await app.stop();
     }
+  });
+
+  test('a pending open is hidden, refuses ballots, and retries by id', async () => {
+    let attempts = 0;
+    const chain = mockChain();
+    const app = await startApp(clock, {
+      chain,
+      l2CivicRpc: 'http://127.0.0.1:9',
+      openElectionOnL2: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('sequencer down');
+        return '0xopen';
+      },
+    });
+    try {
+      const body = electionBody(clock, 'Hidden pending', 'vote');
+      const first = await app.api('POST', '/api/elections', { jar: app.adminJar, body });
+      assert.equal(first.status, 502, first.text);
+      const id = first.json.electionId;
+      const listed = await app.api('GET', '/api/elections');
+      assert.equal(listed.status, 200, listed.text);
+      assert.equal(listed.json.elections.some((row) => String(row.id) === String(id)), false);
+      const hidden = await app.api('GET', `/api/elections/${id}`);
+      assert.equal(hidden.status, 409, hidden.text);
+      assert.equal(hidden.json.code, 'L2_OPEN_PENDING');
+      const voted = await app.api('POST', `/api/elections/${id}/vote`, {
+        body: { nullifier: '1', ballotHash: '2', proof: { accept: true } },
+      });
+      assert.equal(voted.status, 409, voted.text);
+      assert.equal(voted.json.code, 'L2_OPEN_PENDING');
+      const opened = await app.api('POST', `/api/elections/${id}/l2-open`, { jar: app.adminJar });
+      assert.equal(opened.status, 200, opened.text);
+      assert.equal(opened.json.l2Open, 'open');
+      assert.equal(chain.creates.length, 1);
+      const again = await app.api('POST', `/api/elections/${id}/l2-open`, { jar: app.adminJar });
+      assert.equal(again.status, 200, again.text);
+      assert.equal(again.json.l2Open, 'open');
+      assert.equal(attempts, 2);
+      assert.equal(chain.creates.length, 1);
+      const visible = await app.api('GET', `/api/elections/${id}`);
+      assert.equal(visible.status, 200, visible.text);
+    } finally {
+      await app.stop();
+    }
+  });
+});
+
+describe('the deadline flushes one final chain batch', () => {
+  test('planDisclosureBatch waits, then submits the remainder at cutoff', () => {
+    const pending = [{ nullifier: 3n, cutoffTime: 5000 }, { nullifier: 1n, cutoffTime: 5000 }];
+    const early = planDisclosureBatch({
+      pending,
+      interval: 3600,
+      now: 1000,
+      startTime: 0,
+      lastBatchAt: 0,
+      cutoffTime: 5000,
+    });
+    assert.equal(early.action, 'wait');
+    const due = planDisclosureBatch({
+      pending,
+      interval: 3600,
+      now: 3600,
+      startTime: 0,
+      lastBatchAt: 0,
+      cutoffTime: 9000,
+    });
+    assert.equal(due.action, 'batch');
+    const finalBatch = planDisclosureBatch({
+      pending,
+      interval: 3600,
+      now: 5000,
+      startTime: 0,
+      lastBatchAt: 0,
+      cutoffTime: 5000,
+    });
+    assert.equal(finalBatch.action, 'final');
+    assert.deepEqual(finalBatch.batch.map((row) => row.nullifier), [1n, 3n]);
   });
 });

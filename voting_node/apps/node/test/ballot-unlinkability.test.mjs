@@ -301,7 +301,7 @@ describe('ballot unlinkability (off-chain)', () => {
   });
 
   test('ballot collections get hour-truncated row timestamps in Postgres', () => {
-    for (const name of ['votes', 'receipts', 'envelopes', 'votePassSpent', 'heldChainBallots']) {
+    for (const name of ['votes', 'receipts', 'envelopes', 'votePassSpent']) {
       assert.ok(BALLOT_TIMING_COLLECTIONS.includes(name), name);
     }
   });

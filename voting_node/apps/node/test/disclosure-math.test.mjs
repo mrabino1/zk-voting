@@ -259,4 +259,33 @@ describe('hourly disclosure math', () => {
     assert.equal(atEnd.publish[1].items.length, 3);
     assert.equal(atEnd.hold.length, 0);
   });
+
+  test('the open hour is the final block at the deadline', () => {
+    const items = [
+      { electionId: 'e', receivedAt: HOUR_START + 10 },
+      { electionId: 'e', receivedAt: HOUR_START + 20 },
+    ];
+    const end = HOUR_START + 30 * 60;
+    const before = planPublicBlocks(items, {
+      now: end - 1,
+      intervalSeconds: HOUR,
+      delaySeconds: 0,
+      minBlockVotes: 1,
+      minVotes: 0,
+      electionContext: () => ({ submittedVotes: 2, endTime: end, tallied: false }),
+    });
+    assert.equal(before.publish.length, 0);
+    const at = planPublicBlocks(items, {
+      now: end,
+      intervalSeconds: HOUR,
+      delaySeconds: 0,
+      minBlockVotes: 1,
+      minVotes: 0,
+      electionContext: () => ({ submittedVotes: 2, endTime: end, tallied: false }),
+    });
+    assert.equal(at.publish.length, 1);
+    assert.equal(at.publish[0].items.length, 2);
+    assert.equal(at.hold.length, 0);
+    assert.equal(at.publish[0].timestamp, end);
+  });
 });

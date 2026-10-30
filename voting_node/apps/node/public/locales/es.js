@@ -469,7 +469,7 @@ export default {
     typePoll: "Encuesta",
     typeVote: "Votación",
     sealedUntil: "Resultados sellados hasta {end}",
-    sealedBody: "Los conteos, la participación y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine.",
+    sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación por hora es pública.",
     sealedStatus: "Resultados sellados",
   },
   info: {

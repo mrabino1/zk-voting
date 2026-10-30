@@ -13,6 +13,7 @@ import { corsOptionsDelegate } from './corsPolicy.mjs';
 import { installConsoleCapture, recordLog, setLogLevel, watchSecrets } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
+import { startVoteFlushTimer } from './electionState.mjs';
 import { getConfig } from './config.mjs';
 import { announceGeneratedSetupToken } from './setupToken.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
@@ -294,27 +295,18 @@ export async function createApp(overrides = {}) {
       if (!election) {
         return { submittedVotes: 0, endTime: null, tallied: false, resultsSealed: false, known: false };
       }
-      if (voteResultsSealed(election, now)) {
-        return {
-          submittedVotes: 0,
-          endTime: election.cutoffTime,
-          tallied: false,
-          resultsSealed: true,
-          known: true,
-          minVotes: 0,
-        };
-      }
+      const sealed = voteResultsSealed(election, now);
       return {
         submittedVotes: store.visibleAcceptedBallots(election),
         endTime: election.cutoffTime,
-        tallied: Boolean(election.tally),
-        resultsSealed: false,
+        tallied: sealed ? false : Boolean(election.tally),
+        resultsSealed: sealed,
         known: true,
         ...(isVoteElection(election) ? { minVotes: 0 } : {}),
       };
     },
   });
-  const chain = chainOverride || createChain(config);
+  const chain = chainOverride || createChain(config, { queueStore: store });
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
   const mailer = configOverrides.mailer || createMailer(config);
@@ -473,6 +465,14 @@ export async function startServer(overrides = {}) {
     );
   }
   const demoPurge = registerDemoPurgeSchedule({ config, store: created.store });
+  let voteFlush = null;
+  const armVoteFlush = () => {
+    if (voteFlush) return;
+    if (created.store?.writerActive === false) return;
+    if (created.writer?.enabled && !created.writer.acceptingWrites()) return;
+    voteFlush = startVoteFlushTimer(created);
+  };
+  armVoteFlush();
   if (created.writer?.enabled && !created.writer.active) {
     const timer = setInterval(async () => {
       if (!created.writer.tryPromote()) return;
@@ -486,6 +486,8 @@ export async function startServer(overrides = {}) {
         created.store.writerActive = true;
         created.explorer.writerActive = true;
         created.config.writerActive = true;
+        if (typeof created.chain?.reloadVoteQueue === 'function') created.chain.reloadVoteQueue();
+        armVoteFlush();
         await created.store.adoptSuperAdminEmail(created.config);
         if (typeof created.plugins?.onPromoted === 'function') await created.plugins.onPromoted();
         console.log(`node writer active epoch=${created.writer.epoch()}`);
@@ -496,7 +498,16 @@ export async function startServer(overrides = {}) {
     if (typeof timer.unref === 'function') timer.unref();
   }
 
-  return { ...created, server, port, demoPurge };
+  return {
+    ...created,
+    server,
+    port,
+    demoPurge,
+    stopVoteFlush() {
+      voteFlush?.stop();
+      voteFlush = null;
+    },
+  };
 }
 
 const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
@@ -509,6 +520,7 @@ if (isMain) {
         stopping = true;
         console.log('node stopping');
         created.demoPurge?.stop?.();
+        created.stopVoteFlush?.();
         created.writer?.beginDrain();
         const force = setTimeout(() => process.exit(0), 20_000);
         if (typeof force.unref === 'function') force.unref();

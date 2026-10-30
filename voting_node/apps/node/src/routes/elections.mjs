@@ -61,7 +61,7 @@ async function recordElectionOnL2(config, election) {
     if (!config?.quiet) {
       console.warn('L2_CIVIC_RPC is unset; this election was not opened on the sequencer');
     }
-    return 'skipped';
+    return 'unconfigured';
   }
   const hooked = typeof config.openElectionOnL2 === 'function';
   const opener = hooked ? config.openElectionOnL2 : openElectionOnL2;
@@ -73,6 +73,15 @@ async function recordElectionOnL2(config, election) {
     cutoffTime: election.cutoffTime,
   });
   return 'open';
+}
+
+function rejectPendingL2(election) {
+  if (election && election.l2OpenStatus === 'pending') {
+    throw new HttpError(409, 'election is not open on the sequencer', {
+      code: 'L2_OPEN_PENDING',
+      electionId: String(election.id),
+    });
+  }
 }
 
 function unixSeconds(value, fallback) {
@@ -123,7 +132,7 @@ export function electionsRouter(deps) {
       await publishDue(deps);
       res.json({
         nfp: true,
-        elections: store.listElections().map((e) => presentElection(e, deps)),
+        elections: store.listPublicElections().map((e) => presentElection(e, deps)),
       });
     }),
   );
@@ -270,6 +279,7 @@ export function electionsRouter(deps) {
       } catch (err) {
         throw new HttpError(502, `Could not record the election on the sequencer: ${err.message || err}`, {
           code: 'L2_OPEN_FAILED',
+          electionId: String(election.id),
         });
       }
       const nextStatus = l2Open === 'open' ? 'open' : 'unconfigured';
@@ -302,6 +312,54 @@ export function electionsRouter(deps) {
         links: dto.links,
         nfp: true,
       });
+    }),
+  );
+
+  router.post(
+    '/:id/l2-open',
+    requireAuth,
+    requireElectionRole(store, 'clerk'),
+    asyncHandler(async (req, res) => {
+      let election = store.requireElection(req.params.id);
+      if (election.l2OpenStatus === 'open') {
+        res.json({ ok: true, id: election.id, l2Open: 'open', nfp: true });
+        return;
+      }
+      const civicRpc = String(config?.l2CivicRpc || '').trim();
+      if (!civicRpc) {
+        if (election.l2OpenStatus !== 'unconfigured') {
+          election = await store.setL2OpenStatus(election.id, 'unconfigured');
+        }
+        res.json({ ok: true, id: election.id, l2Open: 'unconfigured', nfp: true });
+        return;
+      }
+      let l2Open;
+      try {
+        l2Open = await recordElectionOnL2(config, election);
+      } catch (err) {
+        throw new HttpError(502, `Could not record the election on the sequencer: ${err.message || err}`, {
+          code: 'L2_OPEN_FAILED',
+          electionId: String(election.id),
+        });
+      }
+      const nextStatus = l2Open === 'open' ? 'open' : 'unconfigured';
+      if (election.l2OpenStatus !== nextStatus) {
+        election = await store.setL2OpenStatus(election.id, nextStatus);
+      }
+      if (nextStatus === 'open') {
+        await explorer.append('election_created', {
+          electionId: String(election.id),
+          shortCode: election.shortCode,
+          onChainElectionId: String(election.onChainElectionId),
+          onChainElectionAddress: election.onChainElectionAddress,
+          createTxHash: election.createTxHash,
+          title: election.title,
+          jurisdictionId: election.jurisdictionId,
+          startTime: election.startTime,
+          cutoffTime: election.cutoffTime,
+        });
+      }
+      res.json({ ok: true, id: election.id, l2Open, election: presentElection(election, deps), nfp: true });
     }),
   );
 
@@ -374,6 +432,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       res.json(presentPublicBallotInfo(election, deps.config.nowFn()));
     }),
   );
@@ -383,6 +442,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       const dto = presentPublicOptionInfo(
         election,
         req.params.questionId,
@@ -467,6 +527,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       const dto = presentElection(election, deps, { user: req.user });
       if (req.user && req.user.role !== 'observer') {
         dto.me = store.voterStatus(election.id, req.user.id);
@@ -480,6 +541,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       res.json(presentResults(election, deps));
     }),
   );
@@ -489,6 +551,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       const { view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       const dto = presentElection(election, deps);
       const tallied = Boolean(election.tally) && !dto.resultsSealed;
       const seal = dto.resultsSealed ? sealedResultsBody(election, deps.config.nowFn()) : null;
@@ -521,6 +584,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       const { now, view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       const policy = electionDisclosurePolicy(election, deps.config, now);
       const published = store.listPublishedVotes(election.id, now, policy.intervalSeconds, policy);
       const seal = policy.resultsSealed ? sealedResultsBody(election, now) : null;
@@ -607,6 +671,7 @@ export function electionsRouter(deps) {
     asyncHandler(async (req, res) => {
       if (req.user.role === 'observer') throw new HttpError(403, 'observers are read-only');
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       const identityCommitment = req.body?.identityCommitment;
       if (identityCommitment == null || identityCommitment === '') {
         throw new HttpError(400, 'identityCommitment required');
@@ -764,6 +829,7 @@ export function electionsRouter(deps) {
     '/:id/vote-pass',
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       res.json({ ...(await votePass.publicKey()), electionId: String(election.id), nfp: true });
     }),
   );
@@ -776,6 +842,7 @@ export function electionsRouter(deps) {
     '/:id/vote-pass',
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
+      rejectPendingL2(election);
       if (election.votingPaused) {
         throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
       }
@@ -818,6 +885,7 @@ export function electionsRouter(deps) {
     '/:id/vote',
     asyncHandler(async (req, res) => {
       const electionForGate = store.getElection(req.params.id);
+      rejectPendingL2(electionForGate);
       if (electionForGate?.votingPaused) {
         throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
       }

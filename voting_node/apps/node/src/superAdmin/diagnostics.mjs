@@ -20,60 +20,6 @@ function count(list) {
   return list.reduce((n, row) => n + (row && typeof row === 'object' && row.is_deleted === true ? 0 : 1), 0);
 }
 
-/** Live receipt rows for a sealed vote are a turnout counter. Leave them out. */
-function countUnsealedReceipts(store, receipts, now) {
-  if (!Array.isArray(receipts)) return 0;
-  return receipts.reduce((n, row) => {
-    if (!row || row.is_deleted === true) return n;
-    const election = store?.getElection?.(row.electionId);
-    if (voteResultsSealed(election, now)) return n;
-    return n + 1;
-  }, 0);
-}
-
-function sealedItemElectionId(item) {
-  if (!item || typeof item !== 'object') return null;
-  const payload = item.payload && typeof item.payload === 'object' ? item.payload : item;
-  const id = payload.electionId ?? item.electionId;
-  if (id == null || id === '') return null;
-  return String(id);
-}
-
-/** A block that is only sealed-vote rows is a turnout proxy. Leave it out of diagnostics. */
-function blockIsSealedVoteOnly(chain, block, store, now) {
-  const hashes = block?.transactions || [];
-  if (!hashes.length) return false;
-  const txs = chain?.txs || {};
-  for (const hash of hashes) {
-    const tx = hash && typeof hash === 'object' ? hash : txs[hash];
-    if (!tx) return false;
-    const type = String(tx.type || tx.civicType || '').toLowerCase();
-    if (type !== 'vote') return false;
-    const payload = tx.payload || tx.civic || {};
-    const id = payload.electionId ?? tx.electionId;
-    const election = store?.getElection?.(id);
-    if (!voteResultsSealed(election, now)) return false;
-  }
-  return true;
-}
-
-function visibleExplorerBlocks(chain, store, now) {
-  const blocks = Array.isArray(chain?.blocks) ? chain.blocks : [];
-  return blocks.filter((block) => !blockIsSealedVoteOnly(chain, block, store, now));
-}
-
-/** The explorer queue holds the current hour. Sealed-vote rows in it are live turnout. */
-function countUnsealedQueue(store, items, now) {
-  if (!Array.isArray(items)) return 0;
-  return items.reduce((n, item) => {
-    const id = sealedItemElectionId(item);
-    if (id == null) return n + 1;
-    const election = store?.getElection?.(id);
-    if (voteResultsSealed(election, now)) return n;
-    return n + 1;
-  }, 0);
-}
-
 export function healthDiag(deps) {
   const writer = deps.writer;
   const lease = writer?.lease || null;
@@ -161,15 +107,8 @@ export function configDiag(deps) {
   };
 }
 
-export function storeDiag(store, nowSeconds) {
+export function storeDiag(store) {
   const data = store?.data || {};
-  const now = Number(nowSeconds) || Math.floor(Date.now() / 1000);
-  const voteCount = (data.votes || []).reduce((n, row) => {
-    if (!row || row.is_deleted === true) return n;
-    const election = store?.getElection?.(row.electionId);
-    if (voteResultsSealed(election, now)) return n;
-    return n + 1;
-  }, 0);
   return {
     nfp: true,
     schemaVersion: Number(data.meta?.version || 0),
@@ -183,10 +122,10 @@ export function storeDiag(store, nowSeconds) {
       registrationRequestCount: count(data.registrationRequests),
       identityLinkCount: count(data.identityLinks),
       disqualificationCount: count(data.disqualifications),
-      voteCount,
+      voteCount: count(data.votes),
       pollCount: count(data.polls),
       pollBallotCount: count(data.pollBallots),
-      receiptCount: countUnsealedReceipts(store, data.receipts, now),
+      receiptCount: count(data.receipts),
       personalApiKeyCount: count(data.apiKeys),
       superAdminKeyCount: count(data.superAdminKeys),
       auditCount: count(data.superAdminAudit),
@@ -214,7 +153,7 @@ function electionMeta(election, now, store) {
     rollFrozen: Boolean(election.rollFrozen),
     votingPaused: Boolean(election.votingPaused),
     eligibleCount: Number(election.eligibleCount ?? election.participantCount ?? 0),
-    castCount: sealed ? null : hidden > 0 ? Math.max(0, rawCast - hidden) : rawCast,
+    castCount: hidden > 0 ? Math.max(0, rawCast - hidden) : rawCast,
     questionCount: Number(election.questionCount ?? (election.questions || []).length),
     ballotMethod: election.ballotMethod || 'plurality',
     lateUpdateAllowed: Boolean(election.lateUpdateAllowed),
@@ -287,7 +226,7 @@ export function userDiag(store, handle) {
 export function l2Diag(deps) {
   const chain = deps.explorer?.chain || {};
   const now = Number(deps.config?.nowFn?.() || Math.floor(Date.now() / 1000));
-  const blocks = visibleExplorerBlocks(chain, deps.store, now);
+  const blocks = Array.isArray(chain.blocks) ? chain.blocks : [];
   const head = blocks.length ? blocks[blocks.length - 1] : null;
   const headTs = Number(head?.timestamp || 0);
   let archive = { present: false, hours: 0, archivedThrough: null };
@@ -335,7 +274,7 @@ export function l2Diag(deps) {
       height: blocks.length,
       headTimestamp: headTs || null,
       lagSeconds: headTs ? Math.max(0, now - headTs) : null,
-      sealedCount: countUnsealedQueue(deps.store, chain.sealed, now),
+      sealedCount: count(chain.sealed),
     },
   };
 }

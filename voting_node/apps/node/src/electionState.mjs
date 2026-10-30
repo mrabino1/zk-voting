@@ -5,15 +5,35 @@
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
 import { disclosureSettings, publicDisclosureView, sealDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { electionDisclosurePolicy } from './store.mjs';
-import { submitHeldBallotsAtCutoff } from './heldBallots.mjs';
 import { publicIdFields } from './electionIds.mjs';
 import {
   electionTypeName,
   electionTypeOf,
-  isVoteElection,
   sealedResultsMessage,
   voteResultsSealed,
 } from './electionType.mjs';
+
+/** Writer-only clock for BallotInbox batches. Reads do not flush. */
+export function startVoteFlushTimer(deps, { intervalMs = 60_000, setIntervalFn = setInterval } = {}) {
+  if (typeof deps.chain?.flushVoteQueue !== 'function') return { stop() {} };
+  const timer = setIntervalFn(async () => {
+    const writer = deps.writer;
+    if (writer && writer.enabled !== false && !writer.acceptingWrites()) return;
+    if (deps.store?.writerActive === false) return;
+    const now = deps.config.nowFn();
+    try {
+      await deps.chain.flushVoteQueue(now);
+    } catch (err) {
+      if (!deps.config?.quiet) console.warn(`chain batch flush failed: ${err.message || err}`);
+    }
+  }, intervalMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  return {
+    stop() {
+      clearInterval(timer);
+    },
+  };
+}
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -155,12 +175,7 @@ export async function publishDue(deps) {
   const interval = settings.intervalSeconds;
   const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
-  if (!standby && deps.store) {
-    for (const election of deps.store.data.elections || []) {
-      if (!isVoteElection(election)) continue;
-      submitHeldBallotsAtCutoff({ store: deps.store, election, now });
-    }
-  }
+  // Chain batches run on the writer timer (startVoteFlushTimer), not on a read.
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
     : publicDisclosureView(now, interval, {

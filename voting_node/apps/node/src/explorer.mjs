@@ -49,12 +49,12 @@ function withoutChoiceFields(payload) {
   return out;
 }
 
-/** L2 vote rows stay out of the public log until cutoff. Unknown elections fail closed. */
+/** Vote rows follow the same hourly import as a poll. An unknown election fails closed. */
 function voteImportBlocked(explorer, payload) {
   const policy = explorer.disclosurePolicySnapshot();
   const id = String((payload && payload.electionId) ?? '');
   const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
-  return Boolean(ctx.resultsSealed || ctx.known === false);
+  return ctx.known === false;
 }
 
 /** Choice rows stay out of the explorer until the election deadline. Unknown elections fail closed. */

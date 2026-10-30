@@ -439,7 +439,7 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
 
 export function presentOutcomesIndex(deps, opts = {}) {
   const now = opts.now ?? deps.config.nowFn();
-  const elections = deps.store.listElections().map((election) => presentOutcomeSummary(election, deps, { now }));
+  const elections = deps.store.listPublicElections().map((election) => presentOutcomeSummary(election, deps, { now }));
   const phases = {
     before: elections.filter((e) => e.phase === PHASE_BEFORE),
     during: elections.filter((e) => e.phase === PHASE_DURING),

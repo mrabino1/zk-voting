@@ -469,7 +469,7 @@ export default {
     typePoll: "Consulta",
     typeVote: "Votação",
     sealedUntil: "Resultados selados até {end}",
-    sealedBody: "Contagens, comparecimento e apurações parciais ficam selados para todos, inclusive os responsáveis, até esta eleição terminar.",
+    sealedBody: "Contagens por opção e apurações parciais ficam seladas para todos, inclusive os responsáveis, até esta eleição terminar. O comparecimento por hora é público.",
     sealedStatus: "Resultados selados",
   },
   info: {

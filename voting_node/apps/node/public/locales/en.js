@@ -469,7 +469,7 @@ export default {
     typePoll: "Poll",
     typeVote: "Vote",
     sealedUntil: "Results sealed until {end}",
-    sealedBody: "Counts, turnout, and partial tallies stay sealed for everyone, including officials, until this election ends.",
+    sealedBody: "Choice counts and partial tallies stay sealed for everyone, including officials, until this election ends. Hourly turnout is public.",
     sealedStatus: "Results sealed",
   },
   info: {

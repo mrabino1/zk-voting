@@ -174,10 +174,12 @@ function dummyPoints() {
 /**
  * When the disclosure interval is 0, each ballot is its own transaction.
  * Otherwise the relayer holds ballots off chain and submits one batch after
- * the interval, sorted by nullifier. A one-ballot batch is still a singleton.
- * @param {{ pending: object[], interval: number, now: number, startTime: number, lastBatchAt: number }} input
+ * the interval, sorted by nullifier. At cutoff the remainder is a final
+ * batch of the same shape. A one-ballot batch is still a singleton.
+ * The existing submitVoteBatch call accepts at most 64 ballots.
+ * @param {{ pending: object[], interval: number, now: number, startTime: number, lastBatchAt: number, cutoffTime?: number }} input
  */
-export function planDisclosureBatch({ pending, interval, now, startTime, lastBatchAt }) {
+export function planDisclosureBatch({ pending, interval, now, startTime, lastBatchAt, cutoffTime }) {
   const rows = Array.isArray(pending) ? pending : [];
   const sorted = [...rows].sort((a, b) => {
     const left = BigInt(a.nullifier);
@@ -189,6 +191,8 @@ export function planDisclosureBatch({ pending, interval, now, startTime, lastBat
   const wait = Number(interval) || 0;
   if (wait <= 0) return { action: 'immediate', batch: sorted.slice(0, 64) };
   const t = Number(now) || 0;
+  const end = Number(cutoffTime);
+  if (Number.isFinite(end) && t >= end) return { action: 'final', batch: sorted.slice(0, 64) };
   const start = Number(startTime) || 0;
   const last = Number(lastBatchAt) || 0;
   const due = last > 0 ? t >= last + wait : t >= start + wait;
@@ -347,28 +351,93 @@ export function factoryElectionParams(params, electionType) {
   return tuple;
 }
 
-export function createChain(config) {
+function nullifierKey(value) {
+  return String(value);
+}
+
+function rowToStored(electionKey, row) {
+  return {
+    electionKey,
+    nullifier: nullifierKey(row.nullifier),
+    a: row.a.map((n) => n.toString()),
+    b: row.b.map((pair) => pair.map((n) => n.toString())),
+    c: row.c.map((n) => n.toString()),
+    inputs: row.inputs.map((n) => n.toString()),
+    encryptedBallot: row.encryptedBallot,
+    startTime: row.startTime ?? 0,
+    cutoffTime: row.cutoffTime ?? null,
+  };
+}
+
+function storedToRow(stored) {
+  return {
+    nullifier: BigInt(stored.nullifier),
+    a: stored.a.map((n) => BigInt(n)),
+    b: stored.b.map((pair) => pair.map((n) => BigInt(n))),
+    c: stored.c.map((n) => BigInt(n)),
+    inputs: stored.inputs.map((n) => BigInt(n)),
+    encryptedBallot: stored.encryptedBallot,
+    startTime: stored.startTime ?? 0,
+    cutoffTime: stored.cutoffTime ?? null,
+  };
+}
+
+export function createChain(config, extras = {}) {
   const rpc = config.chainRpc;
   let key = config.relayerPrivateKey || '';
   if (key && !key.startsWith('0x')) key = `0x${key}`;
 
-  const configured = Boolean(rpc);
-  const hasWallet = Boolean(rpc && key);
+  const injectedBatch = typeof extras.writeSubmitBatch === 'function';
+  const configured = Boolean(rpc) || injectedBatch;
+  const hasWallet = Boolean(rpc && key) || injectedBatch;
   const factoryAddress = () => config.electionFactoryAddress || '';
   const inboxAddress = () => config.ballotInboxAddress || '';
+  const queueStore = extras.queueStore || null;
 
   let wallet;
   let publicClient;
   let account;
   const voteQueue = new Map();
   const lastBatchAt = new Map();
+  const flushing = new Set();
 
-  if (hasWallet) {
+  if (rpc && key) {
     const chain = zkVotingChain(config.chainId, rpc);
     account = privateKeyToAccount(key);
     publicClient = createPublicClient({ chain, transport: http(rpc) });
     wallet = createWalletClient({ account, chain, transport: http(rpc) });
   }
+
+  function loadQueue() {
+    voteQueue.clear();
+    lastBatchAt.clear();
+    if (!queueStore || typeof queueStore.loadChainVoteQueue !== 'function') return;
+    const loaded = queueStore.loadChainVoteQueue() || {};
+    for (const stored of loaded.rows || []) {
+      if (!stored || stored.electionKey == null) continue;
+      const id = String(stored.electionKey);
+      const list = voteQueue.get(id) || [];
+      list.push(storedToRow(stored));
+      voteQueue.set(id, list);
+    }
+    const batchAt = loaded.batchAt && typeof loaded.batchAt === 'object' ? loaded.batchAt : {};
+    for (const [id, at] of Object.entries(batchAt)) {
+      lastBatchAt.set(id, Number(at) || 0);
+    }
+  }
+
+  async function persistQueue() {
+    if (!queueStore || typeof queueStore.saveChainVoteQueue !== 'function') return;
+    const rows = [];
+    for (const [id, list] of voteQueue) {
+      for (const row of list) rows.push(rowToStored(id, row));
+    }
+    const batchAt = {};
+    for (const [id, at] of lastBatchAt) batchAt[id] = at;
+    await queueStore.saveChainVoteQueue(rows, batchAt);
+  }
+
+  loadQueue();
 
   async function writeSubmitVote({ inbox, electionId, a, b, c, inputs, encryptedBallot }) {
     try {
@@ -388,6 +457,7 @@ export function createChain(config) {
   }
 
   async function writeSubmitBatch({ inbox, electionId, batch }) {
+    if (injectedBatch) return extras.writeSubmitBatch({ inbox, electionId, batch });
     try {
       const hash = await wallet.writeContract({
         address: inbox,
@@ -411,29 +481,53 @@ export function createChain(config) {
     }
   }
 
-  async function flushElection(key, now) {
-    const queued = voteQueue.get(key) || [];
-    if (!queued.length) return { queued: false };
-    const interval = Number(config.disclosureIntervalSeconds) || 0;
-    const plan = planDisclosureBatch({
-      pending: queued,
-      interval,
-      now: now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000),
-      startTime: queued[0].startTime,
-      lastBatchAt: lastBatchAt.get(key) || 0,
-    });
-    if (plan.action === 'wait') {
-      return { queued: true, submitted: false, waiting: queued.length };
+  function queuedCutoff(rows) {
+    for (const row of rows) {
+      const end = Number(row?.cutoffTime);
+      if (Number.isFinite(end)) return end;
     }
-    const inbox = inboxAddress();
-    const result = await writeSubmitBatch({ inbox, electionId: key, batch: plan.batch });
-    const sent = new Set(plan.batch);
-    voteQueue.set(
-      key,
-      queued.filter((row) => !sent.has(row)),
-    );
-    lastBatchAt.set(key, Number(now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000)));
-    return result;
+    return null;
+  }
+
+  async function flushElection(key, now) {
+    if (flushing.has(key)) return { queued: true, inFlight: true };
+    flushing.add(key);
+    try {
+      let first = null;
+      const at = now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000);
+      for (;;) {
+        const queued = voteQueue.get(key) || [];
+        if (!queued.length) return first || { queued: false };
+        const interval = Number(config.disclosureIntervalSeconds) || 0;
+        const plan = planDisclosureBatch({
+          pending: queued,
+          interval,
+          now: at,
+          startTime: queued[0].startTime,
+          lastBatchAt: lastBatchAt.get(key) || 0,
+          cutoffTime: queuedCutoff(queued),
+        });
+        if (plan.action === 'wait' || plan.batch.length === 0) {
+          return first || { queued: true, submitted: false, waiting: queued.length };
+        }
+        const inbox = inboxAddress();
+        const result = await writeSubmitBatch({ inbox, electionId: key, batch: plan.batch });
+        const sent = new Set(plan.batch);
+        const left = queued.filter((row) => !sent.has(row));
+        if (left.length) voteQueue.set(key, left);
+        else voteQueue.delete(key);
+        lastBatchAt.set(key, Number(at));
+        await persistQueue();
+        const payload = plan.action === 'final' ? { ...result, final: true } : result;
+        if (!first) first = payload;
+        else first.continued = payload;
+        // The batch ABI takes 64 ballots. A deadline drains the rest in this lock.
+        if (plan.action === 'final' && left.length) continue;
+        return first;
+      }
+    } finally {
+      flushing.delete(key);
+    }
   }
 
   return {
@@ -513,7 +607,7 @@ export function createChain(config) {
         });
       }
     },
-    async submitVote({ electionId, proof, publicInputs, encryptedBallot, startTime, now }) {
+    async submitVote({ electionId, proof, publicInputs, encryptedBallot, startTime, cutoffTime, now }) {
       if (!configured) return null;
       const inbox = inboxAddress();
       if (!hasWallet || !inbox) {
@@ -532,6 +626,9 @@ export function createChain(config) {
         return writeSubmitVote({ inbox, electionId, a, b, c, inputs, encryptedBallot });
       }
       const queued = voteQueue.get(key) || [];
+      if (queued.some((row) => nullifierKey(row.nullifier) === nullifierKey(nullifier))) {
+        return { queued: true, submitted: false, duplicate: true };
+      }
       queued.push({
         nullifier,
         a,
@@ -540,9 +637,16 @@ export function createChain(config) {
         inputs,
         encryptedBallot,
         startTime: startTime ?? 0,
+        cutoffTime: cutoffTime ?? null,
       });
       voteQueue.set(key, queued);
-      return flushElection(key, now);
+      await persistQueue();
+      // The writer timer flushes. This request does not, so a failed batch
+      // cannot leave a second copy of the same nullifier in the queue.
+      return { queued: true, submitted: false };
+    },
+    reloadVoteQueue() {
+      loadQueue();
     },
     async flushVoteQueue(now) {
       if (!configured) return [];
