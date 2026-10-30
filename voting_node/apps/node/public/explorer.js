@@ -195,6 +195,7 @@
       out.superseded = true;
       out.supersededBy = tx.supersededBy;
     }
+    if (tx.orderUnknown) out.orderUnknown = true;
     return out;
   }
 
@@ -406,7 +407,21 @@
         tx.blockNumber != null ? `<a href="#/block/${esc(tx.blockNumber)}">${esc(tx.blockNumber)}</a>` : "—",
       ],
       ["Timestamp", esc(fmtTime(tx.timestamp))],
-      ...(tx.superseded ? [["Status", "superseded"]] : []),
+      ...(tx.superseded
+        ? [[
+            t("explorer.status", null, "Status"),
+            esc(t("explorer.superseded", null, "superseded")) +
+              (tx.supersededBy
+                ? ` <a href="#/tx/${encodeURIComponent(tx.supersededBy)}">${esc(tx.supersededBy)}</a>`
+                : ""),
+          ]]
+        : []),
+      ...(tx.orderUnknown
+        ? [[
+            t("explorer.status", null, "Status"),
+            esc(t("explorer.orderUnknown", null, "order unknown")),
+          ]]
+        : []),
       [
         "Election",
         tx.electionId != null

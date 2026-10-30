@@ -392,22 +392,22 @@ export default {
     maxOptions: "Você pode escolher no máximo {count} opções.",
     receiptTitle: "Recibo da cédula",
     receiptHelp:
-      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode enviar uma só cédula. As linhas públicas do explorador esperam a hora fechar, o atraso de divulgação passar e o portão de resultados abrir.",
+      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode votar apenas uma vez; uma segunda cédula sua é rejeitada. As linhas públicas do explorador esperam a hora que continha esta cédula se encerrar.",
     recorded: "Registrado",
     ballotHash: "Hash da cédula",
     nullifier: "Nullifier",
     userOpHash: "Hash UserOp",
     results: "Resultados",
     envelopeHelp:
-      "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode enviar uma só cédula. As duas não são contadas juntas. O recibo não pode provar como você votou.",
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode mudar de ideia neste formulário até enviar. Depois que o Node aceita uma cédula, esse nullifier é gasto — você não pode votar de novo. Voto em dobro é impossível. O recibo não pode provar como você votou.",
     envelopeHelpTally:
-      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abrir o agregado após o encerramento exige t decifragens parciais verificadas (NÃO PRODUÇÃO). Você pode enviar uma só cédula. O recibo não pode provar como você votou.",
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abri-lo após o encerramento exige t descriptografias parciais verificadas (NÃO PRODUÇÃO). Depois que o Node aceita uma cédula, esse nullifier é gasto — você não pode votar de novo. O recibo não pode provar como você votou.",
     receiptHelpRevote:
-      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração certificada. As linhas públicas do explorador esperam a hora fechar, o atraso de divulgação passar e o portão de resultados abrir.",
+      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Cada eleitor é contado uma vez e pode votar de novo até o prazo; o último voto é o que conta. As linhas públicas do explorador esperam a hora fechar e o atraso de divulgação passar.",
     envelopeHelpRevote:
-      "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração certificada. As duas não são contadas juntas. O recibo não pode provar como você votou.",
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração final. As duas não são contadas juntas. O recibo não pode provar como você votou.",
     envelopeHelpTallyRevote:
-      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abrir o agregado após o encerramento exige t decifragens parciais verificadas (NÃO PRODUÇÃO). Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração certificada. O recibo não pode provar como você votou.",
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abrir o agregado após o encerramento exige t decifragens parciais verificadas (NÃO PRODUÇÃO). Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração final. O recibo não pode provar como você votou.",
     aspectsCount: "{count} perguntas nesta cédula",
     aspectsCount_one: "{count} pergunta nesta cédula",
     nonePublished: "Nenhuma publicada",
@@ -981,6 +981,9 @@ export default {
     head: "Cabeça #{head}",
     chain: "cadeia {id}",
     notTallied: "não apurado ({note})",
+    status: "Estado",
+    superseded: "substituído",
+    orderUnknown: "ordem desconhecida",
     irvShort: "IRV",
   },
   sample: {

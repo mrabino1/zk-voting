@@ -164,28 +164,28 @@ describe('website i18n', () => {
 
   test('receipt help follows ALLOW_REVOTE in every locale', () => {
     const once = {
-      en: 'You can submit one ballot.',
-      es: 'Puede enviar una sola boleta.',
-      zh: '您只能提交一张选票。',
-      fil: 'Maaari kang magsumite ng isang balota.',
-      vi: 'Bạn chỉ có thể nộp một phiếu.',
-      ar: 'يمكنك تقديم ورقة واحدة.',
-      fr: 'Vous pouvez soumettre un seul bulletin.',
-      ko: '투표용지는 한 장만 제출할 수 있습니다.',
-      pt: 'Você pode enviar uma só cédula.',
-      hi: 'आप एक मतपत्र भेज सकते हैं।',
+      en: 'You may vote only once; a second ballot from you is rejected.',
+      es: 'Solo puede votar una vez; una segunda boleta de usted es rechazada.',
+      zh: '您只能投票一次；您的第二张选票会被拒绝。',
+      fil: 'Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota mula sa iyo.',
+      vi: 'Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai của bạn bị từ chối.',
+      ar: 'يمكنك التصويت مرة واحدة فقط؛ تُرفض ورقة ثانية منك.',
+      fr: 'Vous ne pouvez voter qu’une fois ; un second bulletin de votre part est rejeté.',
+      ko: '한 번만 투표할 수 있으며, 본인의 두 번째 투표용지는 거부됩니다.',
+      pt: 'Você pode votar apenas uma vez; uma segunda cédula sua é rejeitada.',
+      hi: 'आप केवल एक बार मत दे सकते हैं; आपका दूसरा मतपत्र अस्वीकार किया जाता है।',
     };
     const revote = {
-      en: 'You may submit a later ballot until the deadline',
-      es: 'Puede enviar una boleta posterior hasta la fecha límite',
-      zh: '截止前您可以提交后来的选票',
-      fil: 'Maaari kang magsumite ng huling balota hanggang sa deadline',
-      vi: 'Bạn có thể nộp phiếu sau cho đến hạn chót',
-      ar: 'يمكنك تقديم ورقة لاحقة حتى الموعد النهائي',
-      fr: 'Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite',
-      ko: '마감 전까지 나중 투표용지를 제출할 수 있습니다',
-      pt: 'Você pode enviar uma cédula posterior até o prazo',
-      hi: 'समय सीमा तक आप बाद का मतपत्र भेज सकते हैं',
+      en: 'may re-vote until the deadline, with the last vote counting',
+      es: 'puede volver a votar hasta la fecha límite, y cuenta el último voto',
+      zh: '截止前可以重新投票，最后一次投票计入',
+      fil: 'maaaring bumoto muli hanggang sa deadline; ang huling boto ang binibilang',
+      vi: 'có thể bỏ phiếu lại cho đến hạn chót; phiếu cuối cùng được tính',
+      ar: 'يمكنه إعادة التصويت حتى الموعد النهائي، ويُحتسب آخر تصويت',
+      fr: 'peut revoter jusqu’à la date limite ; le dernier vote compte',
+      ko: '마감 전까지 다시 투표할 수 있고, 마지막 투표가 집계됩니다',
+      pt: 'pode votar de novo até o prazo; o último voto é o que conta',
+      hi: 'समय सीमा तक फिर मत दे सकता है; अंतिम मत गिना जाता है',
     };
     assert.equal(receiptHelpKey(false), 'vote.receiptHelp');
     assert.equal(receiptHelpKey(undefined), 'vote.receiptHelp');

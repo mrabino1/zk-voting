@@ -392,22 +392,22 @@ export default {
     maxOptions: "Vous pouvez choisir au plus {count} options.",
     receiptTitle: "Reçu du bulletin",
     receiptHelp:
-      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous pouvez soumettre un seul bulletin. Les lignes publiques de l’explorateur attendent la clôture de l’heure, le délai de publication, et l’ouverture du seuil de résultats.",
+      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous ne pouvez voter qu’une fois ; un second bulletin de votre part est rejeté. Les lignes publiques de l’explorateur attendent la clôture de l’heure qui contenait ce bulletin.",
     recorded: "Enregistré",
     ballotHash: "Hachage du bulletin",
     nullifier: "Nullifier",
     userOpHash: "Hachage UserOp",
     results: "Résultats",
     envelopeHelp:
-      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez soumettre un seul bulletin. Les deux ne sont pas comptés ensemble. Le reçu ne peut pas prouver comment vous avez voté.",
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez changer d’avis sur ce formulaire jusqu’à la soumission. Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le double vote est impossible. Le reçu ne peut pas prouver comment vous avez voté.",
     envelopeHelpTally:
-      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. Ouvrir l’agrégat après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Vous pouvez soumettre un seul bulletin. Le reçu ne peut pas prouver comment vous avez voté.",
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. L’ouvrir après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le reçu ne peut pas prouver comment vous avez voté.",
     receiptHelpRevote:
-      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement certifié. Les lignes publiques de l’explorateur attendent la clôture de l’heure, le délai de publication, et l’ouverture du seuil de résultats.",
+      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Chaque électeur n’est compté qu’une fois et peut revoter jusqu’à la date limite ; le dernier vote compte. Les lignes publiques de l’explorateur attendent la clôture de l’heure et le délai de publication.",
     envelopeHelpRevote:
-      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement certifié. Les deux ne sont pas comptés ensemble. Le reçu ne peut pas prouver comment vous avez voté.",
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement final. Les deux ne sont pas comptés ensemble. Le reçu ne peut pas prouver comment vous avez voté.",
     envelopeHelpTallyRevote:
-      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. Ouvrir l’agrégat après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement certifié. Le reçu ne peut pas prouver comment vous avez voté.",
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. Ouvrir l’agrégat après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement final. Le reçu ne peut pas prouver comment vous avez voté.",
     aspectsCount: "{count} questions sur ce bulletin",
     aspectsCount_one: "{count} question sur ce bulletin",
     nonePublished: "Aucune publiée",
@@ -981,6 +981,9 @@ export default {
     head: "Tête #{head}",
     chain: "chaîne {id}",
     notTallied: "non décompté ({note})",
+    status: "Statut",
+    superseded: "remplacé",
+    orderUnknown: "ordre inconnu",
     irvShort: "IRV",
   },
   sample: {

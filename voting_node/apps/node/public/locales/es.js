@@ -392,22 +392,22 @@ export default {
     maxOptions: "Puede elegir como máximo {count} opciones.",
     receiptTitle: "Recibo de la boleta",
     receiptHelp:
-      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una sola boleta. Las filas públicas del explorador esperan a que cierre la hora, pase el retraso de divulgación y se abra la puerta de resultados.",
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Solo puede votar una vez; una segunda boleta de usted es rechazada. Las filas públicas del explorador esperan a que cierre la hora que contuvo esta boleta.",
     recorded: "Registrado",
     ballotHash: "Hash de la boleta",
     nullifier: "Nullifier",
     userOpHash: "Hash del UserOp",
     results: "Resultados",
     envelopeHelp:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una sola boleta. No se cuentan las dos. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede cambiar de opinión en este formulario hasta enviarlo. Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El voto doble es imposible. El recibo no puede probar cómo votó.",
     envelopeHelpTally:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una sola boleta. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrirlo después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El recibo no puede probar cómo votó.",
     receiptHelpRevote:
-      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. Las filas públicas del explorador esperan a que cierre la hora, pase el retraso de divulgación y se abra la puerta de resultados.",
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Cada votante se cuenta una vez y puede volver a votar hasta la fecha límite, y cuenta el último voto. Las filas públicas del explorador esperan a que cierre la hora y pase el retraso de divulgación.",
     envelopeHelpRevote:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. No se cuentan las dos. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio final. No se cuentan las dos. El recibo no puede probar cómo votó.",
     envelopeHelpTallyRevote:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio final. El recibo no puede probar cómo votó.",
     aspectsCount: "{count} preguntas en esta boleta",
     aspectsCount_one: "{count} pregunta en esta boleta",
     nonePublished: "Ninguna publicada",
@@ -987,6 +987,9 @@ export default {
     head: "Cabeza #{head}",
     chain: "cadena {id}",
     notTallied: "no escrutado ({note})",
+    status: "Estado",
+    superseded: "sustituido",
+    orderUnknown: "orden desconocido",
     irvShort: "IRV",
   },
   sample: {

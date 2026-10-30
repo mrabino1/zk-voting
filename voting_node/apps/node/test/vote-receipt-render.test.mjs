@@ -78,8 +78,8 @@ describe('ballot receipt screen', () => {
     await renderVote(main, ctx);
     const text = textsOf(painted).join('\n');
     assert.match(text, /Ballot receipt/);
-    assert.match(text, /You can submit one ballot\./);
-    assert.doesNotMatch(text, /You may submit a later ballot/);
+    assert.match(text, /a second ballot from you is rejected/);
+    assert.doesNotMatch(text, /may re-vote until the deadline/);
   });
 
   test('renders the re-vote receipt when the node allows a later ballot', async () => {
@@ -88,6 +88,6 @@ describe('ballot receipt screen', () => {
     await renderVote(main, ctx);
     const text = textsOf(painted).join('\n');
     assert.match(text, /Ballot receipt/);
-    assert.match(text, /You may submit a later ballot until the deadline\./);
+    assert.match(text, /may re-vote until the deadline, with the last vote counting/);
   });
 });

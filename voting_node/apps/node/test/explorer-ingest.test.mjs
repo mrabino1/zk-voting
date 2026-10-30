@@ -8,6 +8,7 @@ import path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { Explorer, OUTCOMES_ONLY_KEY_CAP } from '../src/explorer.mjs';
+import { l2Diag } from '../src/superAdmin/diagnostics.mjs';
 
 function policy(now, cutoff) {
   return {
@@ -383,6 +384,286 @@ describe('explorer ingest', () => {
       );
       assert.equal(newest.imported, 0);
       assert.equal(explorer.chain.ingestedOutcomeKeys.length, OUTCOMES_ONLY_KEY_CAP);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  function realTally(pollId, closeBlock, extra = {}) {
+    const row = {
+      pollId,
+      ballotsRoot: `0x${'ab'.repeat(32)}`,
+      resultHash: `0x${'cd'.repeat(32)}`,
+      participation: '1',
+      outcome: 'yes',
+      ...extra,
+    };
+    if (closeBlock != null) row.closeBlock = closeBlock;
+    return row;
+  }
+
+  function realParams(pollId, extra = {}) {
+    return {
+      pollId,
+      pollParamsHash: `0x${'aa'.repeat(32)}`,
+      token: `0x${'11'.repeat(20)}`,
+      tokenChainId: 1,
+      startTime: 10,
+      cutoffTime: 100,
+      ...extra,
+    };
+  }
+
+  test('a later closeBlock stays latest when an earlier closeBlock arrives late', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      const first = await explorer.ingest(
+        { outcomes: { poll_tally: [realTally('poll-1', 20)] } },
+        now,
+        0,
+      );
+      const late = await explorer.ingest(
+        {
+          outcomes: {
+            poll_tally: [realTally('poll-1', 10, { ballotsRoot: `0x${'ef'.repeat(32)}`, outcome: 'no' })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(first.imported, 1);
+      assert.equal(late.imported, 0);
+      const latest = explorer.latestPollRecord('poll_tally', 'poll-1');
+      assert.equal(latest.payload.closeBlock, 20);
+      assert.equal(explorer.getTx(latest.hash).superseded, undefined);
+      assert.equal(explorer.chain.supersededBy[latest.hash], undefined);
+      const stored = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_tally');
+      assert.equal(stored.length, 1);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('an unordered row after a known latest is appended unranked and alerts', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      assert.equal(
+        (await explorer.ingest({ outcomes: { poll_tally: [realTally('poll-1', 20)] } }, now, 0)).imported,
+        1,
+      );
+      const latest = explorer.latestPollRecord('poll_tally', 'poll-1');
+      const unknown = await explorer.ingest(
+        {
+          outcomes: {
+            poll_tally: [
+              realTally('poll-1', null, {
+                participation: '2',
+                outcome: 'no',
+                ballotsRoot: `0x${'12'.repeat(32)}`,
+              }),
+            ],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(unknown.imported, 1);
+      assert.equal(explorer.latestPollRecord('poll_tally', 'poll-1').hash, latest.hash);
+      assert.equal(explorer.latestPollRecord('poll_tally', 'poll-1').payload.closeBlock, 20);
+      assert.equal(explorer.chain.supersededBy[latest.hash], undefined);
+      const stored = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_tally');
+      assert.equal(stored.length, 2);
+      const alerts = explorer.chain.alerts || [];
+      assert.equal(alerts.length, 1);
+      assert.equal(alerts[0].kind, 'poll_order_unknown');
+      assert.equal(alerts[0].pollId, 'poll-1');
+      const unknownTx = stored.find((tx) => tx.payload.participation === '2');
+      assert.equal(alerts[0].hash, unknownTx.hash);
+      assert.deepEqual(Object.keys(alerts[0]).sort(), ['hash', 'kind', 'pollId']);
+      assert.equal(explorer.getTx(unknownTx.hash).orderUnknown, true);
+      assert.equal(explorer.getTx(latest.hash).orderUnknown, undefined);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('poll params order by sequence and by postedAt', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      const seq1 = await explorer.ingest(
+        { outcomes: { poll_params: [realParams('poll-1', { sequence: 1, postedAt: 50 })] } },
+        now,
+        0,
+      );
+      const seq2 = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-1', { sequence: 2, postedAt: 10, pollParamsHash: `0x${'bb'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      const seqLate = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-1', { sequence: 1, postedAt: 90, pollParamsHash: `0x${'cc'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(seq1.imported, 1);
+      assert.equal(seq2.imported, 1);
+      assert.equal(seqLate.imported, 0);
+      assert.equal(explorer.latestPollRecord('poll_params', 'poll-1').payload.sequence, 2);
+      const early = await explorer.ingest(
+        { outcomes: { poll_params: [realParams('poll-when', { postedAt: 20 })] } },
+        now,
+        0,
+      );
+      const older = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-when', { postedAt: 10, pollParamsHash: `0x${'dd'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      const newer = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-when', { postedAt: 30, pollParamsHash: `0x${'ee'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(early.imported, 1);
+      assert.equal(older.imported, 0);
+      assert.equal(newer.imported, 1);
+      assert.equal(explorer.latestPollRecord('poll_params', 'poll-when').payload.postedAt, 30);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a cleared source order is recovered on load so a later closeBlock becomes latest', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      assert.equal(
+        (await explorer.ingest({ outcomes: { poll_tally: [realTally('poll-1', 20)] } }, now, 0)).imported,
+        1,
+      );
+      const first = explorer.latestPollRecord('poll_tally', 'poll-1');
+      delete explorer.chain.sourceOrder[first.hash];
+      await explorer.persist();
+      const reloaded = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      reloaded.disclosurePolicy = () => policy(now, 100);
+      const later = await reloaded.ingest(
+        {
+          outcomes: {
+            poll_tally: [realTally('poll-1', 40, { ballotsRoot: `0x${'40'.repeat(32)}`, participation: '4' })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(later.imported, 1);
+      const latest = reloaded.latestPollRecord('poll_tally', 'poll-1');
+      assert.equal(latest.payload.closeBlock, 40);
+      assert.equal(reloaded.chain.supersededBy[first.hash], latest.hash);
+      assert.equal(reloaded.chain.sourceOrder[first.hash].closeBlock, 20);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('the same closeBlock with a different tally alerts and does not replace latest', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      assert.equal(
+        (await explorer.ingest({ outcomes: { poll_tally: [realTally('poll-1', 20)] } }, now, 0)).imported,
+        1,
+      );
+      const first = explorer.latestPollRecord('poll_tally', 'poll-1');
+      const conflict = await explorer.ingest(
+        {
+          outcomes: {
+            poll_tally: [realTally('poll-1', 20, { ballotsRoot: `0x${'99'.repeat(32)}`, participation: '9' })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(conflict.imported, 0);
+      assert.equal(explorer.latestPollRecord('poll_tally', 'poll-1').hash, first.hash);
+      assert.equal(explorer.chain.supersededBy[first.hash], undefined);
+      const stored = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_tally');
+      assert.equal(stored.length, 1);
+      assert.equal(explorer.chain.alerts.length, 1);
+      assert.equal(explorer.chain.alerts[0].kind, 'poll_tally_conflict');
+      assert.equal(explorer.chain.alerts[0].pollId, 'poll-1');
+      assert.equal(explorer.chain.alerts[0].hash, first.hash);
+      assert.deepEqual(Object.keys(explorer.chain.alerts[0]).sort(), ['hash', 'kind', 'pollId']);
+      const replay = await explorer.ingest({ outcomes: { poll_tally: [realTally('poll-1', 20)] } }, now, 0);
+      assert.equal(replay.imported, 0);
+      assert.equal(explorer.chain.alerts.length, 1);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('explorer alerts stay at the last 20 and the ops diagnostic shows them', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      for (let i = 0; i < 25; i += 1) {
+        await explorer.noteAlert({ kind: 'poll_order_unknown', pollId: 'poll-1', hash: `h${i}` });
+      }
+      assert.equal(explorer.chain.alerts.length, 20);
+      assert.equal(explorer.chain.alerts[0].hash, 'h5');
+      assert.equal(explorer.chain.alerts[19].hash, 'h24');
+      const diag = l2Diag({
+        explorer,
+        config: { dataDir: tmp, nowFn: () => 50 },
+        store: { data: {} },
+        chain: {},
+      });
+      assert.equal(diag.explorer.alerts.length, 20);
+      assert.equal(diag.explorer.alerts[0].hash, 'h5');
+      assert.equal(diag.explorer.alerts.at(-1).kind, 'poll_order_unknown');
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('append records source order for poll rows and not for ballots', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const vote = await explorer.append('vote', { nullifier: 'n-1', ballotHash: '0xbb', electionId: 'poll-1' });
+      const pollVote = await explorer.append('poll_vote', { pollId: 'poll-1', nullifier: 'n-2' });
+      const tally = await explorer.append('poll_tally', realTally('poll-1', 20));
+      assert.equal(explorer.chain.sourceOrder[vote.tx.hash], undefined);
+      assert.equal(explorer.chain.sourceOrder[pollVote.tx.hash], undefined);
+      assert.equal(explorer.chain.sourceOrder[tally.tx.hash].closeBlock, 20);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

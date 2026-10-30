@@ -98,15 +98,14 @@ function notExcluded(store, election, nullifier) {
 }
 
 const EXCLUSION_RELEASE_ATTEMPTS = 3;
-const exclusionReleaseAlertedKeys = new Set();
 
 function exclusionAlertKey(electionId, nullifier) {
   return `${String(electionId)}:${String(nullifier)}`;
 }
 
-function exclusionReleaseAlerted(chain, electionId, nullifier) {
+function exclusionReleaseAlerted(chain, electionId, nullifier, alertedKeys) {
   const key = exclusionAlertKey(electionId, nullifier);
-  if (exclusionReleaseAlertedKeys.has(key)) return true;
+  if (alertedKeys instanceof Set && alertedKeys.has(key)) return true;
   if (typeof chain?.diagnostics !== 'function') return false;
   const electionKey = String(electionId);
   const id = String(nullifier);
@@ -120,12 +119,12 @@ function exclusionReleaseAlerted(chain, electionId, nullifier) {
   );
 }
 
-function rememberExclusionReleaseAlert(electionId, nullifier) {
-  exclusionReleaseAlertedKeys.add(exclusionAlertKey(electionId, nullifier));
+function rememberExclusionReleaseAlert(alertedKeys, electionId, nullifier) {
+  if (alertedKeys instanceof Set) alertedKeys.add(exclusionAlertKey(electionId, nullifier));
 }
 
-async function clearExclusionReleaseAlert(chain, electionId, nullifier) {
-  exclusionReleaseAlertedKeys.delete(exclusionAlertKey(electionId, nullifier));
+async function clearExclusionReleaseAlert(chain, electionId, nullifier, alertedKeys) {
+  if (alertedKeys instanceof Set) alertedKeys.delete(exclusionAlertKey(electionId, nullifier));
   if (typeof chain?.clearAlert !== 'function') return;
   await chain.clearAlert({
     kind: 'exclusion_release_failed',
@@ -135,7 +134,7 @@ async function clearExclusionReleaseAlert(chain, electionId, nullifier) {
 }
 
 /** Try again to drop a dead letter that was already recorded as excluded. */
-async function retryPendingExclusionReleases({ store, chain, election }) {
+async function retryPendingExclusionReleases({ store, chain, election, alertedKeys }) {
   if (typeof chain?.releaseExcluded !== 'function') return;
   const key = chainElectionId(election);
   const rows = (election.excludedBallots || []).filter((row) => row && row.releasePending === true);
@@ -150,17 +149,17 @@ async function retryPendingExclusionReleases({ store, chain, election }) {
     }
     if (released) {
       await store.setExclusionReleasePending(election.id, row.nullifier, false);
-      await clearExclusionReleaseAlert(chain, election.id, row.nullifier);
+      await clearExclusionReleaseAlert(chain, election.id, row.nullifier, alertedKeys);
     } else {
       console.warn(`ballot exclusion release failed for election ${election.id} nullifier ${row.nullifier}`);
-      if (typeof chain.noteAlert === 'function' && !exclusionReleaseAlerted(chain, election.id, row.nullifier)) {
+      if (typeof chain.noteAlert === 'function' && !exclusionReleaseAlerted(chain, election.id, row.nullifier, alertedKeys)) {
         await chain.noteAlert({
           kind: 'exclusion_release_failed',
           electionKey: String(election.id),
           nullifier: String(row.nullifier),
           at: Math.floor(Date.now() / 1000),
         });
-        rememberExclusionReleaseAlert(election.id, row.nullifier);
+        rememberExclusionReleaseAlert(alertedKeys, election.id, row.nullifier);
       }
     }
   }
@@ -267,7 +266,10 @@ async function revokeHandler(req, store, explorer) {
 export function electionsRouter(deps) {
   const { store, explorer, chain, config, l1, pin } = deps;
   const votePass = deps.votePass || createVotePassService(config);
+  const exclusionReleaseAlertedKeys = new Set();
   const router = Router();
+  // Test-only. Dedupe for this router instance, not a public API.
+  router.exclusionReleaseAlertedKeys = exclusionReleaseAlertedKeys;
   router.param('id', uuidParam('id'));
   router.param('requestId', uuidParam('requestId'));
 
@@ -1399,7 +1401,7 @@ export function electionsRouter(deps) {
       if (now < tallyAllowedAt(election, config.tallyChallengeSeconds)) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      await retryPendingExclusionReleases({ store, chain, election });
+      await retryPendingExclusionReleases({ store, chain, election, alertedKeys: exclusionReleaseAlertedKeys });
       await offerSupplementaryBatch({ store, chain, election, now, config });
       const pendingReleases = (store.requireElection(election.id).excludedBallots || []).filter(
         (row) => row && row.releasePending === true,
