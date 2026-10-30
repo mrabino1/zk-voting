@@ -7,7 +7,7 @@
   <meta name="description" content="ZK Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="favicon.svg?v=2bd6214156" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=b73a953654">
+  <link rel="stylesheet" href="styles.css?v=927772a5c4">
 </head>
 <body>
   <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets, no embedded demo. -->
@@ -19,6 +19,7 @@
         <a href="#why">Why it matters</a>
         <a href="#who">Who it's for</a>
         <a href="#how">How it works</a>
+        <a href="#poll-or-vote">Poll or vote</a>
         <a href="#self-host">Self-host</a>
         <a class="btn btn-sm" href="https://community.zk-voting.org">Community forum</a>
       </nav>
@@ -30,7 +31,7 @@
       <div class="wrap">
         <p class="eyebrow">Open source &middot; Not for profit &middot; Self-hostable</p>
         <h1>Voting your members can <span class="accent">verify</span>.<br>Ballots nobody can <span class="accent">read</span>.</h1>
-        <p class="lead">ZK Voting lets any group run its own elections and polls. Zero-knowledge proofs show that only eligible people voted, each one once, and that the published tally matches the ballots. Nobody's choice is ever published.</p>
+        <p class="lead">ZK Voting lets any group run its own elections and polls. The creator chooses a poll, which shows results on the dashboard while it is open, or a vote, which shows the outcome only after it ends. Zero-knowledge proofs show that only eligible people voted, each one once, and that the published tally matches the ballots. Nobody's choice is ever published.</p>
         <div class="cta">
           <a class="btn" href="https://community.zk-voting.org">Join the discussion</a>
           <a class="btn btn-ghost" href="https://demo.zk-voting.org">Try the voting demo &rarr;</a>
@@ -175,9 +176,9 @@
         <p class="sub">Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. ZK Voting turns those claims into things anyone can check.</p>
         <div class="grid">
           <article class="card"><h3>Private by design</h3><p>The option you pick is never a readable field in a transaction or a database. Receipts are hashes, so they can't show how you voted.</p></article>
-          <article class="card"><h3>Publicly verifiable</h3><p>Registrations, disqualification codes, vote proofs and the final tally are public. An independent auditor can rebuild the result without the operator's private database.</p></article>
+          <article class="card"><h3>Publicly verifiable</h3><p>Registrations and disqualification codes are public. A poll's result is on the dashboard while it is open. A vote's tally stays hidden until the election ends. An independent auditor can rebuild a published result without the operator's private database.</p></article>
           <article class="card"><h3>One person, one vote</h3><p>Every ballot carries a proof that the voter is on the frozen roll and not disqualified. A one-time nullifier rejects any second ballot.</p></article>
-          <article class="card"><h3>Built to resist coercion</h3><p>Voters can change their mind privately before submitting, and nothing they are given proves their choice to someone pressuring them. Turnout is published hourly, after the hour closes, so a person can't be matched to a live tick.</p></article>
+          <article class="card"><h3>Built to resist coercion</h3><p>Voters can change their mind privately before submitting, and nothing they are given proves their choice to someone pressuring them. Choose a vote when a running count would add pressure: before it ends, nobody can see an interim count, turnout, or partial tally. A poll shows its result on the dashboard while it is open.</p></article>
           <article class="card"><h3>Due process for disqualification</h3><p>Barring someone is a public, coded, on-chain change with a stated reason, not a silent database flag.</p></article>
           <article class="card"><h3>No vendor lock-in</h3><p>AGPL-licensed, run at cost, built to be forked and rebranded. Your group owns the node, the roll and the record.</p></article>
         </div>
@@ -189,12 +190,12 @@
         <h2>Who it's for</h2>
         <p class="sub">Any body that needs a roll, a ballot and a result people will accept.</p>
         <div class="grid">
-          <article class="card"><h3>Cities, counties and districts</h3><p>Run civic elections and referendums with nested districts, measures and articles, and a public results page observers can follow.</p></article>
+          <article class="card"><h3>Cities, counties and districts</h3><p>Run civic elections and referendums with nested districts, measures and articles. Observers follow a public results page after the election ends.</p></article>
           <article class="card"><h3>Unions and member associations</h3><p>Hold leadership elections and contract ratification votes where members trust the count without trusting the officers.</p></article>
           <article class="card"><h3>Cooperatives and boards</h3><p>Take board votes and member polls, including weighted and ranked-choice ballots, with an auditable outcome report.</p></article>
           <article class="card"><h3>Schools and campuses</h3><p>Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.</p></article>
-          <article class="card"><h3>Communities and clubs</h3><p>Quick yes/no, single-choice or multiple-choice polls for any group that wants a private, honest show of hands.</p></article>
-          <article class="card"><h3>Observers and auditors</h3><p>Follow registrations, disqualifications and the tally on the public explorer, and verify an outcome report offline.</p></article>
+          <article class="card"><h3>Communities and clubs</h3><p>Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands, with the result on the dashboard while the poll is open.</p></article>
+          <article class="card"><h3>Observers and auditors</h3><p>Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. A poll's result is on the dashboard while it is open. A vote's outcome appears only after the election ends.</p></article>
         </div>
       </div>
     </section>
@@ -202,13 +203,23 @@
     <section class="band" id="how">
       <div class="wrap">
         <h2>How it works</h2>
-        <p class="sub">Zero-knowledge proofs let the system check facts about a voter without putting the ballot in the clear.</p>
+        <p class="sub">Zero-knowledge proofs let the system check facts about a voter without putting the ballot in the clear. What anyone can see, and when, depends on the kind the creator chose.</p>
+        <div class="kinds" id="poll-or-vote">
+          <article class="card">
+            <h3>Poll</h3>
+            <p>Use a poll when the group wants the picture while people are still responding: a temperature check, a club question, or a non-binding show of hands. The dashboard shows the result the whole time the poll is open, and voters and admins see that same running result. After the closing date, no more votes can be added.</p>
+          </article>
+          <article class="card">
+            <h3>Vote</h3>
+            <p>Use a vote for an election, when the outcome must stay hidden until the end: leadership, a binding decision, or any contest where an early count could change who still turns out. The outcome is shown only after the election ends. Before the close, nobody, including admins, can see or obtain an interim count, turnout, a per-block disclosure, or a partial tally. The chain, the API and relayer, and the pages people use all refuse those figures. There is no private preview.</p>
+          </article>
+        </div>
         <ol class="steps">
           <li><span class="n">1</span><h3>Register</h3><p>Members sign up with a passkey, wallet, email or ID. The roll stores an identity commitment, never an address or document number.</p></li>
           <li><span class="n">2</span><h3>Freeze the roll</h3><p>Officials commit the eligible set and any disqualifications for the election.</p></li>
           <li><span class="n">3</span><h3>Vote with a proof</h3><p>Each ballot proves eligibility and spends a one-time nullifier, so a second ballot is rejected.</p></li>
-          <li><span class="n">4</span><h3>Hourly disclosure</h3><p>Vote proofs are published once an hour, after the hour closes.</p></li>
-          <li><span class="n">5</span><h3>Proven tally</h3><p>When voting closes, anyone can check that the totals match the accepted ballots.</p></li>
+          <li><span class="n">4</span><h3>While it is open</h3><p>A poll shows its result on the dashboard. A vote shows no interim count, turnout, per-block disclosure, or partial tally to anyone, including admins.</p></li>
+          <li><span class="n">5</span><h3>After the closing date</h3><p>No more votes can be added. A vote's outcome is published only then. Anyone can check that the published totals match the accepted ballots.</p></li>
         </ol>
       </div>
     </section>
