@@ -464,6 +464,7 @@ export async function createApp(overrides = {}) {
         { src: '/brand-mark.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
       ],
       theme_color: '#03173A',
+      // #0e0f11 is this app's canvas. The landing manifest uses #0d0d0f, which is that page's background.
       background_color: '#0e0f11',
       display: 'standalone',
     });
