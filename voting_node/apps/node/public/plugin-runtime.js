@@ -264,11 +264,46 @@ function applyNav(layout) {
   run();
 }
 
+/** Same split as splitBrandWordmark in src/branding.mjs. */
+function splitBrandWordmark(name) {
+  const value = String(name ?? '');
+  const match = /^(zk)(?=$|[\s\u2010-\u2015-])/i.exec(value);
+  if (!match) return null;
+  return { lead: value.slice(0, match[1].length), rest: value.slice(match[1].length) };
+}
+
+function paintBrandWordmark(el, name) {
+  const value = String(name ?? '');
+  el.title = value;
+  const split = splitBrandWordmark(value);
+  el.replaceChildren();
+  if (!split) {
+    const text = document.createElement('span');
+    text.className = 'brand-name-text';
+    text.textContent = value;
+    el.append(text);
+    return;
+  }
+  const lead = document.createElement('span');
+  lead.className = 'brand-zk';
+  lead.textContent = split.lead;
+  el.append(lead);
+  if (!split.rest) return;
+  const rest = document.createElement('span');
+  rest.className = 'brand-rest';
+  rest.textContent = split.rest;
+  el.append(rest);
+}
+
 function applyBranding(layout) {
   const name = layout.branding?.productName || DEFAULT_PRODUCT_NAME;
   // The server already renders the name into each page; this keeps the chrome
-  // right if the layout changes while the page is open.
-  for (const el of document.querySelectorAll('[data-product-name], .brand-name')) el.textContent = name;
+  // right if the layout changes while the page is open. Header names stay
+  // two-tone text. Other product-name slots stay plain text.
+  for (const el of document.querySelectorAll('[data-product-name]')) {
+    if (!el.classList.contains('brand-name')) el.textContent = name;
+  }
+  for (const el of document.querySelectorAll('.brand-name')) paintBrandWordmark(el, name);
 }
 
 function applyTheme() {

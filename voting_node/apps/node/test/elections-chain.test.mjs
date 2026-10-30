@@ -8,16 +8,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, test } from 'node:test';
 
-import { encodeAbiParameters, encodeEventTopics, keccak256, stringToHex } from 'viem';
+import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, keccak256, stringToHex } from 'viem';
 
 import {
   chainElectionIdOf,
   createChain,
   decodeElectionCreated,
   electionFactoryAbi,
+  factoryElectionParams,
   resolveCreateElectionParams,
   toJurisdictionBytes32,
 } from '../src/chain.mjs';
+import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
 import { HttpError } from '../src/http.mjs';
 import { createApp } from '../src/server.mjs';
 import { isUuid } from '../src/electionIds.mjs';
@@ -215,6 +217,43 @@ describe('factory param helpers', () => {
     assert.equal(params.verifier, VERIFIER);
     assert.equal(params.questionCount, 1);
     assert.equal(params.jurisdictionId, keccak256(stringToHex('demo')));
+    assert.equal(Object.hasOwn(params, 'electionType'), false);
+  });
+
+  test('createElection calldata stays on the current tuple when electionType is set app-side', () => {
+    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, false);
+    const components = electionFactoryAbi.find((item) => item.name === 'createElection').inputs[0].components;
+    assert.equal(components.at(-1).name, 'tallyScheme');
+    assert.equal(components.some((item) => item.name === 'electionType'), false);
+    const resolved = resolveCreateElectionParams(
+      { verifierAddress: VERIFIER },
+      {
+        title: 'T',
+        metadataURI: '',
+        startTime: 1,
+        cutoffTime: 2,
+        maxParticipants: 0,
+        treeDepth: 20,
+        ballotSpecHash: `0x${'11'.repeat(32)}`,
+        questions: [{ type: 'YES_NO' }],
+        jurisdictionId: 'demo',
+        electionType: 1,
+      },
+      RELAYER,
+    );
+    const tuple = factoryElectionParams(resolved, 1);
+    assert.equal(Object.hasOwn(tuple, 'electionType'), false);
+    const encoded = encodeFunctionData({
+      abi: electionFactoryAbi,
+      functionName: 'createElection',
+      args: [tuple],
+    });
+    const withExtra = encodeFunctionData({
+      abi: electionFactoryAbi,
+      functionName: 'createElection',
+      args: [{ ...tuple, electionType: 1 }],
+    });
+    assert.equal(encoded, withExtra);
   });
 
   test('resolveCreateElectionParams requires verifier when chain env is used', () => {

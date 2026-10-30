@@ -4,6 +4,9 @@
 
 import { HttpError } from './http.mjs';
 import { aggregateCiphertexts, aggregateOptionId, isAggregateEnvelope } from './aggregateBallot.mjs';
+import { isVoteElection } from './electionType.mjs';
+import { blockAggregateId, productForChoiceBlock, serverChoicePlan } from './pollChoiceBlocks.mjs';
+import { ciphertextForTally, withoutExcludedEnvelopes } from './tallyOpen.mjs';
 import { isTallyEnvelope } from './tallyCrypto.mjs';
 import { expectedVerificationKey, jointPublicKey, pointToHex } from './guardians/index.mjs';
 import { pointFromHex, pointXBytes } from './guardians/p256.mjs';
@@ -96,13 +99,17 @@ export async function acceptPartials(store, electionId, body) {
       z: String(row?.proof?.z || ''),
     },
   }));
-  const envelopes = store.listEnvelopes(electionId);
-  if (envelopes.some((env) => !isAggregateEnvelope(env.encryptedBallot))) {
+  const envelopes = withoutExcludedEnvelopes(
+    store.listEnvelopes(electionId),
+    typeof store.excludedNullifiers === 'function' ? store.excludedNullifiers(electionId) : [],
+  ).envelopes;
+  const tallyCiphertexts = envelopes.map((env) => ciphertextForTally(env));
+  if (tallyCiphertexts.some((ciphertext) => !isAggregateEnvelope(ciphertext))) {
     fail(400, 'accepted ballots are not AG aggregate envelopes', 'PER_BALLOT_OPEN_DISABLED');
   }
   let product;
   try {
-    product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
+    product = aggregateCiphertexts(tallyCiphertexts);
   } catch (err) {
     fail(400, err.message, err.code || 'BAD_ENVELOPE');
   }
@@ -128,4 +135,70 @@ export async function acceptPartials(store, electionId, body) {
   }
   await store.saveGuardianPartials(electionId, { index, partials });
   return { index, count: partials.length };
+}
+
+/**
+ * Threshold partials for one published POLL block product.
+ * The tag is `block:<id>:aggregate:<slot>`. A per-ballot tag is refused.
+ * A vote has no block to decrypt.
+ */
+export async function acceptChoiceBlockPartials(store, electionId, body, deps) {
+  const election = store.requireElection(electionId);
+  if (isVoteElection(election)) {
+    fail(409, 'a vote has no published choice blocks', 'VOTE_NO_CHOICE_BLOCKS');
+  }
+  const ceremony = election.tallyCeremony;
+  if (!ceremony || ceremony.status !== 'ready') {
+    fail(409, 'guardian public key is not ready', 'CEREMONY_INCOMPLETE');
+  }
+  const index = Number(body?.index);
+  if (!(ceremony.roster || []).some((g) => g.index === index)) {
+    fail(400, 'unknown guardian index', 'UNKNOWN_GUARDIAN');
+  }
+  const blockId = String(body?.blockId || '');
+  if (!/^\d+-\d+$/.test(blockId)) fail(400, 'blockId is required', 'BAD_PARTIAL');
+  const plan = serverChoicePlan(election, deps);
+  const block = (plan?.publish || []).find((row) => row.id === blockId);
+  if (!block) fail(404, 'that choice block is not published', 'BLOCK_NOT_PUBLISHED');
+  const envelopes = store.listEnvelopes(electionId);
+  const byNullifier = new Map();
+  for (const env of envelopes) {
+    if (env.nullifier != null) byNullifier.set(String(env.nullifier).toLowerCase(), env);
+    if (env.ballotHash != null) byNullifier.set(String(env.ballotHash).toLowerCase(), env);
+  }
+  const product = productForChoiceBlock(block, byNullifier);
+  if (!product) fail(409, 'choice block is not an aggregate product', 'PER_BALLOT_OPEN_DISABLED');
+  if (!Array.isArray(body?.partials) || body.partials.length === 0) {
+    fail(400, 'partials required', 'BAD_PARTIAL');
+  }
+  const partials = [];
+  for (const row of body.partials) {
+    const tag = String(row?.ballotHash || '');
+    const option = new RegExp(`^block:${blockId}:aggregate:(\\d+)$`).exec(tag);
+    if (!option) fail(400, 'per-ballot decryption partials are refused', 'PER_BALLOT_PARTIAL');
+    const slot = Number(option[1]);
+    const summed = product.options[slot];
+    if (!summed) fail(400, 'partial does not match a block option', 'BAD_PARTIAL');
+    const partial = {
+      ballotHash: blockAggregateId(blockId, slot),
+      point: String(row?.point || ''),
+      proof: {
+        A: String(row?.proof?.A || ''),
+        B: String(row?.proof?.B || ''),
+        z: String(row?.proof?.z || ''),
+      },
+    };
+    const ok = verifyPartial({
+      partial,
+      electionId: election.id,
+      index,
+      jointPublicKey: ceremony.publicKey,
+      expectedY: ceremony.verificationKeys[String(index)],
+      ephemeral: summed.c1Hex,
+    });
+    if (!ok) fail(400, `partial decryption from guardian ${index} is not valid`, 'BAD_PARTIAL');
+    partials.push(partial);
+  }
+  await store.saveChoiceBlockPartials(electionId, { blockId, index, partials });
+  return { index, blockId, count: partials.length };
 }

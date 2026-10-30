@@ -55,10 +55,10 @@ export const FAQ_ENTRIES = [
   {
     id: "one-vote",
     topic: "one-vote",
-    q: "Can I vote more than once in an election?",
+    q: "Can I change my vote?",
     a: [
-      "No. Each nullifier is accepted once. A second ballot — including a new ciphertext — is rejected (NullifierUsed). Double voting is impossible on that rule. You may change your mind privately on the ballot form before you submit. After the inbox accepts the ballot you cannot recast.",
-      "This is not MACI and not “last vote counts.” Coercion-resistance upgrades of that kind are still later work.",
+      "Not by default. A second ballot for the same nullifier is rejected unless the operator has enabled re-vote. When that is on, a later ballot before the deadline updates the final tally only. A published poll block keeps the first ballot. After the deadline the Node rejects another ballot.",
+      "The receipt still cannot prove how you voted. The inbox accepts a nullifier once, so the Node does not submit a replacement again. This is not MACI.",
     ],
   },
   {
@@ -75,7 +75,7 @@ export const FAQ_ENTRIES = [
     topic: "hourly-disclosure",
     q: "Why do public counts wait an hour?",
     a: [
-      "Your ballot is accepted immediately so the nullifier cannot be reused. Public dashboards and the explorer show that vote only after the UTC hour has closed, the disclosure delay has elapsed, and the results gate is open. A person leaving a voting office cannot be matched to a live jurisdiction increase.",
+      "Your ballot is accepted immediately so the nullifier cannot be reused. Public dashboards and the explorer show that vote only after the UTC hour has closed and the disclosure delay has elapsed, from the first ballot. A person leaving a voting office cannot be matched to a live jurisdiction increase.",
       "The snapshot lists the last closed hour, how many ballots have been disclosed so far, and a countdown to the next hour close — never a pending-per-election live tick. Officials do not get a private live precinct feed either.",
     ],
   },
@@ -103,8 +103,8 @@ export const FAQ_ENTRIES = [
     topic: "outcomes",
     q: "What is the /outcomes portal?",
     a: [
-      "It is a public monitor of every election on this Node, separate from certified results at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
-      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. Certified counts appear only after a tally is posted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
+      "It is a public monitor of every election on this Node, separate from the final tally at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
+      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. The final tally appears only after a tally is posted. Excluded ballots are not counted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
     ],
   },
   {
@@ -112,7 +112,7 @@ export const FAQ_ENTRIES = [
     topic: "outcome-reports",
     q: "What is the official outcome PDF?",
     a: [
-      `Once voting time has completely expired and a certified tally is posted, ${brandName()} issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.`,
+      `Once voting time has completely expired and a final tally is posted, ${brandName()} issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. Excluded ballots are not counted. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.`,
       "If you vote, you are subscribed to that contest’s official report by default. Unsubscribe from My desk only if you do not want the email. Drop the file at /outcomes/verify (or scan the QR) to confirm the bytes still match the Node fingerprint. A changed copy will fail.",
     ],
   },
@@ -193,7 +193,7 @@ export const FAQ_ENTRIES = [
     topic: "explorer",
     q: "What is the block explorer for?",
     a: [
-      "The public explorer at /explorer reads the civic L2 record: registrations (commitments only), accepted ballots (nullifier + ballot hash, never the choice), disqualifications, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes, the disclosure delay elapses, and the results gate opens.",
+      "The public explorer at /explorer reads the civic L2 record: registrations (commitments only), accepted ballots (nullifier + ballot hash, never the choice), disqualifications, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes and the disclosure delay elapses.",
       `${brandName()} L2 as implemented is an application-specific civic sequencer (JSON transactions), chainId 27427. It is not a general-purpose EVM and it does not proxy to Anvil.`,
     ],
   },

@@ -46,7 +46,7 @@ function expandedRoles(store, user) {
 function electionsMap(store, user) {
   if (!user) return {};
     const out = {};
-    for (const election of store.listElections()) {
+    for (const election of store.listPublicElections()) {
       const status = store.voterStatus(election.id, user.id);
       if (status.pending) {
         out[String(election.id)] = {

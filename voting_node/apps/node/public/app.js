@@ -4,7 +4,8 @@
  */
 
 import { brandName } from "./brand.js";
-import { LOCALE_EVENT } from "./i18n.js";
+import { LOCALE_EVENT, t } from "./i18n.js";
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { fetchWithStandbyRetry } from "./standby-retry.js";
 import { startRouter, navigate, currentRoute } from "./router.js";
 import * as wallet from "./passkey-wallet.js";
@@ -580,6 +581,7 @@ function electionCard(election, me, store) {
       "p",
       { class: "cluster" },
       h("span", { class: `status-pill ${st.className}`, text: st.label }),
+      h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
       h("span", { class: `status-pill ${vs.className}`, text: vs.label })
     ),
     h(
@@ -587,6 +589,9 @@ function electionCard(election, me, store) {
       { class: "meta-list" },
       h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
       h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+      resultsAreSealed(election)
+        ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+        : null,
       election.shortCode
         ? h(
             "li",
@@ -636,7 +641,7 @@ function electionCard(election, me, store) {
           class: election.state >= 4 ? "btn" : "btn btn-secondary",
           href: `/elections/${encodeURIComponent(election.id)}/results`,
           "data-nav": "",
-          text: election.state >= 4 ? "Results" : "Results status",
+          text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
         }
       ),
       h("a", {
@@ -749,7 +754,7 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "outcome-sub-heading" },
       h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
       h("p", {
-        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a certified tally is posted.",
+        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a final tally is posted.",
       }),
       renderOutcomeSubscriptions(outcomeSubscriptions, {
         h,

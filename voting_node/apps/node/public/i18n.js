@@ -100,6 +100,11 @@ export function localeTag(locale = getLocale()) {
   return HTML_LANG[code] || HTML_LANG[DEFAULT_LOCALE];
 }
 
+/** Receipt copy follows ALLOW_REVOTE. Off is the default, and a configured chain forces it off. */
+export function receiptHelpKey(allowRevote) {
+  return allowRevote === true ? "vote.receiptHelpRevote" : "vote.receiptHelp";
+}
+
 export function t(key, vars) {
   const locale = getLocale();
   let template;

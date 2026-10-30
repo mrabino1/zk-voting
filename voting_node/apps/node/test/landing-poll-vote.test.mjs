@@ -99,16 +99,16 @@ test('Spanish render keeps both columns and translates the accessible name', () 
   assert.match(name, /encuesta/i);
   assert.match(name, /escrutinio final/i);
   assert.doesNotMatch(name, /Ballot flow/);
-  assert.match(html, /data-brand>ZK-Voting</);
+  assert.match(html, /data-brand><span class="brand-zk">ZK<\/span><span class="brand-rest">-Voting<\/span>/);
 });
 
 test('display name is filled from the branding helper', () => {
   assert.equal(brandName(), DEFAULT_BRAND_NAME);
   const html = pageHtml();
-  assert.ok(html.includes(`<span data-brand>${DEFAULT_BRAND_NAME}</span>`));
+  assert.match(html, /<span class="wordmark" title="ZK-Voting"><span data-brand><span class="brand-zk">ZK<\/span><span class="brand-rest">-Voting<\/span><\/span><\/span>/);
   assert.match(html, /<meta name="brand-name" content="ZK-Voting">/);
   const branded = translateMarkup(html, 'en', 'Civic Desk');
-  assert.match(branded, /data-brand>Civic Desk</);
+  assert.match(branded, /data-brand><span class="brand-name-text">Civic Desk<\/span>/);
   assert.match(branded, /aria-label="Civic Desk on GitHub"/);
   assert.match(branded, /<title[^>]*>Civic Desk: private ballots/);
   assert.doesNotMatch(regionOf(branded), /ZK-Voting/);

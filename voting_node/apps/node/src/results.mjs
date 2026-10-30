@@ -1,10 +1,12 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Certified election results from a posted tally. Plurality only (no IRV).
-// Public option counts exist after tally; never invent unofficial choice totals.
+// Final tally from a posted tally. Plurality only (no IRV).
+// A poll may also show almost-live hourly choice sums. A vote does not.
 
 import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
-import { electionDisclosurePolicy } from './store.mjs';
+import { electionTypeName, electionTypeOf, isPollElection, sealedResultsBody } from './electionType.mjs';
+import { buildPollChoiceView } from './pollChoiceBlocks.mjs';
+import { electionDisclosurePolicy, publicExclusion } from './store.mjs';
 
 const RANKED_TYPES = new Set(['RANKED', 'IRV', 'RCV', 'RANKED_CHOICE']);
 
@@ -44,12 +46,12 @@ export function tokenPollResultsDto(result, { tallied, pollId, state } = {}) {
 
 export const EMPTY_RESULT_MESSAGES = {
   created:
-    'This election is not open yet. Certified option counts appear after a tally is posted.',
+    'This election is not open yet. Option counts in the final tally appear after a tally is posted.',
   roll_frozen:
-    'The roll is frozen. Voting has not opened. Certified option counts appear after a tally is posted.',
-  open: 'Voting is open. Option counts are not published until a certified tally is posted. Public turnout is the last hourly snapshot, not a live precinct tick.',
-  awaiting_tally: 'Polls are closed. A certified tally has not been posted yet.',
-  closed: 'Polls are closed. A certified tally has not been posted yet.',
+    'The roll is frozen. Voting has not opened. Option counts in the final tally appear after a tally is posted.',
+  open: 'Voting is open. Option counts are not published until a final tally is posted. Public turnout is the last hourly snapshot, not a live precinct tick.',
+  awaiting_tally: 'Polls are closed. A final tally has not been posted yet.',
+  closed: 'Polls are closed. A final tally has not been posted yet.',
 };
 
 export function isRankedType(type) {
@@ -283,6 +285,7 @@ export function buildResults(election, extra = {}) {
   const available = Boolean(election?.tally && (Array.isArray(election.tally.counts) || Array.isArray(election.tally.questions)));
   const slices = sliceOptionCounts(election?.questions || [], available ? election.tally.counts : null);
   const labeledTally = presentTally(election, election.acceptedBallots);
+  const excluded = publicExclusion(election);
   const questions = slices.map(({ question, counts }) => {
     const labeled = labeledTally?.questions?.find((row) => String(row.id) === String(question.id));
     return questionResult(question, counts, { available, labeled });
@@ -293,7 +296,7 @@ export function buildResults(election, extra = {}) {
     method: 'plurality',
     emptyReason: available ? null : status,
     message: available
-      ? 'Certified plurality results from the posted tally. Individual choices are never shown. Explorer vote rows still follow hourly disclosure.'
+      ? 'Plurality results from the posted final tally. Individual choices are never shown. Excluded ballots are not counted. Explorer vote rows still follow hourly disclosure.'
       : EMPTY_RESULT_MESSAGES[status] || EMPTY_RESULT_MESSAGES.awaiting_tally,
     questions,
     tallyPostedAt: election?.tally?.postedAt || null,
@@ -302,12 +305,59 @@ export function buildResults(election, extra = {}) {
       : null,
     publishedAcceptedBallots:
       typeof publishedAcceptedBallots === 'number' ? publishedAcceptedBallots : null,
+    excludedCount: excluded.count,
+    excludedReasons: excluded.reasons,
   };
 }
 
 export function presentResults(election, deps, opts = {}) {
   const now = opts.now ?? deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
+  if (policy.resultsSealed) {
+    const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
+      election.id,
+      now,
+      policy.intervalSeconds,
+      policy,
+    );
+    const dto = publicElection(election, now, {
+      intervalSeconds: policy.intervalSeconds,
+      delaySeconds: policy.delaySeconds,
+      minBlockVotes: policy.minBlockVotes,
+      publishedAcceptedBallots,
+      resultsSealed: true,
+    });
+    const seal = sealedResultsBody(election, now);
+    return {
+      ...dto,
+      ...seal,
+      electionId: String(election.id),
+      acceptedBallots: publishedAcceptedBallots,
+      tally: null,
+      results: {
+        available: false,
+        sealed: true,
+        status: 'sealed',
+        method: election.ballotMethod || 'plurality',
+        emptyReason: 'sealed',
+        message: seal.message,
+        questions: (election.questions || []).map((question) => ({
+          id: question.id,
+          type: question.type,
+          prompt: question.prompt,
+          options: (question.options || []).map((option) => ({
+            id: option.id,
+            label: option.label,
+          })),
+          outcome: null,
+        })),
+        tallyPostedAt: null,
+        certifiedBallots: null,
+        publishedAcceptedBallots,
+      },
+      explorerPath: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
+    };
+  }
   const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
     election.id,
     now,
@@ -320,11 +370,41 @@ export function presentResults(election, deps, opts = {}) {
     resultsMinVotes: policy.minVotes,
     minBlockVotes: policy.minBlockVotes,
     publishedAcceptedBallots,
+    resultsSealed: false,
   });
-  return {
+  const results = buildResults(election, { now, publishedAcceptedBallots });
+  const choiceBlocks = isPollElection(election) ? buildPollChoiceView(election, deps, now) : null;
+  if (choiceBlocks && isPollElection(election)) {
+    for (const block of choiceBlocks.blocks || []) {
+      if (!Array.isArray(block.counts)) continue;
+      const slices = sliceOptionCounts(election.questions || [], block.counts);
+      block.questions = slices.map(({ question, counts }) => questionResult(question, counts, { available: true }));
+    }
+    if (Array.isArray(choiceBlocks.totals) && choiceBlocks.totals.length) {
+      const slices = sliceOptionCounts(election.questions || [], choiceBlocks.totals);
+      choiceBlocks.questions = slices.map(({ question, counts }) =>
+        questionResult(question, counts, { available: true }),
+      );
+    }
+    if (!results.available) {
+      const gate = Number(policy.minVotes) || 0;
+      if (!choiceBlocks.gateOpen) {
+        results.message = `Option counts stay hidden until the results gate opens: ${gate} ballots, or the scheduled end, whichever comes first.`;
+      } else if ((choiceBlocks.blocks || []).length) {
+        results.message =
+          'Almost-live per-choice sums for this poll. A published block stays as first published. The final tally at close counts the latest ballot.';
+      }
+    }
+  }
+  const body = {
     ...dto,
     electionId: String(election.id),
-    results: buildResults(election, { now, publishedAcceptedBallots }),
+    electionType: electionTypeOf(election),
+    electionTypeName: electionTypeName(election),
+    resultsSealed: false,
+    results,
     explorerPath: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
   };
+  if (choiceBlocks) body.choiceBlocks = choiceBlocks;
+  return body;
 }

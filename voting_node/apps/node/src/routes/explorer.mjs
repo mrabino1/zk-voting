@@ -143,10 +143,11 @@ export function explorerRouter(deps) {
         if (tx.hash && !seen.has(tx.hash)) result.txs.push(tx);
       }
       const presented = presentElection(election, deps);
+      const txs = result.txs || [];
       res.json({
         nfp: true,
         election: presented,
-        txs: result.txs,
+        txs,
         disclosure: presented.disclosure,
       });
     }),

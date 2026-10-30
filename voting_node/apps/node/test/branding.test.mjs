@@ -9,7 +9,7 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
 import { createApp } from '../src/server.mjs';
-import { brandDefaults, brandName, renderBrandedHtml, setBrandingProvider } from '../src/branding.mjs';
+import { brandDefaults, brandName, brandWordmarkHtml, renderBrandedHtml, setBrandingProvider, splitBrandWordmark } from '../src/branding.mjs';
 
 let tmp;
 let server;
@@ -105,6 +105,16 @@ describe('configurable branding', () => {
     }
     const home = await api('GET', '/');
     assert.match(home.text, /<meta property="og:site_name" content="ZK-Voting" \/>/);
+    assert.match(home.text, /src="\/brand-mark\.svg"/);
+    assert.match(home.text, /class="brand-zk">ZK</);
+    assert.match(home.text, /class="brand-rest">-Voting</);
+    assert.match(home.text, /rel="apple-touch-icon" href="\/apple-touch-icon\.png"/);
+    const manifest = await api('GET', '/site.webmanifest');
+    assert.equal(manifest.status, 200);
+    assert.equal(manifest.json.name, 'ZK-Voting');
+    assert.equal(manifest.json.icons.some((icon) => icon.src === '/icon-512.png'), true);
+    assert.equal(manifest.json.icons.every((icon) => icon.purpose === 'any maskable'), true);
+    assert.match(home.text, /class="brand-name" title="ZK-Voting"/);
     const cfg = await api('GET', '/api/config');
     assert.equal(cfg.json.product, 'ZK-Voting');
     assert.equal(cfg.json.rpName, 'ZK-Voting');
@@ -122,7 +132,11 @@ describe('configurable branding', () => {
     assert.match(home.text, /<meta name="brand-name" content="Springfield Votes"\/>/);
     assert.match(home.text, /<meta name="brand-short-name" content="Springfield Votes"\/>/);
     assert.match(home.text, /content="Town of Springfield ballots"/);
+    assert.match(home.text, /class="brand-name-text">Springfield Votes</);
+    assert.doesNotMatch(home.text, /class="brand-zk"/);
     assert.doesNotMatch(visible(home.text), /ZK-Voting/);
+    const manifest = await api('GET', '/site.webmanifest');
+    assert.equal(manifest.json.name, 'Springfield Votes');
     const docs = await api('GET', '/docs');
     assert.match(docs.text, /Springfield Votes/);
     const cfg = await api('GET', '/api/config');
@@ -178,5 +192,28 @@ describe('branding helpers', () => {
       tagline: 'x',
     });
     assert.equal(out, '<title>A &amp; B</title>A&#39;s|x');
+  });
+
+  test('wordmark colors a ZK prefix and leaves other names whole', () => {
+    assert.deepEqual(splitBrandWordmark('ZK-Voting'), { lead: 'ZK', rest: '-Voting' });
+    assert.deepEqual(splitBrandWordmark('ZK Voting'), { lead: 'ZK', rest: ' Voting' });
+    assert.deepEqual(splitBrandWordmark('zk-ballots'), { lead: 'zk', rest: '-ballots' });
+    assert.equal(splitBrandWordmark('Springfield Votes'), null);
+    assert.equal(splitBrandWordmark('ZKvote'), null);
+    assert.equal(
+      brandWordmarkHtml('ZK-Voting'),
+      '<span class="brand-zk">ZK</span><span class="brand-rest">-Voting</span>',
+    );
+    assert.equal(
+      brandWordmarkHtml('Springfield Votes'),
+      '<span class="brand-name-text">Springfield Votes</span>',
+    );
+    assert.equal(brandWordmarkHtml('A & B'), '<span class="brand-name-text">A &amp; B</span>');
+    const page = renderBrandedHtml('<span class="brand-name">%BRAND_WORDMARK%</span>', {
+      name: 'ZK-Voting',
+      shortName: 'ZK-Voting',
+      tagline: 'x',
+    });
+    assert.equal(page, '<span class="brand-name"><span class="brand-zk">ZK</span><span class="brand-rest">-Voting</span></span>');
   });
 });

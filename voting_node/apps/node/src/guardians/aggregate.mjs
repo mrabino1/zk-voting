@@ -15,6 +15,8 @@
 // A later owner can register a strategy whose `status` is `selected`. Until
 // then, asking for `homomorphic` or `mixnet` fails closed.
 
+import { ciphertextForTally } from '../tallyOpen.mjs';
+
 export const AGGREGATION_DECISION = 'open';
 
 /**
@@ -52,7 +54,7 @@ const undecidedAggregator = {
       const ballotHash = String(env.ballotHash || env.nullifier || i);
       return {
         id: ballotHash,
-        encryptedBallot: env.encryptedBallot,
+        encryptedBallot: ciphertextForTally(env),
         ballotHash,
         sourceIds: [ballotHash],
       };
