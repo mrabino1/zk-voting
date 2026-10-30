@@ -4,6 +4,7 @@
 
 set -euo pipefail
 umask 077
+SKIPS=0
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT"
@@ -230,18 +231,26 @@ reject_git_absent() {
                 break
             fi
         done
-        if [[ -z "$src" || "$(basename -- "$src")" == "git" ]]; then
+        if [[ -z "$src" ]]; then
+            printf 'git-absent: skipped (could not find %s)\n' "$cmd"
+            SKIPS=$((SKIPS + 1))
+            return 0
+        fi
+        if [[ "$(basename -- "$src")" == "git" ]]; then
             printf 'git-absent: skipped (could not link %s without git)\n' "$cmd"
+            SKIPS=$((SKIPS + 1))
             return 0
         fi
         if ! ln -s "$src" "$bindir/$cmd"; then
             printf 'git-absent: skipped (could not link %s)\n' "$cmd"
+            SKIPS=$((SKIPS + 1))
             return 0
         fi
     done
     rm -rf -- "$stray"
     if PATH="$bindir" command -v git >/dev/null 2>&1; then
         printf 'git-absent: skipped (git remained on PATH)\n'
+        SKIPS=$((SKIPS + 1))
         return 0
     fi
     if PATH="$bindir" bash "$ROOT/scripts/ceremony/guardian_key_ceremony.sh" --noninteractive \
@@ -313,3 +322,8 @@ chmod 400 "$TMP/original.pem"
 direct_round_trip
 ceremony_round_trip
 printf 'round-trip: ok\n'
+printf 'skips: %s\n' "$SKIPS"
+if [[ "${CI:-}" == "1" ]] && (( SKIPS > 0 )); then
+    echo "A skipped check is a failure when CI=1." >&2
+    exit 1
+fi
