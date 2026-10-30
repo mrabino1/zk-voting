@@ -1203,7 +1203,7 @@ function guideBody() {
   lines.push('```');
   lines.push('');
   lines.push(
-    'JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor.',
+    'JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout publishes hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor.',
   );
   lines.push('');
   lines.push('Machine-readable copies:');

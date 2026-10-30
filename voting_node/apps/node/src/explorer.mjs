@@ -91,8 +91,12 @@ function emptyChain(chainId) {
     seenBlockHashes: [],
     ingestedTxHashes: [],
     ingestedTxByBlock: {},
+    ingestedOutcomeKeys: [],
   };
 }
+
+/** Hashless outcomes rows have no block to prune, so the remembered keys are capped. */
+export const OUTCOMES_ONLY_KEY_CAP = 64;
 
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -107,8 +111,9 @@ function stable(value) {
 function ingestKey(type, payload, blockHash, index) {
   const listed = payload && payload.hash != null ? String(payload.hash).trim().toLowerCase() : '';
   if (listed && listed !== 'undefined') return listed;
-  const tail = index == null ? stable(payload) : String(index);
-  return createHash('sha256').update(`${type}|${blockHash}|${tail}`).digest('hex');
+  const block = blockHash ? String(blockHash).toLowerCase() : '';
+  const tail = block && index != null ? `${index}|${stable(payload)}` : stable(payload);
+  return createHash('sha256').update(`${type}|${block}|${tail}`).digest('hex');
 }
 
 function votePayload(payload) {
@@ -147,6 +152,7 @@ function normalizeChain(chain, chainId) {
   if (!chain.ingestedTxByBlock || typeof chain.ingestedTxByBlock !== 'object' || Array.isArray(chain.ingestedTxByBlock)) {
     chain.ingestedTxByBlock = {};
   }
+  chain.ingestedOutcomeKeys = Array.isArray(chain.ingestedOutcomeKeys) ? chain.ingestedOutcomeKeys : [];
   return chain;
 }
 
@@ -362,7 +368,6 @@ export class Explorer {
       intervalSeconds: interval,
       delaySeconds: policy.delaySeconds || 0,
       minBlockVotes: policy.minBlockVotes ?? 1,
-      minVotes: policy.minVotes || 0,
       electionContext: policy.electionContext || (() => ({})),
     });
     this.chain.sealed = planned.hold.map(({ electionId: _id, ...item }) => item);
@@ -533,6 +538,7 @@ export class Explorer {
     const list = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
     this._ingestedTxs = new Set(list.map((item) => String(item).toLowerCase()));
     this._ingestedByBlock = new Map();
+    this._outcomeKeys = [];
     const owners = this.chain.ingestedTxByBlock;
     if (owners && typeof owners === 'object' && !Array.isArray(owners)) {
       for (const [block, keys] of Object.entries(owners)) {
@@ -544,6 +550,22 @@ export class Explorer {
         }
         if (bucket.size) this._ingestedByBlock.set(String(block).toLowerCase(), bucket);
       }
+    }
+    const savedOutcomes = Array.isArray(this.chain.ingestedOutcomeKeys) ? this.chain.ingestedOutcomeKeys : [];
+    for (const key of savedOutcomes) {
+      const clean = String(key).toLowerCase();
+      if (clean && this._ingestedTxs.has(clean)) this._outcomeKeys.push(clean);
+    }
+    while (this._outcomeKeys.length > OUTCOMES_ONLY_KEY_CAP) {
+      const dropped = this._outcomeKeys.shift();
+      let still = false;
+      for (const other of this._ingestedByBlock.values()) {
+        if (other.has(dropped)) {
+          still = true;
+          break;
+        }
+      }
+      if (!still) this._ingestedTxs.delete(dropped);
     }
   }
 
@@ -560,13 +582,34 @@ export class Explorer {
     if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
     this._ingestedTxs.add(key);
     const block = blockHash ? String(blockHash).toLowerCase() : '';
-    if (!block) return;
+    if (!block) {
+      this.noteOutcomeKey(key);
+      return;
+    }
     let bucket = this._ingestedByBlock.get(block);
     if (!bucket) {
       bucket = new Set();
       this._ingestedByBlock.set(block, bucket);
     }
     bucket.add(key);
+  }
+
+  noteOutcomeKey(key) {
+    if (!Array.isArray(this._outcomeKeys)) this._outcomeKeys = [];
+    const existing = this._outcomeKeys.indexOf(key);
+    if (existing !== -1) this._outcomeKeys.splice(existing, 1);
+    this._outcomeKeys.push(key);
+    while (this._outcomeKeys.length > OUTCOMES_ONLY_KEY_CAP) {
+      const dropped = this._outcomeKeys.shift();
+      let still = false;
+      for (const other of this._ingestedByBlock.values()) {
+        if (other.has(dropped)) {
+          still = true;
+          break;
+        }
+      }
+      if (!still) this._ingestedTxs.delete(dropped);
+    }
   }
 
   pruneIngestedBlock(blockHash) {
@@ -589,6 +632,7 @@ export class Explorer {
   async flushIngestedTxs() {
     if (!(this._ingestedTxs instanceof Set)) return;
     this.chain.ingestedTxHashes = [...this._ingestedTxs];
+    this.chain.ingestedOutcomeKeys = [...(this._outcomeKeys || [])];
     const owners = {};
     for (const [block, keys] of this._ingestedByBlock) owners[block] = [...keys];
     this.chain.ingestedTxByBlock = owners;

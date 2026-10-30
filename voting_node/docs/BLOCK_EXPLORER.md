@@ -32,7 +32,7 @@ These are **meant** to be public. The explorer should render them in plain langu
 | --- | --- |
 | Blocks | Number, hash, parent, timestamp, state root, sequencer address, tx count. |
 | Registration | `identityCommitment` (field element / bytes32) inserted into the election tree. Leaf **index** if the contract emits it. Never a legal name. |
-| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **only after the hour closes, the disclosure delay elapses, the results gate is open, and the block meets the floor**. Timestamp is the disclosure clock, not the minute they voted. Each nullifier appears once; a second ballot is not accepted. |
+| Vote accepted | `electionId`, `nullifier`, `ballotHash`, relayer address — **hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor**. Timestamp is the disclosure clock, not the minute they voted. Each nullifier appears once; a second ballot is not accepted. |
 | Disqualification | `identityCommitment`, `electionId`, **reason code** (and label, e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revoke events. |
 | Roll freeze | Eligible root, disqualification root, clerk, time. |
 | Tally | Per-option **counts** (after a valid tally proof), `countsHash`, operator. |
@@ -46,7 +46,7 @@ Live **counts that are safe to show** before tally: number registered, number di
 Votes are accepted immediately so a nullifier is unique. A second ciphertext for the same nullifier is rejected (`NullifierUsed`). Double voting is impossible. Proof of those votes is public only when all of the following are true. The API enforces this; hiding it only in the page would not.
 
 - The UTC hour has closed and `DISCLOSURE_DELAY_SECONDS` (default 1800) has elapsed. `DISCLOSURE_INTERVAL_SECONDS` stays 3600. A vote at 08:59 publishes at 09:30. A vote at 14:05 is time-ready at 15:30. A vote at **exactly** 14:00:00 is in the 14:00 hour and is time-ready at 15:30. An earlier guarantee that the same vote appears at 15:00, on the hour, is withdrawn.
-- The results gate is open: at least `RESULTS_MIN_VOTES` ballots (default 100), or `cutoffTime` has passed, whichever is earlier. Until then, hourly turnout, live counts, and per-block vote rows for that election stay empty.
+- Turnout and per-block vote rows publish hourly from the first ballot. They do not wait for `RESULTS_MIN_VOTES`. Poll per-choice counts wait until 100 first ballots are in or the scheduled end. Per-choice counts publish with the posted tally; hourly per-choice blocks after the gate are planned.
 - The block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default 10). Hours under that floor merge into the next block. At election end the remainder is published if the election met the floor. If the whole election is under the floor, nothing is published until the final tally.
 
 Ready ballots share one disclosure block. Public timestamp is the disclosure clock (hour end + delay). Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.
@@ -66,7 +66,7 @@ Observers should see a **hour-bucketed update**, not a live tick. The explorer b
 | `lastClosedHourAt` / `lastPublishedAt` | Unix time the delay has cleared through (e.g. 14:00 once the clock reaches 14:30). |
 | `lastClosedHourStart` | Start of that hour (13:00 when `lastClosedHourAt` is 14:00). |
 | `delaySeconds` | Extra wait after the hour. Default `1800`. |
-| `resultsMinVotes` | Turnout stays hidden until this many ballots, or the scheduled end. Default `100`. |
+| `resultsMinVotes` | Poll per-choice counts wait until this many first ballots, or the scheduled end. Default `100`. Turnout does not use this gate. |
 | `minBlockVotes` | Smallest disclosure block. Smaller hours merge forward. Default `10`. |
 | `acceptedBallotsDisclosed` | Ballots already in a published block. Explorer total is chain-wide; election APIs are per election. Never a pending remainder. |
 | `nextPublishAt` | Next disclosure clock (hour end + delay). |

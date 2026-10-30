@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrirlo después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El recibo no puede probar cómo votó.",
     receiptHelpRevote:
-      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. Las filas públicas del explorador esperan a que cierre la hora, pase el retraso de divulgación y se abra la puerta de resultados.",
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio final. Las filas públicas del explorador esperan a que cierre la hora y pase el retraso de divulgación.",
     envelopeHelpRevote:
       "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. No se cuentan las dos. El recibo no puede probar cómo votó.",
     envelopeHelpTallyRevote:
@@ -674,7 +674,7 @@ export default {
   office: {
     kicker: "Funcionarios electorales",
     title: "Oficina interna",
-    lede: "Los funcionarios montan elecciones. Los registradores insertan compromisos de identidad (nunca nombres). Los oficiales de inhabilitación aplican el catálogo público de motivos. El personal electoral registra partes externas ilimitadas (felonía, muerte, edad y otros sistemas que hoy no se hablan entre sí). Los operadores de escrutinio publican conteos. El texto claro de la elección nunca aparece aquí. La participación y las pruebas de voto en cada tablero esperan a que cierre la hora que contuvo la boleta: una persona que sale de un local de votación no puede relacionarse con un incremento en vivo.",
+    lede: "Los funcionarios montan elecciones. Los registradores insertan compromisos de identidad (nunca nombres). Los oficiales de inhabilitación aplican el catálogo público de motivos. El personal electoral registra partes externas ilimitadas (felonía, muerte, edad y otros sistemas que hoy no se hablan entre sí). Los operadores de escrutinio publican conteos. El texto claro de la elección nunca aparece aquí. La participación y las pruebas de voto en cada tablero se publican cada hora desde la primera boleta, después de que cierra la hora que contuvo la boleta: una persona que sale de un local de votación no puede relacionarse con un incremento en vivo.",
     checkingSession: "Comprobando sesión…",
     sections: "Secciones de la oficina interna",
     navClerk: "Funcionario",
@@ -708,7 +708,7 @@ export default {
     typePoll: "Encuesta",
     typePollHelp: "Los resultados siguen visibles en el panel mientras la votación está abierta, con las reglas de divulgación habituales. Después de la fecha de cierre no se suman más votos al total.",
     typeVote: "Votación",
-    typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Hasta entonces, nadie —incluidos los funcionarios— puede ver conteos, participación ni un escrutinio parcial.",
+    typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Hasta entonces, nadie —incluidos los funcionarios— puede ver conteos por opción ni un escrutinio parcial. La participación horaria es pública.",
     typeLocked: "El tipo queda fijo al crear la elección y no se puede cambiar.",
     loadExisting: "Cargar boleta existente",
     newElection: "Elección nueva…",

@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abri-lo após o encerramento exige t descriptografias parciais verificadas (NÃO PRODUÇÃO). Depois que o Node aceita uma cédula, esse nullifier é gasto — você não pode votar de novo. O recibo não pode provar como você votou.",
     receiptHelpRevote:
-      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração certificada. As linhas públicas do explorador esperam a hora fechar, o atraso de divulgação passar e o portão de resultados abrir.",
+      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração final. As linhas públicas do explorador esperam a hora fechar e o atraso de divulgação passar.",
     envelopeHelpRevote:
       "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração certificada. As duas não são contadas juntas. O recibo não pode provar como você votou.",
     envelopeHelpTallyRevote:
@@ -672,7 +672,7 @@ export default {
   office: {
     kicker: "Oficiais eleitorais",
     title: "Escritório interno",
-    lede: "Escrivães montam eleições. Registradores inserem identity commitments (nunca nomes). Oficiais de desqualificação aplicam o catálogo público de motivos. Operadores de apuração publicam contagens. O texto claro da escolha nunca aparece aqui. Participação e provas de voto em cada painel esperam a hora que continha a cédula se encerrar — uma pessoa que sai de um local de votação não pode ser associada a um aumento ao vivo.",
+    lede: "Escrivães montam eleições. Registradores inserem identity commitments (nunca nomes). Oficiais de desqualificação aplicam o catálogo público de motivos. Operadores de apuração publicam contagens. O texto claro da escolha nunca aparece aqui. Participação e provas de voto em cada painel são publicadas de hora em hora desde a primeira cédula, depois que a hora que continha a cédula se encerra — uma pessoa que sai de um local de votação não pode ser associada a um aumento ao vivo.",
     checkingSession: "Verificando a sessão…",
     sections: "Seções do escritório interno",
     navClerk: "Escrivão",
@@ -706,7 +706,7 @@ export default {
     typePoll: "Consulta",
     typePollHelp: "Os resultados permanecem visíveis no painel enquanto a votação está aberta, segundo as regras de divulgação já existentes. Depois da data de encerramento, nenhum voto entra no total.",
     typeVote: "Votação",
-    typeVoteHelp: "O resultado só aparece depois que a eleição termina. Até lá, ninguém — inclusive os responsáveis — pode ver contagens, comparecimento ou uma apuração parcial.",
+    typeVoteHelp: "O resultado só aparece depois que a eleição termina. Até lá, ninguém — inclusive os responsáveis — pode ver contagens por escolha ou uma apuração parcial. O comparecimento horário é público.",
     typeLocked: "O tipo fica fixo na criação e não pode ser alterado.",
     loadExisting: "Carregar cédula existente",
     newElection: "Nova eleição…",

@@ -75,7 +75,7 @@ export const FAQ_ENTRIES = [
     topic: "hourly-disclosure",
     q: "Why do public counts wait an hour?",
     a: [
-      "Your ballot is accepted immediately so the nullifier cannot be reused. Public dashboards and the explorer show that vote only after the UTC hour has closed, the disclosure delay has elapsed, and the results gate is open. A person leaving a voting office cannot be matched to a live jurisdiction increase.",
+      "Your ballot is accepted immediately so the nullifier cannot be reused. Public dashboards and the explorer show that vote only after the UTC hour has closed and the disclosure delay has elapsed, from the first ballot. A person leaving a voting office cannot be matched to a live jurisdiction increase.",
       "The snapshot lists the last closed hour, how many ballots have been disclosed so far, and a countdown to the next hour close — never a pending-per-election live tick. Officials do not get a private live precinct feed either.",
     ],
   },
@@ -193,7 +193,7 @@ export const FAQ_ENTRIES = [
     topic: "explorer",
     q: "What is the block explorer for?",
     a: [
-      "The public explorer at /explorer reads the civic L2 record: registrations (commitments only), accepted ballots (nullifier + ballot hash, never the choice), disqualifications, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes, the disclosure delay elapses, and the results gate opens.",
+      "The public explorer at /explorer reads the civic L2 record: registrations (commitments only), accepted ballots (nullifier + ballot hash, never the choice), disqualifications, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes and the disclosure delay elapses.",
       `${brandName()} L2 as implemented is an application-specific civic sequencer (JSON transactions), chainId 27427. It is not a general-purpose EVM and it does not proxy to Anvil.`,
     ],
   },

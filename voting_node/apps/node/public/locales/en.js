@@ -203,7 +203,7 @@ export default {
       "You authorize a UserOp with the passkey. The Node relays it; the jurisdiction paymaster sponsors L2 gas. The bundler is the visible sender, not your local address.",
     how5Title: "5. Proofs wait for the hour to close",
     how5Body:
-      "Your ballot is accepted immediately so the nullifier cannot be reused. Dashboards and the explorer show that vote only after the hour closes, the disclosure delay elapses, and the results gate opens, so walking out of a voting office cannot be matched to a live increase in any jurisdiction.",
+      "Your ballot is accepted immediately so the nullifier cannot be reused. Dashboards and the explorer show that vote only after the hour closes and the disclosure delay elapses, from the first ballot, so walking out of a voting office cannot be matched to a live increase in any jurisdiction.",
     deviceTitle: "Your status on this device",
     passkey: "Passkey",
     passkeyPresent: "Present",
@@ -392,7 +392,7 @@ export default {
     maxOptions: "You may choose at most {count} options.",
     receiptTitle: "Ballot receipt",
     receiptHelp:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     recorded: "Recorded",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",
@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted.",
     receiptHelpRevote:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. Public explorer rows wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     envelopeHelpRevote:
       "Mark every question. One envelope covers the whole ballot. You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. Two ballots are not both counted. The receipt cannot prove how you voted.",
     envelopeHelpTallyRevote:
@@ -441,7 +441,7 @@ export default {
     choiceResults: "Choice results",
     tallyPosted: "Tally posted",
     privacy:
-      "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+      "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes and the disclosure delay elapses.",
     questions: "Questions on this ballot",
     ballot: "Ballot",
     candidateInfo: "Candidate / measure info",
@@ -674,7 +674,7 @@ export default {
   office: {
     kicker: "Election officials",
     title: "Back office",
-    lede: "Clerks stand up elections. Registrars insert identity commitments (never names). Disqualification officers apply the public reason catalog. Election staff register unbounded external parties (felony, death, age, and other systems that do not talk to each other today). Tally operators post counts. Choice plaintext never appears here. Turnout and vote proofs on every dashboard wait until the hour that contained the ballot has closed, the disclosure delay has elapsed, and the results gate is open — a person leaving a voting office cannot be matched to a live increase.",
+    lede: "Clerks stand up elections. Registrars insert identity commitments (never names). Disqualification officers apply the public reason catalog. Election staff register unbounded external parties (felony, death, age, and other systems that do not talk to each other today). Tally operators post counts. Choice plaintext never appears here. Turnout and vote proofs on every dashboard publish hourly from the first ballot, after the hour that contained the ballot has closed and the disclosure delay has elapsed — a person leaving a voting office cannot be matched to a live increase.",
     checkingSession: "Checking session…",
     sections: "Back-office sections",
     navClerk: "Clerk",
@@ -708,7 +708,7 @@ export default {
     typePoll: "Poll",
     typePollHelp: "Results stay visible on the dashboard while voting is open, under the usual disclosure rules. After the closing date, no further votes are added to the total.",
     typeVote: "Vote",
-    typeVoteHelp: "The outcome is shown only after the election ends. Until then, nobody — including officials — can see counts, turnout, or a partial tally.",
+    typeVoteHelp: "The outcome is shown only after the election ends. Until then, nobody — including officials — can see choice counts or a partial tally. Hourly turnout is public.",
     typeLocked: "The type is fixed when the election is created and cannot be changed.",
     loadExisting: "Load existing ballot",
     newElection: "New election…",
@@ -898,7 +898,7 @@ export default {
   explorer: {
     kicker: "{brand} L2 · chain 27427",
     title: "Block explorer",
-    lede: "Public record of every block: registrations (commitments only), accepted ballots (nullifier + ballot hash — never the choice), disqualifications, external-party vetoes, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes, plus the disclosure delay, and only once the results gate and the block floor are met, so a person leaving a voting office cannot be matched to a live jurisdiction tick. The snapshot below is the last published block: disclosed ballot count, when that hour ended, and the countdown to the next update. Choice is never shown here. No ads. No tokens.",
+    lede: "Public record of every block: registrations (commitments only), accepted ballots (nullifier + ballot hash — never the choice), disqualifications, external-party vetoes, tallies, and rollup batches. Vote proofs publish hourly from the first ballot, after the hour that contained them closes and the disclosure delay elapses, once the block floor is met, so a person leaving a voting office cannot be matched to a live jurisdiction tick. The snapshot below is the last published block: disclosed ballot count, when that hour ended, and the countdown to the next update. Choice is never shown here. No ads. No tokens.",
     searchLabel: "Search the ledger",
     searchField: "Search by block number, transaction hash, or nullifier",
     searchPlaceholder: "12 · 0xabc… · nullifier",
@@ -907,7 +907,7 @@ export default {
     breadcrumb: "Breadcrumb",
     privacyTitle: "Ballot privacy",
     privacyBody:
-      "This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash. Choice plaintext is not a field on {brand} L2 and is never rendered here. Vote rows appear only after the hour that contained them has closed, the disclosure delay has elapsed, and the results gate is open, so leaving a voting office cannot be matched to a live jurisdiction tick.",
+      "This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash. Choice plaintext is not a field on {brand} L2 and is never rendered here. Vote rows publish hourly from the first ballot, after the hour that contained them has closed and the disclosure delay has elapsed, once the block floor is met, so leaving a voting office cannot be matched to a live jurisdiction tick.",
     noTx: "No transactions in this view.",
     type: "Type",
     txnHash: "Txn hash",

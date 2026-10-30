@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa tally public key ng mga guardian. Ang pagbukas nito pagkatapos ng cutoff ay nangangailangan ng t na beripikadong partial decryption (HINDI PRODUKSYON). Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     receiptHelpRevote:
-      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa sertipikadong tally. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras, lumipas ang disclosure delay, at magbukas ang results gate.",
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa final tally. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras at lumipas ang disclosure delay.",
     envelopeHelpRevote:
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa sertipikadong tally. Hindi parehong binibilang ang dalawa. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     envelopeHelpTallyRevote:
@@ -672,7 +672,7 @@ export default {
   office: {
     kicker: "Mga opisyal ng halalan",
     title: "Panloob na tanggapan",
-    lede: "Nagtatayo ang mga clerk ng mga halalan. Nagsisingit ang mga registrar ng identity commitments (hindi kailanman mga pangalan). Inilalapat ng mga disqualification officer ang pampublikong katalogo ng dahilan. Nagpo-post ang mga tally operator ng counts. Hindi kailanman lumalabas dito ang plaintext ng pagpipilian. Naghihintay ang turnout at vote proofs sa bawat dashboard hanggang magsara ang oras na naglalaman ng balota — hindi maitutugma ang taong umalis sa voting office sa live na pagtaas.",
+    lede: "Nagtatayo ang mga clerk ng mga halalan. Nagsisingit ang mga registrar ng identity commitments (hindi kailanman mga pangalan). Inilalapat ng mga disqualification officer ang pampublikong katalogo ng dahilan. Nagpo-post ang mga tally operator ng counts. Hindi kailanman lumalabas dito ang plaintext ng pagpipilian. Inilalabas ang turnout at vote proofs sa bawat dashboard kada oras mula sa unang balota, pagkatapos magsara ang oras na naglalaman ng balota — hindi maitutugma ang taong umalis sa voting office sa live na pagtaas.",
     checkingSession: "Sinusuri ang sesyon…",
     sections: "Mga seksyon ng panloob na tanggapan",
     navClerk: "Clerk",
@@ -706,7 +706,7 @@ export default {
     typePoll: "Poll",
     typePollHelp: "Nakikita ang mga resulta sa dashboard habang bukas ang botohan, ayon sa kasalukuyang tuntunin ng pagsisiwalat. Pagkalipas ng petsa ng pagsasara, wala nang boto na idadagdag sa kabuuan.",
     typeVote: "Vote",
-    typeVoteHelp: "Ipinapakita ang resulta pagkatapos lang matapos ang halalan. Hanggang doon, walang sinuman — kasama ang mga opisyal — ang makakakita ng bilang, turnout, o bahagyang tally.",
+    typeVoteHelp: "Ipinapakita ang resulta pagkatapos lang matapos ang halalan. Hanggang doon, walang sinuman — kasama ang mga opisyal — ang makakakita ng bilang ng pagpipilian o bahagyang tally. Pampubliko ang turnout kada oras.",
     typeLocked: "Naka-lock ang uri noong ginawa ang halalan at hindi na mababago.",
     loadExisting: "I-load ang umiiral na balota",
     newElection: "Bagong halalan…",

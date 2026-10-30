@@ -313,7 +313,7 @@
     return `<p class="privacy-callout"><strong>Ballot privacy</strong>
       This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
       Choice plaintext is not a field on this L2 and is never rendered here.
-      Vote rows appear only after the hour that contained them has closed, the disclosure delay has elapsed, and the results gate is open, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
+      Vote rows appear only after the hour that contained them has closed and the disclosure delay has elapsed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 
   let disclosurePayload = null;

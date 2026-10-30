@@ -238,7 +238,7 @@ Tally mirror is cheap even on mainnet because it is **once per election**.
 | `maxParticipants` | UI **0**; `0` = unlimited (registry does not cap). Non-zero → insert reverts at cap | back-office hint “0 = unbounded roll”; [`packages/types`](./packages/types/index.js) |
 | Merkle full | `insertLeaf` throws `merkle tree full` at `2 ** depth` | [`apps/node/src/merkle.mjs`](./apps/node/src/merkle.mjs) |
 | L2 block | `maxTxsPerBlock` **4096** | [`l2/config.json`](./l2/config.json) |
-| Hourly flush | Sealed votes publish after the hour, the disclosure delay, the results gate, and the block floor. Lumpy, ordered by hash/nullifier | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
+| Hourly flush | Sealed votes publish hourly from the first ballot, after the hour, the disclosure delay, and the block floor. Lumpy, ordered by hash/nullifier | [`l2/disclosure.mjs`](./l2/disclosure.mjs), [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md) |
 
 `maxParticipants = 0` does **not** mean infinite RAM. It means the **contract** will not apply a numeric cap; the **tree depth** still caps leaves at 2^d.
 
@@ -309,7 +309,7 @@ Glacier / IA / R2 lifecycle can be cheaper for cold election archives; retrieval
 
 ### What “live” means here (**repo fact**)
 
-ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish on the hourly block after `DISCLOSURE_DELAY_SECONDS` (default **1800**), and only once `RESULTS_MIN_VOTES` (default **100**) or the scheduled end is reached. Blocks under `DISCLOSURE_MIN_BLOCK_VOTES` (default **10**) merge forward. `DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests. A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish hourly from the first ballot, on the block after `DISCLOSURE_DELAY_SECONDS` (default **1800**). `RESULTS_MIN_VOTES` (default **100** first ballots) gates poll per-choice counts only. Blocks under `DISCLOSURE_MIN_BLOCK_VOTES` (default **10**) merge forward. `DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests. A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 | Surface | During the poll | After the final tally |
 | --- | --- | --- |

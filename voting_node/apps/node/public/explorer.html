@@ -62,8 +62,8 @@
         <p class="lede">
           Public record of every block: registrations (commitments only), accepted ballots
           (nullifier + ballot hash — never the choice), disqualifications, tallies, and
-          rollup batches. Vote proofs appear only after the hour that contained them closes,
-          plus a disclosure delay, and only once the results gate and the block floor are met,
+          rollup batches. Vote proofs publish hourly from the first ballot, after the hour that contained them closes
+          and the disclosure delay elapses, once the block floor is met,
           so a person leaving a voting office cannot be matched to a live jurisdiction tick.
           The snapshot below is the last published block: disclosed ballot count, when that
           hour ended, and the countdown to the next update. Choice is never shown here.
@@ -71,7 +71,7 @@
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
-            Vote proofs and turnout counts wait until the hour closes, the disclosure delay elapses, the results gate opens, and the block is large enough.
+            Vote proofs and turnout counts publish hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block is large enough.
           </p>
         </aside>
       </header>

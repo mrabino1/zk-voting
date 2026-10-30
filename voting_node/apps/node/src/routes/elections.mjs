@@ -97,6 +97,8 @@ function notExcluded(store, election, nullifier) {
   return !listed.some((item) => sameNullifier(item, nullifier));
 }
 
+const EXCLUSION_RELEASE_ATTEMPTS = 3;
+
 /** Try again to drop a dead letter that was already recorded as excluded. */
 async function retryPendingExclusionReleases({ store, chain, election }) {
   if (typeof chain?.releaseExcluded !== 'function') return;
@@ -104,10 +106,20 @@ async function retryPendingExclusionReleases({ store, chain, election }) {
   const rows = (election.excludedBallots || []).filter((row) => row && row.releasePending === true);
   for (const row of rows) {
     let released = false;
-    try {
-      released = await chain.releaseExcluded(key, row.nullifier);
-    } catch {
-      released = false;
+    for (let attempt = 1; attempt <= EXCLUSION_RELEASE_ATTEMPTS && !released; attempt += 1) {
+      try {
+        released = Boolean(await chain.releaseExcluded(key, row.nullifier));
+      } catch {
+        released = false;
+        console.warn(`ballot exclusion release failed for election ${election.id} nullifier ${row.nullifier}`);
+        if (attempt === EXCLUSION_RELEASE_ATTEMPTS && typeof chain.noteAlert === 'function') {
+          await chain.noteAlert({
+            kind: 'exclusion_release_failed',
+            electionKey: String(election.id),
+            nullifier: String(row.nullifier),
+          });
+        }
+      }
     }
     if (released) await store.setExclusionReleasePending(election.id, row.nullifier, false);
   }
@@ -122,6 +134,7 @@ async function offerSupplementaryBatch({ store, chain, election, now, config }) 
   const dead = chain.deadLettersFor(chainElectionId(election)) || [];
   const rows = [];
   for (const item of dead) {
+    if (!notExcluded(store, election, item.nullifier)) continue;
     if (!receiptBeforeCutoff(store, election, item.nullifier)) continue;
     const vote = store.findVote(election.id, item.nullifier);
     rows.push({
@@ -1334,8 +1347,8 @@ export function electionsRouter(deps) {
       if (now < tallyAllowedAt(election, config.tallyChallengeSeconds)) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      await offerSupplementaryBatch({ store, chain, election, now, config });
       await retryPendingExclusionReleases({ store, chain, election });
+      await offerSupplementaryBatch({ store, chain, election, now, config });
       const pendingReleases = (store.requireElection(election.id).excludedBallots || []).filter(
         (row) => row && row.releasePending === true,
       ).length;

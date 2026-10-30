@@ -333,7 +333,7 @@ export async function renderResults(main, ctx) {
         "p",
         {
           class: "field-hint",
-          text: "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+          text: "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes and the disclosure delay elapses.",
         }
       )
     ),

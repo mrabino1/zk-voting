@@ -403,7 +403,7 @@ export default {
     envelopeHelpTally:
       "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của các giám hộ. Mở nó sau hết hạn cần t giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     receiptHelpRevote:
-      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Hàng trình khám phá công khai chờ đến khi giờ đóng, độ trễ công bố trôi qua, và cổng kết quả mở.",
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Hàng trình khám phá công khai chờ đến khi giờ đóng và độ trễ công bố trôi qua.",
     envelopeHelpRevote:
       "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Không tính cả hai. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     envelopeHelpTallyRevote:
@@ -672,7 +672,7 @@ export default {
   office: {
     kicker: "Cán bộ bầu cử",
     title: "Văn phòng nội bộ",
-    lede: "Thư ký lập cuộc bầu cử. Đăng ký viên chèn cam kết danh tính (không bao giờ tên). Cán bộ tước tư cách áp dụng danh mục lý do công khai. Người vận hành kiểm phiếu đăng số phiếu. Văn bản rõ của lựa chọn không bao giờ xuất hiện ở đây. Tỷ lệ tham gia và bằng chứng phiếu trên mọi bảng điều khiển chờ đến khi giờ chứa phiếu đóng — người rời phòng bỏ phiếu không thể bị khớp với mức tăng trực tiếp.",
+    lede: "Thư ký lập cuộc bầu cử. Đăng ký viên chèn cam kết danh tính (không bao giờ tên). Cán bộ tước tư cách áp dụng danh mục lý do công khai. Người vận hành kiểm phiếu đăng số phiếu. Văn bản rõ của lựa chọn không bao giờ xuất hiện ở đây. Tỷ lệ tham gia và bằng chứng phiếu trên mọi bảng điều khiển được công bố mỗi giờ từ phiếu đầu tiên, sau khi giờ chứa phiếu đóng — người rời phòng bỏ phiếu không thể bị khớp với mức tăng trực tiếp.",
     checkingSession: "Đang kiểm tra phiên…",
     sections: "Các phần văn phòng nội bộ",
     navClerk: "Thư ký",
@@ -706,7 +706,7 @@ export default {
     typePoll: "Thăm dò",
     typePollHelp: "Kết quả vẫn hiện trên bảng điều khiển khi còn mở, theo quy tắc công bố hiện có. Sau ngày đóng cửa, không cộng thêm phiếu vào tổng.",
     typeVote: "Bỏ phiếu",
-    typeVoteHelp: "Kết quả chỉ được hiển thị sau khi cuộc bầu cử kết thúc. Trước đó, không ai — kể cả cán bộ — có thể thấy số phiếu, tỷ lệ đi bỏ phiếu, hoặc kết quả tạm.",
+    typeVoteHelp: "Kết quả chỉ được hiển thị sau khi cuộc bầu cử kết thúc. Trước đó, không ai — kể cả cán bộ — có thể thấy số phiếu theo lựa chọn hoặc kết quả tạm. Tỷ lệ tham gia theo giờ là công khai.",
     typeLocked: "Loại được chốt khi tạo và không thể đổi.",
     loadExisting: "Tải phiếu hiện có",
     newElection: "Cuộc bầu cử mới…",
