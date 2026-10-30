@@ -99,7 +99,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('second ballot is rejected even with a new ciphertext; receipts hide choice', async () => {
+  test('a later ballot replaces the envelope; receipts hide choice', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -148,6 +148,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     assert.match(first.json.receipt.proofText, /BEGIN ZK-VOTING VOTE RECEIPT/);
     assert.doesNotMatch(first.json.receipt.proofText, /I voted for/i);
 
+    const firstHash = first.json.vote.ballotHash;
     const replay = await api('POST', `/api/elections/${id}/vote`, {
       body: {
         proof: { accept: true },
@@ -156,7 +157,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
         identityCommitment: '0xca11',
       },
     });
-    assert.equal(replay.status, 409);
+    assert.equal(replay.status, 409, replay.json?.error);
     assert.equal(replay.json.code, 'NULLIFIER_USED');
 
     const changedMind = await api('POST', `/api/elections/${id}/vote`, {
@@ -167,7 +168,7 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
         identityCommitment: '0xca11',
       },
     });
-    assert.equal(changedMind.status, 409, 'a new ciphertext must not be a second ballot');
+    assert.equal(changedMind.status, 409, changedMind.json?.error);
     assert.equal(changedMind.json.code, 'NULLIFIER_USED');
 
     const election = store.requireElection(id);
@@ -183,6 +184,8 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     assert.equal(ballots.json.ballots[0].generation, undefined);
     assert.equal(ballots.json.ballots[0].choice, undefined);
     assert.equal(ballots.json.ballots[0].supersededHashes, undefined);
+    assert.equal(ballots.json.ballots[0].ballotHash, firstHash);
+    assert.equal(ballots.json.ballots[0].nullifier, first.json.vote.nullifier);
 
     election.cutoffTime = nowSec() - 1;
     await store.persist();

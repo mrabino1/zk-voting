@@ -32,10 +32,8 @@ export default {
   },
   hero: {
     eyebrow: "Mã nguồn mở · Phi lợi nhuận · Tự lưu trữ được",
-    title:
-      "Phiếu được làm để không ai đọc được.",
-    lead:
-      "{brand} để mọi nhóm tự tổ chức bầu cử và thăm dò. Người tạo chọn thăm dò hoặc bỏ phiếu. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 cử tri đã bỏ phiếu đầu tiên của mình hoặc thăm dò kết thúc. Bỏ phiếu chỉ công bố lựa chọn lúc hạn chót. Chứng minh không tiết lộ tri thức được thiết kế để cho thấy chỉ người đủ tư cách bỏ phiếu, mỗi người một lần, và kết quả kiểm phiếu đã công bố khớp với phiếu (kiểm thử hiện dùng bộ xác minh giả). Các lựa chọn cá nhân không được công bố.",
+    title: "Lá phiếu được thiết kế để không ai đọc được.",
+    lead: "{brand} cho phép mọi nhóm tự tổ chức bầu cử và thăm dò. Khi tạo, người vận hành chọn thăm dò hay bỏ phiếu và có cho phép bỏ phiếu lại hay không. Thiết lập này bị khóa cho đến khi cuộc bầu cử kết thúc. Tỷ lệ tham gia được công bố theo lịch hằng giờ có độ trễ cho cả hai loại. Một cuộc thăm dò cũng công bố số đếm theo từng lựa chọn theo lịch đó khi 100 cử tri khác nhau đã bỏ phiếu hoặc khi thăm dò kết thúc, tùy điều nào đến trước. Một cuộc bỏ phiếu chỉ công bố lựa chọn khi hết hạn. Bằng chứng không tiết lộ được thiết kế để cho thấy chỉ người hợp lệ đã bỏ phiếu, mỗi người một lần, và kết quả kiểm phiếu công bố khớp với lá phiếu (các bài kiểm thử hiện dùng trình xác minh giả lập). Lựa chọn cá nhân được thiết kế để không bị công bố.",
     discuss: "Tham gia thảo luận",
     demo: "Thử bản demo bỏ phiếu →",
     statsLabel: "Nhìn nhanh",
@@ -100,15 +98,13 @@ export default {
     title: "Vì sao quan trọng",
     sub: "Phần lớn cuộc bầu vẫn đòi cử tri, ứng viên và tòa tin một vài người vận hành: ai có trong danh sách, ai bị từ chối, phiếu đã được tính chưa, kết quả có khớp không. {brand} biến những khẳng định đó thành điều ai cũng kiểm được.",
     privateTitle: "Riêng tư từ thiết kế",
-    privateBody: "Lựa chọn của bạn không bao giờ là trường đọc được trong một giao dịch hay cơ sở dữ liệu. Biên lai là hash, được thiết kế để không cho thấy bạn đã chọn gì.",
+    privateBody: "Lựa chọn của bạn được thiết kế để không bao giờ là một trường đọc được trong giao dịch hay cơ sở dữ liệu. Biên nhận là mã băm, được thiết kế để không cho thấy bạn đã bầu thế nào.",
     publicTitle: "Kiểm được công khai",
-    publicBody:
-      "Đăng ký và mã loại tư cách là công khai. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 cử tri đã bỏ phiếu đầu tiên của mình hoặc thăm dò kết thúc. Lựa chọn của một cuộc bỏ phiếu giữ kín đến hạn chót. Kiểm toán độc lập dựng lại kết quả đã công bố mà không cần cơ sở dữ liệu riêng của người vận hành.",
+    publicBody: "Đăng ký và mã truất quyền là công khai. Tỷ lệ tham gia được công bố theo lịch hằng giờ có độ trễ cho cả hai loại. Một cuộc thăm dò cũng công bố số đếm theo từng lựa chọn theo lịch đó khi 100 cử tri khác nhau đã bỏ phiếu hoặc khi thăm dò kết thúc, tùy điều nào đến trước. Mỗi khối hằng giờ đã công bố được thiết kế để giữ nguyên như lần đầu công bố. Lựa chọn của một cuộc bỏ phiếu được niêm phong đến hạn chót. Một kiểm toán viên độc lập được thiết kế để có thể dựng lại kết quả công bố mà không cần cơ sở dữ liệu riêng của người vận hành.",
     oneTitle: "Một người, một phiếu",
-    oneBody: "Mỗi phiếu mang chứng minh rằng cử tri nằm trong danh sách đã đóng băng và không bị loại. Trong thăm dò hoặc bỏ phiếu, cử tri đổi lựa chọn được đến hạn chót, và bộ hủy chỉ tính phiếu cuối.",
+    oneBody: "Mỗi lá phiếu mang một bằng chứng rằng cử tri có trong danh sách đã chốt và không bị truất quyền. Người vận hành quyết định khi tạo có cho phép bỏ phiếu lại hay không, và thiết lập này bị khóa cho đến khi cuộc bầu cử kết thúc. Nếu được phép, lá phiếu cuối cùng trước hạn chót được tính. Nếu không, lá phiếu thứ hai bị từ chối.",
     coerceTitle: "Xây để chống ép buộc",
-    coerceBody:
-      "Không thứ gì đưa cho cử tri chứng minh lựa chọn của họ với người đang gây sức ép. Hãy chọn bỏ phiếu khi một bảng đếm đang chạy sẽ tăng sức ép. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ, như ở thăm dò. Lựa chọn giữ mã hóa đến hạn chót, và cử tri thay phiếu được đến lúc đó. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 cử tri đã bỏ phiếu đầu tiên của mình hoặc thăm dò kết thúc.",
+    coerceBody: "Không thứ gì cử tri nhận được được thiết kế để chứng minh lựa chọn của họ cho người gây áp lực. Hãy chọn bỏ phiếu khi số đếm đang chạy sẽ tạo thêm áp lực. Tỷ lệ tham gia được công bố theo lịch hằng giờ có độ trễ, giống như thăm dò. Các lựa chọn được mã hóa đến hạn chót. Nếu người vận hành cho phép bỏ phiếu lại khi tạo, cử tri có thể thay lá phiếu đến lúc đó.",
     dueTitle: "Thủ tục khi loại tư cách",
     dueBody: "Loại một người là thay đổi công khai, có mã, trên chuỗi, kèm lý do nêu rõ, không phải cờ im lặng trong cơ sở dữ liệu.",
     vendorTitle: "Không khóa nhà cung cấp",
@@ -126,11 +122,9 @@ export default {
     schoolsTitle: "Trường và khuôn viên",
     schoolsBody: "Tổ chức chính quyền học sinh và phiếu của giảng viên với đăng nhập khóa truy cập và phiếu dùng được trên mọi thiết bị.",
     clubsTitle: "Cộng đồng và câu lạc bộ",
-    clubsBody:
-      "Thăm dò nhanh có/không, một lựa chọn hoặc nhiều lựa chọn, cho nhóm nào muốn phiếu kín và một cuộc giơ tay trung thực. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 cử tri đã bỏ phiếu đầu tiên của mình hoặc thăm dò kết thúc.",
+    clubsBody: "Thăm dò nhanh có/không, một lựa chọn hoặc nhiều lựa chọn cho mọi nhóm muốn có lá phiếu kín và một cuộc giơ tay trung thực. Tỷ lệ tham gia được công bố theo lịch hằng giờ có độ trễ cho cả hai loại. Một cuộc thăm dò cũng công bố số đếm theo từng lựa chọn theo lịch đó khi 100 cử tri khác nhau đã bỏ phiếu hoặc khi thăm dò kết thúc, tùy điều nào đến trước.",
     auditorsTitle: "Người quan sát và kiểm toán",
-    auditorsBody:
-      "Theo dõi đăng ký và mã loại tư cách trên trình khám phá công khai, và kiểm báo cáo kết quả khi cuộc tranh đó được phép hiện nó. Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại. Thăm dò còn công bố số phiếu từng lựa chọn theo lịch giờ trễ 30 phút sau khi 100 cử tri đã bỏ phiếu đầu tiên của mình hoặc thăm dò kết thúc. Bỏ phiếu chỉ công bố lựa chọn lúc hạn chót.",
+    auditorsBody: "Theo dõi đăng ký và mã truất quyền trên trình khám phá công khai, và xác minh báo cáo kết quả khi cuộc bầu đó được phép hiển thị. Tỷ lệ tham gia được công bố theo lịch hằng giờ có độ trễ cho cả hai loại. Một cuộc thăm dò cũng công bố số đếm theo từng lựa chọn theo lịch đó khi 100 cử tri khác nhau đã bỏ phiếu hoặc khi thăm dò kết thúc, tùy điều nào đến trước. Một cuộc bỏ phiếu chỉ công bố lựa chọn khi hết hạn.",
   },
   how: {
     title: "Cách hoạt động",
@@ -140,13 +134,11 @@ export default {
     s2title: "Đóng băng danh sách",
     s2body: "Người phụ trách chốt tập hợp đủ tư cách và mọi trường hợp loại của cuộc bầu.",
     s3title: "Bỏ phiếu kèm chứng minh",
-    s3body: "Mỗi phiếu chứng minh tư cách. Trong thăm dò hoặc bỏ phiếu, cử tri đổi lựa chọn được đến hạn chót. Chứng minh không tiết lộ tri thức và bộ hủy chỉ tính phiếu cuối.",
+    s3body: "Mỗi lá phiếu chứng minh tư cách hợp lệ. Người vận hành quyết định khi tạo có cho phép bỏ phiếu lại hay không, và thiết lập này bị khóa cho đến khi cuộc bầu cử kết thúc. Nếu được phép, lá phiếu cuối cùng trước hạn chót được tính. Nếu không, lá phiếu thứ hai bị từ chối.",
     s4title: "Khi còn mở",
-    s4body:
-      "Thăm dò công bố số phiếu từng lựa chọn khi 100 cử tri đã bỏ phiếu đầu tiên của mình hoặc đến lúc kết thúc đã định, tùy việc nào đến trước. Mỗi giờ được công bố 30 phút sau khi đóng. Giờ nào dưới 10 phiếu thì gộp tiếp tới khi một khối có ít nhất 10. Bỏ phiếu công bố tỷ lệ đi bỏ phiếu theo giờ và giữ lựa chọn kín.",
+    s4body: "Một cuộc thăm dò công bố số đếm theo từng lựa chọn khi 100 cử tri khác nhau đã bỏ phiếu hoặc đến thời điểm kết thúc dự kiến, tùy điều nào đến trước. Mỗi giờ được công bố 30 phút sau khi kết thúc. Giờ có ít hơn 10 lá phiếu được gộp sang sau cho đến khi một khối có ít nhất 10. Một cuộc bỏ phiếu công bố tỷ lệ tham gia theo cùng lịch hằng giờ có độ trễ và giữ kín các lựa chọn.",
     s5title: "Sau ngày đóng",
-    s5body:
-      "Không nhận thêm phiếu. Các khối giờ đã công bố của thăm dò giữ nguyên như lúc công bố. Phiếu bỏ lại chỉ hiện ở kết quả kiểm phiếu cuối. Lựa chọn của một cuộc bỏ phiếu chỉ được giải mã thành tổng hợp, bởi những người giữ khóa k-of-n. Một lô cuối được công bố lúc hạn chót, rồi cửa sổ phản đối, rồi kết quả kiểm phiếu cuối. Ai cũng kiểm được rằng tổng đã công bố khớp với phiếu được nhận.",
+    s5body: "Không nhận thêm lá phiếu nào. Các khối hằng giờ đã công bố của thăm dò được thiết kế để giữ nguyên như lần đầu công bố. Nếu được phép bỏ phiếu lại, các lá phiếu thay thế chỉ xuất hiện trong kết quả cuối cùng. Lựa chọn của một cuộc bỏ phiếu được thiết kế để chỉ được giải mã ở dạng tổng hợp bởi k trên n người giám hộ. Một lô cuối được gửi lên L1 khi hết hạn, sau đó là thời gian khiếu nại, rồi kết quả cuối cùng. Bất kỳ ai cũng có thể kiểm tra tổng số công bố khớp với các lá phiếu được chấp nhận.",
   },
   host: {
     title: "Tự chạy",
@@ -184,10 +176,10 @@ export default {
     poll: {
       name: "Thăm dò",
       summary: "Số phiếu từng lựa chọn theo giờ, trễ 30 phút, sau cửa.",
-      gate: "Số phiếu giữ kín đến khi 100 cử tri đã bỏ phiếu đầu tiên của mình, hoặc đến lúc kết thúc đã định, tùy việc nào đến trước.",
+      gate: "Số đếm được ẩn cho đến khi 100 cử tri khác nhau đã bỏ phiếu, hoặc đến thời điểm kết thúc dự kiến, tùy điều nào đến trước.",
       hourly: "Sau cửa đó, số phiếu từng lựa chọn của mỗi khối giờ được công bố 30 phút sau khi giờ đóng.",
       merge: "Giờ nào dưới 10 phiếu thì gộp tiếp tới khi một khối có ít nhất 10.",
-      freeze: "Các khối giờ đã công bố không đổi. Phiếu bỏ lại chỉ hiện ở kết quả kiểm phiếu cuối.",
+      freeze: "Các khối hằng giờ đã công bố không bao giờ thay đổi: mỗi khối được thiết kế để giữ nguyên như lần đầu công bố. Lá phiếu thay thế, nếu được phép bỏ phiếu lại, chỉ xuất hiện trong kết quả cuối cùng.",
       example: "Ví dụ",
       choiceA: "Lựa chọn A",
       choiceB: "Lựa chọn B",
@@ -197,16 +189,18 @@ export default {
       name: "Bỏ phiếu",
       summary: "Lựa chọn giữ kín đến hạn chót.",
       sealed: "Lựa chọn giữ kín đến hạn chót.",
-      guardians: "Chúng chỉ được giải mã thành một tổng hợp, bởi những người giữ khóa k-of-n. Thiết kế không trao cho người vận hành phần khóa nào.",
+      guardians: "Chúng được thiết kế để chỉ được giải mã ở dạng tổng hợp bởi k trên n người giám hộ. Thiết kế không cho người vận hành phần khóa nào.",
+      shamir: "Khóa riêng tương ứng được chia cho những người giám hộ bằng chia sẻ bí mật Shamir, được thiết kế để không một bên nào, kể cả người vận hành, có thể giải mã sớm.",
+      keyL2: "Các lựa chọn được mã hóa bằng một khóa công khai đăng trên L2.",
       noInterim: "Không có số phiếu tạm theo từng lựa chọn.",
       sealedLabel: "Kín",
       turnoutLabel: "Tỷ lệ đi",
     },
     both: {
       title: "Cả hai",
-      revote: "Cử tri bỏ lại được đến hạn chót. Phiếu cuối được tính.",
+      revote: "Người vận hành quyết định khi tạo có cho phép bỏ phiếu lại hay không, và thiết lập này bị khóa cho đến khi cuộc bầu cử kết thúc. Nếu được phép, lá phiếu cuối cùng trước hạn chót được tính. Nếu không, lá phiếu thứ hai bị từ chối.",
       receipt: "Mọi phiếu, kể cả phiếu bỏ lại, đều có biên lai.",
-      turnout: "Tỷ lệ đi bỏ phiếu theo giờ là công khai, không có phiếu đệm.",
+      turnout: "Tỷ lệ tham gia được công bố theo lịch hằng giờ có độ trễ, không thêm số đệm.",
       batch:
         "Phiếu được gom theo giờ khi còn mở, một lô cuối lên L1 lúc hạn chót, và một lô bổ sung được đăng trước kết quả kiểm phiếu.",
       challenge: "Một cửa sổ phản đối, bắt buộc dài hơn không, đứng trước kết quả kiểm phiếu cuối.",

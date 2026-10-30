@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Official election-outcome PDFs. Issued only after cutoffTime has fully
-// expired and a certified tally exists. Locked against modification. QR +
+// expired and a final tally exists. Locked against modification. QR +
 // HMAC/SHA-256 authenticity seals cannot be omitted by the admin template.
 
 import { createHmac, randomUUID } from 'node:crypto';
@@ -34,7 +34,7 @@ export function defaultOutcomeReportTemplate() {
     heading: 'Official election outcome',
     letterhead: 'Office of civic elections',
     intro:
-      'This certified report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Individual choices are never shown.',
+      'This final tally report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Excluded ballots are not counted. Individual choices are never shown.',
     footer: 'NOT FOR PROFIT — civic public good. Not a commercial product.',
     contactLine: '',
     showJurisdiction: true,
@@ -458,7 +458,7 @@ async function issueCanonicalPdf(deps, election, now) {
   }
   const facts = officialOutcomeFacts(election, deps, now);
   if (!facts.available) {
-    throw new HttpError(409, 'certified counts are not posted yet', { code: 'OUTCOME_NOT_READY' });
+    throw new HttpError(409, 'final tally is not posted yet', { code: 'OUTCOME_NOT_READY' });
   }
   const reportId = randomUUID();
   const template = presentOutcomeReportTemplate(deps.store.getOutcomeReportTemplate());

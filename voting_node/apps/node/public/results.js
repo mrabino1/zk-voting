@@ -1,8 +1,11 @@
 /**
  * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
- * Certified election results: per-option counts after a tally, plurality
- * winners and ties. No unofficial choice totals while polls are open.
+ * Final tally: per-option counts after a tally, plurality
+ * winners and ties. A poll may also show almost-live hourly choice sums.
  */
+
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
 
 function percent(share) {
   if (share == null || !Number.isFinite(Number(share))) return "—";
@@ -13,24 +16,24 @@ function emptyCopy(status) {
   if (status === "open") {
     return {
       title: "Voting is open",
-      body: "Certified option counts appear after a tally is posted. Public turnout is the last hourly snapshot, so a person leaving a voting office cannot be matched to a live jurisdiction tick.",
+      body: "Option counts in the final tally appear after a tally is posted. Public turnout is the last hourly snapshot, so a person leaving a voting office cannot be matched to a live jurisdiction tick.",
     };
   }
   if (status === "awaiting_tally" || status === "closed") {
     return {
-      title: "Awaiting certified tally",
+      title: "Awaiting final tally",
       body: "Polls are closed. Option counts and a declared winner are published when the tally operator posts a valid tally.",
     };
   }
   if (status === "roll_frozen") {
     return {
       title: "Roll frozen",
-      body: "Voting has not opened. Certified results appear after the poll closes and a tally is posted.",
+      body: "Voting has not opened. The final tally appears after the poll closes and a tally is posted.",
     };
   }
   return {
     title: "Results not posted",
-    body: "This election has no certified tally yet. Option counts are not estimated from live ballots.",
+    body: "This election has no final tally yet. Option counts are not estimated from live ballots.",
   };
 }
 
@@ -223,7 +226,7 @@ export async function renderResults(main, ctx) {
         status,
         message:
           source === "sample"
-            ? "This is the built-in sample roll. Certified counts load from the Node at GET /api/elections/:id/results."
+            ? "This is the built-in sample roll. The final tally loads from the Node at GET /api/elections/:id/results."
             : emptyCopy(status).body,
         questions: (election.questions || SAMPLE_QUESTIONS).map((q) => ({
           id: q.id,
@@ -241,6 +244,44 @@ export async function renderResults(main, ctx) {
   const election = payload;
   const results = payload.results || {};
   const st = electionStateInfo(election.state);
+  const sealed = resultsAreSealed(election) || resultsAreSealed(results);
+  if (sealed) {
+    const endText = sealedUntilLabel(election.sealedUntil ? election : { ...election, sealedUntil: election.cutoffTime }, formatTime);
+    main.replaceChildren(
+      h(
+        "div",
+        { class: "page-head" },
+        h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || t("results.observers") }),
+        h("h1", { text: election.title || `Election ${electionId}` }),
+        h(
+          "p",
+          { class: "cluster" },
+          h("span", { class: `status-pill ${st.className}`, text: st.label }),
+          h("span", { class: "status-pill status-created", text: electionTypeLabel(election) })
+        ),
+        h(
+          "ul",
+          { class: "meta-list" },
+          h("li", {}, h("span", { class: "lbl", text: t("results.electionId") }), h("span", { text: String(election.id || election.electionId || electionId) })),
+          h("li", {}, h("span", { class: "lbl", text: t("results.cutoff") }), h("span", { text: formatTime(election.cutoffTime || election.sealedUntil) })),
+          h("li", {}, h("span", { class: "lbl", text: t("results.publishedBallots") }), h("span", { text: String(election.acceptedBallots ?? results.publishedAcceptedBallots ?? "—") }))
+        )
+      ),
+      h(
+        "div",
+        { class: "notice notice-warn empty-results", role: "status" },
+        h("h2", { text: endText }),
+        h("p", { text: t("results.sealedBody") })
+      ),
+      h(
+        "div",
+        { class: "toolbar" },
+        h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: t("chrome.navElections") }),
+        h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id || electionId)}`, "data-nav": "", text: t("results.ballot") })
+      )
+    );
+    return;
+  }
   const available = Boolean(results.available);
   const empty = emptyCopy(results.status);
 
@@ -255,7 +296,7 @@ export async function renderResults(main, ctx) {
         { class: "cluster" },
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
         available
-          ? h("span", { class: "status-pill status-tallied", text: "Certified tally" })
+          ? h("span", { class: "status-pill status-tallied", text: "Final tally" })
           : h("span", { class: "status-pill status-created", text: "No tally yet" }),
         source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
       ),
@@ -278,17 +319,44 @@ export async function renderResults(main, ctx) {
               h("span", { class: "lbl", text: "Tally posted" }),
               h("span", { text: formatTime(results.tallyPostedAt || election.tally?.postedAt) })
             )
+          : null,
+        Number(results.excludedCount) > 0
+          ? h(
+              "li",
+              {},
+              h("span", { class: "lbl", text: "Excluded ballots" }),
+              h("span", { text: `${results.excludedCount} not counted` })
+            )
           : null
       ),
       h(
         "p",
         {
           class: "field-hint",
-          text: "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+          text: "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes and the disclosure delay elapses.",
         }
       )
     ),
   ];
+
+  if (Number(results.excludedCount) > 0) {
+    const reasons = (results.excludedReasons || [])
+      .map((row) => `${row.count} — ${row.reason}`)
+      .join("; ");
+    children.push(
+      h(
+        "div",
+        { class: "notice", role: "status" },
+        h("h2", { text: "Excluded ballots" }),
+        h(
+          "p",
+          {
+            text: `${results.excludedCount} accepted ballot${Number(results.excludedCount) === 1 ? "" : "s"} not counted. ${Number(results.excludedCount) === 1 ? "It was" : "They were"} not posted to the chain. ${reasons}`,
+          }
+        )
+      )
+    );
+  }
 
   if (source === "sample") {
     children.push(
@@ -309,6 +377,10 @@ export async function renderResults(main, ctx) {
     );
   } else {
     children.push(h("p", { class: "lede", text: results.message }));
+  }
+
+  if (payload.choiceBlocks) {
+    children.push(choiceBlocksSection(payload.choiceBlocks, h, formatTime));
   }
 
   if (available && Array.isArray(results.questions)) {
@@ -373,6 +445,41 @@ function questionWithDefaults(q) {
   };
 }
 
+function choiceBlocksSection(choiceBlocks, h, formatTime) {
+  if (!choiceBlocks || !Array.isArray(choiceBlocks.blocks)) return null;
+  const rows = choiceBlocks.blocks.map((block) => {
+    const start = formatTime(block.hourStart);
+    const end = formatTime(block.hourEnd);
+    const questions =
+      Array.isArray(block.questions) && block.questions.length
+        ? block.questions.map((q) => questionBlock(questionWithDefaults({ ...q, id: `${block.id}-${q.id}` }), h))
+        : [
+            h("p", {
+              text:
+                block.decryption === "unavailable" || block.decryption === "decrypt_failed"
+                  ? t("results.blockUnavailable")
+                  : t("results.blockAwaiting"),
+            }),
+          ];
+    return h(
+      "section",
+      { class: "choice-block" },
+      h("h3", { text: `${start} – ${end}` }),
+      h("p", { class: "field-hint", text: t("results.blockBallots", { count: block.ballots }) }),
+      ...questions
+    );
+  });
+  return h(
+    "section",
+    { class: "almost-live", "aria-labelledby": "almost-live-heading" },
+    h("h2", { id: "almost-live-heading", text: t("results.almostLive") }),
+    h("p", { text: t("results.almostLiveBody") }),
+    h("p", { class: "field-hint", text: t("results.trailingHelp") }),
+    h("p", { class: "field-hint", text: t("results.certifiedSeparate") }),
+    ...rows
+  );
+}
+
 export async function renderResultsIndex(main, ctx) {
   const { h, loadElections, formatTime, electionStateInfo } = ctx;
   const { elections, source } = await loadElections();
@@ -393,7 +500,10 @@ export async function renderResultsIndex(main, ctx) {
               h(
                 "ul",
                 { class: "meta-list" },
-                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) }))
+                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+                resultsAreSealed(election)
+                  ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+                  : null
               ),
               h(
                 "div",
@@ -404,7 +514,11 @@ export async function renderResultsIndex(main, ctx) {
                     class: election.state >= 4 ? "btn" : "btn btn-secondary",
                     href: `/elections/${encodeURIComponent(election.id)}/results`,
                     "data-nav": "",
-                    text: election.state >= 4 ? "Certified results" : "Results status",
+                    text: resultsAreSealed(election)
+                      ? t("results.sealedStatus")
+                      : election.state >= 4
+                        ? "Final tally"
+                        : "Results status",
                   }
                 )
               )
@@ -422,7 +536,7 @@ export async function renderResultsIndex(main, ctx) {
         "p",
         {
           class: "lede",
-          text: "Certified plurality totals after a tally. While a poll is open or awaiting a tally, this page does not show unofficial choice counts.",
+          text: t("results.lede"),
         }
       ),
       source === "sample"

@@ -32,10 +32,8 @@ export default {
   },
   hero: {
     eyebrow: "Ouvert · Sans but lucratif · Auto-hébergeable",
-    title:
-      "Des bulletins conçus pour que personne ne puisse les lire.",
-    lead:
-      "{brand} permet à tout groupe de mener ses élections et ses sondages. La personne qui crée choisit un sondage ou un scrutin. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que 100 votants ont déposé leur premier bulletin ou que le sondage se termine. Un scrutin ne publie les choix qu'à l'échéance. Les preuves à divulgation nulle de connaissance sont conçues pour montrer que seules des personnes éligibles ont voté, chacune une fois, et que le décompte publié correspond aux bulletins (les tests utilisent actuellement un vérificateur fictif). Les choix individuels ne sont pas publiés.",
+    title: "Des bulletins conçus pour que personne ne puisse les lire.",
+    lead: "{brand} permet à tout groupe d'organiser ses propres élections et sondages. À la création, l'opérateur choisit un sondage ou un vote, et si le revote est autorisé. Ce réglage est verrouillé jusqu'à la fin de l'élection. La participation est publiée selon un calendrier horaire différé pour les deux types. Un sondage publie aussi les décomptes par choix selon ce calendrier dès que 100 votants distincts ont déposé un bulletin ou à la fin du sondage, selon ce qui arrive en premier. Un vote ne publie les choix qu'à l'échéance. Les preuves à divulgation nulle de connaissance sont conçues pour montrer que seules des personnes éligibles ont voté, une fois chacune, et que le décompte publié correspond aux bulletins (les tests utilisent pour l'instant un vérificateur fictif). Les choix individuels sont conçus pour ne pas être publiés.",
     discuss: "Rejoindre la discussion",
     demo: "Essayer la démo de vote →",
     statsLabel: "En bref",
@@ -101,17 +99,13 @@ export default {
     title: "Pourquoi c'est utile",
     sub: "La plupart des élections demandent encore aux votants, aux candidatures et aux tribunaux de croire quelques opérateurs : qui est sur la liste, qui a été écarté, si un bulletin a été compté, si le résultat correspond. {brand} transforme ces affirmations en faits que n'importe qui peut vérifier.",
     privateTitle: "Privé par construction",
-    privateBody:
-      "L'option choisie n'est jamais un champ lisible dans une transaction ou une base. Les reçus sont des hachages, conçus pour ne pas montrer comment vous avez voté.",
+    privateBody: "L'option que vous choisissez est conçue pour ne jamais être un champ lisible dans une transaction ou une base de données. Les reçus sont des empreintes, conçues pour ne pas révéler votre vote.",
     publicTitle: "Vérifiable publiquement",
-    publicBody:
-      "Les inscriptions et les codes de disqualification sont publics. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que 100 votants ont déposé leur premier bulletin ou que le sondage se termine. Les choix d'un scrutin restent scellés jusqu'à l'échéance. Un audit indépendant peut reconstruire un résultat publié sans la base privée de l'opérateur.",
+    publicBody: "Les inscriptions et les codes de disqualification sont publics. La participation est publiée selon un calendrier horaire différé pour les deux types. Un sondage publie aussi les décomptes par choix selon ce calendrier dès que 100 votants distincts ont déposé un bulletin ou à la fin du sondage, selon ce qui arrive en premier. Chaque bloc horaire publié est conçu pour rester tel qu'il a été publié. Les choix d'un vote restent scellés jusqu'à l'échéance. Un auditeur indépendant est censé pouvoir reconstruire un résultat publié sans la base de données privée de l'opérateur.",
     oneTitle: "Une personne, une voix",
-    oneBody:
-      "Chaque bulletin porte une preuve que la personne est sur la liste figée et n'est pas disqualifiée. Dans un sondage ou un scrutin, on peut changer son choix jusqu'à l'échéance, et l'annulateur ne compte que le dernier.",
+    oneBody: "Chaque bulletin porte une preuve que le votant figure sur la liste figée et n'est pas disqualifié. L'opérateur décide à la création si le revote est autorisé, et ce réglage est verrouillé jusqu'à la fin de l'élection. S'il est autorisé, le dernier bulletin avant l'échéance compte. Sinon, un second bulletin est refusé.",
     coerceTitle: "Conçu contre la contrainte",
-    coerceBody:
-      "Rien de ce qui est remis à une personne ne prouve son choix à quelqu'un qui la presse. Choisissez un scrutin quand un total en cours ajouterait de la pression. La participation est publique chaque heure, comme dans un sondage. Les choix restent chiffrés jusqu'à l'échéance, et un vote peut être remplacé jusque-là. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que 100 votants ont déposé leur premier bulletin ou que le sondage se termine.",
+    coerceBody: "Rien de ce que reçoit un votant n'est conçu pour prouver son choix à quelqu'un qui fait pression sur lui. Choisissez un vote quand un décompte en cours ajouterait de la pression. La participation est publiée selon un calendrier horaire différé, comme pour un sondage. Les choix restent chiffrés jusqu'à l'échéance. Si l'opérateur a autorisé le revote à la création, un votant peut remplacer son bulletin jusque-là.",
     dueTitle: "Procédure pour disqualifier",
     dueBody: "Écarter quelqu'un est un changement public, codé et sur la chaîne, avec un motif énoncé, pas un drapeau silencieux dans une base.",
     vendorTitle: "Sans enfermement fournisseur",
@@ -130,11 +124,9 @@ export default {
     schoolsTitle: "Écoles et campus",
     schoolsBody: "Menez des gouvernements étudiants et des votes du corps enseignant avec une clé d'accès et un bulletin utilisable sur tout appareil.",
     clubsTitle: "Communautés et clubs",
-    clubsBody:
-      "Sondages rapides oui/non, à choix unique ou multiple, pour tout groupe qui veut un bulletin privé et un décompte honnête. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que 100 votants ont déposé leur premier bulletin ou que le sondage se termine.",
+    clubsBody: "Des sondages rapides oui/non, à choix unique ou multiple, pour tout groupe qui veut un bulletin secret et un vote à main levée honnête. La participation est publiée selon un calendrier horaire différé pour les deux types. Un sondage publie aussi les décomptes par choix selon ce calendrier dès que 100 votants distincts ont déposé un bulletin ou à la fin du sondage, selon ce qui arrive en premier.",
     auditorsTitle: "Observateurs et auditeurs",
-    auditorsBody:
-      "Suivez les inscriptions et les codes de disqualification sur l'explorateur public, et vérifiez un rapport de résultat dès que ce scrutin peut l'afficher. La participation est publique chaque heure pour les deux types. Un sondage publie aussi les totaux par choix sur un rythme horaire différé de 30 minutes dès que 100 votants ont déposé leur premier bulletin ou que le sondage se termine. Un scrutin ne publie les choix qu'à l'échéance.",
+    auditorsBody: "Suivez les inscriptions et les codes de disqualification sur l'explorateur public, et vérifiez un rapport de résultat dès que ce scrutin peut l'afficher. La participation est publiée selon un calendrier horaire différé pour les deux types. Un sondage publie aussi les décomptes par choix selon ce calendrier dès que 100 votants distincts ont déposé un bulletin ou à la fin du sondage, selon ce qui arrive en premier. Un vote ne publie les choix qu'à l'échéance.",
   },
   how: {
     title: "Fonctionnement",
@@ -144,14 +136,11 @@ export default {
     s2title: "Figer la liste",
     s2body: "Les responsables engagent l'ensemble éligible et les éventuelles disqualifications de l'élection.",
     s3title: "Voter avec une preuve",
-    s3body:
-      "Chaque bulletin prouve l'éligibilité. Dans un sondage ou un scrutin, on peut changer son choix jusqu'à l'échéance. La preuve à divulgation nulle de connaissance et l'annulateur ne comptent que le dernier.",
+    s3body: "Chaque bulletin prouve l'éligibilité. L'opérateur décide à la création si le revote est autorisé, et ce réglage est verrouillé jusqu'à la fin de l'élection. S'il est autorisé, le dernier bulletin avant l'échéance compte. Sinon, un second bulletin est refusé.",
     s4title: "Pendant l'ouverture",
-    s4body:
-      "Un sondage publie les totaux par choix dès que 100 votants ont déposé leur premier bulletin ou à la fin prévue, selon ce qui arrive en premier. Chaque heure est publiée 30 minutes après sa clôture. Une heure de moins de 10 bulletins fusionne vers l'avant jusqu'à ce qu'un bloc en ait au moins 10. Un scrutin publie la participation horaire et garde les choix scellés.",
+    s4body: "Un sondage publie les décomptes par choix dès que 100 votants distincts ont déposé un bulletin ou à la fin prévue, selon ce qui arrive en premier. Chaque heure est publiée 30 minutes après sa clôture. Une heure de moins de 10 bulletins est reportée jusqu'à ce qu'un bloc en compte au moins 10. Un vote publie la participation selon le même calendrier horaire différé et garde les choix scellés.",
     s5title: "Après la date de clôture",
-    s5body:
-      "Plus aucun bulletin n'est accepté. Les blocs horaires publiés d'un sondage restent tels que publiés. Les votes remplacés n'apparaissent que dans le décompte final. Les choix d'un scrutin ne sont déchiffrés que comme un agrégat, par des gardiens k-of-n. Un lot final est publié à l'échéance, puis une fenêtre de contestation, puis le décompte final. N'importe qui peut vérifier que les totaux publiés correspondent aux bulletins acceptés.",
+    s5body: "Plus aucun bulletin n'est accepté. Les blocs horaires publiés d'un sondage sont conçus pour rester tels qu'ils ont été publiés. Si le revote était autorisé, les bulletins de remplacement n'apparaissent que dans le décompte final. Les choix d'un vote sont conçus pour n'être déchiffrés qu'en agrégat, par k gardiens sur n. Un dernier lot part vers L1 à l'échéance, puis une fenêtre de contestation, puis le décompte final. Chacun peut vérifier que les totaux publiés correspondent aux bulletins acceptés.",
   },
   host: {
     title: "Faites-le tourner vous-même",
@@ -189,10 +178,10 @@ export default {
     poll: {
       name: "Sondage",
       summary: "Totaux horaires par choix, différés de 30 minutes, après le seuil.",
-      gate: "Les totaux restent cachés jusqu'à ce que 100 votants aient déposé leur premier bulletin, ou jusqu'à la fin prévue, selon ce qui arrive en premier.",
+      gate: "Les décomptes restent masqués jusqu'à ce que 100 votants distincts aient déposé un bulletin, ou jusqu'à la fin prévue, selon ce qui arrive en premier.",
       hourly: "Après ce seuil, les totaux par choix sont publiés pour chaque bloc horaire, 30 minutes après la fin de l'heure.",
       merge: "Une heure de moins de 10 bulletins fusionne vers l'avant jusqu'à ce qu'un bloc en ait au moins 10.",
-      freeze: "Les blocs horaires publiés ne changent plus. Les nouveaux votes (changements de vote) n'apparaissent que dans le décompte final.",
+      freeze: "Les blocs horaires publiés ne changent jamais : chaque bloc est conçu pour rester tel qu'il a été publié. Les bulletins de remplacement, si le revote est autorisé, n'apparaissent que dans le décompte final.",
       example: "Exemple",
       choiceA: "Choix A",
       choiceB: "Choix B",
@@ -202,16 +191,18 @@ export default {
       name: "Scrutin",
       summary: "Les choix restent scellés jusqu'à l'échéance.",
       sealed: "Les choix restent scellés jusqu'à l'échéance.",
-      guardians: "Ils ne sont déchiffrés que comme un agrégat, par des gardiens k-of-n. La conception ne donne à l'opérateur aucune part de clé.",
+      guardians: "Ils sont conçus pour n'être déchiffrés qu'en agrégat, par k gardiens sur n. La conception ne donne à l'opérateur aucune part de clé.",
+      shamir: "La clé privée correspondante est partagée entre les gardiens par le partage de secret de Shamir, conçu pour qu'aucune partie seule, pas même l'opérateur, ne puisse déchiffrer avant l'heure.",
+      keyL2: "Les choix sont chiffrés avec une clé publique publiée sur la L2.",
       noInterim: "Il n'y a pas de totaux provisoires par choix.",
       sealedLabel: "Scellé",
       turnoutLabel: "Participation",
     },
     both: {
       title: "Les deux",
-      revote: "On peut revoter jusqu'à l'échéance. Le dernier vote compte.",
+      revote: "L'opérateur décide à la création si le revote est autorisé, et ce réglage est verrouillé jusqu'à la fin de l'élection. S'il est autorisé, le dernier bulletin avant l'échéance compte. Sinon, un second bulletin est refusé.",
       receipt: "Chaque bulletin, y compris un vote remplacé, reçoit un reçu.",
-      turnout: "La participation horaire est publique, sans remplissage.",
+      turnout: "La participation est publiée selon un calendrier horaire différé, sans remplissage.",
       batch:
         "Les bulletins sont groupés chaque heure pendant l'ouverture, un lot final part vers L1 à l'échéance, et un lot supplémentaire est publié avant le décompte.",
       challenge: "Une fenêtre de contestation, qui doit durer plus de zéro, précède le décompte final.",

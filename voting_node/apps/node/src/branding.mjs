@@ -93,11 +93,37 @@ export function escapeHtml(value) {
 }
 
 /**
+ * Split a display name for the two-tone wordmark.
+ * A leading "ZK" (any case) followed by the end of the name, a space, or a
+ * dash keeps that prefix separate from the rest. Any other name stays whole
+ * so a custom display name is not cut in the middle of a word.
+ * @returns {{ lead: string, rest: string } | null}
+ */
+export function splitBrandWordmark(name) {
+  const value = String(name ?? '');
+  const match = /^(zk)(?=$|[\s\u2010-\u2015-])/i.exec(value);
+  if (!match) return null;
+  return { lead: value.slice(0, match[1].length), rest: value.slice(match[1].length) };
+}
+
+/** HTML for the header wordmark. The name stays text; the mark is a separate image. */
+export function brandWordmarkHtml(name) {
+  const split = splitBrandWordmark(name);
+  if (!split) return `<span class="brand-name-text">${escapeHtml(name)}</span>`;
+  let html = `<span class="brand-zk">${escapeHtml(split.lead)}</span>`;
+  if (split.rest) html += `<span class="brand-rest">${escapeHtml(split.rest)}</span>`;
+  return html;
+}
+
+/**
  * Server-render branding into an HTML page. Pages use the placeholders
- * %BRAND_NAME%, %BRAND_SHORT_NAME% and %BRAND_TAGLINE%; values are HTML-escaped.
+ * %BRAND_NAME%, %BRAND_SHORT_NAME%, %BRAND_TAGLINE%, and %BRAND_WORDMARK%.
+ * Name, short name, and tagline are HTML-escaped. The wordmark placeholder
+ * is safe markup built from the escaped display name.
  */
 export function renderBrandedHtml(html, branding = getBranding()) {
   return String(html)
+    .replace(/%BRAND_WORDMARK%/g, brandWordmarkHtml(branding.name))
     .replace(/%BRAND_NAME%/g, escapeHtml(branding.name))
     .replace(/%BRAND_SHORT_NAME%/g, escapeHtml(branding.shortName))
     .replace(/%BRAND_TAGLINE%/g, escapeHtml(branding.tagline));

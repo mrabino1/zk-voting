@@ -8,6 +8,7 @@
 //   L1: resultOf(electionKey) on the L1 tally mirror, where
 //       electionKey = keccak256(abi.encode(domain, l1ChainId, l2Id, bytes16(electionUuid)))
 import { computeElectionKey, isUuid, resolveIdentity, resolveOperatorAddress } from '../../../l2/identity.mjs';
+import { normalizeElectionType } from './electionType.mjs';
 import { signAdminCivic } from '../../../l2/adminAuth.mjs';
 import { checkSubmitterFunding } from '../../../l2/prover/funding.mjs';
 import { keccak256Hex } from '../../../l2/sequencer/state.mjs';
@@ -83,14 +84,29 @@ export async function sendAdminCivic(cfg, civic, { env = process.env, chainId, f
   return jsonRpc(cfg.civicRpc, 'eth_sendRawTransaction', [raw], fetchImpl);
 }
 
-/** Open an election UUID on this L2 (unique per L2, enforced by the sequencer). */
-export async function openElectionOnL2(cfg, { electionUuid, approvedSenders = [] }, opts = {}) {
+/**
+ * Civic payload for an L2 open. electionType and cutoffTime are app-side
+ * fields. They are not gated by PASS_ELECTION_TYPE_ON_CHAIN, which only
+ * controls the factory tuple.
+ */
+export function electionOpenCivic(cfg, { electionUuid, approvedSenders = [], electionType, cutoffTime } = {}) {
   if (!isUuid(electionUuid)) throw new Error('electionUuid must be a UUID');
-  return sendAdminCivic(
-    cfg,
-    { type: 'election_open', electionId: electionUuid.toLowerCase(), approvedSenders, l2Uuid: cfg.l2Uuid },
-    opts,
-  );
+  const civic = {
+    type: 'election_open',
+    electionId: String(electionUuid).toLowerCase(),
+    approvedSenders,
+    l2Uuid: cfg?.l2Uuid,
+    electionType: normalizeElectionType(electionType),
+  };
+  if (cutoffTime != null && cutoffTime !== '' && Number.isFinite(Number(cutoffTime))) {
+    civic.cutoffTime = Number(cutoffTime);
+  }
+  return civic;
+}
+
+/** Open an election UUID on this L2 (unique per L2, enforced by the sequencer). */
+export async function openElectionOnL2(cfg, fields = {}, opts = {}) {
+  return sendAdminCivic(cfg, electionOpenCivic(cfg, fields), opts);
 }
 
 /** Outcome as recorded on the L2 itself. */

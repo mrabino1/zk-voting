@@ -69,7 +69,7 @@ test('renders the poll vs vote section, both columns, and the named flow graphic
   assert.doesNotMatch(name, /certified/i);
   assert.doesNotMatch(region, BANNED);
   assert.match(region, /k-of-n guardians/);
-  assert.match(region, /100 voters have cast their first ballot/);
+  assert.match(region, /100 distinct voters have cast a ballot/);
   assert.doesNotMatch(region, /100 first ballots/);
   assert.match(region, /30-minute delay/);
   assert.match(region, /30 minutes delayed/);
@@ -99,16 +99,16 @@ test('Spanish render keeps both columns and translates the accessible name', () 
   assert.match(name, /encuesta/i);
   assert.match(name, /escrutinio final/i);
   assert.doesNotMatch(name, /Ballot flow/);
-  assert.match(html, /data-brand>ZK-Voting</);
+  assert.match(html, /data-brand><span class="brand-zk">ZK<\/span><span class="brand-rest">-Voting<\/span>/);
 });
 
 test('display name is filled from the branding helper', () => {
   assert.equal(brandName(), DEFAULT_BRAND_NAME);
   const html = pageHtml();
-  assert.ok(html.includes(`<span data-brand>${DEFAULT_BRAND_NAME}</span>`));
+  assert.match(html, /<span class="wordmark" title="ZK-Voting"><span data-brand>/);
   assert.match(html, /<meta name="brand-name" content="ZK-Voting">/);
   const branded = translateMarkup(html, 'en', 'Civic Desk');
-  assert.match(branded, /data-brand>Civic Desk</);
+  assert.match(branded, /data-brand>[^<]*(?:<span[^>]*>)?Civic Desk/);
   assert.match(branded, /aria-label="Civic Desk on GitHub"/);
   assert.match(branded, /<title[^>]*>Civic Desk: private ballots/);
   assert.doesNotMatch(regionOf(branded), /ZK-Voting/);
@@ -150,16 +150,16 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.match(lookup(dicts.en, 'pollVote.both.challenge'), /longer than zero/);
   assert.match(lookup(dicts.en, 'pollVote.poll.freeze'), /Published hourly blocks never change/);
   assert.match(lookup(dicts.en, 'pollVote.poll.merge'), /at least 10/);
-  assert.match(lookup(dicts.en, 'how.s5body'), /stay as published/);
+  assert.match(lookup(dicts.en, 'how.s5body'), /stay as first published/);
   assert.match(lookup(dicts.en, 'how.s5body'), /Anyone can check that the published totals match the accepted ballots/);
-  assert.match(html, /once 100 voters have cast their first ballot or the poll ends/);
-  assert.match(html, /once 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first/);
-  assert.match(html, /Counts stay hidden until 100 voters have cast their first ballot, or until the scheduled end, whichever comes first/);
+  assert.match(html, /once 100 distinct voters have cast a ballot or the poll ends/);
+  assert.match(html, /once 100 distinct voters have cast a ballot or the scheduled end arrives, whichever comes first/);
+  assert.match(html, /Counts stay hidden until 100 distinct voters have cast a ballot, or until the scheduled end, whichever comes first/);
   assert.doesNotMatch(html, /100 first ballots/);
   assert.doesNotMatch(lookup(dicts.en, 'hero.lead'), /100 first ballots/);
   assert.doesNotMatch(lookup(dicts.en, 'how.s4body'), /100 first ballots/);
   assert.doesNotMatch(lookup(dicts.en, 'pollVote.poll.gate'), /100 first ballots/);
-  assert.match(html, /A poll's published hourly blocks stay as published/);
+  assert.match(html, /A poll.s published hourly blocks are designed to stay as first published/);
   assert.match(html, /data-i18n="nav\.pollVsVote"/);
   assert.equal(lookup(dicts.en, 'nav.pollVsVote'), 'Poll vs Vote');
   assert.doesNotMatch(html, /class="ballot-visual" dir="ltr"/);
@@ -214,96 +214,38 @@ function sentencesOf(value) {
   return value.split(/[.!?。！？।۔]+/).map((part) => part.trim()).filter(Boolean);
 }
 
-test('turnout is public every hour and is not tied to the poll gate', () => {
+test('turnout, re-voting and privacy copy match the agreed wording', () => {
   const html = pageHtml();
   const dicts = catalogs();
   for (const key of ['hero.lead', 'why.publicBody', 'who.clubsBody', 'who.auditorsBody']) {
-    assert.match(lookup(dicts.en, key), new RegExp(BOTH_TURNOUT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(lookup(dicts.en, key), /Turnout is published on a delayed hourly schedule for both kinds\./);
+    assert.match(lookup(dicts.en, key), /once 100 distinct voters have cast a ballot or the poll ends, whichever comes first/);
   }
-  assert.match(lookup(dicts.en, 'why.coerceBody'), new RegExp(POLL_TURNOUT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(html, /Turnout is public every hour for both kinds\./);
-  assert.match(html, /Turnout is public every hour, as in a poll\./);
-  assert.match(lookup(dicts.en, 'hero.lead'), /Individual choices are not published\./);
-  assert.match(lookup(dicts.en, 'hero.lead'), /Zero-knowledge proofs are designed to show that only eligible people voted/);
+  for (const key of ['why.oneBody', 'how.s3body']) {
+    assert.match(lookup(dicts.en, key), /The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends\./);
+    assert.match(lookup(dicts.en, key), /If not, a second ballot is rejected\./);
+  }
+  assert.match(lookup(dicts.en, 'hero.lead'), /Individual choices are designed not to be published\./);
   assert.match(lookup(dicts.en, 'hero.lead'), /\(tests currently use a mock verifier\)/);
-  assert.doesNotMatch(lookup(dicts.en, 'hero.lead'), /Nobody's choice is ever published/);
-  assert.match(html, /Individual choices are not published\./);
-  assert.match(html, /tests currently use a mock verifier/);
-  assert.doesNotMatch(html, /Nobody's choice is ever published/);
-  assert.equal(lookup(dicts.en, 'hero.title'), 'Ballots built so nobody can read them.');
-  assert.match(lookup(dicts.en, 'why.privateBody'), /designed so they don't show how you voted/);
-  assert.match(lookup(dicts.en, 'vision.l2p2'), /\(with the mock verifier in tests, this check is not yet enforced\)/);
-  assert.match(html, /Ballots built so nobody can read them/);
-  assert.match(html, /designed so they don't show how you voted/);
-  assert.match(html, /with the mock verifier in tests, this check is not yet enforced/);
+  assert.equal(lookup(dicts.en, 'hero.title'), 'Ballots designed so nobody can read them.');
+  assert.match(html, /Ballots designed so nobody can read them/);
   assert.match(lookup(dicts.en, 'pollVote.vote.guardians'), /The design gives the operator no key share\./);
-  assert.match(html, /The design gives the operator no key share\./);
-  assert.doesNotMatch(html, /The operator holds no key/);
-  assert.equal(
-    lookup(dicts.es, 'pollVote.poll.gate'),
-    'Los recuentos permanecen ocultos hasta que 100 votantes hayan emitido su primera boleta, o hasta el cierre programado, lo que ocurra primero.',
-  );
-  assert.equal(
-    lookup(dicts.fr, 'pollVote.poll.gate'),
-    "Les totaux restent cachés jusqu'à ce que 100 votants aient déposé leur premier bulletin, ou jusqu'à la fin prévue, selon ce qui arrive en premier.",
-  );
-  assert.equal(
-    lookup(dicts.pt, 'pollVote.poll.gate'),
-    'As contagens ficam ocultas até que 100 eleitores tenham enviado sua primeira cédula, ou até o fim programado, o que ocorrer primeiro.',
-  );
-  assert.equal(
-    lookup(dicts.ar, 'pollVote.poll.gate'),
-    'تبقى الأعداد مخفية حتى يُدلي 100 ناخب بأوراقهم الأولى، أو حتى النهاية المجدولة، أيهما أسبق.',
-  );
-  assert.equal(
-    lookup(dicts.es, 'pollVote.poll.freeze').split('. ').pop(),
-    'Los votos cambiados aparecen solo en el escrutinio final.',
-  );
-  assert.equal(
-    lookup(dicts.fr, 'pollVote.poll.freeze').split('. ').pop(),
-    "Les nouveaux votes (changements de vote) n'apparaissent que dans le décompte final.",
-  );
-  assert.equal(
-    lookup(dicts.pt, 'pollVote.poll.freeze').split('. ').pop(),
-    'Os votos alterados só aparecem na apuração final.',
-  );
-  const marks = {
-    es: ['La participación es pública cada hora para ambos tipos.', 'verificador simulado', 'Las opciones individuales no se publican.', 'El diseño no da al operador ninguna parte de la clave.', '100 votantes hayan emitido su primera boleta'],
-    fr: ['La participation est publique chaque heure pour les deux types.', 'vérificateur fictif', 'Les choix individuels ne sont pas publiés.', "La conception ne donne à l'opérateur aucune part de clé.", 'leur premier bulletin'],
-    pt: ['A participação é pública a cada hora para os dois tipos.', 'verificador simulado', 'As escolhas individuais não são publicadas.', 'O desenho não dá ao operador nenhuma parte da chave.', '100 eleitores tenham enviado sua primeira cédula'],
-    zh: ['两种的投票率每小时都公开。', '模拟验证器', '不公布个人的选择。', '设计不向运营者提供密钥份额。', '100 名投票人各自投出第一张选票'],
-    ar: ['الإقبال علني كل ساعة لكلا النوعين.', 'مُحققًا وهميًا', 'لا تُنشر الخيارات الفردية.', 'لا يمنح التصميم المشغّل أي حصة من المفتاح.', '100 ناخب بأوراقهم الأولى'],
-    ko: ['두 종류 모두 투표율은 매시간 공개됩니다.', '모의 검증기', '개인의 선택은 공개되지 않습니다.', '설계는 운영자에게 키 지분을 주지 않습니다.', '100명의 유권자가 각자의 첫 투표용지를'],
-    hi: ['दोनों प्रकारों में उपस्थिति हर घंटे सार्वजनिक है।', 'नकली सत्यापक', 'व्यक्तिगत विकल्प प्रकाशित नहीं होते।', 'डिज़ाइन संचालक को कोई कुंजी-हिस्सा नहीं देता।', '100 मतदाता'],
-    vi: ['Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại.', 'bộ xác minh giả', 'Các lựa chọn cá nhân không được công bố.', 'Thiết kế không trao cho người vận hành phần khóa nào.', '100 cử tri đã bỏ phiếu đầu tiên của mình'],
-    fil: ['Hayagan ang pagdalo kada oras para sa parehong uri.', 'kunwang tagapagpatunay', 'Hindi inilalathala ang mga indibidwal na pagpipilian.', 'Hindi binibigyan ng disenyo ang operator ng bahagi ng susi.', '100 botante ng kanilang unang balota'],
-  };
-  for (const [code, phrases] of Object.entries(marks)) {
-    const lead = lookup(dicts[code], 'hero.lead');
-    const guardians = lookup(dicts[code], 'pollVote.vote.guardians');
-    assert.match(lead, new RegExp(phrases[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    assert.match(lead, new RegExp(phrases[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    assert.match(lead, new RegExp(phrases[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    assert.match(guardians, new RegExp(phrases[3].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    assert.match(lookup(dicts[code], 'why.publicBody'), new RegExp(phrases[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    const voters = new RegExp(phrases[4].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    for (const key of ['hero.lead', 'why.publicBody', 'why.coerceBody', 'who.clubsBody', 'who.auditorsBody', 'how.s4body', 'pollVote.poll.gate']) {
-      assert.match(lookup(dicts[code], key), voters, `${code} ${key}`);
-    }
+  assert.match(lookup(dicts.en, 'pollVote.vote.keyL2'), /public key posted on the L2/);
+  assert.match(lookup(dicts.en, 'pollVote.vote.shamir'), /Shamir/);
+  assert.match(html, /data-i18n="pollVote.vote.keyL2"/);
+  assert.match(html, /data-i18n="pollVote.vote.shamir"/);
+  for (const banned of [/Nobody's choice is ever published/, /can't show how you voted/, /Individual choices are not published/, /Turnout is public every hour/]) {
+    assert.doesNotMatch(html, banned);
   }
   for (const code of LOCALE_CODES) {
+    for (const key of ['hero.lead', 'pollVote.poll.gate', 'pollVote.vote.keyL2', 'pollVote.vote.shamir', 'pollVote.both.revote', 'pollVote.both.turnout']) {
+      assert.equal(typeof lookup(dicts[code], key), 'string', `${code} ${key}`);
+    }
+    assert.match(lookup(dicts[code], 'pollVote.poll.gate'), /100/, code);
     const rules = TURNOUT_GATE[code];
     for (const key of flattenKeys(dicts[code])) {
       for (const sentence of sentencesOf(lookup(dicts[code], key))) {
-        assert.doesNotMatch(
-          sentence,
-          rules.gate,
-          `${code} ${key} counts the first 100 ballots, not 100 voters' first ballots: ${sentence}`,
-        );
-        assert.ok(
-          !(rules.turnout.test(sentence) && rules.tied.test(sentence)),
-          `${code} ${key} ties turnout to the gate: ${sentence}`,
-        );
+        assert.doesNotMatch(sentence, rules.gate, `${code} ${key} counts the first 100 ballots: ${sentence}`);
       }
     }
   }

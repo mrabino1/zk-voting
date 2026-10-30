@@ -19,6 +19,8 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { receiptHelpKey, t } from "./i18n.js";
 
 function tallyEncryptionBlurb(election) {
   const ceremony = election.tallyCeremony;
@@ -124,11 +126,14 @@ export async function renderVote(main, ctx) {
     SAMPLE_QUESTIONS: sampleQs,
   } = ctx;
 
-  const [{ election, source }, me, publicRecord] = await Promise.all([
+  const [{ election, source }, me, publicRecord, nodeConfig] = await Promise.all([
     loadElection(electionId),
     loadMe(),
     wallet.getPublicRecord().catch(() => null),
+    api("/api/config").catch(() => null),
   ]);
+  const allowRevote = nodeConfig?.allowRevote === true;
+  const voteCopy = (key) => t(allowRevote ? `${key}Revote` : key);
 
   if (!election) {
     main.replaceChildren(
@@ -178,6 +183,7 @@ export async function renderVote(main, ctx) {
         "p",
         { class: "cluster" },
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
+        h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
         source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample ballot" }) : null
       ),
       h(
@@ -197,6 +203,12 @@ export async function renderVote(main, ctx) {
           : null,
         h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
         h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        resultsAreSealed(election)
+          ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+          : null,
+        resultsAreSealed(election)
+          ? h("li", {}, h("span", { class: "field-hint", text: t("results.sealedBody") }))
+          : null,
         h(
           "li",
           {},
@@ -217,8 +229,8 @@ export async function renderVote(main, ctx) {
             state.step === "receipt"
               ? "Your ballot was accepted. The receipt below cannot prove how you voted."
               : election.tallyPubKey
-                ? "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted."
-                : "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
+                ? voteCopy("vote.envelopeHelpTally")
+                : voteCopy("vote.envelopeHelp"),
         }
       ),
       h(
@@ -575,7 +587,7 @@ export async function renderVote(main, ctx) {
     }
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
-      children.push(renderReceipt(state, { h, api, announce, election, paint }));
+      children.push(renderReceipt(state, { h, api, announce, election, paint, voteCopy }));
       children.push(
         h(
           "p",
@@ -610,7 +622,7 @@ export async function renderVote(main, ctx) {
           "div",
           { class: "notice notice-warn", role: "status" },
           h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." }),
-          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Certified results" })
+          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Final tally" })
         )
       );
     } else if (notOpen) {
@@ -881,7 +893,7 @@ export async function renderVote(main, ctx) {
   paint();
 }
 
-function renderReceipt(state, { h, api, announce, election, paint }) {
+function renderReceipt(state, { h, api, announce, election, paint, voteCopy }) {
   const receipt = state.receipt || {};
   const proof =
     receipt.proofText ||
@@ -989,7 +1001,7 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
     h(
       "p",
       {
-        text: "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
+        text: voteCopy("vote.receiptHelp"),
       }
     ),
     h("p", {
@@ -1006,6 +1018,9 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       h("li", {}, h("span", { class: "lbl", text: "PDF" }), h("span", { text: "Locked against modification" })),
       receipt.pdfSha256
         ? h("li", {}, h("span", { class: "lbl", text: "PDF SHA-256" }), h("span", { class: "hex", text: receipt.pdfSha256 }))
+        : null,
+      resultsAreSealed(election)
+        ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
         : null,
       receipt.published === false
         ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))

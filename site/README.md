@@ -4,7 +4,7 @@ The informational landing page for **zk-voting.org**: what ZK-Voting is, who it'
 
 The voting demo is a separate app (`voting_node/`). This site only links to it; never embed or iframe it here.
 
-- `public/`: the site itself (`index.html`, `styles.css`, `favicon.svg`, `brand.js`, `i18n.js`, `locales/`).
+- `public/`: the site itself (`index.html`, `styles.css`, `brand-mark.svg`, favicons and `site.webmanifest`, `brand.js`, `i18n.js`, `locales/`).
 - `Dockerfile` + `nginx.conf`: serves `public/` with nginx on port 80, with a `GET /health` endpoint.
 - `check-assets.sh`: checks the `?v=<hash>` cache-busting versions on local assets (CSS, SVG and so on) referenced from the HTML pages. After changing an asset, run `site/check-assets.sh --fix` and commit the updated HTML.
 

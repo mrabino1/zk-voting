@@ -392,7 +392,7 @@ export default {
     maxOptions: "Maaari kang pumili ng hanggang {count} opsyon.",
     receiptTitle: "Resibo ng balota",
     receiptHelp:
-      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Isa lang ang maaari mong boto; tinatanggihan ang pangalawang balota para sa parehong nullifier. Imposible ang dobleng pagboto. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras na naglalaman ng balotang ito.",
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Maaari kang bumoto nang isang beses lamang; tinatanggihan ang pangalawang balota mula sa iyo. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras na naglalaman ng balotang ito.",
     recorded: "Naitala",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",
@@ -401,7 +401,13 @@ export default {
     envelopeHelp:
       "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Maaari kang magbago ng isip sa form na ito hanggang magsumite ka. Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Imposible ang dobleng pagboto. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     envelopeHelpTally:
-      "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa tally public key para mabuksan ng operator ang mga balota pagkatapos ng cutoff (demo key, HINDI PRODUKSYON). Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
+      "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa tally public key ng mga guardian. Ang pagbukas nito pagkatapos ng cutoff ay nangangailangan ng t na beripikadong partial decryption (HINDI PRODUKSYON). Pagkatapos tanggapin ng Node ang balota, nagamit na ang nullifier — hindi ka na maaaring bumoto ulit. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
+    receiptHelpRevote:
+      "Hindi mapapatunayan ng resibong ito kung paano ka bumoto. Mga hash lang ang nakalista. Hindi kasama ang iyong minarkahang opsyon, ciphertext opening, o trapdoor. Isang beses lang binibilang ang bawat botante at maaaring bumoto muli hanggang sa deadline; ang huling boto ang binibilang. Naghihintay ang pampublikong explorer rows hanggang magsara ang oras at lumipas ang disclosure delay.",
+    envelopeHelpRevote:
+      "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa final tally. Hindi parehong binibilang ang dalawa. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
+    envelopeHelpTallyRevote:
+      "Markahan ang bawat tanong. Isang envelope ang sumasaklaw sa buong balota. Nanatili ang iyong mga pinili sa form na ito hanggang magsumite ka. Naka-encrypt ang nai-post na envelope sa guardian tally public key. Ang pagbukas ng pinagsama pagkatapos ng cutoff ay nangangailangan ng t na beripikadong partial decryption (HINDI PRODUKSYON). Maaari kang magsumite ng huling balota hanggang sa deadline. Ang nailathalang bloke ay pinananatili ang unang balota. Ang kapalit ay binibilang lang sa final tally. Hindi mapapatunayan ng resibo kung paano ka bumoto.",
     aspectsCount: "{count} tanong sa balotang ito",
     aspectsCount_one: "{count} tanong sa balotang ito",
     nonePublished: "Walang nai-publish",
@@ -412,7 +418,7 @@ export default {
   results: {
     observers: "Mga tagamasid",
     title: "Mga resulta ng halalan",
-    lede: "Mga sertipikadong plurality total pagkatapos ng tally. Habang bukas ang botohan o naghihintay ng tally, hindi nagpapakita ang pahinang ito ng hindi opisyal na bilang ng pagpipilian.",
+    lede: "Mga sertipikadong plurality total pagkatapos ng tally. Maaari ring magpakita ang isang poll ng halos live na oras-oras na suma ng pagpipilian pagkatapos magbukas ang results gate. Nanatiling selyado ang isang boto hanggang matapos ito.",
     sampleNote: "Ipinapakita ang built-in na sample na talaan dahil hindi available ang /api/elections.",
     tie: "Tabla",
     lexTie: "Ang tabla sa unang puwesto ay sinira ayon sa lexicographic option id.",
@@ -431,6 +437,8 @@ export default {
     opens: "Magbubukas",
     cutoff: "Cutoff",
     publishedBallots: "Mga nai-publish na balota",
+    ballotsDisclosed: "Mga balotang isiniwalat",
+    choiceResults: "Mga resulta ng pagpipilian",
     tallyPosted: "Nai-post ang tally",
     privacy:
       "Hindi kailanman ipinapakita rito ang data sa antas ng pagpipilian. Naghihintay ang explorer vote proofs hanggang magsara ang oras na naglalaman nito.",
@@ -464,6 +472,22 @@ export default {
     pluralitySeats: "Plurality, {count} puwesto.",
     questionFallback: "Tanong",
     declared: "Idineklara si {names}.",
+    typePoll: "Poll",
+    typeVote: "Vote",
+    sealedUntil: "Selyado ang mga resulta hanggang {end}",
+    sealedBody: "Mananatiling selyado ang mga bilang ng pagpipilian at ang bahagyang tally para sa lahat, kasama ang mga opisyal, hanggang matapos ang halalang ito. Pampubliko ang turnout kada oras.",
+    sealedStatus: "Selyado ang mga resulta",
+    almostLive: "Halos live",
+    almostLiveBody:
+      "Mga oras-oras na suma ng pagpipilian para sa poll na ito. Maaaring mailathala ang bloke ng 08:00–08:59 sa 09:30, pagkatapos magbukas ang results gate (100 balota o ang nakatakdang wakas, alinman ang mauna). Ang mga oras na wala pang 10 balota ay isinasama pasulong. Nagyeyelo ang serye sa pagsasara. Ang nailathalang bloke ay nananatili sa unang paglalathala. Hindi ito ang sertipikadong tally.",
+    trailingHelp:
+      "Ang huling oras na wala pang 10 ay hindi sariling hilera. Sa pagsasara, isinasama ito sa naunang bloke. Kung ang buong poll ay wala pa ring 10, isang closing block ang buong set.",
+    blockBallots: "{count} balota",
+    blockBallots_one: "{count} balota",
+    blockAwaiting: "Naghihintay ng threshold decryption ang mga suma ng pagpipilian para sa oras na ito.",
+    blockUnavailable: "Hindi available ang mga suma ng pagpipilian para sa oras na ito.",
+    certifiedSeparate:
+      "Ang sertipikadong tally sa pagsasara ang pinal. Hindi kinakailangang tumugma ito sa mga oras-oras na suma.",
   },
   info: {
     elections: "Mga halalan",
@@ -659,7 +683,7 @@ export default {
   office: {
     kicker: "Mga opisyal ng halalan",
     title: "Panloob na tanggapan",
-    lede: "Nagtatayo ang mga clerk ng mga halalan. Nagsisingit ang mga registrar ng identity commitments (hindi kailanman mga pangalan). Inilalapat ng mga disqualification officer ang pampublikong katalogo ng dahilan. Nagpo-post ang mga tally operator ng counts. Hindi kailanman lumalabas dito ang plaintext ng pagpipilian. Naghihintay ang turnout at vote proofs sa bawat dashboard hanggang magsara ang oras na naglalaman ng balota — hindi maitutugma ang taong umalis sa voting office sa live na pagtaas.",
+    lede: "Nagtatayo ang mga clerk ng mga halalan. Nagsisingit ang mga registrar ng identity commitments (hindi kailanman mga pangalan). Inilalapat ng mga disqualification officer ang pampublikong katalogo ng dahilan. Nagpo-post ang mga tally operator ng counts. Hindi kailanman lumalabas dito ang plaintext ng pagpipilian. Inilalabas ang turnout at vote proofs sa bawat dashboard kada oras mula sa unang balota, pagkatapos magsara ang oras na naglalaman ng balota — hindi maitutugma ang taong umalis sa voting office sa live na pagtaas.",
     checkingSession: "Sinusuri ang sesyon…",
     sections: "Mga seksyon ng panloob na tanggapan",
     navClerk: "Clerk",
@@ -689,6 +713,12 @@ export default {
     rankedChoice: "ranked_choice — instant-runoff (IRV)",
     methodHint:
       "Default ng halalan. Nanatiling plurality ang YES_NO. Palaging gumagamit ng IRV ang RANKED na tanong. Nakakakuha ang mga nagawang halalan ng UUID public id at maikling <code>/v/…</code> link; nananatiling <code>onChainElectionId</code> ang factory <code>uint256</code>.",
+    electionType: "Uri ng halalan",
+    typePoll: "Poll",
+    typePollHelp: "Pagkatapos magbukas ang results gate (100 balota, o ang nakatakdang wakas, alinman ang mauna), inilalathala ang oras-oras na suma ng pagpipilian 30 minuto pagkatapos ng bawat oras. Ang mga oras na wala pang 10 balota ay isinasama sa susunod. Hindi nagbabago ang nailathalang bloke. Ang sertipikadong tally sa pagsasara ang pinal. Hindi inilalathala ng isang boto ang mga sumang ito.",
+    typeVote: "Vote",
+    typeVoteHelp: "Ipinapakita ang resulta pagkatapos lang matapos ang halalan. Bago ang deadline, walang sinuman, kasama ang mga opisyal, ang makakakita ng bilang ng pagpipilian o bahagyang tally. Nakikita ang turnout.",
+    typeLocked: "Naka-lock ang uri noong ginawa ang halalan at hindi na mababago.",
     loadExisting: "I-load ang umiiral na balota",
     newElection: "Bagong halalan…",
     loadHint: "Maaaring i-edit ang mga nagawang halalan hanggang i-freeze ang talaan. Nanatiling hashed as-is ang mga naka-freeze na balota.",
@@ -951,6 +981,9 @@ export default {
     head: "Head #{head}",
     chain: "chain {id}",
     notTallied: "hindi nabilang ({note})",
+    status: "Katayuan",
+    superseded: "napalitan",
+    orderUnknown: "hindi alam ang pagkakasunod",
     irvShort: "IRV",
   },
   sample: {

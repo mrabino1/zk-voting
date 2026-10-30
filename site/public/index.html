@@ -7,14 +7,17 @@
   <title data-i18n="meta.title">ZK-Voting: private ballots, verifiable results, self-hosted</title>
   <meta name="description" data-i18n-content="meta.description" content="ZK-Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
   <meta name="color-scheme" content="dark">
-  <link rel="icon" href="favicon.svg?v=2bd6214156" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=b156ac0b13">
+  <link rel="icon" href="brand-mark.svg?v=be53df128b" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png?v=ac966d961d" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=c968590ce2" sizes="180x180">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="stylesheet" href="styles.css?v=b3c754afd1">
 </head>
 <body>
   <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets, no embedded demo. -->
   <header class="nav">
     <div class="wrap nav-inner">
-      <a class="brand" href="/"><span class="logo" aria-hidden="true">zk</span> <span data-brand>ZK-Voting</span></a>
+      <a class="brand" href="/"><img class="logo" src="brand-mark.svg?v=be53df128b" alt="" width="36" height="36"><span class="wordmark" title="ZK-Voting"><span data-brand><span class="brand-zk">ZK</span><span class="brand-rest">-Voting</span></span></span></a>
       <nav aria-label="Main" data-i18n-aria-label="nav.main">
         <a href="#vision" data-i18n="nav.vision">Vision</a>
         <a href="#why" data-i18n="nav.why">Why it matters</a>
@@ -31,8 +34,8 @@
     <section class="hero">
       <div class="wrap">
         <p class="eyebrow" data-i18n="hero.eyebrow">Open source &middot; Not for profit &middot; Self-hostable</p>
-        <h1 data-i18n-html="hero.title">Ballots built so nobody can read them.</h1>
-        <p class="lead" data-i18n="hero.lead">ZK-Voting lets any group run its own elections and polls. The creator chooses a poll or a vote. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends. A vote publishes choices only at the deadline. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots (tests currently use a mock verifier). Individual choices are not published.</p>
+        <h1 data-i18n-html="hero.title">Ballots designed so nobody can read them.</h1>
+        <p class="lead" data-i18n="hero.lead">ZK-Voting lets any group run its own elections and polls. When creating one, the operator chooses a poll or a vote and whether re-voting is allowed. That setting is locked until the election ends. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first. A vote publishes choices only at the deadline. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots (tests currently use a mock verifier). Individual choices are designed not to be published.</p>
         <div class="cta">
           <a class="btn" href="https://community.zk-voting.org" data-i18n="hero.discuss">Join the discussion</a>
           <a class="btn btn-ghost" href="https://demo.zk-voting.org" data-i18n="hero.demo">Try the voting demo &rarr;</a>
@@ -176,10 +179,10 @@
         <h2 data-i18n="why.title">Why it matters</h2>
         <p class="sub" data-i18n="why.sub">Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. ZK-Voting turns those claims into things anyone can check.</p>
         <div class="grid">
-          <article class="card"><h3 data-i18n="why.privateTitle">Private by design</h3><p data-i18n="why.privateBody">The option you pick is never a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.</p></article>
-          <article class="card"><h3 data-i18n="why.publicTitle">Publicly verifiable</h3><p data-i18n="why.publicBody">Registrations and disqualification codes are public. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends. A vote's choices stay sealed until the deadline. An independent auditor can rebuild a published result without the operator's private database.</p></article>
-          <article class="card"><h3 data-i18n="why.oneTitle">One person, one vote</h3><p data-i18n="why.oneBody">Every ballot carries a proof that the voter is on the frozen roll and not disqualified. In a poll or a vote, a voter can change their choice until the deadline, and the nullifier counts only the last one.</p></article>
-          <article class="card"><h3 data-i18n="why.coerceTitle">Built to resist coercion</h3><p data-i18n="why.coerceBody">Nothing a voter is given proves their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout is public every hour, as in a poll. The choices stay encrypted until the deadline, and a voter can replace their vote until then. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends.</p></article>
+          <article class="card"><h3 data-i18n="why.privateTitle">Private by design</h3><p data-i18n="why.privateBody">The option you pick is designed never to be a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.</p></article>
+          <article class="card"><h3 data-i18n="why.publicTitle">Publicly verifiable</h3><p data-i18n="why.publicBody">Registrations and disqualification codes are public. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first. A published hourly block is designed to stay as first published. A vote's choices stay sealed until the deadline. An independent auditor is designed to be able to rebuild a published result without the operator's private database.</p></article>
+          <article class="card"><h3 data-i18n="why.oneTitle">One person, one vote</h3><p data-i18n="why.oneBody">Every ballot carries a proof that the voter is on the frozen roll and not disqualified. The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</p></article>
+          <article class="card"><h3 data-i18n="why.coerceTitle">Built to resist coercion</h3><p data-i18n="why.coerceBody">Nothing a voter is given is designed to prove their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout is published on a delayed hourly schedule, as in a poll. The choices stay encrypted until the deadline. If the operator allowed re-voting at creation, a voter can replace their ballot until then.</p></article>
           <article class="card"><h3 data-i18n="why.dueTitle">Due process for disqualification</h3><p data-i18n="why.dueBody">Barring someone is a public, coded, on-chain change with a stated reason, not a silent database flag.</p></article>
           <article class="card"><h3 data-i18n="why.vendorTitle">No vendor lock-in</h3><p data-i18n="why.vendorBody">AGPL-licensed, run at cost, built to be forked and rebranded. Your group owns the node, the roll and the record.</p></article>
         </div>
@@ -195,8 +198,8 @@
           <article class="card"><h3 data-i18n="who.unionsTitle">Unions and member associations</h3><p data-i18n="who.unionsBody">Hold leadership elections and contract ratification votes where members trust the count without trusting the officers.</p></article>
           <article class="card"><h3 data-i18n="who.coopsTitle">Cooperatives and boards</h3><p data-i18n="who.coopsBody">Take board votes and member polls, including weighted and ranked-choice ballots, with an auditable outcome report.</p></article>
           <article class="card"><h3 data-i18n="who.schoolsTitle">Schools and campuses</h3><p data-i18n="who.schoolsBody">Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.</p></article>
-          <article class="card"><h3 data-i18n="who.clubsTitle">Communities and clubs</h3><p data-i18n="who.clubsBody">Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends.</p></article>
-          <article class="card"><h3 data-i18n="who.auditorsTitle">Observers and auditors</h3><p data-i18n="who.auditorsBody">Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends. A vote publishes choices only at the deadline.</p></article>
+          <article class="card"><h3 data-i18n="who.clubsTitle">Communities and clubs</h3><p data-i18n="who.clubsBody">Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first.</p></article>
+          <article class="card"><h3 data-i18n="who.auditorsTitle">Observers and auditors</h3><p data-i18n="who.auditorsBody">Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first. A vote publishes choices only at the deadline.</p></article>
         </div>
       </div>
     </section>
@@ -246,10 +249,10 @@
                 </svg>
               </div>
               <ul>
-                <li data-i18n="pollVote.poll.gate">Counts stay hidden until 100 voters have cast their first ballot, or until the scheduled end, whichever comes first.</li>
+                <li data-i18n="pollVote.poll.gate">Counts stay hidden until 100 distinct voters have cast a ballot, or until the scheduled end, whichever comes first.</li>
                 <li data-i18n="pollVote.poll.hourly">After that gate, per-choice counts publish for each hourly block, 30 minutes after the hour closes.</li>
                 <li data-i18n="pollVote.poll.merge">An hour with fewer than 10 ballots merges forward until a block has at least 10.</li>
-                <li data-i18n="pollVote.poll.freeze">Published hourly blocks never change. Re-votes show up only in the final tally.</li>
+                <li data-i18n="pollVote.poll.freeze">Published hourly blocks never change: each block is designed to stay as first published. Replacement ballots, if re-voting is allowed, show up only in the final tally.</li>
               </ul>
             </article>
             <article class="ballot-sheet" id="vote-column" aria-labelledby="vote-column-title">
@@ -269,16 +272,18 @@
               </div>
               <ul>
                 <li data-i18n="pollVote.vote.sealed">Choices stay sealed until the deadline.</li>
-                <li data-i18n="pollVote.vote.guardians">They are decrypted only as an aggregate, by k-of-n guardians. The design gives the operator no key share.</li>
+                <li data-i18n="pollVote.vote.guardians">They are designed to be decrypted only as an aggregate, by k-of-n guardians. The design gives the operator no key share.</li>
+                <li data-i18n="pollVote.vote.keyL2">Choices are encrypted to a public key posted on the L2.</li>
+                <li data-i18n="pollVote.vote.shamir">The matching private key is split among the guardians with Shamir secret sharing, designed so no single party, including the operator, can decrypt early.</li>
                 <li data-i18n="pollVote.vote.noInterim">There are no interim per-choice counts.</li>
               </ul>
             </article>
           </div>
           <h3 data-i18n="pollVote.both.title">Both</h3>
           <ul class="both-grid">
-            <li data-i18n="pollVote.both.revote">A voter can re-vote until the deadline. The last vote counts.</li>
+            <li data-i18n="pollVote.both.revote">The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</li>
             <li data-i18n="pollVote.both.receipt">Every ballot, including a re-vote, gets a receipt.</li>
-            <li data-i18n="pollVote.both.turnout">Hourly turnout is public, with no padding.</li>
+            <li data-i18n="pollVote.both.turnout">Turnout is published on a delayed hourly schedule, with no padding.</li>
             <li data-i18n="pollVote.both.batch">Ballots batch hourly while open, one final batch goes to L1 at the deadline, and one supplementary batch is posted before the tally.</li>
             <li data-i18n="pollVote.both.challenge">A challenge window, which must be longer than zero, comes before the final tally.</li>
           </ul>
@@ -335,9 +340,9 @@
         <ol class="steps">
           <li><span class="n">1</span><h3 data-i18n="how.s1title">Register</h3><p data-i18n="how.s1body">Members sign up with a passkey, wallet, email or ID. The roll stores an identity commitment, never an address or document number.</p></li>
           <li><span class="n">2</span><h3 data-i18n="how.s2title">Freeze the roll</h3><p data-i18n="how.s2body">Officials commit the eligible set and any disqualifications for the election.</p></li>
-          <li><span class="n">3</span><h3 data-i18n="how.s3title">Vote with a proof</h3><p data-i18n="how.s3body">Each ballot proves eligibility. In a poll or a vote, the voter can change their choice until the deadline. The zero-knowledge proof and the nullifier count only the last one.</p></li>
-          <li><span class="n">4</span><h3 data-i18n="how.s4title">While it is open</h3><p data-i18n="how.s4body">A poll publishes per-choice counts once 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward until a block has at least 10. A vote publishes hourly turnout and keeps choices sealed.</p></li>
-          <li><span class="n">5</span><h3 data-i18n="how.s5title">After the closing date</h3><p data-i18n="how.s5body">No more ballots are accepted. A poll's published hourly blocks stay as published. Re-votes show up only in the final tally. A vote's choices are decrypted only as an aggregate by k-of-n guardians. One final batch is published at the deadline, then a challenge window, then the final tally. Anyone can check that the published totals match the accepted ballots.</p></li>
+          <li><span class="n">3</span><h3 data-i18n="how.s3title">Vote with a proof</h3><p data-i18n="how.s3body">Each ballot proves eligibility. The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</p></li>
+          <li><span class="n">4</span><h3 data-i18n="how.s4title">While it is open</h3><p data-i18n="how.s4body">A poll publishes per-choice counts once 100 distinct voters have cast a ballot or the scheduled end arrives, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward until a block has at least 10. A vote publishes turnout on the same delayed hourly schedule and keeps choices sealed.</p></li>
+          <li><span class="n">5</span><h3 data-i18n="how.s5title">After the closing date</h3><p data-i18n="how.s5body">No more ballots are accepted. A poll's published hourly blocks are designed to stay as first published. If re-voting was allowed, replacement ballots show up only in the final tally. A vote's choices are designed to be decrypted only as an aggregate by k-of-n guardians. One final batch goes to L1 at the deadline, then a challenge window, then the final tally. Anyone can check that the published totals match the accepted ballots.</p></li>
         </ol>
       </div>
     </section>

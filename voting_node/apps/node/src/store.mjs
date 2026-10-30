@@ -32,6 +32,7 @@ import {
 import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
 import { ensureSiteAdminCollections } from './siteAudit.mjs';
 import { disclosureSettings, isDisclosed, selectPublicVotes } from './disclosure.mjs';
+import { electionTypeOf, isVoteElection, voteResultsSealed } from './electionType.mjs';
 import {
   electionMatchesRef,
   mintScopedPublicId,
@@ -100,12 +101,16 @@ export function electionIdMatches(election, id) {
   return electionAliases(election).some((v) => String(v) === want);
 }
 
-/** Public ballot row: no acceptedAt, no choice, no user id. */
+/**
+ * Public ballot row: no acceptedAt, no choice, no user id.
+ * The hash is the one first stored. A re-vote does not change it, so a
+ * public record never pairs a nullifier with a later ballot hash.
+ */
 export function publicVoteRecord(vote) {
   if (!vote) return null;
   return {
     nullifier: vote.nullifier,
-    ballotHash: vote.ballotHash,
+    ballotHash: vote.publishedBallotHash || vote.ballotHash,
     electionId: String(vote.electionId),
     relayer: vote.relayer || 'node',
   };
@@ -120,16 +125,23 @@ export function publishedVoteSlice(vote, now, intervalSeconds, delaySeconds = 0)
 
 export function electionDisclosurePolicy(election, config, now, submittedVotes) {
   const settings = disclosureSettings(config || {});
+  const sealed = voteResultsSealed(election, now);
+  const vote = isVoteElection(election);
+  // RESULTS_MIN_VOTES is the poll per-choice gate. Turnout does not use it.
+  // A vote does not use it. Choice results are not on this object.
   const votes = submittedVotes ?? election?.acceptedBallots ?? 0;
   return {
     now,
     intervalSeconds: settings.intervalSeconds,
     delaySeconds: settings.delaySeconds,
     minBlockVotes: settings.minBlockVotes,
-    minVotes: settings.minVotes,
+    minVotes: vote ? 0 : settings.minVotes,
     endTime: election?.cutoffTime ?? null,
-    tallied: Boolean(election?.tally),
+    // TODO: switch tallied to certification after the challenge window once the #113 contracts land. Until then it follows setTally.
+    tallied: sealed ? false : Boolean(election?.tally),
     submittedVotes: votes,
+    resultsSealed: sealed,
+    electionType: electionTypeOf(election),
   };
 }
 
@@ -153,6 +165,22 @@ function emptyData() {
     votes: [],
     receipts: [],
     envelopes: [],
+    // Ballots waiting for the next BallotInbox batch. Proof points only.
+    // The JSON backend's live copy is chain-vote-queue.json; these fields are
+    // the copy a full persist writes, and the postgres collections.
+    chainVoteQueue: [],
+    chainVoteBatchAt: {},
+    chainVoteInFlight: {},
+    chainVoteDeadLetter: [],
+    chainVoteAttempts: {},
+    chainVoteBackoff: {},
+    chainVoteSplit: {},
+    chainVoteAlerts: [],
+    chainVoteTransportStrikes: {},
+    // Dead letters offered to the supplementary batch and not yet mined.
+    chainVoteSupplementary: [],
+    // Proof payload for a crash between accept and the queue write. Not a public row.
+    chainBallotPayloads: [],
     notifications: [],
     tallyGuardians: [],
     pages: [],
@@ -174,7 +202,8 @@ function emptyData() {
     superAdminAudit: [],
     // Phase-2 trusted-setup ceremonies (src/ceremony/service.mjs).
     ceremonies: [],
-    // electionId -> sorted hashes of spent vote passes (no order, no time).
+    // electionId -> sorted hashes of spent vote passes. An unlinked set:
+    // a hash is never stored on, or keyed by, a nullifier or a ballot.
     votePassSpent: {},
     runtime: {},
   };
@@ -225,6 +254,7 @@ function normalizeLoadedData(parsed) {
   }
   data.site = { ...defaultSite(), ...(data.site || {}) };
   data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
+  delete data.heldChainBallots;
   ensureSuperAdminCollections(data);
   ensureSiteAdminCollections(data);
   data.meta = data.meta || {};
@@ -242,6 +272,7 @@ export function scrubBallotLinkage(data) {
   if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
     data.votePassSpent = {};
   }
+  if (dropPassToBallotLinks(data)) markPassLinksDirty(data);
   const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
   for (const r of data.receipts || []) {
     if (!r || typeof r !== 'object') continue;
@@ -273,7 +304,7 @@ function insertAtRandom(list, item) {
 }
 
 /** Soft-deleted rows stay in the document. Every read skips them. */
-function isSoftDeleted(row) {
+export function isSoftDeleted(row) {
   return Boolean(row && typeof row === 'object' && row.is_deleted === true);
 }
 
@@ -289,6 +320,8 @@ const ARRAY_COLLECTIONS = [
   'votes',
   'receipts',
   'envelopes',
+  'chainBallotPayloads',
+  'chainVoteAlerts',
   'notifications',
   'tallyGuardians',
   'pages',
@@ -311,7 +344,13 @@ const ARRAY_COLLECTIONS = [
 
 const PG_NAMESPACE = 'store';
 /** Ballot-side collections whose Postgres timestamps are hour-truncated (db.mjs). */
-export const BALLOT_TIMING_COLLECTIONS = ['votes', 'receipts', 'envelopes', 'votePassSpent', 'elections'];
+export const BALLOT_TIMING_COLLECTIONS = [
+  'votes',
+  'receipts',
+  'envelopes',
+  'votePassSpent',
+  'elections',
+];
 
 async function readJsonFile(filePath) {
   try {
@@ -322,11 +361,177 @@ async function readJsonFile(filePath) {
   }
 }
 
+function plainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Queue document. Rows are proof points; the chain layer owns the meaning. */
+export function normalizeChainVoteQueue(doc) {
+  const src = doc && typeof doc === 'object' ? doc : {};
+  const batchAt = {};
+  if (plainObject(src.batchAt)) {
+    for (const [id, at] of Object.entries(src.batchAt)) batchAt[id] = Number(at) || 0;
+  }
+  const inFlight = {};
+  if (plainObject(src.inFlight)) {
+    for (const [id, marker] of Object.entries(src.inFlight)) {
+      if (!plainObject(marker)) continue;
+      inFlight[id] = {
+        txHash: marker.txHash ? String(marker.txHash) : null,
+        nullifiers: Array.isArray(marker.nullifiers) ? marker.nullifiers.map((n) => String(n)) : [],
+        sentAt: Number(marker.sentAt) || 0,
+      };
+    }
+  }
+  const attempts = {};
+  if (plainObject(src.attempts)) {
+    for (const [id, n] of Object.entries(src.attempts)) {
+      const num = Number(n);
+      if (Number.isFinite(num) && num > 0) attempts[id] = Math.floor(num);
+    }
+  }
+  const backoffUntil = {};
+  if (plainObject(src.backoffUntil)) {
+    for (const [id, at] of Object.entries(src.backoffUntil)) {
+      const num = Number(at);
+      if (Number.isFinite(num) && num > 0) backoffUntil[id] = Math.floor(num);
+    }
+  }
+  const splitLimit = {};
+  if (plainObject(src.splitLimit)) {
+    for (const [id, n] of Object.entries(src.splitLimit)) {
+      const num = Number(n);
+      if (Number.isFinite(num) && num > 0) splitLimit[id] = Math.floor(num);
+    }
+  }
+  const transportStrikes = {};
+  if (plainObject(src.transportStrikes)) {
+    for (const [id, n] of Object.entries(src.transportStrikes)) {
+      const num = Number(n);
+      if (Number.isFinite(num) && num > 0) transportStrikes[id] = Math.floor(num);
+    }
+  }
+  return {
+    rows: Array.isArray(src.rows) ? src.rows : [],
+    batchAt,
+    inFlight,
+    deadLetter: Array.isArray(src.deadLetter) ? src.deadLetter.filter((item) => plainObject(item)) : [],
+    attempts,
+    backoffUntil,
+    splitLimit,
+    transportStrikes,
+    alerts: Array.isArray(src.alerts) ? src.alerts.filter((item) => plainObject(item)).slice(-20) : [],
+    supplementary: Array.isArray(src.supplementary) ? src.supplementary.filter((item) => plainObject(item)) : [],
+  };
+}
+
+function markPassLinksDirty(data) {
+  Object.defineProperty(data, '__passLinksDirty', {
+    value: true,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
+/**
+ * Delete any stored tie between a vote pass and a ballot: the tag list, a
+ * legacy spentPassHash field, and a spent-set entry that was keyed by a
+ * nullifier. The spent set stays a list of hashes per election.
+ */
+export function dropPassToBallotLinks(data) {
+  if (!data || typeof data !== 'object') return false;
+  let dirty = false;
+  if (data.votePassTags != null) {
+    delete data.votePassTags;
+    dirty = true;
+  }
+  for (const key of ['votes', 'receipts', 'envelopes', 'chainBallotPayloads']) {
+    for (const row of data[key] || []) {
+      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'spentPassHash')) {
+        delete row.spentPassHash;
+        dirty = true;
+      }
+    }
+  }
+  const lists = data.votePassSpent;
+  if (lists && typeof lists === 'object' && !Array.isArray(lists)) {
+    for (const [electionId, value] of Object.entries(lists)) {
+      let hashes;
+      if (Array.isArray(value)) {
+        hashes = value.map((item) => {
+          if (item && typeof item === 'object') {
+            dirty = true;
+            return String(item.hash || item.passHash || '').toLowerCase();
+          }
+          return String(item || '').toLowerCase();
+        });
+      } else if (value && typeof value === 'object') {
+        dirty = true;
+        hashes = Object.values(value).map((item) => String(item || '').toLowerCase());
+      } else {
+        lists[electionId] = [];
+        dirty = true;
+        continue;
+      }
+      const unique = [...new Set(hashes.filter((hash) => /^[0-9a-f]{64}$/.test(hash)))].sort();
+      const same = Array.isArray(value)
+        && unique.length === value.length
+        && unique.every((hash, index) => hash === String(value[index]).toLowerCase());
+      if (!same) {
+        lists[electionId] = unique;
+        dirty = true;
+      }
+    }
+  }
+  return dirty;
+}
+
+/** Public reason code. Free text stays in the private operator note. */
+export const EXCLUSION_REASON_CODE = 'excluded';
+
+/** A pending exclusion approval expires after one day. */
+export const EXCLUSION_APPROVAL_TTL_SECONDS = 24 * 60 * 60;
+
+/** Public exclusion summary: a count and a fixed reason code, not a nullifier or a note. */
+export function publicExclusion(election) {
+  const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
+  const byReason = new Map();
+  for (const row of rows) {
+    const code = String(row?.reasonCode || '').trim();
+    const reason = /^[a-z0-9_]{1,40}$/.test(code) ? code : EXCLUSION_REASON_CODE;
+    byReason.set(reason, (byReason.get(reason) || 0) + 1);
+  }
+  return {
+    count: rows.length,
+    reasons: [...byReason.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0)),
+  };
+}
+
+function chainVoteQueueFromData(data) {
+  return normalizeChainVoteQueue({
+    rows: data?.chainVoteQueue,
+    batchAt: data?.chainVoteBatchAt,
+    inFlight: data?.chainVoteInFlight,
+    deadLetter: data?.chainVoteDeadLetter,
+    attempts: data?.chainVoteAttempts,
+    backoffUntil: data?.chainVoteBackoff,
+    splitLimit: data?.chainVoteSplit,
+    transportStrikes: data?.chainVoteTransportStrikes,
+    alerts: data?.chainVoteAlerts,
+    supplementary: data?.chainVoteSupplementary,
+  });
+}
+
 export class Store {
   constructor(filePath, data) {
     this.filePath = filePath;
+    this.queuePath = path.join(path.dirname(filePath), 'chain-vote-queue.json');
     this.data = data;
     this._write = Promise.resolve();
+    this._queueWrite = Promise.resolve();
+    this._chainQueue = chainVoteQueueFromData(data);
     /** 'json' (DATA_DIR file, dev fallback) or 'postgres' (DATABASE_URL). */
     this.backend = 'json';
     this.pg = null;
@@ -367,7 +572,9 @@ export class Store {
       );
     }
     store.writerActive = config.writerActive !== false;
+    store.allowRevote = config.allowRevote === true;
     store.lease = config.writerLeaseHandle || null;
+    store.allowRevote = config.allowRevote === true;
     for (const user of store.data.users) {
       ensurePersonFields(user);
       for (const cred of user.credentials) {
@@ -392,6 +599,7 @@ export class Store {
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 9);
+    await store.loadChainQueueFromDisk();
     if (store.writerActive) {
       if (store.pg) await store.pg.claimWriter();
       await store.persist();
@@ -441,6 +649,7 @@ export class Store {
     this.data = data;
     this.ensureJurisdictionIds();
     this.rebuildAllEligibility();
+    await this.loadChainQueueFromDisk();
   }
 
   async persist() {
@@ -660,6 +869,90 @@ export class Store {
 
   listElections() {
     return this.data.elections.slice();
+  }
+
+  /** Public lists omit a row whose sequencer open has not finished. */
+  listPublicElections() {
+    return this.listElections().filter((row) => row && !isSoftDeleted(row) && row.l2OpenStatus !== 'pending');
+  }
+
+  applyChainVoteQueue(doc) {
+    const next = normalizeChainVoteQueue(doc);
+    this._chainQueue = next;
+    this.data.chainVoteQueue = next.rows;
+    this.data.chainVoteBatchAt = next.batchAt;
+    this.data.chainVoteInFlight = next.inFlight;
+    this.data.chainVoteDeadLetter = next.deadLetter;
+    this.data.chainVoteAttempts = next.attempts;
+    this.data.chainVoteBackoff = next.backoffUntil;
+    this.data.chainVoteSplit = next.splitLimit;
+    this.data.chainVoteAlerts = next.alerts;
+    this.data.chainVoteTransportStrikes = next.transportStrikes;
+    this.data.chainVoteSupplementary = next.supplementary;
+    return next;
+  }
+
+  /**
+   * JSON: chain-vote-queue.json wins over the embedded copy so a crash between
+   * a ballot and the next full persist still has the queue. Postgres keeps the
+   * queue in its own collections; the sidecar is not read there.
+   */
+  async loadChainQueueFromDisk() {
+    if (!this.pg) {
+      const sidecar = await readJsonFile(this.queuePath);
+      if (sidecar && typeof sidecar === 'object') {
+        this.applyChainVoteQueue(sidecar);
+        return this._chainQueue;
+      }
+    }
+    this.applyChainVoteQueue(chainVoteQueueFromData(this.data));
+    return this._chainQueue;
+  }
+
+  loadChainVoteQueue() {
+    return this._chainQueue || chainVoteQueueFromData(this.data);
+  }
+
+  /**
+   * Persist the ballot queue only. The JSON backend rewrites chain-vote-queue.json.
+   * Postgres writes the queue collections. Neither path rewrites the whole store.
+   */
+  async saveChainVoteQueue(doc) {
+    this.refuseIfStandby();
+    const next = this.applyChainVoteQueue(doc);
+    if (this.pg) {
+      await this.pg.saveCollections({
+        chainVoteQueue: next.rows,
+        chainVoteBatchAt: next.batchAt,
+        chainVoteInFlight: next.inFlight,
+        chainVoteDeadLetter: next.deadLetter,
+        chainVoteAttempts: next.attempts,
+        chainVoteBackoff: next.backoffUntil,
+        chainVoteSplit: next.splitLimit,
+        chainVoteAlerts: next.alerts,
+        chainVoteTransportStrikes: next.transportStrikes,
+        chainVoteSupplementary: next.supplementary,
+      });
+      return;
+    }
+    this._queueWrite = this._queueWrite.then(async () => {
+      const tmp = `${this.queuePath}.${process.pid}.tmp`;
+      const handle = await fs.open(tmp, 'w');
+      try {
+        await handle.writeFile(JSON.stringify(next));
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await fs.rename(tmp, this.queuePath);
+      const dir = await fs.open(path.dirname(this.queuePath), 'r');
+      try {
+        await dir.sync();
+      } finally {
+        await dir.close();
+      }
+    });
+    return this._queueWrite;
   }
 
   getUser(id) {
@@ -1396,6 +1689,7 @@ export class Store {
       treeDepth: params.treeDepth,
       ballotSpecHash: params.ballotSpecHash,
       ballotMethod: params.ballotMethod || 'plurality',
+      electionType: isVoteElection({ electionType: params.electionType }) ? 1 : 0,
       questions: params.questions,
       questionCount: params.questions.length,
       jurisdictionId: params.jurisdictionId,
@@ -1429,8 +1723,35 @@ export class Store {
       createdBy: params.createdBy || null,
       createdAt: new Date().toISOString(),
       staff: [],
+      l2OpenStatus:
+        params.l2OpenStatus === 'pending' || params.l2OpenStatus === 'open'
+          ? params.l2OpenStatus
+          : 'unconfigured',
+      l2OpenFingerprint: params.l2OpenFingerprint || null,
     };
     this.data.elections.push(election);
+    await this.persist();
+    return election;
+  }
+
+  /** A create whose sequencer open failed. A matching retry reuses this row. */
+  findPendingL2Open(fingerprint) {
+    const want = String(fingerprint || '');
+    if (!want) return null;
+    return (
+      (this.data.elections || []).find(
+        (row) =>
+          row &&
+          !isSoftDeleted(row) &&
+          row.l2OpenStatus === 'pending' &&
+          String(row.l2OpenFingerprint || '') === want,
+      ) || null
+    );
+  }
+
+  async setL2OpenStatus(id, status) {
+    const election = this.requireElection(id);
+    election.l2OpenStatus = status;
     await this.persist();
     return election;
   }
@@ -2205,11 +2526,16 @@ export class Store {
     return (this.data.receipts || []).find((r) => !isSoftDeleted(r) && String(r.tokenHash || '').toLowerCase() === key) || null;
   }
 
-  findReceiptForVote(electionId, nullifier) {
+  findReceiptForVote(electionId, nullifier, ballotHash) {
     const key = toBytes32(nullifier);
+    const hash = ballotHash == null || ballotHash === '' ? null : toBytes32(ballotHash);
     return (
       (this.data.receipts || []).find(
-        (r) => !isSoftDeleted(r) && String(r.electionId) === String(electionId) && toBytes32(r.nullifier) === key,
+        (r) =>
+          !isSoftDeleted(r) &&
+          String(r.electionId) === String(electionId) &&
+          toBytes32(r.nullifier) === key &&
+          (hash == null || toBytes32(r.ballotHash) === hash),
       ) || null
     );
   }
@@ -2247,10 +2573,11 @@ export class Store {
   /**
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
-   * they wait for hourly disclosure. No passkey user id, no choice.
+   * they wait for hourly disclosure. No passkey user id, no choice, no pass hash.
    *
-   * One ballot per nullifier: any second submit (including a new ciphertext)
-   * is 409 NULLIFIER_USED. Double voting is impossible.
+   * One ballot per nullifier. A later submit is always rejected here.
+   * relayVote calls replaceVote itself when allowRevote is on, so two racing
+   * first submits cannot both record an explorer row or roll the first one back.
    */
   async acceptVote(vote, envelope) {
     this.refuseIfStandby();
@@ -2278,10 +2605,14 @@ export class Store {
     const record = {
       nullifier: toBytes32(vote.nullifier),
       ballotHash,
+      publishedBallotHash: ballotHash,
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
     };
+    if (vote.chainPayload && typeof vote.chainPayload === 'object') {
+      this.upsertChainBallotPayload(record.electionId, record.nullifier, vote.chainPayload);
+    }
     // Each collection gets its own random insert position, so array order (and
     // the zkv_rows `pos` column) is not arrival order and the three rows of
     // one ballot do not share an index. No userOpHash, no email fields.
@@ -2309,22 +2640,371 @@ export class Store {
         ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
-    if (spentPassHash) {
-      const key = String(vote.electionId);
-      const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
-      list.push(spentPassHash);
-      list.sort();
-      this.data.votePassSpent[key] = list;
-    }
+    if (spentPassHash) this._rememberSpentPass(vote.electionId, spentPassHash);
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
     await this.persist();
     return record;
   }
 
+  /**
+   * Latest ciphertext for the final tally only. The published ballot
+   * hash, accept hour, and block ciphertext stay as first stored.
+   * acceptedBallots stays a unique-nullifier count.
+   * The presented pass must already be in the unlinked spent set. This
+   * stores nothing that ties that pass to this nullifier.
+   */
+  async replaceVote(vote, envelope) {
+    this.refuseIfStandby();
+    if (this.allowRevote !== true) {
+      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+    }
+    const existing = this.findVote(vote.electionId, vote.nullifier);
+    if (!existing) {
+      throw new HttpError(404, 'ballot not found', { code: 'NOT_FOUND' });
+    }
+    const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
+    if (!spentPassHash || !this.votePassSpent(vote.electionId, spentPassHash)) {
+      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
+    }
+    const electionId = String(existing.electionId);
+    const nullifier = existing.nullifier;
+    if (!existing.publishedBallotHash) existing.publishedBallotHash = existing.ballotHash;
+    const sameBallot = (row) =>
+      row && String(row.electionId) === electionId && toBytes32(row.nullifier) === toBytes32(nullifier);
+    let env = null;
+    for (const row of this.data.envelopes) {
+      if (sameBallot(row)) {
+        env = row;
+        break;
+      }
+    }
+    if (envelope) {
+      if (!env) {
+        // The published ciphertext slot stays empty. The replacement is only
+        // the tally ciphertext, so a missing original is not overwritten.
+        env = {
+          electionId,
+          nullifier,
+          ballotHash: existing.ballotHash,
+          encryptedBallot: null,
+          tallyEncryptedBallot: envelope.encryptedBallot,
+        };
+        insertAtRandom(this.data.envelopes, env);
+      } else {
+        env.tallyEncryptedBallot = envelope.encryptedBallot;
+      }
+      if (Array.isArray(envelope.rankingPayload)) env.tallyRankingPayload = envelope.rankingPayload;
+    }
+    if (vote.chainPayload && typeof vote.chainPayload === 'object') {
+      this.upsertChainBallotPayload(electionId, nullifier, vote.chainPayload);
+    }
+    if (vote.receiptTokenHash) {
+      let pdfSha256 = null;
+      if (vote.pdfSha256) {
+        pdfSha256 = String(vote.pdfSha256).toLowerCase();
+        if (!/^[0-9a-f]{64}$/.test(pdfSha256)) {
+          throw new HttpError(500, 'receipt PDF fingerprint missing', { code: 'RECEIPT_PDF_DRIFT' });
+        }
+      }
+      if (!Array.isArray(this.data.receipts)) this.data.receipts = [];
+      const receiptAcceptedAt = Number.isFinite(Number(vote.acceptedAt))
+        ? Math.floor(Number(vote.acceptedAt))
+        : existing.acceptedAt;
+      insertAtRandom(this.data.receipts, {
+        id: randomUUID(),
+        electionId,
+        nullifier,
+        ballotHash: toBytes32(vote.ballotHash),
+        tokenHash: String(vote.receiptTokenHash),
+        acceptedAt: receiptAcceptedAt,
+        pdfSha256,
+        pdfProtected: true,
+        pdfIntegrity: vote.pdfIntegrity ? String(vote.pdfIntegrity) : null,
+      });
+    }
+    await this.persist();
+    return existing;
+  }
+
+  /**
+   * Undo one acceptVote that never made it onto the queue. Removes that
+   * ballot's vote, receipt, and envelope, unspends its vote pass, and
+   * decrements the counter. A published explorer block is left alone.
+   */
+  async revertAcceptedVote({ electionId, nullifier, spentPassHash = null } = {}) {
+    this.refuseIfStandby();
+    const key = toBytes32(nullifier);
+    const electionKey = String(electionId);
+    const keepVote = (row) =>
+      isSoftDeleted(row) || String(row?.electionId) !== electionKey || toBytes32(row?.nullifier) !== key;
+    const before = this.data.votes.length;
+    this.data.votes = this.data.votes.filter(keepVote);
+    const removed = before - this.data.votes.length;
+    if (!removed) return false;
+    this.data.receipts = (this.data.receipts || []).filter(keepVote);
+    this.data.envelopes = (this.data.envelopes || []).filter(
+      (row) => String(row?.electionId) !== electionKey || toBytes32(row?.nullifier) !== key,
+    );
+    if (spentPassHash) {
+      const hash = String(spentPassHash).toLowerCase();
+      const list = this.data.votePassSpent?.[electionKey];
+      if (Array.isArray(list)) this.data.votePassSpent[electionKey] = list.filter((item) => item !== hash);
+    }
+    this.data.chainBallotPayloads = (this.data.chainBallotPayloads || []).filter(
+      (row) => !row || String(row.electionId) !== electionKey || toBytes32(row.nullifier) !== key,
+    );
+    const election = this.getElection(electionId);
+    if (election) election.acceptedBallots = Math.max(0, Number(election.acceptedBallots || 0) - removed);
+    await this.persist();
+    return true;
+  }
+
+  upsertChainBallotPayload(electionId, nullifier, payload) {
+    if (!Array.isArray(this.data.chainBallotPayloads)) this.data.chainBallotPayloads = [];
+    const electionKey = String(electionId);
+    const id = toBytes32(nullifier);
+    let row = this.data.chainBallotPayloads.find(
+      (item) => item && String(item.electionId) === electionKey && toBytes32(item.nullifier) === id,
+    );
+    if (!row) {
+      row = { electionId: electionKey, nullifier: id };
+      insertAtRandom(this.data.chainBallotPayloads, row);
+    }
+    row.proof = payload.proof;
+    row.publicInputs = payload.publicInputs;
+    row.encryptedBallot = payload.encryptedBallot;
+    row.startTime = payload.startTime ?? 0;
+    row.cutoffTime = payload.cutoffTime ?? null;
+    return row;
+  }
+
+  chainBallotPayload(electionId, nullifier) {
+    const electionKey = String(electionId);
+    let id;
+    try {
+      id = toBytes32(nullifier);
+    } catch {
+      return null;
+    }
+    return (
+      (this.data.chainBallotPayloads || []).find(
+        (item) => item && String(item.electionId) === electionKey && toBytes32(item.nullifier) === id,
+      ) || null
+    );
+  }
+
+  async markChainBallotQueued(electionId, nullifier, at, txHash = null) {
+    const row = this.chainBallotPayload(electionId, nullifier);
+    if (!row) return null;
+    row.chainQueuedAt = Math.floor(Number(at) || Date.now() / 1000);
+    if (txHash) row.chainTxHash = String(txHash);
+    await this.persist();
+    return row;
+  }
+
+  /**
+   * Drop proof payloads once the inbox has the nullifier. Matches the app
+   * election id or the on-chain id the queue uses.
+   */
+  async dropChainBallotPayloads(electionKey, nullifiers) {
+    if (!Array.isArray(this.data.chainBallotPayloads) || !this.data.chainBallotPayloads.length) return 0;
+    const ids = new Set();
+    for (const n of nullifiers || []) {
+      try {
+        ids.add(toBytes32(n));
+      } catch {
+        /* skip a nullifier this store cannot name */
+      }
+    }
+    if (!ids.size) return 0;
+    const electionIds = new Set([String(electionKey)]);
+    for (const election of this.data.elections || []) {
+      if (!election) continue;
+      const appId = String(election.id);
+      const chainId = election.onChainElectionId != null ? String(election.onChainElectionId) : '';
+      if (appId === String(electionKey) || (chainId && chainId === String(electionKey))) {
+        electionIds.add(appId);
+        if (chainId) electionIds.add(chainId);
+      }
+    }
+    const before = this.data.chainBallotPayloads.length;
+    this.data.chainBallotPayloads = this.data.chainBallotPayloads.filter((row) => {
+      if (!row || !electionIds.has(String(row.electionId))) return true;
+      try {
+        return !ids.has(toBytes32(row.nullifier));
+      } catch {
+        return true;
+      }
+    });
+    const removed = before - this.data.chainBallotPayloads.length;
+    if (removed) await this.persist();
+    return removed;
+  }
+
+  excludedNullifiers(electionId) {
+    const election = this.getElection(electionId);
+    const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
+    return rows.map((row) => row.nullifier);
+  }
+
+  /**
+   * First tally operator records intent. A second, different operator must
+   * call again before the ballot is excluded. The pending row expires after
+   * 24 hours and stays tied to the public reason code. The second operator
+   * receives the first operator's note.
+   */
+  async noteExclusionApproval(electionId, { nullifier, userId, reason, at } = {}) {
+    this.refuseIfStandby();
+    const election = this.requireElection(electionId);
+    const clean = String(reason || '').trim();
+    if (!clean) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
+    if (clean.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
+    const uid = String(userId || '').trim();
+    if (!uid) throw new HttpError(400, 'operator is required', { code: 'OPERATOR_REQUIRED' });
+    const id = toBytes32(nullifier);
+    const when = Math.floor(Number(at) || Date.now() / 1000);
+    if (!Array.isArray(election.exclusionApprovals)) election.exclusionApprovals = [];
+    const pending = election.exclusionApprovals.find((row) => row && toBytes32(row.nullifier) === id);
+    const age = pending ? when - Number(pending.at) : 0;
+    const expired = Boolean(pending) && (!Number.isFinite(age) || age >= EXCLUSION_APPROVAL_TTL_SECONDS);
+    const unbound = Boolean(pending) && pending.reasonCode !== EXCLUSION_REASON_CODE;
+    if (!pending || expired || unbound) {
+      election.exclusionApprovals = election.exclusionApprovals.filter(
+        (row) => !(row && toBytes32(row.nullifier) === id),
+      );
+      election.exclusionApprovals.push({
+        nullifier: id,
+        userId: uid,
+        reason: clean,
+        reasonCode: EXCLUSION_REASON_CODE,
+        at: when,
+      });
+      await this.persist();
+      return { status: 'pending', reason: clean, reasonCode: EXCLUSION_REASON_CODE };
+    }
+    if (String(pending.userId) === uid) {
+      throw new HttpError(409, 'a second tally operator must approve this exclusion', { code: 'SAME_OPERATOR' });
+    }
+    return {
+      status: 'ready',
+      approverIds: [String(pending.userId), uid],
+      reason: pending.reason,
+      reasonCode: pending.reasonCode,
+    };
+  }
+
+  /**
+   * Writer record that a dead-lettered ballot will not be forced onto the
+   * chain. The vote row stays. The public tally copies the count and the
+   * fixed reason code. The operator's note stays on exclusionNotes.
+   */
+  async recordBallotExclusion(electionId, { nullifier, reason, notes, at, approverIds } = {}) {
+    this.refuseIfStandby();
+    const election = this.requireElection(electionId);
+    const list = Array.isArray(notes) && notes.length
+      ? notes.map((entry) => ({
+          reason: String(entry?.reason || '').trim(),
+          userId: entry?.userId != null ? String(entry.userId) : '',
+        }))
+      : [{ reason: String(reason || '').trim(), userId: '' }];
+    for (const entry of list) {
+      if (!entry.reason) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
+      if (entry.reason.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
+    }
+    const id = toBytes32(nullifier);
+    if (!Array.isArray(election.excludedBallots)) election.excludedBallots = [];
+    if (!election.excludedBallots.some((row) => row && toBytes32(row.nullifier) === id)) {
+      const when = Math.floor(Number(at) || Date.now() / 1000);
+      const ids = Array.isArray(approverIds) ? approverIds.map((item) => String(item)) : [];
+      election.excludedBallots.push({
+        nullifier: id,
+        reasonCode: EXCLUSION_REASON_CODE,
+        at: when,
+      });
+      if (!Array.isArray(election.exclusionNotes)) election.exclusionNotes = [];
+      for (const entry of list) {
+        election.exclusionNotes.push({
+          nullifier: id,
+          reason: entry.reason,
+          at: when,
+          ...(entry.userId ? { userId: entry.userId } : {}),
+          approverIds: ids,
+        });
+      }
+      if (Array.isArray(election.exclusionApprovals)) {
+        election.exclusionApprovals = election.exclusionApprovals.filter(
+          (row) => !(row && toBytes32(row.nullifier) === id),
+        );
+      }
+      await this.persist();
+    }
+    return publicExclusion(election);
+  }
+
+  /** Keep the exclusion record when the dead letter could not be released. */
+  async setExclusionReleasePending(electionId, nullifier, pending) {
+    this.refuseIfStandby();
+    const election = this.requireElection(electionId);
+    const id = toBytes32(nullifier);
+    const row = (election.excludedBallots || []).find((item) => item && toBytes32(item.nullifier) === id);
+    if (!row) return false;
+    if (pending) {
+      if (row.releasePending === true) return true;
+      row.releasePending = true;
+    } else if (row.releasePending) {
+      delete row.releasePending;
+    } else {
+      return false;
+    }
+    await this.persist();
+    return true;
+  }
+
   votePassSpent(electionId, hash) {
     const list = this.data.votePassSpent?.[String(electionId)];
     return Array.isArray(list) && list.includes(String(hash).toLowerCase());
+  }
+
+  /** Add a pass hash to the election's unlinked spent set. Not stored on a ballot. */
+  _rememberSpentPass(electionId, passHash) {
+    const hash = String(passHash || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) return;
+    const key = String(electionId);
+    if (!this.data.votePassSpent || typeof this.data.votePassSpent !== 'object' || Array.isArray(this.data.votePassSpent)) {
+      this.data.votePassSpent = {};
+    }
+    const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
+    if (!list.includes(hash)) {
+      list.push(hash);
+      list.sort();
+      this.data.votePassSpent[key] = list;
+    }
+  }
+
+  /** Live ballots (not soft-deleted) whose nullifier was excluded from the tally. */
+  liveExcludedCount(electionId) {
+    const election = this.getElection(electionId);
+    const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
+    if (!rows.length) return 0;
+    const ids = new Set();
+    for (const row of rows) {
+      try {
+        ids.add(toBytes32(row.nullifier));
+      } catch {
+        /* a row this store cannot name is not a live ballot */
+      }
+    }
+    if (!ids.size) return 0;
+    let count = 0;
+    for (const vote of this.listVotes(electionId)) {
+      try {
+        if (ids.has(toBytes32(vote.nullifier))) count += 1;
+      } catch {
+        /* skip */
+      }
+    }
+    return count;
   }
 
   listVotes(electionId) {
@@ -2338,16 +3018,18 @@ export class Store {
   listPublishedVotes(electionId, now, intervalSeconds, policy = null) {
     const election = this.getElection(electionId);
     const votes = this.listVotes(electionId);
+    const base = policy && typeof policy === 'object' ? policy : {};
+    // Choice sealing must not suppress the hourly ballot rows.
     const resolved = {
       now,
-      intervalSeconds,
-      delaySeconds: 0,
-      minBlockVotes: 1,
-      minVotes: 0,
-      endTime: election?.cutoffTime ?? null,
-      tallied: Boolean(election?.tally),
-      submittedVotes: election?.acceptedBallots ?? votes.length,
-      ...(policy || {}),
+      intervalSeconds: base.intervalSeconds ?? intervalSeconds,
+      delaySeconds: base.delaySeconds || 0,
+      minBlockVotes: base.minBlockVotes ?? 1,
+      minVotes: base.minVotes ?? 0,
+      endTime: base.endTime ?? election?.cutoffTime ?? null,
+      tallied: Boolean(base.tallied),
+      submittedVotes: base.submittedVotes ?? votes.length,
+      resultsSealed: false,
     };
     return selectPublicVotes(votes, resolved);
   }
@@ -2367,7 +3049,10 @@ export class Store {
       }
       return n;
     }
-    return this.data.votes.filter((v) => !isSoftDeleted(v) && isDisclosed(v.acceptedAt, now, intervalOrConfig)).length;
+    return this.data.votes.filter((v) => {
+      if (!v || isSoftDeleted(v)) return false;
+      return isDisclosed(v.acceptedAt, now, intervalOrConfig);
+    }).length;
   }
 
   listEnvelopes(electionId, { includeDeleted = false } = {}) {
@@ -2710,6 +3395,19 @@ export class Store {
     return bucket.partials;
   }
 
+  async saveChoiceBlockPartials(electionId, { blockId, index, partials }) {
+    const bucket = this.getTallyGuardian(electionId);
+    if (!bucket) throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
+    const key = String(blockId);
+    const n = Number(index);
+    bucket.choiceBlockPartials = (bucket.choiceBlockPartials || []).filter(
+      (row) => !(row.blockId === key && row.index === n),
+    );
+    bucket.choiceBlockPartials.push({ blockId: key, index: n, partials });
+    await this.persist();
+    return bucket.choiceBlockPartials;
+  }
+
   async setTally(id, counts, extras = {}) {
     this.refuseIfStandby();
     const election = this.requireElection(id);
@@ -2726,6 +3424,8 @@ export class Store {
       l1: extras.l1 || null,
       ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
+    const excluded = publicExclusion(election);
+    if (excluded.count) election.tally.excluded = excluded;
     if (Array.isArray(extras.questions) && extras.questions.length) {
       election.tally.questions = extras.questions;
     }
@@ -3038,7 +3738,7 @@ export class Store {
           heading: 'Official election outcome',
           letterhead: 'Office of civic elections',
           intro:
-            'This certified report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Individual choices are never shown.',
+            'This final tally report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Excluded ballots are not counted. Individual choices are never shown.',
           footer: 'NOT FOR PROFIT — civic public good. Not a commercial product.',
           contactLine: '',
           showJurisdiction: true,

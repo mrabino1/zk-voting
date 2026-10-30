@@ -22,21 +22,9 @@
     <header class="site-header">
       <div class="header-inner">
         <a class="brand" href="/" aria-label="%BRAND_NAME% home" data-i18n-aria-label="chrome.brandHome">
-          <span class="brand-mark" aria-hidden="true">
-            <svg width="36" height="36" viewBox="0 0 36 36" focusable="false">
-              <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
-              <path
-                d="M10 18.5 L15.5 24 L26 12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-              />
-            </svg>
-          </span>
+          <span class="brand-mark" aria-hidden="true"><img src="/brand-mark.svg" alt="" width="32" height="32" /></span>
           <span class="brand-text">
-            <span class="brand-name">%BRAND_NAME%</span>
+            <span class="brand-name" title="%BRAND_NAME%">%BRAND_WORDMARK%</span>
             <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
           </span>
         </a>
@@ -62,13 +50,13 @@
         <p class="lede">
           Clerks stand up elections. Registrars insert identity commitments (never names).
           Disqualification officers apply the public reason catalog. Tally operators post counts.
-          Choice plaintext never appears here. Turnout and vote proofs on every dashboard wait
-          until the hour that contained the ballot has closed, the disclosure delay has elapsed,
-          and the results gate is open — a person leaving a voting office cannot be matched to a live increase.
+          Choice plaintext never appears here. Turnout and vote proofs on every dashboard publish
+          hourly from the first ballot, after the hour that contained the ballot has closed and
+          the disclosure delay has elapsed — a person leaving a voting office cannot be matched to a live increase.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
-            Public ballot counts wait for the disclosure delay and the results gate. Officials do not get a live precinct tick.
+            Public ballot counts publish hourly from the first ballot, after the disclosure delay. Officials do not get a live precinct tick.
           </p>
         </aside>
         <p class="session-line" id="me-line">Checking session…</p>
@@ -163,6 +151,28 @@
               </select>
             </div>
           </div>
+          <fieldset class="election-type-choices">
+            <legend class="field-label" data-i18n="office.electionType">Election type</legend>
+            <label>
+              <input type="radio" name="electionType" value="0" checked />
+              <span>
+                <strong data-i18n="office.typePoll">Poll</strong>
+                <span class="field-hint" data-i18n="office.typePollHelp">
+                  After the results gate opens (100 ballots, or the scheduled end, whichever comes first), hourly choice sums publish 30 minutes after each hour. Hours with fewer than 10 ballots merge forward. A published block does not change. The final tally at close counts the latest ballot. A vote does not publish these sums.
+                </span>
+              </span>
+            </label>
+            <label>
+              <input type="radio" name="electionType" value="1" />
+              <span>
+                <strong data-i18n="office.typeVote">Vote</strong>
+                <span class="field-hint" data-i18n="office.typeVoteHelp">
+                  The outcome is shown only after the election ends. Before the deadline, nobody, including officials, can see choice counts or a partial tally. Turnout is visible.
+                </span>
+              </span>
+            </label>
+            <span class="field-hint" data-i18n="office.typeLocked">The type is fixed when the election is created and cannot be changed.</span>
+          </fieldset>
           <div class="field">
             <label class="field-label" for="e-method">Ballot method</label>
             <select id="e-method" name="ballotMethod">

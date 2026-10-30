@@ -88,6 +88,98 @@ function escapeAttr(value) {
   return escapeText(value).replace(/"/g, "&quot;");
 }
 
+/** Same split as splitBrandWordmark in the node branding module. */
+function splitBrandWordmark(name) {
+  const value = String(name ?? "");
+  const match = /^(zk)(?=$|[\s\u2010-\u2015-])/i.exec(value);
+  if (!match) return null;
+  return { lead: value.slice(0, match[1].length), rest: value.slice(match[1].length) };
+}
+
+function brandWordmarkMarkup(name) {
+  const value = String(name ?? "");
+  const split = splitBrandWordmark(value);
+  if (!split) return `<span class="brand-name-text">${escapeText(value)}</span>`;
+  let html = `<span class="brand-zk">${escapeText(split.lead)}</span>`;
+  if (split.rest) html += `<span class="brand-rest">${escapeText(split.rest)}</span>`;
+  return html;
+}
+
+function paintBrandWordmark(el, name) {
+  const value = String(name ?? "");
+  const split = splitBrandWordmark(value);
+  el.replaceChildren();
+  if (!split) {
+    const text = document.createElement("span");
+    text.className = "brand-name-text";
+    text.textContent = value;
+    el.append(text);
+  } else {
+    const lead = document.createElement("span");
+    lead.className = "brand-zk";
+    lead.textContent = split.lead;
+    el.append(lead);
+    if (split.rest) {
+      const rest = document.createElement("span");
+      rest.className = "brand-rest";
+      rest.textContent = split.rest;
+      el.append(rest);
+    }
+  }
+  const wordmark = el.closest(".wordmark");
+  if (wordmark) wordmark.setAttribute("title", value);
+}
+
+function matchingClose(html, tag, from) {
+  const openRe = new RegExp(`<${tag}(?:\\s[^>]*)?>`, "gi");
+  const closeRe = new RegExp(`</${tag}>`, "gi");
+  let depth = 1;
+  let i = from;
+  while (i < html.length) {
+    openRe.lastIndex = i;
+    closeRe.lastIndex = i;
+    const open = openRe.exec(html);
+    const close = closeRe.exec(html);
+    if (!close) return -1;
+    if (open && open.index < close.index) {
+      depth += 1;
+      i = open.index + 1;
+      continue;
+    }
+    depth -= 1;
+    i = close.index + close[0].length;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
+function replaceDataBrand(html, brand) {
+  const markup = brandWordmarkMarkup(brand);
+  const re = /<([a-zA-Z0-9:-]+)(\s[^>]*\bdata-brand(?=[\s>=])[^>]*)>/g;
+  let out = "";
+  let last = 0;
+  let match;
+  while ((match = re.exec(html))) {
+    const end = matchingClose(html, match[1], re.lastIndex);
+    if (end < 0) break;
+    out += html.slice(last, match.index);
+    out += `<${match[1]}${match[2]}>${markup}</${match[1]}>`;
+    last = end;
+    re.lastIndex = end;
+  }
+  return out + html.slice(last);
+}
+
+function refreshWordmarkTitle(html, brand) {
+  const value = escapeAttr(brand);
+  return html.replace(/<([a-zA-Z0-9:-]+)([^>]*\bclass="[^"]*\bwordmark\b[^"]*"[^>]*)>/g, (_full, tag, attrs) => {
+    const next = /\btitle="[^"]*"/.test(attrs)
+      ? attrs.replace(/\btitle="[^"]*"/, `title="${value}"`)
+      : `${attrs} title="${value}"`;
+    return `<${tag}${next}>`;
+  });
+}
+
 /** Allow only br, accent spans, code, and strong. Everything else is escaped text. */
 export function safeHtml(template) {
   const re = /<br\s*\/?>|<span class="accent">([\s\S]*?)<\/span>|<code>([\s\S]*?)<\/code>|<strong>([\s\S]*?)<\/strong>/g;
@@ -136,10 +228,7 @@ export function translateMarkup(html, locale, brand = DEFAULT_BRAND_NAME) {
       : `${attrs} aria-label="${value}"`;
     return `<${tag}${next}>`;
   });
-  return out.replace(
-    /(<[^>]*\sdata-brand(?=[\s>=])[^>]*>)([\s\S]*?)(<\/[^>]+>)/g,
-    (_match, open, _body, close) => `${open}${escapeText(brand)}${close}`
-  );
+  return refreshWordmarkTitle(replaceDataBrand(out, brand), brand);
 }
 
 function readStored() {
@@ -181,7 +270,7 @@ function apply(locale) {
     if (key) el.setAttribute("aria-label", translate(code, key, brand));
   });
   document.querySelectorAll("[data-brand]").forEach((el) => {
-    el.textContent = brand;
+    paintBrandWordmark(el, brand);
   });
   const region = document.getElementById("poll-vs-vote");
   if (region) {

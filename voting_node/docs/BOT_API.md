@@ -52,7 +52,7 @@ curl -sS \
   "$ORIGIN/api/me"
 ```
 
-JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor.
+JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout publishes hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor.
 
 Machine-readable copies:
 
@@ -142,14 +142,17 @@ Machine-readable copies:
 ### Elections
 
 - `GET /api/elections` (key read). Published elections. Counts follow the hourly disclosure rule.
-- `POST /api/elections` (key officer, signed in). Clerk creates an election in a jurisdiction they already serve. Body: title, jurisdictionId, startTime, cutoffTime, questions or ballot.
+- `POST /api/elections` (key officer, signed in). Clerk creates an election in a jurisdiction they already serve. Body: title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable.
+- `POST /api/elections/:id/l2-open` (key officer, signed in). Retry the sequencer open for one election. Idempotent: an open election is not opened again.
+- `POST /api/elections/:id/chain-dead-letter/replay` (key officer, signed in). Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row. Body: nullifier (optional).
+- `POST /api/elections/:id/chain-dead-letter/exclude` (tally_operator, signed in). Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted. Body: nullifier, reason.
 - `GET /api/elections/:id` (key read). One election. When the caller is signed in, includes that person’s registration status. Choice is never included.
 - `PATCH /api/elections/:id` (key officer, signed in). Clerk edits the ballot before the roll is frozen.
 - `PUT /api/elections/:id` (key officer, signed in). Same edit as PATCH.
 - `DELETE /api/elections/:id` (key officer, signed in). Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction. Body: confirmTitle.
 - `GET /api/elections/:id/info` (key read). Voter-facing questions, options, and supporting info.
 - `GET /api/elections/:id/info/:questionId/:optionId` (key read). One option and its external links.
-- `GET /api/elections/:id/results` (key read). Certified plurality or IRV results after tally. Empty of option counts before tally.
+- `GET /api/elections/:id/results` (key read). Plurality or IRV results from the final tally. Empty of option counts before tally. A poll may include almost-live hourly choice sums after the results gate. A vote stays empty of those sums. Excluded ballots are not counted.
 - `GET /api/elections/:id/summary` (key read). Short public status: state, window, disclosed ballot count, links.
 - `GET /api/elections/:id/ballots` (key read). Disclosed ballot proofs for closed hours. Choice is not a field.
 - `GET /api/elections/:id/artifacts` (key read). Auditor pack: roots, counts, and public checks. No Node private database.
@@ -164,7 +167,7 @@ Machine-readable copies:
 - `POST /api/elections/:id/registration-requests/:requestId/approve` (key officer, signed in). Clerk or registrar approves a registration request and inserts the commitment.
 - `POST /api/elections/:id/registration-requests/:requestId/deny` (key officer, signed in). Clerk or registrar declines a registration request. Body: reason.
 - `POST /api/elections/:id/freeze` (key officer, signed in). Clerk freezes the eligible and disqualification roots.
-- `POST /api/elections/:id/vote` (key voter). Submit one ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. The same nullifier is accepted once. A read-only key is refused. Body: proof, public inputs, ciphertext, pinToken, identityCommitment when an external party is active.
+- `POST /api/elections/:id/vote` (key voter). Submit a ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. A second ballot for the same nullifier is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block does not change. A read-only key is refused. Body: proof, public inputs, ciphertext, pinToken, identityCommitment when an external party is active.
 - `POST /api/elections/:id/disqualify` (key officer, signed in). Disqualification officer applies a coded reason and an evidence hash. Body: identityCommitment, reasonCode, evidenceHash.
 - `POST /api/elections/:id/disqualify/revoke` (key officer, signed in). Disqualification officer records a revocation event.
 - `POST /api/elections/:id/revoke` (key officer, signed in). Same revocation event as /disqualify/revoke.
@@ -172,7 +175,8 @@ Machine-readable copies:
 - `POST /api/elections/:id/guardians` (key officer, signed in). Tally operator enrolls a guardian in the opens-ballots ceremony. Non-production cryptography.
 - `POST /api/elections/:id/guardians/deals` (key officer, signed in). Tally operator posts a guardian deal.
 - `GET /api/elections/:id/guardians/:index/inbox` (key read). Encrypted shares addressed to one enrolled guardian index.
-- `POST /api/elections/:id/guardians/partials` (key officer, signed in). Tally operator submits partial decryptions after cutoff.
+- `POST /api/elections/:id/guardians/partials` (key officer, signed in). Tally operator submits partial decryptions of the full aggregate after cutoff.
+- `POST /api/elections/:id/choice-blocks/partials` (key officer, signed in). Tally operator submits partial decryptions for one published poll hour block. A vote has no block. The response is the guardian index and the block id. Body: blockId, index, partials tagged for that block aggregate.
 - `POST /api/elections/:id/tally` (key officer, signed in). Tally operator posts the tally after cutoff. Invented counts that do not match opened ballots are rejected for opens-ballots.
 - `POST /api/elections/:id/certify-l1` (key officer, signed in). Tally operator asks the Node to mirror the tally to L1 when L1 env is set.
 ### External parties

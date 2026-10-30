@@ -38,6 +38,15 @@
     return data;
   }
 
+  function t(key, vars, fallback) {
+    const i18n = window.ZkVotingI18n;
+    if (i18n && typeof i18n.t === "function") {
+      const value = i18n.t(key, vars);
+      if (value && value !== key) return value;
+    }
+    return fallback;
+  }
+
   function retryable(err) {
     return !err.status || err.status === 404 || err.status === 405 || err.status === 501;
   }
@@ -182,6 +191,11 @@
       out.stateRoot = pick(tx, ["newStateRoot", "stateRoot", "eligibleRoot"]);
       out.title = pick(tx, ["title", "payload.title"]);
     }
+    if (tx.superseded) {
+      out.superseded = true;
+      out.supersededBy = tx.supersededBy;
+    }
+    if (tx.orderUnknown) out.orderUnknown = true;
     return out;
   }
 
@@ -304,7 +318,7 @@
     return `<p class="privacy-callout"><strong>Ballot privacy</strong>
       This transaction proves eligibility and uniqueness. The explorer shows the nullifier and the ballot hash.
       Choice plaintext is not a field on this L2 and is never rendered here.
-      Vote rows appear only after the hour that contained them has closed, the disclosure delay has elapsed, and the results gate is open, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
+      Vote rows appear only after the hour that contained them has closed and the disclosure delay has elapsed, so leaving a voting office cannot be matched to a live jurisdiction tick.</p>`;
   }
 
   let disclosurePayload = null;
@@ -393,6 +407,21 @@
         tx.blockNumber != null ? `<a href="#/block/${esc(tx.blockNumber)}">${esc(tx.blockNumber)}</a>` : "—",
       ],
       ["Timestamp", esc(fmtTime(tx.timestamp))],
+      ...(tx.superseded
+        ? [[
+            t("explorer.status", null, "Status"),
+            esc(t("explorer.superseded", null, "superseded")) +
+              (tx.supersededBy
+                ? ` <a href="#/tx/${encodeURIComponent(tx.supersededBy)}">${esc(tx.supersededBy)}</a>`
+                : ""),
+          ]]
+        : []),
+      ...(tx.orderUnknown
+        ? [[
+            t("explorer.status", null, "Status"),
+            esc(t("explorer.orderUnknown", null, "order unknown")),
+          ]]
+        : []),
       [
         "Election",
         tx.electionId != null
@@ -619,6 +648,10 @@
     } catch {
       summary = null;
     }
+    const sealed = Boolean(
+      (election && (election.resultsSealed || election.sealed)) ||
+        (summary && (summary.resultsSealed || summary.sealed || summary.code === "RESULTS_SEALED"))
+    );
     try {
       const data = await request("/api/elections/" + encodeURIComponent(id) + "/ballots");
       ballots = asList(data, ["ballots", "votes", "items"]).map((v) =>
@@ -633,6 +666,12 @@
     } catch {
       chainTxs = [];
     }
+    if (sealed) {
+      chainTxs = chainTxs.filter((tx) => {
+        const kind = String(tx.type || "").toUpperCase();
+        return kind !== "TALLY" && kind !== "L1";
+      });
+    }
     const byHash = new Map();
     for (const tx of [...chainTxs, ...ballots]) {
       const key = tx.hash || tx.nullifier || JSON.stringify(tx);
@@ -640,7 +679,7 @@
     }
     const txs = [...byHash.values()];
     const title = pick(election, ["title", "name"]) || (summary && summary.title) || "Election " + id;
-    const tally = pick(election, ["tally"]);
+    const tally = sealed ? null : pick(election, ["tally"]);
     const aspects = asList(election, ["aspects", "questions"]);
     const tallied = Boolean(tally);
     const tallyRows = Array.isArray(tally && tally.questions) && tally.questions.length
@@ -674,15 +713,20 @@
       else if (l1.reason) l1Label += " · " + l1.reason;
     }
     const disclosure = (summary && summary.disclosure) || (election && election.disclosure) || null;
+    const sealedEnd = (election && (election.sealedUntil || election.cutoffTime)) || (summary && summary.sealedUntil) || (disclosure && disclosure.sealedUntil);
+    const sealedLine = sealed
+      ? t("results.sealedUntil", { end: fmtTime(sealedEnd) }, "Results sealed until " + fmtTime(sealedEnd))
+      : "";
     const accepted =
       (summary && summary.acceptedBallots != null
         ? summary.acceptedBallots
         : pick(election, ["acceptedBallots"])) ??
       (disclosure && disclosure.acceptedBallotsDisclosed);
-    const resultsUrl =
-      (summary && summary.resultsUrl) ||
-      (tallied ? "/elections/" + encodeURIComponent(id) + "/results" : null);
-    paintDisclosure({ disclosure: disclosure || {} }, disclosure);
+    const resultsUrl = sealed
+      ? "/elections/" + encodeURIComponent(id) + "/results"
+      : (summary && summary.resultsUrl) ||
+        (tallied ? "/elections/" + encodeURIComponent(id) + "/results" : null);
+    paintDisclosure({ disclosure: disclosure || {} }, sealed ? { ...(disclosure || {}), resultsSealed: true, sealedUntil: sealedEnd, note: sealedLine } : disclosure);
     const nextLine = !disclosure
       ? "—"
       : Number(disclosure.intervalSeconds) > 0
@@ -691,41 +735,59 @@
         : "Publishes immediately";
     const stateLabel =
       pick(election, ["stateName", "state", "status"]) || (summary && summary.stateName) || "—";
+    const headerAction = sealed
+      ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">' + esc(t("results.sealedStatus", null, "Results sealed")) + "</a>"
+      : resultsUrl
+        ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">Final tally</a>'
+        : '<span class="field-hint">Tally not posted yet</span>';
+    const tallyCell = tallyRows
+      ? '<ul class="tally-bars">' + tallyRows + "</ul>"
+      : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted");
+    const resultsCell = resultsUrl
+      ? '<a href="' + esc(resultsUrl) + '">Tally posted — view results</a>'
+      : "not posted (winner page is linked after a final tally)";
+    const turnoutRows =
+      "<dt>Last closed hour</dt><dd>" +
+      esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt))) +
+      "</dd><dt>" +
+      esc(t("results.ballotsDisclosed", null, "Ballots disclosed")) +
+      "</dt><dd>" +
+      esc(accepted != null ? accepted : "—") +
+      "</dd><dt>Next disclosure</dt><dd>" +
+      esc(nextLine) +
+      "</dd>";
+    const choiceRows = sealed
+      ? "<dt>" + esc(t("results.choiceResults", null, "Choice results")) + "</dt><dd>" + esc(sealedLine) + "</dd>"
+      : "<dt>Public tally</dt><dd>" +
+        tallyCell +
+        '</dd><dt>Tally hash</dt><dd class="hash">' +
+        esc(pick(election, ["tally.countsHash"]) || "—") +
+        "</dd><dt>L1 certification</dt><dd>" +
+        esc(l1Label) +
+        "</dd><dt>Final tally</dt><dd>" +
+        resultsCell +
+        "</dd>" +
+        (pick(election, ["tally.questions.0.winnerLabel"])
+          ? "<dt>IRV winner</dt><dd>" + esc(pick(election, ["tally.questions.0.winnerLabel"])) + "</dd>"
+          : "");
+    const countRows = turnoutRows + choiceRows;
+    const hint = sealed
+      ? esc(sealedLine)
+      : "Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed and the disclosure delay has elapsed. Plurality totals are labeled per question.";
     $("view").innerHTML = `<section class="panel">
       <header>
         <h2>${esc(title)}</h2>
-        ${
-          resultsUrl
-            ? `<a class="btn btn-secondary" href="${esc(resultsUrl)}">Certified results</a>`
-            : `<span class="field-hint">Tally not posted yet</span>`
-        }
+        ${headerAction}
       </header>
       <dl class="detail-grid">
         <dt>Election id</dt><dd>${esc(id)}</dd>
         <dt>State</dt><dd>${esc(stateLabel)}</dd>
         <dt>Eligible root</dt><dd>${esc(pick(election, ["eligibleRoot"]) || "—")}</dd>
         <dt>Questions</dt><dd>${esc(pick(election, ["questionCount"]) ?? aspects.length ?? "—")}</dd>
-        <dt>Last closed hour</dt><dd>${esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt)))}</dd>
-        <dt>Ballots disclosed</dt><dd>${esc(accepted != null ? accepted : "—")}</dd>
-        <dt>Next disclosure</dt><dd>${esc(nextLine)}</dd>
-        <dt>Public tally</dt><dd>${
-          tallyRows
-            ? `<ul class="tally-bars">${tallyRows}</ul>`
-            : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted")
-        }</dd>
-        <dt>Tally hash</dt><dd class="hash">${esc(pick(election, ["tally.countsHash"]) || "—")}</dd>
-        <dt>L1 certification</dt><dd>${esc(l1Label)}</dd>
-        <dt>Certified results</dt><dd>${
-          resultsUrl
-            ? `<a href="${esc(resultsUrl)}">Tally posted — view results</a>`
-            : "not posted (winner page is linked after a certified tally)"
-        }</dd>
-        ${pick(election, ["tally.questions.0.winnerLabel"])
-          ? `<dt>IRV winner</dt><dd>${esc(pick(election, ["tally.questions.0.winnerLabel"]))}</dd>`
-          : ""}
+        ${countRows}
       </dl>
       ${aspectList}
-      <p class="field-hint">Hourly snapshot only. Individual choices are not in this ledger. Vote rows wait until the hour that contained them has closed and the disclosure delay has elapsed. Plurality totals are labeled per question.</p>
+      <p class="field-hint">${hint}</p>
     </section>
     <section class="panel">
       <header><h2>On-chain activity</h2></header>

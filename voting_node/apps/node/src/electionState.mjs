@@ -3,9 +3,37 @@
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
-import { disclosureSettings, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
+import { disclosureSettings, publicDisclosureView, sealDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { electionDisclosurePolicy } from './store.mjs';
 import { publicIdFields } from './electionIds.mjs';
+import {
+  electionTypeName,
+  electionTypeOf,
+  sealedResultsMessage,
+  voteResultsSealed,
+} from './electionType.mjs';
+
+/** Writer-only clock for BallotInbox batches. Reads do not flush. */
+export function startVoteFlushTimer(deps, { intervalMs = 60_000, setIntervalFn = setInterval } = {}) {
+  if (typeof deps.chain?.flushVoteQueue !== 'function') return { stop() {} };
+  const timer = setIntervalFn(async () => {
+    const writer = deps.writer;
+    if (writer && writer.enabled !== false && !writer.acceptingWrites()) return;
+    if (deps.store?.writerActive === false) return;
+    const now = deps.config.nowFn();
+    try {
+      await deps.chain.flushVoteQueue(now);
+    } catch (err) {
+      if (!deps.config?.quiet) console.warn(`chain batch flush failed: ${err.message || err}`);
+    }
+  }, intervalMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  return {
+    stop() {
+      clearInterval(timer);
+    },
+  };
+}
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -33,11 +61,25 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
   const state = electionState(election, now);
   const interval = Number(disclosure.intervalSeconds ?? 0);
   const delay = Number(disclosure.delaySeconds) || 0;
+  const sealed = Boolean(disclosure.resultsSealed) || voteResultsSealed(election, now);
   let acceptedBallots = election.acceptedBallots;
   if (typeof disclosure.publishedAcceptedBallots === 'number') {
     acceptedBallots = disclosure.publishedAcceptedBallots;
-  } else if (interval > 0) {
+  } else if (sealed || interval > 0) {
+    // Disclosed snapshot only. Never the live accept counter.
     acceptedBallots = 0;
+  }
+  const type = electionTypeOf(election);
+  const disclosureView = publicDisclosureView(now, interval, {
+    delaySeconds: delay,
+    resultsMinVotes: sealed && type === 1 ? undefined : disclosure.resultsMinVotes,
+    minBlockVotes: disclosure.minBlockVotes,
+    acceptedBallotsDisclosed: acceptedBallots,
+  });
+  if (sealed) {
+    disclosureView.resultsSealed = true;
+    disclosureView.sealedUntil = Number.isFinite(Number(election?.cutoffTime)) ? Number(election.cutoffTime) : null;
+    disclosureView.note = sealedResultsMessage(election);
   }
   return {
     ...publicIdFields(election),
@@ -49,6 +91,11 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     treeDepth: election.treeDepth,
     ballotSpecHash: election.ballotSpecHash,
     ballotMethod: election.ballotMethod || 'plurality',
+    electionType: type,
+    electionTypeName: electionTypeName(election),
+    resultsSealed: sealed,
+    sealedUntil: sealed ? election.cutoffTime ?? null : null,
+    resultsMessage: sealed ? sealedResultsMessage(election) : null,
     questionCount: election.questionCount ?? (election.questions || []).length,
     questions: withQuestionMethods(election.questions, election.ballotMethod || 'plurality'),
     aspects: presentAspects(election),
@@ -105,22 +152,19 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationRoot: election.disqualificationRoot,
     state,
     stateName: STATE_NAMES[state],
-    tally: presentTally(election, election.acceptedBallots)
-      ? {
-          ...presentTally(election, election.acceptedBallots),
-          source: election.tally.source || 'sum_only',
-          production: false,
-          aggregation: election.tally.aggregation || null,
-          openedBallots: election.tally.openedBallots ?? null,
-        }
-      : null,
+    tally: sealed
+      ? null
+      : presentTally(election, election.acceptedBallots)
+        ? {
+            ...presentTally(election, election.acceptedBallots),
+            source: election.tally.source || 'sum_only',
+            production: false,
+            aggregation: election.tally.aggregation || null,
+            openedBallots: election.tally.openedBallots ?? null,
+          }
+        : null,
     createdAt: election.createdAt,
-    disclosure: publicDisclosureView(now, interval, {
-      delaySeconds: delay,
-      resultsMinVotes: disclosure.resultsMinVotes,
-      minBlockVotes: disclosure.minBlockVotes,
-      acceptedBallotsDisclosed: acceptedBallots,
-    }),
+    disclosure: disclosureView,
     nfp: true,
   };
 }
@@ -131,6 +175,7 @@ export async function publishDue(deps) {
   const interval = settings.intervalSeconds;
   const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
+  // Chain batches run on the writer timer (startVoteFlushTimer), not on a read.
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
     : publicDisclosureView(now, interval, {
@@ -150,6 +195,16 @@ export function electionDisclosure(election, deps, view) {
     policy.intervalSeconds,
     policy,
   );
+  if (policy.resultsSealed) {
+    const base =
+      view ||
+      publicDisclosureView(now, policy.intervalSeconds, {
+        delaySeconds: policy.delaySeconds,
+        minBlockVotes: policy.minBlockVotes,
+        acceptedBallotsDisclosed,
+      });
+    return withDisclosedCount(sealDisclosureView(base, election), acceptedBallotsDisclosed);
+  }
   const base =
     view ||
     publicDisclosureView(now, policy.intervalSeconds, {
@@ -176,9 +231,11 @@ export function presentElection(election, deps, opts = {}) {
     resultsMinVotes: policy.minVotes,
     minBlockVotes: policy.minBlockVotes,
     publishedAcceptedBallots,
+    resultsSealed: policy.resultsSealed,
   });
   dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
   if (
+    !dto.resultsSealed &&
     opts.user &&
     deps.store.userHasJurisdictionRole(opts.user, 'tally_operator', election.jurisdictionId) &&
     electionState(election, now) >= 3
@@ -190,6 +247,31 @@ export function presentElection(election, deps, opts = {}) {
 
 export function presentResults(election, deps, opts = {}) {
   const dto = presentElection(election, deps, opts);
+  if (dto?.resultsSealed) {
+    return {
+      nfp: true,
+      electionId: String(election.id),
+      title: election.title,
+      jurisdictionId: election.jurisdictionId,
+      state: dto.state,
+      stateName: dto.stateName,
+      acceptedBallots: dto.acceptedBallots,
+      questionCount: dto.questionCount,
+      aspects: dto.aspects,
+      questions: dto.questions,
+      tally: null,
+      ballotSpecHash: election.ballotSpecHash,
+      cutoffTime: election.cutoffTime,
+      ballotMethod: election.ballotMethod || 'plurality',
+      electionType: dto.electionType,
+      electionTypeName: dto.electionTypeName,
+      resultsSealed: true,
+      sealed: true,
+      sealedUntil: dto.sealedUntil,
+      code: 'RESULTS_SEALED',
+      message: dto.resultsMessage,
+    };
+  }
   return {
     nfp: true,
     electionId: String(election.id),
@@ -205,5 +287,8 @@ export function presentResults(election, deps, opts = {}) {
     ballotSpecHash: election.ballotSpecHash,
     cutoffTime: election.cutoffTime,
     ballotMethod: election.ballotMethod || 'plurality',
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: false,
   };
 }

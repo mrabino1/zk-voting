@@ -131,7 +131,16 @@ describe('hourly disclosure math', () => {
     assert.equal(resultsGateOpen({ submittedVotes: 1, now: end, endTime: end, minVotes: 100 }), true);
     assert.equal(resultsGateOpen({ submittedVotes: 1, now: end - 1, endTime: end, minVotes: 100 }), false);
     assert.equal(resultsGateOpen({ submittedVotes: 1, now: HOUR_START, endTime: end, minVotes: 100, tallied: true }), true);
-    const hidden = selectPublicVotes(
+    assert.equal(
+      resultsGateOpen({
+        submittedVotes: 1,
+        now: HOUR_START + HOUR + 1800,
+        endTime: end,
+        minVotes: 100,
+      }),
+      false,
+    );
+    const turnout = selectPublicVotes(
       [{ acceptedAt: HOUR_START + 10, electionId: 'e' }],
       {
         now: HOUR_START + HOUR + 1800,
@@ -143,7 +152,7 @@ describe('hourly disclosure math', () => {
         submittedVotes: 1,
       },
     );
-    assert.equal(hidden.length, 0);
+    assert.equal(turnout.length, 1);
     const opened = selectPublicVotes(
       [{ acceptedAt: HOUR_START + 10, electionId: 'e' }],
       {
@@ -159,7 +168,7 @@ describe('hourly disclosure math', () => {
     assert.equal(opened.length, 1);
   });
 
-  test('small hours merge forward, and a short election waits for the certified tally', () => {
+  test('small hours merge forward, and a short election waits for the final tally', () => {
     const votes = [];
     for (let i = 0; i < 6; i += 1) votes.push({ id: i, acceptedAt: HOUR_START + 10 + i, electionId: 'e' });
     for (let i = 0; i < 6; i += 1) votes.push({ id: 10 + i, acceptedAt: HOUR_START + HOUR + 10 + i, electionId: 'e' });
@@ -258,5 +267,34 @@ describe('hourly disclosure math', () => {
     assert.equal(atEnd.publish[0].items.length, 10);
     assert.equal(atEnd.publish[1].items.length, 3);
     assert.equal(atEnd.hold.length, 0);
+  });
+
+  test('the open hour is the final block at the deadline', () => {
+    const items = [
+      { electionId: 'e', receivedAt: HOUR_START + 10 },
+      { electionId: 'e', receivedAt: HOUR_START + 20 },
+    ];
+    const end = HOUR_START + 30 * 60;
+    const before = planPublicBlocks(items, {
+      now: end - 1,
+      intervalSeconds: HOUR,
+      delaySeconds: 0,
+      minBlockVotes: 1,
+      minVotes: 0,
+      electionContext: () => ({ submittedVotes: 2, endTime: end, tallied: false }),
+    });
+    assert.equal(before.publish.length, 0);
+    const at = planPublicBlocks(items, {
+      now: end,
+      intervalSeconds: HOUR,
+      delaySeconds: 0,
+      minBlockVotes: 1,
+      minVotes: 0,
+      electionContext: () => ({ submittedVotes: 2, endTime: end, tallied: false }),
+    });
+    assert.equal(at.publish.length, 1);
+    assert.equal(at.publish[0].items.length, 2);
+    assert.equal(at.hold.length, 0);
+    assert.equal(at.publish[0].timestamp, end);
   });
 });

@@ -1,9 +1,12 @@
 /**
  * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Public monitor: every election, verified, in before / during / after columns
- * from chain and election state. Certified option counts only after a tally.
+ * from chain and election state. Final tally option counts only after a tally.
  * Never shows how a person voted.
  */
+
+import { resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
 
 const PHASE_ORDER = ["before", "during", "after"];
 
@@ -14,11 +17,11 @@ const PHASE_COPY = {
   },
   during: {
     title: "During voting",
-    body: "The poll is open. Turnout is the last closed hour. Option counts wait for a certified tally.",
+    body: "The poll is open. Turnout is the last closed hour. Option counts wait for a final tally.",
   },
   after: {
     title: "After voting",
-    body: "Polls are closed. Certified option counts appear when a tally is posted. L1 may mirror the tally hash.",
+    body: "Polls are closed. Final tally option counts appear when a tally is posted. Excluded ballots are not counted. L1 may mirror the tally hash.",
   },
 };
 
@@ -89,6 +92,9 @@ function outcomeCard(row, ctx) {
       { class: "meta-list" },
       h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(row.startTime) })),
       h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(row.cutoffTime) })),
+      resultsAreSealed(row)
+        ? h("li", {}, h("span", { text: sealedUntilLabel(row, formatTime) }))
+        : null,
       h(
         "li",
         {},
@@ -160,7 +166,7 @@ export async function renderOutcomesIndex(main, ctx) {
       { class: "field-hint" },
       "Paste a personal vote receipt at ",
       h("a", { href: "/receipt", "data-nav": "", text: "/receipt" }),
-      ". Certified plurality pages live at ",
+      ". Final tally pages live at ",
       h("a", { href: "/elections", "data-nav": "", text: "/elections" }),
       "."
     )
@@ -210,7 +216,7 @@ function officialReportBlock(detail, ctx) {
       { class: "notice", role: "status" },
       h("h2", { text: "Official PDF" }),
       h("p", {
-        text: "The locked official outcome PDF is issued after voting time expires and a certified tally is posted. Drop that file at /outcomes/verify to confirm it was not changed.",
+        text: "The locked official outcome PDF is issued after voting time expires and a final tally is posted. Drop that file at /outcomes/verify to confirm it was not changed.",
       })
     );
   }
@@ -254,7 +260,7 @@ function certifiedBlock(detail, ctx) {
     return h(
       "div",
       { class: "notice", role: "status" },
-      h("h2", { text: "Certified outcome not published yet" }),
+      h("h2", { text: "Final tally not published yet" }),
       h("p", {
         text: "While this contest is before or during voting, this portal does not show option counts. Turnout below is the last disclosed hour.",
       })
@@ -264,14 +270,14 @@ function certifiedBlock(detail, ctx) {
     return h(
       "div",
       { class: "notice notice-warn", role: "status" },
-      h("h2", { text: "Awaiting certified tally" }),
-      h("p", { text: certified?.message || "Polls are closed. A certified tally has not been posted yet." })
+      h("h2", { text: "Awaiting final tally" }),
+      h("p", { text: certified?.message || "Polls are closed. A final tally has not been posted yet." })
     );
   }
   return h(
     "section",
     { class: "outcomes-certified", "aria-labelledby": "certified-heading" },
-    h("h2", { id: "certified-heading", text: "Certified outcome" }),
+    h("h2", { id: "certified-heading", text: "Final tally" }),
     h("p", { text: certified.message }),
     ...(certified.questions || []).map((q) =>
       h(
@@ -449,10 +455,12 @@ export async function renderOutcomesDetail(main, ctx) {
     h(
       "section",
       { "aria-labelledby": "turnout-heading" },
-      h("h2", { id: "turnout-heading", text: "Disclosed turnout" }),
+      h("h2", { id: "turnout-heading", text: resultsAreSealed(detail) ? sealedUntilLabel(detail, formatTime) : "Disclosed turnout" }),
       h("p", {
         class: "field-hint",
-        text: "Hourly snapshot of accepted ballots. Not a count by candidate or option, and not a live tick while the hour is still open.",
+        text: resultsAreSealed(detail)
+          ? t("results.sealedBody")
+          : "Hourly snapshot of accepted ballots. Not a count by candidate or option, and not a live tick while the hour is still open.",
       }),
       h(
         "ul",

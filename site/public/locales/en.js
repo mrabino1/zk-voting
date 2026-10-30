@@ -31,9 +31,8 @@ export default {
   },
   hero: {
     eyebrow: "Open source · Not for profit · Self-hostable",
-    title: "Ballots built so nobody can read them.",
-    lead:
-      "{brand} lets any group run its own elections and polls. The creator chooses a poll or a vote. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends. A vote publishes choices only at the deadline. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots (tests currently use a mock verifier). Individual choices are not published.",
+    title: "Ballots designed so nobody can read them.",
+    lead: "{brand} lets any group run its own elections and polls. When creating one, the operator chooses a poll or a vote and whether re-voting is allowed. That setting is locked until the election ends. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first. A vote publishes choices only at the deadline. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots (tests currently use a mock verifier). Individual choices are designed not to be published.",
     discuss: "Join the discussion",
     demo: "Try the voting demo →",
     statsLabel: "At a glance",
@@ -99,17 +98,13 @@ export default {
     title: "Why it matters",
     sub: "Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. {brand} turns those claims into things anyone can check.",
     privateTitle: "Private by design",
-    privateBody:
-      "The option you pick is never a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.",
+    privateBody: "The option you pick is designed never to be a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.",
     publicTitle: "Publicly verifiable",
-    publicBody:
-      "Registrations and disqualification codes are public. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends. A vote's choices stay sealed until the deadline. An independent auditor can rebuild a published result without the operator's private database.",
+    publicBody: "Registrations and disqualification codes are public. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first. A published hourly block is designed to stay as first published. A vote's choices stay sealed until the deadline. An independent auditor is designed to be able to rebuild a published result without the operator's private database.",
     oneTitle: "One person, one vote",
-    oneBody:
-      "Every ballot carries a proof that the voter is on the frozen roll and not disqualified. In a poll or a vote, a voter can change their choice until the deadline, and the nullifier counts only the last one.",
+    oneBody: "Every ballot carries a proof that the voter is on the frozen roll and not disqualified. The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.",
     coerceTitle: "Built to resist coercion",
-    coerceBody:
-      "Nothing a voter is given proves their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout is public every hour, as in a poll. The choices stay encrypted until the deadline, and a voter can replace their vote until then. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends.",
+    coerceBody: "Nothing a voter is given is designed to prove their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout is published on a delayed hourly schedule, as in a poll. The choices stay encrypted until the deadline. If the operator allowed re-voting at creation, a voter can replace their ballot until then.",
     dueTitle: "Due process for disqualification",
     dueBody: "Barring someone is a public, coded, on-chain change with a stated reason, not a silent database flag.",
     vendorTitle: "No vendor lock-in",
@@ -128,11 +123,9 @@ export default {
     schoolsTitle: "Schools and campuses",
     schoolsBody: "Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.",
     clubsTitle: "Communities and clubs",
-    clubsBody:
-      "Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends.",
+    clubsBody: "Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first.",
     auditorsTitle: "Observers and auditors",
-    auditorsBody:
-      "Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends. A vote publishes choices only at the deadline.",
+    auditorsBody: "Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 distinct voters have cast a ballot or the poll ends, whichever comes first. A vote publishes choices only at the deadline.",
   },
   how: {
     title: "How it works",
@@ -142,14 +135,11 @@ export default {
     s2title: "Freeze the roll",
     s2body: "Officials commit the eligible set and any disqualifications for the election.",
     s3title: "Vote with a proof",
-    s3body:
-      "Each ballot proves eligibility. In a poll or a vote, the voter can change their choice until the deadline. The zero-knowledge proof and the nullifier count only the last one.",
+    s3body: "Each ballot proves eligibility. The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.",
     s4title: "While it is open",
-    s4body:
-      "A poll publishes per-choice counts once 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward until a block has at least 10. A vote publishes hourly turnout and keeps choices sealed.",
+    s4body: "A poll publishes per-choice counts once 100 distinct voters have cast a ballot or the scheduled end arrives, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward until a block has at least 10. A vote publishes turnout on the same delayed hourly schedule and keeps choices sealed.",
     s5title: "After the closing date",
-    s5body:
-      "No more ballots are accepted. A poll's published hourly blocks stay as published. Re-votes show up only in the final tally. A vote's choices are decrypted only as an aggregate by k-of-n guardians. One final batch is published at the deadline, then a challenge window, then the final tally. Anyone can check that the published totals match the accepted ballots.",
+    s5body: "No more ballots are accepted. A poll's published hourly blocks are designed to stay as first published. If re-voting was allowed, replacement ballots show up only in the final tally. A vote's choices are designed to be decrypted only as an aggregate by k-of-n guardians. One final batch goes to L1 at the deadline, then a challenge window, then the final tally. Anyone can check that the published totals match the accepted ballots.",
   },
   host: {
     title: "Run it yourself",
@@ -187,10 +177,10 @@ export default {
     poll: {
       name: "Poll",
       summary: "Hourly per-choice counts, 30 minutes delayed, after the gate.",
-      gate: "Counts stay hidden until 100 voters have cast their first ballot, or until the scheduled end, whichever comes first.",
+      gate: "Counts stay hidden until 100 distinct voters have cast a ballot, or until the scheduled end, whichever comes first.",
       hourly: "After that gate, per-choice counts publish for each hourly block, 30 minutes after the hour closes.",
       merge: "An hour with fewer than 10 ballots merges forward until a block has at least 10.",
-      freeze: "Published hourly blocks never change. Re-votes show up only in the final tally.",
+      freeze: "Published hourly blocks never change: each block is designed to stay as first published. Replacement ballots, if re-voting is allowed, show up only in the final tally.",
       example: "Example",
       choiceA: "Choice A",
       choiceB: "Choice B",
@@ -200,16 +190,18 @@ export default {
       name: "Vote",
       summary: "Choices stay sealed until the deadline.",
       sealed: "Choices stay sealed until the deadline.",
-      guardians: "They are decrypted only as an aggregate, by k-of-n guardians. The design gives the operator no key share.",
+      guardians: "They are designed to be decrypted only as an aggregate, by k-of-n guardians. The design gives the operator no key share.",
+      shamir: "The matching private key is split among the guardians with Shamir secret sharing, designed so no single party, including the operator, can decrypt early.",
+      keyL2: "Choices are encrypted to a public key posted on the L2.",
       noInterim: "There are no interim per-choice counts.",
       sealedLabel: "Sealed",
       turnoutLabel: "Turnout",
     },
     both: {
       title: "Both",
-      revote: "A voter can re-vote until the deadline. The last vote counts.",
+      revote: "The operator decides at creation whether re-voting is allowed, and that setting is locked until the election ends. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.",
       receipt: "Every ballot, including a re-vote, gets a receipt.",
-      turnout: "Hourly turnout is public, with no padding.",
+      turnout: "Turnout is published on a delayed hourly schedule, with no padding.",
       batch:
         "Ballots batch hourly while open, one final batch goes to L1 at the deadline, and one supplementary batch is posted before the tally.",
       challenge: "A challenge window, which must be longer than zero, comes before the final tally.",
