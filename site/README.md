@@ -1,10 +1,10 @@
 # site: zk-voting.org
 
-The informational landing page for **zk-voting.org**: what ZK Voting is, who it's for, why it matters, when a poll shows per-choice counts and turnout and when a vote shows turnout during the election and choices only at the deadline, and a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no JavaScript, no build step, no tracking and no third-party assets.
+The informational landing page for **zk-voting.org**: what ZK-Voting is, who it's for, why it matters, that turnout is public every hour for both a poll and a vote, that a poll also publishes per-choice counts after a gate, and that a vote publishes choices only at the deadline, plus a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no build step, no tracking and no third-party assets. A first-party script translates the page into the same ten languages as the Node UI. Arabic sets the document to right-to-left. The display name comes from `brand.js`.
 
 The voting demo is a separate app (`voting_node/`). This site only links to it; never embed or iframe it here.
 
-- `public/`: the site itself (`index.html`, `styles.css`, `brand-mark.svg`).
+- `public/`: the site itself (`index.html`, `styles.css`, `brand-mark.svg`, favicons and `site.webmanifest`, `brand.js`, `i18n.js`, `locales/`).
 - `Dockerfile` + `nginx.conf`: serves `public/` with nginx on port 80, with a `GET /health` endpoint.
 - `check-assets.sh`: checks the `?v=<hash>` cache-busting versions on local assets (CSS, SVG and so on) referenced from the HTML pages. After changing an asset, run `site/check-assets.sh --fix` and commit the updated HTML.
 
