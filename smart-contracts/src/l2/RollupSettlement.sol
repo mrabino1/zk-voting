@@ -237,23 +237,21 @@ contract RollupSettlement is IRollupSettlement {
         return keccak256(abi.encodePacked(words));
     }
 
-    /// @dev Poseidon chain, same order as `circuits/batch_transition.circom`.
-    ///      Curve points are bound by `pointTag = keccak256(points) mod r`, which the circuit takes as a witness word.
+    /// @dev Poseidon chain, same order as `circuits/batch_transition_lib.circom`.
+    ///      `pointTag` is the Poseidon fold of the eight curve coordinates, reduced mod r.
     function computeSealedDataHash(SealedParams memory params, uint8 kind) public pure returns (bytes32) {
-        uint256 pointTag = uint256(
-            keccak256(
-                abi.encode(
-                    params.prevC1X,
-                    params.prevC1Y,
-                    params.prevC2X,
-                    params.prevC2Y,
-                    params.nextC1X,
-                    params.nextC1Y,
-                    params.nextC2X,
-                    params.nextC2Y
-                )
+        uint256 pointTag = foldScalars(
+            _eight(
+                params.prevC1X,
+                params.prevC1Y,
+                params.prevC2X,
+                params.prevC2Y,
+                params.nextC1X,
+                params.nextC1Y,
+                params.nextC2X,
+                params.nextC2Y
             )
-        ) % SNARK_SCALAR_FIELD;
+        );
         uint256[16] memory words;
         words[0] = kind;
         words[1] = params.electionId;
@@ -276,6 +274,52 @@ contract RollupSettlement is IRollupSettlement {
             h = PoseidonT3.hashLeftRight(h, words[i]);
         }
         return bytes32(h);
+    }
+
+    /// @notice Poseidon fold. An empty list folds to 0. Each word is reduced mod r.
+    function foldWords(bytes32[] memory words) public pure returns (bytes32) {
+        uint256 h;
+        for (uint256 i; i < words.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, uint256(words[i]) % SNARK_SCALAR_FIELD);
+        }
+        return bytes32(h);
+    }
+
+    function foldScalars(uint256[] memory words) public pure returns (uint256 h) {
+        for (uint256 i; i < words.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, words[i] % SNARK_SCALAR_FIELD);
+        }
+    }
+
+    function _eight(
+        uint256 a,
+        uint256 b,
+        uint256 c,
+        uint256 d,
+        uint256 e,
+        uint256 f,
+        uint256 g,
+        uint256 h
+    ) private pure returns (uint256[] memory words) {
+        words = new uint256[](8);
+        words[0] = a;
+        words[1] = b;
+        words[2] = c;
+        words[3] = d;
+        words[4] = e;
+        words[5] = f;
+        words[6] = g;
+        words[7] = h;
+    }
+
+    /// @notice Fold of the bound-root list, or of the previous ballot-set root when the list is empty.
+    function expectedBoundHash(bytes32[] memory bound, bytes32 lastRoot) public pure returns (bytes32) {
+        if (bound.length == 0) {
+            bytes32[] memory one = new bytes32[](1);
+            one[0] = lastRoot;
+            return foldWords(one);
+        }
+        return foldWords(bound);
     }
 
     function submitHourlyBatch(
@@ -396,8 +440,10 @@ contract RollupSettlement is IRollupSettlement {
         if (params.ballotSetRoot == bytes32(0)) revert EmptyRoot();
         _checkBoundRoots(params.electionId, boundRoots);
         _checkFirstTags(params.electionId, firstBallotTags);
-        if (params.tagHash != keccak256(abi.encodePacked(firstBallotTags))) revert DataHashMismatch();
-        if (params.boundRootHash != keccak256(abi.encodePacked(boundRoots))) revert DataHashMismatch();
+        if (params.tagHash != foldWords(firstBallotTags)) revert DataHashMismatch();
+        if (params.boundRootHash != expectedBoundHash(boundRoots, _lastHourlyRoot[params.electionId])) {
+            revert DataHashMismatch();
+        }
         _checkSealedHash(params, kind);
     }
 
@@ -448,8 +494,9 @@ contract RollupSettlement is IRollupSettlement {
         else _finalPoints[params.electionId] = next;
     }
 
-    function _pointsSet(SealedParams calldata params) internal pure returns (bool) {
-        return params.nextC1X != 0 || params.nextC1Y != 0;
+    /// @dev A stored batch always has a ciphertext, including the identity point (count 0).
+    function _pointsSet(SealedParams calldata) internal pure returns (bool) {
+        return true;
     }
 
     function _requireFactory() internal view {
@@ -507,22 +554,13 @@ contract RollupSettlement is IRollupSettlement {
 
     function _coverPending(uint256 electionId, uint256[] calldata included) internal view {
         if (inbox == address(0)) revert NotAuthorized();
-        uint256[] memory forced = IBallotInbox(inbox).pendingForcedIn(electionId);
-        if (included.length != forced.length) revert PendingBallotOmitted();
-        _eachIncluded(forced, included);
-        for (uint256 i; i < forced.length; ++i) {
-            (bytes32 root, bool pending) = IBallotInbox(inbox).forcedInRoot(electionId, forced[i]);
+        IBallotInbox box = IBallotInbox(inbox);
+        uint256 n = box.pendingCount(electionId);
+        if (included.length != n) revert PendingBallotOmitted();
+        for (uint256 i; i < n; ++i) {
+            if (included[i] != box.pendingIdAt(electionId, i)) revert PendingBallotOmitted();
+            (bytes32 root, bool pending) = box.forcedInRoot(electionId, included[i]);
             if (!pending || root == bytes32(0) || _rootIndex[electionId][root] == 0) revert UnknownBoundRoot();
-        }
-    }
-
-    function _eachIncluded(uint256[] memory pending, uint256[] calldata included) internal pure {
-        for (uint256 i; i < pending.length; ++i) {
-            bool found;
-            for (uint256 j; j < included.length; ++j) {
-                if (pending[i] == included[j]) found = true;
-            }
-            if (!found) revert PendingBallotOmitted();
         }
     }
 

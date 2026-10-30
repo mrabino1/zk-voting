@@ -43,6 +43,7 @@ interface IBallotInbox {
     error UnknownBoundRoot();
     error UnknownInclusion();
     error PendingListFull();
+    error LinksLocked();
 
     struct RelayerReceipt {
         uint256 submissionId;
@@ -80,6 +81,17 @@ interface IBallotInbox {
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 
     function acceptedBallots(uint256 electionId) external view returns (uint256);
+
+    /// @notice First ballots committed by a batch. Re-votes do not increment it.
+    function firstBallots(uint256 electionId) external view returns (uint256);
+
+    function emptyBallotRoot(uint256 depth) external pure returns (uint256);
+
+    function pendingCount(uint256 electionId) external view returns (uint256);
+
+    function pendingIdAt(uint256 electionId, uint256 index) external view returns (uint256);
+
+    function pendingChunk(uint256 electionId, uint256 chunk) external view returns (uint256);
 
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32);
 
@@ -122,19 +134,6 @@ interface IBallotInbox {
         uint256 electionId,
         RelayerReceipt calldata receipt,
         bytes calldata signature,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[] calldata publicInputs,
-        bytes calldata encryptedBallot
-    ) external;
-
-    /// @notice A final-hour re-vote the device re-proved against the final batch root.
-    function submitHeldRevote(
-        uint256 electionId,
-        RelayerReceipt calldata receipt,
-        bytes calldata signature,
-        bytes32 reproofRoot,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,

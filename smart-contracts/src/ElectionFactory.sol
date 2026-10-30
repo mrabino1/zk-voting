@@ -288,6 +288,7 @@ contract ElectionFactory is IElectionFactory {
     /// @inheritdoc IElectionFactory
     function createElection(ElectionParams calldata params) external returns (uint256 electionId, address election) {
         _validate(params);
+        if (params.electionType == ElectionType.VOTE && tallyVerifier == address(0)) revert TallyVerifierNotSet();
         if (!allowMockVerifiers && _reportsMock(params.verifier)) revert MockVerifierNotAllowed();
         if (!_canCreate(params)) {
             if (jurisdictionRegistry != address(0)) revert NotJurisdictionClerk();

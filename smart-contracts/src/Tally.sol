@@ -98,6 +98,17 @@ contract Tally is ITallyVerifier {
     mapping(uint256 => mapping(address => StoredPartial)) private _finalPartial;
     mapping(uint256 => uint256) private _finalPartialCount;
 
+    struct OptionCiphertext {
+        uint256 c1X;
+        uint256 c1Y;
+        uint256 c2X;
+        uint256 c2Y;
+        bool set;
+    }
+
+    /// @notice Option 0 is the supplementary final ciphertext. Options 1.. are posted here.
+    mapping(uint256 => mapping(uint256 => OptionCiphertext)) private _optionCt;
+
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
         _reentrancyLock = 1;
@@ -214,17 +225,37 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
-    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external nonReentrant {
+    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash, uint8[] calldata subset)
+        external
+        nonReentrant
+    {
         _requireNotPaused();
         if (aggregatePlaintextHash == bytes32(0)) revert EmptyCommitment();
         // Same clock as tally posting: challenge window, supplementary batch, and VOTE stays sealed until cutoff.
-        // The argument is one aggregate hash. There is no openings array.
+        // `subset` picks which posted guardian indexes open the ciphertext. Legacy elections ignore it.
         (,, ElectionParams memory p) = _authorize(electionId);
         if (!_tallied[electionId]) revert DecryptionBeforeTally(electionId);
-        _checkDecryption(electionId, p.electionType, aggregatePlaintextHash);
+        _checkDecryption(electionId, p.electionType, aggregatePlaintextHash, subset);
         if (_decryptionHash[electionId] != bytes32(0)) revert ResultAlreadyFinal(electionId);
         _decryptionHash[electionId] = aggregatePlaintextHash;
         emit AggregateDecrypted(electionId, aggregatePlaintextHash);
+    }
+
+    /// @notice Ciphertext for option `option` (1-based extra options). Option 0 is the final batch ciphertext.
+    ///         The identity point with `set` true is a count of zero, not a missing ciphertext.
+    function postOptionCiphertext(
+        uint256 electionId,
+        uint8 option,
+        uint256 c1X,
+        uint256 c1Y,
+        uint256 c2X,
+        uint256 c2Y
+    ) external {
+        ElectionParams memory p = _operatorParams(electionId);
+        if (option == 0) revert CiphertextMissing();
+        if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) revert ResultsSealedUntilEnd(electionId);
+        if (_optionCt[electionId][option].set) revert ResultAlreadyFinal(electionId);
+        _optionCt[electionId][option] = OptionCiphertext({c1X: c1X, c1Y: c1Y, c2X: c2X, c2Y: c2Y, set: true});
     }
 
     /// @inheritdoc ITallyVerifier
@@ -233,6 +264,7 @@ contract Tally is ITallyVerifier {
         if (resultHash == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
+        _revertIfZeroWindow(electionId, p);
         // A pre-cutoff interim may be replaced until cutoff. The one write at or
         // after cutoff is the certified final value, even when an interim is
         // already stored. It requires a posted tally. A later write reverts.
@@ -249,6 +281,7 @@ contract Tally is ITallyVerifier {
         if (disclosureHash_ == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
+        _revertIfZeroWindow(electionId, p);
         _revertIfFinalBeforeTally(electionId, p);
         _revertIfFinal(electionId, p, _disclosureFinal[electionId]);
         if (block.timestamp >= p.cutoffTime) _disclosureFinal[electionId] = true;
@@ -347,6 +380,16 @@ contract Tally is ITallyVerifier {
         if (msg.sender != p.tallyOperator) revert NotTallyOperator();
     }
 
+    function _revertIfZeroWindow(uint256 electionId, ElectionParams memory p) internal view {
+        if (block.timestamp >= p.cutoffTime && _challengeWindow[electionId] == 0) revert ZeroChallengeWindow();
+    }
+
+    function _requireLinksOpen(uint256 electionId) internal view {
+        address electionAddr = _factory.getElection(electionId);
+        if (electionAddr == address(0)) revert UnknownElection();
+        if (block.timestamp >= IElection(electionAddr).params().startTime) revert LinksLocked();
+    }
+
     function _revertIfVoteSealed(uint256 electionId, ElectionParams memory p) internal view {
         if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) {
             revert ResultsSealedUntilEnd(electionId);
@@ -385,6 +428,7 @@ contract Tally is ITallyVerifier {
         ElectionParams memory p = _operatorParams(electionId);
         if (block.timestamp >= p.startTime) revert ChallengeWindowLocked(electionId);
         if (secondsAfterCutoff == 0) revert ZeroChallengeWindow();
+        if (secondsAfterCutoff < MIN_CHALLENGE_WINDOW) revert ChallengeWindowTooShort();
         if (_windowCustom[electionId]) revert ChallengeWindowAlreadySet(electionId);
         _challengeWindow[electionId] = secondsAfterCutoff;
         _windowCustom[electionId] = true;
@@ -411,6 +455,7 @@ contract Tally is ITallyVerifier {
 
     function setRollupSettlement(uint256 electionId, address settlement_) external {
         if (!_factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
+        _requireLinksOpen(electionId);
         if (settlement_ == address(0)) revert ZeroAddress();
         address cur = settlementOf[electionId];
         if (cur != address(0) && cur != settlement_) revert SettlementAlreadySet();
@@ -419,6 +464,7 @@ contract Tally is ITallyVerifier {
 
     function setCeremony(uint256 electionId, address ceremony_) external {
         if (!_factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
+        _requireLinksOpen(electionId);
         if (ceremony_ == address(0)) revert ZeroAddress();
         address cur = ceremonyOf[electionId];
         if (cur != address(0) && cur != ceremony_) revert CeremonyAlreadySet();
@@ -447,7 +493,7 @@ contract Tally is ITallyVerifier {
             revert HourGateClosed();
         }
         address inbox = IElection(_factory.getElection(electionId)).inbox();
-        uint256 ballots = IBallotInbox(inbox).acceptedBallots(electionId);
+        uint256 ballots = IBallotInbox(inbox).firstBallots(electionId);
         if (ballots < HOURLY_BALLOT_GATE && block.timestamp < uint256(p.cutoffTime) + HOURLY_PARTIAL_DELAY) {
             revert HourGateClosed();
         }
@@ -524,8 +570,14 @@ contract Tally is ITallyVerifier {
     }
 
     /// @dev No ceremony and no settlement keeps the legacy write-once hash.
-    ///      A sealed election, or any posted ceremony, must open to `M = c2 - Σ λ d`.
-    function _checkDecryption(uint256 electionId, uint8 electionType, bytes32 plaintextHash) internal view {
+    ///      A sealed election opens each option to `M = counts[i] · G`.
+    ///      The identity ciphertext is a count of zero and does not need shares.
+    function _checkDecryption(
+        uint256 electionId,
+        uint8 electionType,
+        bytes32 plaintextHash,
+        uint8[] calldata subset
+    ) internal view {
         address cerAddr = ceremonyOf[electionId];
         address settlement = settlementOf[electionId];
         if (cerAddr == address(0) && settlement == address(0)) return;
@@ -533,23 +585,62 @@ contract Tally is ITallyVerifier {
         GuardianCeremony cer = GuardianCeremony(cerAddr);
         if (!cer.keyPosted(electionId, electionType)) revert KeyNotPosted();
         uint256 k = cer.threshold(electionId, electionType);
-        if (_finalGuardians[electionId].length < k) revert NotEnoughPartials(electionId);
-        IRollupSettlement.Ciphertext memory ct = IRollupSettlement(settlement).finalCiphertext(electionId);
-        if (!ct.set) revert CiphertextMissing();
-        (uint256 mx, uint256 my) = _combine(electionId, ct.c2X, ct.c2Y, k);
-        if (keccak256(abi.encode(mx, my)) != plaintextHash) revert PlaintextMismatch();
+        uint256[] memory counts = _counts[electionId];
+        if (keccak256(abi.encode(counts)) != plaintextHash) revert PlaintextMismatch();
+        bool needShares;
+        for (uint256 i; i < counts.length; ++i) {
+            (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, bool set) = _optionPoint(electionId, i);
+            if (!set) revert CiphertextMissing();
+            if (c1x == 0 && c1y == 0 && c2x == 0 && c2y == 0) {
+                if (counts[i] != 0) revert PlaintextMismatch();
+                continue;
+            }
+            needShares = true;
+            if (subset.length != k) revert NotEnoughPartials(electionId);
+            (uint256 mx, uint256 my) = _combine(electionId, electionType, c2x, c2y, subset);
+            (bool ok, uint256 ex, uint256 ey) = Bn128.mul(1, 2, counts[i]);
+            if (!ok || mx != ex || my != ey) revert PlaintextMismatch();
+        }
+        if (!needShares && subset.length != 0) revert InvalidPartial();
     }
 
-    function _combine(uint256 electionId, uint256 c2x, uint256 c2y, uint256 k)
+    function _optionPoint(uint256 electionId, uint256 option)
         internal
         view
-        returns (uint256 mx, uint256 my)
+        returns (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, bool set)
     {
+        if (option == 0) {
+            IRollupSettlement.Ciphertext memory ct = IRollupSettlement(settlementOf[electionId]).finalCiphertext(electionId);
+            return (ct.c1X, ct.c1Y, ct.c2X, ct.c2Y, ct.set);
+        }
+        OptionCiphertext storage row = _optionCt[electionId][option];
+        return (row.c1X, row.c1Y, row.c2X, row.c2Y, row.set);
+    }
+
+    function _combine(
+        uint256 electionId,
+        uint8 electionType,
+        uint256 c2x,
+        uint256 c2y,
+        uint8[] calldata subset
+    ) internal view returns (uint256 mx, uint256 my) {
+        GuardianCeremony cer = GuardianCeremony(ceremonyOf[electionId]);
+        uint256 k = subset.length;
+        if (k == 0 || k > 16) revert NotEnoughPartials(electionId);
         uint256[16] memory idx;
         uint256[16] memory dx;
         uint256[16] memory dy;
         for (uint256 i; i < k; ++i) {
-            StoredPartial storage part = _finalPartial[electionId][_finalGuardians[electionId][i]];
+            uint8 index = subset[i];
+            if (index == 0) revert InvalidPartial();
+            for (uint256 j; j < i; ++j) {
+                if (subset[j] == index) revert InvalidPartial();
+            }
+            address who = cer.guardianAt(electionId, electionType, index);
+            StoredPartial storage part = _finalPartial[electionId][who];
+            if (!part.posted || part.index != index) revert InvalidPartial();
+            (uint256 pkX,, bool okGuardian) = cer.guardianPk(electionId, electionType, who);
+            if (!okGuardian || pkX == 0) revert InvalidPartial();
             idx[i] = part.index;
             dx[i] = part.dX;
             dy[i] = part.dY;

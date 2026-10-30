@@ -39,6 +39,8 @@ interface ITallyVerifier {
     /// @notice `block.timestamp` is still before `cutoffTime + challengeWindow`.
     error ChallengeWindowOpen(uint256 electionId);
     error ZeroChallengeWindow();
+    error ChallengeWindowTooShort();
+    error LinksLocked();
     error ChallengeWindowLocked(uint256 electionId);
     error ChallengeWindowAlreadySet(uint256 electionId);
     /// @notice Tally, decryption, and final partials wait for the supplementary batch.
@@ -113,7 +115,9 @@ interface ITallyVerifier {
     /// @notice Record a hash of the decrypted aggregate. No per-ballot plaintext.
     ///         Requires a posted tally. Before cutoff, VOTE reverts `ResultsSealedUntilEnd`
     ///         and POLL reverts `ChallengeWindowOpen`. After the window the hash is write-once.
-    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external;
+    /// @notice `subset` is the 1-based guardian indexes that open the ciphertext.
+    ///         Legacy elections (no ceremony and no settlement) ignore it.
+    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash, uint8[] calldata subset) external;
 
     /// @notice Running result commitment. POLL may replace it before cutoff. VOTE may not
     ///         post before cutoff. At or after cutoff it may be written once, even if a

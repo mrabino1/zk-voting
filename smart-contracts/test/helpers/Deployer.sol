@@ -360,15 +360,26 @@ contract Deployer is Test {
     function voteInputs(uint256 electionId, address election, uint256 nullifier, bytes memory encrypted)
         internal
         view
-        returns (uint256[] memory)
+        returns (uint256[] memory inputs)
     {
-        return Fixtures.publicInputs(
+        inputs = Fixtures.publicInputs(
             eligibleRoot(electionId, election),
             disqRoot(electionId, election),
             nullifier,
             Fixtures.ballotHash(encrypted),
             electionId
         );
+        if (inbox.settlementOf(electionId) == address(0)) return inputs;
+        bytes32 posted = RollupSettlement(inbox.settlementOf(electionId)).lastHourlyRoot(electionId);
+        uint256 bound = posted == bytes32(0)
+            ? inbox.emptyBallotRoot(IElection(election).params().treeDepth)
+            : uint256(posted);
+        uint256[] memory withRoot = new uint256[](6);
+        for (uint256 i; i < 5; ++i) {
+            withRoot[i] = inputs[i];
+        }
+        withRoot[5] = bound;
+        return withRoot;
     }
 
     function submitVote(uint256 electionId, address election, uint256 nullifier) internal {

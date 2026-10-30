@@ -54,6 +54,7 @@ const FACTORY_ABI = [
           { name: "tallyPubKeyX", type: "bytes32" },
           { name: "tallyPubKeyY", type: "bytes32" },
           { name: "tallyScheme", type: "uint8" },
+          { name: "electionType", type: "uint8" },
         ],
       },
     ],
@@ -71,6 +72,7 @@ const FACTORY_ABI = [
       { name: "jurisdictionId", type: "bytes32", indexed: true },
       { name: "startTime", type: "uint64", indexed: false },
       { name: "cutoffTime", type: "uint64", indexed: false },
+      { name: "electionType", type: "uint8", indexed: false },
     ],
   },
   {
@@ -448,6 +450,7 @@ function toViemParams(params) {
     tallyPubKeyX: toHex32(params.tallyPubKeyX || 0),
     tallyPubKeyY: toHex32(params.tallyPubKeyY || 0),
     tallyScheme: Number(params.tallyScheme || 0),
+    electionType: Number(params.electionType || 0),
   };
 }
 
@@ -469,7 +472,7 @@ function unpackCreateResult(result) {
  * Read `ElectionCreated` from a transaction receipt.
  * @param {{logs?: Array<{data?: string, topics?: string[]}>}|null|undefined} receipt
  * @param {object} [viemLib]
- * @returns {{electionId?: bigint, election?: string, jurisdictionId?: string, startTime?: bigint, cutoffTime?: bigint}}
+ * @returns {{electionId?: bigint, election?: string, jurisdictionId?: string, startTime?: bigint, cutoffTime?: bigint, electionType?: number}}
  */
 function decodeElectionCreated(receipt, viemLib) {
   const viem = viemLib || tryViem();
@@ -489,6 +492,7 @@ function decodeElectionCreated(receipt, viemLib) {
           jurisdictionId: decoded.args.jurisdictionId,
           startTime: decoded.args.startTime,
           cutoffTime: decoded.args.cutoffTime,
+          electionType: decoded.args.electionType,
         };
       }
     } catch {

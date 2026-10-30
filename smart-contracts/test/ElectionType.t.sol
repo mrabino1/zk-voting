@@ -107,7 +107,7 @@ contract ElectionTypeTest is Deployer {
         tally.submitTally(id, counts, a, b, c);
         vm.prank(tallyOperator);
         vm.expectPartialRevert(ITallyVerifier.ChallengeWindowOpen.selector);
-        tally.submitDecryption(id, keccak256("early-plain"));
+        tally.submitDecryption(id, keccak256("early-plain"), new uint8[](0));
 
         _certify(el, id, keccak256("poll-result"));
         assertEq(mirror.resultHashOfIdentity(_certId(id, el)), keccak256("poll-result"));
@@ -125,7 +125,7 @@ contract ElectionTypeTest is Deployer {
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
         tally.submitAggregateTally(id, counts, keccak256("agg"), a, b, c);
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.submitDecryption(id, keccak256("plain"));
+        tally.submitDecryption(id, keccak256("plain"), new uint8[](0));
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
         tally.postInterimResult(id, keccak256("interim"));
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
@@ -146,7 +146,7 @@ contract ElectionTypeTest is Deployer {
         bytes32 disclosure = keccak256("after-disclosure");
         vm.startPrank(tallyOperator);
         tally.submitTally(id, counts, a, b, c);
-        tally.submitDecryption(id, plain);
+        tally.submitDecryption(id, plain, new uint8[](0));
         tally.postInterimResult(id, interim);
         tally.disclose(id, disclosure);
         vm.stopPrank();
@@ -177,7 +177,10 @@ contract ElectionTypeTest is Deployer {
             IBallotInbox.submitVote.selector,
             bytes4(keccak256("submitVote(uint256,uint256[2],uint256[2][2],uint256[2],uint256[],bytes)"))
         );
-        assertEq(ITallyVerifier.submitDecryption.selector, bytes4(keccak256("submitDecryption(uint256,bytes32)")));
+        assertEq(
+            ITallyVerifier.submitDecryption.selector,
+            bytes4(keccak256("submitDecryption(uint256,bytes32,uint8[])"))
+        );
     }
 
     function testPollInterimUpdatesBeforeCutoffAndFreezesAfterClose() public {
@@ -237,9 +240,9 @@ contract ElectionTypeTest is Deployer {
 
     function _expectDecryptOnceAfterTally(uint256 id) internal {
         vm.startPrank(tallyOperator);
-        tally.submitDecryption(id, keccak256("plain"));
+        tally.submitDecryption(id, keccak256("plain"), new uint8[](0));
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultAlreadyFinal.selector, id));
-        tally.submitDecryption(id, keccak256("plain-2"));
+        tally.submitDecryption(id, keccak256("plain-2"), new uint8[](0));
         vm.stopPrank();
         assertEq(tally.decryptionHash(id), keccak256("plain"));
     }
@@ -350,7 +353,7 @@ contract ElectionTypeTest is Deployer {
         counts[0] = 1;
         vm.startPrank(tallyOperator);
         tally.submitTally(id, counts, a, b, c);
-        tally.submitDecryption(id, plain);
+        tally.submitDecryption(id, plain, new uint8[](0));
         tally.postInterimResult(id, keccak256("late-interim"));
         tally.disclose(id, keccak256("late-disclosure"));
         vm.stopPrank();
@@ -370,7 +373,7 @@ contract ElectionTypeTest is Deployer {
     function _expectDecryptBeforeTallyReverts(uint256 id) internal {
         vm.prank(tallyOperator);
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.DecryptionBeforeTally.selector, id));
-        tally.submitDecryption(id, keccak256("plain-early"));
+        tally.submitDecryption(id, keccak256("plain-early"), new uint8[](0));
     }
 
     function _expectReplaceReverts(uint256 id) internal {
@@ -384,7 +387,7 @@ contract ElectionTypeTest is Deployer {
         tally.disclose(id, keccak256("disc-again"));
         if (plain != bytes32(0)) {
             vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultAlreadyFinal.selector, id));
-            tally.submitDecryption(id, keccak256("plain-again"));
+            tally.submitDecryption(id, keccak256("plain-again"), new uint8[](0));
         }
         vm.stopPrank();
         assertEq(tally.interimResult(id), interim);

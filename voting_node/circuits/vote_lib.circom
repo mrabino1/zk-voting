@@ -199,10 +199,9 @@ template Vote(levels) {
     }
     merkle.root === root;
 
-    // Public input 2 is the once-only voter id Poseidon(nullifierSecret, electionId).
-    // An election with no settlement spends that word, so a new ballot hash
-    // cannot mint a second voter. A linked settlement spends the nested id
-    // Poseidon(Poseidon(nullifierSecret, electionId), ballotHash). This tree's
+    // Public input 2 of this template is the once-only voter id
+    // Poseidon(nullifierSecret, electionId). VoteSealed publishes the nested
+    // submission id instead and keeps this voter id private. This tree's
     // Poseidon permutation is t = 3 (two inputs). A three-input Poseidon is not here.
     component voterId = Hasher();
     voterId.a <== nullifierSecret;

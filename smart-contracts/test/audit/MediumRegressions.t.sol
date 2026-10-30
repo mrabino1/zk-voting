@@ -243,10 +243,10 @@ contract MediumRegressionsTest is Deployer {
     function testM05_PinnedSettlementRequiresSettledRoot() public {
         L1TallyMirror mirror = new L1TallyMirror(admin, address(0));
         vm.prank(admin);
-        mirror.setSettlement(address(settlement));
+        mirror.setSettlement(1, address(settlement));
         vm.prank(admin);
         vm.expectRevert(IL1TallyMirror.SettlementAlreadySet.selector);
-        mirror.setSettlement(address(settlement));
+        mirror.setSettlement(1, address(settlement));
 
         vm.prank(admin);
         vm.expectRevert(IL1TallyMirror.UnsettledStateRoot.selector);

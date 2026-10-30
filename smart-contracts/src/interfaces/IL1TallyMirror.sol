@@ -61,7 +61,7 @@ interface IL1TallyMirror {
         uint256 totalBallots,
         bytes32 l2StateRoot
     );
-    event SettlementSet(address indexed settlement);
+    event SettlementSet(uint256 indexed electionId, address indexed settlement);
     event CertificationSuperseded(
         bytes32 indexed certificationId,
         bytes32 previousResultHash,
@@ -76,7 +76,7 @@ interface IL1TallyMirror {
 
     function admin() external view returns (address);
 
-    function settlement() external view returns (address);
+    function settlementOf(uint256 electionId) external view returns (address);
 
     function postedAt(bytes32 certificationId) external view returns (uint256);
 
@@ -115,7 +115,7 @@ interface IL1TallyMirror {
 
     function setL2Factory(address factory_) external;
 
-    function setSettlement(address settlement_) external;
+    function setSettlement(uint256 electionId, address settlement_) external;
 
     function supersedeCertifiedResult(
         bytes32 certificationId,
