@@ -1,6 +1,6 @@
 # site: zk-voting.org
 
-The informational landing page for **zk-voting.org**: what ZK Voting is, who it's for, why it matters, when a poll shows per-choice counts and turnout and when a vote shows turnout during the election and choices only at the deadline, and a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no build step, no tracking and no third-party assets. A first-party script translates the Poll vs Vote section into the same ten languages as the Node UI. The rest of the page stays English.
+The informational landing page for **zk-voting.org**: what ZK-Voting is, who it's for, why it matters, when a poll shows per-choice counts and turnout and when a vote shows turnout during the election and choices only at the deadline, and a prominent link to the community forum at https://community.zk-voting.org. Plain static HTML and CSS, with no build step, no tracking and no third-party assets. A first-party script translates the page into the same ten languages as the Node UI. Arabic sets the document to right-to-left. The display name comes from `brand.js`.
 
 The voting demo is a separate app (`voting_node/`). This site only links to it; never embed or iframe it here.
 

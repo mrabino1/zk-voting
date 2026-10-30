@@ -15,8 +15,11 @@ import {
   LOCALE_CODES,
   catalogs,
   flattenKeys,
+  flowLaneTransform,
   lookup,
+  safeHtml,
   sectionDirection,
+  translate,
   translateMarkup,
 } from '../../../../site/public/i18n.js';
 
@@ -66,12 +69,22 @@ test('renders the poll vs vote section, both columns, and the named flow graphic
   assert.doesNotMatch(name, /certified/i);
   assert.doesNotMatch(region, BANNED);
   assert.match(region, /k-of-n guardians/);
-  assert.match(region, /100 ballots/);
-  assert.match(region, /30 minutes/);
+  assert.match(region, /100 first ballots/);
+  assert.match(region, /30-minute delay/);
+  assert.match(region, /30 minutes delayed/);
   assert.match(region, /fewer than 10 ballots/);
+  assert.match(region, /at least 10/);
   assert.match(region, /challenge window/i);
+  assert.match(region, /longer than zero/);
   assert.match(region, /re-vote/);
-  assert.match(region, /receipt/i);
+  assert.match(region, /including a re-vote/);
+  assert.match(region, /no padding/);
+  assert.match(region, /supplementary batch/);
+  assert.match(region, /Published hourly blocks never change/);
+  assert.doesNotMatch(region, /almost-live/);
+  assert.doesNotMatch(region, /Results freeze/);
+  assert.doesNotMatch(region, /data-i18n="pollVote\.vote\.turnout"/);
+  assert.match(region, /data-i18n="pollVote\.both\.turnout"/);
 });
 
 test('Spanish render keeps both columns and translates the accessible name', () => {
@@ -96,7 +109,10 @@ test('display name is filled from the branding helper', () => {
   const branded = translateMarkup(html, 'en', 'Civic Desk');
   assert.match(branded, /data-brand>Civic Desk</);
   assert.match(branded, /aria-label="Civic Desk on GitHub"/);
+  assert.match(branded, /<title[^>]*>Civic Desk: private ballots/);
   assert.doesNotMatch(regionOf(branded), /ZK-Voting/);
+  assert.doesNotMatch(html, /ZK Voting/);
+  assert.match(html, /ZK-Voting/);
 });
 
 test('poll vs vote copy covers the same keys in all 10 locales', () => {
@@ -111,12 +127,42 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
 
   const dicts = catalogs();
   const enKeys = flattenKeys(dicts.en).sort();
-  assert.ok(enKeys.length >= 40);
-  const used = [...pageHtml().matchAll(/data-i18n="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(used.length >= 30);
+  assert.ok(enKeys.length >= 170);
+  const html = pageHtml();
+  const used = [];
+  for (const attr of ['data-i18n', 'data-i18n-html', 'data-i18n-content', 'data-i18n-aria-label']) {
+    used.push(...[...html.matchAll(new RegExp(`${attr}="([^"]+)"`, 'g'))].map((m) => m[1]));
+  }
+  assert.ok(used.length >= 160);
   for (const key of used) {
     assert.equal(typeof lookup(dicts.en, key), 'string', `missing ${key}`);
   }
+  const usedSet = new Set(used);
+  for (const key of enKeys) {
+    if (key.startsWith('lang.') && key !== 'lang.label') continue;
+    assert.ok(usedSet.has(key), `landing page does not use ${key}`);
+  }
+  assert.equal(lookup(dicts.en, 'pollVote.vote.turnout'), undefined);
+  assert.match(lookup(dicts.en, 'pollVote.both.turnout'), /no padding/);
+  assert.match(lookup(dicts.en, 'pollVote.both.batch'), /supplementary batch/);
+  assert.match(lookup(dicts.en, 'pollVote.both.receipt'), /including a re-vote/);
+  assert.match(lookup(dicts.en, 'pollVote.both.challenge'), /longer than zero/);
+  assert.match(lookup(dicts.en, 'pollVote.poll.freeze'), /Published hourly blocks never change/);
+  assert.match(lookup(dicts.en, 'pollVote.poll.merge'), /at least 10/);
+  assert.match(lookup(dicts.en, 'how.s5body'), /stay as published/);
+  assert.match(lookup(dicts.en, 'how.s5body'), /Anyone can check that the published totals match the accepted ballots/);
+  assert.match(html, /100 first ballots are in/);
+  assert.match(html, /A poll's published hourly blocks stay as published/);
+  assert.doesNotMatch(html, /data-i18n="nav\.pollVsVote"/);
+  assert.doesNotMatch(html, /class="ballot-visual" dir="ltr"/);
+  assert.match(html, /id="flow-poll-lane"/);
+  assert.match(html, /id="flow-vote-lane"/);
+  assert.deepEqual(flowLaneTransform('rtl'), { poll: 'translate(236 0)', vote: 'translate(-236 0)' });
+  assert.deepEqual(flowLaneTransform('ltr'), { poll: '', vote: '' });
+  assert.equal(safeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
+  assert.equal(safeHtml('A <span class="accent">b</span><br>c'), 'A <span class="accent">b</span><br>c');
+  assert.match(translate('es', 'meta.title', 'Civic Desk'), /Civic Desk/);
+  assert.match(translate('ar', 'hero.title'), /[\u0600-\u06FF]/);
 
   for (const code of LOCALE_CODES) {
     const keys = flattenKeys(dicts[code]).sort();
@@ -146,4 +192,7 @@ test('comparison stacks on a narrow screen and motion can be reduced', () => {
   assert.match(css, /@media \(max-width:640px\)\{[^}]*\.both-grid\{grid-template-columns:1fr\}/);
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)/);
   assert.match(css, /\.flow-edge\{animation:none !important/);
+  assert.match(css, /\.lang-label select:focus-visible\{outline:2px solid var\(--accent2\);outline-offset:2px\}/);
+  assert.match(css, /\.mini-ballot text\{direction:ltr;unicode-bidi:isolate\}/);
+  assert.match(css, /\.vz-svg text\{[^}]*direction:ltr;unicode-bidi:isolate\}/);
 });

@@ -4,25 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="brand-name" content="ZK-Voting">
-  <title>ZK Voting: private ballots, verifiable results, self-hosted</title>
-  <meta name="description" content="ZK Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
+  <title data-i18n="meta.title">ZK-Voting: private ballots, verifiable results, self-hosted</title>
+  <meta name="description" data-i18n-content="meta.description" content="ZK-Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="favicon.svg?v=2bd6214156" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=09a7d5c992">
+  <link rel="stylesheet" href="styles.css?v=b156ac0b13">
 </head>
 <body>
   <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets, no embedded demo. -->
   <header class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="/"><span class="logo" aria-hidden="true">zk</span> <span data-brand>ZK-Voting</span></a>
-      <nav aria-label="Main">
-        <a href="#vision">Vision</a>
-        <a href="#why">Why it matters</a>
-        <a href="#who">Who it's for</a>
-        <a href="#how">How it works</a>
-        <a href="#poll-vs-vote" data-i18n="nav.pollVsVote">Poll vs Vote</a>
-        <a href="#self-host">Self-host</a>
-        <a class="btn btn-sm" href="https://community.zk-voting.org">Community forum</a>
+      <nav aria-label="Main" data-i18n-aria-label="nav.main">
+        <a href="#vision" data-i18n="nav.vision">Vision</a>
+        <a href="#why" data-i18n="nav.why">Why it matters</a>
+        <a href="#who" data-i18n="nav.who">Who it's for</a>
+        <a href="#how" data-i18n="nav.how">How it works</a>
+        <a href="#poll-vs-vote">Poll vs Vote</a>
+        <a href="#self-host" data-i18n="nav.selfHost">Self-host</a>
+        <a class="btn btn-sm" href="https://community.zk-voting.org" data-i18n="nav.forum">Community forum</a>
       </nav>
     </div>
   </header>
@@ -30,106 +30,106 @@
   <main>
     <section class="hero">
       <div class="wrap">
-        <p class="eyebrow">Open source &middot; Not for profit &middot; Self-hostable</p>
-        <h1>Voting your members can <span class="accent">verify</span>.<br>Ballots nobody can <span class="accent">read</span>.</h1>
-        <p class="lead">ZK Voting lets any group run its own elections and polls. The creator chooses a poll or a vote. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 ballots are in or the poll ends. A vote publishes turnout on that same schedule, and publishes choices only at the deadline. Zero-knowledge proofs show that only eligible people voted, each one once, and that the published tally matches the ballots. Nobody's choice is ever published.</p>
+        <p class="eyebrow" data-i18n="hero.eyebrow">Open source &middot; Not for profit &middot; Self-hostable</p>
+        <h1 data-i18n-html="hero.title">Voting your members can <span class="accent">verify</span>.<br>Ballots nobody can <span class="accent">read</span>.</h1>
+        <p class="lead" data-i18n="hero.lead">ZK-Voting lets any group run its own elections and polls. The creator chooses a poll or a vote. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 first ballots are in or the poll ends. A vote publishes turnout on that same schedule, and publishes choices only at the deadline. Zero-knowledge proofs show that only eligible people voted, each one once, and that the published tally matches the ballots. Nobody's choice is ever published.</p>
         <div class="cta">
-          <a class="btn" href="https://community.zk-voting.org">Join the discussion</a>
-          <a class="btn btn-ghost" href="https://demo.zk-voting.org">Try the voting demo &rarr;</a>
+          <a class="btn" href="https://community.zk-voting.org" data-i18n="hero.discuss">Join the discussion</a>
+          <a class="btn btn-ghost" href="https://demo.zk-voting.org" data-i18n="hero.demo">Try the voting demo &rarr;</a>
         </div>
-        <ul class="stats" aria-label="At a glance">
-          <li><strong>0</strong><span>choices published</span></li>
-          <li><strong>1</strong><span>counted ballot per voter</span></li>
-          <li><strong>100%</strong><span>of the tally checkable by anyone</span></li>
-          <li><strong>$0</strong><span>to voters: no token, no fees</span></li>
+        <ul class="stats" aria-label="At a glance" data-i18n-aria-label="hero.statsLabel">
+          <li><strong>0</strong><span data-i18n="hero.statChoices">choices published</span></li>
+          <li><strong>1</strong><span data-i18n="hero.statCounted">counted ballot per voter</span></li>
+          <li><strong>100%</strong><span data-i18n="hero.statCheckable">of the tally checkable by anyone</span></li>
+          <li><strong>$0</strong><span data-i18n="hero.statFree">to voters: no token, no fees</span></li>
         </ul>
       </div>
     </section>
 
     <section class="vision" id="vision" aria-labelledby="vision-title">
       <div class="wrap">
-        <p class="eyebrow">The big picture</p>
-        <h2 id="vision-title">Many civic L2s, one shared record on Ethereum</h2>
-        <p class="sub">Anyone can run a civic L2 for their own elections. Each one batches votes and settles them to Ethereum L1, so the record outlives any single operator.</p>
+        <p class="eyebrow" data-i18n="vision.eyebrow">The big picture</p>
+        <h2 id="vision-title" data-i18n="vision.title">Many civic L2s, one shared record on Ethereum</h2>
+        <p class="sub" data-i18n="vision.sub">Anyone can run a civic L2 for their own elections. Each one batches votes and settles them to Ethereum L1, so the record outlives any single operator.</p>
         <div class="vision-grid">
           <figure class="vz">
             <svg class="vz-svg" viewBox="0 0 520 470" width="100%" fill="#a1a1ad" font-size="14" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="vz-macro-title vz-macro-desc" focusable="false">
-              <title id="vz-macro-title">Macro view: many independent civic L2s settling to Ethereum L1</title>
-              <desc id="vz-macro-desc">Three civic L2 boxes labeled A, B and C, plus a dashed box for unlimited more. Each holds election chips with no limit on how many. Arrows carry vote batches from every L2 down to one Ethereum L1 box, where each batch is keyed by hash of the L2 ID and the election UUID. A two-way arrow notes that results can be rebuilt from either the L2 or L1.</desc>
+              <title id="vz-macro-title" data-i18n="vision.macroTitle">Macro view: many independent civic L2s settling to Ethereum L1</title>
+              <desc id="vz-macro-desc" data-i18n="vision.macroDesc">Three civic L2 boxes labeled A, B and C, plus a dashed box for unlimited more. Each holds election chips with no limit on how many. Arrows carry vote batches from every L2 down to one Ethereum L1 box, where each batch is keyed by hash of the L2 ID and the election UUID. A two-way arrow notes that results can be rebuilt from either the L2 or L1.</desc>
               <rect class="vz-bg" width="520" height="470" rx="12" fill="#141418"/>
               <defs>
                 <marker id="vz-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a78bfa"/></marker>
               </defs>
-              <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="24" text-anchor="middle">Anyone can run one &middot; unlimited L2s</text>
+              <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="24" text-anchor="middle" data-i18n="vision.anyone">Anyone can run one &middot; unlimited L2s</text>
               <g>
                 <rect class="vz-box" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5" x="10" y="40" width="114" height="132" rx="12"/>
-                <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="67" y="66" text-anchor="middle">Civic L2 A</text>
-                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="24" y="80" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="67" y="96" text-anchor="middle">election 1</text>
-                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="24" y="108" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="67" y="124" text-anchor="middle">election 2</text>
-                <text class="vz-m" fill="#a1a1ad" font-size="14" x="67" y="154" text-anchor="middle">+ unlimited</text>
+                <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="67" y="66" text-anchor="middle" data-i18n="vision.civicA">Civic L2 A</text>
+                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="24" y="80" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="67" y="96" text-anchor="middle" data-i18n="vision.election1">election 1</text>
+                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="24" y="108" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="67" y="124" text-anchor="middle" data-i18n="vision.election2">election 2</text>
+                <text class="vz-m" fill="#a1a1ad" font-size="14" x="67" y="154" text-anchor="middle" data-i18n="vision.unlimited">+ unlimited</text>
               </g>
               <g>
                 <rect class="vz-box" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5" x="138" y="40" width="114" height="132" rx="12"/>
-                <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="195" y="66" text-anchor="middle">Civic L2 B</text>
-                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="152" y="80" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="195" y="96" text-anchor="middle">election 1</text>
-                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="152" y="108" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="195" y="124" text-anchor="middle">election 2</text>
-                <text class="vz-m" fill="#a1a1ad" font-size="14" x="195" y="154" text-anchor="middle">+ unlimited</text>
+                <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="195" y="66" text-anchor="middle" data-i18n="vision.civicB">Civic L2 B</text>
+                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="152" y="80" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="195" y="96" text-anchor="middle" data-i18n="vision.election1">election 1</text>
+                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="152" y="108" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="195" y="124" text-anchor="middle" data-i18n="vision.election2">election 2</text>
+                <text class="vz-m" fill="#a1a1ad" font-size="14" x="195" y="154" text-anchor="middle" data-i18n="vision.unlimited">+ unlimited</text>
               </g>
               <g>
                 <rect class="vz-box" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5" x="266" y="40" width="114" height="132" rx="12"/>
-                <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="323" y="66" text-anchor="middle">Civic L2 C</text>
-                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="280" y="80" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="323" y="96" text-anchor="middle">election 1</text>
-                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="280" y="108" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="323" y="124" text-anchor="middle">election 2</text>
-                <text class="vz-m" fill="#a1a1ad" font-size="14" x="323" y="154" text-anchor="middle">+ unlimited</text>
+                <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="323" y="66" text-anchor="middle" data-i18n="vision.civicC">Civic L2 C</text>
+                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="280" y="80" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="323" y="96" text-anchor="middle" data-i18n="vision.election1">election 1</text>
+                <rect class="vz-chip" fill="#2a2140" stroke="#6f5aa3" x="280" y="108" width="86" height="22" rx="6"/><text class="vz-s" fill="#e9e9ee" font-size="13" x="323" y="124" text-anchor="middle" data-i18n="vision.election2">election 2</text>
+                <text class="vz-m" fill="#a1a1ad" font-size="14" x="323" y="154" text-anchor="middle" data-i18n="vision.unlimited">+ unlimited</text>
               </g>
               <g>
                 <rect class="vz-box vz-dashed" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6 5" x="394" y="40" width="116" height="132" rx="12"/>
                 <text class="vz-big" fill="#a78bfa" font-size="44" font-weight="700" x="452" y="104" text-anchor="middle">&#8734;</text>
-                <text class="vz-m" fill="#a1a1ad" font-size="14" x="452" y="134" text-anchor="middle">more L2s</text>
+                <text class="vz-m" fill="#a1a1ad" font-size="14" x="452" y="134" text-anchor="middle" data-i18n="vision.moreL2s">more L2s</text>
               </g>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M67 176V262" marker-end="url(#vz-arrow)"/>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M195 176V262" marker-end="url(#vz-arrow)"/>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M323 176V262" marker-end="url(#vz-arrow)"/>
               <path class="vz-flow vz-dash-line" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5" d="M452 176V262" marker-end="url(#vz-arrow)"/>
               <rect class="vz-pill" fill="#141418" stroke="#a78bfa" stroke-width="1.5" x="100" y="196" width="320" height="46" rx="23"/>
-              <text class="vz-s" fill="#e9e9ee" font-size="13" x="260" y="215" text-anchor="middle">vote batches, each keyed by</text>
+              <text class="vz-s" fill="#e9e9ee" font-size="13" x="260" y="215" text-anchor="middle" data-i18n="vision.batchesKeyed">vote batches, each keyed by</text>
               <text class="vz-code" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="234" text-anchor="middle">hash(L2 ID, election UUID)</text>
               <rect class="vz-l1" fill="#231d36" stroke="#8b5cf6" stroke-width="2" x="10" y="270" width="500" height="92" rx="14"/>
               <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="306" text-anchor="middle">Ethereum L1</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="332" text-anchor="middle">Shared settlement layer and permanent public record</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="332" text-anchor="middle" data-i18n="vision.l1Sub">Shared settlement layer and permanent public record</text>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M140 384H380" marker-start="url(#vz-arrow)" marker-end="url(#vz-arrow)"/>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="70" y="389" text-anchor="middle">L2 data</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="450" y="389" text-anchor="middle">L1 record</text>
-              <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="424" text-anchor="middle">Results can be rebuilt from either one</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="450" text-anchor="middle">No single operator has to be trusted to keep them</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="70" y="389" text-anchor="middle" data-i18n="vision.l2data">L2 data</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="450" y="389" text-anchor="middle" data-i18n="vision.l1record">L1 record</text>
+              <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="424" text-anchor="middle" data-i18n="vision.rebuild">Results can be rebuilt from either one</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="450" text-anchor="middle" data-i18n="vision.noTrust">No single operator has to be trusted to keep them</text>
             </svg>
             <figcaption>
-              <h3>Macro view</h3>
+              <h3 data-i18n="vision.macroCaption">Macro view</h3>
               <ul class="vz-points">
-                <li>Anyone can run a civic L2, and there's no limit on how many exist.</li>
-                <li>Each L2 can hold any number of elections.</li>
-                <li>Every L2 settles its vote batches to Ethereum L1, keyed by <code>hash(L2 ID, election UUID)</code>.</li>
-                <li>Results can be rebuilt from the L2's data or from the L1 record.</li>
+                <li data-i18n="vision.macroP1">Anyone can run a civic L2, and there's no limit on how many exist.</li>
+                <li data-i18n="vision.macroP2">Each L2 can hold any number of elections.</li>
+                <li data-i18n-html="vision.macroP3">Every L2 settles its vote batches to Ethereum L1, keyed by <code>hash(L2 ID, election UUID)</code>.</li>
+                <li data-i18n="vision.macroP4">Results can be rebuilt from the L2's data or from the L1 record.</li>
               </ul>
             </figcaption>
           </figure>
           <figure class="vz">
             <svg class="vz-svg" viewBox="0 0 520 470" width="100%" fill="#a1a1ad" font-size="14" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="vz-l2-title vz-l2-desc" focusable="false">
-              <title id="vz-l2-title">L2 view: one election team's L2</title>
-              <desc id="vz-l2-desc">Voters at the edge vote for free and send ballots to the sequencer. A voter who is not pre-approved is rejected by the prover. The sequencer and prover batch the accepted votes. The operator's minimally funded L1 key pays to submit each batch to Ethereum L1. The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</desc>
+              <title id="vz-l2-title" data-i18n="vision.l2Title">L2 view: one election team's L2</title>
+              <desc id="vz-l2-desc" data-i18n="vision.l2Desc">Voters at the edge vote for free and send ballots to the sequencer. A voter who is not pre-approved is rejected by the prover. The sequencer and prover batch the accepted votes. The operator's minimally funded L1 key pays to submit each batch to Ethereum L1. The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</desc>
               <rect class="vz-bg" width="520" height="470" rx="12" fill="#141418"/>
               <rect class="vz-frame" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="8 6" x="6" y="6" width="508" height="352" rx="16"/>
-              <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="24" y="34">One election team's L2</text>
-              <text class="vz-code" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="496" y="34" text-anchor="end">L2 ID = operator key + salt</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="66">Voters at the edge &middot; vote free</text>
+              <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="24" y="34" data-i18n="vision.oneTeam">One election team's L2</text>
+              <text class="vz-code" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="496" y="34" text-anchor="end" data-i18n="vision.idFormula">L2 ID = operator key + salt</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="66" data-i18n="vision.votersEdge">Voters at the edge &middot; vote free</text>
               <g>
                 <circle class="vz-ok" fill="#8b5cf6" stroke="#a78bfa" cx="44" cy="96" r="15"/><text class="vz-tick" fill="#ffffff" font-size="15" font-weight="700" x="44" y="101" text-anchor="middle">&#10003;</text>
                 <circle class="vz-ok" fill="#8b5cf6" stroke="#a78bfa" cx="92" cy="96" r="15"/><text class="vz-tick" fill="#ffffff" font-size="15" font-weight="700" x="92" y="101" text-anchor="middle">&#10003;</text>
                 <circle class="vz-ok" fill="#8b5cf6" stroke="#a78bfa" cx="140" cy="96" r="15"/><text class="vz-tick" fill="#ffffff" font-size="15" font-weight="700" x="140" y="101" text-anchor="middle">&#10003;</text>
                 <circle class="vz-ok" fill="#8b5cf6" stroke="#a78bfa" cx="188" cy="96" r="15"/><text class="vz-tick" fill="#ffffff" font-size="15" font-weight="700" x="188" y="101" text-anchor="middle">&#10003;</text>
                 <circle class="vz-no" fill="none" stroke="#fca5a5" stroke-width="2" stroke-dasharray="4 3" cx="300" cy="96" r="15"/><text class="vz-x" fill="#fca5a5" font-size="15" font-weight="700" x="300" y="101" text-anchor="middle">?</text>
-                <text class="vz-m" fill="#a1a1ad" font-size="14" x="324" y="92">not</text>
-                <text class="vz-m" fill="#a1a1ad" font-size="14" x="324" y="110">pre-approved</text>
+                <text class="vz-m" fill="#a1a1ad" font-size="14" x="324" y="92" data-i18n="vision.notLine">not</text>
+                <text class="vz-m" fill="#a1a1ad" font-size="14" x="324" y="110" data-i18n="vision.preapproved">pre-approved</text>
               </g>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M116 116V150" marker-end="url(#vz-arrow2)"/>
               <path class="vz-flow vz-dash-line" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5" d="M300 116V150" marker-end="url(#vz-arrow2)"/>
@@ -137,33 +137,33 @@
                 <marker id="vz-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a78bfa"/></marker>
               </defs>
               <rect class="vz-box" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5" x="24" y="156" width="200" height="74" rx="12"/>
-              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="124" y="188" text-anchor="middle">Sequencer</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="124" y="212" text-anchor="middle">orders and batches votes</text>
+              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="124" y="188" text-anchor="middle" data-i18n="vision.sequencer">Sequencer</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="124" y="212" text-anchor="middle" data-i18n="vision.sequencerSub">orders and batches votes</text>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M226 193H272" marker-end="url(#vz-arrow2)"/>
               <rect class="vz-box" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5" x="278" y="156" width="218" height="74" rx="12"/>
-              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="387" y="188" text-anchor="middle">Prover</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="387" y="212" text-anchor="middle">proves each batch</text>
-              <text class="vz-reject" fill="#fca5a5" font-size="14" font-weight="600" x="312" y="142">&#10005; rejected by the prover</text>
+              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="387" y="188" text-anchor="middle" data-i18n="vision.prover">Prover</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="387" y="212" text-anchor="middle" data-i18n="vision.proverSub">proves each batch</text>
+              <text class="vz-reject" fill="#fca5a5" font-size="14" font-weight="600" x="312" y="142" data-i18n="vision.rejected">&#10005; rejected by the prover</text>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M387 232V268" marker-end="url(#vz-arrow2)"/>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="262">Election UUIDs are unique</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="282">within this L2</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="262" data-i18n="vision.uuids1">Election UUIDs are unique</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="282" data-i18n="vision.uuids2">within this L2</text>
               <rect class="vz-box vz-key" fill="#0d0d0f" stroke="#8b5cf6" stroke-width="1.5" x="218" y="274" width="278" height="70" rx="12"/>
-              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="357" y="302" text-anchor="middle">Operator L1 key</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="357" y="326" text-anchor="middle">minimally funded, pays to submit</text>
+              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="357" y="302" text-anchor="middle" data-i18n="vision.operatorKey">Operator L1 key</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="357" y="326" text-anchor="middle" data-i18n="vision.operatorSub">minimally funded, pays to submit</text>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M357 346V384" marker-end="url(#vz-arrow2)"/>
-              <text class="vz-s" fill="#e9e9ee" font-size="13" x="347" y="372" text-anchor="end">batch</text>
+              <text class="vz-s" fill="#e9e9ee" font-size="13" x="347" y="372" text-anchor="end" data-i18n="vision.batchWord">batch</text>
               <rect class="vz-l1" fill="#231d36" stroke="#8b5cf6" stroke-width="2" x="10" y="388" width="500" height="72" rx="14"/>
               <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="420" text-anchor="middle">Ethereum L1</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="444" text-anchor="middle">batch settled under hash(L2 ID, election UUID)</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="444" text-anchor="middle" data-i18n="vision.settled">batch settled under hash(L2 ID, election UUID)</text>
             </svg>
             <figcaption>
-              <h3>L2 view: one election team</h3>
+              <h3 data-i18n="vision.l2Caption">L2 view: one election team</h3>
               <ul class="vz-points">
-                <li>Voters at the edge vote for free.</li>
-                <li>Only pre-approved voters are accepted. The prover rejects everyone else.</li>
-                <li>The sequencer and prover batch the votes.</li>
-                <li>The operator's minimally funded L1 key pays to submit each batch to L1.</li>
-                <li>The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</li>
+                <li data-i18n="vision.l2p1">Voters at the edge vote for free.</li>
+                <li data-i18n="vision.l2p2">Only pre-approved voters are accepted. The prover rejects everyone else.</li>
+                <li data-i18n="vision.l2p3">The sequencer and prover batch the votes.</li>
+                <li data-i18n="vision.l2p4">The operator's minimally funded L1 key pays to submit each batch to L1.</li>
+                <li data-i18n="vision.l2p5">The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</li>
               </ul>
             </figcaption>
           </figure>
@@ -173,38 +173,38 @@
 
     <section class="band" id="why">
       <div class="wrap">
-        <h2>Why it matters</h2>
-        <p class="sub">Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. ZK Voting turns those claims into things anyone can check.</p>
+        <h2 data-i18n="why.title">Why it matters</h2>
+        <p class="sub" data-i18n="why.sub">Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. ZK-Voting turns those claims into things anyone can check.</p>
         <div class="grid">
-          <article class="card"><h3>Private by design</h3><p>The option you pick is never a readable field in a transaction or a database. Receipts are hashes, so they can't show how you voted.</p></article>
-          <article class="card"><h3>Publicly verifiable</h3><p>Registrations and disqualification codes are public. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 ballots are in or the poll ends. A vote publishes turnout on the same delayed hourly schedule. Its choices stay sealed until the deadline. An independent auditor can rebuild a published result without the operator's private database.</p></article>
-          <article class="card"><h3>One person, one vote</h3><p>Every ballot carries a proof that the voter is on the frozen roll and not disqualified. In a poll or a vote, a voter can change their choice until the deadline, and the nullifier counts only the last one.</p></article>
-          <article class="card"><h3>Built to resist coercion</h3><p>Nothing a voter is given proves their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout follows the same delayed hourly schedule as a poll. The choices stay encrypted until the deadline, and a voter can replace their vote until then. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 ballots are in or the poll ends.</p></article>
-          <article class="card"><h3>Due process for disqualification</h3><p>Barring someone is a public, coded, on-chain change with a stated reason, not a silent database flag.</p></article>
-          <article class="card"><h3>No vendor lock-in</h3><p>AGPL-licensed, run at cost, built to be forked and rebranded. Your group owns the node, the roll and the record.</p></article>
+          <article class="card"><h3 data-i18n="why.privateTitle">Private by design</h3><p data-i18n="why.privateBody">The option you pick is never a readable field in a transaction or a database. Receipts are hashes, so they can't show how you voted.</p></article>
+          <article class="card"><h3 data-i18n="why.publicTitle">Publicly verifiable</h3><p data-i18n="why.publicBody">Registrations and disqualification codes are public. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 first ballots are in or the poll ends. A vote publishes turnout on the same delayed hourly schedule. Its choices stay sealed until the deadline. An independent auditor can rebuild a published result without the operator's private database.</p></article>
+          <article class="card"><h3 data-i18n="why.oneTitle">One person, one vote</h3><p data-i18n="why.oneBody">Every ballot carries a proof that the voter is on the frozen roll and not disqualified. In a poll or a vote, a voter can change their choice until the deadline, and the nullifier counts only the last one.</p></article>
+          <article class="card"><h3 data-i18n="why.coerceTitle">Built to resist coercion</h3><p data-i18n="why.coerceBody">Nothing a voter is given proves their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout follows the same delayed hourly schedule as a poll. The choices stay encrypted until the deadline, and a voter can replace their vote until then. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 first ballots are in or the poll ends.</p></article>
+          <article class="card"><h3 data-i18n="why.dueTitle">Due process for disqualification</h3><p data-i18n="why.dueBody">Barring someone is a public, coded, on-chain change with a stated reason, not a silent database flag.</p></article>
+          <article class="card"><h3 data-i18n="why.vendorTitle">No vendor lock-in</h3><p data-i18n="why.vendorBody">AGPL-licensed, run at cost, built to be forked and rebranded. Your group owns the node, the roll and the record.</p></article>
         </div>
       </div>
     </section>
 
     <section id="who">
       <div class="wrap">
-        <h2>Who it's for</h2>
-        <p class="sub">Any body that needs a roll, a ballot and a result people will accept.</p>
+        <h2 data-i18n="who.title">Who it's for</h2>
+        <p class="sub" data-i18n="who.sub">Any body that needs a roll, a ballot and a result people will accept.</p>
         <div class="grid">
-          <article class="card"><h3>Cities, counties and districts</h3><p>Run civic elections and referendums with nested districts, measures and articles. Observers follow turnout while the election is open and the choices after the deadline.</p></article>
-          <article class="card"><h3>Unions and member associations</h3><p>Hold leadership elections and contract ratification votes where members trust the count without trusting the officers.</p></article>
-          <article class="card"><h3>Cooperatives and boards</h3><p>Take board votes and member polls, including weighted and ranked-choice ballots, with an auditable outcome report.</p></article>
-          <article class="card"><h3>Schools and campuses</h3><p>Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.</p></article>
-          <article class="card"><h3>Communities and clubs</h3><p>Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 ballots are in or the poll ends.</p></article>
-          <article class="card"><h3>Observers and auditors</h3><p>Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 ballots are in or the poll ends. A vote publishes turnout on the same delayed hourly schedule as a poll, and publishes choices only at the deadline.</p></article>
+          <article class="card"><h3 data-i18n="who.citiesTitle">Cities, counties and districts</h3><p data-i18n="who.citiesBody">Run civic elections and referendums with nested districts, measures and articles. Observers follow turnout while the election is open and the choices after the deadline.</p></article>
+          <article class="card"><h3 data-i18n="who.unionsTitle">Unions and member associations</h3><p data-i18n="who.unionsBody">Hold leadership elections and contract ratification votes where members trust the count without trusting the officers.</p></article>
+          <article class="card"><h3 data-i18n="who.coopsTitle">Cooperatives and boards</h3><p data-i18n="who.coopsBody">Take board votes and member polls, including weighted and ranked-choice ballots, with an auditable outcome report.</p></article>
+          <article class="card"><h3 data-i18n="who.schoolsTitle">Schools and campuses</h3><p data-i18n="who.schoolsBody">Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.</p></article>
+          <article class="card"><h3 data-i18n="who.clubsTitle">Communities and clubs</h3><p data-i18n="who.clubsBody">Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 first ballots are in or the poll ends.</p></article>
+          <article class="card"><h3 data-i18n="who.auditorsTitle">Observers and auditors</h3><p data-i18n="who.auditorsBody">Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. A poll publishes per-choice counts and turnout on a delayed hourly schedule once 100 first ballots are in or the poll ends. A vote publishes turnout on the same delayed hourly schedule as a poll, and publishes choices only at the deadline.</p></article>
         </div>
       </div>
     </section>
 
     <section class="band" id="how">
       <div class="wrap">
-        <h2>How it works</h2>
-        <p class="sub">Zero-knowledge proofs let the system check facts about a voter without putting the ballot in the clear. What anyone can see, and when, depends on the kind the creator chose.</p>
+        <h2 data-i18n="how.title">How it works</h2>
+        <p class="sub" data-i18n="how.sub">Zero-knowledge proofs let the system check facts about a voter without putting the ballot in the clear. What anyone can see, and when, depends on the kind the creator chose.</p>
         <div class="poll-vs" id="poll-vs-vote" role="region" aria-labelledby="poll-vote-title" lang="en">
           <div class="poll-vs-bar">
             <p class="eyebrow"><span data-brand>ZK-Voting</span> · <span data-i18n="pollVote.eyebrow">Poll vs Vote</span></p>
@@ -224,12 +224,12 @@
             </label>
           </div>
           <h2 id="poll-vote-title" data-i18n="pollVote.title">Poll vs Vote</h2>
-          <p class="sub" data-i18n="pollVote.intro">The creator chooses a poll or a vote. A poll publishes almost-live per-choice counts after a gate. A vote keeps choices sealed until the deadline. Both end with one final batch, a challenge window, and the final tally.</p>
+          <p class="sub" data-i18n="pollVote.intro">The creator chooses a poll or a vote. A poll publishes per-choice counts hourly, with a 30-minute delay, after a gate. A vote keeps choices sealed until the deadline. Both end with one final batch, a challenge window, and the final tally.</p>
           <div class="ballot-compare">
             <article class="ballot-sheet" id="poll-column" aria-labelledby="poll-column-title">
               <h3 id="poll-column-title" data-i18n="pollVote.poll.name">Poll</h3>
-              <p class="ballot-summary" data-i18n="pollVote.poll.summary">Almost-live per-choice counts after the gate.</p>
-              <div class="ballot-visual" dir="ltr">
+              <p class="ballot-summary" data-i18n="pollVote.poll.summary">Hourly per-choice counts, 30 minutes delayed, after the gate.</p>
+              <div class="ballot-visual">
                 <svg class="mini-ballot" viewBox="0 0 300 150" width="100%" aria-hidden="true" focusable="false" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
                   <rect x="0.5" y="0.5" width="299" height="149" rx="8" fill="#0d0d0f" stroke="#26262d"/>
                   <text x="16" y="24" fill="#a78bfa" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" data-i18n="pollVote.poll.example">Example</text>
@@ -246,16 +246,16 @@
                 </svg>
               </div>
               <ul>
-                <li data-i18n="pollVote.poll.gate">Counts stay hidden until 100 ballots are in, or the scheduled end, whichever comes first.</li>
+                <li data-i18n="pollVote.poll.gate">Counts stay hidden until 100 first ballots are in, or the scheduled end, whichever comes first.</li>
                 <li data-i18n="pollVote.poll.hourly">After that gate, per-choice counts publish for each hourly block, 30 minutes after the hour closes.</li>
-                <li data-i18n="pollVote.poll.merge">An hour with fewer than 10 ballots merges forward into the next block.</li>
-                <li data-i18n="pollVote.poll.freeze">Results freeze at close.</li>
+                <li data-i18n="pollVote.poll.merge">An hour with fewer than 10 ballots merges forward until a block has at least 10.</li>
+                <li data-i18n="pollVote.poll.freeze">Published hourly blocks never change. Re-votes show up only in the final tally.</li>
               </ul>
             </article>
             <article class="ballot-sheet" id="vote-column" aria-labelledby="vote-column-title">
               <h3 id="vote-column-title" data-i18n="pollVote.vote.name">Vote</h3>
               <p class="ballot-summary" data-i18n="pollVote.vote.summary">Choices stay sealed until the deadline.</p>
-              <div class="ballot-visual" dir="ltr">
+              <div class="ballot-visual">
                 <svg class="mini-ballot" viewBox="0 0 300 168" width="100%" aria-hidden="true" focusable="false" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
                   <rect x="0.5" y="0.5" width="299" height="167" rx="8" fill="#0d0d0f" stroke="#26262d"/>
                   <text x="16" y="24" fill="#a78bfa" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" data-i18n="pollVote.poll.example">Example</text>
@@ -270,7 +270,6 @@
               <ul>
                 <li data-i18n="pollVote.vote.sealed">Choices stay sealed until the deadline.</li>
                 <li data-i18n="pollVote.vote.guardians">They are decrypted only as an aggregate, by k-of-n guardians.</li>
-                <li data-i18n="pollVote.vote.turnout">Hourly turnout is public.</li>
                 <li data-i18n="pollVote.vote.noInterim">There are no interim per-choice counts.</li>
               </ul>
             </article>
@@ -278,9 +277,10 @@
           <h3 data-i18n="pollVote.both.title">Both</h3>
           <ul class="both-grid">
             <li data-i18n="pollVote.both.revote">A voter can re-vote until the deadline. The last vote counts.</li>
-            <li data-i18n="pollVote.both.receipt">Every ballot has a receipt.</li>
-            <li data-i18n="pollVote.both.batch">One final batch is published at the deadline.</li>
-            <li data-i18n="pollVote.both.challenge">A challenge window comes before the final tally.</li>
+            <li data-i18n="pollVote.both.receipt">Every ballot, including a re-vote, gets a receipt.</li>
+            <li data-i18n="pollVote.both.turnout">Hourly turnout is public, with no padding.</li>
+            <li data-i18n="pollVote.both.batch">Ballots batch hourly while open, one final batch goes to L1 at the deadline, and one supplementary batch is posted before the tally.</li>
+            <li data-i18n="pollVote.both.challenge">A challenge window, which must be longer than zero, comes before the final tally.</li>
           </ul>
           <div class="flow-figure">
             <h3 data-i18n="pollVote.flow.heading">How a ballot moves</h3>
@@ -305,13 +305,17 @@
               <path class="flow-edge" d="M122 230H358" fill="none" stroke="#a78bfa" stroke-width="2"/>
               <path class="flow-edge" d="M122 230V238" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
               <path class="flow-edge" d="M358 230V238" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <rect x="12" y="244" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5"/>
-              <text x="122" y="274" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollLane">Poll</text>
-              <text x="122" y="306" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollResults">Hourly results</text>
-              <rect x="248" y="244" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4"/>
-              <text x="358" y="270" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteLane">Vote</text>
-              <text x="358" y="298" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteSealed">Sealed</text>
-              <text x="358" y="320" fill="#a1a1ad" font-size="14" text-anchor="middle" data-i18n="pollVote.flow.voteTurnout">Turnout only</text>
+              <g id="flow-poll-lane">
+                <rect x="12" y="244" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5"/>
+                <text x="122" y="274" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollLane">Poll</text>
+                <text x="122" y="306" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollResults">Hourly results</text>
+              </g>
+              <g id="flow-vote-lane">
+                <rect x="248" y="244" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4"/>
+                <text x="358" y="270" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteLane">Vote</text>
+                <text x="358" y="298" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteSealed">Sealed</text>
+                <text x="358" y="320" fill="#a1a1ad" font-size="14" text-anchor="middle" data-i18n="pollVote.flow.voteTurnout">Turnout only</text>
+              </g>
               <path class="flow-edge" d="M122 342V352" fill="none" stroke="#a78bfa" stroke-width="2"/>
               <path class="flow-edge" d="M358 342V352" fill="none" stroke="#a78bfa" stroke-width="2"/>
               <path class="flow-edge" d="M122 352H358" fill="none" stroke="#a78bfa" stroke-width="2"/>
@@ -329,11 +333,11 @@
           </div>
         </div>
         <ol class="steps">
-          <li><span class="n">1</span><h3>Register</h3><p>Members sign up with a passkey, wallet, email or ID. The roll stores an identity commitment, never an address or document number.</p></li>
-          <li><span class="n">2</span><h3>Freeze the roll</h3><p>Officials commit the eligible set and any disqualifications for the election.</p></li>
-          <li><span class="n">3</span><h3>Vote with a proof</h3><p>Each ballot proves eligibility. In a poll or a vote, the voter can change their choice until the deadline. The zero-knowledge proof and the nullifier count only the last one.</p></li>
-          <li><span class="n">4</span><h3>While it is open</h3><p>A poll publishes per-choice counts once 100 ballots are in or the scheduled end, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward. A vote publishes hourly turnout and keeps choices sealed.</p></li>
-          <li><span class="n">5</span><h3>After the closing date</h3><p>No more ballots are accepted. A poll's results freeze once the last hour clears the 30-minute delay. A vote's choices are decrypted only as an aggregate by k-of-n guardians. One final batch is published at the deadline, then a challenge window, then the final tally.</p></li>
+          <li><span class="n">1</span><h3 data-i18n="how.s1title">Register</h3><p data-i18n="how.s1body">Members sign up with a passkey, wallet, email or ID. The roll stores an identity commitment, never an address or document number.</p></li>
+          <li><span class="n">2</span><h3 data-i18n="how.s2title">Freeze the roll</h3><p data-i18n="how.s2body">Officials commit the eligible set and any disqualifications for the election.</p></li>
+          <li><span class="n">3</span><h3 data-i18n="how.s3title">Vote with a proof</h3><p data-i18n="how.s3body">Each ballot proves eligibility. In a poll or a vote, the voter can change their choice until the deadline. The zero-knowledge proof and the nullifier count only the last one.</p></li>
+          <li><span class="n">4</span><h3 data-i18n="how.s4title">While it is open</h3><p data-i18n="how.s4body">A poll publishes per-choice counts once 100 first ballots are in or the scheduled end, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward until a block has at least 10. A vote publishes hourly turnout and keeps choices sealed.</p></li>
+          <li><span class="n">5</span><h3 data-i18n="how.s5title">After the closing date</h3><p data-i18n="how.s5body">No more ballots are accepted. A poll's published hourly blocks stay as published. Re-votes show up only in the final tally. A vote's choices are decrypted only as an aggregate by k-of-n guardians. One final batch is published at the deadline, then a challenge window, then the final tally. Anyone can check that the published totals match the accepted ballots.</p></li>
         </ol>
       </div>
     </section>
@@ -341,18 +345,18 @@
     <section id="self-host">
       <div class="wrap two-col">
         <div>
-          <h2>Run it yourself</h2>
-          <p>Your group runs its own node with Docker Compose, Coolify, Dokploy or CapRover, optionally kept private behind a Tailscale sidecar. Every node serves its self-hosting guides at <code>/docs</code>.</p>
-          <p>Day-to-day activity lands on the ZK Voting L2, a purpose-built civic sequencer and prover that settles to Ethereum. Final tallies can be mirrored on Ethereum mainnet.</p>
-          <pre class="terminal" aria-label="Self-host quickstart"><span class="dim"># run your own node</span>
+          <h2 data-i18n="host.title">Run it yourself</h2>
+          <p data-i18n-html="host.body">Your group runs its own node with Docker Compose, Coolify, Dokploy or CapRover, optionally kept private behind a Tailscale sidecar. Every node serves its self-hosting guides at <code>/docs</code>.</p>
+          <p data-i18n="host.l2">Day-to-day activity lands on the ZK-Voting L2, a purpose-built civic sequencer and prover that settles to Ethereum. Final tallies can be mirrored on Ethereum mainnet.</p>
+          <pre class="terminal" aria-label="Self-host quickstart" data-i18n-aria-label="host.terminalLabel"><span class="dim" dir="auto" data-i18n="host.terminalComment"># run your own node</span>
 cp .env.example .env
 docker compose up -d --build
 curl -fsS http://127.0.0.1:3000/health</pre>
         </div>
         <div class="panel">
-          <h3>Honest status</h3>
-          <p>ZK Voting is under active development. Tests use a mock verifier, the first proving path is in progress and the trusted-setup ceremony hasn't happened yet. Don't use it for a binding election today.</p>
-          <p>Passing a vote never auto-executes anything. Outcomes are verifiable; acting on them stays with the people.</p>
+          <h3 data-i18n="host.statusTitle">Honest status</h3>
+          <p data-i18n="host.statusBody">ZK-Voting is under active development. Tests use a mock verifier, the first proving path is in progress and the trusted-setup ceremony hasn't happened yet. Don't use it for a binding election today.</p>
+          <p data-i18n="host.statusAct">Passing a vote never auto-executes anything. Outcomes are verifiable; acting on them stays with the people.</p>
         </div>
       </div>
     </section>
@@ -360,11 +364,11 @@ curl -fsS http://127.0.0.1:3000/health</pre>
     <section class="band final" id="community">
       <div class="wrap center">
         <p class="eyebrow">community.zk-voting.org</p>
-        <h2>Talk about how your group could use it</h2>
-        <p class="sub">The community forum is where people discuss real use cases, ask questions about running a node, and shape what gets built next.</p>
+        <h2 data-i18n="community.title">Talk about how your group could use it</h2>
+        <p class="sub" data-i18n="community.sub">The community forum is where people discuss real use cases, ask questions about running a node, and shape what gets built next.</p>
         <div class="cta center">
-          <a class="btn" href="https://community.zk-voting.org">Go to the community forum</a>
-          <a class="btn btn-ghost" href="https://demo.zk-voting.org">Try the voting demo</a>
+          <a class="btn" href="https://community.zk-voting.org" data-i18n="community.forum">Go to the community forum</a>
+          <a class="btn btn-ghost" href="https://demo.zk-voting.org" data-i18n="community.demo">Try the voting demo</a>
         </div>
       </div>
     </section>
@@ -373,27 +377,27 @@ curl -fsS http://127.0.0.1:3000/health</pre>
   <footer>
     <div class="wrap foot-main">
       <div class="foot-block" role="region" aria-labelledby="footer-contact-label">
-        <p class="foot-label" id="footer-contact-label">Contact</p>
+        <p class="foot-label" id="footer-contact-label" data-i18n="footer.contact">Contact</p>
         <a class="foot-mail" href="mailto:hello@zk-voting.org">hello@zk-voting.org</a>
       </div>
       <div class="foot-block">
-        <p class="foot-oss"><a href="https://github.com/mrabino1/zk-voting"><span data-brand>ZK-Voting</span> is 100% open source and free to use.</a></p>
+        <p class="foot-oss"><a href="https://github.com/mrabino1/zk-voting" data-i18n="footer.oss">ZK-Voting is 100% open source and free to use.</a></p>
       </div>
       <div class="foot-block">
-        <p>We are available for contracting for your local implementation.</p>
-        <a class="btn btn-sm" href="mailto:hello@zk-voting.org">Email us</a>
+        <p data-i18n="footer.contracting">We are available for contracting for your local implementation.</p>
+        <a class="btn btn-sm" href="mailto:hello@zk-voting.org" data-i18n="footer.email">Email us</a>
       </div>
     </div>
     <div class="wrap foot">
-      <span>&copy; <span data-brand>ZK-Voting</span> contributors &middot; AGPL-3.0-or-later &middot; Not for profit</span>
+      <span>&copy; <span data-brand>ZK-Voting</span> <span data-i18n="footer.contributors">contributors</span> &middot; AGPL-3.0-or-later &middot; <span data-i18n="footer.nonprofit">Not for profit</span></span>
       <span class="foot-end">
-        <span><a href="https://community.zk-voting.org">Community forum</a> &middot; <a href="https://demo.zk-voting.org">Voting demo</a></span>
-        <a class="gh-link" href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer" data-brand-suffix=" on GitHub" aria-label="ZK-Voting on GitHub">
+        <span><a href="https://community.zk-voting.org" data-i18n="footer.forum">Community forum</a> &middot; <a href="https://demo.zk-voting.org" data-i18n="footer.demo">Voting demo</a></span>
+        <a class="gh-link" href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer" data-i18n-aria-label="footer.github" aria-label="ZK-Voting on GitHub">
           <svg class="gh-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
         </a>
       </span>
     </div>
   </footer>
-  <script type="module" src="i18n.js?v=6e12041c41"></script>
+  <script type="module" src="i18n.js?v=f74316cf36"></script>
 </body>
 </html>
