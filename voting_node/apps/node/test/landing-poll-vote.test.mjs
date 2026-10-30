@@ -69,7 +69,8 @@ test('renders the poll vs vote section, both columns, and the named flow graphic
   assert.doesNotMatch(name, /certified/i);
   assert.doesNotMatch(region, BANNED);
   assert.match(region, /k-of-n guardians/);
-  assert.match(region, /100 first ballots/);
+  assert.match(region, /100 voters have cast their first ballot/);
+  assert.doesNotMatch(region, /100 first ballots/);
   assert.match(region, /30-minute delay/);
   assert.match(region, /30 minutes delayed/);
   assert.match(region, /fewer than 10 ballots/);
@@ -151,7 +152,13 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.match(lookup(dicts.en, 'pollVote.poll.merge'), /at least 10/);
   assert.match(lookup(dicts.en, 'how.s5body'), /stay as published/);
   assert.match(lookup(dicts.en, 'how.s5body'), /Anyone can check that the published totals match the accepted ballots/);
-  assert.match(html, /100 first ballots are in/);
+  assert.match(html, /once 100 voters have cast their first ballot or the poll ends/);
+  assert.match(html, /once 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first/);
+  assert.match(html, /Counts stay hidden until 100 voters have cast their first ballot, or until the scheduled end, whichever comes first/);
+  assert.doesNotMatch(html, /100 first ballots/);
+  assert.doesNotMatch(lookup(dicts.en, 'hero.lead'), /100 first ballots/);
+  assert.doesNotMatch(lookup(dicts.en, 'how.s4body'), /100 first ballots/);
+  assert.doesNotMatch(lookup(dicts.en, 'pollVote.poll.gate'), /100 first ballots/);
   assert.match(html, /A poll's published hourly blocks stay as published/);
   assert.match(html, /data-i18n="nav\.pollVsVote"/);
   assert.equal(lookup(dicts.en, 'nav.pollVsVote'), 'Poll vs Vote');
@@ -187,11 +194,11 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
 });
 
 const BOTH_TURNOUT =
-  'Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends.';
+  'Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 voters have cast their first ballot or the poll ends.';
 const POLL_TURNOUT = 'Turnout is public every hour, as in a poll.';
 
 const TURNOUT_GATE = {
-  en: { turnout: /\bturnout\b/i, gate: /\bfirst 100 ballots\b/i, tied: /\b(?:100 first ballots|the gate|a gate|delayed)\b/i },
+  en: { turnout: /\bturnout\b/i, gate: /\b(?:first 100 ballots|100 first ballots)\b/i, tied: /\b(?:100 voters have cast their first ballot|the gate|a gate|delayed)\b/i },
   es: { turnout: /participaci[oó]n/i, gate: /primeras 100 boletas/i, tied: /100 votantes|umbral|diferido/i },
   fr: { turnout: /participation/i, gate: /100 premiers bulletins/i, tied: /100 votants|diff[eé]r[eé]|seuil/i },
   pt: { turnout: /participa[cç][aã]o/i, gate: /primeiras 100 c[eé]dulas/i, tied: /100 eleitores|atrasad|limiar|barreira/i },
