@@ -119,6 +119,7 @@ export function planChoiceBlocks(items, policy = {}) {
     endTime,
     minVotes,
     tallied: false,
+    openedAt: policy.resultsGateOpenedAt,
   });
   if (!gateOpen) {
     return {

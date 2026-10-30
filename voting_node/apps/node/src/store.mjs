@@ -31,7 +31,7 @@ import {
 } from './db.mjs';
 import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
 import { ensureSiteAdminCollections } from './siteAudit.mjs';
-import { disclosureSettings, isDisclosed, selectPublicVotes } from './disclosure.mjs';
+import { disclosureSettings, hourBucket, isDisclosed, selectPublicVotes } from './disclosure.mjs';
 import { electionTypeOf, isVoteElection, voteResultsSealed } from './electionType.mjs';
 import {
   electionMatchesRef,
@@ -130,6 +130,9 @@ export function electionDisclosurePolicy(election, config, now, submittedVotes) 
   // RESULTS_MIN_VOTES is the poll per-choice gate. Turnout does not use it.
   // A vote does not use it. Choice results are not on this object.
   const votes = submittedVotes ?? election?.acceptedBallots ?? 0;
+  const gateRaw = election?.resultsGateOpenedAt;
+  const gateHour =
+    gateRaw == null || gateRaw === '' || !Number.isFinite(Number(gateRaw)) ? null : Number(gateRaw);
   return {
     now,
     intervalSeconds: settings.intervalSeconds,
@@ -140,6 +143,7 @@ export function electionDisclosurePolicy(election, config, now, submittedVotes) 
     // TODO: switch tallied to certification after the challenge window once the #113 contracts land. Until then it follows setTally.
     tallied: sealed ? false : Boolean(election?.tally),
     submittedVotes: votes,
+    resultsGateOpenedAt: vote ? null : gateHour,
     resultsSealed: sealed,
     electionType: electionTypeOf(election),
   };
@@ -574,7 +578,8 @@ export class Store {
     store.writerActive = config.writerActive !== false;
     store.allowRevote = config.allowRevote === true;
     store.lease = config.writerLeaseHandle || null;
-    store.allowRevote = config.allowRevote === true;
+    store.resultsMinVotes = Number(config.resultsMinVotes) || 0;
+    store.disclosureIntervalSeconds = Number(config.disclosureIntervalSeconds) || 0;
     for (const user of store.data.users) {
       ensurePersonFields(user);
       for (const cred of user.credentials) {
@@ -2643,8 +2648,22 @@ export class Store {
     if (spentPassHash) this._rememberSpentPass(vote.electionId, spentPassHash);
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
+    this.latchResultsGate(election, acceptedAt);
     await this.persist();
     return record;
+  }
+
+  /**
+   * The first time a poll's distinct ballots reach the results minimum, remember
+   * that hour. A later removal decrements acceptedBallots and must not close the gate.
+   */
+  latchResultsGate(election, acceptedAt) {
+    if (!election || isVoteElection(election)) return;
+    const existing = election.resultsGateOpenedAt;
+    if (existing != null && existing !== '' && Number.isFinite(Number(existing))) return;
+    const min = Number(this.resultsMinVotes) || 0;
+    if (min <= 0 || Number(election.acceptedBallots) < min) return;
+    election.resultsGateOpenedAt = hourBucket(acceptedAt, this.disclosureIntervalSeconds);
   }
 
   /**
@@ -2756,6 +2775,7 @@ export class Store {
     );
     const election = this.getElection(electionId);
     if (election) election.acceptedBallots = Math.max(0, Number(election.acceptedBallots || 0) - removed);
+    // resultsGateOpenedAt stays set. Dropping acceptedBallots must not close the gate.
     await this.persist();
     return true;
   }
