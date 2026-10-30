@@ -33,9 +33,9 @@ export default {
   hero: {
     eyebrow: "Código abierto · Sin fines de lucro · Autoalojable",
     title:
-      'Votaciones que sus miembros pueden <span class="accent">verificar</span>.<br>Boletas que nadie puede <span class="accent">leer</span>.',
+      "Boletas hechas para que nadie pueda leerlas.",
     lead:
-      "{brand} permite que cualquier grupo ejecute sus propias elecciones y encuestas. Quien la crea elige una encuesta o una votación. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica las opciones solo en el cierre. Las pruebas de conocimiento cero están diseñadas para mostrar que solo votó gente elegible, cada persona una vez, y que el escrutinio publicado coincide con las boletas (las pruebas usan actualmente un verificador simulado). Las opciones individuales no se publican.",
+      "{brand} permite que cualquier grupo ejecute sus propias elecciones y encuestas. Quien la crea elige una encuesta o una votación. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que 100 votantes hayan emitido su primera boleta o termine la encuesta. Una votación publica las opciones solo en el cierre. Las pruebas de conocimiento cero están diseñadas para mostrar que solo votó gente elegible, cada persona una vez, y que el escrutinio publicado coincide con las boletas (las pruebas usan actualmente un verificador simulado). Las opciones individuales no se publican.",
     discuss: "Únase a la conversación",
     demo: "Probar la demostración de votación →",
     statsLabel: "De un vistazo",
@@ -92,7 +92,7 @@ export default {
     settled: "lote liquidado bajo hash(L2 ID, election UUID)",
     l2Caption: "Vista L2: un equipo electoral",
     l2p1: "Quienes votan en el borde lo hacen gratis.",
-    l2p2: "Solo se acepta a votantes preaprobados. El probador rechaza al resto.",
+    l2p2: "Solo se acepta a votantes preaprobados. El probador rechaza al resto. (con el verificador simulado en las pruebas, esta comprobación aún no se exige)",
     l2p3: "El secuenciador y el probador agrupan los votos.",
     l2p4: "La clave L1 del operador, con fondos mínimos, paga el envío de cada lote a L1.",
     l2p5: "El ID de la L2 queda ligado a la clave del operador más una sal, y los UUID de elección son únicos dentro de la L2.",
@@ -102,16 +102,16 @@ export default {
     sub: "La mayoría de las elecciones todavía pide a votantes, candidaturas y tribunales que confíen en unos pocos operadores: quién está en el padrón, a quién se rechazó, si una boleta se contó, si el resultado coincide. {brand} convierte esas afirmaciones en algo que cualquiera puede comprobar.",
     privateTitle: "Privada por diseño",
     privateBody:
-      "La opción que usted elige nunca es un campo legible en una transacción ni en una base de datos. Los recibos son hashes, así que no pueden mostrar cómo votó.",
+      "La opción que usted elige nunca es un campo legible en una transacción ni en una base de datos. Los recibos son hashes, diseñados para que no muestren cómo votó.",
     publicTitle: "Verificable en público",
     publicBody:
-      "Las inscripciones y los códigos de inhabilitación son públicos. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta. Las opciones de una votación permanecen selladas hasta el cierre. Una auditoría independiente puede reconstruir un resultado publicado sin la base privada del operador.",
+      "Las inscripciones y los códigos de inhabilitación son públicos. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que 100 votantes hayan emitido su primera boleta o termine la encuesta. Las opciones de una votación permanecen selladas hasta el cierre. Una auditoría independiente puede reconstruir un resultado publicado sin la base privada del operador.",
     oneTitle: "Una persona, un voto",
     oneBody:
       "Cada boleta lleva una prueba de que quien vota está en el padrón congelado y no está inhabilitado. En una encuesta o una votación se puede cambiar la opción hasta el cierre, y el anulador cuenta solo la última.",
     coerceTitle: "Hecha para resistir la coacción",
     coerceBody:
-      "Nada de lo que recibe quien vota demuestra su opción ante alguien que lo presiona. Elija una votación cuando un recuento en curso añadiría presión. La participación es pública cada hora, como en una encuesta. Las opciones permanecen cifradas hasta el cierre, y se puede reemplazar el voto hasta entonces. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta.",
+      "Nada de lo que recibe quien vota demuestra su opción ante alguien que lo presiona. Elija una votación cuando un recuento en curso añadiría presión. La participación es pública cada hora, como en una encuesta. Las opciones permanecen cifradas hasta el cierre, y se puede reemplazar el voto hasta entonces. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que 100 votantes hayan emitido su primera boleta o termine la encuesta.",
     dueTitle: "Debido proceso para inhabilitar",
     dueBody: "Excluir a alguien es un cambio público, codificado y en cadena, con un motivo declarado, no una marca silenciosa en una base de datos.",
     vendorTitle: "Sin dependencia de un proveedor",
@@ -131,10 +131,10 @@ export default {
     schoolsBody: "Ejecute gobiernos estudiantiles y votos del profesorado con acceso por clave de acceso y una boleta usable en cualquier dispositivo.",
     clubsTitle: "Comunidades y clubes",
     clubsBody:
-      "Encuestas rápidas de sí o no, de una opción o de varias, para cualquier grupo que quiera una boleta privada y un recuento honesto. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta.",
+      "Encuestas rápidas de sí o no, de una opción o de varias, para cualquier grupo que quiera una boleta privada y un recuento honesto. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que 100 votantes hayan emitido su primera boleta o termine la encuesta.",
     auditorsTitle: "Observación y auditoría",
     auditorsBody:
-      "Siga inscripciones y códigos de inhabilitación en el explorador público, y verifique un informe de resultado cuando ese concurso ya puede mostrarlo. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que entran las primeras 100 boletas o termina la encuesta. Una votación publica las opciones solo en el cierre.",
+      "Siga inscripciones y códigos de inhabilitación en el explorador público, y verifique un informe de resultado cuando ese concurso ya puede mostrarlo. La participación es pública cada hora para ambos tipos. Una encuesta también publica los recuentos por opción cada hora, con un retraso de 30 minutos, una vez que 100 votantes hayan emitido su primera boleta o termine la encuesta. Una votación publica las opciones solo en el cierre.",
   },
   how: {
     title: "Cómo funciona",
@@ -148,7 +148,7 @@ export default {
       "Cada boleta prueba la elegibilidad. En una encuesta o una votación se puede cambiar la opción hasta el cierre. La prueba de conocimiento cero y el anulador cuentan solo la última.",
     s4title: "Mientras está abierta",
     s4body:
-      "Una encuesta publica los recuentos por opción una vez que entran las primeras 100 boletas o llega el cierre programado, lo que ocurra primero. Cada hora se publica 30 minutos después de cerrar. Una hora con menos de 10 boletas se fusiona hacia adelante hasta que un bloque tenga al menos 10. Una votación publica la participación por hora y mantiene las opciones selladas.",
+      "Una encuesta publica los recuentos por opción una vez que 100 votantes hayan emitido su primera boleta o llegue el cierre programado, lo que ocurra primero. Cada hora se publica 30 minutos después de cerrar. Una hora con menos de 10 boletas se fusiona hacia adelante hasta que un bloque tenga al menos 10. Una votación publica la participación por hora y mantiene las opciones selladas.",
     s5title: "Después de la fecha de cierre",
     s5body:
       "No se aceptan más boletas. Los bloques horarios publicados de una encuesta quedan como se publicaron. Las repeticiones aparecen solo en el escrutinio final. Las opciones de una votación se descifran solo como un agregado, mediante guardianes k-of-n. En el cierre se publica un lote final, luego hay un plazo de impugnación y después el escrutinio final. Cualquiera puede comprobar que los totales publicados coinciden con las boletas aceptadas.",
@@ -189,7 +189,7 @@ export default {
     poll: {
       name: "Encuesta",
       summary: "Recuentos por opción cada hora, con 30 minutos de retraso, después del umbral.",
-      gate: "Los recuentos permanecen ocultos hasta que entran las primeras 100 boletas, o hasta el cierre programado, lo que ocurra primero.",
+      gate: "Los recuentos permanecen ocultos hasta que 100 votantes hayan emitido su primera boleta, o hasta el cierre programado, lo que ocurra primero.",
       hourly: "Después de ese umbral, los recuentos por opción se publican en cada bloque horario, 30 minutos después de que cierra la hora.",
       merge: "Una hora con menos de 10 boletas se fusiona hacia adelante hasta que un bloque tenga al menos 10.",
       freeze: "Los bloques horarios publicados no cambian. Los votos cambiados aparecen solo en el escrutinio final.",
@@ -202,7 +202,7 @@ export default {
       name: "Votación",
       summary: "Las opciones permanecen selladas hasta el cierre.",
       sealed: "Las opciones permanecen selladas hasta el cierre.",
-      guardians: "Se descifran solo como un agregado, mediante guardianes k-of-n. El operador no tiene ninguna clave.",
+      guardians: "Se descifran solo como un agregado, mediante guardianes k-of-n. El diseño no da al operador ninguna parte de la clave.",
       noInterim: "No hay recuentos provisionales por opción.",
       sealedLabel: "Sellado",
       turnoutLabel: "Participación",

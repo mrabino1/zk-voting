@@ -31,8 +31,7 @@ export default {
   },
   hero: {
     eyebrow: "Open source · Not for profit · Self-hostable",
-    title:
-      'Voting your members can <span class="accent">verify</span>.<br>Ballots nobody can <span class="accent">read</span>.',
+    title: "Ballots built so nobody can read them.",
     lead:
       "{brand} lets any group run its own elections and polls. The creator chooses a poll or a vote. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends. A vote publishes choices only at the deadline. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots (tests currently use a mock verifier). Individual choices are not published.",
     discuss: "Join the discussion",
@@ -91,7 +90,7 @@ export default {
     settled: "batch settled under hash(L2 ID, election UUID)",
     l2Caption: "L2 view: one election team",
     l2p1: "Voters at the edge vote for free.",
-    l2p2: "Only pre-approved voters are accepted. The prover rejects everyone else.",
+    l2p2: "Only pre-approved voters are accepted. The prover rejects everyone else. (with the mock verifier in tests, this check is not yet enforced)",
     l2p3: "The sequencer and prover batch the votes.",
     l2p4: "The operator's minimally funded L1 key pays to submit each batch to L1.",
     l2p5: "The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.",
@@ -101,7 +100,7 @@ export default {
     sub: "Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. {brand} turns those claims into things anyone can check.",
     privateTitle: "Private by design",
     privateBody:
-      "The option you pick is never a readable field in a transaction or a database. Receipts are hashes, so they can't show how you voted.",
+      "The option you pick is never a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.",
     publicTitle: "Publicly verifiable",
     publicBody:
       "Registrations and disqualification codes are public. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends. A vote's choices stay sealed until the deadline. An independent auditor can rebuild a published result without the operator's private database.",
@@ -201,7 +200,7 @@ export default {
       name: "Vote",
       summary: "Choices stay sealed until the deadline.",
       sealed: "Choices stay sealed until the deadline.",
-      guardians: "They are decrypted only as an aggregate, by k-of-n guardians. The operator holds no key.",
+      guardians: "They are decrypted only as an aggregate, by k-of-n guardians. The design gives the operator no key share.",
       noInterim: "There are no interim per-choice counts.",
       sealedLabel: "Sealed",
       turnoutLabel: "Turnout",

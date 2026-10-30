@@ -33,9 +33,9 @@ export default {
   hero: {
     eyebrow: "Código aberto · Sem fins lucrativos · Auto-hospedável",
     title:
-      'Votação que os membros podem <span class="accent">verificar</span>.<br>Cédulas que ninguém pode <span class="accent">ler</span>.',
+      "Cédulas feitas para que ninguém possa lê-las.",
     lead:
-      "{brand} permite que qualquer grupo conduza suas eleições e enquetes. Quem cria escolhe uma enquete ou uma votação. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação só publica as opções no prazo. Provas de conhecimento zero são concebidas para mostrar que só pessoas elegíveis votaram, cada uma uma vez, e que a apuração publicada corresponde às cédulas (os testes usam atualmente um verificador simulado). As escolhas individuais não são publicadas.",
+      "{brand} permite que qualquer grupo conduza suas eleições e enquetes. Quem cria escolhe uma enquete ou uma votação. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que 100 eleitores tenham enviado sua primeira cédula ou a enquete termina. Uma votação só publica as opções no prazo. Provas de conhecimento zero são concebidas para mostrar que só pessoas elegíveis votaram, cada uma uma vez, e que a apuração publicada corresponde às cédulas (os testes usam atualmente um verificador simulado). As escolhas individuais não são publicadas.",
     discuss: "Entre na conversa",
     demo: "Experimentar a demonstração de votação →",
     statsLabel: "Em resumo",
@@ -92,7 +92,7 @@ export default {
     settled: "lote liquidado sob hash(L2 ID, election UUID)",
     l2Caption: "Visão da L2: uma equipe eleitoral",
     l2p1: "Quem vota na borda vota de graça.",
-    l2p2: "Só votantes pré-aprovados são aceitos. O provador recusa os demais.",
+    l2p2: "Só votantes pré-aprovados são aceitos. O provador recusa os demais. (com o verificador simulado nos testes, esta verificação ainda não é exigida)",
     l2p3: "O sequenciador e o provador agrupam os votos.",
     l2p4: "A chave L1 do operador, com fundos mínimos, paga o envio de cada lote à L1.",
     l2p5: "O ID da L2 fica ligado à chave do operador mais um sal, e os UUIDs de eleição são únicos dentro da L2.",
@@ -102,16 +102,16 @@ export default {
     sub: "A maioria das eleições ainda pede que votantes, candidaturas e tribunais confiem em poucos operadores: quem está na lista, quem foi barrado, se uma cédula foi contada, se o resultado confere. {brand} transforma essas afirmações em algo que qualquer pessoa pode conferir.",
     privateTitle: "Privada por construção",
     privateBody:
-      "A opção escolhida nunca é um campo legível numa transação ou num banco. Os recibos são hashes, então não mostram como você votou.",
+      "A opção escolhida nunca é um campo legível numa transação ou num banco. Os recibos são hashes, concebidos para não mostrar como você votou.",
     publicTitle: "Verificável em público",
     publicBody:
-      "Inscrições e códigos de impedimento são públicos. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina. As opções de uma votação ficam seladas até o prazo. Uma auditoria independente pode reconstruir um resultado publicado sem o banco privado do operador.",
+      "Inscrições e códigos de impedimento são públicos. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que 100 eleitores tenham enviado sua primeira cédula ou a enquete termina. As opções de uma votação ficam seladas até o prazo. Uma auditoria independente pode reconstruir um resultado publicado sem o banco privado do operador.",
     oneTitle: "Uma pessoa, um voto",
     oneBody:
       "Cada cédula carrega uma prova de que a pessoa está na lista congelada e não está impedida. Numa enquete ou numa votação, dá para mudar a escolha até o prazo, e o anulador conta só a última.",
     coerceTitle: "Feita para resistir à coerção",
     coerceBody:
-      "Nada entregue a quem vota prova a escolha para alguém que esteja pressionando. Escolha uma votação quando uma contagem em andamento aumentaria a pressão. A participação é pública a cada hora, como numa enquete. As opções ficam cifradas até o prazo, e o voto pode ser substituído até lá. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina.",
+      "Nada entregue a quem vota prova a escolha para alguém que esteja pressionando. Escolha uma votação quando uma contagem em andamento aumentaria a pressão. A participação é pública a cada hora, como numa enquete. As opções ficam cifradas até o prazo, e o voto pode ser substituído até lá. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que 100 eleitores tenham enviado sua primeira cédula ou a enquete termina.",
     dueTitle: "Devido processo para impedir",
     dueBody: "Barrar alguém é uma mudança pública, codificada e na cadeia, com motivo declarado, não uma marca silenciosa num banco.",
     vendorTitle: "Sem aprisionamento de fornecedor",
@@ -131,10 +131,10 @@ export default {
     schoolsBody: "Conduza grêmios e votações docentes com entrada por chave de acesso e uma cédula usável em qualquer aparelho.",
     clubsTitle: "Comunidades e clubes",
     clubsBody:
-      "Enquetes rápidas de sim/não, de escolha única ou múltipla, para qualquer grupo que queira uma cédula privada e uma contagem honesta. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina.",
+      "Enquetes rápidas de sim/não, de escolha única ou múltipla, para qualquer grupo que queira uma cédula privada e uma contagem honesta. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que 100 eleitores tenham enviado sua primeira cédula ou a enquete termina.",
     auditorsTitle: "Observadores e auditores",
     auditorsBody:
-      "Acompanhe inscrições e códigos de impedimento no explorador público e confira um relatório de resultado quando aquela disputa já puder mostrá-lo. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que as primeiras 100 cédulas entram ou a enquete termina. Uma votação só publica as opções no prazo.",
+      "Acompanhe inscrições e códigos de impedimento no explorador público e confira um relatório de resultado quando aquela disputa já puder mostrá-lo. A participação é pública a cada hora para os dois tipos. Uma enquete também publica as contagens por opção em um ritmo horário com 30 minutos de atraso assim que 100 eleitores tenham enviado sua primeira cédula ou a enquete termina. Uma votação só publica as opções no prazo.",
   },
   how: {
     title: "Como funciona",
@@ -148,7 +148,7 @@ export default {
       "Cada cédula prova a elegibilidade. Numa enquete ou numa votação, a pessoa pode mudar a escolha até o prazo. A prova de conhecimento zero e o anulador contam só a última.",
     s4title: "Enquanto está aberta",
     s4body:
-      "Uma enquete publica as contagens por opção assim que as primeiras 100 cédulas entram ou no fim programado, o que ocorrer primeiro. Cada hora é publicada 30 minutos depois de fechar. Uma hora com menos de 10 cédulas segue adiante até um bloco ter pelo menos 10. Uma votação publica a participação horária e mantém as opções seladas.",
+      "Uma enquete publica as contagens por opção assim que 100 eleitores tenham enviado sua primeira cédula ou no fim programado, o que ocorrer primeiro. Cada hora é publicada 30 minutos depois de fechar. Uma hora com menos de 10 cédulas segue adiante até um bloco ter pelo menos 10. Uma votação publica a participação horária e mantém as opções seladas.",
     s5title: "Depois da data de encerramento",
     s5body:
       "Não se aceitam mais cédulas. Os blocos horários publicados de uma enquete permanecem como foram publicados. Novos votos só aparecem na apuração final. As opções de uma votação são decifradas só como um agregado, por guardiões k-of-n. Um lote final é publicado no prazo, depois uma janela de impugnação e então a apuração final. Qualquer pessoa pode conferir se os totais publicados correspondem às cédulas aceitas.",
@@ -189,7 +189,7 @@ export default {
     poll: {
       name: "Enquete",
       summary: "Contagens horárias por opção, atrasadas 30 minutos, depois da barreira.",
-      gate: "As contagens ficam ocultas até entrarem as primeiras 100 cédulas, ou até o fim programado, o que ocorrer primeiro.",
+      gate: "As contagens ficam ocultas até que 100 eleitores tenham enviado sua primeira cédula, ou até o fim programado, o que ocorrer primeiro.",
       hourly: "Depois dessa barreira, as contagens por opção são publicadas em cada bloco horário, 30 minutos após o fim da hora.",
       merge: "Uma hora com menos de 10 cédulas segue adiante até um bloco ter pelo menos 10.",
       freeze: "Os blocos horários publicados não mudam. Os votos alterados só aparecem na apuração final.",
@@ -202,7 +202,7 @@ export default {
       name: "Votação",
       summary: "As opções ficam seladas até o prazo.",
       sealed: "As opções ficam seladas até o prazo.",
-      guardians: "São decifradas só como um agregado, por guardiões k-of-n. O operador não tem chave.",
+      guardians: "São decifradas só como um agregado, por guardiões k-of-n. O desenho não dá ao operador nenhuma parte da chave.",
       noInterim: "Não há contagens provisórias por opção.",
       sealedLabel: "Selado",
       turnoutLabel: "Participação",

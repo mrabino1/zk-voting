@@ -191,16 +191,16 @@ const BOTH_TURNOUT =
 const POLL_TURNOUT = 'Turnout is public every hour, as in a poll.';
 
 const TURNOUT_GATE = {
-  en: { turnout: /\bturnout\b/i, gate: /\b(?:100 first ballots|the gate|a gate|delayed)\b/i },
-  es: { turnout: /participaci[oó]n/i, gate: /primeras 100|umbral|diferido/i },
-  fr: { turnout: /participation/i, gate: /100 premiers|diff[eé]r[eé]|seuil/i },
-  pt: { turnout: /participa[cç][aã]o/i, gate: /primeiras 100|atrasad|limiar|port[aã]o/i },
-  zh: { turnout: /投票率/, gate: /最先的 100|门槛|延迟/ },
-  ar: { turnout: /إقبال/, gate: /أول 100|عتبة|مؤج/ },
-  ko: { turnout: /투표율/, gate: /100장|문턱|지연/ },
-  hi: { turnout: /उपस्थिति/, gate: /100 मत|द्वार|विलंब/ },
-  vi: { turnout: /tỷ lệ đi/i, gate: /100 phiếu|cửa|trễ/i },
-  fil: { turnout: /pagdalo/i, gate: /100 balota|tarangkahan|antala/i },
+  en: { turnout: /\bturnout\b/i, gate: /\bfirst 100 ballots\b/i, tied: /\b(?:100 first ballots|the gate|a gate|delayed)\b/i },
+  es: { turnout: /participaci[oó]n/i, gate: /primeras 100 boletas/i, tied: /100 votantes|umbral|diferido/i },
+  fr: { turnout: /participation/i, gate: /100 premiers bulletins/i, tied: /100 votants|diff[eé]r[eé]|seuil/i },
+  pt: { turnout: /participa[cç][aã]o/i, gate: /primeiras 100 c[eé]dulas/i, tied: /100 eleitores|atrasad|limiar|barreira/i },
+  zh: { turnout: /投票率/, gate: /最先的 100/, tied: /100 名投票人|门槛|延迟/ },
+  ar: { turnout: /إقبال/, gate: /أول 100/, tied: /100 ناخب|عتبة|مؤج/ },
+  ko: { turnout: /투표율/, gate: /처음 100장/, tied: /100명|문턱|지연/ },
+  hi: { turnout: /उपस्थिति/, gate: /पहले 100 मत/, tied: /100 मतदाता|द्वार|विलंब/ },
+  vi: { turnout: /tỷ lệ đi/i, gate: /100 phiếu đầu/i, tied: /100 cử tri|cửa|trễ/i },
+  fil: { turnout: /pagdalo/i, gate: /unang 100 balota/i, tied: /100 botante|tarangkahan|antala/i },
 };
 
 function sentencesOf(value) {
@@ -223,8 +223,31 @@ test('turnout is public every hour and is not tied to the poll gate', () => {
   assert.match(html, /Individual choices are not published\./);
   assert.match(html, /tests currently use a mock verifier/);
   assert.doesNotMatch(html, /Nobody's choice is ever published/);
-  assert.match(lookup(dicts.en, 'pollVote.vote.guardians'), /The operator holds no key\./);
-  assert.match(html, /The operator holds no key\./);
+  assert.equal(lookup(dicts.en, 'hero.title'), 'Ballots built so nobody can read them.');
+  assert.match(lookup(dicts.en, 'why.privateBody'), /designed so they don't show how you voted/);
+  assert.match(lookup(dicts.en, 'vision.l2p2'), /\(with the mock verifier in tests, this check is not yet enforced\)/);
+  assert.match(html, /Ballots built so nobody can read them/);
+  assert.match(html, /designed so they don't show how you voted/);
+  assert.match(html, /with the mock verifier in tests, this check is not yet enforced/);
+  assert.match(lookup(dicts.en, 'pollVote.vote.guardians'), /The design gives the operator no key share\./);
+  assert.match(html, /The design gives the operator no key share\./);
+  assert.doesNotMatch(html, /The operator holds no key/);
+  assert.equal(
+    lookup(dicts.es, 'pollVote.poll.gate'),
+    'Los recuentos permanecen ocultos hasta que 100 votantes hayan emitido su primera boleta, o hasta el cierre programado, lo que ocurra primero.',
+  );
+  assert.equal(
+    lookup(dicts.fr, 'pollVote.poll.gate'),
+    "Les totaux restent cachés jusqu'à ce que 100 votants aient déposé leur premier bulletin, ou jusqu'à la fin prévue, selon ce qui arrive en premier.",
+  );
+  assert.equal(
+    lookup(dicts.pt, 'pollVote.poll.gate'),
+    'As contagens ficam ocultas até que 100 eleitores tenham enviado sua primeira cédula, ou até o fim programado, o que ocorrer primeiro.',
+  );
+  assert.equal(
+    lookup(dicts.ar, 'pollVote.poll.gate'),
+    'تبقى الأعداد مخفية حتى يُدلي 100 ناخب بأوراقهم الأولى، أو حتى النهاية المجدولة، أيهما أسبق.',
+  );
   assert.equal(
     lookup(dicts.es, 'pollVote.poll.freeze').split('. ').pop(),
     'Los votos cambiados aparecen solo en el escrutinio final.',
@@ -238,15 +261,15 @@ test('turnout is public every hour and is not tied to the poll gate', () => {
     'Os votos alterados só aparecem na apuração final.',
   );
   const marks = {
-    es: ['La participación es pública cada hora para ambos tipos.', 'verificador simulado', 'Las opciones individuales no se publican.', 'El operador no tiene ninguna clave.'],
-    fr: ['La participation est publique chaque heure pour les deux types.', 'vérificateur fictif', 'Les choix individuels ne sont pas publiés.', "L'opérateur ne détient aucune clé."],
-    pt: ['A participação é pública a cada hora para os dois tipos.', 'verificador simulado', 'As escolhas individuais não são publicadas.', 'O operador não tem chave.'],
-    zh: ['两种的投票率每小时都公开。', '模拟验证器', '不公布个人的选择。', '运营者不持有密钥。'],
-    ar: ['الإقبال علني كل ساعة لكلا النوعين.', 'مُحققًا وهميًا', 'لا تُنشر الخيارات الفردية.', 'لا يحمل المشغّل أي مفتاح.'],
-    ko: ['두 종류 모두 투표율은 매시간 공개됩니다.', '모의 검증기', '개인의 선택은 공개되지 않습니다.', '운영자는 키를 갖고 있지 않습니다.'],
-    hi: ['दोनों प्रकारों में उपस्थिति हर घंटे सार्वजनिक है।', 'नकली सत्यापक', 'व्यक्तिगत विकल्प प्रकाशित नहीं होते।', 'संचालक के पास कोई कुंजी नहीं है।'],
-    vi: ['Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại.', 'bộ xác minh giả', 'Các lựa chọn cá nhân không được công bố.', 'Người vận hành không giữ khóa.'],
-    fil: ['Hayagan ang pagdalo kada oras para sa parehong uri.', 'kunwang tagapagpatunay', 'Hindi inilalathala ang mga indibidwal na pagpipilian.', 'Walang hawak na susi ang operator.'],
+    es: ['La participación es pública cada hora para ambos tipos.', 'verificador simulado', 'Las opciones individuales no se publican.', 'El diseño no da al operador ninguna parte de la clave.', '100 votantes hayan emitido su primera boleta'],
+    fr: ['La participation est publique chaque heure pour les deux types.', 'vérificateur fictif', 'Les choix individuels ne sont pas publiés.', "La conception ne donne à l'opérateur aucune part de clé.", 'leur premier bulletin'],
+    pt: ['A participação é pública a cada hora para os dois tipos.', 'verificador simulado', 'As escolhas individuais não são publicadas.', 'O desenho não dá ao operador nenhuma parte da chave.', '100 eleitores tenham enviado sua primeira cédula'],
+    zh: ['两种的投票率每小时都公开。', '模拟验证器', '不公布个人的选择。', '设计不向运营者提供密钥份额。', '100 名投票人各自投出第一张选票'],
+    ar: ['الإقبال علني كل ساعة لكلا النوعين.', 'مُحققًا وهميًا', 'لا تُنشر الخيارات الفردية.', 'لا يمنح التصميم المشغّل أي حصة من المفتاح.', '100 ناخب بأوراقهم الأولى'],
+    ko: ['두 종류 모두 투표율은 매시간 공개됩니다.', '모의 검증기', '개인의 선택은 공개되지 않습니다.', '설계는 운영자에게 키 지분을 주지 않습니다.', '100명의 유권자가 각자의 첫 투표용지를'],
+    hi: ['दोनों प्रकारों में उपस्थिति हर घंटे सार्वजनिक है।', 'नकली सत्यापक', 'व्यक्तिगत विकल्प प्रकाशित नहीं होते।', 'डिज़ाइन संचालक को कोई कुंजी-हिस्सा नहीं देता।', '100 मतदाता'],
+    vi: ['Tỷ lệ đi bỏ phiếu được công khai mỗi giờ cho cả hai loại.', 'bộ xác minh giả', 'Các lựa chọn cá nhân không được công bố.', 'Thiết kế không trao cho người vận hành phần khóa nào.', '100 cử tri đã bỏ phiếu đầu tiên của mình'],
+    fil: ['Hayagan ang pagdalo kada oras para sa parehong uri.', 'kunwang tagapagpatunay', 'Hindi inilalathala ang mga indibidwal na pagpipilian.', 'Hindi binibigyan ng disenyo ang operator ng bahagi ng susi.', '100 botante ng kanilang unang balota'],
   };
   for (const [code, phrases] of Object.entries(marks)) {
     const lead = lookup(dicts[code], 'hero.lead');
@@ -256,13 +279,22 @@ test('turnout is public every hour and is not tied to the poll gate', () => {
     assert.match(lead, new RegExp(phrases[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(guardians, new RegExp(phrases[3].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(lookup(dicts[code], 'why.publicBody'), new RegExp(phrases[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    const voters = new RegExp(phrases[4].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    for (const key of ['hero.lead', 'why.publicBody', 'why.coerceBody', 'who.clubsBody', 'who.auditorsBody', 'how.s4body', 'pollVote.poll.gate']) {
+      assert.match(lookup(dicts[code], key), voters, `${code} ${key}`);
+    }
   }
   for (const code of LOCALE_CODES) {
     const rules = TURNOUT_GATE[code];
     for (const key of flattenKeys(dicts[code])) {
       for (const sentence of sentencesOf(lookup(dicts[code], key))) {
+        assert.doesNotMatch(
+          sentence,
+          rules.gate,
+          `${code} ${key} counts the first 100 ballots, not 100 voters' first ballots: ${sentence}`,
+        );
         assert.ok(
-          !(rules.turnout.test(sentence) && rules.gate.test(sentence)),
+          !(rules.turnout.test(sentence) && rules.tied.test(sentence)),
           `${code} ${key} ties turnout to the gate: ${sentence}`,
         );
       }

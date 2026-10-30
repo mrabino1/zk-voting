@@ -33,9 +33,9 @@ export default {
   hero: {
     eyebrow: "Bukas na kodigo · Hindi para kumita · Maaaring patakbuhin nang sarili",
     title:
-      'Botong masusuri ng mga kasapi. <span class="accent">Tiyak</span>.<br>Balotang walang <span class="accent">makababasa</span>.',
+      "Mga balotang ginawa nang walang makakabasa.",
     lead:
-      "Hinahayaan ng {brand} ang alinmang grupo na magpatakbo ng sariling halalan at palatanungan. Pinipili ng gumawa kung palatanungan o botohan. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag pumasok na ang unang 100 balota o natapos na ang palatanungan. Inilalathala ng botohan ang mga pagpipilian sa takdang oras lamang. Ang zero-knowledge proof ay idinisenyo upang ipakita na mga karapat-dapat lang ang bumoto, isa-isa, at tumutugma ang inilathalang bilang sa mga balota (ang mga pagsubok ay gumagamit ngayon ng kunwang tagapagpatunay). Hindi inilalathala ang mga indibidwal na pagpipilian.",
+      "Hinahayaan ng {brand} ang alinmang grupo na magpatakbo ng sariling halalan at palatanungan. Pinipili ng gumawa kung palatanungan o botohan. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag nakaboto na ang 100 botante ng kanilang unang balota o natapos na ang palatanungan. Inilalathala ng botohan ang mga pagpipilian sa takdang oras lamang. Ang zero-knowledge proof ay idinisenyo upang ipakita na mga karapat-dapat lang ang bumoto, isa-isa, at tumutugma ang inilathalang bilang sa mga balota (ang mga pagsubok ay gumagamit ngayon ng kunwang tagapagpatunay). Hindi inilalathala ang mga indibidwal na pagpipilian.",
     discuss: "Sumali sa usapan",
     demo: "Subukan ang demo ng pagboto →",
     statsLabel: "Sa isang tingin",
@@ -91,7 +91,7 @@ export default {
     settled: "bungkos na naayos sa ilalim ng hash(L2 ID, election UUID)",
     l2Caption: "Tanaw ng L2: isang pangkat ng halalan",
     l2p1: "Bumoto nang libre ang mga botante sa gilid.",
-    l2p2: "Tinatanggap lamang ang paaprubahang botante. Tinatanggihan ng tagapagpatunay ang iba.",
+    l2p2: "Tinatanggap lamang ang paaprubahang botante. Tinatanggihan ng tagapagpatunay ang iba. (sa kunwang tagapagpatunay sa mga pagsubok, hindi pa ipinapatupad ang pagsusuring ito)",
     l2p3: "Binubuklod ng tagaayos at ng tagapagpatunay ang mga boto.",
     l2p4: "Ang L1 key ng operator, na may pinakamaliit na pondo, ang nagbabayad para isumite ang bawat bungkos sa L1.",
     l2p5: "Nakatali ang L2 ID sa key ng operator kasama ang asin, at natatangi ang mga UUID ng halalan sa loob ng L2.",
@@ -100,15 +100,15 @@ export default {
     title: "Bakit mahalaga",
     sub: "Karamihan ng halalan ay hinihingi pa rin sa mga botante, kandidato at hukuman na magtiwala sa iilang operator: sino ang nasa talaan, sino ang tinanggihan, nabibilang ba ang balota, tugma ba ang resulta. Ginagawa ng {brand} na masuri ninuman ang mga pahayag na iyon.",
     privateTitle: "Pribado sa disenyo",
-    privateBody: "Ang pinili mo ay hindi kailanman nababasang field sa isang transaksyon o database. Hash ang mga resibo, kaya hindi ipinapakita kung paano ka bumoto.",
+    privateBody: "Ang pinili mo ay hindi kailanman nababasang field sa isang transaksyon o database. Hash ang mga resibo, idinisenyo nang hindi ipinapakita kung paano ka bumoto.",
     publicTitle: "Masusuri nang hayagan",
     publicBody:
-      "Hayagan ang mga pagpaparehistro at ang mga kodigo ng diskwalipikasyon. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag pumasok na ang unang 100 balota o natapos na ang palatanungan. Nanatiling selyado ang mga pagpipilian ng botohan hanggang sa takdang oras. Mabubuo muli ng malayang tagasuri ang inilathalang resulta nang wala ang pribadong database ng operator.",
+      "Hayagan ang mga pagpaparehistro at ang mga kodigo ng diskwalipikasyon. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag nakaboto na ang 100 botante ng kanilang unang balota o natapos na ang palatanungan. Nanatiling selyado ang mga pagpipilian ng botohan hanggang sa takdang oras. Mabubuo muli ng malayang tagasuri ang inilathalang resulta nang wala ang pribadong database ng operator.",
     oneTitle: "Isang tao, isang boto",
     oneBody: "May patunay ang bawat balota na nasa nagyelong talaan ang botante at hindi diskwalipikado. Sa palatanungan o botohan, maaaring baguhin ang pinili hanggang sa takdang oras, at ang nullifier ang bumibilang ng huli lamang.",
     coerceTitle: "Ginawa para labanan ang pamimilit",
     coerceBody:
-      "Walang ibinibigay sa botante na nagpapatunay ng kanyang pinili sa nangungumusta. Pumili ng botohan kapag magdadagdag ng presyon ang tumatakbong bilang ng pagpipilian. Hayagan ang pagdalo kada oras, gaya ng sa palatanungan. Naka-encrypt ang mga pagpipilian hanggang sa takdang oras, at maaaring palitan ang boto hanggang doon. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag pumasok na ang unang 100 balota o natapos na ang palatanungan.",
+      "Walang ibinibigay sa botante na nagpapatunay ng kanyang pinili sa nangungumusta. Pumili ng botohan kapag magdadagdag ng presyon ang tumatakbong bilang ng pagpipilian. Hayagan ang pagdalo kada oras, gaya ng sa palatanungan. Naka-encrypt ang mga pagpipilian hanggang sa takdang oras, at maaaring palitan ang boto hanggang doon. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag nakaboto na ang 100 botante ng kanilang unang balota o natapos na ang palatanungan.",
     dueTitle: "Tamang proseso sa diskwalipikasyon",
     dueBody: "Ang pagbabawal sa isang tao ay hayagan, may kodigo, at pagbabago sa chain na may nakasaad na dahilan, hindi tahimik na bandila sa database.",
     vendorTitle: "Walang pagkakakulong sa vendor",
@@ -127,10 +127,10 @@ export default {
     schoolsBody: "Magpatakbo ng pamahalaang mag-aaral at boto ng guro gamit ang passkey at balotang magagamit sa anumang aparato.",
     clubsTitle: "Mga komunidad at klub",
     clubsBody:
-      "Mabilis na oo/hindi, iisang pagpipilian o maraming pagpipilian para sa grupong gusto ng pribadong balota at tapat na pagbibilang. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag pumasok na ang unang 100 balota o natapos na ang palatanungan.",
+      "Mabilis na oo/hindi, iisang pagpipilian o maraming pagpipilian para sa grupong gusto ng pribadong balota at tapat na pagbibilang. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag nakaboto na ang 100 botante ng kanilang unang balota o natapos na ang palatanungan.",
     auditorsTitle: "Mga tagamasid at tagasuri",
     auditorsBody:
-      "Sundan ang mga pagpaparehistro at kodigo ng diskwalipikasyon sa pampublikong explorer, at suriin ang ulat ng resulta kapag pinapayagan nang ipakita iyon ng paligsahan. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag pumasok na ang unang 100 balota o natapos na ang palatanungan. Inilalathala ng botohan ang mga pagpipilian sa takdang oras lamang.",
+      "Sundan ang mga pagpaparehistro at kodigo ng diskwalipikasyon sa pampublikong explorer, at suriin ang ulat ng resulta kapag pinapayagan nang ipakita iyon ng paligsahan. Hayagan ang pagdalo kada oras para sa parehong uri. Inilalathala rin ng palatanungan ang bilang ng bawat pagpipilian sa iskedyul na oras-oras na may 30 minutong antala kapag nakaboto na ang 100 botante ng kanilang unang balota o natapos na ang palatanungan. Inilalathala ng botohan ang mga pagpipilian sa takdang oras lamang.",
   },
   how: {
     title: "Paano gumagana",
@@ -143,7 +143,7 @@ export default {
     s3body: "Pinatutunayan ng bawat balota ang karapatan. Sa palatanungan o botohan, maaaring baguhin ng botante ang pinili hanggang sa takdang oras. Ang zero-knowledge proof at ang nullifier ang bumibilang ng huli lamang.",
     s4title: "Habang bukas",
     s4body:
-      "Inilalathala ng palatanungan ang bilang ng bawat pagpipilian kapag pumasok na ang unang 100 balota o dumating ang nakatakdang wakas, alinman ang mauna. Inilalathala ang bawat oras 30 minuto pagkatapos magsara. Ang oras na wala pang 10 balota ay sumasama pasulong hanggang magkaroon ng hindi bababa sa 10 ang isang bloke. Inilalathala ng botohan ang oras-oras na pagdalo at pinananatiling selyado ang mga pagpipilian.",
+      "Inilalathala ng palatanungan ang bilang ng bawat pagpipilian kapag nakaboto na ang 100 botante ng kanilang unang balota o dumating ang nakatakdang wakas, alinman ang mauna. Inilalathala ang bawat oras 30 minuto pagkatapos magsara. Ang oras na wala pang 10 balota ay sumasama pasulong hanggang magkaroon ng hindi bababa sa 10 ang isang bloke. Inilalathala ng botohan ang oras-oras na pagdalo at pinananatiling selyado ang mga pagpipilian.",
     s5title: "Pagkatapos ng araw ng pagsasara",
     s5body:
       "Wala nang tinatanggap na balota. Nanatili ang inilathalang oras-oras na bloke ng palatanungan gaya ng pagkakalathala. Ang muling boto ay lumalabas lamang sa huling bilangan. Ang mga pagpipilian ng botohan ay dini-decrypt lamang bilang pinagsama-sama ng mga tagapag-ingat na k-of-n. May isang huling bungkos na inilalathala sa takdang oras, tapos ang palugit ng pagtutol, tapos ang huling bilangan. Masusuri ninuman na tumutugma ang inilathalang kabuuan sa mga tinanggap na balota.",
@@ -184,7 +184,7 @@ export default {
     poll: {
       name: "Palatanungan",
       summary: "Bilang ng bawat pagpipilian kada oras, 30 minutong antala, pagkatapos ng tarangkahan.",
-      gate: "Nanatiling nakatago ang mga bilang hanggang pumasok ang unang 100 balota, o hanggang sa nakatakdang wakas, alinman ang mauna.",
+      gate: "Nanatiling nakatago ang mga bilang hanggang makaboto ang 100 botante ng kanilang unang balota, o hanggang sa nakatakdang wakas, alinman ang mauna.",
       hourly: "Pagkatapos ng tarangkahang iyon, inilalathala ang bilang ng bawat pagpipilian sa bawat oras-oras na bloke, 30 minuto pagkatapos magsara ang oras.",
       merge: "Ang oras na wala pang 10 balota ay sumasama pasulong hanggang magkaroon ng hindi bababa sa 10 ang isang bloke.",
       freeze: "Hindi na nagbabago ang inilathalang oras-oras na bloke. Ang muling boto ay lumalabas lamang sa huling bilangan.",
@@ -197,7 +197,7 @@ export default {
       name: "Botohan",
       summary: "Nanatiling selyado ang mga pagpipilian hanggang sa takdang oras.",
       sealed: "Nanatiling selyado ang mga pagpipilian hanggang sa takdang oras.",
-      guardians: "Dini-decrypt lamang ang mga ito bilang pinagsama-sama, ng mga tagapag-ingat na k-of-n. Walang hawak na susi ang operator.",
+      guardians: "Dini-decrypt lamang ang mga ito bilang pinagsama-sama, ng mga tagapag-ingat na k-of-n. Hindi binibigyan ng disenyo ang operator ng bahagi ng susi.",
       noInterim: "Walang pansamantalang bilang ng bawat pagpipilian.",
       sealedLabel: "Selyado",
       turnoutLabel: "Pagdalo",

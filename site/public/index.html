@@ -31,7 +31,7 @@
     <section class="hero">
       <div class="wrap">
         <p class="eyebrow" data-i18n="hero.eyebrow">Open source &middot; Not for profit &middot; Self-hostable</p>
-        <h1 data-i18n-html="hero.title">Voting your members can <span class="accent">verify</span>.<br>Ballots nobody can <span class="accent">read</span>.</h1>
+        <h1 data-i18n-html="hero.title">Ballots built so nobody can read them.</h1>
         <p class="lead" data-i18n="hero.lead">ZK-Voting lets any group run its own elections and polls. The creator chooses a poll or a vote. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends. A vote publishes choices only at the deadline. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots (tests currently use a mock verifier). Individual choices are not published.</p>
         <div class="cta">
           <a class="btn" href="https://community.zk-voting.org" data-i18n="hero.discuss">Join the discussion</a>
@@ -160,7 +160,7 @@
               <h3 data-i18n="vision.l2Caption">L2 view: one election team</h3>
               <ul class="vz-points">
                 <li data-i18n="vision.l2p1">Voters at the edge vote for free.</li>
-                <li data-i18n="vision.l2p2">Only pre-approved voters are accepted. The prover rejects everyone else.</li>
+                <li data-i18n="vision.l2p2">Only pre-approved voters are accepted. The prover rejects everyone else. (with the mock verifier in tests, this check is not yet enforced)</li>
                 <li data-i18n="vision.l2p3">The sequencer and prover batch the votes.</li>
                 <li data-i18n="vision.l2p4">The operator's minimally funded L1 key pays to submit each batch to L1.</li>
                 <li data-i18n="vision.l2p5">The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</li>
@@ -176,7 +176,7 @@
         <h2 data-i18n="why.title">Why it matters</h2>
         <p class="sub" data-i18n="why.sub">Most elections still ask voters, candidates and courts to trust a few operators: who is on the roll, who was turned away, whether a ballot was counted, whether the result matches. ZK-Voting turns those claims into things anyone can check.</p>
         <div class="grid">
-          <article class="card"><h3 data-i18n="why.privateTitle">Private by design</h3><p data-i18n="why.privateBody">The option you pick is never a readable field in a transaction or a database. Receipts are hashes, so they can't show how you voted.</p></article>
+          <article class="card"><h3 data-i18n="why.privateTitle">Private by design</h3><p data-i18n="why.privateBody">The option you pick is never a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.</p></article>
           <article class="card"><h3 data-i18n="why.publicTitle">Publicly verifiable</h3><p data-i18n="why.publicBody">Registrations and disqualification codes are public. Turnout is public every hour for both kinds. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends. A vote's choices stay sealed until the deadline. An independent auditor can rebuild a published result without the operator's private database.</p></article>
           <article class="card"><h3 data-i18n="why.oneTitle">One person, one vote</h3><p data-i18n="why.oneBody">Every ballot carries a proof that the voter is on the frozen roll and not disqualified. In a poll or a vote, a voter can change their choice until the deadline, and the nullifier counts only the last one.</p></article>
           <article class="card"><h3 data-i18n="why.coerceTitle">Built to resist coercion</h3><p data-i18n="why.coerceBody">Nothing a voter is given proves their choice to someone pressuring them. Choose a vote when a running choice count would add pressure. Turnout is public every hour, as in a poll. The choices stay encrypted until the deadline, and a voter can replace their vote until then. A poll also publishes per-choice counts on a 30-minute-delayed hourly schedule once 100 first ballots are in or the poll ends.</p></article>
@@ -269,7 +269,7 @@
               </div>
               <ul>
                 <li data-i18n="pollVote.vote.sealed">Choices stay sealed until the deadline.</li>
-                <li data-i18n="pollVote.vote.guardians">They are decrypted only as an aggregate, by k-of-n guardians. The operator holds no key.</li>
+                <li data-i18n="pollVote.vote.guardians">They are decrypted only as an aggregate, by k-of-n guardians. The design gives the operator no key share.</li>
                 <li data-i18n="pollVote.vote.noInterim">There are no interim per-choice counts.</li>
               </ul>
             </article>
