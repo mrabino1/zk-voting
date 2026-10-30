@@ -27,10 +27,12 @@ Not code. Defaults for the later change:
 | Record | Groth16 proof, five public inputs, one ciphertext | Same bytes for POLL and VOTE. |
 | Turnout | `acceptedBallots`, public the whole window | Unique voters. A replacement does not increment it. No padding. |
 | Final batch | Always, at `cutoffTime` | The tail is real. A short tail shows its real row count. |
-| L1 during the election | One `RollupSettlement.submitBatch` per hour, plus the final batch | Roots and the aggregate commitment. Bodies stay on the L2. |
+| L1 during the election | One `RollupSettlement.submitBatch` per hour, plus the final batch | That hour's ballot-set root and that hour's aggregate, the running total that leaves re-vote deltas out. Bodies stay on the L2. `postInterimResult` is not this record. |
 | POLL choice publication | App gate, then a sealed hour | Sums wait for 100 ballots or the end, then 30 minutes. Hours under 10 merge forward. A published hourly block never changes. A re-vote's replacement is reflected only in the certified final tally. |
 
-`RollupSettlement.computeDataHash` is `keccak256(abi.encode(batchIndex, prevStateRoot, newStateRoot))`. `submitBatch` stores `dataLength = 0`. Neither commits to ballots or to an aggregate. The later change puts the hour's ballot-set root and the aggregate commitment inside `dataHash`. A published hourly batch is not rewritten. The certified final tally is the only published total that includes a later replacement.
+`postInterimResult` (`Tally.sol` lines 199–206) stores one hash, `_interimHash`. Before cutoff a POLL may replace that slot on every call. It is not a per-hour record. The per-hour guarantee is a `RollupSettlement` batch. `submitBatch` appends one `batchIndex` and does not rewrite an earlier one.
+
+`RollupSettlement.computeDataHash` is `keccak256(abi.encode(batchIndex, prevStateRoot, newStateRoot))`. `submitBatch` stores `dataLength = 0`. Neither commits to ballots or to an aggregate today. The later change puts that hour's ballot-set root and that hour's aggregate commitment inside `dataHash`. The hour's aggregate is the one that leaves re-vote deltas out, defined below. A published hourly block never changes. A re-vote's replacement is reflected only in the certified final tally.
 
 The JSON sequencer (chain id 27427) has no gas token. Voters pay nothing. The EVM contracts are the settlement path and the Foundry inbox.
 
@@ -46,13 +48,26 @@ The plan does **not** reuse one public nullifier for both ballots. It does **not
 
 Public input 2 becomes a **submission id**: `Poseidon(nullifierSecret, electionId, ballotHash)`. It is spent once. The same proof posted twice still reverts `NullifierUsed`. A new choice has a new ballot hash, so it has a new submission id, the spent-key check does not fire, and the ballot is accepted. The contract does not keep a voter-to-ballot map. It does not store the previous submission id. It does not emit an event that names both.
 
-Last-ballot-counts is the running aggregate, proved in private:
+There are two aggregates. They are not the same product.
 
-- The counted ciphertext is exponential ElGamal of a one-hot vector. `Enc(new) * Enc(old)^{-1}` equals `Enc(new - old)`.
-- First ballot from a person: the batch proof multiplies `Enc(choice)` into the aggregate and increments the unique count.
-- Later ballot: the batch proof multiplies in the delta only. The previous choice leaves the product. The new ciphertext is appended. The old ciphertext stays in history and is not labeled as replaced.
+- **Hourly POLL total.** A first ballot multiplies `Enc(choice)` into this product. A re-vote does not. The delta is left out. Decrypting a product that included `Enc(new) * Enc(old)^{-1}` can show a negative count on the old option, and that negative count is itself the news that someone switched. Guardians decrypt this hourly product for the published hour, and that hour is then left as posted.
+- **Final tally product.** First ballots and re-vote deltas both go into this other product. `Enc(new) * Enc(old)^{-1}` equals `Enc(new - old)`. Only this product is decrypted for the certified final tally.
+
+Last-ballot-counts is that final product, proved in private:
+
+- The counted ciphertext is exponential ElGamal of a one-hot vector.
+- First ballot from a person: the batch proof multiplies `Enc(choice)` into both products and increments the unique count.
+- Later ballot: the batch proof multiplies the delta into the final product only. The hourly product is unchanged, so its next public value equals its previous public value. The new ciphertext is appended. The old ciphertext stays in history and is not labeled as replaced.
 - The private witness shows either that this secret has no earlier ciphertext in the ballot set, or the opening of the actual previous ciphertext and that the same secret opens both. The previous index is not a public input. The nullifier secret is not a public input. A stranger who does not know the secret cannot cancel someone else's ciphertext.
-- `acceptedBallots` stays the unique-voter count. The batch proof's public instance carries the previous unique count and the next unique count. A replacement leaves the next count equal to the previous count. Those two words are batch inputs, not vote inputs. Observers see that a new submission was accepted. They do not see which earlier row it replaced, and they do not see whether the unique count moved because of this row or because of another row in the same batch.
+- `acceptedBallots` stays the unique-voter count. The batch proof's public instance carries the previous unique count and the next unique count, plus the previous and next value of each product. A replacement leaves the next unique count equal to the previous count. Those words are batch inputs, not vote inputs. Observers see that a new submission was accepted. They do not see which earlier row it replaced, and they do not see a negative option count in the hour.
+
+### Who builds the proof
+
+The witness needs `nullifierSecret`. On a re-vote it also needs the opening of that voter's earlier ciphertext. The voter is the only party who has those values, and the voter's prover is the only party that builds this proof. It runs on the voter's device.
+
+The prover does not send the secret, the prior index, or the prior opening to the relayer, the operator, or the guardians. The relayer receives the same package as any other ballot: the five public inputs, the new ciphertext, and the transition proof. The public instance has no previous submission id. A builder who was handed the secret could match the two ballots, so the relayer is not given the secret and does not run this prover.
+
+The device submits through the same relayer path as the first ballot, with no account attached. The proof does not link the re-vote. A reused connection can still tie the two deliveries together outside the proof. That is a property of the transport, not of the witness.
 
 A published hourly block never changes. A re-vote's replacement is reflected only in the certified final tally.
 
@@ -69,7 +84,7 @@ What changes inside the vote circuit:
 - Eligibility, the disqualification root, and the election id are unchanged.
 - The tally key, a re-vote flag, and the previous ballot hash are not added to this list. A public previous hash, or a reused nullifier, would link the two ballots.
 
-What the vote circuit does not prove: that the ciphertext is ElGamal under the joint key, or that it cancels a prior ballot. That is the batch-transition circuit. Its public instance is the previous aggregate, the new aggregate, the previous unique count, the next unique count, and the ballot-set root. It does not include a voter id, the nullifier secret, or the cancelled index.
+What the vote circuit does not prove: that the ciphertext is ElGamal under the joint key, or that it cancels a prior ballot. That is the batch-transition circuit, built by the voter's prover as specified above. Its public instance is the previous and next hourly product, the previous and next final product, the previous unique count, the next unique count, and the ballot-set root. On a re-vote the next hourly product equals the previous hourly product. The instance does not include a voter id, the nullifier secret, or the cancelled index.
 
 `TallyPublicInputs` (seven words, version 2) stays the tally instance. Word 5 is one aggregate commitment. `circuits/tally.circom` still proves a plaintext histogram and does not match that instance. The production tally circuit proves that the decrypted product matches the posted counts, and that the decryption is of the aggregate only.
 
@@ -104,8 +119,8 @@ Not coded. Shamir sharing. Not a time-lock. The joint scalar is not reconstructe
 
 - **Setup.** Distributed Feldman sharing. Each guardian deals a polynomial of degree `k - 1`. No dealer holds the joint scalar. Bounds: `n` from 2 to 16, `k >= 2`, `k <= n`. Each election type gets its own joint public key, posted on the L2 before `startTime`. Ballots of that type are refused until its key is posted.
 - **Share distribution.** Shares are encrypted to each guardian's transport key and kept off chain. The chain stores Feldman commitments only. The operator's database must not gain a copy of a share.
-- **What is encrypted.** Choices are exponential ElGamal of a one-hot vector under that type's joint key, which is what makes `Enc(new) * Enc(old)^{-1}` a re-vote. POLL hourly sums are decrypted by a guardian k-of-n key separate from the VOTE key. The operator holds no opening key and never decrypts a single ballot.
-- **Deadline.** Only at or after `tallyAllowedAt`, guardians submit partial decryptions of the **one aggregate ciphertext**, each with a Chaum-Pedersen proof against that guardian's commitment. `k` valid partials combine, by Lagrange, to the plaintext counts. `submitDecryption` records a hash of those counts. It does not take the scalar. It does not take per-ballot openings. A published hour, once decrypted and posted, is left as posted.
+- **What is encrypted.** Choices are exponential ElGamal of a one-hot vector under that type's joint key, which is what makes `Enc(new) * Enc(old)^{-1}` a re-vote. POLL hourly sums are decrypted by a guardian k-of-n key separate from the VOTE key. The operator holds no opening key and never decrypts a single ballot. The POLL guardians decrypt the hourly product only. That product leaves re-vote deltas out, so a published hour cannot show a negative count.
+- **Deadline.** Only at or after `tallyAllowedAt`, guardians submit partial decryptions of one aggregate ciphertext, each with a Chaum-Pedersen proof against that guardian's commitment. For a published POLL hour that ciphertext is the hourly product. For the certified tally it is the final product, the one that includes re-vote deltas. `k` valid partials combine, by Lagrange, to the plaintext counts. `submitDecryption` records a hash of those counts. It does not take the scalar. It does not take per-ballot openings. A published hour, once decrypted and posted, is left as posted.
 - **Never publish the private key.** No function returns it, stores it, or emits it. Publishing it would open every ciphertext. After release, individual ballots stay ciphertext. A voter cannot point at the tally transaction and prove which choice was theirs. The tally output is the option totals.
 - **What that does not hide.** A voter who retained the encryption randomness can still show an opening of their own ciphertext to someone else. The release does not create that proof, and it does not erase it. Receipt-freeness against a voter who kept the coins is a different ballot scheme. This plan does not add one.
 - **Guardian loss.** Fewer than `k` partials means there is no result for that key. Do not lower `k` and do not add an operator override.
@@ -117,11 +132,11 @@ Later pull request, after this plan is confirmed. Nothing in this list is in the
 
 | Surface | Change |
 | --- | --- |
-| `BallotInbox` | Spend the submission id once. Accept a second, different submission from the same person until cutoff. Do not key storage by the voter nullifier. Do not emit a replacement event. Append the new ciphertext commitment. The batch proof updates the aggregate and the unique count. Keep five public inputs. Keep the relayer check. |
-| Batch transition | Verify aggregate in, aggregate out, previous unique count, next unique count, and the ballot-set root. The replaced ballot stays in the private witness. Set once, same pattern as `tallyProofVerifier`. |
+| `BallotInbox` | Spend the submission id once. Accept a second, different submission from the same person until cutoff. Do not key storage by the voter nullifier. Do not emit a replacement event. Append the new ciphertext commitment. The batch proof updates both products and the unique count. A re-vote changes only the final product. Keep five public inputs. Keep the relayer check. |
+| Batch transition | The voter's prover builds this. Verify hourly product in and out (unchanged on a re-vote), final product in and out (delta applied), previous unique count, next unique count, and the ballot-set root. The replaced ballot stays in the private witness. Set once, same pattern as `tallyProofVerifier`. |
 | `Tally` | `setChallengeWindow` as specified under "Challenge window", rejecting 0 and reverting at or after `startTime`. `_authorize` uses `ChallengeWindowOpen` instead of comparing only to `cutoffTime`. For each type, store guardian partials of that type's aggregate and require `k` valid partials before the decryption hash. Do not add a scalar argument or a scalar getter. The one post-cutoff interim write and the one post-cutoff disclosure write stay as they are on this branch, including `FinalBeforeTally`. |
 | Ceremony storage | A contract for deals, commitments, `k`, and `n`, with a separate ceremony per election type. `createElection`'s tuple does not grow. `electionType` is already the last field. |
-| `RollupSettlement` | Put the ballot-set root and the aggregate commitment inside `dataHash`. Keep `dataLength` at 0 under the gas assumption below. The final batch is mandatory. Do not rewrite an earlier batch. |
+| `RollupSettlement` | Put that hour's ballot-set root and that hour's aggregate (the running total that leaves re-vote deltas out) inside `dataHash`. The final product, which includes those deltas, is not written into an earlier hour. Keep `dataLength` at 0 under the gas assumption below. The final batch is mandatory. Do not rewrite an earlier batch. |
 | Vote circuit | Public input 2 becomes `Poseidon(nullifierSecret, electionId, ballotHash)`. Still five words. No new public input. |
 | Tally circuit | Prove decryption of the product against `TallyPublicInputs` version 2. The witness is shares of the aggregate, not the joint scalar and not per-ballot openings. |
 | Deploy scripts | Do not edit addresses or broadcast artifacts for this plan. A later release deploys the ceremony contract and the new verifier. Existing clones keep their bytecode until that release. |

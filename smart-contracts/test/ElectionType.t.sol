@@ -348,19 +348,6 @@ contract ElectionTypeTest is Deployer {
         tally.submitDecryption(id, keccak256("plain-early"));
     }
 
-    function _expectDecryptOnce(uint256 id, uint256 total) internal {
-        _expectDecryptBeforeTallyReverts(id);
-        uint256[] memory counts = new uint256[](1);
-        counts[0] = total;
-        vm.startPrank(tallyOperator);
-        tally.submitTally(id, counts, a, b, c);
-        tally.submitDecryption(id, keccak256("plain"));
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultAlreadyFinal.selector, id));
-        tally.submitDecryption(id, keccak256("plain-2"));
-        vm.stopPrank();
-        assertEq(tally.decryptionHash(id), keccak256("plain"));
-    }
-
     function _expectReplaceReverts(uint256 id) internal {
         bytes32 interim = tally.interimResult(id);
         bytes32 disclosed = tally.disclosureHash(id);
