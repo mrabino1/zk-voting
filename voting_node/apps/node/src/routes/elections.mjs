@@ -25,7 +25,7 @@ import { expireRepairAttempts, relayVote } from '../relay.mjs';
 import { chainElectionId } from '../electionIds.mjs';
 import { submitSupplementaryBatch, tallyAllowedAt } from '../supplementaryBatch.mjs';
 import { uuidParam } from '../recordIds.mjs';
-import { electionDisclosurePolicy, EXCLUSION_REASON_CODE, publicVoteRecord } from '../store.mjs';
+import { electionDisclosurePolicy, EXCLUSION_REASON_CODE, publicExclusion, publicVoteRecord } from '../store.mjs';
 import {
   electionTypeOf,
   normalizeElectionType,
@@ -1238,7 +1238,7 @@ export function electionsRouter(deps) {
         });
       }
       let approverIds = [];
-      let notedReason = reason;
+      let firstReason = '';
       if (!already) {
         const approval = await store.noteExclusionApproval(election.id, {
           nullifier,
@@ -1249,10 +1249,27 @@ export function electionsRouter(deps) {
         if (approval.status === 'pending') {
           throw new HttpError(409, 'a second tally operator must approve this exclusion', {
             code: 'SECOND_APPROVAL_REQUIRED',
+            reason: approval.reason,
+            reasonCode: approval.reasonCode,
           });
         }
         approverIds = approval.approverIds || [];
-        notedReason = [approval.reason, reason].filter(Boolean).join('\n');
+        firstReason = String(approval.reason || '');
+        const recorded = await store.recordBallotExclusion(election.id, {
+          nullifier,
+          notes: [
+            { userId: approverIds[0], reason: firstReason },
+            { userId: req.user?.id, reason },
+          ],
+          at: now,
+          approverIds,
+        });
+        const fresh = store.requireElection(election.id);
+        await explorer.append('ballot_excluded', {
+          electionId: String(fresh.id),
+          reason: EXCLUSION_REASON_CODE,
+          count: recorded.count,
+        });
       }
       if (item && typeof chain?.releaseExcluded === 'function') {
         let released = false;
@@ -1265,6 +1282,7 @@ export function electionsRouter(deps) {
         }
         if (!released) {
           const message = releaseError?.message || 'the dead letter was not released';
+          await store.setExclusionReleasePending(election.id, nullifier, true);
           console.warn(`ballot exclusion release failed for election ${election.id}: ${message}`);
           if (typeof chain.noteAlert === 'function') {
             await chain.noteAlert({
@@ -1276,22 +1294,15 @@ export function electionsRouter(deps) {
           }
           throw new HttpError(502, 'could not release the excluded ballot', { code: 'EXCLUSION_FAILED' });
         }
+        await store.setExclusionReleasePending(election.id, nullifier, false);
       }
-      const excluded = await store.recordBallotExclusion(election.id, {
-        nullifier,
-        reason: notedReason,
-        at: now,
-        approverIds,
+      const excluded = publicExclusion(store.requireElection(election.id));
+      res.json({
+        ok: true,
+        nfp: true,
+        excluded,
+        ...(firstReason ? { firstReason } : {}),
       });
-      if (!already) {
-        const fresh = store.requireElection(election.id);
-        await explorer.append('ballot_excluded', {
-          electionId: String(fresh.id),
-          reason: EXCLUSION_REASON_CODE,
-          count: excluded.count,
-        });
-      }
-      res.json({ ok: true, nfp: true, excluded });
     }),
   );
 

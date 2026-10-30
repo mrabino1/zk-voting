@@ -488,6 +488,9 @@ export function dropPassToBallotLinks(data) {
 /** Public reason code. Free text stays in the private operator note. */
 export const EXCLUSION_REASON_CODE = 'excluded';
 
+/** A pending exclusion approval expires after one day. */
+export const EXCLUSION_APPROVAL_TTL_SECONDS = 24 * 60 * 60;
+
 /** Public exclusion summary: a count and a fixed reason code, not a nullifier or a note. */
 export function publicExclusion(election) {
   const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
@@ -2845,7 +2848,9 @@ export class Store {
 
   /**
    * First tally operator records intent. A second, different operator must
-   * call again before the ballot is excluded.
+   * call again before the ballot is excluded. The pending row expires after
+   * 24 hours and stays tied to the public reason code. The second operator
+   * receives the first operator's note.
    */
   async noteExclusionApproval(electionId, { nullifier, userId, reason, at } = {}) {
     this.refuseIfStandby();
@@ -2856,22 +2861,35 @@ export class Store {
     const uid = String(userId || '').trim();
     if (!uid) throw new HttpError(400, 'operator is required', { code: 'OPERATOR_REQUIRED' });
     const id = toBytes32(nullifier);
+    const when = Math.floor(Number(at) || Date.now() / 1000);
     if (!Array.isArray(election.exclusionApprovals)) election.exclusionApprovals = [];
     const pending = election.exclusionApprovals.find((row) => row && toBytes32(row.nullifier) === id);
-    if (!pending) {
+    const age = pending ? when - Number(pending.at) : 0;
+    const expired = Boolean(pending) && (!Number.isFinite(age) || age >= EXCLUSION_APPROVAL_TTL_SECONDS);
+    const unbound = Boolean(pending) && pending.reasonCode !== EXCLUSION_REASON_CODE;
+    if (!pending || expired || unbound) {
+      election.exclusionApprovals = election.exclusionApprovals.filter(
+        (row) => !(row && toBytes32(row.nullifier) === id),
+      );
       election.exclusionApprovals.push({
         nullifier: id,
         userId: uid,
         reason: clean,
-        at: Math.floor(Number(at) || Date.now() / 1000),
+        reasonCode: EXCLUSION_REASON_CODE,
+        at: when,
       });
       await this.persist();
-      return { status: 'pending' };
+      return { status: 'pending', reason: clean, reasonCode: EXCLUSION_REASON_CODE };
     }
     if (String(pending.userId) === uid) {
       throw new HttpError(409, 'a second tally operator must approve this exclusion', { code: 'SAME_OPERATOR' });
     }
-    return { status: 'ready', approverIds: [String(pending.userId), uid], reason: pending.reason };
+    return {
+      status: 'ready',
+      approverIds: [String(pending.userId), uid],
+      reason: pending.reason,
+      reasonCode: pending.reasonCode,
+    };
   }
 
   /**
@@ -2879,28 +2897,39 @@ export class Store {
    * chain. The vote row stays. The public tally copies the count and the
    * fixed reason code. The operator's note stays on exclusionNotes.
    */
-  async recordBallotExclusion(electionId, { nullifier, reason, at, approverIds } = {}) {
+  async recordBallotExclusion(electionId, { nullifier, reason, notes, at, approverIds } = {}) {
     this.refuseIfStandby();
     const election = this.requireElection(electionId);
-    const clean = String(reason || '').trim();
-    if (!clean) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
-    if (clean.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
+    const list = Array.isArray(notes) && notes.length
+      ? notes.map((entry) => ({
+          reason: String(entry?.reason || '').trim(),
+          userId: entry?.userId != null ? String(entry.userId) : '',
+        }))
+      : [{ reason: String(reason || '').trim(), userId: '' }];
+    for (const entry of list) {
+      if (!entry.reason) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
+      if (entry.reason.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
+    }
     const id = toBytes32(nullifier);
     if (!Array.isArray(election.excludedBallots)) election.excludedBallots = [];
     if (!election.excludedBallots.some((row) => row && toBytes32(row.nullifier) === id)) {
       const when = Math.floor(Number(at) || Date.now() / 1000);
+      const ids = Array.isArray(approverIds) ? approverIds.map((item) => String(item)) : [];
       election.excludedBallots.push({
         nullifier: id,
         reasonCode: EXCLUSION_REASON_CODE,
         at: when,
       });
       if (!Array.isArray(election.exclusionNotes)) election.exclusionNotes = [];
-      election.exclusionNotes.push({
-        nullifier: id,
-        reason: clean,
-        at: when,
-        approverIds: Array.isArray(approverIds) ? approverIds.map((item) => String(item)) : [],
-      });
+      for (const entry of list) {
+        election.exclusionNotes.push({
+          nullifier: id,
+          reason: entry.reason,
+          at: when,
+          ...(entry.userId ? { userId: entry.userId } : {}),
+          approverIds: ids,
+        });
+      }
       if (Array.isArray(election.exclusionApprovals)) {
         election.exclusionApprovals = election.exclusionApprovals.filter(
           (row) => !(row && toBytes32(row.nullifier) === id),
@@ -2909,6 +2938,25 @@ export class Store {
       await this.persist();
     }
     return publicExclusion(election);
+  }
+
+  /** Keep the exclusion record when the dead letter could not be released. */
+  async setExclusionReleasePending(electionId, nullifier, pending) {
+    this.refuseIfStandby();
+    const election = this.requireElection(electionId);
+    const id = toBytes32(nullifier);
+    const row = (election.excludedBallots || []).find((item) => item && toBytes32(item.nullifier) === id);
+    if (!row) return false;
+    if (pending) {
+      if (row.releasePending === true) return true;
+      row.releasePending = true;
+    } else if (row.releasePending) {
+      delete row.releasePending;
+    } else {
+      return false;
+    }
+    await this.persist();
+    return true;
   }
 
   votePassSpent(electionId, hash) {

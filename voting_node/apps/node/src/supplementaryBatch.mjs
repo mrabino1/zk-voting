@@ -18,6 +18,9 @@ export const PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS = 60 * 60;
 /** Production default: 24 hours. Tests use the 1-second floor unless a window is set. */
 export const DEFAULT_TALLY_CHALLENGE_SECONDS = 24 * 60 * 60;
 
+/** One warning per configured value and floor, so getConfig does not repeat it. */
+const warnedChallengeFloors = new Set();
+
 /**
  * @param {unknown} value
  * @param {{ isTest?: boolean, isProduction?: boolean }} [opts]
@@ -29,9 +32,13 @@ export function resolveTallyChallengeSeconds(value, { isTest = false, isProducti
   }
   const n = Number(value);
   if (!Number.isFinite(n) || n < floor) {
-    console.warn(
-      `TALLY_CHALLENGE_SECONDS value ${value} is below the minimum of ${floor} seconds; using ${floor}`,
-    );
+    const key = `${String(value)}|${floor}`;
+    if (!warnedChallengeFloors.has(key)) {
+      warnedChallengeFloors.add(key);
+      console.warn(
+        `TALLY_CHALLENGE_SECONDS value ${value} is below the minimum of ${floor} seconds; using ${floor}`,
+      );
+    }
     return floor;
   }
   return Math.floor(n);

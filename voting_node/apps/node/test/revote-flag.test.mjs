@@ -17,7 +17,7 @@ import { HttpError } from '../src/http.mjs';
 import { relayVote } from '../src/relay.mjs';
 import { createApp } from '../src/server.mjs';
 import { electionsDiag } from '../src/superAdmin/diagnostics.mjs';
-import { dropPassToBallotLinks } from '../src/store.mjs';
+import { dropPassToBallotLinks, EXCLUSION_APPROVAL_TTL_SECONDS, Store } from '../src/store.mjs';
 import {
   DEFAULT_TALLY_CHALLENGE_SECONDS,
   MIN_TALLY_CHALLENGE_SECONDS,
@@ -143,6 +143,16 @@ describe('ALLOW_REVOTE', () => {
     assert.equal(resolveTallyChallengeSeconds(0, { isProduction: true }), PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS);
     assert.equal(resolveTallyChallengeSeconds(90, { isProduction: true }), PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS);
     assert.equal(resolveTallyChallengeSeconds(DEFAULT_TALLY_CHALLENGE_SECONDS, { isProduction: true }), DEFAULT_TALLY_CHALLENGE_SECONDS);
+    const warnings = [];
+    const origWarn = console.warn;
+    console.warn = (...args) => warnings.push(args.join(' '));
+    try {
+      assert.equal(resolveTallyChallengeSeconds(-3, { isProduction: true }), PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS);
+      assert.equal(resolveTallyChallengeSeconds(-3, { isProduction: true }), PRODUCTION_MIN_TALLY_CHALLENGE_SECONDS);
+      assert.equal(warnings.length, 1);
+    } finally {
+      console.warn = origWarn;
+    }
     assert.equal(tallyAllowedAt({ cutoffTime: 100 }, 60), 160);
     assert.throws(
       () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
@@ -1216,6 +1226,8 @@ describe('ALLOW_REVOTE', () => {
       });
       assert.equal(first.status, 409, first.text);
       assert.equal(first.json.code, 'SECOND_APPROVAL_REQUIRED');
+      assert.equal(first.json.reason, note);
+      assert.equal(first.json.reasonCode, 'excluded');
       const same = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
         jar: jarA,
         body: { nullifier, reason: note },
@@ -1229,11 +1241,14 @@ describe('ALLOW_REVOTE', () => {
       assert.equal(excluded.status, 200, excluded.text);
       assert.equal(excluded.json.excluded.count, 1);
       assert.equal(excluded.json.excluded.reasons[0].reason, 'excluded');
-      assert.equal(JSON.stringify(excluded.json).includes(note), false);
-      assert.equal(JSON.stringify(excluded.json).includes(String(nullifier)), false);
-      const privateNote = created.store.requireElection(id).exclusionNotes[0];
-      assert.equal(privateNote.reason.includes('reverted'), true);
-      assert.equal(privateNote.approverIds.length, 2);
+      assert.equal(excluded.json.firstReason, note);
+      assert.equal(JSON.stringify(excluded.json.excluded).includes(note), false);
+      assert.equal(JSON.stringify(excluded.json.excluded).includes(String(nullifier)), false);
+      const notes = created.store.requireElection(id).exclusionNotes;
+      assert.equal(notes.length, 2);
+      assert.equal(notes[0].reason.includes('reverted'), true);
+      assert.equal(notes[0].approverIds.length, 2);
+      assert.equal(notes[1].reason, note);
       const audit = Object.values(created.explorer.chain.txs).find((tx) => tx.type === 'ballot_excluded');
       assert.equal(audit.payload.count, 1);
       assert.equal(audit.payload.reason, 'excluded');
@@ -1388,7 +1403,10 @@ describe('ALLOW_REVOTE', () => {
       assert.equal(failed.status, 502, failed.text);
       assert.equal(failed.json.code, 'EXCLUSION_FAILED');
       assert.equal(chain.diagnostics().alerts.some((row) => row.kind === 'exclusion_release_failed'), true);
-      assert.equal(created.store.requireElection(id).excludedBallots || null, null);
+      const held = created.store.requireElection(id);
+      assert.equal(held.excludedBallots.length, 1);
+      assert.equal(held.excludedBallots[0].releasePending, true);
+      assert.equal(chain.deadLettersFor(onChain).length, 1);
       chain.releaseExcluded = originalRelease;
       const excluded = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
         jar: jarB,
@@ -1396,8 +1414,12 @@ describe('ALLOW_REVOTE', () => {
       });
       assert.equal(excluded.status, 200, excluded.text);
       assert.equal(excluded.json.excluded.reasons[0].reason, 'excluded');
-      assert.equal(JSON.stringify(excluded.json).includes(note), false);
-      assert.equal(created.store.requireElection(id).exclusionNotes[0].reason.includes(note), true);
+      assert.equal(JSON.stringify(excluded.json.excluded).includes(note), false);
+      const after = created.store.requireElection(id);
+      assert.equal(after.excludedBallots[0].releasePending, undefined);
+      assert.equal(after.exclusionNotes.length, 2);
+      assert.equal(after.exclusionNotes[0].reason.includes(note), true);
+      assert.equal(chain.deadLettersFor(onChain).length, 0);
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
       await rm(tmp, { recursive: true, force: true });
@@ -1510,11 +1532,197 @@ describe('ALLOW_REVOTE', () => {
       });
       assert.equal(early.status, 409, early.text);
       assert.equal(early.json.code, 'SECOND_APPROVAL_REQUIRED');
+      assert.equal(early.json.reason, 'held after the deadline');
       const done = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
         jar: jarB,
         body: { nullifier, reason: 'held after the deadline' },
       });
       assert.equal(done.status, 200, done.text);
+      assert.equal(done.json.firstReason, 'held after the deadline');
+      assert.equal(chain.supplementaryFor(onChain).length, 0);
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('an exclusion approval expires after 24 hours and shows the first reason', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'exclude-approval-'));
+    try {
+      const store = await Store.open({ dataDir: tmp, databaseUrl: '', quiet: true });
+      const id = '11111111-1111-4111-8111-111111111111';
+      store.data.elections.push({ id });
+      const nullifier = '0x' + 'ab'.repeat(32);
+      const at = 1_700_000_000;
+      const pending = await store.noteExclusionApproval(id, {
+        nullifier,
+        userId: 'operator-a',
+        reason: 'sealed batch reverted',
+        at,
+      });
+      assert.equal(pending.status, 'pending');
+      assert.equal(pending.reason, 'sealed batch reverted');
+      assert.equal(pending.reasonCode, 'excluded');
+      await assert.rejects(
+        () =>
+          store.noteExclusionApproval(id, {
+            nullifier,
+            userId: 'operator-a',
+            reason: 'again',
+            at: at + EXCLUSION_APPROVAL_TTL_SECONDS - 1,
+          }),
+        (err) => err instanceof HttpError && err.extra?.code === 'SAME_OPERATOR',
+      );
+      const expired = await store.noteExclusionApproval(id, {
+        nullifier,
+        userId: 'operator-a',
+        reason: 'fresh after a day',
+        at: at + EXCLUSION_APPROVAL_TTL_SECONDS,
+      });
+      assert.equal(expired.status, 'pending');
+      assert.equal(expired.reason, 'fresh after a day');
+      store.requireElection(id).exclusionApprovals[0].reasonCode = 'other';
+      const rebound = await store.noteExclusionApproval(id, {
+        nullifier,
+        userId: 'operator-b',
+        reason: 'tied to the public code',
+        at: at + EXCLUSION_APPROVAL_TTL_SECONDS + 5,
+      });
+      assert.equal(rebound.status, 'pending');
+      assert.equal(rebound.reasonCode, 'excluded');
+      const shown = await store.noteExclusionApproval(id, {
+        nullifier,
+        userId: 'operator-c',
+        reason: 'second note',
+        at: at + EXCLUSION_APPROVAL_TTL_SECONDS + 10,
+      });
+      assert.equal(shown.status, 'ready');
+      assert.equal(shown.reason, 'tied to the public code');
+      assert.equal(shown.reasonCode, 'excluded');
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('two long exclusion notes are stored separately', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'exclude-long-'));
+    const adminJar = {};
+    const jarA = {};
+    const jarB = {};
+    const queue = {
+      saved: { rows: [], batchAt: {}, inFlight: {}, deadLetter: [], attempts: {}, supplementary: [] },
+      loadChainVoteQueue() {
+        return JSON.parse(JSON.stringify(this.saved));
+      },
+      async saveChainVoteQueue(doc) {
+        this.saved = JSON.parse(JSON.stringify(doc || {}));
+      },
+    };
+    const chain = createChain(
+      {
+        chainRpc: 'http://127.0.0.1:9',
+        ballotInboxAddress: '0x0000000000000000000000000000000000000001',
+        disclosureIntervalSeconds: 3600,
+        chainId: 31337,
+        quiet: true,
+      },
+      {
+        queueStore: queue,
+        nullifierSpent: async () => false,
+        writeSubmitBatch: async () => {
+          const err = new Error('execution reverted');
+          err.revert = true;
+          throw err;
+        },
+      },
+    );
+    chain.createElection = async () => ({ onChainElectionId: '1', params: {} });
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 3600,
+      chain,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-a', role: 'tally_operator' }, jar: jarA });
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'tally-b', role: 'tally_operator' }, jar: jarB });
+      const now = Math.floor(Date.now() / 1000);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Long notes',
+          startTime: now - 10,
+          cutoffTime: now + 7200,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      const id = election.json.id;
+      const jurisdictionId = created.store.requireElection(id).jurisdictionId;
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-a', role: 'tally_operator' });
+      await created.store.grantJurisdictionRole(jurisdictionId, { handle: 'tally-b', role: 'tally_operator' });
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const cast = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(cast.status, 201, cast.text);
+      const onChain = created.store.requireElection(id).onChainElectionId;
+      const at = now + 8000;
+      await chain.flushVoteQueue(at);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS * 2);
+      const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
+      await chain.holdSupplementary(onChain, [nullifier]);
+      const stored = created.store.requireElection(id);
+      stored.cutoffTime = Math.floor(Date.now() / 1000) - created.config.tallyChallengeSeconds;
+      await created.store.persist();
+      const reasonA = 'A'.repeat(280);
+      const reasonB = 'B'.repeat(280);
+      const pending = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarA,
+        body: { nullifier, reason: reasonA },
+      });
+      assert.equal(pending.status, 409, pending.text);
+      assert.equal(pending.json.code, 'SECOND_APPROVAL_REQUIRED');
+      assert.equal(pending.json.reason, reasonA);
+      const done = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: jarB,
+        body: { nullifier, reason: reasonB },
+      });
+      assert.equal(done.status, 200, done.text);
+      assert.equal(done.json.firstReason, reasonA);
+      assert.equal(JSON.stringify(done.json.excluded).includes(reasonA), false);
+      assert.equal(JSON.stringify(done.json.excluded).includes(reasonB), false);
+      const notes = created.store.requireElection(id).exclusionNotes;
+      assert.equal(notes.length, 2);
+      assert.equal(notes[0].reason, reasonA);
+      assert.equal(notes[1].reason, reasonB);
       assert.equal(chain.supplementaryFor(onChain).length, 0);
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));

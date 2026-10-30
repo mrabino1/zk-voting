@@ -19,6 +19,7 @@ function op(method, path, minLevel, fields) {
     minLevel,
     auth: Boolean(fields.auth),
     apiKey: fields.apiKey !== false,
+    gate: fields.gate || '',
     tag: fields.tag,
     summary: fields.summary,
     body: fields.body || '',
@@ -394,6 +395,7 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
     tag: 'Elections',
     auth: true,
+    gate: 'tally_operator',
     summary: 'Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted.',
     body: 'nullifier, reason',
   }),
@@ -1220,7 +1222,8 @@ function guideBody() {
       lines.push(`### ${tag}`);
       lines.push('');
     }
-    const gate = entry.apiKey ? `key ${entry.minLevel}${entry.auth ? ', signed in' : ''}` : 'API key refused';
+    const who = entry.gate || `key ${entry.minLevel}`;
+    const gate = entry.apiKey ? `${who}${entry.auth ? ', signed in' : ''}` : 'API key refused';
     const body = entry.body ? ` Body: ${entry.body}.` : '';
     lines.push(`- \`${entry.method} ${entry.path}\` (${gate}). ${entry.summary}${body}`);
   }

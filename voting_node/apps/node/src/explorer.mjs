@@ -88,6 +88,7 @@ function emptyChain(chainId) {
     sealed: [],
     sealedPolls: [],
     seenBlockHashes: [],
+    ingestedTxHashes: [],
   };
 }
 
@@ -132,6 +133,7 @@ function normalizeChain(chain, chainId) {
   chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
   chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
   chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
+  chain.ingestedTxHashes = Array.isArray(chain.ingestedTxHashes) ? chain.ingestedTxHashes : [];
   return chain;
 }
 
@@ -428,6 +430,7 @@ export class Explorer {
     const outcomes = src.outcomes && typeof src.outcomes === 'object' ? src.outcomes : {};
     await this.refresh();
     this.chain.seenBlockHashes = Array.isArray(this.chain.seenBlockHashes) ? this.chain.seenBlockHashes : [];
+    this.chain.ingestedTxHashes = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
     const blockHash = block && block.hash ? String(block.hash).toLowerCase() : '';
     if (blockHash && this.chain.seenBlockHashes.some((h) => String(h).toLowerCase() === blockHash)) {
       return { ok: true, imported: 0, duplicate: true };
@@ -471,11 +474,14 @@ export class Explorer {
         row.payload = withoutChoiceFields(payload);
       }
       if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
+        const payload = row.payload || row;
+        if (this.txAlreadyIngested(payload)) continue;
         if (type === 'poll_vote' && !l2Delayed) {
-          await this.recordPollVote(row.payload || {}, now, intervalSeconds);
+          await this.recordPollVote(payload, now, intervalSeconds);
         } else {
-          await this.append(type, row.payload || row, { timestamp: blockTs || now });
+          await this.append(type, payload, { timestamp: blockTs || now });
         }
+        await this.noteIngestedTx(payload);
         imported += 1;
       } else if (isDelayedPublicType(type) || type === 'vote_superseded') {
         const payload = votePayload(row.payload);
@@ -489,7 +495,10 @@ export class Explorer {
           imported += 1;
         }
       } else if (type && type !== 'userop') {
-        await this.append(type, row.payload || row);
+        const payload = row.payload || row;
+        if (this.txAlreadyIngested(payload)) continue;
+        await this.append(type, payload);
+        await this.noteIngestedTx(payload);
         imported += 1;
       }
     }
@@ -499,6 +508,22 @@ export class Explorer {
     }
     await this.disclose(now, intervalSeconds);
     return { ok: true, imported, duplicate: false };
+  }
+
+  txAlreadyIngested(payload) {
+    const hash = payload && payload.hash != null ? String(payload.hash).toLowerCase() : '';
+    if (!hash) return false;
+    const seen = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
+    return seen.some((item) => String(item).toLowerCase() === hash);
+  }
+
+  async noteIngestedTx(payload) {
+    const hash = payload && payload.hash != null ? String(payload.hash).toLowerCase() : '';
+    if (!hash) return;
+    if (!Array.isArray(this.chain.ingestedTxHashes)) this.chain.ingestedTxHashes = [];
+    if (this.chain.ingestedTxHashes.some((item) => String(item).toLowerCase() === hash)) return;
+    this.chain.ingestedTxHashes.push(hash);
+    await this.persist();
   }
 
   presentTx(tx) {
