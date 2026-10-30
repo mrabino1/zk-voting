@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {Vm} from "forge-std/Vm.sol";
 import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 import {IElection} from "../src/interfaces/IElection.sol";
 import {IElectionFactory} from "../src/interfaces/IElectionFactory.sol";
@@ -76,9 +77,6 @@ contract ElectionTypeTest is Deployer {
         IElection(el)
             .initialize(id, p, address(factory), address(voterRegistry), address(disqualification), address(inbox));
 
-        _openAndVote(id, el);
-        warpClosed(el);
-        _postFinal(id, keccak256("sealed-plain"));
         _assertType(id, el, ElectionType.VOTE);
         assertEq(IElection(el).params().tallyScheme, TallyScheme.SUM_ONLY);
     }
@@ -112,66 +110,19 @@ contract ElectionTypeTest is Deployer {
         assertEq(mirror.resultHashOfIdentity(_certId(id, el)), keccak256("poll-result"));
     }
 
-    function testVoteSealsResultsUntilEndThenAllowsThem() public {
+    function testVoteSharedTallyRejectsAndMirrorOpensAfterClose() public {
         (uint256 id, address el) = _create(ElectionType.VOTE);
-        _openAndVote(id, el);
-
-        uint256[] memory counts = new uint256[](1);
-        counts[0] = 1;
-        vm.startPrank(tallyOperator);
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.submitTally(id, counts, a, b, c);
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.submitAggregateTally(id, counts, keccak256("agg"), a, b, c);
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.submitDecryption(id, keccak256("plain"));
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.postInterimResult(id, keccak256("interim"));
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.disclose(id, keccak256("disclosure"));
-        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultsSealedUntilEnd.selector, id));
-        tally.addTallyComponent(id, keccak256("component"));
-        vm.stopPrank();
-
+        _expectSharedTallyRejected(id);
         _expectSealedCertify(el, id);
         assertFalse(tally.isTallied(id));
         assertEq(tally.decryptionHash(id), bytes32(0));
-        assertEq(tally.interimResult(id), bytes32(0));
-        assertEq(tally.disclosureHash(id), bytes32(0));
+        assertEq(inbox.acceptedBallots(id), 0);
 
         warpClosed(el);
-        bytes32 plain = keccak256("aggregate-plain");
-        bytes32 interim = keccak256("after-interim");
-        bytes32 disclosure = keccak256("after-disclosure");
-        vm.startPrank(tallyOperator);
-        tally.submitTally(id, counts, a, b, c);
-        tally.submitDecryption(id, plain);
-        tally.postInterimResult(id, interim);
-        tally.disclose(id, disclosure);
-        vm.stopPrank();
-        assertTrue(tally.isTallied(id));
-        assertEq(tally.tally(id)[0], 1);
-        assertEq(tally.decryptionHash(id), plain);
-        assertEq(tally.interimResult(id), interim);
-        assertEq(tally.disclosureHash(id), disclosure);
-        assertEq(tally.postedScheme(id), TallyScheme.SUM_ONLY);
-
+        _expectSharedTallyRejected(id);
+        assertEq(tally.decryptionHash(id), bytes32(0));
         _certify(el, id, keccak256("final-l1"));
         assertEq(mirror.resultHashOfIdentity(_certId(id, el)), keccak256("final-l1"));
-
-        (bool opened,) = address(tally)
-            .call(
-                abi.encodeWithSignature(
-                    "submitOpenedTally(uint256,uint256[],uint256[],uint256[2],uint256[2][2],uint256[2])",
-                    id,
-                    counts,
-                    counts,
-                    a,
-                    b,
-                    c
-                )
-            );
-        assertFalse(opened, "per-ballot openings stay unavailable");
         assertEq(
             IBallotInbox.submitVote.selector,
             bytes4(keccak256("submitVote(uint256,uint256[2],uint256[2][2],uint256[2],uint256[],bytes)"))
@@ -187,14 +138,17 @@ contract ElectionTypeTest is Deployer {
         _expectDecryptOnce(id, 0);
     }
 
-    function testVoteResultHashesAreWriteOnceAfterClose() public {
+    function testVoteSharedDecryptionStaysUnset() public {
         (uint256 id, address el) = _create(ElectionType.VOTE);
-        _openAndVote(id, el);
+        vm.prank(tallyOperator);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.SealedVoteUsesOtherTally.selector, id));
+        tally.submitDecryption(id, keccak256("plain"));
         warpClosed(el);
-        _expectDecryptBeforeTallyReverts(id);
-        _postFinal(id, keccak256("plain"));
-        _expectReplaceReverts(id);
-        assertEq(tally.decryptionHash(id), keccak256("plain"));
+        vm.prank(tallyOperator);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.SealedVoteUsesOtherTally.selector, id));
+        tally.submitDecryption(id, keccak256("plain"));
+        assertEq(tally.decryptionHash(id), bytes32(0));
+        assertEq(inbox.acceptedBallots(id), 0);
     }
 
     function testTallyComponentAtOutOfRangeReverts() public {
@@ -212,6 +166,10 @@ contract ElectionTypeTest is Deployer {
     }
 
     function _assertClosedToNewInputs(uint8 kind) internal {
+        if (kind == ElectionType.VOTE) {
+            _assertVoteInboxStaysEmpty();
+            return;
+        }
         (uint256 id, address el) = _create(kind);
         uint256 commitment = Fixtures.identityCommitment(uint256(kind) + 7);
         registerVoter(id, commitment);
@@ -236,6 +194,44 @@ contract ElectionTypeTest is Deployer {
         tally.addTallyComponent(id, keccak256("after-close"));
         uint256 expectedComponents = kind == ElectionType.POLL ? 1 : 0;
         assertEq(tally.tallyComponentCount(id), expectedComponents);
+    }
+
+    function _assertVoteInboxStaysEmpty() internal {
+        (uint256 id, address el) = _create(ElectionType.VOTE);
+        registerVoter(id, Fixtures.identityCommitment(uint256(11)));
+        freezeRoll(el);
+        warpOpen(el);
+        bytes memory enc = Fixtures.encryptedBallot(uint256(3));
+        uint256[] memory inputs = voteInputs(id, el, uint256(3), enc);
+        vm.record();
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IBallotInbox.SealedBallotNotAccepted.selector, id));
+        inbox.submitVote(id, a, b, c, inputs, enc);
+        assertEq(inbox.acceptedBallots(id), 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0);
+        warpClosed(el);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IBallotInbox.SealedBallotNotAccepted.selector, id));
+        inbox.submitVote(id, a, b, c, inputs, enc);
+        assertEq(inbox.acceptedBallots(id), 0);
+        vm.prank(tallyOperator);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.SealedVoteUsesOtherTally.selector, id));
+        tally.addTallyComponent(id, keccak256("after-close"));
+        assertEq(tally.tallyComponentCount(id), 0);
+    }
+
+    function _expectSharedTallyRejected(uint256 id) internal {
+        uint256[] memory counts = new uint256[](1);
+        counts[0] = 1;
+        vm.startPrank(tallyOperator);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.SealedVoteUsesOtherTally.selector, id));
+        tally.submitTally(id, counts, a, b, c);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.SealedVoteUsesOtherTally.selector, id));
+        tally.submitDecryption(id, keccak256("plain"));
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.SealedVoteUsesOtherTally.selector, id));
+        tally.postInterimResult(id, keccak256("interim"));
+        vm.stopPrank();
     }
 
     function _create(uint8 kind) internal returns (uint256 id, address el) {

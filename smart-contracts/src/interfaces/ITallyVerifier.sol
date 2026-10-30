@@ -34,6 +34,8 @@ interface ITallyVerifier {
     error DecryptionBeforeTally(uint256 electionId);
     /// @notice `tallyComponentAt` index is past the stored list.
     error TallyComponentOutOfRange(uint256 index);
+    /// @notice VOTE results are posted on the sealed tally, not this contract.
+    error SealedVoteUsesOtherTally(uint256 electionId);
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,

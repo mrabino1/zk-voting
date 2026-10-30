@@ -31,6 +31,8 @@ interface IBallotInbox {
     error BallotTooLarge();
     error ContractPaused();
     error ReentrantCall();
+    /// @notice VOTE ballots are not accepted here. They stay off chain until cutoff.
+    error SealedBallotNotAccepted(uint256 electionId);
 
     event VoteAccepted(uint256 indexed electionId, uint256 indexed nullifier, bytes32 ballotHash, address relayer);
 

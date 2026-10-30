@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {ElectionParams} from "./interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
@@ -81,7 +81,21 @@ contract BallotInbox is IBallotInbox {
         uint256[2] calldata c,
         uint256[] calldata publicInputs,
         bytes calldata encryptedBallot
-    ) external nonReentrant {
+    ) external {
+        // Reject a sealed VOTE before the reentrancy lock so a refused call
+        // does not write this contract. POLL never takes this branch.
+        _rejectIfSealed(electionId);
+        _submitVoteLocked(electionId, a, b, c, publicInputs, encryptedBallot);
+    }
+
+    function _submitVoteLocked(
+        uint256 electionId,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot
+    ) internal nonReentrant {
         _requireNotPaused();
         _requireRelayer();
         if (_disclosureInterval() != 0) revert UseVoteBatch();
@@ -96,7 +110,19 @@ contract BallotInbox is IBallotInbox {
         uint256[2][] calldata c,
         uint256[][] calldata publicInputs,
         bytes[] calldata encryptedBallots
-    ) external nonReentrant {
+    ) external {
+        _rejectIfSealed(electionId);
+        _submitVoteBatchLocked(electionId, a, b, c, publicInputs, encryptedBallots);
+    }
+
+    function _submitVoteBatchLocked(
+        uint256 electionId,
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots
+    ) internal nonReentrant {
         _requireNotPaused();
         _requireRelayer();
         uint256 n = encryptedBallots.length;
@@ -220,6 +246,16 @@ contract BallotInbox is IBallotInbox {
 
         if (!CappedVerifierCall.accepted(verifier, a, b, c, publicInputs)) revert InvalidProof();
         if (_nullifierUsed[electionId][nullifier]) revert NullifierUsed();
+    }
+
+    /// @dev VOTE turnout must not move this inbox. The check is a read of the
+    ///      election type and returns before any storage write.
+    function _rejectIfSealed(uint256 electionId) internal view {
+        address electionAddr = _factory.getElection(electionId);
+        if (electionAddr == address(0)) return;
+        if (IElection(electionAddr).electionType() == ElectionType.VOTE) {
+            revert SealedBallotNotAccepted(electionId);
+        }
     }
 
     function _requireRelayer() internal view {
