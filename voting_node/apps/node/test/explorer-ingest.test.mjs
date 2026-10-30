@@ -630,6 +630,106 @@ describe('explorer ingest', () => {
     }
   });
 
+  test('a shared poll params sequence alerts and a later postedAt becomes latest', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
+    try {
+      const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
+      const now = 50;
+      explorer.disclosurePolicy = () => policy(now, 100);
+      assert.equal(
+        (await explorer.ingest(
+          { outcomes: { poll_params: [realParams('poll-1', { sequence: 4, postedAt: 100 })] } },
+          now,
+          0,
+        )).imported,
+        1,
+      );
+      const first = explorer.latestPollRecord('poll_params', 'poll-1');
+      const later = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-1', { sequence: 4, postedAt: 180, pollParamsHash: `0x${'33'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(later.imported, 1);
+      const newest = explorer.latestPollRecord('poll_params', 'poll-1');
+      assert.equal(newest.payload.postedAt, 180);
+      assert.equal(newest.payload.sequence, 4);
+      assert.equal(explorer.chain.supersededBy[first.hash], newest.hash);
+      assert.equal(explorer.chain.alerts.length, 1);
+      assert.equal(explorer.chain.alerts[0].kind, 'poll_params_conflict');
+      assert.equal(explorer.chain.alerts[0].pollId, 'poll-1');
+      assert.equal(explorer.chain.alerts[0].hash, first.hash);
+      assert.deepEqual(Object.keys(explorer.chain.alerts[0]).sort(), ['hash', 'kind', 'pollId']);
+      const replay = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-1', { sequence: 4, postedAt: 180, pollParamsHash: `0x${'33'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(replay.imported, 0);
+      assert.equal(explorer.chain.alerts.length, 1);
+      const nextSequence = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-1', { sequence: 5, postedAt: 1, pollParamsHash: `0x${'44'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(nextSequence.imported, 1);
+      assert.equal(explorer.latestPollRecord('poll_params', 'poll-1').payload.sequence, 5);
+      assert.equal(explorer.chain.alerts.length, 1);
+
+      assert.equal(
+        (await explorer.ingest(
+          { outcomes: { poll_params: [realParams('poll-tie', { sequence: 4, postedAt: 100 })] } },
+          now,
+          0,
+        )).imported,
+        1,
+      );
+      const tied = explorer.latestPollRecord('poll_params', 'poll-tie');
+      const sameClock = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-tie', { sequence: 4, postedAt: 100, pollParamsHash: `0x${'11'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      const earlier = await explorer.ingest(
+        {
+          outcomes: {
+            poll_params: [realParams('poll-tie', { sequence: 4, postedAt: 40, pollParamsHash: `0x${'22'.repeat(32)}` })],
+          },
+        },
+        now,
+        0,
+      );
+      assert.equal(sameClock.imported, 0);
+      assert.equal(earlier.imported, 0);
+      assert.equal(explorer.latestPollRecord('poll_params', 'poll-tie').hash, tied.hash);
+      const tieAlerts = explorer.chain.alerts.filter((row) => row.pollId === 'poll-tie');
+      assert.equal(tieAlerts.length, 2);
+      for (const alert of tieAlerts) {
+        assert.equal(alert.kind, 'poll_params_conflict');
+        assert.equal(alert.hash, tied.hash);
+        assert.deepEqual(Object.keys(alert).sort(), ['hash', 'kind', 'pollId']);
+      }
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('explorer alerts stay at the last 20 and the ops diagnostic shows them', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
     try {

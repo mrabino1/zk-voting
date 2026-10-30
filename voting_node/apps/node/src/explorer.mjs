@@ -137,7 +137,10 @@ function sourceOrderOf(payload, block, index) {
   const closeBlock = finiteNumber(body.closeBlock);
   if (closeBlock != null) return { closeBlock, index: at };
   const sequence = finiteNumber(body.sequence ?? body.tallySequence);
-  if (sequence != null) return { sequence, index: 0 };
+  if (sequence != null) {
+    const postedAt = finiteNumber(body.postedAt);
+    return postedAt != null ? { sequence, postedAt, index: 0 } : { sequence, index: 0 };
+  }
   const height = finiteNumber(block?.number ?? block?.height ?? body.l2Block ?? body.blockNumber ?? body.sourceBlock);
   if (height != null) return { height, index: at };
   const postedAt = finiteNumber(body.postedAt);
@@ -162,13 +165,26 @@ function compareSource(a, b) {
   }
   if (a.sequence != null && b.sequence != null) {
     if (a.sequence !== b.sequence) return a.sequence < b.sequence ? -1 : 1;
+    // Same sequence: a later postedAt wins. An equal or missing postedAt stays a tie.
+    if (a.postedAt != null && b.postedAt != null && a.postedAt !== b.postedAt) {
+      return a.postedAt < b.postedAt ? -1 : 1;
+    }
     return 0;
   }
-  if (a.postedAt != null && b.postedAt != null) {
+  if (
+    a.postedAt != null &&
+    b.postedAt != null &&
+    a.sequence == null &&
+    b.sequence == null
+  ) {
     if (a.postedAt !== b.postedAt) return a.postedAt < b.postedAt ? -1 : 1;
     return 0;
   }
   return null;
+}
+
+function sharesSequence(a, b) {
+  return a?.sequence != null && b?.sequence != null && a.sequence === b.sequence;
 }
 
 /** True only when next is strictly newer. An unknown order never replaces a latest row. */
@@ -622,6 +638,19 @@ export class Explorer {
             this.noteIngestedTx(type, body, blockHash, rowIndex);
             continue;
           }
+          if (type === 'poll_params' && id && !this.storedPayload(type, body)) {
+            const latest = this.latestPollRecord(type, id);
+            const latestOrder = latest
+              ? this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0)
+              : null;
+            if (sharesSequence(order, latestOrder)) {
+              await this.noteAlert({ kind: 'poll_params_conflict', pollId: id, hash: latest?.hash || '' });
+              if (!(cmp > 0)) {
+                this.noteIngestedTx(type, body, blockHash, rowIndex);
+                continue;
+              }
+            }
+          }
           if (this.olderThanLatestPoll(type, body, order)) {
             this.noteIngestedTx(type, body, blockHash, rowIndex);
             continue;
@@ -648,8 +677,6 @@ export class Explorer {
           const ranked = compareSource(order, latestOrder);
           if (previous?.hash && hash && ranked == null) {
             await this.noteAlert({ kind: 'poll_order_unknown', pollId: id, hash });
-          } else if (previous?.hash && hash && ranked === 0 && type === 'poll_tally') {
-            await this.noteAlert({ kind: 'poll_tally_conflict', pollId: id, hash });
           } else if (previous?.hash && hash && previous.hash !== hash && ranked > 0) {
             this.noteSuperseded(previous.hash, hash);
           }
