@@ -39,6 +39,29 @@ function sealedItemElectionId(item) {
   return String(id);
 }
 
+/** A block that is only sealed-vote rows is a turnout proxy. Leave it out of diagnostics. */
+function blockIsSealedVoteOnly(chain, block, store, now) {
+  const hashes = block?.transactions || [];
+  if (!hashes.length) return false;
+  const txs = chain?.txs || {};
+  for (const hash of hashes) {
+    const tx = hash && typeof hash === 'object' ? hash : txs[hash];
+    if (!tx) return false;
+    const type = String(tx.type || tx.civicType || '').toLowerCase();
+    if (type !== 'vote') return false;
+    const payload = tx.payload || tx.civic || {};
+    const id = payload.electionId ?? tx.electionId;
+    const election = store?.getElection?.(id);
+    if (!voteResultsSealed(election, now)) return false;
+  }
+  return true;
+}
+
+function visibleExplorerBlocks(chain, store, now) {
+  const blocks = Array.isArray(chain?.blocks) ? chain.blocks : [];
+  return blocks.filter((block) => !blockIsSealedVoteOnly(chain, block, store, now));
+}
+
 /** The explorer queue holds the current hour. Sealed-vote rows in it are live turnout. */
 function countUnsealedQueue(store, items, now) {
   if (!Array.isArray(items)) return 0;
@@ -263,10 +286,10 @@ export function userDiag(store, handle) {
 
 export function l2Diag(deps) {
   const chain = deps.explorer?.chain || {};
-  const blocks = Array.isArray(chain.blocks) ? chain.blocks : [];
+  const now = Number(deps.config?.nowFn?.() || Math.floor(Date.now() / 1000));
+  const blocks = visibleExplorerBlocks(chain, deps.store, now);
   const head = blocks.length ? blocks[blocks.length - 1] : null;
   const headTs = Number(head?.timestamp || 0);
-  const now = Number(deps.config?.nowFn?.() || Math.floor(Date.now() / 1000));
   let archive = { present: false, hours: 0, archivedThrough: null };
   try {
     const index = readArchiveIndex(deps.config.dataDir);

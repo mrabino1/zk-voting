@@ -160,6 +160,8 @@ function emptyData() {
     votes: [],
     receipts: [],
     envelopes: [],
+    // VOTE chain submissions waiting for cutoff. Not a public counter.
+    heldChainBallots: [],
     notifications: [],
     tallyGuardians: [],
     pages: [],
@@ -296,6 +298,7 @@ const ARRAY_COLLECTIONS = [
   'votes',
   'receipts',
   'envelopes',
+  'heldChainBallots',
   'notifications',
   'tallyGuardians',
   'pages',
@@ -318,7 +321,14 @@ const ARRAY_COLLECTIONS = [
 
 const PG_NAMESPACE = 'store';
 /** Ballot-side collections whose Postgres timestamps are hour-truncated (db.mjs). */
-export const BALLOT_TIMING_COLLECTIONS = ['votes', 'receipts', 'envelopes', 'votePassSpent', 'elections'];
+export const BALLOT_TIMING_COLLECTIONS = [
+  'votes',
+  'receipts',
+  'envelopes',
+  'votePassSpent',
+  'elections',
+  'heldChainBallots',
+];
 
 async function readJsonFile(filePath) {
   try {
@@ -2323,6 +2333,19 @@ export class Store {
       list.push(spentPassHash);
       list.sort();
       this.data.votePassSpent[key] = list;
+    }
+    if (vote.chainHold && typeof vote.chainHold === 'object') {
+      if (!Array.isArray(this.data.heldChainBallots)) this.data.heldChainBallots = [];
+      insertAtRandom(this.data.heldChainBallots, {
+        electionId: record.electionId,
+        chainElectionId:
+          vote.chainHold.chainElectionId != null ? String(vote.chainHold.chainElectionId) : record.electionId,
+        nullifier: record.nullifier,
+        ballotHash: record.ballotHash,
+        proof: vote.chainHold.proof ?? null,
+        publicInputs: vote.chainHold.publicInputs ?? null,
+        encryptedBallot: vote.chainHold.encryptedBallot ?? null,
+      });
     }
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;

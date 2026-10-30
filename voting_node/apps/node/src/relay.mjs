@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Relays a vote proof to BallotInbox when CHAIN_RPC is set; otherwise accepts
-// into the local store for demo. Never writes passkey user id onto a ballot.
+// A poll is relayed to BallotInbox when CHAIN_RPC is set. A vote is stored
+// until cutoff and is not sent per ballot. Never writes passkey user id onto a ballot.
 // The vote body is the relay envelope only. Identity, wallet, and plaintext
 // choice keys are stripped before this function reads the body. Per-leaf
 // exclusion is not decided from the POST (that would require the leaf).
@@ -21,6 +21,7 @@ import { isAggregateEnvelope, parseAggregateEnvelope } from './aggregateBallot.m
 import { assertVoteProof } from './voteProof.mjs';
 import { nextPublishAt } from './disclosure.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from './store.mjs';
+import { isVoteElection } from './electionType.mjs';
 import {
   buildReceiptPdf,
   mintHolderToken,
@@ -265,6 +266,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   }
 
   const chainConfigured = Boolean(chain?.isConfigured?.());
+  const voteElection = isVoteElection(election);
 
   const bound = assertBoundRoots(election, parsed, store);
   const publicInputs = asInputList({
@@ -277,7 +279,9 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
 
   await assertVoteProof({ proof: parsed.proof, publicSignals: publicInputs, config });
 
-  if (chainConfigured) {
+  // POLL keeps the current relayer: one transaction when the interval is 0,
+  // otherwise the existing interval batch. A VOTE is not submitted here.
+  if (!voteElection && chainConfigured) {
     await chain.submitVote({
       electionId: chainElectionId(election),
       proof: parsed.proof,
@@ -318,6 +322,16 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       spentPassHash,
       pdfSha256: artifact.pdfSha256,
       pdfIntegrity: artifact.integrity,
+      ...(voteElection
+        ? {
+            chainHold: {
+              chainElectionId: chainElectionId(election),
+              proof: parsed.proof,
+              publicInputs,
+              encryptedBallot: parsed.encryptedBallot,
+            },
+          }
+        : {}),
     },
     { encryptedBallot: parsed.encryptedBallot },
   );

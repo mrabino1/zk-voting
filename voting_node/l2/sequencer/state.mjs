@@ -831,14 +831,38 @@ export class ChainState {
     this.persistSealed();
   }
 
+  /**
+   * A recorded VOTE waits until cutoff. An invalid type stored as a vote
+   * fails closed. A poll, and a civic vote with no election_open, keeps the
+   * hourly clock.
+   */
+  voteWaitsForCutoff(tx) {
+    if (String(tx?.civicType || '').toLowerCase() !== 'vote') return false;
+    const id = String(tx.civic?.electionId ?? '').toLowerCase();
+    const entry = this.electionRegistry.get(id);
+    if (!entry) return false;
+    if (entry.typeInvalid) return true;
+    return Number(entry.electionType) === 1;
+  }
+
+  voteCutoffReached(tx, now) {
+    const id = String(tx?.civic?.electionId ?? '').toLowerCase();
+    const entry = this.electionRegistry.get(id);
+    if (!entry || entry.typeInvalid) return false;
+    const end = Number(entry.cutoffTime);
+    if (!Number.isFinite(end)) return false;
+    return Number(now) >= end;
+  }
+
   shouldHoldVote(tx) {
     if (!isHeldVoteType(tx.civicType)) return false;
+    if (this.voteWaitsForCutoff(tx)) return true;
     return (Number(this.config.disclosureIntervalSeconds) || 0) > 0;
   }
 
   /**
-   * Ballot rows follow the hourly gate. A tally is choice data: refuse it
-   * while a vote is sealed. An unknown electionType is rejected on open.
+   * POLL ballot rows follow the hourly gate. A VOTE is not bucketed by hour.
+   * A tally is choice data: refuse it while a vote is sealed.
    */
   _assertChoicePolicy(tx) {
     const type = String(tx.civicType || '').toLowerCase();
@@ -981,17 +1005,35 @@ export class ChainState {
     const raw = String(electionId ?? '');
     const key = raw.toLowerCase();
     const entry = this.electionRegistry.get(key);
-    let submitted = 0;
-    for (const tx of this.sealed) {
-      if (String(tx.civicType || '').toLowerCase() !== 'vote') continue;
-      if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
-    }
-    for (const block of this.blocks) {
-      for (const tx of block.transactions || []) {
-        if (!tx || typeof tx !== 'object') continue;
-        if (String(tx.civicType || tx.civic?.type || '').toLowerCase() !== 'vote') continue;
-        if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
+    if (entry && (entry.typeInvalid || Number(entry.electionType) === 1)) {
+      const sealed =
+        entry.typeInvalid ||
+        voteResultsSealed(
+          { electionType: 1, cutoffTime: entry.typeInvalid ? null : entry.cutoffTime },
+          this.now(),
+        );
+      if (sealed) {
+        // No live total. The hourly planner must not see a VOTE before cutoff.
+        return {
+          submittedVotes: 0,
+          endTime: entry.typeInvalid ? null : entry.cutoffTime ?? null,
+          tallied: false,
+          resultsSealed: true,
+          minVotes: 0,
+        };
       }
+    }
+    let submitted = 0;
+    const countTx = (tx) => {
+      if (!tx || typeof tx !== 'object') return;
+      if (String(tx.civicType || tx.civic?.type || '').toLowerCase() !== 'vote') return;
+      if (String(tx.civic?.electionId ?? '') !== raw) return;
+      if (this.voteWaitsForCutoff(tx) && !this.voteCutoffReached(tx, this.now())) return;
+      submitted += 1;
+    };
+    for (const tx of this.sealed) countTx(tx);
+    for (const block of this.blocks) {
+      for (const tx of block.transactions || []) countTx(tx);
     }
     const vote = Number(entry?.electionType) === 1;
     return {
@@ -1007,14 +1049,22 @@ export class ChainState {
     const now = this.now();
     const interval = Number(this.config.disclosureIntervalSeconds) || 0;
     const delay = Number(this.config.disclosureDelaySeconds) || 0;
-    const votes = [];
+    const hourly = [];
     const other = [];
+    const waitingForCutoff = [];
+    const releaseAtCutoff = [];
     for (const tx of this.sealed) {
-      if (String(tx.civicType || '').toLowerCase() === 'vote') votes.push(tx);
-      else other.push(tx);
+      if (this.voteWaitsForCutoff(tx)) {
+        if (this.voteCutoffReached(tx, now)) releaseAtCutoff.push(tx);
+        else waitingForCutoff.push(tx);
+      } else if (String(tx.civicType || '').toLowerCase() === 'vote') {
+        hourly.push(tx);
+      } else {
+        other.push(tx);
+      }
     }
     const planned = planPublicBlocks(
-      votes.map((tx) => ({
+      hourly.map((tx) => ({
         tx,
         receivedAt: tx.receivedAt,
         electionId: String(tx.civic?.electionId ?? ''),
@@ -1039,8 +1089,13 @@ export class ChainState {
         ready.push(item.tx);
       }
     }
+    // One release at cutoff. These rows are not split into hour buckets.
+    for (const tx of releaseAtCutoff) {
+      if (apply) tx.disclosureTimestamp = now;
+      ready.push(tx);
+    }
     if (!apply) return ready;
-    this.sealed = planned.hold.map((item) => item.tx);
+    this.sealed = [...planned.hold.map((item) => item.tx), ...waitingForCutoff];
     this.sealedHashes = new Set(this.sealed.map((t) => t.hash.toLowerCase()));
     ready.sort((a, b) => String(a.hash).toLowerCase().localeCompare(String(b.hash).toLowerCase()));
     for (const tx of ready) {
@@ -1581,6 +1636,15 @@ export class ChainState {
     const key = String(electionUuid || '').toLowerCase();
     const entry = this.electionRegistry.get(key);
     if (!entry) return null;
+    const sealedVote =
+      entry.typeInvalid ||
+      voteResultsSealed(
+        {
+          electionType: entry.typeInvalid ? 1 : entry.electionType,
+          cutoffTime: entry.typeInvalid ? null : entry.cutoffTime,
+        },
+        this.now(),
+      );
     let registered = 0;
     let votes = 0;
     let tally = null;
@@ -1593,7 +1657,7 @@ export class ChainState {
         const t = String(tx.civicType || c.type || '').toLowerCase();
         if (t === 'election_open') openedAtBlock = block.number;
         else if (t === 'register') registered += 1;
-        else if (t === 'vote') votes += 1;
+        else if (t === 'vote' && !sealedVote) votes += 1;
         else if (t === 'tally') {
           const choiceSealed =
             entry.typeInvalid ||
@@ -1620,7 +1684,7 @@ export class ChainState {
       eligibleRoots: [...entry.eligibleRoots],
       approvedSenders: entry.approvedSenders.size,
       registered,
-      votesSealedInBlocks: votes,
+      votesSealedInBlocks: sealedVote ? null : votes,
       tally,
     };
   }

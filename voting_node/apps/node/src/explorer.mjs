@@ -49,6 +49,14 @@ function withoutChoiceFields(payload) {
   return out;
 }
 
+/** L2 vote rows stay out of the public log until cutoff. Unknown elections fail closed. */
+function voteImportBlocked(explorer, payload) {
+  const policy = explorer.disclosurePolicySnapshot();
+  const id = String((payload && payload.electionId) ?? '');
+  const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
+  return Boolean(ctx.resultsSealed || ctx.known === false);
+}
+
 /** Choice rows stay out of the explorer until the election deadline. Unknown elections fail closed. */
 function choiceRowBlocked(explorer, type, payload) {
   if (!isChoiceDisclosure(type, payload)) return false;
@@ -428,6 +436,9 @@ export class Explorer {
       if (!type) continue;
       const payload = row.payload || row;
       if (choiceRowBlocked(this, type, payload)) continue;
+      if ((type === 'vote' || type === 'vote_superseded') && l2Delayed && voteImportBlocked(this, payload)) {
+        continue;
+      }
       if (type === 'vote' || type === 'vote_superseded') {
         row.payload = withoutChoiceFields(payload);
       }

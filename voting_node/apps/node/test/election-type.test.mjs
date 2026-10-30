@@ -2,7 +2,7 @@
 // Poll keeps today's disclosure. A vote stays sealed until cutoff for every role.
 
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -12,7 +12,8 @@ import { planPublicBlocks } from '../src/disclosure.mjs';
 import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
 import { electionOpenCivic } from '../src/l2Identity.mjs';
 import { electionFactoryAbi, factoryElectionParams } from '../src/chain.mjs';
-import { electionsDiag, storeDiag } from '../src/superAdmin/diagnostics.mjs';
+import { electionsDiag, l2Diag, storeDiag } from '../src/superAdmin/diagnostics.mjs';
+import { submitHeldBallotsAtCutoff } from '../src/heldBallots.mjs';
 
 const HOUR = 3600;
 const HOUR_START = 1_699_999_200;
@@ -665,5 +666,147 @@ describe('hourly blocks are not held for a sealed vote', () => {
       planned.publish.map((block) => block.electionId).sort(),
       ['poll', 'vote'],
     );
+  });
+});
+
+function mockChain() {
+  const calls = [];
+  let nextId = 100;
+  return {
+    calls,
+    configured: true,
+    isConfigured: () => true,
+    isReady: () => true,
+    async createElection() {
+      nextId += 1;
+      return { onChainElectionId: String(nextId), chainId: 27427, params: {} };
+    },
+    async submitVote(args) {
+      calls.push(args);
+      return { hash: `0x${'ab'.repeat(32)}` };
+    },
+  };
+}
+
+describe('vote turnout counters are absent before close for every role', () => {
+  let app;
+  const clock = { t: HOUR_START + 12 * 60 };
+  const chain = mockChain();
+  const roles = [
+    { name: 'anonymous', jar: null },
+    { name: 'voter', handle: 'voter-diag', role: 'voter' },
+    { name: 'observer', handle: 'observer-diag', role: 'observer' },
+    { name: 'clerk', handle: 'clerk-diag', role: 'clerk' },
+    { name: 'tally_operator', handle: 'tally-diag', role: 'tally_operator' },
+    { name: 'platform_admin', handle: 'padmin-diag', role: 'platform_admin' },
+    { name: 'platform_super_admin' },
+  ];
+
+  before(async () => {
+    app = await startApp(clock, { chain });
+  });
+  after(async () => {
+    await app.stop();
+  });
+
+  test('store, l2, and the relayer omit a sealed vote', async () => {
+    const poll = await openElection(app.api, app.adminJar, clock, 'Counter poll');
+    const vote = await openElection(app.api, app.adminJar, clock, 'Counter vote', 1);
+    const pollCast = await cast(app.api, poll.id, 81);
+    assert.equal(pollCast.vote.status, 201, pollCast.vote.json?.error);
+    const beforeStore = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
+    const beforeL2 = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
+    assert.equal(beforeStore.status, 200, beforeStore.text);
+    assert.equal(beforeL2.status, 200, beforeL2.text);
+    const receiptBefore = beforeStore.json.counts.receiptCount;
+    const sealedBefore = beforeL2.json.explorer.sealedCount;
+    const voteBefore = beforeStore.json.counts.voteCount;
+
+    for (let n = 0; n < 4; n += 1) {
+      const row = await cast(app.api, vote.id, 900 + n);
+      assert.equal(row.vote.status, 201, row.vote.json?.error);
+    }
+
+    const jars = { anonymous: null, platform_super_admin: app.adminJar };
+    for (const role of roles) {
+      if (role.handle) {
+        const jar = {};
+        const login = await app.api('POST', '/api/auth/dev-login', {
+          body: { handle: role.handle, role: role.role },
+          jar,
+        });
+        assert.equal(login.status, 200, login.text);
+        jars[role.name] = jar;
+      }
+    }
+
+    for (const role of roles) {
+      const jar = jars[role.name];
+      const store = await app.api('GET', '/api/_sa/v1/store', { jar });
+      const l2 = await app.api('GET', '/api/_sa/v1/l2', { jar });
+      if (role.name !== 'platform_super_admin') {
+        assert.equal(store.status, 404, `${role.name} store ${store.text}`);
+        assert.equal(l2.status, 404, `${role.name} l2 ${l2.text}`);
+        assert.equal(store.text.includes('receiptCount'), false, role.name);
+        assert.equal(l2.text.includes('sealedCount'), false, role.name);
+        continue;
+      }
+      assert.equal(store.status, 200, store.text);
+      assert.equal(l2.status, 200, l2.text);
+      assert.equal(store.json.counts.receiptCount, receiptBefore);
+      assert.equal(store.json.counts.voteCount, voteBefore);
+      assert.equal(l2.json.explorer.sealedCount, sealedBefore);
+      assert.equal(store.text.includes('heldChainBallots'), false);
+      assert.equal(l2.text.includes('"sealedCount":4'), false);
+      assert.equal(store.text.includes('"receiptCount":4'), false);
+      const diag = electionsDiag(app.store, clock.t);
+      const meta = diag.elections.find((row) => String(row.id) === String(vote.id));
+      assert.equal(meta.castCount, null);
+      assert.equal(JSON.stringify(storeDiag(app.store, clock.t)).includes('"receiptCount":4'), false);
+      assert.equal(JSON.stringify(l2Diag({ store: app.store, explorer: app.store, config: { nowFn: () => clock.t } })).includes('"sealedCount":4'), false);
+    }
+
+    assert.equal(chain.calls.length, 1);
+    assert.equal(String(chain.calls[0].electionId), String(poll.created.onChainElectionId));
+    assert.notEqual(String(chain.calls[0].electionId), String(vote.created.onChainElectionId));
+
+    const saved = JSON.parse(await readFile(app.store.filePath, 'utf8'));
+    assert.equal(saved.heldChainBallots.length, 4);
+    for (const row of saved.heldChainBallots) {
+      assert.equal(Object.hasOwn(row, 'count'), false);
+      assert.ok(row.proof);
+      assert.equal(String(row.electionId), String(vote.id));
+    }
+
+    const earlyHook = submitHeldBallotsAtCutoff({
+      store: app.store,
+      election: app.store.requireElection(vote.id),
+      now: clock.t,
+    });
+    assert.equal(earlyHook.reason, 'not-due');
+    assert.equal(earlyHook.submitted, false);
+    assert.equal(JSON.stringify(earlyHook).includes('4'), false);
+
+    clock.t = HOUR_START + HOUR + 30;
+    const mid = await app.api('GET', `/api/elections/${vote.id}`, { jar: app.adminJar });
+    assert.equal(mid.status, 200, mid.text);
+    const afterHour = await app.api('GET', '/api/_sa/v1/l2', { jar: app.adminJar });
+    const afterStore = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
+    assert.equal(afterStore.json.counts.receiptCount, receiptBefore);
+    assert.equal(afterHour.json.explorer.sealedCount === 4, false);
+    assert.equal(afterHour.json.explorer.height === 4, false);
+    assert.equal(chain.calls.length, 1);
+
+    const election = app.store.requireElection(vote.id);
+    election.cutoffTime = clock.t - 1;
+    await app.store.persist();
+    const hook = submitHeldBallotsAtCutoff({ store: app.store, election, now: clock.t });
+    assert.equal(hook.submitted, false);
+    assert.equal(hook.reason, 'chain-batch-abi-not-final');
+    assert.equal(Object.hasOwn(hook, 'count'), false);
+    assert.equal(JSON.stringify(hook).includes('4'), false);
+    const opened = await app.api('GET', `/api/elections/${vote.id}/ballots`, { jar: app.adminJar });
+    assert.equal(opened.status, 200, opened.text);
+    assert.equal(chain.calls.length, 1);
   });
 });
