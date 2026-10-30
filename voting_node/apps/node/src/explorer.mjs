@@ -500,6 +500,7 @@ export class Explorer {
         if (type === 'poll_vote' && !l2Delayed) {
           await this.recordPollVote(body, now, intervalSeconds);
         } else {
+          await this.keepLatestPollRecord(type, body);
           await this.append(type, body, { timestamp: blockTs || now });
         }
         this.noteIngestedTx(type, body, blockHash, rowIndex);
@@ -556,24 +557,60 @@ export class Explorer {
       const clean = String(key).toLowerCase();
       if (clean && this._ingestedTxs.has(clean)) this._outcomeKeys.push(clean);
     }
-    while (this._outcomeKeys.length > OUTCOMES_ONLY_KEY_CAP) {
-      const dropped = this._outcomeKeys.shift();
-      let still = false;
-      for (const other of this._ingestedByBlock.values()) {
-        if (other.has(dropped)) {
-          still = true;
-          break;
-        }
-      }
-      if (!still) this._ingestedTxs.delete(dropped);
-    }
+    this.trimOutcomeKeys();
   }
 
   txAlreadyIngested(type, payload, blockHash, index) {
     const key = ingestKey(type, payload, blockHash, index);
     if (!key) return false;
     if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
-    return this._ingestedTxs.has(key);
+    if (this._ingestedTxs.has(key)) return true;
+    return this.storedPayload(type, payload);
+  }
+
+  /** True when this type and canonical payload are already in the chain log. */
+  storedPayload(type, payload) {
+    const txs = this.chain?.txs;
+    if (!txs || typeof txs !== 'object') return false;
+    const want = stable(payload);
+    const name = String(type || '').toLowerCase();
+    for (const tx of Object.values(txs)) {
+      if (!tx || String(tx.type || '').toLowerCase() !== name) continue;
+      if (stable(tx.payload) === want) return true;
+    }
+    return false;
+  }
+
+  /**
+   * A poll keeps one params row and one tally row. A newer ingest replaces
+   * the earlier row for that election.
+   */
+  async keepLatestPollRecord(type, payload) {
+    const name = String(type || '').toLowerCase();
+    if (name !== 'poll_params' && name !== 'poll_tally') return;
+    const electionId = payload && payload.electionId != null ? String(payload.electionId) : '';
+    if (!electionId) return;
+    const fresh = stable(payload);
+    const txs = this.chain?.txs;
+    if (!txs || typeof txs !== 'object') return;
+    const drop = [];
+    for (const [hash, tx] of Object.entries(txs)) {
+      if (!tx || String(tx.type || '').toLowerCase() !== name) continue;
+      const id = tx.payload && tx.payload.electionId != null ? String(tx.payload.electionId) : '';
+      if (id !== electionId || stable(tx.payload) === fresh) continue;
+      drop.push(String(hash).toLowerCase());
+    }
+    if (!drop.length) return;
+    const gone = new Set(drop);
+    for (const hash of Object.keys(txs)) {
+      if (gone.has(String(hash).toLowerCase())) delete txs[hash];
+    }
+    for (const block of this.chain.blocks || []) {
+      if (!Array.isArray(block.transactions)) continue;
+      block.transactions = block.transactions.filter((hash) => !gone.has(String(hash).toLowerCase()));
+      block.txCount = block.transactions.length;
+    }
+    await this.persist();
   }
 
   noteIngestedTx(type, payload, blockHash, index) {
@@ -599,16 +636,22 @@ export class Explorer {
     const existing = this._outcomeKeys.indexOf(key);
     if (existing !== -1) this._outcomeKeys.splice(existing, 1);
     this._outcomeKeys.push(key);
+    this.trimOutcomeKeys();
+  }
+
+  trimOutcomeKeys() {
+    if (!Array.isArray(this._outcomeKeys)) this._outcomeKeys = [];
+    const buckets = this._ingestedByBlock instanceof Map ? this._ingestedByBlock : new Map();
     while (this._outcomeKeys.length > OUTCOMES_ONLY_KEY_CAP) {
       const dropped = this._outcomeKeys.shift();
       let still = false;
-      for (const other of this._ingestedByBlock.values()) {
+      for (const other of buckets.values()) {
         if (other.has(dropped)) {
           still = true;
           break;
         }
       }
-      if (!still) this._ingestedTxs.delete(dropped);
+      if (!still && this._ingestedTxs instanceof Set) this._ingestedTxs.delete(dropped);
     }
   }
 

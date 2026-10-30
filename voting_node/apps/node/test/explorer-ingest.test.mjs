@@ -137,7 +137,7 @@ describe('explorer ingest', () => {
     }
   });
 
-  test('two outcomes-only ingests keep different poll_params, and a replay stores each once', async () => {
+  test('the latest poll_params and poll_tally replace the earlier row for that election', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'explorer-ingest-'));
     try {
       const explorer = await Explorer.open({ dataDir: tmp, databaseUrl: '', chainId: 27427, quiet: true });
@@ -147,14 +147,21 @@ describe('explorer ingest', () => {
       const p2 = { outcomes: { poll_params: [{ electionId: 'poll-1', floor: 2 }] } };
       const first = await explorer.ingest(p1, now, 0);
       const second = await explorer.ingest(p2, now, 0);
-      const replay = await explorer.ingest(p1, now, 0);
+      const replay = await explorer.ingest(p2, now, 0);
       assert.equal(first.imported, 1);
       assert.equal(second.imported, 1);
       assert.equal(replay.imported, 0);
-      const params = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_params');
-      assert.equal(params.length, 2);
-      const floors = params.map((tx) => tx.payload?.floor ?? tx.floor).sort();
-      assert.deepEqual(floors, [1, 2]);
+      const params = () => Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_params');
+      assert.equal(params().length, 1);
+      assert.equal(params()[0].payload.floor, 2);
+      const t1 = await explorer.ingest({ outcomes: { poll_tally: [{ electionId: 'poll-1', yes: 1 }] } }, now, 0);
+      const t2 = await explorer.ingest({ outcomes: { poll_tally: [{ electionId: 'poll-1', yes: 2 }] } }, now, 0);
+      assert.equal(t1.imported, 1);
+      assert.equal(t2.imported, 1);
+      const tallies = Object.values(explorer.chain.txs).filter((tx) => tx.type === 'poll_tally');
+      assert.equal(tallies.length, 1);
+      assert.equal(tallies[0].payload.yes, 2);
+      assert.equal(params().length, 1);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
@@ -168,7 +175,7 @@ describe('explorer ingest', () => {
       explorer.disclosurePolicy = () => policy(now, 100);
       for (let i = 0; i < OUTCOMES_ONLY_KEY_CAP + 1; i += 1) {
         const result = await explorer.ingest(
-          { outcomes: { poll_params: [{ electionId: 'poll-1', floor: i }] } },
+          { outcomes: { poll_params: [{ electionId: `poll-${i}`, floor: i }] } },
           now,
           0,
         );
@@ -176,14 +183,14 @@ describe('explorer ingest', () => {
       }
       assert.equal(explorer.chain.ingestedOutcomeKeys.length, OUTCOMES_ONLY_KEY_CAP);
       const oldest = await explorer.ingest(
-        { outcomes: { poll_params: [{ electionId: 'poll-1', floor: 0 }] } },
+        { outcomes: { poll_params: [{ electionId: 'poll-0', floor: 0 }] } },
         now,
         0,
       );
-      assert.equal(oldest.imported, 1);
+      assert.equal(oldest.imported, 0);
       assert.equal(explorer.chain.ingestedOutcomeKeys.length, OUTCOMES_ONLY_KEY_CAP);
       const newest = await explorer.ingest(
-        { outcomes: { poll_params: [{ electionId: 'poll-1', floor: OUTCOMES_ONLY_KEY_CAP }] } },
+        { outcomes: { poll_params: [{ electionId: `poll-${OUTCOMES_ONLY_KEY_CAP}`, floor: OUTCOMES_ONLY_KEY_CAP }] } },
         now,
         0,
       );

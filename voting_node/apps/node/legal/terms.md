@@ -57,7 +57,7 @@ You must be old enough, under the hosting jurisdiction’s law, to participate i
 
 ## 7. Ballots, receipts, and coercion
 
-Each nullifier is accepted once. Double voting is impossible on that rule. You may change your mind on the form before submit; after accept you cannot recast.
+Each voter is counted once and may re-vote until the deadline, with the last vote counting.
 
 Receipts list hashes only (ballot hash, nullifier, related identifiers). They cannot prove “I voted for X.” After a ballot is accepted you may email yourself that receipt (message body and a PDF of the same evidence). The vote-receipt PDF is encrypted and locked against modification; a changed file will not match the SHA-256 the Node recorded. Public dashboards delay vote proofs until the UTC hour has closed and the disclosure delay has elapsed, so walking out of a polling place cannot be matched to a live tick.
 

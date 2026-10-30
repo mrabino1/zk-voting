@@ -392,7 +392,7 @@ export default {
     maxOptions: "Bạn được chọn tối đa {count} lựa chọn.",
     receiptTitle: "Biên lai phiếu",
     receiptHelp:
-      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai cho cùng nullifier bị từ chối. Không thể bỏ phiếu kép. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Mỗi cử tri được tính một lần và có thể bỏ phiếu lại cho đến hạn chót; phiếu cuối cùng được tính. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
     recorded: "Đã ghi",
     ballotHash: "Hash phiếu",
     nullifier: "Nullifier",
@@ -405,9 +405,9 @@ export default {
     receiptHelpRevote:
       "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Hàng trình khám phá công khai chờ đến khi giờ đóng và độ trễ công bố trôi qua.",
     envelopeHelpRevote:
-      "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Không tính cả hai. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Không tính cả hai. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     envelopeHelpTallyRevote:
-      "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của người giám hộ. Mở tổng sau hết hạn cần t phần giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu chứng nhận. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của người giám hộ. Mở tổng sau hết hạn cần t phần giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     aspectsCount: "{count} câu trên phiếu này",
     aspectsCount_one: "{count} câu trên phiếu này",
     nonePublished: "Chưa công bố",

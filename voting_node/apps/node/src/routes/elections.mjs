@@ -111,17 +111,21 @@ async function retryPendingExclusionReleases({ store, chain, election }) {
         released = Boolean(await chain.releaseExcluded(key, row.nullifier));
       } catch {
         released = false;
-        console.warn(`ballot exclusion release failed for election ${election.id} nullifier ${row.nullifier}`);
-        if (attempt === EXCLUSION_RELEASE_ATTEMPTS && typeof chain.noteAlert === 'function') {
-          await chain.noteAlert({
-            kind: 'exclusion_release_failed',
-            electionKey: String(election.id),
-            nullifier: String(row.nullifier),
-          });
-        }
       }
     }
-    if (released) await store.setExclusionReleasePending(election.id, row.nullifier, false);
+    if (released) {
+      await store.setExclusionReleasePending(election.id, row.nullifier, false);
+    } else {
+      console.warn(`ballot exclusion release failed for election ${election.id} nullifier ${row.nullifier}`);
+      if (typeof chain.noteAlert === 'function') {
+        await chain.noteAlert({
+          kind: 'exclusion_release_failed',
+          electionKey: String(election.id),
+          nullifier: String(row.nullifier),
+          at: Math.floor(Date.now() / 1000),
+        });
+      }
+    }
   }
 }
 

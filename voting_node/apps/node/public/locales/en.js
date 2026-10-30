@@ -392,7 +392,7 @@ export default {
     maxOptions: "You may choose at most {count} options.",
     receiptTitle: "Ballot receipt",
     receiptHelp:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot for the same nullifier is rejected. Double voting is impossible. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. Each voter is counted once and may re-vote until the deadline, with the last vote counting. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     recorded: "Recorded",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",
