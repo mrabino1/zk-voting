@@ -308,6 +308,7 @@ export async function createApp(overrides = {}) {
   });
   const chain = chainOverride || createChain(config, { queueStore: store });
   if (config.allowRevote === true && chain?.isConfigured?.()) {
+    // TODO(#113): remove the ALLOW_REVOTE chain refusal once the inbox contracts accept a replacement ballot.
     throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
   }
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});

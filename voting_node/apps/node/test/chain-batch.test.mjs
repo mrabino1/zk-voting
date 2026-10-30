@@ -4,9 +4,13 @@
 // queued while the next election flushes, and a mined marker that is not resent.
 
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { createChain } from '../src/chain.mjs';
+import { Store } from '../src/store.mjs';
 
 const INBOX = '0x0000000000000000000000000000000000000001';
 
@@ -28,11 +32,15 @@ function memoryQueue() {
       saved.inFlight = next.inFlight || {};
       saved.deadLetter = next.deadLetter || [];
       saved.attempts = next.attempts || {};
+      saved.backoffUntil = next.backoffUntil || {};
+      saved.splitLimit = next.splitLimit || {};
+      saved.transportStrikes = next.transportStrikes || {};
+      saved.alerts = next.alerts || [];
     },
   };
 }
 
-function openChain({ interval = 3600, gate, queueStore, batches, writeSubmitBatch, settleInFlight, nullifierSpent } = {}) {
+function openChain({ interval = 3600, gate, queueStore, batches, writeSubmitBatch, settleInFlight, nullifierSpent, receiptTimeoutSeconds } = {}) {
   const sent = batches || [];
   const chain = createChain(
     {
@@ -47,6 +55,7 @@ function openChain({ interval = 3600, gate, queueStore, batches, writeSubmitBatc
       queueStore,
       settleInFlight,
       nullifierSpent,
+      receiptTimeoutSeconds,
       writeSubmitBatch:
         writeSubmitBatch ||
         (async ({ batch }) => {
@@ -163,43 +172,129 @@ describe('BallotInbox batch sending', () => {
     assert.equal(sent[0].length, 1);
     assert.equal(queueStore.saved.rows.length, 1);
     assert.equal(String(queueStore.saved.rows[0].electionKey), '7');
-    assert.equal(queueStore.saved.attempts['7'], 1);
+    assert.equal(queueStore.saved.attempts['7'], undefined);
+    assert.equal(queueStore.saved.deadLetter.length, 0);
+    assert.ok(chain.diagnostics().alerts.some((item) => item.kind === 'chain_transport'));
     assert.deepEqual(queueStore.saved.inFlight, {});
     assert.equal(flushed.find((row) => row.electionId === '7').error, 'inbox down');
     assert.equal(flushed.find((row) => row.electionId === '8').batched, true);
   });
 
-  test('the third thrown batch is dead-lettered so a later ballot can flush', async () => {
+  test('a transport outage keeps the batch queued and backs off', async () => {
     const queueStore = memoryQueue();
-    const sent = [];
-    let fail = true;
     const { chain } = openChain({
       queueStore,
-      batches: sent,
-      writeSubmitBatch: async ({ batch }) => {
-        if (fail) throw new Error('inbox down');
-        sent.push(batch);
-        return { hash: '0xok', batched: true, count: batch.length };
+      writeSubmitBatch: async () => {
+        throw new Error('inbox down');
       },
     });
     await chain.submitVote(vote(4, { now: 100 }));
     const first = await chain.flushVoteQueue(3600);
     const second = await chain.flushVoteQueue(3600);
     assert.equal(first[0].error, 'inbox down');
-    assert.equal(second[0].error, 'inbox down');
+    assert.equal(second[0].backoff, true);
     assert.equal(queueStore.saved.rows.length, 1);
-    const third = await chain.flushVoteQueue(3600);
-    assert.equal(third[0].deadLetter, true);
-    assert.equal(queueStore.saved.rows.length, 0);
+    assert.equal(queueStore.saved.deadLetter.length, 0);
+    assert.ok(chain.diagnostics().alerts.some((item) => item.kind === 'chain_transport'));
+    const later = await chain.flushVoteQueue(3600 + 31);
+    assert.equal(later[0].error, 'inbox down');
+    assert.equal(queueStore.saved.rows.length, 1);
+    assert.equal(queueStore.saved.deadLetter.length, 0);
+  });
+
+  test('only an isolated revert is dead-lettered, and a replay puts it back', async () => {
+    const queueStore = memoryQueue();
+    const sent = [];
+    const { chain } = openChain({
+      queueStore,
+      batches: sent,
+      nullifierSpent: async () => false,
+      writeSubmitBatch: async ({ batch }) => {
+        const err = new Error('execution reverted');
+        err.revert = true;
+        if (batch.length === 1 && batch[0].inputs[2] === 2n) throw err;
+        if (batch.some((row) => row.inputs[2] === 2n)) throw err;
+        sent.push(batch);
+        return { hash: '0xok', batched: true, count: batch.length };
+      },
+    });
+    await chain.submitVote(vote(1, { now: 100 }));
+    await chain.submitVote(vote(2, { now: 100 }));
+    await chain.submitVote(vote(3, { now: 100 }));
+    await chain.flushVoteQueue(3600);
     assert.equal(queueStore.saved.deadLetter.length, 1);
-    assert.deepEqual(queueStore.saved.deadLetter[0].nullifiers, ['4']);
-    assert.equal(sent.length, 0);
-    fail = false;
-    await chain.submitVote(vote(5, { now: 100 }));
-    const recovered = await chain.flushVoteQueue(3600);
-    assert.equal(recovered[0].batched, true);
-    assert.equal(sent.length, 1);
+    assert.equal(queueStore.saved.deadLetter[0].nullifier, '2');
     assert.equal(queueStore.saved.rows.length, 0);
+    assert.deepEqual(sent.map((batch) => batch.map((row) => row.inputs[2].toString())).flat().sort(), ['1', '3']);
+    const replayed = await chain.replayDeadLetter('7', '2');
+    assert.equal(replayed.restored, 1);
+    assert.equal(chain.deadLettersFor('7').length, 0);
+    assert.equal(queueStore.saved.rows.length, 1);
+    assert.equal(chain.diagnostics().deadLetter.length, 0);
+  });
+
+  test('a revert drops spent nullifiers and does not dead-letter the hour', async () => {
+    const queueStore = memoryQueue();
+    const sent = [];
+    const { chain } = openChain({
+      queueStore,
+      batches: sent,
+      nullifierSpent: async (_electionId, nullifier) => BigInt(nullifier) === 2n,
+      writeSubmitBatch: async ({ batch }) => {
+        if (batch.some((row) => row.inputs[2] === 2n)) {
+          const err = new Error('execution reverted');
+          err.revert = true;
+          throw err;
+        }
+        sent.push(batch);
+        return { hash: '0xok', batched: true, count: batch.length };
+      },
+    });
+    await chain.submitVote(vote(1, { now: 100 }));
+    await chain.submitVote(vote(2, { now: 100 }));
+    await chain.flushVoteQueue(3600);
+    assert.equal(queueStore.saved.deadLetter.length, 0);
+    assert.equal(queueStore.saved.rows.length, 0);
+    assert.deepEqual(sent.map((batch) => batch.map((row) => String(row.inputs[2]))), [['1']]);
+  });
+
+  test('a broadcast hash is saved before the receipt, and a stale receipt is resent', async () => {
+    const queueStore = memoryQueue();
+    const { chain } = openChain({
+      queueStore,
+      writeSubmitBatch: async ({ onHash }) => {
+        await onHash('0xhash');
+        throw new Error('timeout waiting for receipt');
+      },
+    });
+    await chain.submitVote(vote(6, { now: 100 }));
+    const flushed = await chain.flushVoteQueue(3600);
+    assert.equal(flushed[0].pending, true);
+    assert.equal(queueStore.saved.inFlight['7'].txHash, '0xhash');
+    assert.equal(queueStore.saved.rows.length, 1);
+    assert.equal(queueStore.saved.deadLetter.length, 0);
+
+    const restarted = openChain({
+      queueStore,
+      settleInFlight: async () => 'unknown',
+      nullifierSpent: async () => false,
+      receiptTimeoutSeconds: 600,
+    });
+    const resent = await restarted.chain.flushVoteQueue(3600 + 601);
+    assert.equal(resent[0].batched, true);
+    assert.equal(restarted.sent.length, 1);
+    assert.equal(queueStore.saved.rows.length, 0);
+  });
+
+  test('dropQueuedVote removes one nullifier and leaves the rest', async () => {
+    const queueStore = memoryQueue();
+    const { chain } = openChain({ queueStore });
+    await chain.submitVote(vote(8, { now: 100 }));
+    await chain.submitVote(vote(9, { now: 100 }));
+    assert.equal(await chain.dropQueuedVote('7', 8), true);
+    assert.equal(queueStore.saved.rows.length, 1);
+    assert.equal(queueStore.saved.rows[0].nullifier, '9');
+    assert.equal(await chain.dropQueuedVote('7', 8), false);
   });
 
   test('a mined in-flight marker is not sent again', async () => {
@@ -250,5 +345,27 @@ describe('BallotInbox batch sending', () => {
     assert.equal(restarted.sent.length, 0);
     assert.equal(queueStore.saved.rows.length, 0);
     assert.deepEqual(queueStore.saved.inFlight, {});
+  });
+
+  test('the JSON sidecar wins over the embedded queue on reload', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-queue-'));
+    try {
+      const store = await Store.open({ dataDir: dir, quiet: true });
+      await store.saveChainVoteQueue({
+        rows: [{ electionKey: '7', nullifier: '9', a: ['1', '2'], b: [['1', '2'], ['3', '4']], c: ['5', '6'], inputs: ['1', '2', '9', '4', '5'], encryptedBallot: '0x01' }],
+        batchAt: {},
+        inFlight: {},
+        deadLetter: [],
+        attempts: {},
+      });
+      store.data.chainVoteQueue = [];
+      await store.persist();
+      const reloaded = await Store.open({ dataDir: dir, quiet: true });
+      assert.equal(reloaded.loadChainVoteQueue().rows.length, 1);
+      assert.equal(reloaded.loadChainVoteQueue().rows[0].nullifier, '9');
+      assert.equal(reloaded.data.chainVoteQueue.length, 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -680,9 +680,18 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     pdfUnmodified = storedPdfSha256 === String(proof.pdfSha256).toLowerCase();
   }
   const showPdfSeal = holder || fromIssuedPdf || pdfUnmodified === true;
+  // The holder asked about one receipt. Return that receipt's hash. Falling
+  // back to the published hash would tell them an earlier ballot exists.
+  const queriedHash = receiptRow?.ballotHash || null;
+  const showHash = queriedHash && (holder || fromIssuedPdf || tryBytes32(proof.ballotHash))
+    ? queriedHash
+    : publicVote.ballotHash;
   return stripReceiptChoice({
     ok: true,
     nfp: true,
+    // counted means the ballot was accepted. It does not mean this ciphertext
+    // is the one in the certified tally. The first receipt stays counted after
+    // a replacement so a coercer cannot tell that a later ballot exists.
     counted: true,
     accepted: true,
     published,
@@ -692,7 +701,7 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     jurisdictionId: election?.jurisdictionId || null,
     shortCode: election?.shortCode || null,
     nullifier: publicVote.nullifier,
-    ballotHash: publicVote.ballotHash,
+    ballotHash: showHash,
     relayer: publicVote.relayer,
     userOpHash: holder ? receiptRow?.userOpHash || null : null,
     acceptedAt: holder ? vote.acceptedAt : null,

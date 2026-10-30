@@ -276,6 +276,9 @@ export function l2Diag(deps) {
       lagSeconds: headTs ? Math.max(0, now - headTs) : null,
       sealedCount: count(chain.sealed),
     },
+    inbox: typeof deps.chain?.diagnostics === 'function'
+      ? deps.chain.diagnostics()
+      : { deadLetter: [], alerts: [] },
   };
 }
 

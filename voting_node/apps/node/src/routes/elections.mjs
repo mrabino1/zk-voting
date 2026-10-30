@@ -22,6 +22,7 @@ import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
+import { chainElectionId } from '../electionIds.mjs';
 import { uuidParam } from '../recordIds.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
 import {
@@ -82,6 +83,25 @@ function rejectPendingL2(election) {
       electionId: String(election.id),
     });
   }
+}
+
+const RECEIPT_TAIL = 'Download the receipt or paste it at /receipt — it cannot prove how you voted.';
+const REVOTE_SENTENCE = 'A later ballot before the deadline updates the certified tally only. A published block keeps the first ballot.';
+const ONCE_SENTENCE = 'You may vote only once; a second ballot for this nullifier is rejected.';
+
+function ballotAcceptedMessage({ published, allowRevote }) {
+  const base = published
+    ? 'Ballot accepted. Choice is not stored in the clear.'
+    : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.';
+  return `${base} ${allowRevote ? REVOTE_SENTENCE : ONCE_SENTENCE} ${RECEIPT_TAIL}`;
+}
+
+function bodyNullifier(body) {
+  const inputs = body?.publicInputs;
+  if (inputs && typeof inputs === 'object' && !Array.isArray(inputs) && inputs.nullifier != null) {
+    return inputs.nullifier;
+  }
+  return body?.nullifier;
 }
 
 function unixSeconds(value, fallback) {
@@ -893,7 +913,8 @@ export function electionsRouter(deps) {
       let spentPassHash = null;
       if (rawBody.votePass && electionForGate) {
         spentPassHash = await votePass.verify(electionForGate.id, rawBody.votePass);
-        if (store.votePassSpent(electionForGate.id, spentPassHash)) {
+        const priorBallot = store.findVote(electionForGate.id, bodyNullifier(rawBody));
+        if (store.votePassSpent(electionForGate.id, spentPassHash) && !priorBallot) {
           throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
         }
       } else if (electionForGate && store.listActiveExternalParties(electionForGate.id).length) {
@@ -925,13 +946,7 @@ export function electionsRouter(deps) {
         nextPublishAt: result.nextPublishAt,
         vote: result.vote,
         receipt: result.receipt,
-        message: result.published
-          ? config.allowRevote === true
-            ? 'Ballot accepted. Choice is not stored in the clear. A later ballot before the deadline updates the certified tally only. A published block keeps the first ballot. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
-            : 'Ballot accepted. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
-          : config.allowRevote === true
-            ? 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. A later ballot before the deadline updates the certified tally only. A published block keeps the first ballot. Download the receipt or paste it at /receipt — it cannot prove how you voted.'
-            : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear. You may vote only once; a second ballot for this nullifier is rejected. Download the receipt or paste it at /receipt — it cannot prove how you voted.',
+        message: ballotAcceptedMessage({ published: result.published, allowRevote: config.allowRevote === true }),
         nfp: true,
       });
     }),
@@ -1106,6 +1121,23 @@ export function electionsRouter(deps) {
   );
 
   router.post(
+    '/:id/chain-dead-letter/replay',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      if (deps.writer?.enabled && deps.writer.acceptingWrites() === false) {
+        throw new HttpError(409, 'this node is not the writer', { code: 'NOT_WRITER' });
+      }
+      if (typeof chain?.replayDeadLetter !== 'function') {
+        throw new HttpError(409, 'no ballot queue on this node', { code: 'CHAIN_NOT_READY' });
+      }
+      const election = store.requireElection(req.params.id);
+      const restored = await chain.replayDeadLetter(chainElectionId(election), req.body?.nullifier);
+      res.json({ ok: true, nfp: true, ...restored });
+    }),
+  );
+
+  router.post(
     '/:id/tally',
     requireAuth,
     requireElectionRole(store, 'tally_operator'),
@@ -1115,6 +1147,15 @@ export function electionsRouter(deps) {
       const state = electionState(election, now);
       if (now < election.cutoffTime) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
+      }
+      if (typeof chain?.deadLettersFor === 'function') {
+        const dead = chain.deadLettersFor(chainElectionId(election));
+        if (Array.isArray(dead) && dead.length) {
+          throw new HttpError(409, 'dead-lettered ballots must be replayed before the tally', {
+            code: 'CHAIN_DEAD_LETTER',
+            deadLetter: dead.length,
+          });
+        }
       }
 
       let nums;

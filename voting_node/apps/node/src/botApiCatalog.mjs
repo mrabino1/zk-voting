@@ -385,6 +385,12 @@ export const BOT_OPERATIONS = [
     auth: true,
     summary: 'Retry the sequencer open for one election. Idempotent: an open election is not opened again.',
   }),
+  O('POST', '/api/elections/:id/chain-dead-letter/replay', {
+    tag: 'Elections',
+    auth: true,
+    summary: 'Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row.',
+    body: 'nullifier (optional)',
+  }),
   R('/api/elections/:id', {
     tag: 'Elections',
     summary: 'One election. When the caller is signed in, includes that person’s registration status. Choice is never included.',
