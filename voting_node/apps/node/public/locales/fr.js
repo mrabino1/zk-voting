@@ -431,6 +431,8 @@ export default {
     opens: "Ouverture",
     cutoff: "Clôture",
     publishedBallots: "Bulletins publiés",
+    ballotsDisclosed: "Bulletins divulgués",
+    choiceResults: "Résultats par choix",
     tallyPosted: "Dépouillement publié",
     privacy:
       "Les données au niveau du choix ne sont jamais affichées ici. Les preuves de vote de l’explorateur attendent la clôture de l’heure qui les contenait.",
@@ -467,7 +469,7 @@ export default {
     typePoll: "Sondage",
     typeVote: "Vote",
     sealedUntil: "Résultats scellés jusqu’au {end}",
-    sealedBody: "Les décomptes, la participation et les dépouillements partiels restent scellés pour tout le monde, y compris les responsables, jusqu’à la fin de cette élection.",
+    sealedBody: "Les décomptes par choix et les dépouillements partiels restent scellés pour tout le monde, y compris les responsables, jusqu’à la fin de cette élection. La participation horaire est publique.",
     sealedStatus: "Résultats scellés",
   },
   info: {

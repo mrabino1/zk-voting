@@ -60,14 +60,19 @@
             : d.note || "Results sealed until the election ends";
       const ballots = d.acceptedBallotsDisclosed;
       const ballotsText = typeof ballots === "number" ? String(ballots) : "—";
+      const ballotsLabel =
+        i18n && typeof i18n.t === "function" ? i18n.t("results.ballotsDisclosed") : "Ballots disclosed";
       return `<p class="disclosure-note">${esc(label)}</p>
-        <dl class="disclosure-stats"><div><dt>Ballots disclosed</dt><dd>${esc(ballotsText)}</dd></div></dl>`;
+        <dl class="disclosure-stats"><div><dt>${esc(ballotsLabel)}</dt><dd>${esc(ballotsText)}</dd></div></dl>`;
     }
     const last = d.lastClosedHourAt != null ? d.lastClosedHourAt : d.lastPublishedAt;
     const next = d.nextPublishAt;
     const remaining = remainingSeconds(d, fetchedAtMs);
     const ballots = d.acceptedBallotsDisclosed;
     const ballotsText = typeof ballots === "number" ? String(ballots) : "—";
+    const i18nOpen = typeof window !== "undefined" ? window.ZkVotingI18n : null;
+    const ballotsLabel =
+      i18nOpen && typeof i18nOpen.t === "function" ? i18nOpen.t("results.ballotsDisclosed") : "Ballots disclosed";
     const interval = Number(d.intervalSeconds) || 0;
     const note =
       d.note ||
@@ -89,7 +94,7 @@
           <dd>${esc(fmtTime(last))}</dd>
         </div>
         <div>
-          <dt>Ballots disclosed</dt>
+          <dt>${esc(ballotsLabel)}</dt>
           <dd class="num">${esc(ballotsText)}</dd>
         </div>
         <div>

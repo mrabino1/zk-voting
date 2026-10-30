@@ -264,7 +264,7 @@ export async function renderResults(main, ctx) {
           { class: "meta-list" },
           h("li", {}, h("span", { class: "lbl", text: t("results.electionId") }), h("span", { text: String(election.id || election.electionId || electionId) })),
           h("li", {}, h("span", { class: "lbl", text: t("results.cutoff") }), h("span", { text: formatTime(election.cutoffTime || election.sealedUntil) })),
-          h("li", {}, h("span", { class: "lbl", text: "Published ballots" }), h("span", { text: String(election.acceptedBallots ?? results.publishedAcceptedBallots ?? "—") }))
+          h("li", {}, h("span", { class: "lbl", text: t("results.publishedBallots") }), h("span", { text: String(election.acceptedBallots ?? results.publishedAcceptedBallots ?? "—") }))
         )
       ),
       h(

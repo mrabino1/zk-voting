@@ -431,6 +431,8 @@ export default {
     opens: "开始",
     cutoff: "截止",
     publishedBallots: "已公布选票",
+    ballotsDisclosed: "已披露选票",
+    choiceResults: "选项结果",
     tallyPosted: "计票已公布",
     privacy:
       "此处从不显示选择级数据。浏览器投票证明等到包含它们的小时结束后才出现。",
@@ -467,7 +469,7 @@ export default {
     typePoll: "民意调查",
     typeVote: "表决",
     sealedUntil: "结果密封至 {end}",
-    sealedBody: "在本次选举结束之前，票数、投票率和部分计票对所有人密封，包括管理人员。",
+    sealedBody: "在本次选举结束之前，各选项票数和部分计票对所有人密封，包括管理人员。每小时投票率是公开的。",
     sealedStatus: "结果已密封",
   },
   info: {

@@ -729,13 +729,15 @@
     const turnoutRows =
       "<dt>Last closed hour</dt><dd>" +
       esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt))) +
-      "</dd><dt>Ballots disclosed</dt><dd>" +
+      "</dd><dt>" +
+      esc(t("results.ballotsDisclosed", null, "Ballots disclosed")) +
+      "</dt><dd>" +
       esc(accepted != null ? accepted : "—") +
       "</dd><dt>Next disclosure</dt><dd>" +
       esc(nextLine) +
       "</dd>";
     const choiceRows = sealed
-      ? "<dt>Choice results</dt><dd>" + esc(sealedLine) + "</dd>"
+      ? "<dt>" + esc(t("results.choiceResults", null, "Choice results")) + "</dt><dd>" + esc(sealedLine) + "</dd>"
       : "<dt>Public tally</dt><dd>" +
         tallyCell +
         '</dd><dt>Tally hash</dt><dd class="hash">' +

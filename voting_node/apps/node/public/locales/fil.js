@@ -431,6 +431,8 @@ export default {
     opens: "Magbubukas",
     cutoff: "Cutoff",
     publishedBallots: "Mga nai-publish na balota",
+    ballotsDisclosed: "Mga balotang isiniwalat",
+    choiceResults: "Mga resulta ng pagpipilian",
     tallyPosted: "Nai-post ang tally",
     privacy:
       "Hindi kailanman ipinapakita rito ang data sa antas ng pagpipilian. Naghihintay ang explorer vote proofs hanggang magsara ang oras na naglalaman nito.",
@@ -467,7 +469,7 @@ export default {
     typePoll: "Poll",
     typeVote: "Vote",
     sealedUntil: "Selyado ang mga resulta hanggang {end}",
-    sealedBody: "Mananatiling selyado ang mga bilang, turnout, at bahagyang tally para sa lahat, kasama ang mga opisyal, hanggang matapos ang halalang ito.",
+    sealedBody: "Mananatiling selyado ang mga bilang ng pagpipilian at ang bahagyang tally para sa lahat, kasama ang mga opisyal, hanggang matapos ang halalang ito. Pampubliko ang turnout kada oras.",
     sealedStatus: "Selyado ang mga resulta",
   },
   info: {

@@ -431,6 +431,8 @@ export default {
     opens: "Apertura",
     cutoff: "Cierre",
     publishedBallots: "Boletas publicadas",
+    ballotsDisclosed: "Boletas divulgadas",
+    choiceResults: "Resultados por opción",
     tallyPosted: "Escrutinio publicado",
     privacy:
       "Aquí nunca se muestran datos a nivel de elección. Las pruebas de voto del explorador esperan a que cierre la hora que las contuvo.",
@@ -467,7 +469,7 @@ export default {
     typePoll: "Encuesta",
     typeVote: "Votación",
     sealedUntil: "Resultados sellados hasta {end}",
-    sealedBody: "Los conteos, la participación y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine.",
+    sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación por hora es pública.",
     sealedStatus: "Resultados sellados",
   },
   info: {

@@ -431,6 +431,8 @@ export default {
     opens: "Mở",
     cutoff: "Hết hạn",
     publishedBallots: "Phiếu đã công bố",
+    ballotsDisclosed: "Phiếu đã công bố theo giờ",
+    choiceResults: "Kết quả theo lựa chọn",
     tallyPosted: "Đã đăng kiểm phiếu",
     privacy:
       "Dữ liệu cấp lựa chọn không bao giờ hiện ở đây. Bằng chứng phiếu trên trình khám phá chờ đến khi giờ chứa chúng đóng.",
@@ -467,7 +469,7 @@ export default {
     typePoll: "Thăm dò",
     typeVote: "Bỏ phiếu",
     sealedUntil: "Kết quả được niêm phong đến {end}",
-    sealedBody: "Số phiếu, tỷ lệ đi bỏ phiếu và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc.",
+    sealedBody: "Số phiếu theo lựa chọn và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc. Tỷ lệ đi bỏ phiếu theo giờ là công khai.",
     sealedStatus: "Kết quả được niêm phong",
   },
   info: {

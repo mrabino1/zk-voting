@@ -419,6 +419,9 @@ export function getConfig(overrides = {}) {
     // test suite stays on JSON unless TEST_DATABASE_URL points at a scratch DB.
     databaseUrl: isTest ? process.env.TEST_DATABASE_URL || '' : process.env.DATABASE_URL || '',
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
+    l2CivicRpc: String(
+      overrides.l2CivicRpc !== undefined ? overrides.l2CivicRpc : process.env.L2_CIVIC_RPC || '',
+    ).trim(),
     allowDevLogin: (() => {
       if (process.env.NODE_ENV === 'production') return false;
       if (overrides.allowDevLogin !== undefined) return Boolean(overrides.allowDevLogin);

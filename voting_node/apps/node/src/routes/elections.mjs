@@ -42,6 +42,39 @@ import { partiesRouter } from './parties.mjs';
 import { publicUser } from '../roles.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
 
+function l2OpenFingerprint(fields) {
+  return JSON.stringify([
+    String(fields.title || ''),
+    Number(fields.startTime),
+    Number(fields.cutoffTime),
+    String(fields.jurisdictionId || ''),
+    Number(fields.electionType) || 0,
+    String(fields.ballotSpecHash || ''),
+    String(fields.createdBy || ''),
+  ]);
+}
+
+/** Open on the sequencer, or skip when L2_CIVIC_RPC is unset. Throws on a failed open. */
+async function recordElectionOnL2(config, election) {
+  const civicRpc = String(config?.l2CivicRpc || '').trim();
+  if (!civicRpc) {
+    if (!config?.quiet) {
+      console.warn('L2_CIVIC_RPC is unset; this election was not opened on the sequencer');
+    }
+    return 'skipped';
+  }
+  const hooked = typeof config.openElectionOnL2 === 'function';
+  const opener = hooked ? config.openElectionOnL2 : openElectionOnL2;
+  const cfg = hooked ? { civicRpc } : await readL2IdentityConfig();
+  if (!hooked) cfg.civicRpc = civicRpc;
+  await opener(cfg, {
+    electionUuid: String(election.id),
+    electionType: election.electionType,
+    cutoffTime: election.cutoffTime,
+  });
+  return 'open';
+}
+
 function unixSeconds(value, fallback) {
   if (value == null || value === '') return fallback;
   if (typeof value === 'number' && Number.isFinite(value)) return Math.floor(value);
@@ -138,12 +171,66 @@ export function electionsRouter(deps) {
         throw new HttpError(400, 'unknown jurisdictionId');
       }
       const jurisdictionId = jurisdiction.id;
-      let chainResult = null;
-      if (chain.isConfigured()) {
-        const jurisdiction = store.getJurisdiction(jurisdictionId);
-        const officers = jurisdiction?.officers || [];
-        const roleAddr = (role) => officers.find((o) => o.role === role && o.address)?.address;
-        chainResult = await chain.createElection({
+      const civicRpc = String(config?.l2CivicRpc || '').trim();
+      const fingerprint = l2OpenFingerprint({
+        title,
+        startTime,
+        cutoffTime,
+        jurisdictionId,
+        electionType,
+        ballotSpecHash,
+        createdBy: req.user.id,
+      });
+      // A failed sequencer open leaves one pending row. The retry reopens it
+      // and does not call the factory again.
+      let election = store.findPendingL2Open(fingerprint);
+      if (!election) {
+        let chainResult = null;
+        if (chain.isConfigured()) {
+          const officers = jurisdiction?.officers || [];
+          const roleAddr = (role) => officers.find((o) => o.role === role && o.address)?.address;
+          chainResult = await chain.createElection({
+            title,
+            metadataURI: String(body.metadataURI || ''),
+            startTime,
+            cutoffTime,
+            maxParticipants,
+            treeDepth,
+            ballotSpecHash,
+            questions,
+            questionCount: questions.length,
+            jurisdictionId,
+            clerk: body.clerk || roleAddr('clerk'),
+            registrar: body.registrar || roleAddr('registrar'),
+            disqualificationOfficer: body.disqualificationOfficer || roleAddr('disqualification_officer'),
+            tallyOperator: body.tallyOperator || roleAddr('tally_operator'),
+            verifier: body.verifier,
+            tallyScheme: body.tallyScheme,
+            tallyPubKeyX: body.tallyPubKeyX,
+            tallyPubKeyY: body.tallyPubKeyY,
+            // Read by factoryElectionParams. Omitted from the encoded tuple.
+            electionType,
+          });
+          if (!chainResult?.onChainElectionId) {
+            throw new HttpError(502, 'ElectionFactory did not return an election id', {
+              code: 'CHAIN_CREATE_FAILED',
+            });
+          }
+        }
+        const requestedOnChainId = chainResult?.onChainElectionId ?? null;
+        const pinnedFactory = String(config?.electionFactoryAddress || '').trim();
+        const chainFactory = chainResult?.factoryAddress || null;
+        if (
+          chainFactory &&
+          pinnedFactory &&
+          chainFactory.toLowerCase() !== pinnedFactory.toLowerCase()
+        ) {
+          throw new HttpError(409, 'ElectionFactory is not the pinned shared factory', {
+            code: 'FACTORY_MISMATCH',
+          });
+        }
+        const factoryAddress = chainFactory || pinnedFactory || null;
+        election = await store.createElection({
           title,
           metadataURI: String(body.metadataURI || ''),
           startTime,
@@ -151,83 +238,43 @@ export function electionsRouter(deps) {
           maxParticipants,
           treeDepth,
           ballotSpecHash,
-          questions,
-          questionCount: questions.length,
-          jurisdictionId,
-          clerk: body.clerk || roleAddr('clerk'),
-          registrar: body.registrar || roleAddr('registrar'),
-          disqualificationOfficer: body.disqualificationOfficer || roleAddr('disqualification_officer'),
-          tallyOperator: body.tallyOperator || roleAddr('tally_operator'),
-          verifier: body.verifier,
-          tallyScheme: body.tallyScheme,
-          tallyPubKeyX: body.tallyPubKeyX,
-          tallyPubKeyY: body.tallyPubKeyY,
-          // Read by factoryElectionParams. Omitted from the encoded tuple.
+          ballotMethod,
           electionType,
+          questions,
+          jurisdictionId,
+          clerk: chainResult?.params?.clerk || body.clerk || '',
+          registrar: chainResult?.params?.registrar || body.registrar || '',
+          disqualificationOfficer:
+            chainResult?.params?.disqualificationOfficer || body.disqualificationOfficer || '',
+          tallyOperator: chainResult?.params?.tallyOperator || body.tallyOperator || '',
+          verifier: chainResult?.params?.verifier || body.verifier || '',
+          lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
+          tallyScheme: body.tallyScheme,
+          opensBallots: body.opensBallots,
+          threshold: body.threshold,
+          guardianCount: body.guardianCount,
+          aggregation: body.aggregation,
+          createdBy: req.user.id,
+          onChainElectionId: requestedOnChainId,
+          onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
+          factoryAddress,
+          createTxHash: chainResult?.createTxHash ?? null,
+          chainId: chainResult?.chainId ?? (factoryAddress ? config.chainId : null),
+          l2OpenStatus: civicRpc ? 'pending' : 'unconfigured',
+          l2OpenFingerprint: fingerprint,
         });
-        if (!chainResult?.onChainElectionId) {
-          throw new HttpError(502, 'ElectionFactory did not return an election id', {
-            code: 'CHAIN_CREATE_FAILED',
-          });
-        }
       }
-      let requestedOnChainId = chainResult?.onChainElectionId ?? null;
-      const pinnedFactory = String(config?.electionFactoryAddress || '').trim();
-      const chainFactory = chainResult?.factoryAddress || null;
-      if (
-        chainFactory &&
-        pinnedFactory &&
-        chainFactory.toLowerCase() !== pinnedFactory.toLowerCase()
-      ) {
-        throw new HttpError(409, 'ElectionFactory is not the pinned shared factory', {
-          code: 'FACTORY_MISMATCH',
+      let l2Open;
+      try {
+        l2Open = await recordElectionOnL2(config, election);
+      } catch (err) {
+        throw new HttpError(502, `Could not record the election on the sequencer: ${err.message || err}`, {
+          code: 'L2_OPEN_FAILED',
         });
       }
-      const factoryAddress = chainFactory || pinnedFactory || null;
-      const election = await store.createElection({
-        title,
-        metadataURI: String(body.metadataURI || ''),
-        startTime,
-        cutoffTime,
-        maxParticipants,
-        treeDepth,
-        ballotSpecHash,
-        ballotMethod,
-        electionType,
-        questions,
-        jurisdictionId,
-        clerk: chainResult?.params?.clerk || body.clerk || '',
-        registrar: chainResult?.params?.registrar || body.registrar || '',
-        disqualificationOfficer:
-          chainResult?.params?.disqualificationOfficer || body.disqualificationOfficer || '',
-        tallyOperator: chainResult?.params?.tallyOperator || body.tallyOperator || '',
-        verifier: chainResult?.params?.verifier || body.verifier || '',
-        lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
-        tallyScheme: body.tallyScheme,
-        opensBallots: body.opensBallots,
-        threshold: body.threshold,
-        guardianCount: body.guardianCount,
-        aggregation: body.aggregation,
-        createdBy: req.user.id,
-        onChainElectionId: requestedOnChainId,
-        onChainElectionAddress: chainResult?.onChainElectionAddress ?? null,
-        factoryAddress,
-        createTxHash: chainResult?.createTxHash ?? null,
-        chainId: chainResult?.chainId ?? (factoryAddress ? config.chainId : null),
-      });
-      if (String(process.env.L2_CIVIC_RPC || '').trim()) {
-        try {
-          const cfg = await readL2IdentityConfig();
-          await openElectionOnL2(cfg, {
-            electionUuid: String(election.id),
-            electionType: election.electionType,
-            cutoffTime: election.cutoffTime,
-          });
-        } catch (err) {
-          throw new HttpError(502, `Could not record the election on the sequencer: ${err.message || err}`, {
-            code: 'L2_OPEN_FAILED',
-          });
-        }
+      const nextStatus = l2Open === 'open' ? 'open' : 'unconfigured';
+      if (election.l2OpenStatus !== nextStatus) {
+        election = await store.setL2OpenStatus(election.id, nextStatus);
       }
       await explorer.append('election_created', {
         electionId: String(election.id),
@@ -250,6 +297,7 @@ export function electionsRouter(deps) {
         onChainElectionAddress: election.onChainElectionAddress,
         createTxHash: election.createTxHash,
         chainMode: electionChainMode(election),
+        l2Open,
         election: dto,
         links: dto.links,
         nfp: true,

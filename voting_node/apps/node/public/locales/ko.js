@@ -431,6 +431,8 @@ export default {
     opens: "시작",
     cutoff: "마감",
     publishedBallots: "게시된 투표용지",
+    ballotsDisclosed: "공개된 투표용지",
+    choiceResults: "선택 결과",
     tallyPosted: "집계 게시됨",
     privacy:
       "선택 수준 데이터는 여기에 절대 표시되지 않습니다. 탐색기 투표 증명은 그것이 담긴 시간이 끝날 때까지 기다립니다.",
@@ -467,7 +469,7 @@ export default {
     typePoll: "여론조사",
     typeVote: "투표",
     sealedUntil: "{end}까지 결과가 봉인됨",
-    sealedBody: "이 선거가 끝날 때까지 표 수, 투표율, 부분 개표는 관리자를 포함해 모두에게 봉인됩니다.",
+    sealedBody: "선택별 표 수와 부분 개표는 이 선거가 끝날 때까지 관리자를 포함해 모두에게 봉인됩니다. 시간별 투표율은 공개됩니다.",
     sealedStatus: "결과 봉인",
   },
   info: {

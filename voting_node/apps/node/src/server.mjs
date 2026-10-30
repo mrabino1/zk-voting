@@ -294,21 +294,12 @@ export async function createApp(overrides = {}) {
       if (!election) {
         return { submittedVotes: 0, endTime: null, tallied: false, resultsSealed: false, known: false };
       }
-      if (voteResultsSealed(election, now)) {
-        return {
-          submittedVotes: 0,
-          endTime: election.cutoffTime,
-          tallied: false,
-          resultsSealed: true,
-          known: true,
-          minVotes: 0,
-        };
-      }
+      const sealed = voteResultsSealed(election, now);
       return {
         submittedVotes: store.visibleAcceptedBallots(election),
         endTime: election.cutoffTime,
-        tallied: Boolean(election.tally),
-        resultsSealed: false,
+        tallied: sealed ? false : Boolean(election.tally),
+        resultsSealed: sealed,
         known: true,
         ...(isVoteElection(election) ? { minVotes: 0 } : {}),
       };

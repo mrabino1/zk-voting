@@ -431,6 +431,8 @@ export default {
     opens: "Opens",
     cutoff: "Cutoff",
     publishedBallots: "Published ballots",
+    ballotsDisclosed: "Ballots disclosed",
+    choiceResults: "Choice results",
     tallyPosted: "Tally posted",
     privacy:
       "Choice-level data is never shown here. Explorer vote proofs wait until the hour closes, the disclosure delay elapses, and the results gate opens.",
@@ -467,7 +469,7 @@ export default {
     typePoll: "Poll",
     typeVote: "Vote",
     sealedUntil: "Results sealed until {end}",
-    sealedBody: "Counts, turnout, and partial tallies stay sealed for everyone, including officials, until this election ends.",
+    sealedBody: "Choice counts and partial tallies stay sealed for everyone, including officials, until this election ends. Hourly turnout is public.",
     sealedStatus: "Results sealed",
   },
   info: {
