@@ -185,6 +185,14 @@ contract ElectionTypeTest is Deployer {
         vm.prank(tallyOperator);
         tally.addTallyComponent(id, keccak256("while-open"));
         warpClosed(el);
+        _expectFinalBeforeTally(id);
+        assertEq(tally.interimResult(id), keccak256("interim-2"));
+        assertEq(tally.disclosureHash(id), keccak256("disc-2"));
+
+        uint256[] memory counts = new uint256[](1);
+        counts[0] = 0;
+        vm.prank(tallyOperator);
+        tally.submitTally(id, counts, a, b, c);
 
         bytes32 finalInterim = keccak256("final-interim");
         bytes32 finalDisc = keccak256("final-disc");
@@ -200,9 +208,39 @@ contract ElectionTypeTest is Deployer {
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.TallyComponentsClosed.selector, id));
         tally.addTallyComponent(id, keccak256("after-close"));
         assertEq(tally.tallyComponentCount(id), 1);
-
-        _expectDecryptOnce(id, 0);
+        _expectDecryptOnceAfterTally(id);
         _expectSecondTallyReverts(id);
+    }
+
+    function testFinalHashBeforeTallyReverts() public {
+        (uint256 id, address el) = _create(ElectionType.POLL);
+        (uint256 vid, address vel) = _create(ElectionType.VOTE);
+        _openAndVote(vid, vel);
+        warpClosed(el);
+        _expectFinalBeforeTally(id);
+        _expectFinalBeforeTally(vid);
+        assertEq(tally.interimResult(id), bytes32(0));
+        assertEq(tally.disclosureHash(id), bytes32(0));
+        assertEq(tally.interimResult(vid), bytes32(0));
+        assertFalse(tally.isTallied(vid));
+    }
+
+    function _expectFinalBeforeTally(uint256 id) internal {
+        vm.startPrank(tallyOperator);
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.FinalBeforeTally.selector, id));
+        tally.postInterimResult(id, keccak256("final-too-soon"));
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.FinalBeforeTally.selector, id));
+        tally.disclose(id, keccak256("disc-too-soon"));
+        vm.stopPrank();
+    }
+
+    function _expectDecryptOnceAfterTally(uint256 id) internal {
+        vm.startPrank(tallyOperator);
+        tally.submitDecryption(id, keccak256("plain"));
+        vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultAlreadyFinal.selector, id));
+        tally.submitDecryption(id, keccak256("plain-2"));
+        vm.stopPrank();
+        assertEq(tally.decryptionHash(id), keccak256("plain"));
     }
 
     function _expectSecondTallyReverts(uint256 id) internal {

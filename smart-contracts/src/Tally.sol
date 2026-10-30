@@ -198,7 +198,8 @@ contract Tally is ITallyVerifier {
         _revertIfVoteSealed(electionId, p);
         // A pre-cutoff interim may be replaced until cutoff. The one write at or
         // after cutoff is the certified final value, even when an interim is
-        // already stored. A later write reverts.
+        // already stored. It requires a posted tally. A later write reverts.
+        _revertIfFinalBeforeTally(electionId, p);
         _revertIfFinal(electionId, p, _interimFinal[electionId]);
         if (block.timestamp >= p.cutoffTime) _interimFinal[electionId] = true;
         _interimHash[electionId] = resultHash;
@@ -211,6 +212,7 @@ contract Tally is ITallyVerifier {
         if (disclosureHash_ == bytes32(0)) revert EmptyCommitment();
         ElectionParams memory p = _operatorParams(electionId);
         _revertIfVoteSealed(electionId, p);
+        _revertIfFinalBeforeTally(electionId, p);
         _revertIfFinal(electionId, p, _disclosureFinal[electionId]);
         if (block.timestamp >= p.cutoffTime) _disclosureFinal[electionId] = true;
         _disclosureHash[electionId] = disclosureHash_;
@@ -309,6 +311,11 @@ contract Tally is ITallyVerifier {
         if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) {
             revert ResultsSealedUntilEnd(electionId);
         }
+    }
+
+    /// @dev The certified final hash is posted only after `submitTally`.
+    function _revertIfFinalBeforeTally(uint256 electionId, ElectionParams memory p) internal view {
+        if (block.timestamp >= p.cutoffTime && !_tallied[electionId]) revert FinalBeforeTally(electionId);
     }
 
     /// @dev The post-cutoff write of this field has already happened.
