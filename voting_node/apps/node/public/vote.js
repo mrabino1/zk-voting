@@ -622,7 +622,7 @@ export async function renderVote(main, ctx) {
           "div",
           { class: "notice notice-warn", role: "status" },
           h("p", { text: "Polls are closed for this election. You can review the questions; the Node will not accept a new ballot." }),
-          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Certified results" })
+          h("a", { class: "btn", href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Final tally" })
         )
       );
     } else if (notOpen) {

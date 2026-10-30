@@ -15,7 +15,7 @@ contracts win.
 
 ## What an authoritarian adversary wants
 
-1. **Overwrite** an honest certified tally on Ethereum (courts look here).
+1. **Overwrite** an honest final tally on Ethereum (courts look here).
 2. **Mimic** an honest contest (same UUID, same uint256, same jurisdiction
    name) so media and voters cite the fake.
 3. **Front-run** L1 so `AlreadyPosted` freezes a lie.

@@ -35,13 +35,30 @@ const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
 const REPAIR_COOLDOWN_SECONDS = 60;
 const repairAttemptAt = new Map();
 
+/**
+ * Drop marks whose cooldown has elapsed, and every mark for one election
+ * once that election is tallied. The map stores the expiry time.
+ */
+export function expireRepairAttempts(now, electionId = null) {
+  const at = Number(now) || Math.floor(Date.now() / 1000);
+  const prefix = electionId == null ? null : `${String(electionId)}:`;
+  for (const [key, until] of repairAttemptAt) {
+    if (prefix && key.startsWith(prefix)) {
+      repairAttemptAt.delete(key);
+      continue;
+    }
+    if ((Number(until) || 0) <= at) repairAttemptAt.delete(key);
+  }
+}
+
 function repairAllowed(electionId, nullifier, now, intervalSeconds) {
   const key = `${String(electionId)}:${String(nullifier)}`;
   const cooldown = Math.max(REPAIR_COOLDOWN_SECONDS, Number(intervalSeconds) || 0);
   const at = Number(now) || 0;
-  const prev = repairAttemptAt.get(key) || 0;
-  if (prev && at - prev < cooldown) return false;
-  repairAttemptAt.set(key, at);
+  expireRepairAttempts(at);
+  const until = repairAttemptAt.get(key) || 0;
+  if (until > at) return false;
+  repairAttemptAt.set(key, at + cooldown);
   return true;
 }
 

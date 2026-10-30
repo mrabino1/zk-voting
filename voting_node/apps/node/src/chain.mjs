@@ -635,15 +635,46 @@ export function createChain(config, extras = {}) {
     if (alerts.length > 20) alerts.splice(0, alerts.length - 20);
   }
 
-  /** One reverting row waits before the next try. The row stays queued. */
-  function rememberRevertRetry(key, err, now) {
-    const at = Number(now) || Math.floor(Date.now() / 1000);
-    backoffUntil.set(key, at + REVERT_RETRY_BACKOFF_SECONDS);
-    pushAlert({ kind: 'chain_revert_retry', electionKey: key, error: errorText(err), at });
+  function revertBackoffKey(electionKey, nullifier) {
+    return `row:${attemptKey(electionKey, nullifier)}`;
   }
 
-  /** Drop the local proof copy after the inbox has spent the nullifier. */
+  /**
+   * The wait is per ballot. One reverting row does not hold the rest of the
+   * election, including the final batch. Transport backoff stays on the
+   * election key because an RPC failure applies to every row.
+   */
+  function rememberRevertRetry(electionKey, nullifier, err, now) {
+    const at = Number(now) || Math.floor(Date.now() / 1000);
+    backoffUntil.set(revertBackoffKey(electionKey, nullifier), at + REVERT_RETRY_BACKOFF_SECONDS);
+    pushAlert({
+      kind: 'chain_revert_retry',
+      electionKey,
+      nullifier: nullifierKey(nullifier),
+      error: errorText(err),
+      at,
+    });
+  }
+
+  function revertBackoffActive(electionKey, nullifier, now) {
+    const until = backoffUntil.get(revertBackoffKey(electionKey, nullifier)) || 0;
+    return until > Number(now);
+  }
+
+  function releaseSupplementary(key, nullifiers) {
+    const drop = new Set((nullifiers || []).map((n) => nullifierKey(n)));
+    if (!drop.size || !supplementary.length) return;
+    const still = supplementary.filter(
+      (item) => !(String(item.electionKey) === String(key) && drop.has(nullifierKey(item.nullifier))),
+    );
+    if (still.length === supplementary.length) return;
+    supplementary.length = 0;
+    supplementary.push(...still);
+  }
+
+  /** Drop the local proof copy and any supplementary hold once the inbox has the nullifier. */
   async function forgetMined(key, nullifiers) {
+    releaseSupplementary(key, nullifiers);
     if (!nullifiers?.length || typeof queueStore?.dropChainBallotPayloads !== 'function') return;
     try {
       await queueStore.dropChainBallotPayloads(key, nullifiers);
@@ -678,6 +709,7 @@ export function createChain(config, extras = {}) {
       row: rowToStored(key, row),
     });
     dropNullifiers(key, [row.nullifier]);
+    backoffUntil.delete(revertBackoffKey(key, row.nullifier));
     splitLimit.delete(key);
     pushAlert({ kind: 'chain_dead_letter', electionKey: key, nullifier: id, error: errorText(err), at });
     if (!config.quiet) {
@@ -839,7 +871,7 @@ export function createChain(config, extras = {}) {
         return { action: 'dead', error: errorText(err), nullifier: id };
       }
       attempts.set(attemptKey(key, id), next);
-      rememberRevertRetry(key, err, at);
+      rememberRevertRetry(key, id, err, at);
       return { action: 'backoff' };
     }
     splitLimit.set(key, Math.max(1, Math.ceil(unspent.length / 2)));
@@ -860,22 +892,29 @@ export function createChain(config, extras = {}) {
       }
       let first = null;
       for (;;) {
-        const queued = voteQueue.get(key) || [];
-        if (!queued.length) return first || { queued: false };
+        const queuedAll = voteQueue.get(key) || [];
+        if (!queuedAll.length) return first || { queued: false };
+        const ready = queuedAll.filter((row) => !revertBackoffActive(key, row.nullifier, at));
+        if (!ready.length) {
+          const payload = { queued: true, submitted: false, backoff: true, waiting: queuedAll.length };
+          if (!first) return payload;
+          first.backoff = true;
+          return first;
+        }
         const interval = Number(config.disclosureIntervalSeconds) || 0;
         const isolating = splitLimit.has(key);
         const plan = planDisclosureBatch({
-          pending: queued,
+          pending: ready,
           interval,
           now: at,
-          startTime: queued[0].startTime,
+          startTime: ready[0].startTime,
           lastBatchAt: isolating ? 0 : lastBatchAt.get(key) || 0,
-          cutoffTime: queuedCutoff(queued),
+          cutoffTime: queuedCutoff(ready),
         });
         if (!isolating && (plan.action === 'wait' || plan.batch.length === 0)) {
-          return first || { queued: true, submitted: false, waiting: queued.length };
+          return first || { queued: true, submitted: false, waiting: queuedAll.length };
         }
-        if (plan.batch.length === 0) return first || { queued: true, submitted: false, waiting: queued.length };
+        if (plan.batch.length === 0) return first || { queued: true, submitted: false, waiting: queuedAll.length };
         const cap = splitLimit.get(key) || 64;
         const batch = plan.batch.slice(0, cap);
         const nullifiers = batch.map((row) => nullifierKey(row.nullifier));
@@ -901,17 +940,7 @@ export function createChain(config, extras = {}) {
             return first;
           }
           if (outcome.action === 'transport') throw err;
-          if (outcome.action === 'backoff') {
-            const payload = {
-              queued: true,
-              submitted: false,
-              backoff: true,
-              waiting: (voteQueue.get(key) || []).length,
-            };
-            if (!first) return payload;
-            first.backoff = true;
-            return first;
-          }
+          if (outcome.action === 'backoff') continue;
           if (outcome.action === 'dead') {
             const payload = { deadLetter: true, error: outcome.error, nullifier: outcome.nullifier };
             if (!first) first = payload;
@@ -928,6 +957,7 @@ export function createChain(config, extras = {}) {
         inFlight.delete(key);
         clearAttempts(key, nullifiers);
         await forgetMined(key, nullifiers);
+        for (const n of nullifiers) backoffUntil.delete(revertBackoffKey(key, n));
         backoffUntil.delete(key);
         transportStrikes.delete(key);
         const currentCap = splitLimit.get(key);
@@ -1125,10 +1155,11 @@ export function createChain(config, extras = {}) {
           nullifier: item.nullifier,
           error: item.error,
           at: item.at,
+          replayFailedAt: item.replayFailedAt || null,
         }));
     },
     /** Writer puts one dead-lettered row, or every row for the election, back on the queue. */
-    async replayDeadLetter(electionId, nullifier) {
+    async replayDeadLetter(electionId, nullifier, { now, cutoffTime } = {}) {
       const key = String(electionId);
       const id = nullifier == null || nullifier === '' ? null : nullifierKey(nullifier);
       const kept = [];
@@ -1157,7 +1188,12 @@ export function createChain(config, extras = {}) {
           putBack = false;
         }
         // A row we cannot queue stays dead-lettered so the tally stays blocked.
-        if (!putBack) kept.push(item);
+        if (!putBack) {
+          const at = Number(now);
+          const end = Number(cutoffTime);
+          if (Number.isFinite(at) && Number.isFinite(end) && at >= end) item.replayFailedAt = Math.floor(at);
+          kept.push(item);
+        }
       }
       deadLetter.length = 0;
       deadLetter.push(...kept);
@@ -1197,6 +1233,7 @@ export function createChain(config, extras = {}) {
           nullifier: item.nullifier,
           error: item.error,
           at: item.at,
+          replayFailedAt: item.replayFailedAt || null,
         }));
     },
     /**

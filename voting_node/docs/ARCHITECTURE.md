@@ -144,11 +144,11 @@ checks:
   14:05 vote appears at 15:00 is replaced by **15:30**, and only if the next
   two checks also pass.
 - The results gate is open: `RESULTS_MIN_VOTES` ballots (default **100**) or
-  the scheduled end, whichever is earlier. A certified tally also opens it.
+  the scheduled end, whichever is earlier. A final tally also opens it.
 - The disclosure block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots
   (default **10**). Smaller hours merge forward. A remainder publishes at
   election end when the election met that floor; a short election publishes
-  at the certified tally.
+  at the final tally.
 
 - Do not leak a pending-per-election count (that still identifies the
   jurisdiction).
@@ -310,7 +310,7 @@ address, the factory uint256, and the `jurisdictionId` baked into
 `Election.params`. A copied UUID therefore lands in a different L1 slot —
 or, if the attacker also claims the honest factory + id + jurisdiction,
 they must be a publisher for that body and `AlreadyPosted` keeps the first
-certified tally. Outcome verification recomputes UUID v5 from those fields;
+final tally. Outcome verification recomputes UUID v5 from those fields;
 a copied id fails `publicIdMatchesScope`.
 
 `GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
@@ -732,7 +732,7 @@ PATCH /api/office/site              (title/tagline/contracts: platform_admin)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
-GET  /api/elections/:id/results     (public; certified plurality/IRV after tally; empty before)
+GET  /api/elections/:id/results     (public; final tally plurality/IRV after tally; empty before)
 GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
 GET  /api/elections/:id/info/:questionId/:optionId
@@ -758,7 +758,7 @@ POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry 
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
 GET  /api/outcomes                  (public monitor: every election before/during/after)
-GET  /api/outcomes/:id              (verification + certified outcome after tally)
+GET  /api/outcomes/:id              (verification + final tally after tally)
 GET  /api/outcomes/reports          (issued official outcome PDFs)
 GET  /api/outcomes/reports/:id
 GET  /api/outcomes/reports/:id/pdf  (locked official PDF; X-Pdf-Protected)
@@ -948,7 +948,7 @@ PRF; no seed phrase is shown.
 | `/explorer` | `public/explorer.html` + `explorer.js` | Implemented |
 | `/office/pages`, `/office/site` | `public/cms.js` | Clerk CMS; pin shared factory |
 | `/p/:slug` | published custom pages | Implemented |
-| `/elections/:id/results` | `public/results.js` | Implemented certified plurality / IRV |
+| `/elections/:id/results` | `public/results.js` | Implemented final tally plurality / IRV |
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
 

@@ -394,7 +394,7 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
     tag: 'Elections',
     auth: true,
-    summary: 'Writer records a dead-lettered ballot as excluded, with a count and a reason on the public tally. The tally can then proceed. The ballot is not deleted.',
+    summary: 'Writer records a dead-lettered ballot as excluded after the deadline and a failed replay. The public audit log stores the count and reason. Excluded ballots are not counted. The ballot is not deleted.',
     body: 'nullifier, reason',
   }),
   R('/api/elections/:id', {
@@ -428,7 +428,7 @@ export const BOT_OPERATIONS = [
   }),
   R('/api/elections/:id/results', {
     tag: 'Elections',
-    summary: 'Certified plurality or IRV results after tally. Empty of option counts before tally.',
+    summary: 'Plurality or IRV results from the final tally. Empty of option counts before tally. Excluded ballots are not counted.',
   }),
   R('/api/elections/:id/summary', {
     tag: 'Elections',

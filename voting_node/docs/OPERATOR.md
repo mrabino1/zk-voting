@@ -357,7 +357,7 @@ Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in b
 
 ### Outcomes monitor
 
-Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. This is not `/receipt` and not `/elections/:id/results`.
+Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. The final tally appears only after it is posted. This is not `/receipt` and not `/elections/:id/results`.
 
 ### Passkeys
 
@@ -427,9 +427,9 @@ Acceptance (checkbox on `/register`, or “I agree” while signed in on `/terms
 
 The PDF is emailed with **AWS SES** on first accept of a hash, using the same env as MFA. Vote-receipt PDFs use PDF Standard Security so they cannot be edited; `/receipt` checks SHA-256 of the exact bytes.
 
-A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; certified option counts appear after a tally. It is not the receipt portal.
+A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; option counts appear in the final tally. It is not the receipt portal.
 
-After `cutoffTime` has fully expired **and** a certified tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Subscribing to that email is opt-in on `/me`; casting a ballot never creates a subscription (see "Ballot unlinkability" below). Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
+After `cutoffTime` has fully expired **and** a final tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Subscribing to that email is opt-in on `/me`; casting a ballot never creates a subscription (see "Ballot unlinkability" below). Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
 
 | Variable | Role |
 | --- | --- |

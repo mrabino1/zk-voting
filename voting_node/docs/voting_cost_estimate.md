@@ -273,7 +273,7 @@ When `SES_FROM_ADDRESS` and `AWS_REGION` are set ([`.env.example`](./.env.exampl
 | Vote PIN reset OTP | Forgot-PIN | no |
 | Terms of Use PDF | First accept of a given PDF hash (`already_sent_this_hash` otherwise) | yes — raw MIME; SESv2 Simple **cannot** attach ([`apps/node/src/mailer.mjs`](./apps/node/src/mailer.mjs)) |
 | Optional hash-only vote receipt PDF | After accept, if the voter emails it | yes, locked PDF |
-| Official outcome PDF | After cutoff + certified tally; opt-in subscription | yes, locked PDF |
+| Official outcome PDF | After cutoff + final tally; opt-in subscription | yes, locked PDF |
 
 Unset SES → Node still records accepts and **captures** mail in-process (tests). No AWS bill.
 
@@ -311,7 +311,7 @@ Glacier / IA / R2 lifecycle can be cheaper for cold election archives; retrieval
 
 ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish on the hourly block after `DISCLOSURE_DELAY_SECONDS` (default **1800**), and only once `RESULTS_MIN_VOTES` (default **100**) or the scheduled end is reached. Blocks under `DISCLOSURE_MIN_BLOCK_VOTES` (default **10**) merge forward. `DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests. A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
-| Surface | During the poll | After certified tally |
+| Surface | During the poll | After the final tally |
 | --- | --- | --- |
 | `/explorer` | Registrations, reason codes, **hourly** disclosed ballots, countdown to next hour | History + batches |
 | `/elections/:id/results` | No unofficial option counts | Plurality / IRV counts |

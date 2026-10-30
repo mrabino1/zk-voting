@@ -718,14 +718,14 @@
     const headerAction = sealed
       ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">' + esc(t("results.sealedStatus", null, "Results sealed")) + "</a>"
       : resultsUrl
-        ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">Certified results</a>'
+        ? '<a class="btn btn-secondary" href="' + esc(resultsUrl) + '">Final tally</a>'
         : '<span class="field-hint">Tally not posted yet</span>';
     const tallyCell = tallyRows
       ? '<ul class="tally-bars">' + tallyRows + "</ul>"
       : esc(tally && tally.counts ? JSON.stringify(tally.counts) : "not posted");
     const resultsCell = resultsUrl
       ? '<a href="' + esc(resultsUrl) + '">Tally posted — view results</a>'
-      : "not posted (winner page is linked after a certified tally)";
+      : "not posted (winner page is linked after a final tally)";
     const turnoutRows =
       "<dt>Last closed hour</dt><dd>" +
       esc(fmtTime(disclosure && (disclosure.lastClosedHourAt != null ? disclosure.lastClosedHourAt : disclosure.lastPublishedAt))) +
@@ -744,7 +744,7 @@
         esc(pick(election, ["tally.countsHash"]) || "—") +
         "</dd><dt>L1 certification</dt><dd>" +
         esc(l1Label) +
-        "</dd><dt>Certified results</dt><dd>" +
+        "</dd><dt>Final tally</dt><dd>" +
         resultsCell +
         "</dd>" +
         (pick(election, ["tally.questions.0.winnerLabel"])

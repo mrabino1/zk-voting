@@ -132,7 +132,7 @@ export function isDisclosed(eventTs, now, intervalSeconds, delaySeconds = 0) {
 
 /**
  * Public results may appear once enough ballots are in, or the scheduled end
- * has passed, or a certified tally exists. minVotes <= 0 leaves the gate open.
+ * has passed, or a final tally exists. minVotes <= 0 leaves the gate open.
  */
 export function resultsGateOpen({
   submittedVotes = 0,
@@ -156,7 +156,7 @@ export function resultsGateOpen({
  * Small hours merge forward. A trailing block under the minimum stays sealed until a
  * later hour fills it. At the deadline the still-open hour is the final block when
  * the election met the minimum. An election that never reached the minimum stays
- * sealed until a certified tally. Both types use this clock.
+ * sealed until a final tally. Both types use this clock.
  */
 export function planPublicBlocks(items, policy = {}) {
   const now = policy.now;

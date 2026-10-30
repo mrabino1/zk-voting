@@ -65,7 +65,7 @@ export function buildAuditorPack(election, deps) {
       policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
       note: deps.config?.allowRevote
-        ? 'One ballot per nullifier. A later ballot before the deadline updates the certified tally only. Published blocks keep the original ballot. acceptedBallots does not increase. A receipt lists hashes only and cannot prove which option was marked. The inbox still accepts a nullifier once, so the node does not submit the replacement again. This is not MACI.'
+        ? 'One ballot per nullifier. A later ballot before the deadline updates the final tally only. Published blocks keep the original ballot. acceptedBallots does not increase. A receipt lists hashes only and cannot prove which option was marked. The inbox still accepts a nullifier once, so the node does not submit the replacement again. This is not MACI.'
         : 'One ballot per nullifier. A second ballot is rejected until the inbox can store the latest ballot. A receipt lists hashes only and cannot prove which option was marked. This is not MACI.',
     },
   };

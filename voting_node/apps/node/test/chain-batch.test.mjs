@@ -444,6 +444,31 @@ describe('BallotInbox batch sending', () => {
     }
   });
 
+  test('a mined nullifier leaves the supplementary hold', async () => {
+    const queueStore = memoryQueue();
+    queueStore.saved.deadLetter = [{
+      electionKey: '7',
+      nullifier: '4',
+      error: 'revert',
+      at: 1,
+      row: {
+        nullifier: '4',
+        a: ['1', '2'],
+        b: [['1', '2'], ['3', '4']],
+        c: ['5', '6'],
+        inputs: ['1', '2', '4', '4', '5'],
+        encryptedBallot: '0x01',
+      },
+    }];
+    const { chain } = openChain({ queueStore, nullifierSpent: async () => false });
+    assert.equal((await chain.holdSupplementary('7', ['4'])).moved, 1);
+    assert.equal(chain.supplementaryFor('7').length, 1);
+    await chain.submitVote(vote(4, { now: 100 }));
+    await chain.flushVoteQueue(3600);
+    assert.equal(chain.supplementaryFor('7').length, 0);
+    assert.equal(chain.pendingFor('7').inFlight.length, 0);
+  });
+
   test('a mined nullifier drops its chain payload', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-payload-mined-'));
     try {

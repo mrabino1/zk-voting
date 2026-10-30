@@ -21,7 +21,7 @@ import { asyncHandler, HttpError, sanitizeVoteBody } from '../http.mjs';
 import { emptyTree } from '../merkle.mjs';
 import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
-import { relayVote } from '../relay.mjs';
+import { expireRepairAttempts, relayVote } from '../relay.mjs';
 import { chainElectionId } from '../electionIds.mjs';
 import { submitSupplementaryBatch, tallyAllowedAt } from '../supplementaryBatch.mjs';
 import { uuidParam } from '../recordIds.mjs';
@@ -33,7 +33,7 @@ import {
   sealedResultsMessage,
 } from '../electionType.mjs';
 import { acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
-import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
+import { isOpensBallots, openBallots, rejectInventedCounts, withoutExcludedEnvelopes } from '../tallyOpen.mjs';
 import { publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
 import { computeTallyHash, certifyArgsForElection } from '../l1Certify.mjs';
@@ -118,7 +118,12 @@ async function offerSupplementaryBatch({ store, chain, election, now, config }) 
   const hook = typeof config?.supplementaryBatch === 'function' ? config.supplementaryBatch : submitSupplementaryBatch;
   let result;
   try {
-    result = await hook({ election, rows, now, tallyAllowedAt: tallyAllowedAt(election) });
+    result = await hook({
+      election,
+      rows,
+      now,
+      tallyAllowedAt: tallyAllowedAt(election, config?.tallyChallengeSeconds),
+    });
   } catch {
     return;
   }
@@ -136,7 +141,7 @@ function rejectPendingL2(election) {
 }
 
 const RECEIPT_TAIL = 'Download the receipt or paste it at /receipt — it cannot prove how you voted.';
-const REVOTE_SENTENCE = 'A later ballot before the deadline updates the certified tally only. A published block keeps the first ballot.';
+const REVOTE_SENTENCE = 'A later ballot before the deadline updates the final tally only. A published block keeps the first ballot.';
 const ONCE_SENTENCE = 'You may vote only once; a second ballot for this nullifier is rejected.';
 
 function ballotAcceptedMessage({ published, allowRevote }) {
@@ -963,10 +968,13 @@ export function electionsRouter(deps) {
       let spentPassHash = null;
       if (rawBody.votePass && electionForGate) {
         spentPassHash = await votePass.verify(electionForGate.id, rawBody.votePass);
-        const priorBallot = config.allowRevote === true
+        // A spent pass may replace a stored ballot only while re-vote is on.
+        // The pass stays an unlinked hash: any already-spent pass qualifies,
+        // and nothing records which pass belongs to this nullifier.
+        const storedBallot = config.allowRevote === true
           ? store.findVote(electionForGate.id, bodyNullifier(rawBody))
           : null;
-        if (store.votePassSpent(electionForGate.id, spentPassHash) && !priorBallot) {
+        if (store.votePassSpent(electionForGate.id, spentPassHash) && !storedBallot) {
           throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
         }
       } else if (electionForGate && store.listActiveExternalParties(electionForGate.id).length) {
@@ -1184,7 +1192,10 @@ export function electionsRouter(deps) {
         throw new HttpError(409, 'no ballot queue on this node', { code: 'CHAIN_NOT_READY' });
       }
       const election = store.requireElection(req.params.id);
-      const restored = await chain.replayDeadLetter(chainElectionId(election), req.body?.nullifier);
+      const restored = await chain.replayDeadLetter(chainElectionId(election), req.body?.nullifier, {
+        now: config.nowFn(),
+        cutoffTime: election.cutoffTime,
+      });
       res.json({ ok: true, nfp: true, ...restored });
     }),
   );
@@ -1199,6 +1210,10 @@ export function electionsRouter(deps) {
       }
       const election = store.requireElection(req.params.id);
       if (election.tally) throw new HttpError(409, 'already tallied', { code: 'ALREADY_TALLIED' });
+      const now = config.nowFn();
+      if (now < Number(election.cutoffTime)) {
+        throw new HttpError(409, 'election still open', { code: 'NOT_CLOSED' });
+      }
       const reason = String(req.body?.reason || '').trim();
       if (!reason) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
       const nullifier = req.body?.nullifier;
@@ -1208,22 +1223,30 @@ export function electionsRouter(deps) {
       const key = chainElectionId(election);
       const dead = typeof chain?.deadLettersFor === 'function' ? chain.deadLettersFor(key) : [];
       const held = typeof chain?.supplementaryFor === 'function' ? chain.supplementaryFor(key) : [];
-      const known = [...dead, ...held].some((item) => sameNullifier(item.nullifier, nullifier));
+      const item = [...dead, ...held].find((row) => sameNullifier(row.nullifier, nullifier));
       const already = (election.excludedBallots || []).some((row) => sameNullifier(row.nullifier, nullifier));
-      if (!known && !already) {
+      if (!item && !already) {
         throw new HttpError(404, 'ballot is not dead-lettered', { code: 'NOT_DEAD_LETTER' });
+      }
+      if (!already && !(Number(item?.replayFailedAt) > 0)) {
+        throw new HttpError(409, 'replay the ballot after the deadline before excluding it', {
+          code: 'REPLAY_REQUIRED',
+        });
       }
       const excluded = await store.recordBallotExclusion(election.id, {
         nullifier,
         reason,
-        at: Math.floor(Date.now() / 1000),
+        at: now,
       });
-      if (known && typeof chain?.releaseExcluded === 'function') {
-        const released = await chain.releaseExcluded(key, nullifier);
-        if (!released && notExcluded(store, election, nullifier)) {
-          throw new HttpError(409, 'the dead letter could not be released', { code: 'EXCLUSION_FAILED' });
-        }
+      if (item && typeof chain?.releaseExcluded === 'function') {
+        await chain.releaseExcluded(key, nullifier);
       }
+      const fresh = store.requireElection(election.id);
+      await explorer.append('ballot_excluded', {
+        electionId: String(fresh.id),
+        reason,
+        count: excluded.count,
+      });
       res.json({ ok: true, nfp: true, excluded });
     }),
   );
@@ -1234,9 +1257,10 @@ export function electionsRouter(deps) {
     requireElectionRole(store, 'tally_operator'),
     asyncHandler(async (req, res) => {
       const election = store.requireElection(req.params.id);
-      const now = Math.floor(Date.now() / 1000);
+      const now = config.nowFn();
+      expireRepairAttempts(now, election.id);
       const state = electionState(election, now);
-      if (now < tallyAllowedAt(election)) {
+      if (now < tallyAllowedAt(election, config.tallyChallengeSeconds)) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
       await offerSupplementaryBatch({ store, chain, election, now, config });
@@ -1269,6 +1293,10 @@ export function electionsRouter(deps) {
       let openedBallots = null;
       let opened = null;
       let irv = null;
+      const countedBallots = Math.max(
+        0,
+        Number(election.acceptedBallots) - store.hiddenVoteCount(election.id) - store.liveExcludedCount(election.id),
+      );
 
       if (electionHasRanked(election)) {
         throw new HttpError(
@@ -1280,8 +1308,15 @@ export function electionsRouter(deps) {
 
       if (isOpensBallots(election)) {
         const bucket = store.guardianMaterial(election.id);
-        const envelopes = store.listEnvelopes(election.id, { includeDeleted: true });
-        opened = await openBallots(election, envelopes, bucket?.partials || [], election.questions);
+        const listed = store.listEnvelopes(election.id, { includeDeleted: true });
+        const split = withoutExcludedEnvelopes(listed, store.excludedNullifiers(election.id));
+        opened = await openBallots(
+          election,
+          split.envelopes,
+          bucket?.partials || [],
+          election.questions,
+          split.excludedLive,
+        );
         if (Array.isArray(req.body?.counts) && req.body.counts.length > 0) {
           const submitted = req.body.counts.map((n) => Number(n));
           if (submitted.some((n) => !Number.isInteger(n) || n < 0)) {
@@ -1293,15 +1328,10 @@ export function electionsRouter(deps) {
         source = 'opens_ballots';
         openedBallots = null;
       } else {
-        const hiddenVotes = store.hiddenVoteCount(election.id);
-        const tallyBound =
-          hiddenVotes > 0
-            ? Math.max(0, Number(election.acceptedBallots) - hiddenVotes)
-            : election.acceptedBallots;
         nums = parseTallyCounts(
           req.body || {},
           election.questions || [],
-          tallyBound,
+          countedBallots,
           election.ballotMethod,
         );
       }
@@ -1321,6 +1351,7 @@ export function electionsRouter(deps) {
         electionId: String(tallied.id),
         counts: nums,
         acceptedBallots: tallied.acceptedBallots,
+        countedBallots,
         source,
         production: false,
         countsHash,
@@ -1338,7 +1369,7 @@ export function electionsRouter(deps) {
         l1Certification = await l1.certifyTally({
           ...certifyArgsForElection(tallied, {}, config),
           counts: nums,
-          totalBallots: tallied.acceptedBallots,
+          totalBallots: countedBallots,
           resultHash: countsHash,
         });
         await store.setTallyL1(tallied.id, l1Certification);
@@ -1414,10 +1445,14 @@ export function electionsRouter(deps) {
         return;
       }
       const counts = election.tally.counts;
+      const countedBallots = Math.max(
+        0,
+        Number(election.acceptedBallots) - store.hiddenVoteCount(election.id) - store.liveExcludedCount(election.id),
+      );
       let l1Certification = await l1.certifyTally({
         ...certifyArgsForElection(election, {}, config),
         counts,
-        totalBallots: election.acceptedBallots,
+        totalBallots: countedBallots,
         resultHash: election.tally.countsHash || computeTallyHash(counts),
         l2StateRoot: req.body?.l2StateRoot,
       });

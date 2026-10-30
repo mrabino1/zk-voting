@@ -63,7 +63,7 @@ Receipts list hashes only (ballot hash, nullifier, related identifiers). They ca
 
 Choice is never printed on a receipt, email, PDF, explorer row, or officer live feed.
 
-A separate public monitor at `/outcomes` lists every election before, during, and after voting according to chain and election state, and runs the public auditor checks. It does not show how any person voted. Certified option counts appear there only after a tally is posted.
+A separate public monitor at `/outcomes` lists every election before, during, and after voting according to chain and election state, and runs the public auditor checks. It does not show how any person voted. Final tally option counts appear there only after a tally is posted. Excluded ballots are not counted.
 
 ## 8. Privacy, cookies, and data the Node stores
 

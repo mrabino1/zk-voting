@@ -754,7 +754,7 @@ function renderDesk(main, route, bundle) {
       { "aria-labelledby": "outcome-sub-heading" },
       h("h2", { id: "outcome-sub-heading", text: "Official outcome reports" }),
       h("p", {
-        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a certified tally is posted.",
+        text: "Subscribing is opt-in and separate from voting: casting a ballot never subscribes you. Subscribe to any contest here; the official PDF is emailed only after voting time has completely expired and a final tally is posted.",
       }),
       renderOutcomeSubscriptions(outcomeSubscriptions, {
         h,

@@ -690,7 +690,7 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     ok: true,
     nfp: true,
     // counted means the ballot was accepted. It does not mean this ciphertext
-    // is the one in the certified tally. The first receipt stays counted after
+    // is the one in the final tally. The first receipt stays counted after
     // a replacement so a coercer cannot tell that a later ballot exists.
     counted: true,
     accepted: true,

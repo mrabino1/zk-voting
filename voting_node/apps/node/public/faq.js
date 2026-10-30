@@ -103,8 +103,8 @@ export const FAQ_ENTRIES = [
     topic: "outcomes",
     q: "What is the /outcomes portal?",
     a: [
-      "It is a public monitor of every election on this Node, separate from certified results at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
-      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. Certified counts appear only after a tally is posted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
+      "It is a public monitor of every election on this Node, separate from the final tally at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
+      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. The final tally appears only after a tally is posted. Excluded ballots are not counted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
     ],
   },
   {
@@ -112,7 +112,7 @@ export const FAQ_ENTRIES = [
     topic: "outcome-reports",
     q: "What is the official outcome PDF?",
     a: [
-      `Once voting time has completely expired and a certified tally is posted, ${brandName()} issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.`,
+      `Once voting time has completely expired and a final tally is posted, ${brandName()} issues a locked official PDF: how many people voted for each option, when the contest started, and when it ended. Excluded ballots are not counted. The file uses PDF Standard Security so it cannot be edited. A QR code and SHA-256 / HMAC seals are always included; clerks can customize letterhead and intro on the admin page but cannot remove those seals.`,
       "If you vote, you are subscribed to that contest’s official report by default. Unsubscribe from My desk only if you do not want the email. Drop the file at /outcomes/verify (or scan the QR) to confirm the bytes still match the Node fingerprint. A changed copy will fail.",
     ],
   },

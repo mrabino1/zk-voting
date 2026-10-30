@@ -5,15 +5,39 @@
 // not change an ABI.
 
 /**
- * When a tally may be posted. This stays the election cutoff: the hourly
- * batch is already due at cutoff, and holding every tally for another hour
- * would wait on contracts this branch does not have. The hook runs at the
- * start of the tally request, before that request is accepted.
- * @param {{ cutoffTime?: number }} election
+ * Shortest challenge window after cutoff before a tally may be posted.
+ * A configured 0 is raised to this floor so the window cannot ship as 0.
+ * TODO(#113): align this floor with the sealed-vote contracts challenge window.
  */
-export function tallyAllowedAt(election) {
+export const MIN_TALLY_CHALLENGE_SECONDS = 1;
+
+/** Production default. Tests use the floor unless a window is set. */
+export const DEFAULT_TALLY_CHALLENGE_SECONDS = 60;
+
+/**
+ * @param {unknown} value
+ * @param {{ isTest?: boolean }} [opts]
+ */
+export function resolveTallyChallengeSeconds(value, { isTest = false } = {}) {
+  if (value == null || value === '') {
+    return isTest ? MIN_TALLY_CHALLENGE_SECONDS : DEFAULT_TALLY_CHALLENGE_SECONDS;
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < MIN_TALLY_CHALLENGE_SECONDS) return MIN_TALLY_CHALLENGE_SECONDS;
+  return Math.floor(n);
+}
+
+/**
+ * When a tally may be posted: cutoff plus the challenge window.
+ * TODO(#113): align the window with the sealed-vote contracts once that PR lands.
+ * The supplementary hook runs at the start of the tally request.
+ * @param {{ cutoffTime?: number }} election
+ * @param {number} [challengeSeconds]
+ */
+export function tallyAllowedAt(election, challengeSeconds = MIN_TALLY_CHALLENGE_SECONDS) {
   const cutoff = Number(election?.cutoffTime);
-  return Number.isFinite(cutoff) ? cutoff : 0;
+  const base = Number.isFinite(cutoff) ? cutoff : 0;
+  return base + resolveTallyChallengeSeconds(challengeSeconds);
 }
 
 /**

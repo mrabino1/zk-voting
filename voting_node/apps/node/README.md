@@ -180,7 +180,7 @@ GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction / platform_admin)
 PATCH /api/elections/:id            (clerk of that jurisdiction; ballot metadata until roll freeze)
 GET  /api/elections/:id             (UUID, shortCode, or onChainElectionId)
-GET  /api/elections/:id/results     (public certified plurality/IRV; empty before tally)
+GET  /api/elections/:id/results     (public final tally plurality/IRV; empty before tally)
 GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
 GET  /api/elections/:id/ballots
 GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
@@ -263,7 +263,7 @@ POST /api/receipts/verify           (paste proof and/or drop PDF; pdfUnmodified)
 POST /api/receipts/email            (holder token; SES body + locked PDF)
 POST /api/receipts/pdf              (holder token; encrypted PDF, X-Pdf-Protected: true)
 GET  /api/outcomes                  (public monitor: every election before/during/after)
-GET  /api/outcomes/:id              (auditor + chain verification; certified counts only after tally)
+GET  /api/outcomes/:id              (auditor + chain verification; final tally only after tally)
 GET  /api/outcomes/reports
 GET  /api/outcomes/reports/:id
 GET  /api/outcomes/reports/:id/pdf

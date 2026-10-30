@@ -17,6 +17,13 @@ import { HttpError } from '../src/http.mjs';
 import { relayVote } from '../src/relay.mjs';
 import { createApp } from '../src/server.mjs';
 import { electionsDiag } from '../src/superAdmin/diagnostics.mjs';
+import { dropPassToBallotLinks } from '../src/store.mjs';
+import {
+  DEFAULT_TALLY_CHALLENGE_SECONDS,
+  MIN_TALLY_CHALLENGE_SECONDS,
+  resolveTallyChallengeSeconds,
+  tallyAllowedAt,
+} from '../src/supplementaryBatch.mjs';
 import { ciphertextForTally } from '../src/tallyOpen.mjs';
 
 function applyCookies(res, jar) {
@@ -42,11 +49,97 @@ function listen(application) {
   });
 }
 
+function installDom() {
+  class Node {
+    constructor(type) {
+      this.nodeType = type;
+      this.childNodes = [];
+    }
+    append(...kids) {
+      for (const kid of kids) this.childNodes.push(kid);
+    }
+    get textContent() {
+      if (this.nodeType === 3) return this.data || '';
+      return this.childNodes.map((child) => (child.textContent == null ? '' : child.textContent)).join('');
+    }
+    set textContent(value) {
+      const text = new Node(3);
+      text.data = String(value);
+      this.childNodes = [text];
+    }
+    replaceChildren(...kids) {
+      this.childNodes = kids.flat().filter((child) => child != null && child !== false);
+    }
+    focus() {}
+  }
+  class Element extends Node {
+    constructor(tag) {
+      super(1);
+      this.tagName = String(tag).toUpperCase();
+      this.attrs = {};
+      this.className = '';
+      this.style = {};
+      this.dataset = {};
+    }
+    setAttribute(key, value) {
+      this.attrs[key] = String(value);
+    }
+    addEventListener() {}
+  }
+  globalThis.document = {
+    createElement(tag) {
+      return new Element(tag);
+    },
+    createTextNode(value) {
+      const text = new Node(3);
+      text.data = String(value);
+      return text;
+    },
+  };
+}
+
+function domH(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value == null || value === false) continue;
+    if (key === 'class' || key === 'className') node.className = value;
+    else if (key === 'text') node.textContent = value;
+    else if (value === true) node.setAttribute(key, '');
+    else node.setAttribute(key, String(value));
+  }
+  for (const child of children.flat()) {
+    if (child == null || child === false) continue;
+    node.append(child.nodeType ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+async function renderExcludedNotice(payload) {
+  installDom();
+  const { renderResults } = await import('../public/results.js');
+  const main = document.createElement('main');
+  await renderResults(main, {
+    h: domH,
+    api: async () => payload,
+    loadElection: async () => ({ election: null }),
+    formatTime: (value) => String(value ?? ''),
+    electionStateInfo: () => ({ className: 'status-tallied', label: 'Tallied' }),
+    electionId: payload.id || payload.electionId || 'election',
+    SAMPLE_QUESTIONS: [],
+  });
+  return main.textContent;
+}
+
 describe('ALLOW_REVOTE', () => {
   test('defaults off and is refused while a chain is configured', async () => {
     assert.equal(getConfig({ allowRevote: false }).allowRevote, false);
     assert.equal(getConfig({}).allowRevote, false);
     assert.equal(getConfig({ allowRevote: true }).allowRevote, true);
+    assert.equal(getConfig({}).tallyChallengeSeconds, MIN_TALLY_CHALLENGE_SECONDS);
+    assert.equal(getConfig({ tallyChallengeSeconds: 0 }).tallyChallengeSeconds, MIN_TALLY_CHALLENGE_SECONDS);
+    assert.equal(getConfig({ tallyChallengeSeconds: 90 }).tallyChallengeSeconds, 90);
+    assert.equal(resolveTallyChallengeSeconds(undefined, { isTest: false }), DEFAULT_TALLY_CHALLENGE_SECONDS);
+    assert.equal(tallyAllowedAt({ cutoffTime: 100 }, 60), 160);
     assert.throws(
       () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
       new RegExp(ALLOW_REVOTE_CHAIN_CONFIGURED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
@@ -137,6 +230,7 @@ describe('ALLOW_REVOTE', () => {
         body: { identityCommitment: '0xca11' },
       });
       assert.equal(reg.status, 201, reg.text);
+      const pass = await created.votePass.mintForTest(id);
       const freeze = await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
       assert.equal(freeze.status, 200, freeze.text);
 
@@ -146,6 +240,7 @@ describe('ALLOW_REVOTE', () => {
           publicInputs: { nullifier: '0xabc', electionId: id },
           encryptedBallot: '0x01',
           identityCommitment: '0xca11',
+          votePass: pass,
         },
       });
       assert.equal(first.status, 201, first.text);
@@ -159,6 +254,7 @@ describe('ALLOW_REVOTE', () => {
           publicInputs: { nullifier: '0xabc', electionId: id },
           encryptedBallot: '0x02',
           identityCommitment: '0xca11',
+          votePass: pass,
         },
       });
       assert.equal(second.status, 201, second.text);
@@ -205,6 +301,7 @@ describe('ALLOW_REVOTE', () => {
           electionId: id,
           relayer: 'node',
           acceptedAt: row.acceptedAt,
+          spentPassHash: created.store.data.votePassSpent[id][0],
         },
         { encryptedBallot: '0x03' },
       );
@@ -275,14 +372,15 @@ describe('ALLOW_REVOTE', () => {
       const id = election.json.id;
       assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
       assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const pass = await created.votePass.mintForTest(id);
       const first = await api('POST', `/api/elections/${id}/vote`, {
-        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11', votePass: pass },
       });
       assert.equal(first.status, 201, first.text);
       const sealed = created.explorer.chain.sealed.length;
       now += 3600;
       const second = await api('POST', `/api/elections/${id}/vote`, {
-        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x02', identityCommitment: '0xca11' },
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x02', identityCommitment: '0xca11', votePass: pass },
       });
       assert.equal(second.status, 201, second.text);
       assert.equal(second.json.receipt.acceptedAt, first.json.receipt.acceptedAt + 3600);
@@ -367,21 +465,34 @@ describe('ALLOW_REVOTE', () => {
       const cross = await api('POST', `/api/elections/${id}/vote`, {
         body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x05', identityCommitment: '0xca11', votePass: other },
       });
-      assert.equal(cross.status, 409, cross.text);
-      assert.equal(cross.json.code, 'VOTE_PASS_SPENT');
+      assert.equal(cross.status, 201, cross.text);
       const hashes = created.store.data.votePassSpent[id];
-      const tags = created.store.data.votePassTags;
-      assert.ok(Array.isArray(tags) && tags.length >= 1);
-      assert.deepEqual(tags, [...tags].sort());
+      assert.equal(created.store.data.votePassTags, undefined);
+      const linked = JSON.stringify({
+        votes: created.store.listVotes(id),
+        receipts: created.store.data.receipts,
+        envelopes: created.store.listEnvelopes(id),
+        payloads: created.store.data.chainBallotPayloads,
+      });
       for (const row of created.store.listVotes(id)) {
         assert.equal(Object.hasOwn(row, 'spentPassHash'), false);
       }
-      for (const tag of tags) {
-        assert.equal(hashes.includes(tag), false);
-        assert.equal(tag.length, 64);
-      }
-      const voteJson = JSON.stringify(created.store.listVotes(id));
-      for (const hash of hashes) assert.equal(voteJson.includes(hash), false);
+      for (const hash of hashes) assert.equal(linked.includes(hash), false);
+      created.store.data.votes[0].spentPassHash = hashes[0];
+      created.store.data.votePassTags = ['aa'];
+      assert.equal(dropPassToBallotLinks(created.store.data), true);
+      assert.equal(created.store.data.votePassTags, undefined);
+      assert.equal(Object.hasOwn(created.store.data.votes[0], 'spentPassHash'), false);
+      const badProof = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: false }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x06', identityCommitment: '0xca11', votePass: pass },
+      });
+      assert.notEqual(badProof.status, 201, badProof.text);
+      assert.equal(badProof.json.code === 'PROOF_INVALID' || badProof.json.code === 'VOTE_VK_MISSING', true);
+      const badPass = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x07', identityCommitment: '0xca11', votePass: { token: 'zz', signature: '1' } },
+      });
+      assert.equal(badPass.status, 400, badPass.text);
+      assert.equal(badPass.json.code, 'VOTE_PASS_BAD');
       await assert.rejects(
         () => created.store.acceptVote({
           nullifier: '0xabc',
@@ -689,7 +800,7 @@ describe('ALLOW_REVOTE', () => {
     }
   });
 
-  test('a replacement Yes is the certified tally and a dead letter blocks it', async () => {
+  test('a replacement Yes is the final tally and a dead letter blocks it', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-revote-tally-'));
     const adminJar = {};
     const created = await createApp({
@@ -768,14 +879,15 @@ describe('ALLOW_REVOTE', () => {
       assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
       assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
       const pub = created.store.requireElection(id).tallyPubKey;
+      const pass = await created.votePass.mintForTest(id);
       const no = encryptAggregateBallot({ jointPublicKey: pub, choice: 1, choiceRandomness: 11n, nOptions: 2 });
       const yes = encryptAggregateBallot({ jointPublicKey: pub, choice: 0, choiceRandomness: 12n, nOptions: 2 });
       const first = await api('POST', `/api/elections/${id}/vote`, {
-        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: no.encryptedBallot, identityCommitment: '0xca11' },
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: no.encryptedBallot, identityCommitment: '0xca11', votePass: pass },
       });
       assert.equal(first.status, 201, first.text);
       const second = await api('POST', `/api/elections/${id}/vote`, {
-        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: yes.encryptedBallot, identityCommitment: '0xca11' },
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: yes.encryptedBallot, identityCommitment: '0xca11', votePass: pass },
       });
       assert.equal(second.status, 201, second.text);
       const stored = created.store.requireElection(id);
@@ -961,6 +1073,15 @@ describe('ALLOW_REVOTE', () => {
   test('a writer can exclude a dead letter and the tally then shows the count', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-exclude-'));
     const adminJar = {};
+    const queue = {
+      saved: { rows: [], batchAt: {}, inFlight: {}, deadLetter: [], attempts: {}, supplementary: [] },
+      loadChainVoteQueue() {
+        return JSON.parse(JSON.stringify(this.saved));
+      },
+      async saveChainVoteQueue(doc) {
+        this.saved = JSON.parse(JSON.stringify(doc || {}));
+      },
+    };
     const chain = createChain(
       {
         chainRpc: 'http://127.0.0.1:9',
@@ -970,7 +1091,7 @@ describe('ALLOW_REVOTE', () => {
         quiet: true,
       },
       {
-        queueStore: null,
+        queueStore: queue,
         nullifierSpent: async () => false,
         writeSubmitBatch: async () => {
           const err = new Error('execution reverted');
@@ -1043,26 +1164,63 @@ describe('ALLOW_REVOTE', () => {
         await new Promise((resolve) => setTimeout(resolve, 1100));
         tick = Math.floor(Date.now() / 1000);
       }
-      stored.cutoffTime = tick;
+      const window = created.config.tallyChallengeSeconds;
+      stored.cutoffTime = tick - window;
       await created.store.persist();
       assert.ok(acceptedAt < stored.cutoffTime);
-      const refused = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
+      const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
+      const tooSoon = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: adminJar,
+        body: { nullifier, reason: 'too soon' },
+      });
+      stored.cutoffTime = tick + 3600;
+      await created.store.persist();
+      const open = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: adminJar,
+        body: { nullifier, reason: 'still open' },
+      });
+      assert.equal(open.status, 409, open.text);
+      assert.equal(open.json.code, 'NOT_CLOSED');
+      stored.cutoffTime = tick - window;
+      await created.store.persist();
+      assert.equal(tooSoon.status, 409, tooSoon.text);
+      assert.equal(tooSoon.json.code, 'REPLAY_REQUIRED');
+      queue.saved.deadLetter[0].row = { nullifier: 'nope' };
+      chain.reloadVoteQueue();
+      const replay = await api('POST', `/api/elections/${id}/chain-dead-letter/replay`, {
+        jar: adminJar,
+        body: { nullifier },
+      });
+      assert.equal(replay.status, 200, replay.text);
+      assert.equal(replay.json.restored, 0);
+      assert.ok(replay.json.kept >= 1);
+      const refused = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [0, 0] } });
       assert.equal(refused.status, 409, refused.text);
       assert.equal(refused.json.code, 'CHAIN_DEAD_LETTER');
       assert.equal(created.store.listVotes(id).length, 1);
-      const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
       const excluded = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
         jar: adminJar,
         body: { nullifier, reason: 'The chain batch reverted and the supplementary batch is not available.' },
       });
       assert.equal(excluded.status, 200, excluded.text);
       assert.equal(excluded.json.excluded.count, 1);
-      const tally = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
+      assert.equal(JSON.stringify(excluded.json).includes(String(nullifier)), false);
+      const audit = Object.values(created.explorer.chain.txs).find((tx) => tx.type === 'ballot_excluded');
+      assert.equal(audit.payload.count, 1);
+      assert.equal(audit.payload.reason.includes('reverted'), true);
+      assert.equal(Object.hasOwn(audit.payload, 'nullifier'), false);
+      const counted = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
+      assert.equal(counted.status, 400, counted.text);
+      const tally = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [0, 0] } });
       assert.equal(tally.status, 200, tally.text);
+      assert.deepEqual(tally.json.election.tally.counts, [0, 0]);
       assert.equal(tally.json.election.tally.excluded.count, 1);
       const results = await api('GET', `/api/elections/${id}/results`);
       assert.equal(results.json.results.excludedCount, 1);
+      assert.match(results.json.results.message, /not counted/i);
       assert.equal(results.json.results.excludedReasons[0].reason.includes('reverted'), true);
+      const page = await renderExcludedNotice(results.json);
+      assert.match(page, new RegExp(`${results.json.results.excludedCount}[^<]{0,80}not counted`, 'i'));
       const diag = electionsDiag(created.store, tick);
       assert.equal(diag.elections.find((row) => row.id === String(id)).excludedCount, 1);
       assert.equal(created.store.listVotes(id).length, 1);

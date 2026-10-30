@@ -47,7 +47,7 @@ Votes are accepted immediately so a nullifier is unique. A second ciphertext for
 
 - The UTC hour has closed and `DISCLOSURE_DELAY_SECONDS` (default 1800) has elapsed. `DISCLOSURE_INTERVAL_SECONDS` stays 3600. A vote at 08:59 publishes at 09:30. A vote at 14:05 is time-ready at 15:30. A vote at **exactly** 14:00:00 is in the 14:00 hour and is time-ready at 15:30. An earlier guarantee that the same vote appears at 15:00, on the hour, is withdrawn.
 - The results gate is open: at least `RESULTS_MIN_VOTES` ballots (default 100), or `cutoffTime` has passed, whichever is earlier. Until then, hourly turnout, live counts, and per-block vote rows for that election stay empty.
-- The block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default 10). Hours under that floor merge into the next block. At election end the remainder is published if the election met the floor. If the whole election is under the floor, nothing is published until the certified tally.
+- The block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default 10). Hours under that floor merge into the next block. At election end the remainder is published if the election met the floor. If the whole election is under the floor, nothing is published until the final tally.
 
 Ready ballots share one disclosure block. Public timestamp is the disclosure clock (hour end + delay). Order is by nullifier, not arrival. Intra-hour times (14:03 vs 14:17) are not published.
 
@@ -73,7 +73,7 @@ Observers should see a **hour-bucketed update**, not a live tick. The explorer b
 | `secondsUntilNext` | Countdown to that clock. The explorer UI ticks this locally. |
 | `intervalSeconds` | Default `3600`. `0` publishes immediately (tests / local demo). |
 
-`GET /api/elections/:id/summary` is the public election snapshot: title, state, **disclosed** `acceptedBallots`, the same disclosure object, `explorerUrl`, and `resultsUrl` **only after a certified tally exists**. This surface does not compute or display a winner; when a tally is posted it links to `/elections/:id/results` (that path is still **not** a voter-router page; tally JSON is on `GET /api/elections/:id`).
+`GET /api/elections/:id/summary` is the public election snapshot: title, state, **disclosed** `acceptedBallots`, the same disclosure object, `explorerUrl`, and `resultsUrl` **only after a final tally exists**. This surface does not compute or display a winner; when a tally is posted it links to `/elections/:id/results` (that path is still **not** a voter-router page; tally JSON is on `GET /api/elections/:id`).
 
 Choice plaintext is never a field on these responses.
 

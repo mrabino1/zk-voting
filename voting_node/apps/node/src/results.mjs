@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Certified election results from a posted tally. Plurality only (no IRV).
+// Final tally from a posted tally. Plurality only (no IRV).
 // Public option counts exist after tally; never invent unofficial choice totals.
 
 import { presentTally } from './ballot.mjs';
@@ -45,12 +45,12 @@ export function tokenPollResultsDto(result, { tallied, pollId, state } = {}) {
 
 export const EMPTY_RESULT_MESSAGES = {
   created:
-    'This election is not open yet. Certified option counts appear after a tally is posted.',
+    'This election is not open yet. Option counts in the final tally appear after a tally is posted.',
   roll_frozen:
-    'The roll is frozen. Voting has not opened. Certified option counts appear after a tally is posted.',
-  open: 'Voting is open. Option counts are not published until a certified tally is posted. Public turnout is the last hourly snapshot, not a live precinct tick.',
-  awaiting_tally: 'Polls are closed. A certified tally has not been posted yet.',
-  closed: 'Polls are closed. A certified tally has not been posted yet.',
+    'The roll is frozen. Voting has not opened. Option counts in the final tally appear after a tally is posted.',
+  open: 'Voting is open. Option counts are not published until a final tally is posted. Public turnout is the last hourly snapshot, not a live precinct tick.',
+  awaiting_tally: 'Polls are closed. A final tally has not been posted yet.',
+  closed: 'Polls are closed. A final tally has not been posted yet.',
 };
 
 export function isRankedType(type) {
@@ -295,7 +295,7 @@ export function buildResults(election, extra = {}) {
     method: 'plurality',
     emptyReason: available ? null : status,
     message: available
-      ? 'Certified plurality results from the posted tally. Individual choices are never shown. Explorer vote rows still follow hourly disclosure.'
+      ? 'Plurality results from the posted final tally. Individual choices are never shown. Excluded ballots are not counted. Explorer vote rows still follow hourly disclosure.'
       : EMPTY_RESULT_MESSAGES[status] || EMPTY_RESULT_MESSAGES.awaiting_tally,
     questions,
     tallyPostedAt: election?.tally?.postedAt || null,

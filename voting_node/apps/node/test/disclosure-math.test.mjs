@@ -159,7 +159,7 @@ describe('hourly disclosure math', () => {
     assert.equal(opened.length, 1);
   });
 
-  test('small hours merge forward, and a short election waits for the certified tally', () => {
+  test('small hours merge forward, and a short election waits for the final tally', () => {
     const votes = [];
     for (let i = 0; i < 6; i += 1) votes.push({ id: i, acceptedAt: HOUR_START + 10 + i, electionId: 'e' });
     for (let i = 0; i < 6; i += 1) votes.push({ id: 10 + i, acceptedAt: HOUR_START + HOUR + 10 + i, electionId: 'e' });

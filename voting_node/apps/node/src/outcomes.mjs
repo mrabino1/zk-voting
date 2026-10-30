@@ -35,9 +35,9 @@ export const PHASE_NOTES = {
   before:
     'The roll is still forming, or it is frozen and polls have not opened. Verification covers the published window, Merkle roots, and whether this contest is mapped on chain.',
   during:
-    'Voting is open. Public turnout is the last closed hour, not a live precinct tick. Option counts are not published until a certified tally is posted.',
+    'Voting is open. Public turnout is the last closed hour, not a live precinct tick. Option counts are not published until a final tally is posted.',
   after:
-    'Polls are closed. Certified option counts appear only after a tally is posted. When L1 is configured, the tally hash may be mirrored on Ethereum.',
+    'Polls are closed. Final tally option counts appear only after a tally is posted. Excluded ballots are not counted. When L1 is configured, the tally hash may be mirrored on Ethereum.',
 };
 
 /**
@@ -358,7 +358,7 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
 }
 
 /**
- * Full public monitor for one election. Certified option counts only after a
+ * Full public monitor for one election. Final tally option counts only after a
  * posted tally (phase after). During and before never include unofficial totals.
  */
 export function presentOutcomeDetail(election, deps, opts = {}) {
@@ -432,7 +432,7 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
       policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
       note:
-        'This portal verifies process and certified outcomes. It never shows how any person voted. During voting it does not invent unofficial option counts.',
+        'This portal verifies process and the final tally. It never shows how any person voted. During voting it does not invent unofficial option counts.',
     },
   };
 }

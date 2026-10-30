@@ -4,7 +4,7 @@
 // separate collection from ballots and are never copied onto a vote record.
 
 import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
-import { createHmac, randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -201,10 +201,9 @@ function emptyData() {
     superAdminAudit: [],
     // Phase-2 trusted-setup ceremonies (src/ceremony/service.mjs).
     ceremonies: [],
-    // electionId -> sorted hashes of spent vote passes (no order, no time).
+    // electionId -> sorted hashes of spent vote passes. An unlinked set:
+    // a hash is never stored on, or keyed by, a nullifier or a ballot.
     votePassSpent: {},
-    // Sorted HMAC tags of (pass hash, nullifier). The tag is not stored on a vote.
-    votePassTags: [],
     runtime: {},
   };
 }
@@ -272,7 +271,7 @@ export function scrubBallotLinkage(data) {
   if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
     data.votePassSpent = {};
   }
-  if (!Array.isArray(data.votePassTags)) data.votePassTags = [];
+  if (dropPassToBallotLinks(data)) markPassLinksDirty(data);
   const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
   for (const r of data.receipts || []) {
     if (!r || typeof r !== 'object') continue;
@@ -321,7 +320,6 @@ const ARRAY_COLLECTIONS = [
   'receipts',
   'envelopes',
   'chainBallotPayloads',
-  'votePassTags',
   'chainVoteAlerts',
   'notifications',
   'tallyGuardians',
@@ -350,7 +348,6 @@ export const BALLOT_TIMING_COLLECTIONS = [
   'receipts',
   'envelopes',
   'votePassSpent',
-  'votePassTags',
   'elections',
 ];
 
@@ -427,17 +424,65 @@ export function normalizeChainVoteQueue(doc) {
   };
 }
 
+function markPassLinksDirty(data) {
+  Object.defineProperty(data, '__passLinksDirty', {
+    value: true,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
 /**
- * Keyed tag for one pass used by one nullifier. The digest is not the pass
- * hash and not the nullifier, and it is not written onto the vote row.
- * @param {string} key server secret, kept off the vote document
+ * Delete any stored tie between a vote pass and a ballot: the tag list, a
+ * legacy spentPassHash field, and a spent-set entry that was keyed by a
+ * nullifier. The spent set stays a list of hashes per election.
  */
-export function votePassTag(key, { electionId, passHash, nullifier }) {
-  const pass = String(passHash || '').toLowerCase();
-  const id = toBytes32(nullifier);
-  return createHmac('sha256', String(key || ''))
-    .update(`vote-pass-tag:v1\n${String(electionId)}\n${pass}\n${id}`)
-    .digest('hex');
+export function dropPassToBallotLinks(data) {
+  if (!data || typeof data !== 'object') return false;
+  let dirty = false;
+  if (data.votePassTags != null) {
+    delete data.votePassTags;
+    dirty = true;
+  }
+  for (const key of ['votes', 'receipts', 'envelopes', 'chainBallotPayloads']) {
+    for (const row of data[key] || []) {
+      if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'spentPassHash')) {
+        delete row.spentPassHash;
+        dirty = true;
+      }
+    }
+  }
+  const lists = data.votePassSpent;
+  if (lists && typeof lists === 'object' && !Array.isArray(lists)) {
+    for (const [electionId, value] of Object.entries(lists)) {
+      let hashes;
+      if (Array.isArray(value)) {
+        hashes = value.map((item) => {
+          if (item && typeof item === 'object') {
+            dirty = true;
+            return String(item.hash || item.passHash || '').toLowerCase();
+          }
+          return String(item || '').toLowerCase();
+        });
+      } else if (value && typeof value === 'object') {
+        dirty = true;
+        hashes = Object.values(value).map((item) => String(item || '').toLowerCase());
+      } else {
+        lists[electionId] = [];
+        dirty = true;
+        continue;
+      }
+      const unique = [...new Set(hashes.filter((hash) => /^[0-9a-f]{64}$/.test(hash)))].sort();
+      const same = Array.isArray(value)
+        && unique.length === value.length
+        && unique.every((hash, index) => hash === String(value[index]).toLowerCase());
+      if (!same) {
+        lists[electionId] = unique;
+        dirty = true;
+      }
+    }
+  }
+  return dirty;
 }
 
 /** Public exclusion summary: a count and reasons, not a nullifier list. */
@@ -2516,63 +2561,6 @@ export class Store {
     return rec;
   }
 
-  _passTag(electionId, passHash, nullifier) {
-    const key = String(this.votePassTagKey || '');
-    if (!key) {
-      throw new HttpError(500, 'vote pass tag key is not configured', { code: 'VOTE_PASS_TAG_KEY' });
-    }
-    return votePassTag(key, { electionId, passHash, nullifier });
-  }
-
-  _addVotePassTag(electionId, passHash, nullifier) {
-    if (!Array.isArray(this.data.votePassTags)) this.data.votePassTags = [];
-    const tag = this._passTag(electionId, passHash, nullifier);
-    if (!this.data.votePassTags.includes(tag)) {
-      this.data.votePassTags.push(tag);
-      this.data.votePassTags.sort();
-    }
-    return tag;
-  }
-
-  _removeVotePassTag(electionId, passHash, nullifier) {
-    if (!this.votePassTagKey || !Array.isArray(this.data.votePassTags)) return;
-    let tag;
-    try {
-      tag = this._passTag(electionId, passHash, nullifier);
-    } catch {
-      return;
-    }
-    this.data.votePassTags = this.data.votePassTags.filter((item) => item !== tag);
-  }
-
-  /** True when this pass was already recorded for this nullifier. */
-  votePassTagHeld(electionId, passHash, nullifier) {
-    if (!this.votePassTagKey || !passHash) return false;
-    let tag;
-    try {
-      tag = this._passTag(electionId, passHash, nullifier);
-    } catch {
-      return false;
-    }
-    return Array.isArray(this.data.votePassTags) && this.data.votePassTags.includes(tag);
-  }
-
-  /**
-   * Older rows stored the pass hash on the vote. Move that link into the tag
-   * list and delete the field. No-op until the tag key is set.
-   */
-  migrateSpentPassTags() {
-    if (!this.votePassTagKey) return false;
-    let changed = false;
-    for (const vote of this.data.votes || []) {
-      if (!vote || !vote.spentPassHash) continue;
-      this._addVotePassTag(vote.electionId, vote.spentPassHash, vote.nullifier);
-      delete vote.spentPassHash;
-      changed = true;
-    }
-    return changed;
-  }
-
   /**
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
@@ -2643,14 +2631,7 @@ export class Store {
         ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
       });
     }
-    if (spentPassHash) {
-      const key = String(vote.electionId);
-      const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
-      list.push(spentPassHash);
-      list.sort();
-      this.data.votePassSpent[key] = list;
-      this._addVotePassTag(key, spentPassHash, record.nullifier);
-    }
+    if (spentPassHash) this._rememberSpentPass(vote.electionId, spentPassHash);
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
     await this.persist();
@@ -2658,9 +2639,11 @@ export class Store {
   }
 
   /**
-   * Latest ciphertext for the certified tally only. The published ballot
+   * Latest ciphertext for the final tally only. The published ballot
    * hash, accept hour, and block ciphertext stay as first stored.
    * acceptedBallots stays a unique-nullifier count.
+   * The presented pass must already be in the unlinked spent set. This
+   * stores nothing that ties that pass to this nullifier.
    */
   async replaceVote(vote, envelope) {
     this.refuseIfStandby();
@@ -2672,14 +2655,8 @@ export class Store {
       throw new HttpError(404, 'ballot not found', { code: 'NOT_FOUND' });
     }
     const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
-    // The pass this voter already spent may replace their own ballot until
-    // the deadline. The match is a keyed tag, not a hash stored on the vote.
-    // Any other reuse of that pass is rejected.
-    const samePass = Boolean(
-      spentPassHash && this.votePassTagHeld(vote.electionId, spentPassHash, existing.nullifier),
-    );
-    if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash) && !samePass) {
-      throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
+    if (!spentPassHash || !this.votePassSpent(vote.electionId, spentPassHash)) {
+      throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
     }
     const electionId = String(existing.electionId);
     const nullifier = existing.nullifier;
@@ -2712,14 +2689,6 @@ export class Store {
     }
     if (vote.chainPayload && typeof vote.chainPayload === 'object') {
       this.upsertChainBallotPayload(electionId, nullifier, vote.chainPayload);
-    }
-    if (spentPassHash && !this.votePassSpent(vote.electionId, spentPassHash)) {
-      const key = String(vote.electionId);
-      const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
-      list.push(spentPassHash);
-      list.sort();
-      this.data.votePassSpent[key] = list;
-      this._addVotePassTag(key, spentPassHash, nullifier);
     }
     if (vote.receiptTokenHash) {
       let pdfSha256 = null;
@@ -2772,7 +2741,6 @@ export class Store {
       const hash = String(spentPassHash).toLowerCase();
       const list = this.data.votePassSpent?.[electionKey];
       if (Array.isArray(list)) this.data.votePassSpent[electionKey] = list.filter((item) => item !== hash);
-      this._removeVotePassTag(electionKey, hash, key);
     }
     this.data.chainBallotPayloads = (this.data.chainBallotPayloads || []).filter(
       (row) => !row || String(row.electionId) !== electionKey || toBytes32(row.nullifier) !== key,
@@ -2898,6 +2866,47 @@ export class Store {
   votePassSpent(electionId, hash) {
     const list = this.data.votePassSpent?.[String(electionId)];
     return Array.isArray(list) && list.includes(String(hash).toLowerCase());
+  }
+
+  /** Add a pass hash to the election's unlinked spent set. Not stored on a ballot. */
+  _rememberSpentPass(electionId, passHash) {
+    const hash = String(passHash || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) return;
+    const key = String(electionId);
+    if (!this.data.votePassSpent || typeof this.data.votePassSpent !== 'object' || Array.isArray(this.data.votePassSpent)) {
+      this.data.votePassSpent = {};
+    }
+    const list = Array.isArray(this.data.votePassSpent[key]) ? this.data.votePassSpent[key] : [];
+    if (!list.includes(hash)) {
+      list.push(hash);
+      list.sort();
+      this.data.votePassSpent[key] = list;
+    }
+  }
+
+  /** Live ballots (not soft-deleted) whose nullifier was excluded from the tally. */
+  liveExcludedCount(electionId) {
+    const election = this.getElection(electionId);
+    const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
+    if (!rows.length) return 0;
+    const ids = new Set();
+    for (const row of rows) {
+      try {
+        ids.add(toBytes32(row.nullifier));
+      } catch {
+        /* a row this store cannot name is not a live ballot */
+      }
+    }
+    if (!ids.size) return 0;
+    let count = 0;
+    for (const vote of this.listVotes(electionId)) {
+      try {
+        if (ids.has(toBytes32(vote.nullifier))) count += 1;
+      } catch {
+        /* skip */
+      }
+    }
+    return count;
   }
 
   listVotes(electionId) {
@@ -3618,7 +3627,7 @@ export class Store {
           heading: 'Official election outcome',
           letterhead: 'Office of civic elections',
           intro:
-            'This certified report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Individual choices are never shown.',
+            'This final tally report is issued after voting closed. It lists how many ballots were counted for each option, when the contest opened, and when it ended. Excluded ballots are not counted. Individual choices are never shown.',
           footer: 'NOT FOR PROFIT — civic public good. Not a commercial product.',
           contactLine: '',
           showJurisdiction: true,

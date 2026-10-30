@@ -1,6 +1,6 @@
 /**
  * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
- * Certified election results: per-option counts after a tally, plurality
+ * Final tally: per-option counts after a tally, plurality
  * winners and ties. No unofficial choice totals while polls are open.
  */
 
@@ -16,24 +16,24 @@ function emptyCopy(status) {
   if (status === "open") {
     return {
       title: "Voting is open",
-      body: "Certified option counts appear after a tally is posted. Public turnout is the last hourly snapshot, so a person leaving a voting office cannot be matched to a live jurisdiction tick.",
+      body: "Option counts in the final tally appear after a tally is posted. Public turnout is the last hourly snapshot, so a person leaving a voting office cannot be matched to a live jurisdiction tick.",
     };
   }
   if (status === "awaiting_tally" || status === "closed") {
     return {
-      title: "Awaiting certified tally",
+      title: "Awaiting final tally",
       body: "Polls are closed. Option counts and a declared winner are published when the tally operator posts a valid tally.",
     };
   }
   if (status === "roll_frozen") {
     return {
       title: "Roll frozen",
-      body: "Voting has not opened. Certified results appear after the poll closes and a tally is posted.",
+      body: "Voting has not opened. The final tally appears after the poll closes and a tally is posted.",
     };
   }
   return {
     title: "Results not posted",
-    body: "This election has no certified tally yet. Option counts are not estimated from live ballots.",
+    body: "This election has no final tally yet. Option counts are not estimated from live ballots.",
   };
 }
 
@@ -226,7 +226,7 @@ export async function renderResults(main, ctx) {
         status,
         message:
           source === "sample"
-            ? "This is the built-in sample roll. Certified counts load from the Node at GET /api/elections/:id/results."
+            ? "This is the built-in sample roll. The final tally loads from the Node at GET /api/elections/:id/results."
             : emptyCopy(status).body,
         questions: (election.questions || SAMPLE_QUESTIONS).map((q) => ({
           id: q.id,
@@ -296,7 +296,7 @@ export async function renderResults(main, ctx) {
         { class: "cluster" },
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
         available
-          ? h("span", { class: "status-pill status-tallied", text: "Certified tally" })
+          ? h("span", { class: "status-pill status-tallied", text: "Final tally" })
           : h("span", { class: "status-pill status-created", text: "No tally yet" }),
         source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
       ),
@@ -325,7 +325,7 @@ export async function renderResults(main, ctx) {
               "li",
               {},
               h("span", { class: "lbl", text: "Excluded ballots" }),
-              h("span", { text: String(results.excludedCount) })
+              h("span", { text: `${results.excludedCount} not counted` })
             )
           : null
       ),
@@ -351,7 +351,7 @@ export async function renderResults(main, ctx) {
         h(
           "p",
           {
-            text: `${results.excludedCount} accepted ballot${Number(results.excludedCount) === 1 ? "" : "s"} did not land in the chain batch. ${reasons}`,
+            text: `${results.excludedCount} accepted ballot${Number(results.excludedCount) === 1 ? "" : "s"} not counted. ${Number(results.excludedCount) === 1 ? "It was" : "They were"} not posted to the chain. ${reasons}`,
           }
         )
       )
@@ -478,7 +478,7 @@ export async function renderResultsIndex(main, ctx) {
                     text: resultsAreSealed(election)
                       ? t("results.sealedStatus")
                       : election.state >= 4
-                        ? "Certified results"
+                        ? "Final tally"
                         : "Results status",
                   }
                 )
@@ -497,7 +497,7 @@ export async function renderResultsIndex(main, ctx) {
         "p",
         {
           class: "lede",
-          text: "Certified plurality totals after a tally. While a poll is open or awaiting a tally, this page does not show unofficial choice counts.",
+          text: "Plurality totals from the final tally. While a poll is open or awaiting a tally, this page does not show unofficial choice counts.",
         }
       ),
       source === "sample"

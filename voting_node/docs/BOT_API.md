@@ -145,14 +145,14 @@ Machine-readable copies:
 - `POST /api/elections` (key officer, signed in). Clerk creates an election in a jurisdiction they already serve. Body: title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable.
 - `POST /api/elections/:id/l2-open` (key officer, signed in). Retry the sequencer open for one election. Idempotent: an open election is not opened again.
 - `POST /api/elections/:id/chain-dead-letter/replay` (key officer, signed in). Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row. Body: nullifier (optional).
-- `POST /api/elections/:id/chain-dead-letter/exclude` (key officer, signed in). Writer records a dead-lettered ballot as excluded, with a count and a reason on the public tally. The tally can then proceed. The ballot is not deleted. Body: nullifier, reason.
+- `POST /api/elections/:id/chain-dead-letter/exclude` (key officer, signed in). Writer records a dead-lettered ballot as excluded after the deadline and a failed replay. The public audit log stores the count and reason. Excluded ballots are not counted. The ballot is not deleted. Body: nullifier, reason.
 - `GET /api/elections/:id` (key read). One election. When the caller is signed in, includes that person’s registration status. Choice is never included.
 - `PATCH /api/elections/:id` (key officer, signed in). Clerk edits the ballot before the roll is frozen.
 - `PUT /api/elections/:id` (key officer, signed in). Same edit as PATCH.
 - `DELETE /api/elections/:id` (key officer, signed in). Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction. Body: confirmTitle.
 - `GET /api/elections/:id/info` (key read). Voter-facing questions, options, and supporting info.
 - `GET /api/elections/:id/info/:questionId/:optionId` (key read). One option and its external links.
-- `GET /api/elections/:id/results` (key read). Certified plurality or IRV results after tally. Empty of option counts before tally.
+- `GET /api/elections/:id/results` (key read). Plurality or IRV results from the final tally. Empty of option counts before tally. Excluded ballots are not counted.
 - `GET /api/elections/:id/summary` (key read). Short public status: state, window, disclosed ballot count, links.
 - `GET /api/elections/:id/ballots` (key read). Disclosed ballot proofs for closed hours. Choice is not a field.
 - `GET /api/elections/:id/artifacts` (key read). Auditor pack: roots, counts, and public checks. No Node private database.

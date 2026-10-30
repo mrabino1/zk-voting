@@ -221,8 +221,8 @@ The public is not entitled to a live “this person just voted” tick. Sometime
 Votes are **accepted immediately** (nullifier uniqueness). Proof of those votes is public only after three checks, all enforced in the API and on the civic L2:
 
 1. **Hour plus delay.** The UTC hour that contained the vote has closed, then `DISCLOSURE_DELAY_SECONDS` (default **1800**) has elapsed. A vote at 08:59 publishes at **09:30**, not at 09:00. `DISCLOSURE_INTERVAL_SECONDS` stays **3600**.
-2. **Results gate.** Nothing about that election’s ballots (turnout, per-block rows, hourly counts) is public until the earlier of `RESULTS_MIN_VOTES` ballots (default **100**) or the scheduled `cutoffTime`. A certified tally also opens the gate.
-3. **Block floor.** A disclosure block needs at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default **10**). Smaller hours merge into the next block. After the election ends, a remainder is published when the election as a whole met that floor. If the whole election is below the floor, those rows stay sealed until the certified tally.
+2. **Results gate.** Nothing about that election’s ballots (turnout, per-block rows, hourly counts) is public until the earlier of `RESULTS_MIN_VOTES` ballots (default **100**) or the scheduled `cutoffTime`. A final tally also opens the gate.
+3. **Block floor.** A disclosure block needs at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default **10**). Smaller hours merge into the next block. After the election ends, a remainder is published when the election as a whole met that floor. If the whole election is below the floor, those rows stay sealed until the final tally.
 
 An earlier note in this file said a 14:05 vote appears at 15:00, as soon as the hour closes. That guarantee is **replaced**. The same vote now appears at **15:30**, and only once the gate is open and the block floor is met.
 
@@ -238,9 +238,9 @@ So: a watcher at the polling-place door **cannot** match “that person walked o
 | Surface | Before the gate, delay, and block floor | After publication |
 | --- | --- | --- |
 | `/explorer`, `GET /api/explorer/disclosure` | Last published snapshot + countdown. `acceptedBallotsDisclosed` only | Sealed votes flush, ordered by nullifier |
-| `GET /api/elections/:id/summary` | Disclosed turnout (often 0), no winner | Same + `resultsUrl` only after a certified tally |
+| `GET /api/elections/:id/summary` | Disclosed turnout (often 0), no winner | Same + `resultsUrl` only after a final tally |
 | `GET /api/elections/:id/ballots` | Empty / already published blocks | `{ nullifier, ballotHash, electionId, relayer }` |
-| `/outcomes` while open | Disclosed turnout. **No** unofficial option counts | Certified counts only after tally |
+| `/outcomes` while open | Disclosed turnout. **No** unofficial option counts | Final tally only after it is posted |
 | `/receipt` public hash lookup | 404 until disclosed | Confirms **counted**, still no choice |
 | Holder **token** on the receipt | Can confirm **this** ballot counted before publication | Still no option ids |
 
@@ -256,7 +256,7 @@ No dashboard should show “N waiting to publish in election E.” That still na
 | **Tally operator after cutoff** | Real inbox size (needed for `sum(counts) == acceptedBallots`) | Not from public vote rows | `opens_ballots`: sees ciphertext and can post partials the guardians produced; cannot decrypt alone. `sum_only`: can invent a partition of the sum |
 | **Clerk with the legal file** | Knows who is **registered** (person ↔ commitment) | Yes, for the **roll** | Not from the public ballot. Same Node-host caveat as the operator |
 
-After a disclosure block is published, the public learns **that some eligible secrets voted** (nullifiers appeared, at least the block floor, unless the certified tally released a short election). They still do not learn **which civil identity** that was, and they do not learn **the option**.
+After a disclosure block is published, the public learns **that some eligible secrets voted** (nullifiers appeared, at least the block floor, unless the final tally released a short election). They still do not learn **which civil identity** that was, and they do not learn **the option**.
 
 Registration commitments are **not** hour-delayed. Seeing a new leaf means someone was added to the roll — not how they will vote, and not that they have voted.
 

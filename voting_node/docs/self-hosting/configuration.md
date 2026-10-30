@@ -80,7 +80,7 @@ Never commit `.env`, and never bake secrets into an image.
 | `DISCLOSURE_INTERVAL_SECONDS` | `3600` | Hour length for public vote disclosure. `0` publishes immediately (demo only). |
 | `DISCLOSURE_DELAY_SECONDS` | `1800` | Extra wait after the hour closes. Votes from 08:00–08:59 publish at 09:30. `0` publishes at the hour boundary (demo only). |
 | `RESULTS_MIN_VOTES` | `100` | Hide an election’s turnout and vote rows until this many ballots, or until `cutoffTime`. `0` leaves the gate open (demo only). |
-| `DISCLOSURE_MIN_BLOCK_VOTES` | `10` | Do not publish a disclosure block smaller than this. Short hours merge forward. A whole election under this floor waits for the certified tally. |
+| `DISCLOSURE_MIN_BLOCK_VOTES` | `10` | Do not publish a disclosure block smaller than this. Short hours merge forward. A whole election under this floor waits for the final tally. |
 | `ZK_VOTING_NODE_URL` | `http://node:3000` | Where L2 services reach the Node. The name is kept for compatibility. |
 | `L1_RPC`, `L1_CHAIN_ID`, `L1_TALLY_MIRROR_ADDRESS`, `L1_SETTLEMENT_ADDRESS`, `SETTLEMENT_ADDRESS` | empty | Optional Ethereum L1 certification. Empty is a no-op. |
 

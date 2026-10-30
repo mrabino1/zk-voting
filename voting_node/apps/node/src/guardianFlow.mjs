@@ -4,7 +4,7 @@
 
 import { HttpError } from './http.mjs';
 import { aggregateCiphertexts, aggregateOptionId, isAggregateEnvelope } from './aggregateBallot.mjs';
-import { ciphertextForTally } from './tallyOpen.mjs';
+import { ciphertextForTally, withoutExcludedEnvelopes } from './tallyOpen.mjs';
 import { isTallyEnvelope } from './tallyCrypto.mjs';
 import { expectedVerificationKey, jointPublicKey, pointToHex } from './guardians/index.mjs';
 import { pointFromHex, pointXBytes } from './guardians/p256.mjs';
@@ -97,7 +97,10 @@ export async function acceptPartials(store, electionId, body) {
       z: String(row?.proof?.z || ''),
     },
   }));
-  const envelopes = store.listEnvelopes(electionId);
+  const envelopes = withoutExcludedEnvelopes(
+    store.listEnvelopes(electionId),
+    typeof store.excludedNullifiers === 'function' ? store.excludedNullifiers(electionId) : [],
+  ).envelopes;
   const tallyCiphertexts = envelopes.map((env) => ciphertextForTally(env));
   if (tallyCiphertexts.some((ciphertext) => !isAggregateEnvelope(ciphertext))) {
     fail(400, 'accepted ballots are not AG aggregate envelopes', 'PER_BALLOT_OPEN_DISABLED');
