@@ -113,7 +113,12 @@ describe('configurable branding', () => {
     assert.equal(manifest.status, 200);
     assert.equal(manifest.json.name, 'ZK-Voting');
     assert.equal(manifest.json.icons.some((icon) => icon.src === '/icon-512.png'), true);
-    assert.equal(manifest.json.icons.every((icon) => icon.purpose === 'any maskable'), true);
+    assert.equal(manifest.json.icons.filter((icon) => icon.purpose === 'any').length, 5);
+    assert.deepEqual(
+      manifest.json.icons.filter((icon) => icon.purpose === 'maskable').map((icon) => icon.sizes),
+      ['192x192', '512x512'],
+    );
+    assert.equal(manifest.json.background_color, '#0e0f11');
     assert.match(home.text, /class="brand-name" title="ZK-Voting"/);
     const cfg = await api('GET', '/api/config');
     assert.equal(cfg.json.product, 'ZK-Voting');
