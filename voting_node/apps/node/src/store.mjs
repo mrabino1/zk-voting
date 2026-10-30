@@ -32,6 +32,7 @@ import {
 import { ensureSuperAdminCollections } from './superAdmin/collections.mjs';
 import { ensureSiteAdminCollections } from './siteAudit.mjs';
 import { disclosureSettings, isDisclosed, selectPublicVotes } from './disclosure.mjs';
+import { electionTypeOf, isVoteElection, voteResultsSealed } from './electionType.mjs';
 import {
   electionMatchesRef,
   mintScopedPublicId,
@@ -120,16 +121,23 @@ export function publishedVoteSlice(vote, now, intervalSeconds, delaySeconds = 0)
 
 export function electionDisclosurePolicy(election, config, now, submittedVotes) {
   const settings = disclosureSettings(config || {});
-  const votes = submittedVotes ?? election?.acceptedBallots ?? 0;
+  const sealed = voteResultsSealed(election, now);
+  const vote = isVoteElection(election);
+  // RESULTS_MIN_VOTES is a POLL gate. A VOTE stays sealed until cutoff, then
+  // the threshold does not keep the outcome hidden. Do not read the live
+  // counter while sealed — callers must not receive an interim total.
+  const votes = sealed ? 0 : (submittedVotes ?? election?.acceptedBallots ?? 0);
   return {
     now,
     intervalSeconds: settings.intervalSeconds,
     delaySeconds: settings.delaySeconds,
     minBlockVotes: settings.minBlockVotes,
-    minVotes: settings.minVotes,
+    minVotes: vote ? 0 : settings.minVotes,
     endTime: election?.cutoffTime ?? null,
-    tallied: Boolean(election?.tally),
+    tallied: sealed ? false : Boolean(election?.tally),
     submittedVotes: votes,
+    resultsSealed: sealed,
+    electionType: electionTypeOf(election),
   };
 }
 
@@ -1396,6 +1404,7 @@ export class Store {
       treeDepth: params.treeDepth,
       ballotSpecHash: params.ballotSpecHash,
       ballotMethod: params.ballotMethod || 'plurality',
+      electionType: isVoteElection({ electionType: params.electionType }) ? 1 : 0,
       questions: params.questions,
       questionCount: params.questions.length,
       jurisdictionId: params.jurisdictionId,
@@ -2337,6 +2346,7 @@ export class Store {
    */
   listPublishedVotes(electionId, now, intervalSeconds, policy = null) {
     const election = this.getElection(electionId);
+    if (voteResultsSealed(election, now) || policy?.resultsSealed) return [];
     const votes = this.listVotes(electionId);
     const resolved = {
       now,
@@ -2347,8 +2357,10 @@ export class Store {
       endTime: election?.cutoffTime ?? null,
       tallied: Boolean(election?.tally),
       submittedVotes: election?.acceptedBallots ?? votes.length,
+      resultsSealed: false,
       ...(policy || {}),
     };
+    if (resolved.resultsSealed) return [];
     return selectPublicVotes(votes, resolved);
   }
 
@@ -2367,7 +2379,12 @@ export class Store {
       }
       return n;
     }
-    return this.data.votes.filter((v) => !isSoftDeleted(v) && isDisclosed(v.acceptedAt, now, intervalOrConfig)).length;
+    return this.data.votes.filter((v) => {
+      if (!v || isSoftDeleted(v)) return false;
+      const election = this.getElection(v.electionId);
+      if (voteResultsSealed(election, now)) return false;
+      return isDisclosed(v.acceptedAt, now, intervalOrConfig);
+    }).length;
   }
 
   listEnvelopes(electionId, { includeDeleted = false } = {}) {

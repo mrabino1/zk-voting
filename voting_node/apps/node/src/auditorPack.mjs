@@ -4,6 +4,7 @@
 
 import { brandName } from './branding.mjs';
 import { electionState, presentElection } from './electionState.mjs';
+import { sealedResultsBody } from './electionType.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from './store.mjs';
 
 export const AUDITOR_SCHEMA = 'zk-voting.auditor.v1';
@@ -16,8 +17,47 @@ export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 export function buildAuditorPack(election, deps) {
   const dto = presentElection(election, deps);
   const now = deps.config.nowFn();
-  const tallied = electionState(election, now) >= 4;
   const policy = electionDisclosurePolicy(election, deps.config, now);
+  if (policy.resultsSealed || dto?.resultsSealed) {
+    const seal = sealedResultsBody(election, now);
+    return {
+      schema: AUDITOR_SCHEMA,
+      nfp: true,
+      product: brandName(),
+      chainId: deps.config.chainId,
+      electionId: String(election.id),
+      title: election.title,
+      electionType: dto.electionType,
+      electionTypeName: dto.electionTypeName,
+      ...seal,
+      contracts: {
+        factory: deps.config.electionFactoryAddress || null,
+        ballotInbox: deps.config.ballotInboxAddress || election.inbox || null,
+        verifier: election.verifier || null,
+        voterRegistry: election.voterRegistry || null,
+        disqualificationRegistry: election.disqualificationRegistry || null,
+        tallyVerifier: election.tallyVerifier || null,
+        election: election.contractAddress || null,
+      },
+      roots: {
+        eligibleRoot: election.eligibleRoot,
+        disqualificationRoot: election.disqualificationRoot,
+        ballotSpecHash: election.ballotSpecHash,
+      },
+      window: {
+        startTime: election.startTime,
+        cutoffTime: election.cutoffTime,
+      },
+      rollFrozen: Boolean(election.rollFrozen),
+      participantCount: election.participantCount,
+      publicAcceptedBallots: null,
+      acceptedBallots: null,
+      disclosedBallots: [],
+      tally: null,
+      disclosure: dto.disclosure,
+    };
+  }
+  const tallied = electionState(election, now) >= 4;
   const disclosed = deps.store
     .listPublishedVotes(election.id, now, policy.intervalSeconds, policy)
     .map((vote) => publicVoteRecord(vote));
@@ -28,6 +68,9 @@ export function buildAuditorPack(election, deps) {
     chainId: deps.config.chainId,
     electionId: String(election.id),
     title: election.title,
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: false,
     contracts: {
       factory: deps.config.electionFactoryAddress || null,
       ballotInbox: deps.config.ballotInboxAddress || election.inbox || null,

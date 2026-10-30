@@ -6,6 +6,7 @@ import { createPublicClient, createWalletClient, decodeEventLog, defineChain, ge
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { jurisdictionBytes32 } from './electionIds.mjs';
+import { PASS_ELECTION_TYPE_ON_CHAIN } from './electionType.mjs';
 import { HttpError } from './http.mjs';
 
 export const ballotInboxAbi = [
@@ -315,6 +316,37 @@ export function resolveCreateElectionParams(config, input, fromAddress) {
   };
 }
 
+/**
+ * Isolated on-chain hook. The current factory ABI ends at tallyScheme.
+ * electionType is accepted here so a later factory can append it, and is
+ * dropped while PASS_ELECTION_TYPE_ON_CHAIN is false.
+ */
+export function factoryElectionParams(params, electionType) {
+  const tuple = {
+    title: params.title,
+    metadataURI: params.metadataURI,
+    startTime: params.startTime,
+    cutoffTime: params.cutoffTime,
+    maxParticipants: params.maxParticipants,
+    treeDepth: params.treeDepth,
+    ballotSpecHash: params.ballotSpecHash,
+    clerk: params.clerk,
+    registrar: params.registrar,
+    disqualificationOfficer: params.disqualificationOfficer,
+    tallyOperator: params.tallyOperator,
+    verifier: params.verifier,
+    questionCount: params.questionCount,
+    jurisdictionId: params.jurisdictionId,
+    tallyPubKeyX: params.tallyPubKeyX,
+    tallyPubKeyY: params.tallyPubKeyY,
+    tallyScheme: params.tallyScheme,
+  };
+  if (PASS_ELECTION_TYPE_ON_CHAIN) {
+    tuple.electionType = Number(electionType) || 0;
+  }
+  return tuple;
+}
+
 export function createChain(config) {
   const rpc = config.chainRpc;
   let key = config.relayerPrivateKey || '';
@@ -437,7 +469,10 @@ export function createChain(config) {
           { code: 'CHAIN_NOT_READY' },
         );
       }
-      const params = resolveCreateElectionParams(config, input, account.address);
+      const params = factoryElectionParams(
+        resolveCreateElectionParams(config, input, account.address),
+        input.electionType,
+      );
       try {
         const viemParams = {
           ...params,

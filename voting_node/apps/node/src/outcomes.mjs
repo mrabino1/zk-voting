@@ -14,6 +14,7 @@ import {
   presentElection,
 } from './electionState.mjs';
 import { buildAuditorPack } from './auditorPack.mjs';
+import { sealedResultsBody, voteResultsSealed } from './electionType.mjs';
 import { buildResults } from './results.mjs';
 import { verifyAuditorBundle } from '../../../tools/auditor/verify.mjs';
 import { OUTCOME_VERIFY_PATH } from './outcomeReports.mjs';
@@ -266,6 +267,11 @@ function rootsView(election) {
 function verifyOutcome(election, deps, now, state, phase) {
   const pack = buildAuditorPack(election, deps);
   const auditor = verifyAuditorBundle(pack);
+  if (pack.resultsSealed && auditor.summary) {
+    delete auditor.summary.acceptedBallots;
+    delete auditor.summary.uniqueNullifiers;
+    auditor.summary.resultsSealed = true;
+  }
   const chain = verifyChainStatus(election, deps, now, state, phase);
   const errors = [...auditor.errors, ...chain.errors];
   return {
@@ -328,8 +334,13 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
     startTime: election.startTime,
     cutoffTime: election.cutoffTime,
     rollFrozen: Boolean(election.rollFrozen),
-    tallied,
-    acceptedBallots: dto.acceptedBallots,
+    tallied: dto.resultsSealed ? false : tallied,
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: Boolean(dto.resultsSealed),
+    sealedUntil: dto.sealedUntil,
+    resultsMessage: dto.resultsMessage,
+    acceptedBallots: dto.resultsSealed ? null : dto.acceptedBallots,
     participantCount: election.participantCount,
     eligibleCount:
       typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
@@ -359,11 +370,13 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
   const verification = verifyOutcome(election, deps, now, state, phase);
   const tallied = Boolean(election.tally);
   const official = deps.store.getOutcomeReportForElection?.(election.id) || null;
-  const publishedAcceptedBallots = dto.acceptedBallots;
+  const sealed = Boolean(dto.resultsSealed) || voteResultsSealed(election, now);
+  const publishedAcceptedBallots = sealed ? null : dto.acceptedBallots;
   const certified =
-    phase === PHASE_AFTER && tallied
+    !sealed && phase === PHASE_AFTER && tallied
       ? buildResults(election, { now, publishedAcceptedBallots })
       : null;
+  const seal = sealed ? sealedResultsBody(election, now) : null;
 
   return {
     nfp: true,
@@ -378,6 +391,12 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
     phaseNote: PHASE_NOTES[phase],
     state,
     stateName: dto.stateName || STATE_NAMES[state],
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: sealed,
+    sealedUntil: seal?.sealedUntil ?? null,
+    resultsMessage: seal?.message ?? null,
+    code: seal?.code ?? null,
     window: {
       startTime: election.startTime,
       cutoffTime: election.cutoffTime,
@@ -385,18 +404,26 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
     chain: chainStatusView(election, deps),
     freeze: freezeView(election),
     roots: rootsView(election),
-    turnout: {
-      acceptedBallots: publishedAcceptedBallots,
-      participantCount: election.participantCount,
-      eligibleCount:
-        typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
-      disclosure: dto.disclosure,
-    },
+    turnout: sealed
+      ? {
+          sealed: true,
+          acceptedBallots: null,
+          participantCount: null,
+          eligibleCount: null,
+          disclosure: dto.disclosure,
+        }
+      : {
+          acceptedBallots: publishedAcceptedBallots,
+          participantCount: election.participantCount,
+          eligibleCount:
+            typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
+          disclosure: dto.disclosure,
+        },
     questions: presentAspects(election),
     verification,
     certified,
-    tallyPostedAt: election.tally?.postedAt || null,
-    countsHash: election.tally?.countsHash || null,
+    tallyPostedAt: sealed ? null : election.tally?.postedAt || null,
+    countsHash: sealed ? null : election.tally?.countsHash || null,
     officialReport: official
       ? {
           id: official.id,

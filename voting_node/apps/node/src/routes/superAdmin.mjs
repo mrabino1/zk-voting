@@ -599,7 +599,7 @@ export function superAdminRouter(deps) {
 
   readRoute('/health', 'read:health', () => healthDiag(deps));
   readRoute('/config', 'read:config', () => configDiag(deps));
-  readRoute('/store', 'read:store', () => storeDiag(deps.store));
+  readRoute('/store', 'read:store', () => storeDiag(deps.store, deps.config.nowFn()));
   readRoute('/elections', 'read:elections', () => electionsDiag(deps.store, deps.config.nowFn()));
   readRoute('/elections/:id', 'read:elections', (req) => electionDiag(deps.store, req.params.id, deps.config.nowFn()));
   readRoute('/users', 'read:users', () => usersDiag(deps.store));

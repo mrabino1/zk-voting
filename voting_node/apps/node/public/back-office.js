@@ -866,6 +866,7 @@
     if ($("e-method")) {
       $("e-method").value = election.ballotMethod === "ranked_choice" ? "ranked_choice" : "plurality";
     }
+    setElectionType(election.electionType, true);
     ballotQuestions = hydrateQuestions(election.questions || []);
     storedElectionTitle = String(pick(election, ["title"]) || "");
     setEditingElection(election.id, election.rollFrozen || Number(election.state) >= 1);
@@ -874,6 +875,19 @@
     } else {
       flash($("flash-election"), "ok", "Loaded election " + election.id + ". Save ballot changes before freezing the roll.");
     }
+  }
+
+  function setElectionType(value, locked) {
+    const want = String(value) === "1" || value === "vote" ? "1" : "0";
+    document.querySelectorAll('input[name="electionType"]').forEach((el) => {
+      el.checked = el.value === want;
+      el.disabled = Boolean(locked);
+    });
+  }
+
+  function selectedElectionType() {
+    const picked = document.querySelector('input[name="electionType"]:checked');
+    return picked && picked.value === "1" ? 1 : 0;
   }
 
   function unixToLocal(value) {
@@ -900,6 +914,7 @@
     if (!id) {
       ballotQuestions = hydrateQuestions(DEFAULT_QUESTIONS);
       storedElectionTitle = "";
+      setElectionType(0, false);
       setEditingElection("", false);
       flash($("flash-election"), "ok", "Cleared to a new ballot. Create election to store it.");
       return;
@@ -1277,6 +1292,7 @@
       jurisdictionId: $("e-jurisdiction").value,
       tallyScheme: $("e-tally-scheme") ? $("e-tally-scheme").value : "sum_only",
       ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
+      electionType: selectedElectionType(),
     };
     if (body.tallyScheme === "opens_ballots") {
       body.threshold = Number($("e-threshold") ? $("e-threshold").value : 2);

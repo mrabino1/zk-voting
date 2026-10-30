@@ -4,6 +4,7 @@
 
 import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
+import { electionTypeName, electionTypeOf, sealedResultsBody } from './electionType.mjs';
 import { electionDisclosurePolicy } from './store.mjs';
 
 const RANKED_TYPES = new Set(['RANKED', 'IRV', 'RCV', 'RANKED_CHOICE']);
@@ -308,6 +309,44 @@ export function buildResults(election, extra = {}) {
 export function presentResults(election, deps, opts = {}) {
   const now = opts.now ?? deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
+  if (policy.resultsSealed) {
+    const dto = publicElection(election, now, {
+      intervalSeconds: policy.intervalSeconds,
+      delaySeconds: policy.delaySeconds,
+      minBlockVotes: policy.minBlockVotes,
+      resultsSealed: true,
+    });
+    const seal = sealedResultsBody(election, now);
+    return {
+      ...dto,
+      ...seal,
+      electionId: String(election.id),
+      acceptedBallots: null,
+      tally: null,
+      results: {
+        available: false,
+        sealed: true,
+        status: 'sealed',
+        method: election.ballotMethod || 'plurality',
+        emptyReason: 'sealed',
+        message: seal.message,
+        questions: (election.questions || []).map((question) => ({
+          id: question.id,
+          type: question.type,
+          prompt: question.prompt,
+          options: (question.options || []).map((option) => ({
+            id: option.id,
+            label: option.label,
+          })),
+          outcome: null,
+        })),
+        tallyPostedAt: null,
+        certifiedBallots: null,
+        publishedAcceptedBallots: null,
+      },
+      explorerPath: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
+    };
+  }
   const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
     election.id,
     now,
@@ -320,10 +359,14 @@ export function presentResults(election, deps, opts = {}) {
     resultsMinVotes: policy.minVotes,
     minBlockVotes: policy.minBlockVotes,
     publishedAcceptedBallots,
+    resultsSealed: false,
   });
   return {
     ...dto,
     electionId: String(election.id),
+    electionType: electionTypeOf(election),
+    electionTypeName: electionTypeName(election),
+    resultsSealed: false,
     results: buildResults(election, { now, publishedAcceptedBallots }),
     explorerPath: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
   };

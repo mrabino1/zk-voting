@@ -28,6 +28,7 @@ import { registerDemoPurgeSchedule } from './demoPurge.mjs';
 import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
+import { isVoteElection, voteResultsSealed } from './electionType.mjs';
 import { loadReceiptPdfSecret } from './receipts.mjs';
 import { createVotePassService } from './votePass.mjs';
 import { adminRouter } from './routes/admin.mjs';
@@ -289,11 +290,23 @@ export async function createApp(overrides = {}) {
     minVotes: config.resultsMinVotes,
     electionContext(id) {
       const election = store.getElection(id);
-      if (!election) return { submittedVotes: 0, endTime: null, tallied: false };
+      const now = config.nowFn();
+      if (!election) return { submittedVotes: 0, endTime: null, tallied: false, resultsSealed: false };
+      if (voteResultsSealed(election, now)) {
+        return {
+          submittedVotes: 0,
+          endTime: election.cutoffTime,
+          tallied: false,
+          resultsSealed: true,
+          minVotes: 0,
+        };
+      }
       return {
         submittedVotes: store.visibleAcceptedBallots(election),
         endTime: election.cutoffTime,
         tallied: Boolean(election.tally),
+        resultsSealed: false,
+        ...(isVoteElection(election) ? { minVotes: 0 } : {}),
       };
     },
   });

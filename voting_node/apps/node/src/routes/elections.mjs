@@ -24,6 +24,12 @@ import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { uuidParam } from '../recordIds.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
+import {
+  electionTypeOf,
+  normalizeElectionType,
+  sealedResultsBody,
+  sealedResultsMessage,
+} from '../electionType.mjs';
 import { acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts } from '../tallyOpen.mjs';
 import { publicCeremonyView } from '../tallyCrypto.mjs';
@@ -114,6 +120,12 @@ export function electionsRouter(deps) {
         throw new HttpError(400, 'maxParticipants must be >= 0 (0 = unlimited)');
       }
       const ballotMethod = normalizeBallotMethod(body.ballotMethod);
+      let electionType;
+      try {
+        electionType = normalizeElectionType(body.electionType);
+      } catch (err) {
+        throw new HttpError(400, err.message, { code: err.code || 'INVALID_ELECTION_TYPE' });
+      }
       const questions = withQuestionMethods(questionsFromCreateBody(body), ballotMethod);
       const ballotSpecHash = resolveBallotSpecHash({
         title,
@@ -149,6 +161,8 @@ export function electionsRouter(deps) {
           tallyScheme: body.tallyScheme,
           tallyPubKeyX: body.tallyPubKeyX,
           tallyPubKeyY: body.tallyPubKeyY,
+          // Read by factoryElectionParams. Omitted from the encoded tuple.
+          electionType,
         });
         if (!chainResult?.onChainElectionId) {
           throw new HttpError(502, 'ElectionFactory did not return an election id', {
@@ -178,6 +192,7 @@ export function electionsRouter(deps) {
         treeDepth,
         ballotSpecHash,
         ballotMethod,
+        electionType,
         questions,
         jurisdictionId,
         clerk: chainResult?.params?.clerk || body.clerk || '',
@@ -319,6 +334,17 @@ export function electionsRouter(deps) {
   const patchBallot = asyncHandler(async (req, res) => {
     const election = store.requireElection(req.params.id);
     const body = req.body || {};
+    if (Object.prototype.hasOwnProperty.call(body, 'electionType')) {
+      let nextType;
+      try {
+        nextType = normalizeElectionType(body.electionType, { required: true });
+      } catch (err) {
+        throw new HttpError(400, err.message, { code: err.code || 'INVALID_ELECTION_TYPE' });
+      }
+      if (nextType !== electionTypeOf(election)) {
+        throw new HttpError(409, 'election type is immutable', { code: 'ELECTION_TYPE_IMMUTABLE' });
+      }
+    }
     const title = body.title != null ? String(body.title).trim() : election.title;
     if (!title) throw new HttpError(400, 'title required');
     const ballotMethod = normalizeBallotMethod(
@@ -401,18 +427,25 @@ export function electionsRouter(deps) {
       const { view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
       const dto = presentElection(election, deps);
-      const tallied = Boolean(election.tally);
+      const tallied = Boolean(election.tally) && !dto.resultsSealed;
+      const seal = dto.resultsSealed ? sealedResultsBody(election, deps.config.nowFn()) : null;
       res.json({
         nfp: true,
         electionId: String(election.id),
         title: election.title,
         jurisdictionId: election.jurisdictionId,
+        electionType: dto.electionType,
+        electionTypeName: dto.electionTypeName,
         state: dto.state,
         stateName: dto.stateName,
         startTime: election.startTime,
         cutoffTime: election.cutoffTime,
         participantCount: election.participantCount,
-        acceptedBallots: dto.acceptedBallots,
+        acceptedBallots: dto.resultsSealed ? null : dto.acceptedBallots,
+        resultsSealed: Boolean(dto.resultsSealed),
+        sealedUntil: seal?.sealedUntil ?? null,
+        message: seal?.message ?? null,
+        code: seal?.code ?? null,
         disclosure: electionDisclosure(election, deps, view),
         explorerUrl: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
         resultsUrl: tallied ? `/elections/${election.id}/results` : null,
@@ -423,14 +456,31 @@ export function electionsRouter(deps) {
   router.get(
     '/:id/ballots',
     asyncHandler(async (req, res) => {
-      const { now, interval, view } = await publishDue(deps);
+      const { now, view } = await publishDue(deps);
       const election = store.requireElection(req.params.id);
       const policy = electionDisclosurePolicy(election, deps.config, now);
+      if (policy.resultsSealed) {
+        const seal = sealedResultsBody(election, now);
+        res.json({
+          electionId: String(election.id),
+          electionType: seal.electionType,
+          electionTypeName: seal.electionTypeName,
+          acceptedBallots: null,
+          ballots: [],
+          disclosure: electionDisclosure(election, deps, view),
+          ...seal,
+          message: sealedResultsMessage(election),
+          nfp: true,
+        });
+        return;
+      }
       const published = store.listPublishedVotes(election.id, now, policy.intervalSeconds, policy);
       res.json({
         electionId: String(election.id),
+        electionType: policy.electionType,
         acceptedBallots: published.length,
         ballots: published.map(publicVoteRecord),
+        resultsSealed: false,
         disclosure: electionDisclosure(election, deps, view),
         nfp: true,
       });

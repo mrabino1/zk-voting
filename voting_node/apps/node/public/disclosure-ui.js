@@ -48,6 +48,14 @@
 
   function snapshotHtml(disclosure, fetchedAtMs) {
     const d = disclosure || {};
+    if (d.resultsSealed) {
+      const end = d.sealedUntil;
+      const label =
+        end != null && end !== ""
+          ? "Results sealed until " + fmtTime(end)
+          : d.note || "Results sealed until the election ends";
+      return `<p class="disclosure-note">${esc(label)}</p>`;
+    }
     const last = d.lastClosedHourAt != null ? d.lastClosedHourAt : d.lastPublishedAt;
     const next = d.nextPublishAt;
     const remaining = remainingSeconds(d, fetchedAtMs);

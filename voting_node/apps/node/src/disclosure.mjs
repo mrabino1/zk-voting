@@ -6,6 +6,8 @@
 // and the block has enough ballots. An earlier note that promised publication
 // at the hour boundary is replaced by this delay.
 
+import { sealedResultsMessage } from './electionType.mjs';
+
 export const DEFAULT_DISCLOSURE_INTERVAL_SECONDS = 3600;
 export const DEFAULT_DISCLOSURE_DELAY_SECONDS = 1800;
 export const DEFAULT_RESULTS_MIN_VOTES = 100;
@@ -174,10 +176,17 @@ export function planPublicBlocks(items, policy = {}) {
   const hold = [];
   for (const [electionId, group] of byElection) {
     const ctx = electionContext(electionId) || {};
+    // A sealed VOTE is not bucketed, counted, or published. Hold the rows whole.
+    if (ctx.resultsSealed) {
+      hold.push(...group);
+      continue;
+    }
     const submitted = ctx.submittedVotes ?? group.length;
     const tallied = Boolean(ctx.tallied);
     const endTime = ctx.endTime ?? null;
-    if (!resultsGateOpen({ submittedVotes: submitted, now, endTime, minVotes, tallied })) {
+    const electionMin =
+      ctx.minVotes == null || ctx.minVotes === '' ? minVotes : Number(ctx.minVotes) || 0;
+    if (!resultsGateOpen({ submittedVotes: submitted, now, endTime, minVotes: electionMin, tallied })) {
       hold.push(...group);
       continue;
     }
@@ -226,6 +235,7 @@ export function planPublicBlocks(items, policy = {}) {
 /** Ballots from one election that the public may see. */
 export function selectPublicVotes(votes, policy = {}) {
   const list = Array.isArray(votes) ? votes : [];
+  if (policy.resultsSealed) return [];
   const wrapped = list.map((vote) => ({
     vote,
     receivedAt: vote.acceptedAt ?? vote.receivedAt,
@@ -241,6 +251,8 @@ export function selectPublicVotes(votes, policy = {}) {
       submittedVotes: policy.submittedVotes ?? list.length,
       endTime: policy.endTime ?? null,
       tallied: Boolean(policy.tallied),
+      resultsSealed: Boolean(policy.resultsSealed),
+      minVotes: policy.minVotes,
     }),
   });
   const out = [];
@@ -297,4 +309,14 @@ export function withDisclosedCount(view, acceptedBallotsDisclosed) {
     ...base,
     acceptedBallotsDisclosed: Number(acceptedBallotsDisclosed) || 0,
   };
+}
+
+/** Drop turnout from a disclosure view. A sealed VOTE has no public count. */
+export function sealDisclosureView(view, election) {
+  const base = view && typeof view === 'object' ? { ...view } : {};
+  delete base.acceptedBallotsDisclosed;
+  base.resultsSealed = true;
+  base.sealedUntil = Number.isFinite(Number(election?.cutoffTime)) ? Number(election.cutoffTime) : null;
+  base.note = sealedResultsMessage(election);
+  return base;
 }

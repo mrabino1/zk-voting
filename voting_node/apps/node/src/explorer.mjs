@@ -241,7 +241,14 @@ export class Explorer {
     }
 
     const interval = Number(intervalSeconds) || 0;
-    if (!interval || interval <= 0) {
+    const policy = this.disclosurePolicySnapshot();
+    const ctx =
+      typeof policy.electionContext === 'function'
+        ? policy.electionContext(String(body.electionId ?? '')) || {}
+        : {};
+    // Interval 0 publishes a POLL at once. A sealed VOTE stays in the queue
+    // even then, so the hourly job cannot emit an interim row.
+    if ((!interval || interval <= 0) && !ctx.resultsSealed) {
       return this.append('vote', body, { timestamp: now });
     }
     // Random position, so the sealed queue's order is not arrival order.

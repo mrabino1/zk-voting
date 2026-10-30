@@ -5,6 +5,9 @@
  * Never shows how a person voted.
  */
 
+import { resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
+
 const PHASE_ORDER = ["before", "during", "after"];
 
 const PHASE_COPY = {
@@ -89,12 +92,14 @@ function outcomeCard(row, ctx) {
       { class: "meta-list" },
       h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(row.startTime) })),
       h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(row.cutoffTime) })),
-      h(
-        "li",
-        {},
-        h("span", { class: "lbl", text: "Disclosed ballots" }),
-        h("span", { class: "num", text: String(row.acceptedBallots ?? 0) })
-      )
+      resultsAreSealed(row)
+        ? h("li", {}, h("span", { text: sealedUntilLabel(row, formatTime) }))
+        : h(
+            "li",
+            {},
+            h("span", { class: "lbl", text: "Disclosed ballots" }),
+            h("span", { class: "num", text: String(row.acceptedBallots ?? 0) })
+          )
     ),
     h(
       "div",
@@ -446,7 +451,17 @@ export async function renderOutcomesDetail(main, ctx) {
         )
       )
     ),
-    h(
+    resultsAreSealed(detail)
+      ? h(
+          "section",
+          { "aria-labelledby": "turnout-heading" },
+          h("h2", { id: "turnout-heading", text: sealedUntilLabel(detail, formatTime) }),
+          h("p", {
+            class: "field-hint",
+            text: t("results.sealedBody"),
+          })
+        )
+      : h(
       "section",
       { "aria-labelledby": "turnout-heading" },
       h("h2", { id: "turnout-heading", text: "Disclosed turnout" }),

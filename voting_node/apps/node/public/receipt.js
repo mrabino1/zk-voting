@@ -5,6 +5,8 @@
  */
 
 import { brandName } from "./brand.js";
+import { resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
 
 function proofFromQuery(query) {
   const raw = query?.get?.("proof") || query?.get?.("receipt") || "";
@@ -156,19 +158,22 @@ export async function renderReceiptPortal(main, ctx) {
     return h(
       "div",
       { class: "stack" },
-      h("p", { text: m.note || "Hourly snapshots of accepted ballots. Not a count by candidate or option." }),
+      h("p", { text: resultsAreSealed(m) ? sealedUntilLabel(m, formatTime) : m.note || "Hourly snapshots of accepted ballots. Not a count by candidate or option." }),
+      resultsAreSealed(m) ? h("p", { class: "field-hint", text: t("results.sealedBody") }) : null,
       h(
         "ul",
         { class: "meta-list" },
         m.electionTitle
           ? h("li", {}, h("span", { class: "lbl", text: "Election" }), h("span", { text: m.electionTitle }))
           : null,
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "Ballots disclosed" }),
-          h("span", { text: String(m.acceptedBallotsDisclosed ?? "—") })
-        ),
+        resultsAreSealed(m)
+          ? null
+          : h(
+              "li",
+              {},
+              h("span", { class: "lbl", text: "Ballots disclosed" }),
+              h("span", { text: String(m.acceptedBallotsDisclosed ?? "—") })
+            ),
         m.participantCount != null
           ? h("li", {}, h("span", { class: "lbl", text: "Registered on the roll" }), h("span", { text: String(m.participantCount) }))
           : null,

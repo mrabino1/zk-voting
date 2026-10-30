@@ -142,7 +142,7 @@ Machine-readable copies:
 ### Elections
 
 - `GET /api/elections` (key read). Published elections. Counts follow the hourly disclosure rule.
-- `POST /api/elections` (key officer, signed in). Clerk creates an election in a jurisdiction they already serve. Body: title, jurisdictionId, startTime, cutoffTime, questions or ballot.
+- `POST /api/elections` (key officer, signed in). Clerk creates an election in a jurisdiction they already serve. Body: title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable.
 - `GET /api/elections/:id` (key read). One election. When the caller is signed in, includes that person’s registration status. Choice is never included.
 - `PATCH /api/elections/:id` (key officer, signed in). Clerk edits the ballot before the roll is frozen.
 - `PUT /api/elections/:id` (key officer, signed in). Same edit as PATCH.

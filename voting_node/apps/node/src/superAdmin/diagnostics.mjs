@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 
 import { brandName } from '../branding.mjs';
 import { electionState, STATE_NAMES } from '../electionState.mjs';
+import { electionTypeName, electionTypeOf, voteResultsSealed } from '../electionType.mjs';
 import { countPasskeys, emailHint } from '../identity.mjs';
 import { readArchiveIndex } from '../../../../l2/archive/job.mjs';
 
@@ -106,8 +107,15 @@ export function configDiag(deps) {
   };
 }
 
-export function storeDiag(store) {
+export function storeDiag(store, nowSeconds) {
   const data = store?.data || {};
+  const now = Number(nowSeconds) || Math.floor(Date.now() / 1000);
+  const voteCount = (data.votes || []).reduce((n, row) => {
+    if (!row || row.is_deleted === true) return n;
+    const election = store?.getElection?.(row.electionId);
+    if (voteResultsSealed(election, now)) return n;
+    return n + 1;
+  }, 0);
   return {
     nfp: true,
     schemaVersion: Number(data.meta?.version || 0),
@@ -121,7 +129,7 @@ export function storeDiag(store) {
       registrationRequestCount: count(data.registrationRequests),
       identityLinkCount: count(data.identityLinks),
       disqualificationCount: count(data.disqualifications),
-      voteCount: count(data.votes),
+      voteCount,
       pollCount: count(data.polls),
       pollBallotCount: count(data.pollBallots),
       receiptCount: count(data.receipts),
@@ -135,6 +143,7 @@ export function storeDiag(store) {
 
 function electionMeta(election, now, store) {
   const state = electionState(election, now);
+  const sealed = voteResultsSealed(election, now);
   const rawCast = Number(election.acceptedBallots || 0);
   const hidden = typeof store?.hiddenVoteCount === 'function' ? store.hiddenVoteCount(election.id) : 0;
   return {
@@ -142,19 +151,22 @@ function electionMeta(election, now, store) {
     title: election.title || '',
     status: STATE_NAMES[state] || 'Created',
     state,
+    electionType: electionTypeOf(election),
+    electionTypeName: electionTypeName(election),
+    resultsSealed: sealed,
     createdAt: election.createdAt || null,
     startTime: election.startTime ?? null,
     cutoffTime: election.cutoffTime ?? null,
     rollFrozen: Boolean(election.rollFrozen),
     votingPaused: Boolean(election.votingPaused),
     eligibleCount: Number(election.eligibleCount ?? election.participantCount ?? 0),
-    castCount: hidden > 0 ? Math.max(0, rawCast - hidden) : rawCast,
+    castCount: sealed ? null : hidden > 0 ? Math.max(0, rawCast - hidden) : rawCast,
     questionCount: Number(election.questionCount ?? (election.questions || []).length),
     ballotMethod: election.ballotMethod || 'plurality',
     lateUpdateAllowed: Boolean(election.lateUpdateAllowed),
     jurisdictionId: election.jurisdictionId || null,
     chainMode: election.createTxHash || election.onChainElectionAddress ? 'onchain' : 'demo',
-    tallied: Boolean(election.tally),
+    tallied: sealed ? false : Boolean(election.tally),
   };
 }
 

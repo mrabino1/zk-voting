@@ -4,6 +4,9 @@
  * winners and ties. No unofficial choice totals while polls are open.
  */
 
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
+
 function percent(share) {
   if (share == null || !Number.isFinite(Number(share))) return "—";
   return `${Math.round(Number(share) * 1000) / 10}%`;
@@ -241,6 +244,43 @@ export async function renderResults(main, ctx) {
   const election = payload;
   const results = payload.results || {};
   const st = electionStateInfo(election.state);
+  const sealed = resultsAreSealed(election) || resultsAreSealed(results);
+  if (sealed) {
+    const endText = sealedUntilLabel(election.sealedUntil ? election : { ...election, sealedUntil: election.cutoffTime }, formatTime);
+    main.replaceChildren(
+      h(
+        "div",
+        { class: "page-head" },
+        h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || t("results.observers") }),
+        h("h1", { text: election.title || `Election ${electionId}` }),
+        h(
+          "p",
+          { class: "cluster" },
+          h("span", { class: `status-pill ${st.className}`, text: st.label }),
+          h("span", { class: "status-pill status-created", text: electionTypeLabel(election) })
+        ),
+        h(
+          "ul",
+          { class: "meta-list" },
+          h("li", {}, h("span", { class: "lbl", text: t("results.electionId") }), h("span", { text: String(election.id || election.electionId || electionId) })),
+          h("li", {}, h("span", { class: "lbl", text: t("results.cutoff") }), h("span", { text: formatTime(election.cutoffTime || election.sealedUntil) }))
+        )
+      ),
+      h(
+        "div",
+        { class: "notice notice-warn empty-results", role: "status" },
+        h("h2", { text: endText }),
+        h("p", { text: t("results.sealedBody") })
+      ),
+      h(
+        "div",
+        { class: "toolbar" },
+        h("a", { class: "btn btn-secondary", href: "/", "data-nav": "", text: t("chrome.navElections") }),
+        h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id || electionId)}`, "data-nav": "", text: t("results.ballot") })
+      )
+    );
+    return;
+  }
   const available = Boolean(results.available);
   const empty = emptyCopy(results.status);
 
@@ -393,7 +433,10 @@ export async function renderResultsIndex(main, ctx) {
               h(
                 "ul",
                 { class: "meta-list" },
-                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) }))
+                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+                resultsAreSealed(election)
+                  ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+                  : null
               ),
               h(
                 "div",
@@ -404,7 +447,11 @@ export async function renderResultsIndex(main, ctx) {
                     class: election.state >= 4 ? "btn" : "btn btn-secondary",
                     href: `/elections/${encodeURIComponent(election.id)}/results`,
                     "data-nav": "",
-                    text: election.state >= 4 ? "Certified results" : "Results status",
+                    text: resultsAreSealed(election)
+                      ? t("results.sealedStatus")
+                      : election.state >= 4
+                        ? "Certified results"
+                        : "Results status",
                   }
                 )
               )

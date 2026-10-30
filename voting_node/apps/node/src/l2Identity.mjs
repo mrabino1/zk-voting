@@ -8,6 +8,7 @@
 //   L1: resultOf(electionKey) on the L1 tally mirror, where
 //       electionKey = keccak256(abi.encode(domain, l1ChainId, l2Id, bytes16(electionUuid)))
 import { computeElectionKey, isUuid, resolveIdentity, resolveOperatorAddress } from '../../../l2/identity.mjs';
+import { normalizeElectionType, PASS_ELECTION_TYPE_ON_CHAIN } from './electionType.mjs';
 import { signAdminCivic } from '../../../l2/adminAuth.mjs';
 import { checkSubmitterFunding } from '../../../l2/prover/funding.mjs';
 import { keccak256Hex } from '../../../l2/sequencer/state.mjs';
@@ -84,13 +85,19 @@ export async function sendAdminCivic(cfg, civic, { env = process.env, chainId, f
 }
 
 /** Open an election UUID on this L2 (unique per L2, enforced by the sequencer). */
-export async function openElectionOnL2(cfg, { electionUuid, approvedSenders = [] }, opts = {}) {
+export async function openElectionOnL2(cfg, { electionUuid, approvedSenders = [], electionType } = {}, opts = {}) {
   if (!isUuid(electionUuid)) throw new Error('electionUuid must be a UUID');
-  return sendAdminCivic(
-    cfg,
-    { type: 'election_open', electionId: electionUuid.toLowerCase(), approvedSenders, l2Uuid: cfg.l2Uuid },
-    opts,
-  );
+  const civic = {
+    type: 'election_open',
+    electionId: electionUuid.toLowerCase(),
+    approvedSenders,
+    l2Uuid: cfg.l2Uuid,
+  };
+  // Same switch as the factory tuple. Off, so an open tx does not carry the field.
+  if (PASS_ELECTION_TYPE_ON_CHAIN && electionType != null && electionType !== '') {
+    civic.electionType = normalizeElectionType(electionType);
+  }
+  return sendAdminCivic(cfg, civic, opts);
 }
 
 /** Outcome as recorded on the L2 itself. */

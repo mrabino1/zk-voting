@@ -378,7 +378,7 @@ export const BOT_OPERATIONS = [
     tag: 'Elections',
     auth: true,
     summary: 'Clerk creates an election in a jurisdiction they already serve.',
-    body: 'title, jurisdictionId, startTime, cutoffTime, questions or ballot',
+    body: 'title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable'
   }),
   R('/api/elections/:id', {
     tag: 'Elections',

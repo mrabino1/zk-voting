@@ -19,6 +19,8 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
 
 function tallyEncryptionBlurb(election) {
   const ceremony = election.tallyCeremony;
@@ -178,6 +180,7 @@ export async function renderVote(main, ctx) {
         "p",
         { class: "cluster" },
         h("span", { class: `status-pill ${st.className}`, text: st.label }),
+        h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
         source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample ballot" }) : null
       ),
       h(
@@ -197,6 +200,12 @@ export async function renderVote(main, ctx) {
           : null,
         h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
         h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+        resultsAreSealed(election)
+          ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+          : null,
+        resultsAreSealed(election)
+          ? h("li", {}, h("span", { class: "field-hint", text: t("results.sealedBody") }))
+          : null,
         h(
           "li",
           {},
@@ -1007,11 +1016,13 @@ function renderReceipt(state, { h, api, announce, election, paint }) {
       receipt.pdfSha256
         ? h("li", {}, h("span", { class: "lbl", text: "PDF SHA-256" }), h("span", { class: "hex", text: receipt.pdfSha256 }))
         : null,
-      receipt.published === false
-        ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))
-        : receipt.published
-          ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Disclosed" }))
-          : null
+      resultsAreSealed(election)
+        ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+        : receipt.published === false
+          ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Pending hour close" }))
+          : receipt.published
+            ? h("li", {}, h("span", { class: "lbl", text: "Public proof" }), h("span", { text: "Disclosed" }))
+            : null
     ),
     h("label", { class: "field", for: "receipt-proof-copy" }, "Copy-paste proof"),
     h("textarea", {

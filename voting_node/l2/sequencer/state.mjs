@@ -18,6 +18,7 @@ import {
 } from '../disclosure.mjs';
 import { StaleFenceError, WriterLease } from '../lease/lease.mjs';
 import { isAdminTxType, verifyAdminCivic } from '../adminAuth.mjs';
+import { normalizeElectionType, voteResultsSealed } from '../../apps/node/src/electionType.mjs';
 
 export const L2_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CHAIN_ID = 27427;
@@ -831,8 +832,11 @@ export class ChainState {
   }
 
   shouldHoldVote(tx) {
+    if (!isHeldVoteType(tx.civicType)) return false;
     const interval = Number(this.config.disclosureIntervalSeconds) || 0;
-    return interval > 0 && isHeldVoteType(tx.civicType);
+    if (interval > 0) return true;
+    const ctx = this.electionDisclosureContext(tx.civic?.electionId);
+    return Boolean(ctx.resultsSealed);
   }
 
   decodeCivicRaw(rawHex) {
@@ -953,6 +957,20 @@ export class ChainState {
     const raw = String(electionId ?? '');
     const key = raw.toLowerCase();
     const entry = this.electionRegistry.get(key);
+    const now = this.now();
+    const typed = {
+      electionType: entry?.electionType ?? 0,
+      cutoffTime: entry?.cutoffTime ?? null,
+    };
+    if (voteResultsSealed(typed, now)) {
+      return {
+        submittedVotes: 0,
+        endTime: typed.cutoffTime,
+        tallied: false,
+        resultsSealed: true,
+        minVotes: 0,
+      };
+    }
     let submitted = 0;
     for (const tx of this.sealed) {
       if (String(tx.civicType || '').toLowerCase() !== 'vote') continue;
@@ -965,10 +983,13 @@ export class ChainState {
         if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
       }
     }
+    const vote = Number(entry?.electionType) === 1;
     return {
       submittedVotes: submitted,
       endTime: entry?.cutoffTime ?? null,
       tallied: this.tallyIndex.has(raw) || this.tallyIndex.has(key),
+      resultsSealed: false,
+      ...(vote ? { minVotes: 0 } : {}),
     };
   }
 
@@ -1478,6 +1499,13 @@ export class ChainState {
       const entry = this.electionRegistry.get(key);
       if (civic.cutoffTime != null && Number.isFinite(Number(civic.cutoffTime))) {
         entry.cutoffTime = Number(civic.cutoffTime);
+      }
+      if (civic.electionType != null && civic.electionType !== '') {
+        try {
+          entry.electionType = normalizeElectionType(civic.electionType, { required: true });
+        } catch {
+          /* An unknown type stays a poll so older open txs still replay. */
+        }
       }
       if (civic.eligibleRoot != null) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
       for (const a of Array.isArray(civic.approvedSenders) ? civic.approvedSenders : []) {

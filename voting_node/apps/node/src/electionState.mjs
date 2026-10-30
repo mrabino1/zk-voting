@@ -3,9 +3,15 @@
 // Public acceptedBallots is the last hourly snapshot, never a live tick.
 
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
-import { disclosureSettings, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
+import { disclosureSettings, publicDisclosureView, sealDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { electionDisclosurePolicy } from './store.mjs';
 import { publicIdFields } from './electionIds.mjs';
+import {
+  electionTypeName,
+  electionTypeOf,
+  sealedResultsMessage,
+  voteResultsSealed,
+} from './electionType.mjs';
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -33,12 +39,31 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
   const state = electionState(election, now);
   const interval = Number(disclosure.intervalSeconds ?? 0);
   const delay = Number(disclosure.delaySeconds) || 0;
+  const sealed = Boolean(disclosure.resultsSealed) || voteResultsSealed(election, now);
   let acceptedBallots = election.acceptedBallots;
-  if (typeof disclosure.publishedAcceptedBallots === 'number') {
+  if (sealed) {
+    acceptedBallots = null;
+  } else if (typeof disclosure.publishedAcceptedBallots === 'number') {
     acceptedBallots = disclosure.publishedAcceptedBallots;
   } else if (interval > 0) {
     acceptedBallots = 0;
   }
+  const type = electionTypeOf(election);
+  const disclosureView = sealed
+    ? sealDisclosureView(
+        publicDisclosureView(now, interval, {
+          delaySeconds: delay,
+          resultsMinVotes: type === 1 ? undefined : disclosure.resultsMinVotes,
+          minBlockVotes: disclosure.minBlockVotes,
+        }),
+        election,
+      )
+    : publicDisclosureView(now, interval, {
+        delaySeconds: delay,
+        resultsMinVotes: disclosure.resultsMinVotes,
+        minBlockVotes: disclosure.minBlockVotes,
+        acceptedBallotsDisclosed: acceptedBallots,
+      });
   return {
     ...publicIdFields(election),
     title: election.title,
@@ -49,6 +74,11 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     treeDepth: election.treeDepth,
     ballotSpecHash: election.ballotSpecHash,
     ballotMethod: election.ballotMethod || 'plurality',
+    electionType: type,
+    electionTypeName: electionTypeName(election),
+    resultsSealed: sealed,
+    sealedUntil: sealed ? election.cutoffTime ?? null : null,
+    resultsMessage: sealed ? sealedResultsMessage(election) : null,
     questionCount: election.questionCount ?? (election.questions || []).length,
     questions: withQuestionMethods(election.questions, election.ballotMethod || 'plurality'),
     aspects: presentAspects(election),
@@ -105,22 +135,19 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     disqualificationRoot: election.disqualificationRoot,
     state,
     stateName: STATE_NAMES[state],
-    tally: presentTally(election, election.acceptedBallots)
-      ? {
-          ...presentTally(election, election.acceptedBallots),
-          source: election.tally.source || 'sum_only',
-          production: false,
-          aggregation: election.tally.aggregation || null,
-          openedBallots: election.tally.openedBallots ?? null,
-        }
-      : null,
+    tally: sealed
+      ? null
+      : presentTally(election, election.acceptedBallots)
+        ? {
+            ...presentTally(election, election.acceptedBallots),
+            source: election.tally.source || 'sum_only',
+            production: false,
+            aggregation: election.tally.aggregation || null,
+            openedBallots: election.tally.openedBallots ?? null,
+          }
+        : null,
     createdAt: election.createdAt,
-    disclosure: publicDisclosureView(now, interval, {
-      delaySeconds: delay,
-      resultsMinVotes: disclosure.resultsMinVotes,
-      minBlockVotes: disclosure.minBlockVotes,
-      acceptedBallotsDisclosed: acceptedBallots,
-    }),
+    disclosure: disclosureView,
     nfp: true,
   };
 }
@@ -144,6 +171,15 @@ export async function publishDue(deps) {
 export function electionDisclosure(election, deps, view) {
   const now = deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
+  if (policy.resultsSealed) {
+    const base =
+      view ||
+      publicDisclosureView(now, policy.intervalSeconds, {
+        delaySeconds: policy.delaySeconds,
+        minBlockVotes: policy.minBlockVotes,
+      });
+    return sealDisclosureView(base, election);
+  }
   const acceptedBallotsDisclosed = deps.store.publishedAcceptedBallots(
     election.id,
     now,
@@ -164,21 +200,22 @@ export function presentElection(election, deps, opts = {}) {
   if (!election) return null;
   const now = opts.now ?? deps.config.nowFn();
   const policy = electionDisclosurePolicy(election, deps.config, now);
-  const publishedAcceptedBallots = deps.store.publishedAcceptedBallots(
-    election.id,
-    now,
-    policy.intervalSeconds,
-    policy,
-  );
+  const publishedAcceptedBallots = policy.resultsSealed
+    ? null
+    : deps.store.publishedAcceptedBallots(election.id, now, policy.intervalSeconds, policy);
   const dto = publicElection(election, now, {
     intervalSeconds: policy.intervalSeconds,
     delaySeconds: policy.delaySeconds,
     resultsMinVotes: policy.minVotes,
     minBlockVotes: policy.minBlockVotes,
-    publishedAcceptedBallots,
+    publishedAcceptedBallots: policy.resultsSealed ? null : publishedAcceptedBallots,
+    resultsSealed: policy.resultsSealed,
   });
-  dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
+  if (!policy.resultsSealed) {
+    dto.disclosure = withDisclosedCount(dto.disclosure, publishedAcceptedBallots);
+  }
   if (
+    !dto.resultsSealed &&
     opts.user &&
     deps.store.userHasJurisdictionRole(opts.user, 'tally_operator', election.jurisdictionId) &&
     electionState(election, now) >= 3
@@ -190,6 +227,31 @@ export function presentElection(election, deps, opts = {}) {
 
 export function presentResults(election, deps, opts = {}) {
   const dto = presentElection(election, deps, opts);
+  if (dto?.resultsSealed) {
+    return {
+      nfp: true,
+      electionId: String(election.id),
+      title: election.title,
+      jurisdictionId: election.jurisdictionId,
+      state: dto.state,
+      stateName: dto.stateName,
+      acceptedBallots: null,
+      questionCount: dto.questionCount,
+      aspects: dto.aspects,
+      questions: dto.questions,
+      tally: null,
+      ballotSpecHash: election.ballotSpecHash,
+      cutoffTime: election.cutoffTime,
+      ballotMethod: election.ballotMethod || 'plurality',
+      electionType: dto.electionType,
+      electionTypeName: dto.electionTypeName,
+      resultsSealed: true,
+      sealed: true,
+      sealedUntil: dto.sealedUntil,
+      code: 'RESULTS_SEALED',
+      message: dto.resultsMessage,
+    };
+  }
   return {
     nfp: true,
     electionId: String(election.id),
@@ -205,5 +267,8 @@ export function presentResults(election, deps, opts = {}) {
     ballotSpecHash: election.ballotSpecHash,
     cutoffTime: election.cutoffTime,
     ballotMethod: election.ballotMethod || 'plurality',
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: false,
   };
 }

@@ -72,7 +72,10 @@ function leakKeys(value, acc = []) {
     if (
       /pending|unpublished|sealed|actual/i.test(k) &&
       k !== 'accepted' &&
-      k !== 'published'
+      k !== 'published' &&
+      k !== 'resultsSealed' &&
+      k !== 'sealed' &&
+      k !== 'sealedUntil'
     ) {
       acc.push(k);
     }
