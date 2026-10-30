@@ -469,7 +469,7 @@ export default {
     typePoll: "Thăm dò",
     typeVote: "Bỏ phiếu",
     sealedUntil: "Kết quả được niêm phong đến {end}",
-    sealedBody: "Số phiếu theo lựa chọn và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc. Tỷ lệ đi bỏ phiếu theo giờ là công khai.",
+    sealedBody: "Số phiếu, tỷ lệ đi bỏ phiếu và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc.",
     sealedStatus: "Kết quả được niêm phong",
   },
   info: {

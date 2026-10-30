@@ -469,7 +469,7 @@ export default {
     typePoll: "Sondage",
     typeVote: "Vote",
     sealedUntil: "Résultats scellés jusqu’au {end}",
-    sealedBody: "Les décomptes par choix et les dépouillements partiels restent scellés pour tout le monde, y compris les responsables, jusqu’à la fin de cette élection. La participation horaire est publique.",
+    sealedBody: "Les décomptes, la participation et les dépouillements partiels restent scellés pour tout le monde, y compris les responsables, jusqu’à la fin de cette élection.",
     sealedStatus: "Résultats scellés",
   },
   info: {

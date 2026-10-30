@@ -154,9 +154,9 @@ export function resultsGateOpen({
 /**
  * Split sealed ballots into blocks that are safe to publish and rows that stay sealed.
  * Small hours merge forward. A trailing block under the minimum stays sealed until a
- * later hour fills it. At the deadline the still-open hour is the final block when
- * the election met the minimum. An election that never reached the minimum stays
- * sealed until a certified tally. Both types use this clock.
+ * later hour fills it. Once the election has ended and every ready hour is in, the
+ * remainder is published if the election as a whole met the minimum. An election
+ * that never reached the minimum stays sealed until a certified tally.
  */
 export function planPublicBlocks(items, policy = {}) {
   const now = policy.now;
@@ -181,11 +181,6 @@ export function planPublicBlocks(items, policy = {}) {
     const submitted = ctx.submittedVotes ?? group.length;
     const tallied = Boolean(ctx.tallied);
     const endTime = ctx.endTime ?? null;
-    const ended =
-      endTime != null &&
-      endTime !== '' &&
-      Number.isFinite(Number(endTime)) &&
-      Number(now) >= Number(endTime);
     const electionMin =
       ctx.minVotes == null || ctx.minVotes === '' ? minVotes : Number(ctx.minVotes) || 0;
     if (!resultsGateOpen({ submittedVotes: submitted, now, endTime, minVotes: electionMin, tallied })) {
@@ -196,9 +191,7 @@ export function planPublicBlocks(items, policy = {}) {
     let waitingOnClock = 0;
     for (const item of group) {
       const ts = Number(item.receivedAt ?? item.acceptedAt);
-      // Before the deadline the open hour stays sealed. At the deadline it is
-      // the final block, for a poll and for a vote.
-      if (!ended && interval > 0 && !isDisclosed(ts, now, interval, delay)) {
+      if (interval > 0 && !isDisclosed(ts, now, interval, delay)) {
         waitingOnClock += 1;
         hold.push(item);
         continue;
@@ -212,9 +205,7 @@ export function planPublicBlocks(items, policy = {}) {
     let carryLast = null;
     const emit = (chunk, lastBucket) => {
       if (!chunk.length) return;
-      const scheduled = interval > 0 ? lastBucket + interval + delay : Number(now);
-      // A deadline release of the still-open hour is stamped now, not in the future.
-      const timestamp = ended && scheduled > Number(now) ? Number(now) : scheduled;
+      const timestamp = interval > 0 ? lastBucket + interval + delay : Number(now);
       publish.push({ electionId, items: chunk, timestamp });
     };
     for (const key of keys) {
@@ -226,6 +217,11 @@ export function planPublicBlocks(items, policy = {}) {
         carryLast = null;
       }
     }
+    const ended =
+      endTime != null &&
+      endTime !== '' &&
+      Number.isFinite(Number(endTime)) &&
+      Number(now) >= Number(endTime);
     if (carry.length && (tallied || (ended && waitingOnClock === 0 && submitted >= floor))) {
       emit(carry, carryLast);
     } else if (carry.length) hold.push(...carry);

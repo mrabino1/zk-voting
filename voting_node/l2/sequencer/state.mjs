@@ -831,15 +831,38 @@ export class ChainState {
     this.persistSealed();
   }
 
+  /**
+   * A recorded VOTE waits until cutoff. An invalid type stored as a vote
+   * fails closed. A poll, and a civic vote with no election_open, keeps the
+   * hourly clock.
+   */
+  voteWaitsForCutoff(tx) {
+    if (String(tx?.civicType || '').toLowerCase() !== 'vote') return false;
+    const id = String(tx.civic?.electionId ?? '').toLowerCase();
+    const entry = this.electionRegistry.get(id);
+    if (!entry) return false;
+    if (entry.typeInvalid) return true;
+    return Number(entry.electionType) === 1;
+  }
+
+  voteCutoffReached(tx, now) {
+    const id = String(tx?.civic?.electionId ?? '').toLowerCase();
+    const entry = this.electionRegistry.get(id);
+    if (!entry || entry.typeInvalid) return false;
+    const end = Number(entry.cutoffTime);
+    if (!Number.isFinite(end)) return false;
+    return Number(now) >= end;
+  }
+
   shouldHoldVote(tx) {
     if (!isHeldVoteType(tx.civicType)) return false;
+    if (this.voteWaitsForCutoff(tx)) return true;
     return (Number(this.config.disclosureIntervalSeconds) || 0) > 0;
   }
 
   /**
-   * Ballot rows follow the hourly gate for both types. A tally is choice
-   * data: refuse it for an election this L2 never opened, and while a vote
-   * is sealed. An invalid stored type fails closed.
+   * POLL ballot rows follow the hourly gate. A VOTE is not bucketed by hour.
+   * A tally is choice data: refuse it while a vote is sealed.
    */
   _assertChoicePolicy(tx) {
     const type = String(tx.civicType || '').toLowerCase();
@@ -984,35 +1007,42 @@ export class ChainState {
     const raw = String(electionId ?? '');
     const key = raw.toLowerCase();
     const entry = this.electionRegistry.get(key);
+    if (entry && (entry.typeInvalid || Number(entry.electionType) === 1)) {
+      const sealed =
+        entry.typeInvalid ||
+        voteResultsSealed(
+          { electionType: 1, cutoffTime: entry.typeInvalid ? null : entry.cutoffTime },
+          this.now(),
+        );
+      if (sealed) {
+        // No live total. Null, not zero: a zero would be a turnout count.
+        return {
+          submittedVotes: null,
+          endTime: entry.typeInvalid ? null : entry.cutoffTime ?? null,
+          tallied: false,
+          resultsSealed: true,
+          minVotes: null,
+        };
+      }
+    }
     let submitted = 0;
     const countTx = (tx) => {
       if (!tx || typeof tx !== 'object') return;
       if (String(tx.civicType || tx.civic?.type || '').toLowerCase() !== 'vote') return;
-      const id = String(tx.civic?.electionId ?? '');
-      if (id !== raw && id.toLowerCase() !== key) return;
+      if (String(tx.civic?.electionId ?? '') !== raw) return;
+      if (this.voteWaitsForCutoff(tx) && !this.voteCutoffReached(tx, this.now())) return;
       submitted += 1;
     };
     for (const tx of this.sealed) countTx(tx);
     for (const block of this.blocks) {
       for (const tx of block.transactions || []) countTx(tx);
     }
-    const vote = Boolean(entry && (entry.typeInvalid || Number(entry.electionType) === 1));
-    const sealed =
-      vote &&
-      (entry.typeInvalid ||
-        voteResultsSealed(
-          {
-            electionType: 1,
-            cutoffTime: entry.typeInvalid ? null : entry.cutoffTime,
-          },
-          this.now(),
-        ));
+    const vote = Number(entry?.electionType) === 1;
     return {
       submittedVotes: submitted,
-      endTime: entry?.typeInvalid ? null : entry?.cutoffTime ?? null,
-      // A sealed vote has no public tally yet. The hourly planner still sees turnout.
-      tallied: sealed ? false : this.tallyIndex.has(raw) || this.tallyIndex.has(key),
-      resultsSealed: sealed,
+      endTime: entry?.cutoffTime ?? null,
+      tallied: this.tallyIndex.has(raw) || this.tallyIndex.has(key),
+      resultsSealed: false,
       ...(vote ? { minVotes: 0 } : {}),
     };
   }
@@ -1023,9 +1053,17 @@ export class ChainState {
     const delay = Number(this.config.disclosureDelaySeconds) || 0;
     const hourly = [];
     const other = [];
+    const waitingForCutoff = [];
+    const releaseAtCutoff = [];
     for (const tx of this.sealed) {
-      if (String(tx.civicType || '').toLowerCase() === 'vote') hourly.push(tx);
-      else other.push(tx);
+      if (this.voteWaitsForCutoff(tx)) {
+        if (this.voteCutoffReached(tx, now)) releaseAtCutoff.push(tx);
+        else waitingForCutoff.push(tx);
+      } else if (String(tx.civicType || '').toLowerCase() === 'vote') {
+        hourly.push(tx);
+      } else {
+        other.push(tx);
+      }
     }
     const planned = planPublicBlocks(
       hourly.map((tx) => ({
@@ -1053,8 +1091,13 @@ export class ChainState {
         ready.push(item.tx);
       }
     }
+    // One release at cutoff. These rows are not split into hour buckets.
+    for (const tx of releaseAtCutoff) {
+      if (apply) tx.disclosureTimestamp = now;
+      ready.push(tx);
+    }
     if (!apply) return ready;
-    this.sealed = planned.hold.map((item) => item.tx);
+    this.sealed = [...planned.hold.map((item) => item.tx), ...waitingForCutoff];
     this.sealedHashes = new Set(this.sealed.map((t) => t.hash.toLowerCase()));
     ready.sort((a, b) => String(a.hash).toLowerCase().localeCompare(String(b.hash).toLowerCase()));
     for (const tx of ready) {
@@ -1530,9 +1573,11 @@ export class ChainState {
           entry.typeInvalid = false;
         } catch {
           // Fail closed on replay: an unknown type keeps choice results sealed.
+          // These ballots stay held, because there is no cutoff to release them.
           entry.electionType = 1;
           entry.cutoffTime = null;
           entry.typeInvalid = true;
+          console.warn(`invalid election type on this L2; ballots for ${key} stay held`);
         }
       }
       if (civic.eligibleRoot != null) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
@@ -1616,7 +1661,7 @@ export class ChainState {
         const t = String(tx.civicType || c.type || '').toLowerCase();
         if (t === 'election_open') openedAtBlock = block.number;
         else if (t === 'register') registered += 1;
-        else if (t === 'vote') votes += 1;
+        else if (t === 'vote' && !sealedVote) votes += 1;
         else if (t === 'tally') {
           const choiceSealed =
             entry.typeInvalid ||
@@ -1645,8 +1690,7 @@ export class ChainState {
       registered,
       electionType: entry.typeInvalid ? null : entry.electionType ?? null,
       typeInvalid: Boolean(entry.typeInvalid),
-      // Turnout already in blocks. Choice data stays on tally, which is null while sealed.
-      votesSealedInBlocks: votes,
+      votesSealedInBlocks: sealedVote ? null : votes,
       tally: sealedVote ? null : tally,
     };
   }

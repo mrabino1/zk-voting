@@ -62,8 +62,8 @@ export function isPollElection(election) {
 
 /**
  * Choice results for a VOTE stay sealed until cutoff. Missing cutoff fails closed.
- * POLL is never sealed by this check. Turnout is not a choice result: both types
- * publish it on the hourly clock, including diagnostic counters.
+ * POLL is never sealed by this check. Turnout is not a choice result: disclosed
+ * ballot rows follow the hourly gate. Live diagnostic counters stay omitted.
  */
 export function voteResultsSealed(election, now) {
   if (!isVoteElection(election)) return false;

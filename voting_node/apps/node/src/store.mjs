@@ -123,9 +123,9 @@ export function electionDisclosurePolicy(election, config, now, submittedVotes) 
   const settings = disclosureSettings(config || {});
   const sealed = voteResultsSealed(election, now);
   const vote = isVoteElection(election);
-  // RESULTS_MIN_VOTES is a POLL gate. A VOTE does not use it. submittedVotes
-  // is turnout for both types. Choice results are not on this object.
-  const votes = submittedVotes ?? election?.acceptedBallots ?? 0;
+  // RESULTS_MIN_VOTES is a POLL gate. A VOTE does not use it. While choice
+  // results are sealed, this policy object does not carry the live total.
+  const votes = sealed ? 0 : (submittedVotes ?? election?.acceptedBallots ?? 0);
   return {
     now,
     intervalSeconds: settings.intervalSeconds,
@@ -160,6 +160,8 @@ function emptyData() {
     votes: [],
     receipts: [],
     envelopes: [],
+    // VOTE chain submissions waiting for cutoff. Not a public counter.
+    heldChainBallots: [],
     notifications: [],
     tallyGuardians: [],
     pages: [],
@@ -232,7 +234,6 @@ function normalizeLoadedData(parsed) {
   }
   data.site = { ...defaultSite(), ...(data.site || {}) };
   data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
-  delete data.heldChainBallots;
   ensureSuperAdminCollections(data);
   ensureSiteAdminCollections(data);
   data.meta = data.meta || {};
@@ -297,6 +298,7 @@ const ARRAY_COLLECTIONS = [
   'votes',
   'receipts',
   'envelopes',
+  'heldChainBallots',
   'notifications',
   'tallyGuardians',
   'pages',
@@ -325,6 +327,7 @@ export const BALLOT_TIMING_COLLECTIONS = [
   'envelopes',
   'votePassSpent',
   'elections',
+  'heldChainBallots',
 ];
 
 async function readJsonFile(filePath) {
@@ -2357,6 +2360,22 @@ export class Store {
       list.push(spentPassHash);
       list.sort();
       this.data.votePassSpent[key] = list;
+    }
+    // A re-vote does not replace a held row. This Node still rejects a second
+    // nullifier, so the first ballot is the one stored here. Later re-vote
+    // work must replace this row instead of appending another.
+    if (vote.chainHold && typeof vote.chainHold === 'object') {
+      if (!Array.isArray(this.data.heldChainBallots)) this.data.heldChainBallots = [];
+      insertAtRandom(this.data.heldChainBallots, {
+        electionId: record.electionId,
+        chainElectionId:
+          vote.chainHold.chainElectionId != null ? String(vote.chainHold.chainElectionId) : record.electionId,
+        nullifier: record.nullifier,
+        ballotHash: record.ballotHash,
+        proof: vote.chainHold.proof ?? null,
+        publicInputs: vote.chainHold.publicInputs ?? null,
+        encryptedBallot: vote.chainHold.encryptedBallot ?? null,
+      });
     }
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;

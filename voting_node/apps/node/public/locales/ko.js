@@ -469,7 +469,7 @@ export default {
     typePoll: "여론조사",
     typeVote: "투표",
     sealedUntil: "{end}까지 결과가 봉인됨",
-    sealedBody: "선택별 표 수와 부분 개표는 이 선거가 끝날 때까지 관리자를 포함해 모두에게 봉인됩니다. 시간별 투표율은 공개됩니다.",
+    sealedBody: "이 선거가 끝날 때까지 표 수, 투표율, 부분 개표는 관리자를 포함해 모두에게 봉인됩니다.",
     sealedStatus: "결과 봉인",
   },
   info: {

@@ -174,12 +174,10 @@ function dummyPoints() {
 /**
  * When the disclosure interval is 0, each ballot is its own transaction.
  * Otherwise the relayer holds ballots off chain and submits one batch after
- * the interval, sorted by nullifier. At cutoff the remainder is a final
- * batch of the same shape. A one-ballot batch is still a singleton.
- * The existing submitVoteBatch call accepts at most 64 ballots.
- * @param {{ pending: object[], interval: number, now: number, startTime: number, lastBatchAt: number, cutoffTime?: number }} input
+ * the interval, sorted by nullifier. A one-ballot batch is still a singleton.
+ * @param {{ pending: object[], interval: number, now: number, startTime: number, lastBatchAt: number }} input
  */
-export function planDisclosureBatch({ pending, interval, now, startTime, lastBatchAt, cutoffTime }) {
+export function planDisclosureBatch({ pending, interval, now, startTime, lastBatchAt }) {
   const rows = Array.isArray(pending) ? pending : [];
   const sorted = [...rows].sort((a, b) => {
     const left = BigInt(a.nullifier);
@@ -191,8 +189,6 @@ export function planDisclosureBatch({ pending, interval, now, startTime, lastBat
   const wait = Number(interval) || 0;
   if (wait <= 0) return { action: 'immediate', batch: sorted.slice(0, 64) };
   const t = Number(now) || 0;
-  const end = Number(cutoffTime);
-  if (Number.isFinite(end) && t >= end) return { action: 'final', batch: sorted.slice(0, 64) };
   const start = Number(startTime) || 0;
   const last = Number(lastBatchAt) || 0;
   const due = last > 0 ? t >= last + wait : t >= start + wait;
@@ -415,42 +411,29 @@ export function createChain(config) {
     }
   }
 
-  function queuedCutoff(rows) {
-    for (const row of rows) {
-      const end = Number(row?.cutoffTime);
-      if (Number.isFinite(end)) return end;
-    }
-    return null;
-  }
-
   async function flushElection(key, now) {
     const queued = voteQueue.get(key) || [];
     if (!queued.length) return { queued: false };
     const interval = Number(config.disclosureIntervalSeconds) || 0;
-    const at = now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000);
     const plan = planDisclosureBatch({
       pending: queued,
       interval,
-      now: at,
+      now: now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000),
       startTime: queued[0].startTime,
       lastBatchAt: lastBatchAt.get(key) || 0,
-      cutoffTime: queuedCutoff(queued),
     });
-    if (plan.action === 'wait' || plan.batch.length === 0) {
+    if (plan.action === 'wait') {
       return { queued: true, submitted: false, waiting: queued.length };
     }
     const inbox = inboxAddress();
     const result = await writeSubmitBatch({ inbox, electionId: key, batch: plan.batch });
     const sent = new Set(plan.batch);
-    const left = queued.filter((row) => !sent.has(row));
-    voteQueue.set(key, left);
-    lastBatchAt.set(key, Number(at));
-    // The batch ABI takes 64 ballots. A deadline drains the rest the same way.
-    if (plan.action === 'final' && left.length) {
-      const more = await flushElection(key, at);
-      return { ...result, final: true, continued: more };
-    }
-    return plan.action === 'final' ? { ...result, final: true } : result;
+    voteQueue.set(
+      key,
+      queued.filter((row) => !sent.has(row)),
+    );
+    lastBatchAt.set(key, Number(now ?? config.nowFn?.() ?? Math.floor(Date.now() / 1000)));
+    return result;
   }
 
   return {
@@ -530,7 +513,7 @@ export function createChain(config) {
         });
       }
     },
-    async submitVote({ electionId, proof, publicInputs, encryptedBallot, startTime, cutoffTime, now }) {
+    async submitVote({ electionId, proof, publicInputs, encryptedBallot, startTime, now }) {
       if (!configured) return null;
       const inbox = inboxAddress();
       if (!hasWallet || !inbox) {
@@ -557,7 +540,6 @@ export function createChain(config) {
         inputs,
         encryptedBallot,
         startTime: startTime ?? 0,
-        cutoffTime: cutoffTime ?? null,
       });
       voteQueue.set(key, queued);
       return flushElection(key, now);

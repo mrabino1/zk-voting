@@ -5,10 +5,12 @@
 import { presentAspects, presentTally, withQuestionMethods } from './ballot.mjs';
 import { disclosureSettings, publicDisclosureView, sealDisclosureView, withDisclosedCount } from './disclosure.mjs';
 import { electionDisclosurePolicy } from './store.mjs';
+import { submitHeldBallotsAtCutoff } from './heldBallots.mjs';
 import { publicIdFields } from './electionIds.mjs';
 import {
   electionTypeName,
   electionTypeOf,
+  isVoteElection,
   sealedResultsMessage,
   voteResultsSealed,
 } from './electionType.mjs';
@@ -153,13 +155,10 @@ export async function publishDue(deps) {
   const interval = settings.intervalSeconds;
   const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
-  // Hourly BallotInbox batches, and the remainder at cutoff, use the existing
-  // submitVoteBatch. A public read must not fail closed when the chain is down.
-  if (!standby && typeof deps.chain?.flushVoteQueue === 'function') {
-    try {
-      await deps.chain.flushVoteQueue(now);
-    } catch (err) {
-      if (!deps.config?.quiet) console.warn(`chain batch flush failed: ${err.message || err}`);
+  if (!standby && deps.store) {
+    for (const election of deps.store.data.elections || []) {
+      if (!isVoteElection(election)) continue;
+      submitHeldBallotsAtCutoff({ store: deps.store, election, now });
     }
   }
   const view = deps.explorer?.publicDisclosure
