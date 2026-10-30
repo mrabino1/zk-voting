@@ -4,7 +4,7 @@ pragma solidity 0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {ElectionIdentity} from "../ElectionIdentity.sol";
-import {ElectionParams} from "../interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "../interfaces/ElectionParams.sol";
 import {IElection} from "../interfaces/IElection.sol";
 import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
 import {IL1TallyMirror} from "../interfaces/IL1TallyMirror.sol";
@@ -158,6 +158,10 @@ contract L1TallyMirror is IL1TallyMirror {
                 revert ElectionMismatch();
             }
             ElectionParams memory p = IElection(clone).params();
+            // POLL may publish before the end (unchanged). VOTE may not.
+            if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) {
+                revert ResultsSealedUntilEnd(cert.electionId);
+            }
             if (p.jurisdictionId != cert.jurisdictionId) revert JurisdictionMismatch();
             if (cert.ballotSpecHash != bytes32(0) && p.ballotSpecHash != cert.ballotSpecHash) {
                 revert BallotSpecMismatch();

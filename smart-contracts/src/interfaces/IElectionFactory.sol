@@ -16,6 +16,7 @@ interface IElectionFactory {
     error MissingRole();
     error ModulesNotSet();
     error InvalidTallyScheme();
+    error InvalidElectionType();
     error InvalidJurisdiction();
     error NotJurisdictionClerk();
     error UnknownElection();
@@ -56,6 +57,9 @@ interface IElectionFactory {
     event ContractUnpaused(address indexed guardian);
 
     function createElection(ElectionParams calldata params) external returns (uint256 electionId, address election);
+
+    /// @notice POLL (0) or VOTE (1) for `electionId`. Fixed at creation. There is no setter.
+    function electionType(uint256 electionId) external view returns (uint8);
 
     function getElection(uint256 electionId) external view returns (address);
 

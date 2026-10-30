@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {ElectionParams} from "../../src/interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "../../src/interfaces/ElectionParams.sol";
 
 /// @title Fixtures
 /// @notice Sample `ElectionParams` builders and dummy Groth16 / ballot values for Foundry tests.
@@ -16,13 +16,11 @@ library Fixtures {
     bytes32 internal constant DEFAULT_BALLOT_SPEC = keccak256("canonical-ballot-json");
 
     /// @notice Default civic election: unlimited roll, one-day window starting one day after origin.
-    function sampleParams(
-        address clerk,
-        address registrar,
-        address officer,
-        address tallyOperator,
-        address verifier
-    ) internal pure returns (ElectionParams memory p) {
+    function sampleParams(address clerk, address registrar, address officer, address tallyOperator, address verifier)
+        internal
+        pure
+        returns (ElectionParams memory p)
+    {
         p = build({
             title: "ZK-Voting Civic Election",
             metadataURI: "ipfs://zk-voting/ballot",
@@ -73,6 +71,7 @@ library Fixtures {
         p.tallyPubKeyX = bytes32(0);
         p.tallyPubKeyY = bytes32(0);
         p.tallyScheme = 0;
+        p.electionType = ElectionType.POLL;
     }
 
     function withCap(ElectionParams memory p, uint32 cap) internal pure returns (ElectionParams memory) {
@@ -104,11 +103,16 @@ library Fixtures {
         return p;
     }
 
-    function withTallyScheme(ElectionParams memory p, uint8 scheme)
+    function withElectionType(ElectionParams memory p, uint8 electionType)
         internal
         pure
         returns (ElectionParams memory)
     {
+        p.electionType = electionType;
+        return p;
+    }
+
+    function withTallyScheme(ElectionParams memory p, uint8 scheme) internal pure returns (ElectionParams memory) {
         p.tallyScheme = scheme;
         return p;
     }
@@ -137,7 +141,9 @@ library Fixtures {
     }
 
     function ballotHash(bytes memory encrypted) internal pure returns (uint256) {
-        return uint256(keccak256(encrypted)) % 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+        return
+            uint256(keccak256(encrypted))
+                % 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     }
 
     /// @dev Circuit / proof-helpers order: [root, disqRoot, nullifier, ballotHash, electionId]
@@ -154,11 +160,7 @@ library Fixtures {
         inputs[4] = electionId;
     }
 
-    function dummyProof()
-        internal
-        pure
-        returns (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c)
-    {
+    function dummyProof() internal pure returns (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) {
         a = [uint256(1), uint256(2)];
         b = [[uint256(3), uint256(4)], [uint256(5), uint256(6)]];
         c = [uint256(7), uint256(8)];

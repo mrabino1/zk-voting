@@ -26,6 +26,15 @@ struct ElectionParams {
     /// @notice 0 = SUM_ONLY (any `counts` that sum to acceptedBallots).
     ///         1 = AGGREGATE (one aggregate ciphertext hash; no per-ballot openings).
     uint8 tallyScheme;
+    /// @notice 0 = POLL, 1 = VOTE. Chosen once in `createElection`. There is no setter.
+    uint8 electionType;
+}
+
+/// @notice Kind of election. Zero is POLL and keeps today's rules.
+library ElectionType {
+    uint8 internal constant POLL = 0;
+    /// @notice No tally, decryption, interim result, or disclosure before `cutoffTime`.
+    uint8 internal constant VOTE = 1;
 }
 
 /// @notice Tally binding mode. Additive: existing elections default to SUM_ONLY (0).

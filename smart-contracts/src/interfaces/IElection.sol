@@ -31,6 +31,9 @@ interface IElection {
 
     function params() external view returns (ElectionParams memory);
 
+    /// @notice POLL (0) or VOTE (1). Fixed at `initialize`. There is no setter.
+    function electionType() external view returns (uint8);
+
     function eligibleRoot() external view returns (bytes32);
 
     function disqualificationRoot() external view returns (bytes32);

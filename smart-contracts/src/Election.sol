@@ -51,13 +51,20 @@ contract Election is IElection {
     ) external {
         if (factory_ == address(0)) revert ZeroAddress();
         if (_initialized) revert AlreadyInitialized();
-        _initialized = true;
         electionId = electionId_;
         factory = factory_;
         voterRegistry = voterRegistry_;
         disqualificationRegistry = disqualificationRegistry_;
         inbox = inbox_;
+        // `_initialized` is packed into the tail slot of `_params`. Set the lock
+        // after the copy so that write cannot clear it.
         _params = params_;
+        _initialized = true;
+    }
+
+    /// @inheritdoc IElection
+    function electionType() external view returns (uint8) {
+        return _params.electionType;
     }
 
     /// @inheritdoc IElection

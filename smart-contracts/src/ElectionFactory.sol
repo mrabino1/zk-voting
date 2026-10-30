@@ -6,7 +6,7 @@ pragma solidity 0.8.24;
 import {Clones} from "./Clones.sol";
 import {Election} from "./Election.sol";
 import {ExternalPartyRegistry} from "./ExternalPartyRegistry.sol";
-import {ElectionParams} from "./interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "./interfaces/ElectionParams.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IJurisdictionRegistry} from "./interfaces/IJurisdictionRegistry.sol";
@@ -313,6 +313,13 @@ contract ElectionFactory is IElectionFactory {
     }
 
     /// @inheritdoc IElectionFactory
+    function electionType(uint256 electionId) external view returns (uint8) {
+        address el = _elections[electionId];
+        if (el == address(0)) revert UnknownElection();
+        return IElection(el).electionType();
+    }
+
+    /// @inheritdoc IElectionFactory
     function getElection(uint256 electionId) external view returns (address) {
         return _elections[electionId];
     }
@@ -327,6 +334,7 @@ contract ElectionFactory is IElectionFactory {
         if (params.treeDepth < MIN_DEPTH || params.treeDepth > MAX_DEPTH) revert InvalidTreeDepth();
         if (params.questionCount < 1) revert InvalidQuestionCount();
         if (params.tallyScheme > 1) revert InvalidTallyScheme();
+        if (params.electionType > ElectionType.VOTE) revert InvalidElectionType();
         if (params.jurisdictionId == bytes32(0)) revert InvalidJurisdiction();
         if (
             params.clerk == address(0) || params.registrar == address(0) || params.disqualificationOfficer == address(0)

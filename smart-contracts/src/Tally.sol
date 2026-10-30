@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {ElectionParams, TallyScheme} from "./interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType, TallyScheme} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
@@ -47,6 +47,11 @@ contract Tally is ITallyVerifier {
     mapping(uint256 => bool) private _tallied;
     mapping(uint256 => bytes32) private _aggregateHash;
     mapping(uint256 => uint8) private _postedScheme;
+    /// @notice Hash of the decrypted aggregate totals. Not a list of openings.
+    mapping(uint256 => bytes32) private _decryptionHash;
+    mapping(uint256 => bytes32) private _interimHash;
+    mapping(uint256 => bytes32) private _disclosureHash;
+    mapping(uint256 => bytes32[]) private _components;
 
     /// @notice Groth16 verifier for the `TallyPublicInputs` instance. Set once.
     address public tallyProofVerifier;
@@ -170,6 +175,75 @@ contract Tally is ITallyVerifier {
     }
 
     /// @inheritdoc ITallyVerifier
+    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external nonReentrant {
+        _requireNotPaused();
+        if (aggregatePlaintextHash == bytes32(0)) revert EmptyCommitment();
+        // Same clock as tally posting: closed window, and VOTE stays sealed until then.
+        // The argument is one aggregate hash. There is no openings array.
+        _authorize(electionId);
+        _decryptionHash[electionId] = aggregatePlaintextHash;
+        emit AggregateDecrypted(electionId, aggregatePlaintextHash);
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function postInterimResult(uint256 electionId, bytes32 resultHash) external nonReentrant {
+        _requireNotPaused();
+        if (resultHash == bytes32(0)) revert EmptyCommitment();
+        ElectionParams memory p = _operatorParams(electionId);
+        _revertIfVoteSealed(electionId, p);
+        _interimHash[electionId] = resultHash;
+        emit InterimResultPosted(electionId, resultHash);
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function disclose(uint256 electionId, bytes32 disclosureHash_) external nonReentrant {
+        _requireNotPaused();
+        if (disclosureHash_ == bytes32(0)) revert EmptyCommitment();
+        ElectionParams memory p = _operatorParams(electionId);
+        _revertIfVoteSealed(electionId, p);
+        _disclosureHash[electionId] = disclosureHash_;
+        emit DisclosurePosted(electionId, disclosureHash_);
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function addTallyComponent(uint256 electionId, bytes32 componentHash) external nonReentrant {
+        _requireNotPaused();
+        if (componentHash == bytes32(0)) revert EmptyCommitment();
+        ElectionParams memory p = _operatorParams(electionId);
+        _revertIfVoteSealed(electionId, p);
+        if (block.timestamp >= p.cutoffTime) revert TallyComponentsClosed(electionId);
+        bytes32[] storage list = _components[electionId];
+        if (list.length >= MAX_TALLY_OPTIONS) revert TooManyTallyComponents();
+        list.push(componentHash);
+        emit TallyComponentAdded(electionId, list.length - 1, componentHash);
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function decryptionHash(uint256 electionId) external view returns (bytes32) {
+        return _decryptionHash[electionId];
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function interimResult(uint256 electionId) external view returns (bytes32) {
+        return _interimHash[electionId];
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function disclosureHash(uint256 electionId) external view returns (bytes32) {
+        return _disclosureHash[electionId];
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function tallyComponentCount(uint256 electionId) external view returns (uint256) {
+        return _components[electionId].length;
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function tallyComponentAt(uint256 electionId, uint256 index) external view returns (bytes32) {
+        return _components[electionId][index];
+    }
+
+    /// @inheritdoc ITallyVerifier
     function tally(uint256 electionId) external view returns (uint256[] memory) {
         return _counts[electionId];
     }
@@ -202,11 +276,26 @@ contract Tally is ITallyVerifier {
         IElection election = IElection(electionAddr);
         p = election.params();
         if (msg.sender != p.tallyOperator) revert NotTallyOperator();
+        // VOTE publishes nothing before the end. POLL keeps the cutoff rule below.
+        _revertIfVoteSealed(electionId, p);
         // CLOSED: voting window is [startTime, cutoffTime). Cutoff is exclusive.
         if (block.timestamp < p.cutoffTime) revert ElectionNotClosed();
         verifier = tallyProofVerifier;
         if (verifier == address(0)) revert TallyVerifierNotSet();
         inbox = election.inbox();
+    }
+
+    function _operatorParams(uint256 electionId) internal view returns (ElectionParams memory p) {
+        address electionAddr = _factory.getElection(electionId);
+        if (electionAddr == address(0)) revert UnknownElection();
+        p = IElection(electionAddr).params();
+        if (msg.sender != p.tallyOperator) revert NotTallyOperator();
+    }
+
+    function _revertIfVoteSealed(uint256 electionId, ElectionParams memory p) internal view {
+        if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) {
+            revert ResultsSealedUntilEnd(electionId);
+        }
     }
 
     function _requireNotPaused() internal view {

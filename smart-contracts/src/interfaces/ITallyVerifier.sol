@@ -22,6 +22,12 @@ interface ITallyVerifier {
     error ContractPaused();
     error ReentrantCall();
     error CountsTooLong();
+    /// @notice VOTE elections reject result publication before `cutoffTime`.
+    error ResultsSealedUntilEnd(uint256 electionId);
+    /// @notice Neither kind accepts another tally component at or after cutoff.
+    error TallyComponentsClosed(uint256 electionId);
+    error EmptyCommitment();
+    error TooManyTallyComponents();
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
@@ -30,6 +36,12 @@ interface ITallyVerifier {
         uint256 indexed electionId, bytes32 countsHash, bytes32 aggregateHash, bytes32 ballotRoot, uint256 total
     );
     event TallyProofVerifierSet(address indexed verifier);
+    /// @notice One hash of the decrypted aggregate. Not a per-ballot opening.
+    event AggregateDecrypted(uint256 indexed electionId, bytes32 aggregatePlaintextHash);
+    event InterimResultPosted(uint256 indexed electionId, bytes32 resultHash);
+    event DisclosurePosted(uint256 indexed electionId, bytes32 disclosureHash);
+    /// @notice Hash contribution to a running tally. Not a ballot and not an opening.
+    event TallyComponentAdded(uint256 indexed electionId, uint256 index, bytes32 componentHash);
 
     /// @notice Factory that maps `electionId` → Election clone.
     function factory() external view returns (address);
@@ -68,4 +80,29 @@ interface ITallyVerifier {
     function aggregateHash(uint256 electionId) external view returns (bytes32);
 
     function postedScheme(uint256 electionId) external view returns (uint8);
+
+    /// @notice Record a hash of the decrypted aggregate. No per-ballot plaintext.
+    ///         Before cutoff, VOTE reverts `ResultsSealedUntilEnd` and POLL reverts
+    ///         `ElectionNotClosed` (the same clock as tally posting).
+    function submitDecryption(uint256 electionId, bytes32 aggregatePlaintextHash) external;
+
+    /// @notice Running result commitment. POLL may post before cutoff. VOTE may not.
+    function postInterimResult(uint256 electionId, bytes32 resultHash) external;
+
+    /// @notice Result disclosure commitment. POLL may post before cutoff. VOTE may not.
+    function disclose(uint256 electionId, bytes32 disclosureHash_) external;
+
+    /// @notice Append one tally component while the window is open.
+    ///         Refused after cutoff for both kinds. VOTE is also sealed before cutoff.
+    function addTallyComponent(uint256 electionId, bytes32 componentHash) external;
+
+    function decryptionHash(uint256 electionId) external view returns (bytes32);
+
+    function interimResult(uint256 electionId) external view returns (bytes32);
+
+    function disclosureHash(uint256 electionId) external view returns (bytes32);
+
+    function tallyComponentCount(uint256 electionId) external view returns (uint256);
+
+    function tallyComponentAt(uint256 electionId, uint256 index) external view returns (bytes32);
 }

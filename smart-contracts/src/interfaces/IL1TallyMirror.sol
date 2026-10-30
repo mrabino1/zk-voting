@@ -21,6 +21,8 @@ interface IL1TallyMirror {
     error UnsettledStateRoot();
     error NotPosted();
     error DisputeWindowClosed();
+    /// @notice A VOTE election cannot publish a result hash before `cutoffTime`.
+    error ResultsSealedUntilEnd(uint256 electionId);
 
     struct Certification {
         address factory;
