@@ -171,7 +171,7 @@ describe('website i18n', () => {
       vi: 'Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai của bạn bị từ chối.',
       ar: 'يمكنك التصويت مرة واحدة فقط؛ تُرفض ورقة ثانية منك.',
       fr: 'Vous ne pouvez voter qu’une fois ; un second bulletin de votre part est rejeté.',
-      ko: '한 번만 투표할 수 있으며, 당신이 낸 두 번째 투표용지는 거부됩니다.',
+      ko: '한 번만 투표할 수 있으며, 본인의 두 번째 투표용지는 거부됩니다.',
       pt: 'Você pode votar apenas uma vez; uma segunda cédula sua é rejeitada.',
       hi: 'आप केवल एक बार मत दे सकते हैं; आपका दूसरा मतपत्र अस्वीकार किया जाता है।',
     };

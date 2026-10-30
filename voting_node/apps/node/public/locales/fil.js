@@ -970,6 +970,8 @@ export default {
     head: "Head #{head}",
     chain: "chain {id}",
     notTallied: "hindi nabilang ({note})",
+    status: "Katayuan",
+    superseded: "napalitan",
     irvShort: "IRV",
   },
   sample: {

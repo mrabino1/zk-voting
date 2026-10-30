@@ -973,6 +973,8 @@ export default {
     head: "الرأس #{head}",
     chain: "سلسلة {id}",
     notTallied: "غير مفروز ({note})",
+    status: "الحالة",
+    superseded: "مُستبدَل",
     irvShort: "IRV",
   },
   sample: {

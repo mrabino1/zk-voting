@@ -221,7 +221,7 @@ The public is not entitled to a live “this person just voted” tick. Sometime
 Votes are **accepted immediately** (nullifier uniqueness). Proof of those votes is public after the hour-and-delay check and the block floor, both enforced in the API and on the civic L2. Poll per-choice counts have a separate gate.
 
 1. **Hour plus delay.** The UTC hour that contained the vote has closed, then `DISCLOSURE_DELAY_SECONDS` (default **1800**) has elapsed. A vote at 08:59 publishes at **09:30**, not at 09:00. `DISCLOSURE_INTERVAL_SECONDS` stays **3600**. Turnout and per-block vote rows publish on that clock from the first ballot.
-2. **Choice gate.** Poll per-choice counts wait until 100 first ballots are in or the scheduled end (`RESULTS_MIN_VOTES`, default **100**). Per-choice counts publish with the posted tally; hourly per-choice blocks after the gate are planned.
+2. **Choice gate.** Poll per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end (`RESULTS_MIN_VOTES`, default **100**). Per-choice counts publish with the posted tally; hourly per-choice blocks after the gate are planned.
 3. **Block floor.** A disclosure block needs at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default **10**). Smaller hours merge into the next block. After the election ends, a remainder is published when the election as a whole met that floor. If the whole election is below the floor, those rows stay sealed until the final tally.
 
 An earlier note in this file said a 14:05 vote appears at 15:00, as soon as the hour closes. That guarantee is **replaced**. The same vote now appears at **15:30**, once the block floor is met.

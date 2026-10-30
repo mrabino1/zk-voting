@@ -971,6 +971,8 @@ export default {
     head: "头部 #{head}",
     chain: "链 {id}",
     notTallied: "未计票（{note}）",
+    status: "状态",
+    superseded: "已取代",
     irvShort: "IRV",
   },
   sample: {

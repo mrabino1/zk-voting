@@ -902,7 +902,7 @@ describe('sequencer open is idempotent', () => {
 });
 
 describe('poll turnout before the choice gate', () => {
-  test('a poll with fewer than 100 first ballots publishes hourly turnout but no per-choice counts', async () => {
+  test('a poll publishes hourly turnout but no per-choice counts before the gate opens once 100 voters have cast their first ballot', async () => {
     const clock = { t: HOUR_START + 20 * 60 };
     const app = await startApp(clock, { resultsMinVotes: 100, disclosureDelaySeconds: 1800 });
     try {

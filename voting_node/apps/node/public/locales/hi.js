@@ -972,6 +972,8 @@ export default {
     head: "शीर्ष #{head}",
     chain: "श्रृंखला {id}",
     notTallied: "गणना नहीं ({note})",
+    status: "स्थिति",
+    superseded: "प्रतिस्थापित",
     irvShort: "IRV",
   },
   sample: {

@@ -309,12 +309,41 @@ export async function schedulePoll(deps, actor, id) {
   return presentPoll(poll, now);
 }
 
+function nextPollParamsSequence(explorer) {
+  let max = Number(explorer?.pollParamsSequence) || 0;
+  const txs = explorer?.chain?.txs && typeof explorer.chain.txs === 'object' ? Object.values(explorer.chain.txs) : [];
+  for (const tx of txs) {
+    if (String(tx?.type || '').toLowerCase() !== 'poll_params') continue;
+    const n = Number(tx.payload?.sequence);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  const orders = explorer?.chain?.sourceOrder;
+  if (orders && typeof orders === 'object') {
+    for (const order of Object.values(orders)) {
+      const n = Number(order?.sequence);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  }
+  const next = max + 1;
+  if (explorer) explorer.pollParamsSequence = next;
+  return next;
+}
+
 async function postL2(deps, type, payload) {
   if (!deps.explorer?.append) return null;
   if (type === 'poll_vote' && deps.explorer.recordPollVote) {
     return deps.explorer.recordPollVote(payload, deps.config.nowFn(), deps.config.disclosureIntervalSeconds);
   }
-  return deps.explorer.append(type, payload, { timestamp: deps.config.nowFn() });
+  let body = payload;
+  if (type === 'poll_params' && payload && typeof payload === 'object') {
+    const postedAt = Number(deps.config?.nowFn?.());
+    body = {
+      ...payload,
+      sequence: nextPollParamsSequence(deps.explorer),
+      ...(Number.isFinite(postedAt) ? { postedAt } : {}),
+    };
+  }
+  return deps.explorer.append(type, body, { timestamp: deps.config.nowFn() });
 }
 
 export function listPolls(deps) {

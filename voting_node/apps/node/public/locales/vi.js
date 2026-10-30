@@ -970,6 +970,8 @@ export default {
     head: "Đầu #{head}",
     chain: "chuỗi {id}",
     notTallied: "chưa kiểm phiếu ({note})",
+    status: "Trạng thái",
+    superseded: "đã bị thay thế",
     irvShort: "IRV",
   },
   sample: {

@@ -126,15 +126,20 @@ function finiteNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Source L2 height and index, or a sequence, or postedAt when the source has no height. */
+/**
+ * Poll tally order is closeBlock. Poll params use the monotonic sequence
+ * stamped at post, then postedAt. Otherwise source L2 height and index.
+ */
 function sourceOrderOf(payload, block, index) {
   const body = payload && typeof payload === 'object' ? payload : {};
-  const height = finiteNumber(block?.number ?? block?.height ?? body.l2Block ?? body.blockNumber ?? body.sourceBlock);
   const listed = finiteNumber(body.txIndex);
   const at = listed != null ? listed : finiteNumber(index) ?? 0;
-  if (height != null) return { height, index: at };
+  const closeBlock = finiteNumber(body.closeBlock);
+  if (closeBlock != null) return { closeBlock, index: at };
   const sequence = finiteNumber(body.sequence ?? body.tallySequence);
   if (sequence != null) return { sequence, index: 0 };
+  const height = finiteNumber(block?.number ?? block?.height ?? body.l2Block ?? body.blockNumber ?? body.sourceBlock);
+  if (height != null) return { height, index: at };
   const postedAt = finiteNumber(body.postedAt);
   if (postedAt != null) return { postedAt, index: 0 };
   return null;
@@ -143,6 +148,13 @@ function sourceOrderOf(payload, block, index) {
 /** Negative when `a` is older than `b`. Null when the two orders cannot be compared. */
 function compareSource(a, b) {
   if (!a || !b) return null;
+  if (a.closeBlock != null && b.closeBlock != null) {
+    if (a.closeBlock !== b.closeBlock) return a.closeBlock < b.closeBlock ? -1 : 1;
+    const ai = a.index ?? 0;
+    const bi = b.index ?? 0;
+    if (ai !== bi) return ai < bi ? -1 : 1;
+    return 0;
+  }
   if (a.height != null && b.height != null) {
     if (a.height !== b.height) return a.height < b.height ? -1 : 1;
     const ai = a.index ?? 0;
@@ -161,11 +173,11 @@ function compareSource(a, b) {
   return null;
 }
 
+/** True only when next is strictly newer. An unknown order never replaces a latest row. */
 function pollCandidateWins(next, prev) {
   const cmp = compareSource(next.order, prev.order);
-  if (cmp != null) return cmp > 0;
-  if (next.position.number !== prev.position.number) return next.position.number > prev.position.number;
-  return next.position.index > prev.position.index;
+  if (cmp == null) return false;
+  return cmp > 0;
 }
 
 /** Stable id for a row that arrived without a transaction hash. */
@@ -312,6 +324,7 @@ export class Explorer {
       ? {
           supersededBy: { ...(this.chain.supersededBy || {}) },
           sourceOrder: { ...(this.chain.sourceOrder || {}) },
+          alerts: Array.isArray(this.chain.alerts) ? this.chain.alerts.slice() : [],
         }
       : null;
     const stored = this.pg ? await this.pg.load() : await readChainFile(this.filePath);
@@ -320,6 +333,10 @@ export class Explorer {
       if (side) {
         this.chain.supersededBy = { ...(this.chain.supersededBy || {}), ...side.supersededBy };
         this.chain.sourceOrder = { ...(this.chain.sourceOrder || {}), ...side.sourceOrder };
+        const diskAlerts = Array.isArray(this.chain.alerts) ? this.chain.alerts : [];
+        const seen = new Set(diskAlerts.map((row) => `${row?.kind}|${row?.pollId}|${row?.hash}`));
+        const extra = side.alerts.filter((row) => !seen.has(`${row?.kind}|${row?.pollId}|${row?.hash}`));
+        this.chain.alerts = diskAlerts.concat(extra);
       }
     }
     return this.chain;
@@ -366,6 +383,7 @@ export class Explorer {
       this.chain.txs[hash] = tx;
       hashes.push(hash);
       this.rememberPayload(type, payload, hash);
+      this.noteSource(hash, sourceOrderOf(payload, null, i));
       this.noteTrackedTx(type, payload, hash, { number, index: i });
     }
     const blockHash = keccak256(
@@ -575,14 +593,17 @@ export class Explorer {
       }
       if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
         const body = row.payload || row;
+        let order = null;
         if (type === 'poll_params' || type === 'poll_tally') {
           // Source order first, so a late copy of an earlier row is not appended.
-          const order = sourceOrderOf(body, block, rowIndex);
+          order = sourceOrderOf(body, block, rowIndex);
           if (this.olderThanLatestPoll(type, body, order)) {
             this.noteIngestedTx(type, body, blockHash, rowIndex);
             continue;
           }
         }
+        // A, then B, then A: the final A matches a stored payload and is older than B.
+        // Source order already ran, so this fallback cannot make that older A the latest.
         if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
         if (type === 'poll_vote' && !l2Delayed) {
           await this.recordPollVote(body, now, intervalSeconds);
@@ -590,14 +611,19 @@ export class Explorer {
           const pollId = body?.pollId ?? body?.electionId;
           const id = pollId != null ? String(pollId) : '';
           const previous = id ? this.latestPollRecord(type, id) : null;
-          const order = sourceOrderOf(body, block, rowIndex);
           const appended = await this.append(type, body, { timestamp: blockTs || now });
           const hash = appended?.tx?.hash;
           if (hash) {
             this.noteSource(hash, order);
             this.noteTrackedTx(type, body, hash, { number: Number(appended.block?.number), index: 0 });
           }
-          if (previous?.hash && hash && previous.hash !== hash) this.noteSuperseded(previous.hash, hash);
+          const latestOrder = previous ? this.chain.sourceOrder?.[previous.hash] || null : null;
+          const ranked = compareSource(order, latestOrder);
+          if (previous?.hash && hash && ranked == null) {
+            await this.noteAlert({ kind: 'poll_order_unknown', pollId: id, hash });
+          } else if (previous?.hash && hash && previous.hash !== hash && ranked > 0) {
+            this.noteSuperseded(previous.hash, hash);
+          }
         } else {
           await this.append(type, body, { timestamp: blockTs || now });
         }
@@ -719,7 +745,25 @@ export class Explorer {
     const candidate = { hash: String(hash), order, position };
     const key = `${name}|${id}`;
     const prev = this._pollLatest.get(key);
-    if (!prev || pollCandidateWins(candidate, prev)) this._pollLatest.set(key, candidate);
+    if (!prev) {
+      this._pollLatest.set(key, candidate);
+      return;
+    }
+    const prevOrder = this.chain.sourceOrder?.[prev.hash] || null;
+    if (pollCandidateWins(candidate, { hash: prev.hash, order: prevOrder, position: prev.position })) {
+      this._pollLatest.set(key, candidate);
+    }
+  }
+
+  /** Ids only. This stays off the block hash. */
+  async noteAlert(alert) {
+    const row = {
+      kind: alert?.kind != null ? String(alert.kind) : 'poll_order_unknown',
+      pollId: alert?.pollId != null ? String(alert.pollId) : '',
+      hash: alert?.hash != null ? String(alert.hash) : '',
+    };
+    if (!Array.isArray(this.chain.alerts)) this.chain.alerts = [];
+    this.chain.alerts.push(row);
   }
 
   /** Side index only. Block and transaction hashes do not cover this map. */
@@ -750,8 +794,8 @@ export class Explorer {
   }
 
   /**
-   * Latest poll_params or poll_tally for one poll. Source L2 height, then
-   * index. A sequence or postedAt is used when the source has no height.
+   * Latest poll_params or poll_tally for one poll. Tally order is closeBlock.
+   * Params order is the post sequence, then postedAt. L2 height is the fallback.
    */
   latestPollRecord(type, electionId) {
     const name = String(type || '').toLowerCase();

@@ -309,7 +309,7 @@ Glacier / IA / R2 lifecycle can be cheaper for cold election archives; retrieval
 
 ### What “live” means here (**repo fact**)
 
-ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish hourly from the first ballot, on the block after `DISCLOSURE_DELAY_SECONDS` (default **1800**). `RESULTS_MIN_VOTES` (default **100** first ballots) gates poll per-choice counts only. Blocks under `DISCLOSURE_MIN_BLOCK_VOTES` (default **10**) merge forward. `DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests. A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
+ZK-Voting **does not** show a live precinct tick. Vote proofs and public turnout publish hourly from the first ballot, on the block after `DISCLOSURE_DELAY_SECONDS` (default **1800**). `RESULTS_MIN_VOTES` (the gate opens once 100 voters have cast their first ballot) gates poll per-choice counts only. Blocks under `DISCLOSURE_MIN_BLOCK_VOTES` (default **10**) merge forward. `DISCLOSURE_INTERVAL_SECONDS` default **3600**; `0` = instant, local demo / tests. A person leaving a voting office must not match a dashboard bump. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md), [`apps/node/public/results.js`](./apps/node/public/results.js), [`docs/OPERATOR.md`](./docs/OPERATOR.md).
 
 | Surface | During the poll | After the final tally |
 | --- | --- | --- |

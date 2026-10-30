@@ -406,7 +406,15 @@
         tx.blockNumber != null ? `<a href="#/block/${esc(tx.blockNumber)}">${esc(tx.blockNumber)}</a>` : "—",
       ],
       ["Timestamp", esc(fmtTime(tx.timestamp))],
-      ...(tx.superseded ? [["Status", "superseded"]] : []),
+      ...(tx.superseded
+        ? [[
+            t("explorer.status", null, "Status"),
+            esc(t("explorer.superseded", null, "superseded")) +
+              (tx.supersededBy
+                ? ` <a href="#/tx/${encodeURIComponent(tx.supersededBy)}">${esc(tx.supersededBy)}</a>`
+                : ""),
+          ]]
+        : []),
       [
         "Election",
         tx.electionId != null

@@ -353,7 +353,7 @@ Mismatch or failure at any verify stage: **do not prune**; that hour exits non-z
 
 ### Block explorer
 
-Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in block N: commitments, nullifiers, reason codes, tallies, batches — **not** ballot choices. Vote proofs and public turnout publish hourly from the first ballot, on a block `DISCLOSURE_DELAY_SECONDS` (default 1800) after that hour closes. `RESULTS_MIN_VOTES` (default 100 first ballots) gates poll per-choice counts only. Blocks smaller than `DISCLOSURE_MIN_BLOCK_VOTES` (default 10) merge forward. A person leaving a voting office at 08:59 cannot be matched to a 09:00 tick; the block is 09:30 at the earliest. Local instant demo: `DISCLOSURE_INTERVAL_SECONDS=0`. [`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
+Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in block N: commitments, nullifiers, reason codes, tallies, batches — **not** ballot choices. Vote proofs and public turnout publish hourly from the first ballot, on a block `DISCLOSURE_DELAY_SECONDS` (default 1800) after that hour closes. `RESULTS_MIN_VOTES` (the gate opens once 100 voters have cast their first ballot) gates poll per-choice counts only. Blocks smaller than `DISCLOSURE_MIN_BLOCK_VOTES` (default 10) merge forward. A person leaving a voting office at 08:59 cannot be matched to a 09:00 tick; the block is 09:30 at the earliest. Local instant demo: `DISCLOSURE_INTERVAL_SECONDS=0`. [`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
 
 ### Outcomes monitor
 

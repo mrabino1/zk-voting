@@ -970,6 +970,8 @@ export default {
     head: "Tête #{head}",
     chain: "chaîne {id}",
     notTallied: "non décompté ({note})",
+    status: "Statut",
+    superseded: "remplacé",
     irvShort: "IRV",
   },
   sample: {

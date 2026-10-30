@@ -44,7 +44,7 @@ export function resolveDisclosureDelaySeconds(raw, { isTest = false } = {}) {
   });
 }
 
-/** Poll per-choice counts wait until this many first ballots, or the scheduled end. Turnout does not. Tests default to 0 (gate open). */
+/** Poll per-choice counts wait until the gate opens once this many voters have cast their first ballot, or until the scheduled end. Turnout does not. Tests default to 0 (gate open). */
 export function resolveResultsMinVotes(raw, { isTest = false } = {}) {
   return resolveDefaultInt(raw, {
     isTest,
@@ -132,7 +132,7 @@ export function isDisclosed(eventTs, now, intervalSeconds, delaySeconds = 0) {
 }
 
 /**
- * Poll per-choice counts wait until 100 first ballots are in, or the scheduled
+ * Poll per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled
  * end has passed. minVotes <= 0 leaves the gate open.
  * TODO(#116): resultsGateOpen has no production caller yet and must be wired
  * into hourly per-choice blocks.

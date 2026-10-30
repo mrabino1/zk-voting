@@ -976,6 +976,8 @@ export default {
     head: "Cabeza #{head}",
     chain: "cadena {id}",
     notTallied: "no escrutado ({note})",
+    status: "Estado",
+    superseded: "sustituido",
     irvShort: "IRV",
   },
   sample: {

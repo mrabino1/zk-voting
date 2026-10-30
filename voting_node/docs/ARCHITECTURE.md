@@ -143,7 +143,7 @@ and the block floor, from the first ballot.
   has elapsed. A vote at 08:59 publishes at **09:30**. An earlier note that a
   14:05 vote appears at 15:00 is replaced by **15:30**, once the block floor
   is also met. Turnout is public from the first ballot.
-- Poll per-choice counts wait until 100 first ballots are in or the scheduled
+- Poll per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled
   end (`RESULTS_MIN_VOTES`, default **100**). Per-choice counts publish with
   the posted tally; hourly per-choice blocks after the gate are planned.
 - The disclosure block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots
