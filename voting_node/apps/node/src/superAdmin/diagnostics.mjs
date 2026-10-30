@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { brandName } from '../branding.mjs';
 import { electionState, STATE_NAMES } from '../electionState.mjs';
 import { electionTypeName, electionTypeOf, voteResultsSealed } from '../electionType.mjs';
+import { publicExclusion } from '../store.mjs';
 import { countPasskeys, emailHint } from '../identity.mjs';
 import { readArchiveIndex } from '../../../../l2/archive/job.mjs';
 
@@ -160,6 +161,8 @@ function electionMeta(election, now, store) {
     jurisdictionId: election.jurisdictionId || null,
     chainMode: election.createTxHash || election.onChainElectionAddress ? 'onchain' : 'demo',
     tallied: sealed ? false : Boolean(election.tally),
+    excludedCount: publicExclusion(election).count,
+    excludedReasons: publicExclusion(election).reasons,
   };
 }
 

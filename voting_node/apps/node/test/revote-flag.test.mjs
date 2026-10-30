@@ -9,13 +9,14 @@ import path from 'node:path';
 import { describe, test } from 'node:test';
 
 import { encryptAggregateBallot } from '../src/aggregateBallot.mjs';
-import { createChain } from '../src/chain.mjs';
+import { createChain, REVERT_RETRY_BACKOFF_SECONDS } from '../src/chain.mjs';
 import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from '../src/config.mjs';
 import { createSealedDeal, finalizeShare, initGuardian } from '../src/guardians/index.mjs';
 import { partialDecrypt } from '../src/guardians/threshold.mjs';
 import { HttpError } from '../src/http.mjs';
 import { relayVote } from '../src/relay.mjs';
 import { createApp } from '../src/server.mjs';
+import { electionsDiag } from '../src/superAdmin/diagnostics.mjs';
 import { ciphertextForTally } from '../src/tallyOpen.mjs';
 
 function applyCookies(res, jar) {
@@ -368,6 +369,19 @@ describe('ALLOW_REVOTE', () => {
       });
       assert.equal(cross.status, 409, cross.text);
       assert.equal(cross.json.code, 'VOTE_PASS_SPENT');
+      const hashes = created.store.data.votePassSpent[id];
+      const tags = created.store.data.votePassTags;
+      assert.ok(Array.isArray(tags) && tags.length >= 1);
+      assert.deepEqual(tags, [...tags].sort());
+      for (const row of created.store.listVotes(id)) {
+        assert.equal(Object.hasOwn(row, 'spentPassHash'), false);
+      }
+      for (const tag of tags) {
+        assert.equal(hashes.includes(tag), false);
+        assert.equal(tag.length, 64);
+      }
+      const voteJson = JSON.stringify(created.store.listVotes(id));
+      for (const hash of hashes) assert.equal(voteJson.includes(hash), false);
       await assert.rejects(
         () => created.store.acceptVote({
           nullifier: '0xabc',
@@ -798,6 +812,362 @@ describe('ALLOW_REVOTE', () => {
       const tally = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: {} });
       assert.equal(tally.status, 200, tally.text);
       assert.deepEqual(tally.json.election.tally.counts, [1, 0]);
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('with re-vote off, a spent pass is refused even for the same nullifier', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-pass-once-'));
+    const adminJar = {};
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 0,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      const now = Math.floor(Date.now() / 1000);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Pass once',
+          startTime: now - 10,
+          cutoffTime: now + 3600,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      const id = election.json.id;
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const pass = await created.votePass.mintForTest(id);
+      const first = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11', votePass: pass },
+      });
+      assert.equal(first.status, 201, first.text);
+      const again = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x02', identityCommitment: '0xca11', votePass: pass },
+      });
+      assert.equal(again.status, 409, again.text);
+      assert.equal(again.json.code, 'VOTE_PASS_SPENT');
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('tally waits while a ballot is still queued', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-tally-queued-'));
+    const adminJar = {};
+    const chain = createChain(
+      {
+        chainRpc: 'http://127.0.0.1:9',
+        ballotInboxAddress: '0x0000000000000000000000000000000000000001',
+        disclosureIntervalSeconds: 3600,
+        chainId: 31337,
+        quiet: true,
+      },
+      { writeSubmitBatch: async () => ({ hash: '0xabc', batched: true, count: 1 }) },
+    );
+    chain.createElection = async () => ({ onChainElectionId: '1', params: {} });
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 3600,
+      chain,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      const now = Math.floor(Date.now() / 1000);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Queued tally',
+          startTime: now - 10,
+          cutoffTime: now + 3600,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      const id = election.json.id;
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const cast = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(cast.status, 201, cast.text);
+      const stored = created.store.requireElection(id);
+      stored.cutoffTime = now - 1;
+      await created.store.persist();
+      const refused = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
+      assert.equal(refused.status, 409, refused.text);
+      assert.equal(refused.json.code, 'CHAIN_QUEUE_PENDING');
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a writer can exclude a dead letter and the tally then shows the count', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-exclude-'));
+    const adminJar = {};
+    const chain = createChain(
+      {
+        chainRpc: 'http://127.0.0.1:9',
+        ballotInboxAddress: '0x0000000000000000000000000000000000000001',
+        disclosureIntervalSeconds: 3600,
+        chainId: 31337,
+        quiet: true,
+      },
+      {
+        queueStore: null,
+        nullifierSpent: async () => false,
+        writeSubmitBatch: async () => {
+          const err = new Error('execution reverted');
+          err.revert = true;
+          throw err;
+        },
+      },
+    );
+    chain.createElection = async () => ({ onChainElectionId: '1', params: {} });
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 3600,
+      chain,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      const now = Math.floor(Date.now() / 1000);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Exclude',
+          startTime: now - 10,
+          cutoffTime: now + 7200,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      const id = election.json.id;
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const cast = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(cast.status, 201, cast.text);
+      const onChain = created.store.requireElection(id).onChainElectionId;
+      const at = now + 8000;
+      await chain.flushVoteQueue(at);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS);
+      await chain.flushVoteQueue(at + REVERT_RETRY_BACKOFF_SECONDS * 2);
+      assert.equal(chain.deadLettersFor(onChain).length, 1);
+      const stored = created.store.requireElection(id);
+      const acceptedAt = created.store.listVotes(id)[0].acceptedAt;
+      let tick = Math.floor(Date.now() / 1000);
+      if (tick <= acceptedAt) {
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        tick = Math.floor(Date.now() / 1000);
+      }
+      stored.cutoffTime = tick;
+      await created.store.persist();
+      assert.ok(acceptedAt < stored.cutoffTime);
+      const refused = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
+      assert.equal(refused.status, 409, refused.text);
+      assert.equal(refused.json.code, 'CHAIN_DEAD_LETTER');
+      assert.equal(created.store.listVotes(id).length, 1);
+      const nullifier = chain.deadLettersFor(onChain)[0].nullifier;
+      const excluded = await api('POST', `/api/elections/${id}/chain-dead-letter/exclude`, {
+        jar: adminJar,
+        body: { nullifier, reason: 'The chain batch reverted and the supplementary batch is not available.' },
+      });
+      assert.equal(excluded.status, 200, excluded.text);
+      assert.equal(excluded.json.excluded.count, 1);
+      const tally = await api('POST', `/api/elections/${id}/tally`, { jar: adminJar, body: { counts: [1, 0] } });
+      assert.equal(tally.status, 200, tally.text);
+      assert.equal(tally.json.election.tally.excluded.count, 1);
+      const results = await api('GET', `/api/elections/${id}/results`);
+      assert.equal(results.json.results.excludedCount, 1);
+      assert.equal(results.json.results.excludedReasons[0].reason.includes('reverted'), true);
+      const diag = electionsDiag(created.store, tick);
+      assert.equal(diag.elections.find((row) => row.id === String(id)).excludedCount, 1);
+      assert.equal(created.store.listVotes(id).length, 1);
+    } finally {
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a marked ballot is not repaired, and a second repair waits', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-repair-limit-'));
+    const chain = createChain(
+      {
+        chainRpc: 'http://127.0.0.1:9',
+        ballotInboxAddress: '0x0000000000000000000000000000000000000001',
+        disclosureIntervalSeconds: 3600,
+        chainId: 31337,
+        quiet: true,
+      },
+      { writeSubmitBatch: async () => ({ hash: '0xabc', batched: true, count: 1 }) },
+    );
+    chain.createElection = async () => ({ onChainElectionId: '1', params: {} });
+    const created = await createApp({
+      dataDir: tmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: 3600,
+      chain,
+    });
+    const server = await listen(created.app);
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const adminJar = {};
+    const api = async (method, url, { body, jar } = {}) => {
+      const res = await fetch(base + url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(jar ? { cookie: cookieHeader(jar) } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      if (jar) applyCookies(res, jar);
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      return { status: res.status, json, text };
+    };
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const admin = await api('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: adminJar });
+      assert.equal(admin.status, 200, admin.text);
+      const election = await api('POST', '/api/elections', {
+        jar: adminJar,
+        body: {
+          title: 'Repair limit',
+          startTime: now - 10,
+          cutoffTime: now + 7200,
+          treeDepth: 16,
+          questions: [{ type: 'YES_NO', prompt: 'Sample?' }],
+        },
+      });
+      assert.equal(election.status, 201, election.text);
+      const id = election.json.id;
+      assert.equal((await api('POST', `/api/elections/${id}/register`, { jar: adminJar, body: { identityCommitment: '0xca11' } })).status, 201);
+      assert.equal((await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar })).status, 200);
+      const cast = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(cast.status, 201, cast.text);
+      const onChain = created.store.requireElection(id).onChainElectionId;
+      await chain.dropQueuedVote(onChain, '0xabc');
+      let calls = 0;
+      const orig = chain.nullifierChainState.bind(chain);
+      chain.nullifierChainState = async (...args) => {
+        calls += 1;
+        return orig(...args);
+      };
+      const marked = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(marked.status, 409, marked.text);
+      assert.equal(calls, 0);
+      const payload = created.store.chainBallotPayload(id, '0xabc');
+      delete payload.chainQueuedAt;
+      delete payload.chainTxHash;
+      await created.store.persist();
+      const repaired = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(repaired.status, 409, repaired.text);
+      assert.equal(calls, 1);
+      await chain.dropQueuedVote(onChain, '0xabc');
+      delete created.store.chainBallotPayload(id, '0xabc').chainQueuedAt;
+      const limited = await api('POST', `/api/elections/${id}/vote`, {
+        body: { proof: { accept: true }, publicInputs: { nullifier: '0xabc', electionId: id }, encryptedBallot: '0x01', identityCommitment: '0xca11' },
+      });
+      assert.equal(limited.status, 409, limited.text);
+      assert.equal(calls, 1);
+      assert.equal(created.store.listVotes(id).length, 1);
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
       await rm(tmp, { recursive: true, force: true });

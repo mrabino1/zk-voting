@@ -31,6 +31,20 @@ import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from 
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
 
+/** One repair attempt per nullifier per minute, or per disclosure interval. */
+const REPAIR_COOLDOWN_SECONDS = 60;
+const repairAttemptAt = new Map();
+
+function repairAllowed(electionId, nullifier, now, intervalSeconds) {
+  const key = `${String(electionId)}:${String(nullifier)}`;
+  const cooldown = Math.max(REPAIR_COOLDOWN_SECONDS, Number(intervalSeconds) || 0);
+  const at = Number(now) || 0;
+  const prev = repairAttemptAt.get(key) || 0;
+  if (prev && at - prev < cooldown) return false;
+  repairAttemptAt.set(key, at);
+  return true;
+}
+
 /** Vote circuit / BallotInbox instance: [eligibleRoot, disqRoot, nullifier, ballotHash, electionId]. */
 export const VOTE_PUBLIC_INPUT_COUNT = PUBLIC_INPUT_KEYS.length;
 
@@ -286,21 +300,28 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   }
   if (already && !replacing) {
     // Repair only a stored ballot the queue and the chain have both forgotten.
+    // A ballot already marked queued is left alone. Repairs are rate-limited.
     // Anything queued, in flight, spent, or already recorded is a 409.
-    if (chainConfigured && interval > 0 && typeof chain.nullifierChainState === 'function') {
+    const payload = typeof store.chainBallotPayload === 'function'
+      ? store.chainBallotPayload(election.id, parsed.nullifier)
+      : null;
+    const markedQueued = Boolean(payload?.chainQueuedAt || payload?.chainTxHash);
+    if (
+      !markedQueued
+      && payload
+      && chainConfigured
+      && interval > 0
+      && typeof chain.nullifierChainState === 'function'
+      && repairAllowed(election.id, parsed.nullifier, ts, interval)
+    ) {
       const state = await chain.nullifierChainState(onChainId, parsed.nullifier);
-      const payload = typeof store.chainBallotPayload === 'function'
-        ? store.chainBallotPayload(election.id, parsed.nullifier)
-        : null;
-      const recorded = Boolean(payload?.chainQueuedAt || payload?.chainTxHash);
       const absent = state
         && !state.queued
         && !state.inFlight
         && !state.spent
         && !state.chainRecord
         && !state.deadLetter
-        && state.spentKnown !== false
-        && !recorded;
+        && state.spentKnown !== false;
       if (absent && payload) {
         try {
           await chain.submitVote({

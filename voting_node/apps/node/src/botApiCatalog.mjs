@@ -391,6 +391,12 @@ export const BOT_OPERATIONS = [
     summary: 'Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row.',
     body: 'nullifier (optional)',
   }),
+  O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
+    tag: 'Elections',
+    auth: true,
+    summary: 'Writer records a dead-lettered ballot as excluded, with a count and a reason on the public tally. The tally can then proceed. The ballot is not deleted.',
+    body: 'nullifier, reason',
+  }),
   R('/api/elections/:id', {
     tag: 'Elections',
     summary: 'One election. When the caller is signed in, includes that person’s registration status. Choice is never included.',

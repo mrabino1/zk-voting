@@ -9,7 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 
-import { createChain } from '../src/chain.mjs';
+import { createChain, REVERT_RETRY_BACKOFF_SECONDS } from '../src/chain.mjs';
+import { toBytes32 } from '../src/merkle.mjs';
 import { Store } from '../src/store.mjs';
 
 const INBOX = '0x0000000000000000000000000000000000000001';
@@ -36,6 +37,7 @@ function memoryQueue() {
       saved.splitLimit = next.splitLimit || {};
       saved.transportStrikes = next.transportStrikes || {};
       saved.alerts = next.alerts || [];
+      saved.supplementary = next.supplementary || [];
     },
   };
 }
@@ -221,7 +223,14 @@ describe('BallotInbox batch sending', () => {
     await chain.submitVote(vote(1, { now: 100 }));
     await chain.submitVote(vote(2, { now: 100 }));
     await chain.submitVote(vote(3, { now: 100 }));
-    await chain.flushVoteQueue(3600);
+    const first = await chain.flushVoteQueue(3600);
+    assert.equal(queueStore.saved.deadLetter.length, 0);
+    assert.equal(first[0].backoff, true);
+    const immediate = await chain.flushVoteQueue(3600);
+    assert.equal(immediate[0].backoff, true);
+    await chain.flushVoteQueue(3600 + REVERT_RETRY_BACKOFF_SECONDS);
+    const isolated = await chain.flushVoteQueue(3600 + REVERT_RETRY_BACKOFF_SECONDS * 2);
+    assert.equal(isolated[0].deadLetter, true);
     assert.equal(queueStore.saved.deadLetter.length, 1);
     assert.equal(queueStore.saved.deadLetter[0].nullifier, '2');
     assert.equal(queueStore.saved.rows.length, 0);
@@ -231,6 +240,20 @@ describe('BallotInbox batch sending', () => {
     assert.equal(chain.deadLettersFor('7').length, 0);
     assert.equal(queueStore.saved.rows.length, 1);
     assert.equal(chain.diagnostics().deadLetter.length, 0);
+  });
+
+  test('replay keeps a dead letter it cannot put back', async () => {
+    const queueStore = memoryQueue();
+    queueStore.saved.deadLetter = [
+      { electionKey: '7', nullifier: '2', error: 'revert', at: 1 },
+      { electionKey: '7', nullifier: '9', error: 'revert', at: 1, row: { nullifier: 'nope' } },
+    ];
+    const { chain } = openChain({ queueStore });
+    const replayed = await chain.replayDeadLetter('7');
+    assert.equal(replayed.restored, 0);
+    assert.equal(replayed.kept, 2);
+    assert.equal(chain.deadLettersFor('7').length, 2);
+    assert.equal(queueStore.saved.rows.length, 0);
   });
 
   test('a revert drops spent nullifiers and does not dead-letter the hour', async () => {
@@ -364,6 +387,78 @@ describe('BallotInbox batch sending', () => {
       assert.equal(reloaded.loadChainVoteQueue().rows.length, 1);
       assert.equal(reloaded.loadChainVoteQueue().rows[0].nullifier, '9');
       assert.equal(reloaded.data.chainVoteQueue.length, 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('chain ballot payloads are stored out of arrival order', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-payload-order-'));
+    try {
+      const store = await Store.open({ dataDir: dir, quiet: true });
+      const order = [];
+      for (let i = 1; i <= 12; i += 1) {
+        store.upsertChainBallotPayload('7', i, {
+          proof: { accept: true },
+          publicInputs: [],
+          encryptedBallot: '0x01',
+          startTime: 0,
+          cutoffTime: 99,
+        });
+        order.push(String(i));
+      }
+      const stored = store.data.chainBallotPayloads.map((row) => BigInt(row.nullifier).toString());
+      assert.deepEqual([...stored].sort((a, b) => Number(a) - Number(b)), order);
+      assert.notDeepEqual(stored, order);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('revertAcceptedVote deletes the chain payload', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-payload-revert-'));
+    try {
+      const store = await Store.open({ dataDir: dir, quiet: true });
+      const nullifier = toBytes32(4);
+      store.data.votes.push({
+        electionId: '7',
+        nullifier,
+        ballotHash: toBytes32(1),
+        publishedBallotHash: toBytes32(1),
+        relayer: 'node',
+        acceptedAt: 0,
+      });
+      store.upsertChainBallotPayload('7', 4, {
+        proof: { accept: true },
+        publicInputs: [],
+        encryptedBallot: '0x01',
+        startTime: 0,
+        cutoffTime: 99,
+      });
+      assert.ok(store.chainBallotPayload('7', 4));
+      assert.equal(await store.revertAcceptedVote({ electionId: '7', nullifier: 4 }), true);
+      assert.equal(store.chainBallotPayload('7', 4), null);
+      assert.equal(store.data.votes.length, 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a mined nullifier drops its chain payload', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-payload-mined-'));
+    try {
+      const store = await Store.open({ dataDir: dir, quiet: true });
+      store.upsertChainBallotPayload('7', 4, {
+        proof: { accept: true },
+        publicInputs: [],
+        encryptedBallot: '0x01',
+        startTime: 0,
+        cutoffTime: 99,
+      });
+      const { chain } = openChain({ queueStore: store });
+      await chain.submitVote(vote(4, { now: 100 }));
+      await chain.flushVoteQueue(3600);
+      assert.equal(store.chainBallotPayload('7', 4), null);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

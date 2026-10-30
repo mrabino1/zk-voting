@@ -5,7 +5,7 @@
 import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
 import { electionTypeName, electionTypeOf, sealedResultsBody } from './electionType.mjs';
-import { electionDisclosurePolicy } from './store.mjs';
+import { electionDisclosurePolicy, publicExclusion } from './store.mjs';
 
 const RANKED_TYPES = new Set(['RANKED', 'IRV', 'RCV', 'RANKED_CHOICE']);
 
@@ -284,6 +284,7 @@ export function buildResults(election, extra = {}) {
   const available = Boolean(election?.tally && (Array.isArray(election.tally.counts) || Array.isArray(election.tally.questions)));
   const slices = sliceOptionCounts(election?.questions || [], available ? election.tally.counts : null);
   const labeledTally = presentTally(election, election.acceptedBallots);
+  const excluded = publicExclusion(election);
   const questions = slices.map(({ question, counts }) => {
     const labeled = labeledTally?.questions?.find((row) => String(row.id) === String(question.id));
     return questionResult(question, counts, { available, labeled });
@@ -303,6 +304,8 @@ export function buildResults(election, extra = {}) {
       : null,
     publishedAcceptedBallots:
       typeof publishedAcceptedBallots === 'number' ? publishedAcceptedBallots : null,
+    excludedCount: excluded.count,
+    excludedReasons: excluded.reasons,
   };
 }
 

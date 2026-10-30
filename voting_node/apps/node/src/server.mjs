@@ -282,6 +282,8 @@ export async function createApp(overrides = {}) {
   if (typeof runtime.archiveEnabled === 'boolean') config.archiveEnabled = runtime.archiveEnabled;
   installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper, config.setupToken]);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
+  store.votePassTagKey = config.receiptPdfSecret;
+  if (store.migrateSpentPassTags() && store.writerActive !== false) await store.persist();
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   explorer.writerActive = writer.active;

@@ -319,6 +319,14 @@ export async function renderResults(main, ctx) {
               h("span", { class: "lbl", text: "Tally posted" }),
               h("span", { text: formatTime(results.tallyPostedAt || election.tally?.postedAt) })
             )
+          : null,
+        Number(results.excludedCount) > 0
+          ? h(
+              "li",
+              {},
+              h("span", { class: "lbl", text: "Excluded ballots" }),
+              h("span", { text: String(results.excludedCount) })
+            )
           : null
       ),
       h(
@@ -330,6 +338,25 @@ export async function renderResults(main, ctx) {
       )
     ),
   ];
+
+  if (Number(results.excludedCount) > 0) {
+    const reasons = (results.excludedReasons || [])
+      .map((row) => `${row.count} — ${row.reason}`)
+      .join("; ");
+    children.push(
+      h(
+        "div",
+        { class: "notice", role: "status" },
+        h("h2", { text: "Excluded ballots" }),
+        h(
+          "p",
+          {
+            text: `${results.excludedCount} accepted ballot${Number(results.excludedCount) === 1 ? "" : "s"} did not land in the chain batch. ${reasons}`,
+          }
+        )
+      )
+    );
+  }
 
   if (source === "sample") {
     children.push(

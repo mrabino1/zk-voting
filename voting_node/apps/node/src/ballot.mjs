@@ -427,6 +427,9 @@ export function presentTally(election, acceptedBallots) {
     countsHash: election.tally.countsHash || null,
     l1: election.tally.l1 || null,
     ballotMethod: election.tally.ballotMethod || election.ballotMethod || 'plurality',
+    ...(election.tally.excluded?.count
+      ? { excluded: { count: election.tally.excluded.count, reasons: election.tally.excluded.reasons || [] } }
+      : {}),
   };
 }
 

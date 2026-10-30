@@ -4,7 +4,7 @@
 // separate collection from ballots and are never copied onto a vote record.
 
 import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -176,6 +176,8 @@ function emptyData() {
     chainVoteSplit: {},
     chainVoteAlerts: [],
     chainVoteTransportStrikes: {},
+    // Dead letters offered to the supplementary batch and not yet mined.
+    chainVoteSupplementary: [],
     // Proof payload for a crash between accept and the queue write. Not a public row.
     chainBallotPayloads: [],
     notifications: [],
@@ -201,6 +203,8 @@ function emptyData() {
     ceremonies: [],
     // electionId -> sorted hashes of spent vote passes (no order, no time).
     votePassSpent: {},
+    // Sorted HMAC tags of (pass hash, nullifier). The tag is not stored on a vote.
+    votePassTags: [],
     runtime: {},
   };
 }
@@ -268,6 +272,7 @@ export function scrubBallotLinkage(data) {
   if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
     data.votePassSpent = {};
   }
+  if (!Array.isArray(data.votePassTags)) data.votePassTags = [];
   const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
   for (const r of data.receipts || []) {
     if (!r || typeof r !== 'object') continue;
@@ -316,6 +321,7 @@ const ARRAY_COLLECTIONS = [
   'receipts',
   'envelopes',
   'chainBallotPayloads',
+  'votePassTags',
   'chainVoteAlerts',
   'notifications',
   'tallyGuardians',
@@ -344,6 +350,7 @@ export const BALLOT_TIMING_COLLECTIONS = [
   'receipts',
   'envelopes',
   'votePassSpent',
+  'votePassTags',
   'elections',
 ];
 
@@ -416,6 +423,36 @@ export function normalizeChainVoteQueue(doc) {
     splitLimit,
     transportStrikes,
     alerts: Array.isArray(src.alerts) ? src.alerts.filter((item) => plainObject(item)).slice(-20) : [],
+    supplementary: Array.isArray(src.supplementary) ? src.supplementary.filter((item) => plainObject(item)) : [],
+  };
+}
+
+/**
+ * Keyed tag for one pass used by one nullifier. The digest is not the pass
+ * hash and not the nullifier, and it is not written onto the vote row.
+ * @param {string} key server secret, kept off the vote document
+ */
+export function votePassTag(key, { electionId, passHash, nullifier }) {
+  const pass = String(passHash || '').toLowerCase();
+  const id = toBytes32(nullifier);
+  return createHmac('sha256', String(key || ''))
+    .update(`vote-pass-tag:v1\n${String(electionId)}\n${pass}\n${id}`)
+    .digest('hex');
+}
+
+/** Public exclusion summary: a count and reasons, not a nullifier list. */
+export function publicExclusion(election) {
+  const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
+  const byReason = new Map();
+  for (const row of rows) {
+    const reason = String(row?.reason || '').trim() || 'unspecified';
+    byReason.set(reason, (byReason.get(reason) || 0) + 1);
+  }
+  return {
+    count: rows.length,
+    reasons: [...byReason.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0)),
   };
 }
 
@@ -430,6 +467,7 @@ function chainVoteQueueFromData(data) {
     splitLimit: data?.chainVoteSplit,
     transportStrikes: data?.chainVoteTransportStrikes,
     alerts: data?.chainVoteAlerts,
+    supplementary: data?.chainVoteSupplementary,
   });
 }
 
@@ -796,6 +834,7 @@ export class Store {
     this.data.chainVoteSplit = next.splitLimit;
     this.data.chainVoteAlerts = next.alerts;
     this.data.chainVoteTransportStrikes = next.transportStrikes;
+    this.data.chainVoteSupplementary = next.supplementary;
     return next;
   }
 
@@ -838,6 +877,7 @@ export class Store {
         chainVoteSplit: next.splitLimit,
         chainVoteAlerts: next.alerts,
         chainVoteTransportStrikes: next.transportStrikes,
+        chainVoteSupplementary: next.supplementary,
       });
       return;
     }
@@ -2476,10 +2516,67 @@ export class Store {
     return rec;
   }
 
+  _passTag(electionId, passHash, nullifier) {
+    const key = String(this.votePassTagKey || '');
+    if (!key) {
+      throw new HttpError(500, 'vote pass tag key is not configured', { code: 'VOTE_PASS_TAG_KEY' });
+    }
+    return votePassTag(key, { electionId, passHash, nullifier });
+  }
+
+  _addVotePassTag(electionId, passHash, nullifier) {
+    if (!Array.isArray(this.data.votePassTags)) this.data.votePassTags = [];
+    const tag = this._passTag(electionId, passHash, nullifier);
+    if (!this.data.votePassTags.includes(tag)) {
+      this.data.votePassTags.push(tag);
+      this.data.votePassTags.sort();
+    }
+    return tag;
+  }
+
+  _removeVotePassTag(electionId, passHash, nullifier) {
+    if (!this.votePassTagKey || !Array.isArray(this.data.votePassTags)) return;
+    let tag;
+    try {
+      tag = this._passTag(electionId, passHash, nullifier);
+    } catch {
+      return;
+    }
+    this.data.votePassTags = this.data.votePassTags.filter((item) => item !== tag);
+  }
+
+  /** True when this pass was already recorded for this nullifier. */
+  votePassTagHeld(electionId, passHash, nullifier) {
+    if (!this.votePassTagKey || !passHash) return false;
+    let tag;
+    try {
+      tag = this._passTag(electionId, passHash, nullifier);
+    } catch {
+      return false;
+    }
+    return Array.isArray(this.data.votePassTags) && this.data.votePassTags.includes(tag);
+  }
+
+  /**
+   * Older rows stored the pass hash on the vote. Move that link into the tag
+   * list and delete the field. No-op until the tag key is set.
+   */
+  migrateSpentPassTags() {
+    if (!this.votePassTagKey) return false;
+    let changed = false;
+    for (const vote of this.data.votes || []) {
+      if (!vote || !vote.spentPassHash) continue;
+      this._addVotePassTag(vote.electionId, vote.spentPassHash, vote.nullifier);
+      delete vote.spentPassHash;
+      changed = true;
+    }
+    return changed;
+  }
+
   /**
    * Persist an accepted vote. Internally { nullifier, ballotHash, electionId,
    * relayer, acceptedAt }. Public dashboards never see acceptedAt or a live count;
-   * they wait for hourly disclosure. No passkey user id, no choice.
+   * they wait for hourly disclosure. No passkey user id, no choice, no pass hash.
    *
    * One ballot per nullifier. A later submit is always rejected here.
    * relayVote calls replaceVote itself when allowRevote is on, so two racing
@@ -2515,7 +2612,6 @@ export class Store {
       electionId: String(vote.electionId),
       relayer: vote.relayer || 'node',
       acceptedAt,
-      ...(spentPassHash ? { spentPassHash } : {}),
     };
     if (vote.chainPayload && typeof vote.chainPayload === 'object') {
       this.upsertChainBallotPayload(record.electionId, record.nullifier, vote.chainPayload);
@@ -2553,6 +2649,7 @@ export class Store {
       list.push(spentPassHash);
       list.sort();
       this.data.votePassSpent[key] = list;
+      this._addVotePassTag(key, spentPassHash, record.nullifier);
     }
     const election = this.requireElection(vote.electionId);
     election.acceptedBallots += 1;
@@ -2576,8 +2673,12 @@ export class Store {
     }
     const spentPassHash = vote.spentPassHash ? String(vote.spentPassHash).toLowerCase() : null;
     // The pass this voter already spent may replace their own ballot until
-    // the deadline. Any other reuse of that pass is rejected.
-    if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash) && existing.spentPassHash !== spentPassHash) {
+    // the deadline. The match is a keyed tag, not a hash stored on the vote.
+    // Any other reuse of that pass is rejected.
+    const samePass = Boolean(
+      spentPassHash && this.votePassTagHeld(vote.electionId, spentPassHash, existing.nullifier),
+    );
+    if (spentPassHash && this.votePassSpent(vote.electionId, spentPassHash) && !samePass) {
       throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
     }
     const electionId = String(existing.electionId);
@@ -2618,7 +2719,7 @@ export class Store {
       list.push(spentPassHash);
       list.sort();
       this.data.votePassSpent[key] = list;
-      existing.spentPassHash = spentPassHash;
+      this._addVotePassTag(key, spentPassHash, nullifier);
     }
     if (vote.receiptTokenHash) {
       let pdfSha256 = null;
@@ -2671,7 +2772,11 @@ export class Store {
       const hash = String(spentPassHash).toLowerCase();
       const list = this.data.votePassSpent?.[electionKey];
       if (Array.isArray(list)) this.data.votePassSpent[electionKey] = list.filter((item) => item !== hash);
+      this._removeVotePassTag(electionKey, hash, key);
     }
+    this.data.chainBallotPayloads = (this.data.chainBallotPayloads || []).filter(
+      (row) => !row || String(row.electionId) !== electionKey || toBytes32(row.nullifier) !== key,
+    );
     const election = this.getElection(electionId);
     if (election) election.acceptedBallots = Math.max(0, Number(election.acceptedBallots || 0) - removed);
     await this.persist();
@@ -2687,7 +2792,7 @@ export class Store {
     );
     if (!row) {
       row = { electionId: electionKey, nullifier: id };
-      this.data.chainBallotPayloads.push(row);
+      insertAtRandom(this.data.chainBallotPayloads, row);
     }
     row.proof = payload.proof;
     row.publicInputs = payload.publicInputs;
@@ -2719,6 +2824,75 @@ export class Store {
     if (txHash) row.chainTxHash = String(txHash);
     await this.persist();
     return row;
+  }
+
+  /**
+   * Drop proof payloads once the inbox has the nullifier. Matches the app
+   * election id or the on-chain id the queue uses.
+   */
+  async dropChainBallotPayloads(electionKey, nullifiers) {
+    if (!Array.isArray(this.data.chainBallotPayloads) || !this.data.chainBallotPayloads.length) return 0;
+    const ids = new Set();
+    for (const n of nullifiers || []) {
+      try {
+        ids.add(toBytes32(n));
+      } catch {
+        /* skip a nullifier this store cannot name */
+      }
+    }
+    if (!ids.size) return 0;
+    const electionIds = new Set([String(electionKey)]);
+    for (const election of this.data.elections || []) {
+      if (!election) continue;
+      const appId = String(election.id);
+      const chainId = election.onChainElectionId != null ? String(election.onChainElectionId) : '';
+      if (appId === String(electionKey) || (chainId && chainId === String(electionKey))) {
+        electionIds.add(appId);
+        if (chainId) electionIds.add(chainId);
+      }
+    }
+    const before = this.data.chainBallotPayloads.length;
+    this.data.chainBallotPayloads = this.data.chainBallotPayloads.filter((row) => {
+      if (!row || !electionIds.has(String(row.electionId))) return true;
+      try {
+        return !ids.has(toBytes32(row.nullifier));
+      } catch {
+        return true;
+      }
+    });
+    const removed = before - this.data.chainBallotPayloads.length;
+    if (removed) await this.persist();
+    return removed;
+  }
+
+  excludedNullifiers(electionId) {
+    const election = this.getElection(electionId);
+    const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
+    return rows.map((row) => row.nullifier);
+  }
+
+  /**
+   * Writer record that a dead-lettered ballot will not be forced onto the
+   * chain. The vote row stays. The public tally later copies the count and
+   * the reasons, not the nullifiers.
+   */
+  async recordBallotExclusion(electionId, { nullifier, reason, at } = {}) {
+    this.refuseIfStandby();
+    const election = this.requireElection(electionId);
+    const clean = String(reason || '').trim();
+    if (!clean) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
+    if (clean.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
+    const id = toBytes32(nullifier);
+    if (!Array.isArray(election.excludedBallots)) election.excludedBallots = [];
+    if (!election.excludedBallots.some((row) => row && toBytes32(row.nullifier) === id)) {
+      election.excludedBallots.push({
+        nullifier: id,
+        reason: clean,
+        at: Math.floor(Number(at) || Date.now() / 1000),
+      });
+      await this.persist();
+    }
+    return publicExclusion(election);
   }
 
   votePassSpent(electionId, hash) {
@@ -3130,6 +3304,8 @@ export class Store {
       l1: extras.l1 || null,
       ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
+    const excluded = publicExclusion(election);
+    if (excluded.count) election.tally.excluded = excluded;
     if (Array.isArray(extras.questions) && extras.questions.length) {
       election.tally.questions = extras.questions;
     }

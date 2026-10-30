@@ -23,6 +23,7 @@ import { presentResults } from '../results.mjs';
 import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { chainElectionId } from '../electionIds.mjs';
+import { submitSupplementaryBatch, tallyAllowedAt } from '../supplementaryBatch.mjs';
 import { uuidParam } from '../recordIds.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
 import {
@@ -74,6 +75,55 @@ async function recordElectionOnL2(config, election) {
     cutoffTime: election.cutoffTime,
   });
   return 'open';
+}
+
+function sameNullifier(left, right) {
+  try {
+    return BigInt(left).toString() === BigInt(right).toString();
+  } catch {
+    return String(left) === String(right);
+  }
+}
+
+function receiptBeforeCutoff(store, election, nullifier) {
+  const vote = store.findVote(election.id, nullifier);
+  const at = Number(vote?.acceptedAt);
+  const cutoff = Number(election.cutoffTime);
+  return Number.isFinite(at) && Number.isFinite(cutoff) && at < cutoff;
+}
+
+function notExcluded(store, election, nullifier) {
+  const listed = typeof store.excludedNullifiers === 'function' ? store.excludedNullifiers(election.id) : [];
+  return !listed.some((item) => sameNullifier(item, nullifier));
+}
+
+/**
+ * Offer pre-cutoff dead letters to the supplementary hook before the tally
+ * is accepted. A refusal leaves the dead letter in place.
+ */
+async function offerSupplementaryBatch({ store, chain, election, now, config }) {
+  if (typeof chain?.deadLettersFor !== 'function' || typeof chain?.holdSupplementary !== 'function') return;
+  const dead = chain.deadLettersFor(chainElectionId(election)) || [];
+  const rows = [];
+  for (const item of dead) {
+    if (!receiptBeforeCutoff(store, election, item.nullifier)) continue;
+    const vote = store.findVote(election.id, item.nullifier);
+    rows.push({
+      nullifier: item.nullifier,
+      receiptAcceptedAt: Number(vote?.acceptedAt),
+      cutoffTime: Number(election.cutoffTime),
+    });
+  }
+  if (!rows.length) return;
+  const hook = typeof config?.supplementaryBatch === 'function' ? config.supplementaryBatch : submitSupplementaryBatch;
+  let result;
+  try {
+    result = await hook({ election, rows, now, tallyAllowedAt: tallyAllowedAt(election) });
+  } catch {
+    return;
+  }
+  if (!result?.accepted || !Array.isArray(result.nullifiers) || !result.nullifiers.length) return;
+  await chain.holdSupplementary(chainElectionId(election), result.nullifiers);
 }
 
 function rejectPendingL2(election) {
@@ -913,7 +963,9 @@ export function electionsRouter(deps) {
       let spentPassHash = null;
       if (rawBody.votePass && electionForGate) {
         spentPassHash = await votePass.verify(electionForGate.id, rawBody.votePass);
-        const priorBallot = store.findVote(electionForGate.id, bodyNullifier(rawBody));
+        const priorBallot = config.allowRevote === true
+          ? store.findVote(electionForGate.id, bodyNullifier(rawBody))
+          : null;
         if (store.votePassSpent(electionForGate.id, spentPassHash) && !priorBallot) {
           throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
         }
@@ -1138,6 +1190,45 @@ export function electionsRouter(deps) {
   );
 
   router.post(
+    '/:id/chain-dead-letter/exclude',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      if (deps.writer?.enabled && deps.writer.acceptingWrites() === false) {
+        throw new HttpError(409, 'this node is not the writer', { code: 'NOT_WRITER' });
+      }
+      const election = store.requireElection(req.params.id);
+      if (election.tally) throw new HttpError(409, 'already tallied', { code: 'ALREADY_TALLIED' });
+      const reason = String(req.body?.reason || '').trim();
+      if (!reason) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
+      const nullifier = req.body?.nullifier;
+      if (nullifier == null || String(nullifier).trim() === '') {
+        throw new HttpError(400, 'nullifier is required', { code: 'NULLIFIER_REQUIRED' });
+      }
+      const key = chainElectionId(election);
+      const dead = typeof chain?.deadLettersFor === 'function' ? chain.deadLettersFor(key) : [];
+      const held = typeof chain?.supplementaryFor === 'function' ? chain.supplementaryFor(key) : [];
+      const known = [...dead, ...held].some((item) => sameNullifier(item.nullifier, nullifier));
+      const already = (election.excludedBallots || []).some((row) => sameNullifier(row.nullifier, nullifier));
+      if (!known && !already) {
+        throw new HttpError(404, 'ballot is not dead-lettered', { code: 'NOT_DEAD_LETTER' });
+      }
+      const excluded = await store.recordBallotExclusion(election.id, {
+        nullifier,
+        reason,
+        at: Math.floor(Date.now() / 1000),
+      });
+      if (known && typeof chain?.releaseExcluded === 'function') {
+        const released = await chain.releaseExcluded(key, nullifier);
+        if (!released && notExcluded(store, election, nullifier)) {
+          throw new HttpError(409, 'the dead letter could not be released', { code: 'EXCLUSION_FAILED' });
+        }
+      }
+      res.json({ ok: true, nfp: true, excluded });
+    }),
+  );
+
+  router.post(
     '/:id/tally',
     requireAuth,
     requireElectionRole(store, 'tally_operator'),
@@ -1145,15 +1236,30 @@ export function electionsRouter(deps) {
       const election = store.requireElection(req.params.id);
       const now = Math.floor(Date.now() / 1000);
       const state = electionState(election, now);
-      if (now < election.cutoffTime) {
+      if (now < tallyAllowedAt(election)) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
+      await offerSupplementaryBatch({ store, chain, election, now, config });
       if (typeof chain?.deadLettersFor === 'function') {
-        const dead = chain.deadLettersFor(chainElectionId(election));
-        if (Array.isArray(dead) && dead.length) {
-          throw new HttpError(409, 'dead-lettered ballots must be replayed before the tally', {
+        const dead = (chain.deadLettersFor(chainElectionId(election)) || []).filter((item) =>
+          notExcluded(store, election, item.nullifier),
+        );
+        if (dead.length) {
+          throw new HttpError(409, 'dead-lettered ballots must be replayed or excluded before the tally', {
             code: 'CHAIN_DEAD_LETTER',
             deadLetter: dead.length,
+          });
+        }
+      }
+      if (typeof chain?.pendingFor === 'function') {
+        const pending = chain.pendingFor(chainElectionId(election));
+        const queued = (pending?.queued || []).filter((id) => notExcluded(store, election, id));
+        const inFlight = (pending?.inFlight || []).filter((id) => notExcluded(store, election, id));
+        if (queued.length || inFlight.length) {
+          throw new HttpError(409, 'ballots are still queued for the chain', {
+            code: 'CHAIN_QUEUE_PENDING',
+            queued: queued.length,
+            inFlight: inFlight.length,
           });
         }
       }
