@@ -273,12 +273,14 @@ function splitBrandWordmark(name) {
 }
 
 function paintBrandWordmark(el, name) {
-  const split = splitBrandWordmark(name);
+  const value = String(name ?? '');
+  el.title = value;
+  const split = splitBrandWordmark(value);
   el.replaceChildren();
   if (!split) {
     const text = document.createElement('span');
     text.className = 'brand-name-text';
-    text.textContent = name;
+    text.textContent = value;
     el.append(text);
     return;
   }

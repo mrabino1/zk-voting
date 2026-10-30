@@ -113,6 +113,8 @@ describe('configurable branding', () => {
     assert.equal(manifest.status, 200);
     assert.equal(manifest.json.name, 'ZK-Voting');
     assert.equal(manifest.json.icons.some((icon) => icon.src === '/icon-512.png'), true);
+    assert.equal(manifest.json.icons.every((icon) => icon.purpose === 'any maskable'), true);
+    assert.match(home.text, /class="brand-name" title="ZK-Voting"/);
     const cfg = await api('GET', '/api/config');
     assert.equal(cfg.json.product, 'ZK-Voting');
     assert.equal(cfg.json.rpName, 'ZK-Voting');
