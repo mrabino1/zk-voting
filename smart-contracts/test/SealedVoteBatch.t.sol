@@ -3,12 +3,15 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
 import {IBallotInbox} from "../src/interfaces/IBallotInbox.sol";
 import {IElection} from "../src/interfaces/IElection.sol";
-import {ElectionType} from "../src/interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "../src/interfaces/ElectionParams.sol";
 import {IRollupSettlement} from "../src/interfaces/IRollupSettlement.sol";
 import {ITallyVerifier} from "../src/interfaces/ITallyVerifier.sol";
 import {GuardianCeremony} from "../src/GuardianCeremony.sol";
+import {PoseidonT3} from "../src/hasher/PoseidonT3.sol";
+import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -16,6 +19,8 @@ contract PartialMath {
     struct Proof {
         uint256 pkX;
         uint256 pkY;
+        uint256 c0X;
+        uint256 c0Y;
         uint256 c1X;
         uint256 c1Y;
         uint256 dX;
@@ -25,26 +30,78 @@ contract PartialMath {
         uint256 bX;
         uint256 bY;
         uint256 z;
+        uint256 rX;
+        uint256 rY;
+        uint256 sz;
     }
 
-    function honest(uint256 share, uint256 nonce) public view returns (Proof memory p) {
+    function deal(
+        uint256 share,
+        uint256 nonce,
+        uint256 electionId,
+        uint8 electionType,
+        address guardian,
+        uint256 hourIndex,
+        uint256 c0Scalar,
+        uint256 c1X,
+        uint256 c1Y
+    ) public view returns (Proof memory p) {
         uint256 field = _field();
-        p.c1X = 1;
-        p.c1Y = 2;
         (p.pkX, p.pkY) = this.mulG(share);
-        p.dX = p.pkX;
-        p.dY = p.pkY;
+        (p.c0X, p.c0Y) = this.mulG(c0Scalar);
+        p.c1X = c1X;
+        p.c1Y = c1Y;
+        (p.dX, p.dY) = this.mul(c1X, c1Y, share);
         (p.aX, p.aY) = this.mulG(nonce);
-        p.bX = p.aX;
-        p.bY = p.aY;
-        p.z = _response(p, share, nonce, field);
+        (p.bX, p.bY) = this.mul(c1X, c1Y, nonce);
+        uint256 e = uint256(
+            keccak256(
+                abi.encode(
+                    keccak256("CHAUM_PEDERSEN_V1"),
+                    electionId,
+                    hourIndex,
+                    guardian,
+                    p.pkX,
+                    p.pkY,
+                    p.c1X,
+                    p.c1Y,
+                    p.dX,
+                    p.dY,
+                    p.aX,
+                    p.aY,
+                    p.bX,
+                    p.bY
+                )
+            )
+        ) % field;
+        p.z = addmod(nonce, mulmod(e, share, field), field);
+        uint256 schnorrNonce = nonce + 17;
+        (p.rX, p.rY) = this.mulG(schnorrNonce);
+        uint256 es = uint256(
+            keccak256(
+                abi.encode(
+                    keccak256("GUARDIAN_SCHNORR_V1"),
+                    electionId,
+                    electionType,
+                    guardian,
+                    p.pkX,
+                    p.pkY,
+                    p.rX,
+                    p.rY
+                )
+            )
+        ) % field;
+        p.sz = addmod(schnorrNonce, mulmod(es, share, field), field);
     }
 
-    /// @dev External so the precompile call is not inlined into `honest`.
     function mulG(uint256 s) external view returns (uint256 xOut, uint256 yOut) {
+        return this.mul(1, 2, s);
+    }
+
+    function mul(uint256 x, uint256 y, uint256 s) external view returns (uint256 xOut, uint256 yOut) {
         uint256[3] memory input;
-        input[0] = 1;
-        input[1] = 2;
+        input[0] = x;
+        input[1] = y;
         input[2] = s % _field();
         uint256[2] memory output;
         bool ok;
@@ -56,12 +113,6 @@ contract PartialMath {
         yOut = output[1];
     }
 
-    function _response(Proof memory p, uint256 share, uint256 nonce, uint256 field) private pure returns (uint256) {
-        uint256 e =
-            uint256(keccak256(abi.encode(p.pkX, p.pkY, p.c1X, p.c1Y, p.dX, p.dY, p.aX, p.aY, p.bX, p.bY))) % field;
-        return addmod(nonce, mulmod(e, share, field), field);
-    }
-
     function _field() private pure returns (uint256) {
         return 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     }
@@ -69,8 +120,13 @@ contract PartialMath {
 
 /// @notice Sealed hourly, final, and supplementary batches.
 contract SealedVoteBatchTest is Deployer {
+    using stdStorage for StdStorage;
+
     uint256 internal constant RELAYER_KEY = 0xA11CE;
+    uint256 internal constant FIELD =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
     PartialMath internal math;
+    GuardianCeremony internal ceremony;
     uint256[2] internal pa;
     uint256[2][2] internal pb;
     uint256[2] internal pc;
@@ -102,12 +158,12 @@ contract SealedVoteBatchTest is Deployer {
         bytes32 finalRoot = keccak256("final-root");
         this.sealFinal(id, finalRoot, hourly, finalP, 1);
         assertEq(inbox.acceptedBallots(id), 1, "final batch carries no turnout step");
-        this.hold(id, el, 99, finalRoot, uint64(IElection(el).params().cutoffTime) - 1);
+        uint256 sid = this.hold(id, el, 99, finalRoot, uint64(IElection(el).params().cutoffTime) - 1);
         vm.warp(tally.tallyAllowedAt(id));
-        this.suppOne(id, finalRoot, hourly, keccak256("final-with-revote"), 99);
-        (,, bool pending, bool included) = inbox.heldRevote(id, 99);
+        this.suppOne(id, finalRoot, hourly, keccak256("final-with-revote"), sid, true);
+        (, bool pending) = inbox.forcedInRoot(id, sid);
         assertFalse(pending);
-        assertTrue(included, "final-hour re-vote counted in the supplementary batch");
+        assertEq(inbox.pendingForcedIn(id).length, 0);
         assertEq(inbox.acceptedBallots(id), 1, "a replacement does not add a voter");
         assertTrue(settlement.supplementaryPosted(id));
     }
@@ -127,16 +183,17 @@ contract SealedVoteBatchTest is Deployer {
         (uint256 id, address el) = this.openLinked(2 hours);
         bytes32 hourRoot = keccak256("receipt-root");
         this.hour(id, hourRoot, keccak256("h3"), keccak256("f3"), 0, 0);
-        warpClosed(el);
         uint64 cutoff = IElection(el).params().cutoffTime;
         vm.warp(cutoff + 1 hours);
-        this.forceAt(id, el, 42, hourRoot, cutoff - 1);
-        (bytes32 root, bool pending) = inbox.forcedInRoot(id, 42);
+        uint256 sid = this.forceAt(id, el, 42, hourRoot, cutoff - 1);
+        (bytes32 root, bool pending) = inbox.forcedInRoot(id, sid);
         assertEq(root, hourRoot);
         assertTrue(pending);
         assertEq(inbox.acceptedBallots(id), 0, "force-in does not publish turnout");
         vm.expectRevert(IBallotInbox.UnknownBoundRoot.selector);
         this.forceAt(id, el, 43, keccak256("not-a-posted-root"), cutoff - 1);
+        vm.expectRevert(IBallotInbox.UnknownBoundRoot.selector);
+        this.forceAt(id, el, 45, bytes32(0), cutoff - 1);
         vm.warp(tally.tallyAllowedAt(id));
         vm.expectRevert(IBallotInbox.ForceInClosed.selector);
         this.forceAt(id, el, 44, hourRoot, cutoff - 1);
@@ -147,20 +204,20 @@ contract SealedVoteBatchTest is Deployer {
         bytes32 hourRoot = keccak256("chain-root");
         bytes32 hourly = keccak256("h4");
         this.hour(id, hourRoot, hourly, keccak256("f4"), 0, 0);
-        warpClosed(el);
-        vm.warp(IElection(el).params().cutoffTime + 30 minutes);
-        this.forceAt(id, el, 42, hourRoot, uint64(IElection(el).params().cutoffTime) - 1);
+        uint64 cutoff = IElection(el).params().cutoffTime;
+        vm.warp(cutoff + 30 minutes);
+        uint256 sid = this.forceAt(id, el, 42, hourRoot, cutoff - 1);
         bytes32 finalRoot = keccak256("chain-final");
         this.sealFinal(id, finalRoot, hourly, keccak256("f4"), 0);
         vm.warp(tally.tallyAllowedAt(id));
-        this.expectBadChain(id, finalRoot, hourly);
-        this.suppOne(id, finalRoot, hourly, keccak256("f4b"), 42);
+        this.expectBadChain(id, finalRoot, hourly, sid);
+        this.suppOne(id, finalRoot, hourly, keccak256("f4b"), sid, false);
         assertEq(inbox.acceptedBallots(id), 1, "forced-in first ballot counts in the supplementary step");
-        (, bool stillPending) = inbox.forcedInRoot(id, 42);
+        (, bool stillPending) = inbox.forcedInRoot(id, sid);
         assertFalse(stillPending);
     }
 
-    function testAnyoneMayPostSupplementaryAfterGrace() public {
+    function testMockModeStaysOperatorOnlyAfterGrace() public {
         (uint256 id, address el) = this.openLinked(2 hours);
         bytes32 hourly = keccak256("h5");
         bytes32 finalRoot = keccak256("rf5");
@@ -172,8 +229,32 @@ contract SealedVoteBatchTest is Deployer {
         vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
         this.suppEmpty(id, finalRoot, hourly, keccak256("f5"), stranger);
         vm.warp(tally.tallyAllowedAt(id) + settlement.SUPPLEMENTARY_GRACE());
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
         this.suppEmpty(id, finalRoot, hourly, keccak256("f5"), stranger);
+        this.suppEmpty(id, finalRoot, hourly, keccak256("f5"), sequencer);
         assertTrue(settlement.supplementaryPosted(id));
+    }
+
+    function testStrangerMayPostAfterGraceOutsideMockMode() public {
+        RollupSettlement live = new RollupSettlement(admin, sequencer, prover, address(verifier), false);
+        vm.startPrank(admin);
+        live.setElectionFactory(address(factory));
+        live.setInbox(address(inbox));
+        vm.stopPrank();
+        settlement = live;
+        (uint256 id, address el) = this.openLinked(1 hours);
+        bytes32 hourly = keccak256("hlive");
+        bytes32 finalRoot = keccak256("rflive");
+        this.hour(id, keccak256("rlive"), hourly, keccak256("flive"), 0, 0);
+        warpClosed(el);
+        this.sealFinal(id, finalRoot, hourly, keccak256("flive"), 0);
+        address stranger = makeAddr("live-stranger");
+        vm.warp(tally.tallyAllowedAt(id));
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
+        this.suppEmpty(id, finalRoot, hourly, keccak256("flive"), stranger);
+        vm.warp(tally.tallyAllowedAt(id) + live.SUPPLEMENTARY_GRACE());
+        this.suppEmpty(id, finalRoot, hourly, keccak256("flive"), stranger);
+        assertTrue(live.supplementaryPosted(id));
     }
 
     function testSupplementaryFlagGatesTallyDecryptAndFinalPartials() public {
@@ -186,7 +267,11 @@ contract SealedVoteBatchTest is Deployer {
         vm.warp(tally.tallyAllowedAt(id));
         this.expectTallyBlocked(id);
         this.suppEmpty(id, finalRoot, hourly, keccak256("f6"), sequencer);
-        this.postTallyAndDecrypt(id);
+        this.postCount(id, 0);
+        assertTrue(tally.isTallied(id));
+        vm.prank(tallyOperator);
+        vm.expectPartialRevert(ITallyVerifier.NotEnoughPartials.selector);
+        tally.submitDecryption(id, keccak256("plain"));
     }
 
     function testFinalBatchRejectsATurnoutStep() public {
@@ -204,10 +289,16 @@ contract SealedVoteBatchTest is Deployer {
         (uint256 id,) = this.openLinked(2 hours);
         bytes32 first = keccak256("r8");
         this.hour(id, first, keccak256("h8"), keccak256("f8"), 0, 1);
+        vm.expectRevert(IRollupSettlement.HourAlreadyPosted.selector);
+        this.hour(id, keccak256("r8-again"), keccak256("h8b"), keccak256("f8b"), 1, 1);
+        vm.warp(block.timestamp + 1 hours);
         vm.expectRevert(IRollupSettlement.BoundRootMismatch.selector);
         this.hourBound(id, keccak256("r8b"), bytes32(0), keccak256("tag-a"));
+        vm.warp(block.timestamp + 1 hours);
         vm.expectRevert(IRollupSettlement.DuplicateFirstBallot.selector);
         this.hourDup(id, keccak256("r8c"), first);
+        vm.expectRevert(IRollupSettlement.DuplicateFirstBallot.selector);
+        this.hourSameTag(id, keccak256("r8d"), keccak256(abi.encodePacked("first", id, first)));
     }
 
     function testOfflineDeviceLeavesTheEarlierBallot() public {
@@ -220,12 +311,13 @@ contract SealedVoteBatchTest is Deployer {
         this.sealFinal(id, finalRoot, hourly, keccak256("f9"), 1);
         vm.warp(tally.tallyAllowedAt(id));
         this.suppEmpty(id, finalRoot, hourly, keccak256("f9"), sequencer);
-        assertEq(inbox.pendingHeld(id).length, 0);
+        assertEq(inbox.pendingForcedIn(id).length, 0);
         assertEq(inbox.acceptedBallots(id), 1);
     }
 
     function testChallengeWindowRejectsZeroAndGatesTally() public {
         (uint256 id, address el) = createElection();
+        assertEq(tally.challengeWindow(id), tally.MIN_CHALLENGE_WINDOW());
         vm.prank(tallyOperator);
         vm.expectRevert(ITallyVerifier.ZeroChallengeWindow.selector);
         tally.setChallengeWindow(id, 0);
@@ -241,88 +333,244 @@ contract SealedVoteBatchTest is Deployer {
         registerVoter(id, Fixtures.identityCommitment(uint256(3)));
         freezeRoll(el);
         submitVote(id, el, 8);
-        warpClosed(el);
+        vm.warp(IElection(el).params().cutoffTime);
         this.expectWindowOpen(id);
         vm.warp(tally.tallyAllowedAt(id));
         this.postCount(id, 1);
         assertTrue(tally.isTallied(id));
     }
 
+    function testZeroStoredWindowReverts() public {
+        (uint256 id,) = createElection();
+        stdstore.target(address(tally)).sig("challengeWindow(uint256)").with_key(id).checked_write(uint256(0));
+        vm.expectRevert(ITallyVerifier.ZeroChallengeWindow.selector);
+        tally.tallyAllowedAt(id);
+        vm.expectRevert(ITallyVerifier.ZeroChallengeWindow.selector);
+        this.postCount(id, 0);
+    }
+
     function testBallotRefusedUntilKeyPosted() public {
         (uint256 id, address el) = createElection();
-        (uint256 other, address otherEl) = createElection();
-        GuardianCeremony ceremony = new GuardianCeremony(address(factory));
-        vm.prank(admin);
-        inbox.setCeremony(address(ceremony));
-        this.postGuardian(ceremony, id, makeAddr("hourly-guardian"), 3, 9);
-        registerVoter(other, Fixtures.identityCommitment(uint256(9)));
-        freezeRoll(el);
-        freezeRoll(otherEl);
-        warpOpen(el);
-        this.expectKeyMissing(other, otherEl, 5);
-    }
-
-    function expectKeyMissing(uint256 id, address el, uint256 nullifier) external {
-        bytes memory enc = Fixtures.encryptedBallot(nullifier);
-        uint256[] memory inputs = this.externalVoteInputs(id, el, nullifier, enc);
-        vm.prank(relayer);
-        vm.expectRevert(IBallotInbox.KeyNotPosted.selector);
-        inbox.submitVote(id, pa, pb, pc, inputs, enc);
-    }
-
-    function testHourlyPartialDoesNotTouchInterimAndRejectsABadProof() public {
-        (uint256 id, address el) = createElection();
-        GuardianCeremony ceremony = new GuardianCeremony(address(factory));
-        vm.prank(admin);
-        tally.setCeremony(address(ceremony));
-        address guardian = makeAddr("hourly-guardian");
-        this.postGuardian(ceremony, id, guardian, 3, 9);
-        registerVoter(id, Fixtures.identityCommitment(uint256(8)));
+        GuardianCeremony local = new GuardianCeremony(address(factory));
+        vm.startPrank(admin);
+        inbox.setSettlement(id, address(settlement));
+        inbox.setCeremony(id, address(local));
+        vm.stopPrank();
+        registerVoter(id, Fixtures.identityCommitment(uint256(9)));
         freezeRoll(el);
         warpOpen(el);
+        this.expectKeyMissing(id, el, 5);
+    }
+
+    function testCeremonyIsFeldmanAndChecksType() public {
+        (uint256 id,) = createElection();
+        ceremony = new GuardianCeremony(address(factory));
+        vm.prank(tallyOperator);
+        vm.expectRevert(GuardianCeremony.WrongElectionType.selector);
+        ceremony.openCeremony(id, ElectionType.VOTE, 2, 2);
+        vm.prank(tallyOperator);
+        ceremony.openCeremony(id, ElectionType.POLL, 2, 2);
+        this.postOne(id, makeAddr("g1"), 6, 11, 5);
+        vm.expectRevert(GuardianCeremony.FeldmanMismatch.selector);
+        this.postOne(id, makeAddr("g2"), 7, 13, 9);
+        vm.expectRevert(GuardianCeremony.BadSchnorr.selector);
+        this.postBadSchnorr(id, makeAddr("g2"), 7, 13, 5);
+        this.postOne(id, makeAddr("g2"), 7, 13, 5);
+        assertTrue(ceremony.keyPosted(id, ElectionType.POLL));
+        (uint256 x, uint256 y) = ceremony.jointKey(id, ElectionType.POLL);
+        (uint256 expectX, uint256 expectY) = math.mulG(5);
+        assertEq(x, expectX);
+        assertEq(y, expectY);
+        (uint256 pkX,, bool ok) = ceremony.guardianPk(id, ElectionType.POLL, makeAddr("g1"));
+        assertTrue(ok);
+        assertTrue(pkX != expectX);
+    }
+
+    function testHourlyPartialIsPollAndGated() public {
+        (uint256 id, address el) = this.openLinked(2 hours);
         bytes32 interim = keccak256("interim");
         vm.prank(tallyOperator);
         tally.postInterimResult(id, interim);
+        uint256 hourIndex = block.timestamp / 1 hours;
+        vm.expectRevert(ITallyVerifier.HourNotPosted.selector);
+        this.submitHour(id, makeAddr("g1"), 6, 21, hourIndex, false);
+        this.hourPoints(id, keccak256("rh"), keccak256("hh"), keccak256("fh"), 0, 0, 1, 2, 1, 2);
+        vm.expectRevert(ITallyVerifier.HourGateClosed.selector);
+        this.submitHour(id, makeAddr("g1"), 6, 21, hourIndex, false);
+        vm.warp(uint256(IElection(el).params().cutoffTime) + 30 minutes);
         vm.expectRevert(ITallyVerifier.InvalidPartial.selector);
-        this.submitHour(id, guardian, 3, 9, true);
-        assertEq(tally.interimResult(id), interim);
-        assertFalse(tally.hourlyPartialPosted(id, 0, guardian));
-        this.submitHour(id, guardian, 3, 9, false);
+        this.submitHour(id, makeAddr("g2"), 7, 23, hourIndex, true);
+        this.submitHour(id, makeAddr("g1"), 6, 21, hourIndex, false);
         assertEq(tally.interimResult(id), interim, "hourly partial is not the interim write");
-        assertTrue(tally.hourlyPartialPosted(id, 0, guardian));
+        assertTrue(tally.hourlyPartialPosted(id, hourIndex, makeAddr("g1")));
+        vm.expectRevert(ITallyVerifier.PartialAlreadyPosted.selector);
+        this.submitHour(id, makeAddr("g1"), 6, 21, hourIndex, false);
     }
 
-    function testDecryptionWaitsForKPartials() public {
-        (uint256 id, address el) = createElection();
-        vm.prank(tallyOperator);
-        tally.setChallengeWindow(id, 1 hours);
-        GuardianCeremony ceremony = new GuardianCeremony(address(factory));
+    function testVoteElectionRejectsHourlyPartial() public {
+        ElectionParams memory params = defaultParams();
+        params.electionType = ElectionType.VOTE;
+        (uint256 id,) = createElection(params);
+        GuardianCeremony voteCeremony = new GuardianCeremony(address(factory));
         vm.prank(admin);
-        tally.setCeremony(address(ceremony));
-        this.postPair(ceremony, id);
-        freezeRoll(el);
-        vm.warp(tally.tallyAllowedAt(id));
+        tally.setCeremony(id, address(voteCeremony));
+        vm.expectRevert(ITallyVerifier.NotPoll.selector);
+        this.submitHour(id, makeAddr("g1"), 6, 21, 1, false);
+    }
+
+    function testDecryptionCombinesKPartials() public {
+        (uint256 id, address el) = this.openLinked(1 hours);
+        bytes32 hourly = keccak256("hd");
+        this.hour(id, keccak256("rd"), hourly, keccak256("fd"), 0, 0);
+        warpClosed(el);
+        this.sealFinal(id, keccak256("rfd"), hourly, keccak256("fd"), 0);
+        (uint256 c1x, uint256 c1y) = math.mulG(3);
+        (uint256 c2x, uint256 c2y) = math.mulG(16);
+        vm.prank(tallyOperator);
+        vm.expectPartialRevert(ITallyVerifier.SupplementaryBatchRequired.selector);
+        tally.submitDecryption(id, keccak256(abi.encode(uint256(1), uint256(2))));
+        this.suppCipher(id, keccak256("rfd"), hourly, keccak256("fd2"), c1x, c1y, c2x, c2y);
         this.postCount(id, 0);
+        this.oneFinal(id, makeAddr("g1"), 6, 31, c1x, c1y);
         vm.prank(tallyOperator);
         vm.expectPartialRevert(ITallyVerifier.NotEnoughPartials.selector);
-        tally.submitDecryption(id, keccak256("plain"));
-        this.submitFinals(id);
+        tally.submitDecryption(id, keccak256(abi.encode(uint256(1), uint256(2))));
+        this.oneFinal(id, makeAddr("g2"), 7, 33, c1x, c1y);
+        bytes32 plain = keccak256(abi.encode(uint256(1), uint256(2)));
         vm.prank(tallyOperator);
-        tally.submitDecryption(id, keccak256("plain"));
-        assertEq(tally.decryptionHash(id), keccak256("plain"));
+        vm.expectRevert(ITallyVerifier.PlaintextMismatch.selector);
+        tally.submitDecryption(id, keccak256("not-the-point"));
+        vm.prank(tallyOperator);
+        tally.submitDecryption(id, plain);
+        assertEq(tally.decryptionHash(id), plain);
+    }
+
+    function testLegacySecondBallotDoesNotDoubleCount() public {
+        (uint256 id, address el) = createElection();
+        registerVoter(id, Fixtures.identityCommitment(uint256(4)));
+        freezeRoll(el);
+        warpOpen(el);
+        submitVote(id, el, 7);
+        this.expectSameNullifier(id, el, 7);
+        assertEq(inbox.acceptedBallots(id), 1);
+    }
+
+    function testCommitUniqueRevertsWhenUnlinked() public {
+        (uint256 id, address el) = createElection();
+        registerVoter(id, Fixtures.identityCommitment(uint256(5)));
+        freezeRoll(el);
+        warpOpen(el);
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
+        this.hour(id, keccak256("unlinked"), keccak256("hu"), keccak256("fu"), 0, 0);
+    }
+
+    function testFactoryUnsetReverts() public {
+        RollupSettlement bare = new RollupSettlement(admin, sequencer, prover, address(verifier), true);
+        IRollupSettlement.SealedParams memory p;
+        p.electionId = 1;
+        p.ballotSetRoot = keccak256("root");
+        vm.expectRevert(IRollupSettlement.FactoryUnset.selector);
+        bare.submitHourlyBatch(p, new bytes32[](0), new bytes32[](0), pa, pb, pc);
+    }
+
+    function testZeroBallotRootIsRejected() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        vm.expectRevert(IRollupSettlement.EmptyRoot.selector);
+        this.hour(id, bytes32(0), keccak256("hz"), keccak256("fz"), 0, 0);
+    }
+
+    function testUniqueAndProductMustChain() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        bytes32 first = keccak256("chain-1");
+        this.hour(id, first, keccak256("hc1"), keccak256("fc1"), 0, 1);
+        vm.warp(block.timestamp + 1 hours);
+        vm.expectRevert(IRollupSettlement.UniqueCountMismatch.selector);
+        this.hour(id, keccak256("chain-2"), keccak256("hc1"), keccak256("fc1"), 0, 1);
+        vm.expectRevert(IRollupSettlement.ProductMismatch.selector);
+        this.hourBadProduct(id, keccak256("chain-3"));
+        this.hour(id, keccak256("chain-4"), keccak256("hc2"), keccak256("fc1"), 1, 1);
+    }
+
+    function testSupplementaryWithoutFinalAfterGrace() public {
+        (uint256 id,) = this.openLinked(1 hours);
+        bytes32 hourly = keccak256("h-live");
+        bytes32 root = keccak256("r-live");
+        this.hour(id, root, hourly, keccak256("f-live"), 0, 0);
+        vm.warp(tally.tallyAllowedAt(id));
+        vm.expectRevert(IRollupSettlement.FinalBatchRequired.selector);
+        this.suppEmpty(id, root, hourly, keccak256("f-live"), sequencer);
+        vm.warp(tally.tallyAllowedAt(id) + settlement.SUPPLEMENTARY_GRACE());
+        this.suppEmpty(id, root, hourly, keccak256("f-live"), sequencer);
+        assertTrue(settlement.supplementaryPosted(id));
+        assertTrue(settlement.finalBatchPosted(id));
+        assertEq(settlement.finalBatchRoot(id), root);
+    }
+
+    function testPendingListHoldsBallot65() public {
+        (uint256 id, address el) = this.openLinked(2 hours);
+        bytes32 hourRoot = keccak256("cap-root");
+        this.hour(id, hourRoot, keccak256("hcap"), keccak256("fcap"), 0, 0);
+        vm.warp(uint256(IElection(el).params().cutoffTime) + 30 minutes);
+        this.forceMany(id, el, hourRoot, 65);
+        assertEq(inbox.pendingForcedIn(id).length, 65);
+    }
+
+    function testReceiptDigestBindsChainAndReproof() public {
+        (uint256 id, address el) = this.openLinked(2 hours);
+        bytes32 hourly = keccak256("h-dig");
+        bytes32 finalRoot = keccak256("rf-dig");
+        this.hour(id, keccak256("r-dig"), hourly, keccak256("f-dig"), 0, 0);
+        warpClosed(el);
+        this.sealFinal(id, finalRoot, hourly, keccak256("f-dig"), 0);
+        IBallotInbox.RelayerReceipt memory receipt;
+        receipt.boundRoot = finalRoot;
+        bytes32 first = inbox.receiptDigest(id, receipt);
+        vm.chainId(block.chainid + 1);
+        assertTrue(inbox.receiptDigest(id, receipt) != first);
+        vm.chainId(block.chainid - 1);
+        uint64 receivedAt = uint64(IElection(el).params().cutoffTime) - 1;
+        vm.expectRevert(IBallotInbox.BoundRootMismatch.selector);
+        this.hold(id, el, 4, keccak256("not-the-final-root"), receivedAt);
+        verifier.setAccept(false);
+        vm.expectRevert(IBallotInbox.InvalidProof.selector);
+        this.hold(id, el, 4, finalRoot, receivedAt);
+        verifier.setAccept(true);
     }
 
     function openLinked(uint64 window) external returns (uint256 id, address el) {
         (id, el) = createElection();
         vm.prank(tallyOperator);
         tally.setChallengeWindow(id, window);
+        ceremony = new GuardianCeremony(address(factory));
         vm.startPrank(admin);
-        inbox.setSettlement(address(settlement));
-        tally.setRollupSettlement(address(settlement));
+        inbox.setSettlement(id, address(settlement));
+        inbox.setCeremony(id, address(ceremony));
+        tally.setRollupSettlement(id, address(settlement));
+        tally.setCeremony(id, address(ceremony));
         vm.stopPrank();
+        this.sealKey(id);
         registerVoter(id, Fixtures.identityCommitment(uint256(1)));
         freezeRoll(el);
         warpOpen(el);
+    }
+
+    function sealKey(uint256 id) external {
+        vm.prank(tallyOperator);
+        ceremony.openCeremony(id, ElectionType.POLL, 2, 2);
+        this.postOne(id, makeAddr("g1"), 6, 11, 5);
+        this.postOne(id, makeAddr("g2"), 7, 13, 5);
+    }
+
+    function postOne(uint256 id, address guardian, uint256 share, uint256 nonce, uint256 c0) external {
+        PartialMath.Proof memory p = math.deal(share, nonce, id, ElectionType.POLL, guardian, type(uint256).max, c0, 1, 2);
+        vm.prank(guardian);
+        ceremony.postGuardian(id, ElectionType.POLL, p.pkX, p.pkY, p.c0X, p.c0Y, p.rX, p.rY, p.sz);
+    }
+
+    function postBadSchnorr(uint256 id, address guardian, uint256 share, uint256 nonce, uint256 c0) external {
+        PartialMath.Proof memory p = math.deal(share, nonce, id, ElectionType.POLL, guardian, type(uint256).max, c0, 1, 2);
+        vm.prank(guardian);
+        ceremony.postGuardian(id, ElectionType.POLL, p.pkX, p.pkY, p.c0X, p.c0Y, p.rX, p.rY, p.sz + 1);
     }
 
     struct Job {
@@ -351,10 +599,7 @@ contract SealedVoteBatchTest is Deployer {
         bytes32[] memory tags = new bytes32[](1);
         tags[0] = tag;
         this.post(
-            Job(id, 1, root, keccak256("h8"), keccak256("f8"), 1, 1, bytes32(0), sequencer),
-            bound,
-            tags,
-            new uint256[](0)
+            Job(id, 1, root, keccak256("h8"), keccak256("f8"), 1, 1, bytes32(0), sequencer), bound, tags, new uint256[](0)
         );
     }
 
@@ -366,20 +611,67 @@ contract SealedVoteBatchTest is Deployer {
         tags[0] = keccak256("same");
         tags[1] = tags[0];
         this.post(
-            Job(id, 1, root, keccak256("h8"), keccak256("f8"), 1, 2, bytes32(0), sequencer),
+            Job(id, 1, root, keccak256("h8"), keccak256("f8"), 1, 2, bytes32(0), sequencer), bound, tags, new uint256[](0)
+        );
+    }
+
+    function hourSameTag(uint256 id, bytes32 root, bytes32 tag) external {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = settlement.lastHourlyRoot(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = tag;
+        uint256 n = inbox.acceptedBallots(id);
+        this.post(
+            Job(id, 1, root, settlement.hourlyProduct(id), settlement.finalProduct(id), n, n, bytes32(0), sequencer),
             bound,
             tags,
             new uint256[](0)
         );
     }
 
+    function hourBadProduct(uint256 id, bytes32 root) external {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = settlement.lastHourlyRoot(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256("fresh-tag");
+        uint256 n = inbox.acceptedBallots(id);
+        IRollupSettlement.SealedParams memory p =
+            this.filled(Job(id, 1, root, settlement.hourlyProduct(id), settlement.finalProduct(id), n, n, bytes32(0), sequencer), bound, tags);
+        p.previousHourly = bytes32(uint256(1));
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        vm.prank(sequencer);
+        settlement.submitHourlyBatch(p, bound, tags, pa, pb, pc);
+    }
+
+    function hourPoints(
+        uint256 id,
+        bytes32 root,
+        bytes32 hourly,
+        bytes32 finalP,
+        uint256 prevU,
+        uint256 nextU,
+        uint256 c1x,
+        uint256 c1y,
+        uint256 c2x,
+        uint256 c2y
+    ) external {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = settlement.lastHourlyRoot(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256(abi.encodePacked("first", id, root));
+        IRollupSettlement.SealedParams memory p =
+            this.filled(Job(id, 1, root, hourly, finalP, prevU, nextU, bytes32(0), sequencer), bound, tags);
+        p.nextC1X = c1x;
+        p.nextC1Y = c1y;
+        p.nextC2X = c2x;
+        p.nextC2Y = c2y;
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        vm.prank(sequencer);
+        settlement.submitHourlyBatch(p, bound, tags, pa, pb, pc);
+    }
+
     function sealMismatch(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP) external {
-        this.post(
-            Job(id, 2, root, hourly, finalP, 1, 2, bytes32(0), sequencer),
-            new bytes32[](0),
-            new bytes32[](0),
-            new uint256[](0)
-        );
+        this.post(Job(id, 2, root, hourly, finalP, 1, 2, bytes32(0), sequencer), new bytes32[](0), new bytes32[](0), new uint256[](0));
     }
 
     function sealFinal(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 uniqueCount) external {
@@ -391,11 +683,13 @@ contract SealedVoteBatchTest is Deployer {
         );
     }
 
-    function suppOne(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 submissionId) external {
+    function suppOne(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 submissionId, bool replacement)
+        external
+    {
         uint256[] memory ids = new uint256[](1);
         ids[0] = submissionId;
         uint256 prevU = inbox.acceptedBallots(id);
-        uint256 nextU = submissionId == 99 ? prevU : prevU + 1;
+        uint256 nextU = replacement ? prevU : prevU + 1;
         this.post(
             Job(id, 3, root, hourly, finalP, prevU, nextU, settlement.supplementaryChainHash(id), sequencer),
             new bytes32[](0),
@@ -414,11 +708,38 @@ contract SealedVoteBatchTest is Deployer {
         );
     }
 
-    function expectBadChain(uint256 id, bytes32 root, bytes32 hourly) external {
+    function suppCipher(
+        uint256 id,
+        bytes32 root,
+        bytes32 hourly,
+        bytes32 finalP,
+        uint256 c1x,
+        uint256 c1y,
+        uint256 c2x,
+        uint256 c2y
+    ) external {
+        uint256 n = inbox.acceptedBallots(id);
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 3, root, hourly, finalP, n, n, settlement.supplementaryChainHash(id), sequencer),
+            new bytes32[](0),
+            new bytes32[](0)
+        );
+        p.nextC1X = c1x;
+        p.nextC1Y = c1y;
+        p.nextC2X = c2x;
+        p.nextC2Y = c2y;
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_SUPPLEMENTARY());
+        vm.prank(sequencer);
+        settlement.submitSupplementaryBatch(p, new uint256[](0), pa, pb, pc);
+    }
+
+    function expectBadChain(uint256 id, bytes32 root, bytes32 hourly, uint256 submissionId) external {
         uint256[] memory ids = new uint256[](1);
-        ids[0] = 42;
+        ids[0] = submissionId;
         IRollupSettlement.SealedParams memory p = this.blank(id, root, hourly, keccak256("f4b"), 0, 1);
         p.chainHash = keccak256("wrong-chain");
+        p.previousHourly = settlement.hourlyProduct(id);
+        p.previousFinal = settlement.finalProduct(id);
         p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_SUPPLEMENTARY());
         vm.prank(sequencer);
         vm.expectRevert(IRollupSettlement.DataHashMismatch.selector);
@@ -433,17 +754,9 @@ contract SealedVoteBatchTest is Deployer {
         vm.prank(tallyOperator);
         vm.expectPartialRevert(ITallyVerifier.SupplementaryBatchRequired.selector);
         tally.submitDecryption(id, keccak256("plain"));
-        vm.prank(makeAddr("guardian"));
+        vm.prank(makeAddr("g1"));
         vm.expectPartialRevert(ITallyVerifier.SupplementaryBatchRequired.selector);
-        tally.submitFinalPartial(id, 1, 2, 1, 2, 1, 2, 1, 2, 3);
-    }
-
-    function postTallyAndDecrypt(uint256 id) external {
-        uint256[] memory counts = new uint256[](1);
-        vm.prank(tallyOperator);
-        tally.submitTally(id, counts, pa, pb, pc);
-        vm.prank(tallyOperator);
-        tally.submitDecryption(id, keccak256("plain"));
+        tally.submitFinalPartial(id, 1, 2, 1, 2, 1, 2, 3);
     }
 
     function expectWindowOpen(uint256 id) external {
@@ -461,57 +774,57 @@ contract SealedVoteBatchTest is Deployer {
         tally.submitTally(id, counts, pa, pb, pc);
     }
 
-    function postGuardian(GuardianCeremony ceremony, uint256 id, address guardian, uint256 share, uint256 nonce)
+    function submitHour(uint256 id, address guardian, uint256 share, uint256 nonce, uint256 hourIndex, bool bad)
         external
     {
-        PartialMath.Proof memory good = math.honest(share, nonce);
-        PartialMath.Proof memory other = math.honest(5, nonce + 8);
-        address[] memory guardians = new address[](2);
-        guardians[0] = guardian;
-        guardians[1] = makeAddr("other-guardian");
-        uint256[2][] memory pks = new uint256[2][](2);
-        pks[0] = [good.pkX, good.pkY];
-        pks[1] = [other.pkX, other.pkY];
-        vm.prank(tallyOperator);
-        ceremony.postCeremony(id, ElectionType.POLL, guardians, pks, 2);
-    }
-
-    function submitHour(uint256 id, address guardian, uint256 share, uint256 nonce, bool bad) external {
-        PartialMath.Proof memory good = math.honest(share, nonce);
+        PartialMath.Proof memory good = math.deal(share, nonce, id, ElectionType.POLL, guardian, hourIndex, 5, 1, 2);
         uint256 z = bad ? good.z + 1 : good.z;
         vm.prank(guardian);
-        tally.submitHourlyPartial(id, 0, good.c1X, good.c1Y, good.dX, good.dY, good.aX, good.aY, good.bX, good.bY, z);
+        tally.submitHourlyPartial(id, hourIndex, good.dX, good.dY, good.aX, good.aY, good.bX, good.bY, z);
     }
 
-    function postPair(GuardianCeremony ceremony, uint256 id) external {
-        PartialMath.Proof memory aP = math.honest(3, 11);
-        PartialMath.Proof memory bP = math.honest(5, 13);
-        address[] memory guardians = new address[](2);
-        guardians[0] = makeAddr("gA");
-        guardians[1] = makeAddr("gB");
-        uint256[2][] memory pks = new uint256[2][](2);
-        pks[0] = [aP.pkX, aP.pkY];
-        pks[1] = [bP.pkX, bP.pkY];
-        vm.prank(tallyOperator);
-        ceremony.postCeremony(id, ElectionType.POLL, guardians, pks, 2);
+    function oneFinal(uint256 id, address guardian, uint256 share, uint256 nonce, uint256 c1x, uint256 c1y) external {
+        PartialMath.Proof memory p =
+            math.deal(share, nonce, id, ElectionType.POLL, guardian, type(uint256).max, 5, c1x, c1y);
+        vm.prank(guardian);
+        tally.submitFinalPartial(id, p.dX, p.dY, p.aX, p.aY, p.bX, p.bY, p.z);
     }
 
-    function submitFinals(uint256 id) external {
-        PartialMath.Proof memory aP = math.honest(3, 11);
-        PartialMath.Proof memory bP = math.honest(5, 13);
-        vm.prank(makeAddr("gA"));
-        tally.submitFinalPartial(id, aP.c1X, aP.c1Y, aP.dX, aP.dY, aP.aX, aP.aY, aP.bX, aP.bY, aP.z);
-        vm.prank(makeAddr("gB"));
-        tally.submitFinalPartial(id, bP.c1X, bP.c1Y, bP.dX, bP.dY, bP.aX, bP.aY, bP.bX, bP.bY, bP.z);
+    function expectSameNullifier(uint256 id, address el, uint256 nullifier) external {
+        bytes memory enc = Fixtures.encryptedBallot(nullifier + 1);
+        uint256[] memory inputs = this.externalVoteInputs(id, el, nullifier, enc);
+        inputs[3] = uint256(keccak256(enc)) % FIELD;
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        vm.prank(relayer);
+        vm.expectRevert(IBallotInbox.NullifierUsed.selector);
+        inbox.submitVote(id, a, b, c, inputs, enc);
     }
 
-    function hold(uint256 id, address el, uint256 submissionId, bytes32 reproof, uint64 at) external {
+    function expectKeyMissing(uint256 id, address el, uint256 nullifier) external {
+        bytes memory enc = Fixtures.encryptedBallot(nullifier);
+        uint256[] memory inputs = this.externalVoteInputs(id, el, nullifier, enc);
+        vm.prank(relayer);
+        vm.expectRevert(IBallotInbox.KeyNotPosted.selector);
+        inbox.submitVote(id, pa, pb, pc, inputs, enc);
+    }
+
+    function hold(uint256 id, address el, uint256 submissionId, bytes32 reproof, uint64 at) external returns (uint256) {
         vm.warp(uint256(IElection(el).params().cutoffTime) + 1 hours);
-        this.deliver(id, el, submissionId, settlement.lastHourlyRoot(id), at, reproof, true);
+        return this.deliver(id, el, submissionId, settlement.lastHourlyRoot(id), at, reproof, true);
     }
 
-    function forceAt(uint256 id, address el, uint256 submissionId, bytes32 receiptRoot, uint64 at) external {
-        this.deliver(id, el, submissionId, receiptRoot, at, bytes32(0), false);
+    function forceAt(uint256 id, address el, uint256 submissionId, bytes32 receiptRoot, uint64 at)
+        external
+        returns (uint256)
+    {
+        return this.deliver(id, el, submissionId, receiptRoot, at, bytes32(0), false);
+    }
+
+    function forceMany(uint256 id, address el, bytes32 hourRoot, uint256 n) external {
+        uint64 at = uint64(IElection(el).params().cutoffTime) - 1;
+        for (uint256 i = 1; i <= n; ++i) {
+            this.deliver(id, el, i, hourRoot, at, bytes32(0), false);
+        }
     }
 
     function deliver(
@@ -522,10 +835,10 @@ contract SealedVoteBatchTest is Deployer {
         uint64 at,
         bytes32 reproof,
         bool held
-    ) external {
+    ) external returns (uint256) {
         bytes memory enc = Fixtures.encryptedBallot(submissionId);
         uint256[] memory inputs = this.externalVoteInputs(id, el, submissionId, enc);
-        this.deliverSigned(id, submissionId, receiptRoot, at, reproof, held, enc, inputs);
+        return this.deliverSigned(id, receiptRoot, at, reproof, held, enc, inputs);
     }
 
     function externalVoteInputs(uint256 id, address el, uint256 submissionId, bytes memory enc)
@@ -538,16 +851,18 @@ contract SealedVoteBatchTest is Deployer {
 
     function deliverSigned(
         uint256 id,
-        uint256 submissionId,
         bytes32 receiptRoot,
         uint64 at,
         bytes32 reproof,
         bool held,
         bytes memory enc,
         uint256[] memory inputs
-    ) external {
+    ) external returns (uint256 spent) {
+        uint256 voter = inputs[2] % FIELD;
+        spent = voter;
+        if (inbox.settlementOf(id) != address(0)) spent = PoseidonT3.hashLeftRight(voter, inputs[3]);
         IBallotInbox.RelayerReceipt memory receipt;
-        receipt.submissionId = submissionId;
+        receipt.submissionId = spent;
         receipt.ballotHash = bytes32(inputs[3]);
         receipt.ciphertextHash = keccak256(enc);
         receipt.boundRoot = receiptRoot;
@@ -596,6 +911,15 @@ contract SealedVoteBatchTest is Deployer {
         p.chainHash = job.chain;
         p.boundRootHash = keccak256(abi.encodePacked(bound));
         p.tagHash = keccak256(abi.encodePacked(tags));
+        p.previousHourly = settlement.hourlyProduct(job.id);
+        p.previousFinal = settlement.finalProduct(job.id);
+        IRollupSettlement.Ciphertext memory prev = job.kind == settlement.KIND_HOURLY()
+            ? settlement.chainedHourly(job.id)
+            : settlement.chainedFinal(job.id);
+        p.prevC1X = prev.c1X;
+        p.prevC1Y = prev.c1Y;
+        p.prevC2X = prev.c2X;
+        p.prevC2Y = prev.c2Y;
         p.dataHash = settlement.computeSealedDataHash(p, job.kind);
     }
 

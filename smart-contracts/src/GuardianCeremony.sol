@@ -9,12 +9,15 @@ import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 
 /// @title GuardianCeremony
-/// @notice Feldman public keys for one election type. Shares stay off chain.
-/// @dev `n` is 2..16 and `k` is 2..n. The contract stores commitments only.
+/// @notice Feldman C_0 and per-guardian share keys. Shares stay off chain.
+/// @dev `n` is 2..16 and `k` is 2..n. Each guardian posts the same Feldman `C_0`
+///      and a Schnorr proof that they hold the discrete log of their share key
+///      `g^{s_i}`. The joint encryption key is `C_0`, not the sum of the share keys.
 ///      No function accepts the joint scalar or a guardian share.
 contract GuardianCeremony {
     uint8 public constant MIN_N = 2;
     uint8 public constant MAX_N = 16;
+    bytes32 internal constant SCHNORR_DOMAIN = keccak256("GUARDIAN_SCHNORR_V1");
 
     error ZeroAddress();
     error UnknownElection();
@@ -22,15 +25,24 @@ contract GuardianCeremony {
     error BadCeremonyBounds();
     error CeremonyAlreadyPosted();
     error CeremonyTooLate();
+    error CeremonyNotOpen();
     error PointOffCurve();
+    error BadSchnorr();
+    error FeldmanMismatch();
+    error WrongElectionType();
+    error AlreadyPosted();
 
+    event CeremonyOpened(uint256 indexed electionId, uint8 indexed electionType, uint8 k, uint8 n);
+    event GuardianPosted(uint256 indexed electionId, uint8 indexed electionType, address indexed guardian, uint8 index);
     event CeremonyPosted(uint256 indexed electionId, uint8 indexed electionType, uint8 k, uint8 n);
 
     struct Deal {
         uint8 k;
         uint8 n;
+        uint8 postedCount;
         uint256 jointX;
         uint256 jointY;
+        bool open;
         bool posted;
     }
 
@@ -39,6 +51,7 @@ contract GuardianCeremony {
     mapping(uint256 => mapping(uint8 => Deal)) private _deal;
     mapping(uint256 => mapping(uint8 => mapping(address => uint256))) private _pkX;
     mapping(uint256 => mapping(uint8 => mapping(address => uint256))) private _pkY;
+    mapping(uint256 => mapping(uint8 => mapping(address => uint8))) private _index;
     mapping(uint256 => mapping(uint8 => mapping(address => bool))) private _isGuardian;
 
     constructor(address factory_) {
@@ -50,51 +63,57 @@ contract GuardianCeremony {
         return address(_factory);
     }
 
-    /// @notice Post guardian public keys before `startTime`. One write per election type.
-    /// @dev `pks[i]` is the public key of `guardians[i]`. The caller is the tally operator.
-    ///      The operator does not pass a share.
-    function postCeremony(
-        uint256 electionId,
-        uint8 electionType,
-        address[] calldata guardians,
-        uint256[2][] calldata pks,
-        uint8 k
-    ) external {
-        if (_deal[electionId][electionType].posted) revert CeremonyAlreadyPosted();
-        uint256 n = guardians.length;
-        if (n != pks.length || n < MIN_N || n > MAX_N) revert BadCeremonyBounds();
-        if (k < MIN_N || k > n) revert BadCeremonyBounds();
-
-        address electionAddr = _factory.getElection(electionId);
-        if (electionAddr == address(0)) revert UnknownElection();
-        ElectionParams memory p = IElection(electionAddr).params();
+    /// @notice Tally operator opens the deal before `startTime`.
+    ///         `electionType` must be the election's type. Guardians post their own keys.
+    function openCeremony(uint256 electionId, uint8 electionType, uint8 k, uint8 n) external {
+        if (_deal[electionId][electionType].open || _deal[electionId][electionType].posted) revert CeremonyAlreadyPosted();
+        if (n < MIN_N || n > MAX_N || k < MIN_N || k > n) revert BadCeremonyBounds();
+        ElectionParams memory p = _params(electionId);
         if (msg.sender != p.tallyOperator) revert NotTallyOperator();
         if (block.timestamp >= p.startTime) revert CeremonyTooLate();
+        if (electionType != p.electionType) revert WrongElectionType();
+        _deal[electionId][electionType] = Deal({k: k, n: n, postedCount: 0, jointX: 0, jointY: 0, open: true, posted: false});
+        emit CeremonyOpened(electionId, electionType, k, n);
+    }
 
-        uint256 jointX;
-        uint256 jointY;
-        for (uint256 i; i < n; ++i) {
-            address guardian = guardians[i];
-            if (guardian == address(0) || _isGuardian[electionId][electionType][guardian]) revert BadCeremonyBounds();
-            uint256 x = pks[i][0];
-            uint256 y = pks[i][1];
-            if (!Bn128.onCurve(x, y)) revert PointOffCurve();
-            if (i == 0) {
-                jointX = x;
-                jointY = y;
-            } else {
-                (bool ok, uint256 sx, uint256 sy) = Bn128.add(jointX, jointY, x, y);
-                if (!ok) revert PointOffCurve();
-                jointX = sx;
-                jointY = sy;
-            }
-            _pkX[electionId][electionType][guardian] = x;
-            _pkY[electionId][electionType][guardian] = y;
-            _isGuardian[electionId][electionType][guardian] = true;
+    /// @notice Guardian posts Feldman `C_0` and `g^{s_i}` with a Schnorr proof of possession of `s_i`.
+    function postGuardian(
+        uint256 electionId,
+        uint8 electionType,
+        uint256 pkX,
+        uint256 pkY,
+        uint256 c0X,
+        uint256 c0Y,
+        uint256 rX,
+        uint256 rY,
+        uint256 z
+    ) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.open || deal.posted) revert CeremonyNotOpen();
+        if (_isGuardian[electionId][electionType][msg.sender]) revert AlreadyPosted();
+        if (!Bn128.onCurve(c0X, c0Y)) revert PointOffCurve();
+        if (deal.postedCount == 0) {
+            deal.jointX = c0X;
+            deal.jointY = c0Y;
+        } else if (deal.jointX != c0X || deal.jointY != c0Y) {
+            revert FeldmanMismatch();
         }
-
-        _deal[electionId][electionType] = Deal({k: k, n: uint8(n), jointX: jointX, jointY: jointY, posted: true});
-        emit CeremonyPosted(electionId, electionType, k, uint8(n));
+        if (!_schnorr(electionId, electionType, pkX, pkY, rX, rY, z)) revert BadSchnorr();
+        uint8 index;
+        unchecked {
+            index = deal.postedCount + 1;
+            deal.postedCount = index;
+        }
+        _pkX[electionId][electionType][msg.sender] = pkX;
+        _pkY[electionId][electionType][msg.sender] = pkY;
+        _index[electionId][electionType][msg.sender] = index;
+        _isGuardian[electionId][electionType][msg.sender] = true;
+        emit GuardianPosted(electionId, electionType, msg.sender, index);
+        if (deal.postedCount == deal.n) {
+            deal.posted = true;
+            deal.open = false;
+            emit CeremonyPosted(electionId, electionType, deal.k, deal.n);
+        }
     }
 
     function keyPosted(uint256 electionId, uint8 electionType) external view returns (bool) {
@@ -122,5 +141,37 @@ contract GuardianCeremony {
         ok = _isGuardian[electionId][electionType][guardian];
         x = _pkX[electionId][electionType][guardian];
         y = _pkY[electionId][electionType][guardian];
+    }
+
+    /// @notice 1-based Shamir index, in the order the guardians posted.
+    function guardianIndex(uint256 electionId, uint8 electionType, address guardian) external view returns (uint256) {
+        return _index[electionId][electionType][guardian];
+    }
+
+    function _params(uint256 electionId) internal view returns (ElectionParams memory p) {
+        address electionAddr = _factory.getElection(electionId);
+        if (electionAddr == address(0)) revert UnknownElection();
+        p = IElection(electionAddr).params();
+    }
+
+    /// @dev `g^z = R + e·pk` with `e` bound to this election, type, and guardian.
+    function _schnorr(
+        uint256 electionId,
+        uint8 electionType,
+        uint256 pkX,
+        uint256 pkY,
+        uint256 rX,
+        uint256 rY,
+        uint256 z
+    ) internal view returns (bool) {
+        if (!Bn128.onCurve(pkX, pkY) || !Bn128.onCurve(rX, rY)) return false;
+        uint256 e = uint256(keccak256(abi.encode(SCHNORR_DOMAIN, electionId, electionType, msg.sender, pkX, pkY, rX, rY)))
+            % Bn128.R;
+        (bool okL, uint256 lx, uint256 ly) = Bn128.mul(1, 2, z);
+        if (!okL) return false;
+        (bool okE, uint256 ex, uint256 ey) = Bn128.mul(pkX, pkY, e);
+        if (!okE) return false;
+        (bool okR, uint256 rx, uint256 ry) = Bn128.add(rX, rY, ex, ey);
+        return okR && lx == rx && ly == ry;
     }
 }

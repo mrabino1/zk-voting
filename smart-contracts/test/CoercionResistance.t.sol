@@ -42,7 +42,7 @@ contract CoercionResistanceTest is Deployer {
         assertEq(inbox.acceptedBallots(electionId), 1);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
 
-        vm.warp(IElection(election).params().cutoffTime);
+        vm.warp(tally.tallyAllowedAt(electionId));
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
         vm.prank(tallyOperator);

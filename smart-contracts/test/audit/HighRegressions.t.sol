@@ -91,6 +91,8 @@ contract HighRegressionsTest is Deployer {
         warpClosed(el);
         uint256[] memory counts = new uint256[](2);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        vm.prank(address(factory));
+        fresh.armChallengeWindow(id);
         vm.prank(tallyOperator);
         vm.expectRevert(ITallyVerifier.TallyVerifierNotSet.selector);
         fresh.submitTally(id, counts, a, b, c);
@@ -137,6 +139,8 @@ contract HighRegressionsTest is Deployer {
         assertEq(address(tallyMock), address(verifier), "test stack wires the same dev mock");
         Tally fresh = new Tally(address(factory));
         FieldStrictVerifier strict = new FieldStrictVerifier();
+        vm.prank(address(factory));
+        fresh.armChallengeWindow(id);
         vm.prank(admin);
         fresh.setTallyProofVerifier(address(strict));
         uint256[] memory counts = new uint256[](2);

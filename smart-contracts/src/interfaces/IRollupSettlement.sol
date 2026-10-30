@@ -29,6 +29,11 @@ interface IRollupSettlement {
     error PendingBallotOmitted();
     error UnknownBoundRoot();
     error UnknownInclusion();
+    error FactoryUnset();
+    error ProductMismatch();
+    error UniqueCountMismatch();
+    error HourAlreadyPosted();
+    error PointsMismatch();
 
     event SealedBatchPosted(
         uint256 indexed electionId, uint8 kind, uint64 indexed batchIndex, bytes32 ballotSetRoot, uint256 uniqueCount
@@ -60,6 +65,24 @@ interface IRollupSettlement {
         bytes32 chainHash;
         bytes32 tagHash;
         bytes32 boundRootHash;
+        bytes32 previousHourly;
+        bytes32 previousFinal;
+        uint256 prevC1X;
+        uint256 prevC1Y;
+        uint256 prevC2X;
+        uint256 prevC2Y;
+        uint256 nextC1X;
+        uint256 nextC1Y;
+        uint256 nextC2X;
+        uint256 nextC2Y;
+    }
+
+    struct Ciphertext {
+        uint256 c1X;
+        uint256 c1Y;
+        uint256 c2X;
+        uint256 c2Y;
+        bool set;
     }
 
     function setElectionFactory(address factory_) external;
@@ -87,6 +110,20 @@ interface IRollupSettlement {
     function supplementaryChainHash(uint256 electionId) external view returns (bytes32);
 
     function hashWords(bytes32[] calldata words) external pure returns (bytes32);
+
+    function hourPosted(uint256 electionId, uint256 hourIndex) external view returns (bool);
+
+    function hourClosedAt(uint256 electionId, uint256 hourIndex) external view returns (uint64);
+
+    function hourlyCiphertext(uint256 electionId, uint256 hourIndex) external view returns (Ciphertext memory);
+
+    function finalCiphertext(uint256 electionId) external view returns (Ciphertext memory);
+
+    /// @notice Running hourly points chained into the next hourly batch.
+    function chainedHourly(uint256 electionId) external view returns (Ciphertext memory);
+
+    /// @notice Running final points chained into the next final or supplementary batch.
+    function chainedFinal(uint256 electionId) external view returns (Ciphertext memory);
 
     function computeSealedDataHash(SealedParams memory params, uint8 kind) external pure returns (bytes32);
 

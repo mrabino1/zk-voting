@@ -27,13 +27,15 @@ interface IElectionFactory {
     error NotPendingAdmin();
     error AlreadyPaused();
     error NotPaused();
+    error TallyVerifierNotSet();
 
     event ElectionCreated(
         uint256 indexed electionId,
         address indexed election,
         bytes32 indexed jurisdictionId,
         uint64 startTime,
-        uint64 cutoffTime
+        uint64 cutoffTime,
+        uint8 electionType
     );
     event PartyRegistryCreated(uint256 indexed electionId, address indexed registry);
     event AdminApproved(address indexed account);

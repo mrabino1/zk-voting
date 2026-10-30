@@ -309,7 +309,13 @@ contract ElectionFactory is IElectionFactory {
         _electionStaff[electionId][params.clerk] = true;
         emit ElectionStaffApproved(electionId, params.clerk);
         emit PartyRegistryCreated(electionId, parties);
-        emit ElectionCreated(electionId, election, params.jurisdictionId, params.startTime, params.cutoffTime);
+        emit ElectionCreated(
+            electionId, election, params.jurisdictionId, params.startTime, params.cutoffTime, params.electionType
+        );
+        if (tallyVerifier != address(0)) {
+            (bool armed,) = tallyVerifier.call(abi.encodeWithSignature("armChallengeWindow(uint256)", electionId));
+            if (!armed) revert TallyVerifierNotSet();
+        }
     }
 
     /// @inheritdoc IElectionFactory

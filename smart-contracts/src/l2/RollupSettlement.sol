@@ -9,6 +9,7 @@ import {IElection} from "../interfaces/IElection.sol";
 import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 import {IRollupSettlement} from "../interfaces/IRollupSettlement.sol";
+import {PoseidonT3} from "../hasher/PoseidonT3.sol";
 
 /// @title RollupSettlement
 /// @notice L1 settlement for ZK-Voting L2 (app-specific ZK rollup). No token.
@@ -53,6 +54,13 @@ contract RollupSettlement is IRollupSettlement {
     mapping(uint256 => bytes32) private _finalProduct;
     mapping(uint256 => bytes32[]) private _roots;
     mapping(uint256 => mapping(bytes32 => uint256)) private _rootIndex;
+    mapping(uint256 => mapping(bytes32 => bool)) private _tagUsed;
+    mapping(uint256 => mapping(uint256 => bool)) private _hourPosted;
+    mapping(uint256 => mapping(uint256 => uint64)) private _hourClosedAt;
+    mapping(uint256 => mapping(uint256 => Ciphertext)) private _hourCt;
+    mapping(uint256 => Ciphertext) private _finalCt;
+    mapping(uint256 => Ciphertext) private _hourlyPoints;
+    mapping(uint256 => Ciphertext) private _finalPoints;
 
     constructor(address admin_, address sequencer_, address prover_, address batchVerifier_, bool mockMode_) {
         if (admin_ == address(0) || sequencer_ == address(0) || prover_ == address(0)) revert ZeroAddress();
@@ -193,7 +201,32 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     function postedBallotRoot(uint256 electionId, bytes32 root) external view returns (bool) {
-        return root == bytes32(0) || _rootIndex[electionId][root] != 0;
+        if (root == bytes32(0)) return false;
+        return _rootIndex[electionId][root] != 0;
+    }
+
+    function hourPosted(uint256 electionId, uint256 hourIndex) external view returns (bool) {
+        return _hourPosted[electionId][hourIndex];
+    }
+
+    function hourClosedAt(uint256 electionId, uint256 hourIndex) external view returns (uint64) {
+        return _hourClosedAt[electionId][hourIndex];
+    }
+
+    function hourlyCiphertext(uint256 electionId, uint256 hourIndex) external view returns (Ciphertext memory) {
+        return _hourCt[electionId][hourIndex];
+    }
+
+    function finalCiphertext(uint256 electionId) external view returns (Ciphertext memory) {
+        return _finalCt[electionId];
+    }
+
+    function chainedHourly(uint256 electionId) external view returns (Ciphertext memory) {
+        return _hourlyPoints[electionId];
+    }
+
+    function chainedFinal(uint256 electionId) external view returns (Ciphertext memory) {
+        return _finalPoints[electionId];
     }
 
     function supplementaryChainHash(uint256 electionId) public view returns (bytes32) {
@@ -204,24 +237,45 @@ contract RollupSettlement is IRollupSettlement {
         return keccak256(abi.encodePacked(words));
     }
 
+    /// @dev Poseidon chain, same order as `circuits/batch_transition.circom`.
+    ///      Curve points are bound by `pointTag = keccak256(points) mod r`, which the circuit takes as a witness word.
     function computeSealedDataHash(SealedParams memory params, uint8 kind) public pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                params.batchIndex,
-                params.prevStateRoot,
-                params.newStateRoot,
-                params.ballotSetRoot,
-                params.hourlyProduct,
-                params.finalProduct,
-                params.previousUnique,
-                params.nextUnique,
-                kind,
-                params.electionId,
-                params.chainHash,
-                params.tagHash,
-                params.boundRootHash
+        uint256 pointTag = uint256(
+            keccak256(
+                abi.encode(
+                    params.prevC1X,
+                    params.prevC1Y,
+                    params.prevC2X,
+                    params.prevC2Y,
+                    params.nextC1X,
+                    params.nextC1Y,
+                    params.nextC2X,
+                    params.nextC2Y
+                )
             )
-        );
+        ) % SNARK_SCALAR_FIELD;
+        uint256[16] memory words;
+        words[0] = kind;
+        words[1] = params.electionId;
+        words[2] = params.batchIndex;
+        words[3] = uint256(params.prevStateRoot) % SNARK_SCALAR_FIELD;
+        words[4] = uint256(params.newStateRoot) % SNARK_SCALAR_FIELD;
+        words[5] = uint256(params.ballotSetRoot) % SNARK_SCALAR_FIELD;
+        words[6] = uint256(params.previousHourly) % SNARK_SCALAR_FIELD;
+        words[7] = uint256(params.hourlyProduct) % SNARK_SCALAR_FIELD;
+        words[8] = uint256(params.previousFinal) % SNARK_SCALAR_FIELD;
+        words[9] = uint256(params.finalProduct) % SNARK_SCALAR_FIELD;
+        words[10] = params.previousUnique;
+        words[11] = params.nextUnique;
+        words[12] = uint256(params.chainHash) % SNARK_SCALAR_FIELD;
+        words[13] = uint256(params.tagHash) % SNARK_SCALAR_FIELD;
+        words[14] = uint256(params.boundRootHash) % SNARK_SCALAR_FIELD;
+        words[15] = pointTag;
+        uint256 h;
+        for (uint256 i; i < words.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, words[i]);
+        }
+        return bytes32(h);
     }
 
     function submitHourlyBatch(
@@ -232,10 +286,21 @@ contract RollupSettlement is IRollupSettlement {
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
+        _requireFactory();
         _onlyOperator();
+        uint256 hourIndex = block.timestamp / 1 hours;
+        if (_hourPosted[params.electionId][hourIndex]) revert HourAlreadyPosted();
         _prepareHourOrFinal(params, KIND_HOURLY, boundRoots, firstBallotTags);
+        _matchUnique(params);
+        _matchProducts(params, true);
         _verifyAndStore(params, a, b, c);
+        _consumeTags(params.electionId, firstBallotTags);
         _rememberRoot(params);
+        _storePoints(params, true);
+        _hourPosted[params.electionId][hourIndex] = true;
+        _hourClosedAt[params.electionId][hourIndex] = uint64(block.timestamp);
+        _hourCt[params.electionId][hourIndex] =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
         _commitUnique(params.electionId, params.nextUnique);
         emit SealedBatchPosted(
             params.electionId, KIND_HOURLY, params.batchIndex, params.ballotSetRoot, params.nextUnique
@@ -250,12 +315,17 @@ contract RollupSettlement is IRollupSettlement {
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
-        _onlyOperator();
+        _requireFactory();
+        (bool known, uint256 allowedAt) = _allowedAt(params.electionId);
+        bool open = known && block.timestamp >= allowedAt + SUPPLEMENTARY_GRACE && !mockMode;
+        if (!open) _onlyOperator();
         _prepareHourOrFinal(params, KIND_FINAL, boundRoots, firstBallotTags);
+        _matchProducts(params, false);
         _verifyAndStore(params, a, b, c);
         _finalPosted[params.electionId] = true;
         _finalRoot[params.electionId] = params.ballotSetRoot;
         _rememberRoot(params);
+        _storePoints(params, false);
         emit SealedBatchPosted(
             params.electionId, KIND_FINAL, params.batchIndex, params.ballotSetRoot, params.previousUnique
         );
@@ -268,19 +338,34 @@ contract RollupSettlement is IRollupSettlement {
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
+        _requireFactory();
         (bool known, uint256 allowedAt) = _allowedAt(params.electionId);
         _authSupplementary(known, allowedAt);
-        if (!_finalPosted[params.electionId]) revert FinalBatchRequired();
+        bool afterGrace = known && block.timestamp >= allowedAt + SUPPLEMENTARY_GRACE;
+        if (!_finalPosted[params.electionId] && !afterGrace) revert FinalBatchRequired();
         if (_supplementaryPosted[params.electionId]) revert SupplementaryAlreadyPosted();
         if (params.nextUnique < params.previousUnique) revert UniqueCountDecreased();
         if (params.hourlyProduct != _hourlyProduct[params.electionId]) revert HourlyProductChanged();
+        if (params.previousHourly != _hourlyProduct[params.electionId]) revert ProductMismatch();
         if (params.chainHash != supplementaryChainHash(params.electionId)) revert DataHashMismatch();
+        _matchUnique(params);
+        _matchProducts(params, false);
         _checkSealedHash(params, KIND_SUPPLEMENTARY);
         _coverPending(params.electionId, includedIds);
         _verifyAndStore(params, a, b, c);
         _finalProduct[params.electionId] = params.finalProduct;
+        _storePoints(params, false);
+        _finalCt[params.electionId] =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
+        if (!_finalPosted[params.electionId]) {
+            _finalPosted[params.electionId] = true;
+            _finalRoot[params.electionId] = _lastHourlyRoot[params.electionId] == bytes32(0)
+                ? params.ballotSetRoot
+                : _lastHourlyRoot[params.electionId];
+        }
         _commitUnique(params.electionId, params.nextUnique);
-        if (inbox != address(0)) IBallotInbox(inbox).markSealed(params.electionId, includedIds);
+        if (inbox == address(0)) revert NotAuthorized();
+        IBallotInbox(inbox).markSealed(params.electionId, includedIds);
         _supplementaryPosted[params.electionId] = true;
         emit SupplementaryPosted(params.electionId);
         emit SealedBatchPosted(
@@ -310,7 +395,7 @@ contract RollupSettlement is IRollupSettlement {
         if (params.chainHash != bytes32(0)) revert DataHashMismatch();
         if (params.ballotSetRoot == bytes32(0)) revert EmptyRoot();
         _checkBoundRoots(params.electionId, boundRoots);
-        _checkFirstTags(firstBallotTags);
+        _checkFirstTags(params.electionId, firstBallotTags);
         if (params.tagHash != keccak256(abi.encodePacked(firstBallotTags))) revert DataHashMismatch();
         if (params.boundRootHash != keccak256(abi.encodePacked(boundRoots))) revert DataHashMismatch();
         _checkSealedHash(params, kind);
@@ -323,14 +408,52 @@ contract RollupSettlement is IRollupSettlement {
         }
     }
 
-    function _checkFirstTags(bytes32[] calldata tags) internal pure {
+    function _checkFirstTags(uint256 electionId, bytes32[] calldata tags) internal view {
         uint256 n = tags.length;
         for (uint256 i; i < n; ++i) {
-            if (tags[i] == bytes32(0)) revert DuplicateFirstBallot();
+            if (tags[i] == bytes32(0) || _tagUsed[electionId][tags[i]]) revert DuplicateFirstBallot();
             for (uint256 j; j < i; ++j) {
                 if (tags[i] == tags[j]) revert DuplicateFirstBallot();
             }
         }
+    }
+
+    function _consumeTags(uint256 electionId, bytes32[] calldata tags) internal {
+        for (uint256 i; i < tags.length; ++i) {
+            _tagUsed[electionId][tags[i]] = true;
+        }
+    }
+
+    function _matchUnique(SealedParams calldata params) internal view {
+        if (inbox == address(0)) revert NotAuthorized();
+        if (params.previousUnique != IBallotInbox(inbox).acceptedBallots(params.electionId)) {
+            revert UniqueCountMismatch();
+        }
+    }
+
+    function _matchProducts(SealedParams calldata params, bool hourly) internal view {
+        if (params.previousHourly != _hourlyProduct[params.electionId]) revert ProductMismatch();
+        if (params.previousFinal != _finalProduct[params.electionId]) revert ProductMismatch();
+        Ciphertext storage stored = hourly ? _hourlyPoints[params.electionId] : _finalPoints[params.electionId];
+        if (
+            params.prevC1X != stored.c1X || params.prevC1Y != stored.c1Y || params.prevC2X != stored.c2X
+                || params.prevC2Y != stored.c2Y
+        ) revert PointsMismatch();
+    }
+
+    function _storePoints(SealedParams calldata params, bool hourly) internal {
+        Ciphertext memory next =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
+        if (hourly) _hourlyPoints[params.electionId] = next;
+        else _finalPoints[params.electionId] = next;
+    }
+
+    function _pointsSet(SealedParams calldata params) internal pure returns (bool) {
+        return params.nextC1X != 0 || params.nextC1Y != 0;
+    }
+
+    function _requireFactory() internal view {
+        if (electionFactory == address(0)) revert FactoryUnset();
     }
 
     function _checkSealedHash(SealedParams calldata params, uint8 kind) internal view {
@@ -375,22 +498,21 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     function _commitUnique(uint256 electionId, uint256 uniqueCount) internal {
-        if (inbox == address(0)) return;
-        (bool ok, bytes memory ret) = inbox.staticcall(abi.encodeWithSignature("settlement()"));
-        if (!ok || ret.length < 32 || abi.decode(ret, (address)) != address(this)) return;
+        if (inbox == address(0)) revert NotAuthorized();
+        (bool ok, bytes memory ret) =
+            inbox.staticcall(abi.encodeWithSignature("settlementOf(uint256)", electionId));
+        if (!ok || ret.length < 32 || abi.decode(ret, (address)) != address(this)) revert NotAuthorized();
         IBallotInbox(inbox).commitUniqueCount(electionId, uniqueCount);
     }
 
     function _coverPending(uint256 electionId, uint256[] calldata included) internal view {
-        if (inbox == address(0)) return;
+        if (inbox == address(0)) revert NotAuthorized();
         uint256[] memory forced = IBallotInbox(inbox).pendingForcedIn(electionId);
-        uint256[] memory held = IBallotInbox(inbox).pendingHeld(electionId);
-        if (included.length != forced.length + held.length) revert PendingBallotOmitted();
+        if (included.length != forced.length) revert PendingBallotOmitted();
         _eachIncluded(forced, included);
-        _eachIncluded(held, included);
         for (uint256 i; i < forced.length; ++i) {
             (bytes32 root, bool pending) = IBallotInbox(inbox).forcedInRoot(electionId, forced[i]);
-            if (!pending || (root != bytes32(0) && _rootIndex[electionId][root] == 0)) revert UnknownBoundRoot();
+            if (!pending || root == bytes32(0) || _rootIndex[electionId][root] == 0) revert UnknownBoundRoot();
         }
     }
 
@@ -405,8 +527,10 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     function _authSupplementary(bool known, uint256 allowedAt) internal view {
-        if (known && block.timestamp < allowedAt) revert SupplementaryTooEarly();
-        if (!known || block.timestamp < allowedAt + SUPPLEMENTARY_GRACE) _onlyOperator();
+        if (!known || block.timestamp < allowedAt) revert SupplementaryTooEarly();
+        // A mock settlement never grows a real proof, so the grace stays operator-only.
+        // Outside mock mode the grace is the permissionless liveness path.
+        if (mockMode || block.timestamp < allowedAt + SUPPLEMENTARY_GRACE) _onlyOperator();
     }
 
     function _allowedAt(uint256 electionId) internal view returns (bool known, uint256 allowedAt) {
@@ -414,15 +538,15 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     function _cutoff(uint256 electionId) internal view returns (bool known, uint64 cutoff, uint256 allowedAt) {
-        if (electionFactory == address(0)) return (false, 0, 0);
+        if (electionFactory == address(0)) revert FactoryUnset();
         address el = IElectionFactory(electionFactory).getElection(electionId);
         if (el == address(0)) return (false, 0, 0);
         ElectionParams memory params = IElection(el).params();
         cutoff = params.cutoffTime;
         address tally = IElectionFactory(electionFactory).tallyVerifier();
-        if (tally == address(0)) return (true, cutoff, uint256(cutoff));
+        if (tally == address(0)) revert FactoryUnset();
         (bool ok, bytes memory ret) = tally.staticcall(abi.encodeWithSignature("tallyAllowedAt(uint256)", electionId));
-        if (!ok || ret.length < 32) return (true, cutoff, uint256(cutoff));
+        if (!ok || ret.length < 32) revert FactoryUnset();
         allowedAt = abi.decode(ret, (uint256));
         known = true;
     }

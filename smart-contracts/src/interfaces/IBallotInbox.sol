@@ -102,18 +102,19 @@ interface IBallotInbox {
 
     function ballotHashOfCiphertext(bytes calldata encryptedBallot) external pure returns (uint256);
 
-    function settlement() external view returns (address);
+    function settlementOf(uint256 electionId) external view returns (address);
 
-    function ceremony() external view returns (address);
+    function ceremonyOf(uint256 electionId) external view returns (address);
 
-    function setSettlement(address settlement_) external;
+    function setSettlement(uint256 electionId, address settlement_) external;
 
-    function setCeremony(address ceremony_) external;
+    function setCeremony(uint256 electionId, address ceremony_) external;
 
     /// @notice Published unique count. Only the linked settlement may write it.
     function commitUniqueCount(uint256 electionId, uint256 uniqueCount) external;
 
-    function receiptDigest(uint256 electionId, RelayerReceipt calldata receipt) external pure returns (bytes32);
+    /// @notice Covers chain id, this inbox, and the receipt fields, including `boundRoot`.
+    function receiptDigest(uint256 electionId, RelayerReceipt calldata receipt) external view returns (bytes32);
 
     /// @notice Include an omitted ballot while `block.timestamp < tallyAllowedAt`.
     ///         The ballot is checked against `receipt.boundRoot`.
@@ -143,14 +144,7 @@ interface IBallotInbox {
 
     function pendingForcedIn(uint256 electionId) external view returns (uint256[] memory);
 
-    function pendingHeld(uint256 electionId) external view returns (uint256[] memory);
-
     function forcedInRoot(uint256 electionId, uint256 submissionId) external view returns (bytes32 root, bool pending);
-
-    function heldRevote(uint256 electionId, uint256 submissionId)
-        external
-        view
-        returns (bytes32 boundRoot, uint64 receivedAt, bool pending, bool included);
 
     function markSealed(uint256 electionId, uint256[] calldata submissionIds) external;
 }

@@ -10,6 +10,7 @@ import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 import {ElectionParams, ElectionType, TallyScheme} from "../src/interfaces/ElectionParams.sol";
 import {ITallyVerifier} from "../src/interfaces/ITallyVerifier.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -290,6 +291,10 @@ contract ElectionTypeTest is Deployer {
             assertEq(tally.tallyComponentCount(id), 1);
         }
 
+        // Turnout is the public unique count while the window is still open.
+        assertEq(inbox.acceptedBallots(id), 1);
+        assertLt(block.timestamp, IElection(el).params().cutoffTime);
+
         warpClosed(el);
         _expectVoteClosed(id, el, uint256(keccak256(abi.encodePacked("after", kind))));
         _expectBatchClosed(id, el, uint256(keccak256(abi.encodePacked("batch-after", kind))));
@@ -303,8 +308,28 @@ contract ElectionTypeTest is Deployer {
     }
 
     function _create(uint8 kind) internal returns (uint256 id, address el) {
+        vm.recordLogs();
         (id, el) = createElection(Fixtures.withElectionType(defaultParams(), kind));
         assertEq(factory.electionType(id), kind);
+        _assertCreatedEvent(id, el, kind);
+    }
+
+    function _assertCreatedEvent(uint256 id, address el, uint8 kind) internal {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic0 = keccak256("ElectionCreated(uint256,address,bytes32,uint64,uint64,uint8)");
+        bool found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 4 || logs[i].topics[0] != topic0) continue;
+            assertEq(uint256(logs[i].topics[1]), id);
+            assertEq(address(uint160(uint256(logs[i].topics[2]))), el);
+            (uint64 startTime, uint64 cutoffTime, uint8 emitted) = abi.decode(logs[i].data, (uint64, uint64, uint8));
+            ElectionParams memory p = IElection(el).params();
+            assertEq(startTime, p.startTime);
+            assertEq(cutoffTime, p.cutoffTime);
+            assertEq(emitted, kind);
+            found = true;
+        }
+        assertTrue(found);
     }
 
     function _assertType(uint256 id, address el, uint8 kind) internal view {

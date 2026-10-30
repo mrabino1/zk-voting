@@ -20,28 +20,34 @@ function read(name) {
   return fs.readFileSync(path.join(ROOT, name), "utf8");
 }
 
-test("vote submission id mixes the ballot hash", () => {
+test("vote public word is the once-only id and the sealed id is nested", () => {
   const src = read("vote_lib.circom");
-  assert.match(src, /submissionInner\.b <== electionId/);
-  assert.match(src, /submissionId\.b <== ballotHash/);
-  assert.match(src, /submissionId\.out === nullifier/);
-  assert.doesNotMatch(src, /nullifierCheck\.nullifier === nullifier/);
+  assert.match(src, /voterId\.b <== electionId/);
+  assert.match(src, /voterId\.out === nullifier/);
+  assert.match(src, /sealedId\.a <== voterId\.out/);
+  assert.match(src, /sealedId\.b <== ballotHash/);
+  assert.doesNotMatch(src, /sealedId\.out === nullifier/);
 });
 
-test("per-ballot proof publishes the bound root and a zero hourly contribution on replacement", () => {
+test("per-ballot proof selects membership or non-membership at the bound root", () => {
   const src = read("per_ballot.circom");
   assert.match(src, /public \[electionId, ballotHash, boundRoot, hourlyContribution, finalContribution\]/);
   assert.match(src, /hourlyGate <== isReplacement \* hourlyContribution/);
-  assert.match(src, /uniqueStep <== 1 - isReplacement/);
+  assert.match(src, /selected === boundRoot/);
+  assert.match(src, /MerkleTreeInclusionProof/);
+  assert.match(src, /gapOk === 1/);
 });
 
-test("final batch kind carries no turnout step and duplicate first ballots clash", () => {
+test("batch transition publishes four inputs and binds the unique-count step", () => {
   const src = read("batch_transition.circom");
+  assert.match(src, /public \[prevStateRoot, newStateRoot, dataHash, batchIndex\]/);
   assert.match(src, /kindIsFinal\.in <== kind - 2/);
   assert.match(src, /finalGate <== kindIsFinal\.out \* step/);
   assert.match(src, /finalGate === 0/);
-  assert.match(src, /bothFirst \* diffZero\.out/);
-  assert.match(src, /clash === 0/);
+  assert.match(src, /step === stepAcc\[n\]/);
+  assert.match(src, /rootAcc\[n\] === ballotSetRoot/);
+  assert.match(src, /hashAcc\[16\] === dataHash/);
+  assert.doesNotMatch(src, /signal activeSq;/);
 });
 
 test("aggregate tally binds version 2 and keeps the share private", () => {
@@ -52,11 +58,11 @@ test("aggregate tally binds version 2 and keeps the share private", () => {
   assert.doesNotMatch(src, /public \[.*witnessShare/);
 });
 
-test("circom compiles the sealed circuits when the binary is present", () => {
+test("circom compiles the sealed circuits", () => {
   const found = spawnSync("circom", ["--version"], { encoding: "utf8" });
   if (found.status !== 0) {
-    assert.equal(found.error && found.error.code, "ENOENT");
-    return;
+    const code = found.error && found.error.code;
+    throw new Error(code === "ENOENT" ? "circom is not installed; refusing a silent pass" : found.stderr || found.stdout);
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sealed-circom-"));
   for (const file of ["per_ballot.circom", "batch_transition.circom", "tally_aggregate.circom"]) {

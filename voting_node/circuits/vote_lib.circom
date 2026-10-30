@@ -199,17 +199,21 @@ template Vote(levels) {
     }
     merkle.root === root;
 
-    // Submission id = Poseidon(Poseidon(nullifierSecret, electionId), ballotHash).
-    // This repo's Poseidon permutation is t = 3 (two inputs). A single
-    // three-input Poseidon needs t = 4 constants, which are not in this tree.
-    // The nested two-input hash is the submission id the inbox spends once.
-    component submissionInner = Hasher();
-    submissionInner.a <== nullifierSecret;
-    submissionInner.b <== electionId;
-    component submissionId = Hasher();
-    submissionId.a <== submissionInner.out;
-    submissionId.b <== ballotHash;
-    submissionId.out === nullifier;
+    // Public input 2 is the once-only voter id Poseidon(nullifierSecret, electionId).
+    // An election with no settlement spends that word, so a new ballot hash
+    // cannot mint a second voter. A linked settlement spends the nested id
+    // Poseidon(Poseidon(nullifierSecret, electionId), ballotHash). This tree's
+    // Poseidon permutation is t = 3 (two inputs). A three-input Poseidon is not here.
+    component voterId = Hasher();
+    voterId.a <== nullifierSecret;
+    voterId.b <== electionId;
+    voterId.out === nullifier;
+
+    component sealedId = Hasher();
+    sealedId.a <== voterId.out;
+    sealedId.b <== ballotHash;
+    signal submissionId;
+    submissionId <== sealedId.out;
 
     // Non-membership: Hash(disqLow, disqNext) is in the disqualification chain,
     // and the identity commitment sits strictly inside that gap.

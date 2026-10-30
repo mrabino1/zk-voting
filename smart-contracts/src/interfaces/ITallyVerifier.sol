@@ -50,6 +50,13 @@ interface ITallyVerifier {
     error NotGuardian();
     error NotEnoughPartials(uint256 electionId);
     error FinalPartialTooEarly(uint256 electionId);
+    error NotPoll();
+    error HourNotPosted();
+    error HourGateClosed();
+    error CiphertextMissing();
+    error PlaintextMismatch();
+    error NotElectionFactory();
+    error KeyNotPosted();
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
@@ -140,19 +147,26 @@ interface ITallyVerifier {
 
     function tallyAllowedAt(uint256 electionId) external view returns (uint256);
 
-    function setRollupSettlement(address settlement_) external;
+    /// @notice Smallest window `createElection` arms. A stored zero is refused.
+    function MIN_CHALLENGE_WINDOW() external view returns (uint256);
 
-    function rollupSettlement() external view returns (address);
+    /// @notice Factory only. Stores `MIN_CHALLENGE_WINDOW` when the slot is still zero.
+    ///         Does not consume the operator's one custom write.
+    function armChallengeWindow(uint256 electionId) external;
 
-    function setCeremony(address ceremony_) external;
+    function setRollupSettlement(uint256 electionId, address settlement_) external;
 
-    function ceremony() external view returns (address);
+    function settlementOf(uint256 electionId) external view returns (address);
 
+    function setCeremony(uint256 electionId, address ceremony_) external;
+
+    function ceremonyOf(uint256 electionId) external view returns (address);
+
+    /// @notice POLL only, for a posted hour, after the 100-ballot-or-end gate plus 30 minutes.
+    ///         `c1` is the stored hourly ciphertext, not a caller argument.
     function submitHourlyPartial(
         uint256 electionId,
         uint256 hourIndex,
-        uint256 c1X,
-        uint256 c1Y,
         uint256 dX,
         uint256 dY,
         uint256 aX,
@@ -164,10 +178,9 @@ interface ITallyVerifier {
 
     function hourlyPartialPosted(uint256 electionId, uint256 hourIndex, address guardian) external view returns (bool);
 
+    /// @notice Partial of the stored final ciphertext. `c1` is not a caller argument.
     function submitFinalPartial(
         uint256 electionId,
-        uint256 c1X,
-        uint256 c1Y,
         uint256 dX,
         uint256 dY,
         uint256 aX,

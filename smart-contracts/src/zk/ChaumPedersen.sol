@@ -7,13 +7,17 @@ import {Bn128} from "./Bn128.sol";
 
 /// @title ChaumPedersen
 /// @notice Equality of discrete logs: `log_g(pk) = log_c1(d)`.
-/// @dev Proof `(A, B, z)` with challenge `e = keccak256(pk, c1, d, A, B) mod r`.
+/// @dev Proof `(A, B, z)` with challenge
+///      `e = keccak256(domain, electionId, hourIndex, guardian, pk, c1, d, A, B) mod r`.
 ///      Checks `g^z = A + e·pk` and `c1^z = B + e·d` on alt_bn128.
 ///      `z` is the response, not the Shamir share and not the joint scalar.
+///      `c1` is the stored aggregate point, not a point the caller picks.
 library ChaumPedersen {
     /// @notice Generator of alt_bn128 G1.
     uint256 internal constant GX = 1;
     uint256 internal constant GY = 2;
+
+    bytes32 internal constant DOMAIN = keccak256("CHAUM_PEDERSEN_V1");
 
     function verify(
         uint256 pkX,
@@ -26,11 +30,20 @@ library ChaumPedersen {
         uint256 aY,
         uint256 bX,
         uint256 bY,
-        uint256 z
+        uint256 z,
+        uint256 electionId,
+        uint256 hourIndex,
+        address guardian
     ) internal view returns (bool) {
         if (!Bn128.onCurve(pkX, pkY) || !Bn128.onCurve(c1X, c1Y) || !Bn128.onCurve(dX, dY)) return false;
         if (!Bn128.onCurve(aX, aY) || !Bn128.onCurve(bX, bY)) return false;
-        uint256 e = uint256(keccak256(abi.encode(pkX, pkY, c1X, c1Y, dX, dY, aX, aY, bX, bY))) % Bn128.R;
+        uint256 e = uint256(
+            keccak256(
+                abi.encode(
+                    DOMAIN, electionId, hourIndex, guardian, pkX, pkY, c1X, c1Y, dX, dY, aX, aY, bX, bY
+                )
+            )
+        ) % Bn128.R;
         if (!_same(GX, GY, z, aX, aY, pkX, pkY, e)) return false;
         return _same(c1X, c1Y, z, bX, bY, dX, dY, e);
     }

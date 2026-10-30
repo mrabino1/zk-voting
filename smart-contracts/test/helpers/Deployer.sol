@@ -35,7 +35,12 @@ import {Fixtures} from "./Fixtures.sol";
 ///      via CREATE + appended ABI args so slight signature drift still deploys.
 contract Deployer is Test {
     event ElectionCreated(
-        uint256 indexed electionId, address indexed election, bytes32 indexed jurisdictionId, uint64 startTime, uint64 cutoffTime
+        uint256 indexed electionId,
+        address indexed election,
+        bytes32 indexed jurisdictionId,
+        uint64 startTime,
+        uint64 cutoffTime,
+        uint8 electionType
     );
     event VoterRegistered(uint256 indexed electionId, uint256 indexed identityCommitment, uint256 leafIndex);
     event Disqualified(
@@ -335,7 +340,7 @@ contract Deployer is Test {
     }
 
     function warpClosed(address election) internal {
-        vm.warp(IElection(election).params().cutoffTime);
+        vm.warp(tally.tallyAllowedAt(IElection(election).electionId()));
     }
 
     function eligibleRoot(uint256 electionId, address election) internal view returns (bytes32 root) {

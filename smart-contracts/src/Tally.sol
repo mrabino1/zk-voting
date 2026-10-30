@@ -10,6 +10,7 @@ import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IRollupSettlement} from "./interfaces/IRollupSettlement.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
+import {Bn128} from "./zk/Bn128.sol";
 import {ChaumPedersen} from "./zk/ChaumPedersen.sol";
 import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
@@ -39,6 +40,18 @@ contract Tally is ITallyVerifier {
     /// @notice Option-vector bound. A histogram is not one integer per ballot.
     uint256 public constant MAX_TALLY_OPTIONS = 256;
 
+    /// @notice Armed at creation when the operator has not written a window. Zero is refused.
+    uint256 public constant MIN_CHALLENGE_WINDOW = 1 hours;
+
+    /// @notice POLL hourly partials wait this long after the hour closes and after the gate.
+    uint256 public constant HOURLY_PARTIAL_DELAY = 30 minutes;
+
+    /// @notice Unique ballots that open a POLL hour without waiting for cutoff.
+    uint256 public constant HOURLY_BALLOT_GATE = 100;
+
+    /// @dev Final partials use this hour index in the Chaum-Pedersen challenge.
+    uint256 internal constant FINAL_HOUR = type(uint256).max;
+
     IElectionFactory private immutable _factory;
 
     /// @inheritdoc ITallyVerifier
@@ -66,15 +79,19 @@ contract Tally is ITallyVerifier {
     uint256 private _reentrancyLock;
 
     mapping(uint256 => uint64) private _challengeWindow;
-    address public rollupSettlement;
-    address public ceremony;
+    /// @dev True after the operator's one custom write. The armed minimum does not set this.
+    mapping(uint256 => bool) private _windowCustom;
+    mapping(uint256 => address) public settlementOf;
+    mapping(uint256 => address) public ceremonyOf;
 
     struct StoredPartial {
         uint256 dX;
         uint256 dY;
-        bytes32 proofHash;
+        uint256 index;
         bool posted;
     }
+
+    mapping(uint256 => address[]) private _finalGuardians;
 
     /// @notice POLL hourly partials. Not the one post-cutoff interim write.
     mapping(uint256 => mapping(uint256 => mapping(address => StoredPartial))) private _hourlyPartial;
@@ -204,7 +221,7 @@ contract Tally is ITallyVerifier {
         // The argument is one aggregate hash. There is no openings array.
         (,, ElectionParams memory p) = _authorize(electionId);
         if (!_tallied[electionId]) revert DecryptionBeforeTally(electionId);
-        _requirePartials(electionId, p.electionType);
+        _checkDecryption(electionId, p.electionType, aggregatePlaintextHash);
         if (_decryptionHash[electionId] != bytes32(0)) revert ResultAlreadyFinal(electionId);
         _decryptionHash[electionId] = aggregatePlaintextHash;
         emit AggregateDecrypted(electionId, aggregatePlaintextHash);
@@ -313,8 +330,10 @@ contract Tally is ITallyVerifier {
         if (msg.sender != p.tallyOperator) revert NotTallyOperator();
         // VOTE publishes nothing before the end. POLL keeps the cutoff rule below.
         _revertIfVoteSealed(electionId, p);
-        // CLOSED once cutoff and the challenge window have both passed.
-        if (block.timestamp < p.cutoffTime + _challengeWindow[electionId]) revert ChallengeWindowOpen(electionId);
+        // CLOSED once cutoff and a nonzero challenge window have both passed.
+        uint64 window = _challengeWindow[electionId];
+        if (window == 0) revert ZeroChallengeWindow();
+        if (block.timestamp < uint256(p.cutoffTime) + window) revert ChallengeWindowOpen(electionId);
         _requireSupplementary(electionId);
         verifier = tallyProofVerifier;
         if (verifier == address(0)) revert TallyVerifierNotSet();
@@ -366,8 +385,16 @@ contract Tally is ITallyVerifier {
         ElectionParams memory p = _operatorParams(electionId);
         if (block.timestamp >= p.startTime) revert ChallengeWindowLocked(electionId);
         if (secondsAfterCutoff == 0) revert ZeroChallengeWindow();
-        if (_challengeWindow[electionId] != 0) revert ChallengeWindowAlreadySet(electionId);
+        if (_windowCustom[electionId]) revert ChallengeWindowAlreadySet(electionId);
         _challengeWindow[electionId] = secondsAfterCutoff;
+        _windowCustom[electionId] = true;
+    }
+
+    /// @notice Factory arms the minimum when the slot is still zero. The operator may replace it once.
+    function armChallengeWindow(uint256 electionId) external {
+        if (msg.sender != address(_factory)) revert NotElectionFactory();
+        if (_windowCustom[electionId] || _challengeWindow[electionId] != 0) return;
+        _challengeWindow[electionId] = uint64(MIN_CHALLENGE_WINDOW);
     }
 
     function challengeWindow(uint256 electionId) external view returns (uint64) {
@@ -377,28 +404,30 @@ contract Tally is ITallyVerifier {
     function tallyAllowedAt(uint256 electionId) public view returns (uint256) {
         address electionAddr = _factory.getElection(electionId);
         if (electionAddr == address(0)) revert UnknownElection();
-        return uint256(IElection(electionAddr).params().cutoffTime) + _challengeWindow[electionId];
+        uint64 window = _challengeWindow[electionId];
+        if (window == 0) revert ZeroChallengeWindow();
+        return uint256(IElection(electionAddr).params().cutoffTime) + window;
     }
 
-    function setRollupSettlement(address settlement_) external {
+    function setRollupSettlement(uint256 electionId, address settlement_) external {
         if (!_factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
         if (settlement_ == address(0)) revert ZeroAddress();
-        if (rollupSettlement != address(0) && rollupSettlement != settlement_) revert SettlementAlreadySet();
-        rollupSettlement = settlement_;
+        address cur = settlementOf[electionId];
+        if (cur != address(0) && cur != settlement_) revert SettlementAlreadySet();
+        settlementOf[electionId] = settlement_;
     }
 
-    function setCeremony(address ceremony_) external {
+    function setCeremony(uint256 electionId, address ceremony_) external {
         if (!_factory.isSuperAdmin(msg.sender)) revert NotSuperAdmin();
         if (ceremony_ == address(0)) revert ZeroAddress();
-        if (ceremony != address(0) && ceremony != ceremony_) revert CeremonyAlreadySet();
-        ceremony = ceremony_;
+        address cur = ceremonyOf[electionId];
+        if (cur != address(0) && cur != ceremony_) revert CeremonyAlreadySet();
+        ceremonyOf[electionId] = ceremony_;
     }
 
     function submitHourlyPartial(
         uint256 electionId,
         uint256 hourIndex,
-        uint256 c1X,
-        uint256 c1Y,
         uint256 dX,
         uint256 dY,
         uint256 aX,
@@ -409,19 +438,36 @@ contract Tally is ITallyVerifier {
     ) external nonReentrant {
         _requireNotPaused();
         ElectionParams memory p = _paramsOf(electionId);
+        if (p.electionType != ElectionType.POLL) revert NotPoll();
+        address settlement = settlementOf[electionId];
+        if (settlement == address(0)) revert CiphertextMissing();
+        IRollupSettlement rollup = IRollupSettlement(settlement);
+        if (!rollup.hourPosted(electionId, hourIndex)) revert HourNotPosted();
+        if (block.timestamp < uint256(rollup.hourClosedAt(electionId, hourIndex)) + HOURLY_PARTIAL_DELAY) {
+            revert HourGateClosed();
+        }
+        address inbox = IElection(_factory.getElection(electionId)).inbox();
+        uint256 ballots = IBallotInbox(inbox).acceptedBallots(electionId);
+        if (ballots < HOURLY_BALLOT_GATE && block.timestamp < uint256(p.cutoffTime) + HOURLY_PARTIAL_DELAY) {
+            revert HourGateClosed();
+        }
+        IRollupSettlement.Ciphertext memory ct = rollup.hourlyCiphertext(electionId, hourIndex);
+        if (!ct.set) revert CiphertextMissing();
         _storePartial(
             _hourlyPartial[electionId][hourIndex][msg.sender],
             electionId,
             p.electionType,
-            c1X,
-            c1Y,
+            ct.c1X,
+            ct.c1Y,
             dX,
             dY,
             aX,
             aY,
             bX,
             bY,
-            z
+            z,
+            hourIndex,
+            false
         );
     }
 
@@ -431,8 +477,6 @@ contract Tally is ITallyVerifier {
 
     function submitFinalPartial(
         uint256 electionId,
-        uint256 c1X,
-        uint256 c1Y,
         uint256 dX,
         uint256 dY,
         uint256 aX,
@@ -445,12 +489,26 @@ contract Tally is ITallyVerifier {
         _requireSupplementary(electionId);
         if (block.timestamp < tallyAllowedAt(electionId)) revert FinalPartialTooEarly(electionId);
         ElectionParams memory p = _paramsOf(electionId);
+        address settlement = settlementOf[electionId];
+        if (settlement == address(0)) revert CiphertextMissing();
+        IRollupSettlement.Ciphertext memory ct = IRollupSettlement(settlement).finalCiphertext(electionId);
+        if (!ct.set) revert CiphertextMissing();
         _storePartial(
-            _finalPartial[electionId][msg.sender], electionId, p.electionType, c1X, c1Y, dX, dY, aX, aY, bX, bY, z
+            _finalPartial[electionId][msg.sender],
+            electionId,
+            p.electionType,
+            ct.c1X,
+            ct.c1Y,
+            dX,
+            dY,
+            aX,
+            aY,
+            bX,
+            bY,
+            z,
+            FINAL_HOUR,
+            true
         );
-        unchecked {
-            _finalPartialCount[electionId] += 1;
-        }
     }
 
     function finalPartialCount(uint256 electionId) external view returns (uint256) {
@@ -458,17 +516,79 @@ contract Tally is ITallyVerifier {
     }
 
     function _requireSupplementary(uint256 electionId) internal view {
-        if (rollupSettlement == address(0)) return;
-        if (!IRollupSettlement(rollupSettlement).supplementaryPosted(electionId)) {
+        address settlement = settlementOf[electionId];
+        if (settlement == address(0)) return;
+        if (!IRollupSettlement(settlement).supplementaryPosted(electionId)) {
             revert SupplementaryBatchRequired(electionId);
         }
     }
 
-    function _requirePartials(uint256 electionId, uint8 electionType) internal view {
-        if (ceremony == address(0)) return;
-        if (!GuardianCeremony(ceremony).keyPosted(electionId, electionType)) return;
-        uint256 k = GuardianCeremony(ceremony).threshold(electionId, electionType);
-        if (_finalPartialCount[electionId] < k) revert NotEnoughPartials(electionId);
+    /// @dev No ceremony and no settlement keeps the legacy write-once hash.
+    ///      A sealed election, or any posted ceremony, must open to `M = c2 - Σ λ d`.
+    function _checkDecryption(uint256 electionId, uint8 electionType, bytes32 plaintextHash) internal view {
+        address cerAddr = ceremonyOf[electionId];
+        address settlement = settlementOf[electionId];
+        if (cerAddr == address(0) && settlement == address(0)) return;
+        if (cerAddr == address(0) || settlement == address(0)) revert KeyNotPosted();
+        GuardianCeremony cer = GuardianCeremony(cerAddr);
+        if (!cer.keyPosted(electionId, electionType)) revert KeyNotPosted();
+        uint256 k = cer.threshold(electionId, electionType);
+        if (_finalGuardians[electionId].length < k) revert NotEnoughPartials(electionId);
+        IRollupSettlement.Ciphertext memory ct = IRollupSettlement(settlement).finalCiphertext(electionId);
+        if (!ct.set) revert CiphertextMissing();
+        (uint256 mx, uint256 my) = _combine(electionId, ct.c2X, ct.c2Y, k);
+        if (keccak256(abi.encode(mx, my)) != plaintextHash) revert PlaintextMismatch();
+    }
+
+    function _combine(uint256 electionId, uint256 c2x, uint256 c2y, uint256 k)
+        internal
+        view
+        returns (uint256 mx, uint256 my)
+    {
+        uint256[16] memory idx;
+        uint256[16] memory dx;
+        uint256[16] memory dy;
+        for (uint256 i; i < k; ++i) {
+            StoredPartial storage part = _finalPartial[electionId][_finalGuardians[electionId][i]];
+            idx[i] = part.index;
+            dx[i] = part.dX;
+            dy[i] = part.dY;
+        }
+        mx = c2x;
+        my = c2y;
+        for (uint256 i; i < k; ++i) {
+            uint256 lambda = _lambda(idx, i, k);
+            (bool ok, uint256 sx, uint256 sy) = Bn128.mul(dx[i], dy[i], lambda);
+            if (!ok) revert InvalidPartial();
+            (uint256 nx, uint256 ny) = Bn128.neg(sx, sy);
+            (ok, mx, my) = Bn128.add(mx, my, nx, ny);
+            if (!ok) revert InvalidPartial();
+        }
+    }
+
+    /// @dev λ_i(0) = Π_{j≠i} x_j * inv(x_j - x_i) mod r. Indices are the 1-based post order.
+    function _lambda(uint256[16] memory idx, uint256 i, uint256 k) internal pure returns (uint256) {
+        uint256 num = 1;
+        uint256 den = 1;
+        uint256 xi = idx[i] % Bn128.R;
+        for (uint256 j; j < k; ++j) {
+            if (j == i) continue;
+            uint256 xj = idx[j] % Bn128.R;
+            num = mulmod(num, xj, Bn128.R);
+            den = mulmod(den, addmod(xj, Bn128.R - xi, Bn128.R), Bn128.R);
+        }
+        return mulmod(num, _inv(den), Bn128.R);
+    }
+
+    function _inv(uint256 a) internal pure returns (uint256 res) {
+        res = 1;
+        uint256 base = a % Bn128.R;
+        uint256 exp = Bn128.R - 2;
+        while (exp > 0) {
+            if (exp & 1 == 1) res = mulmod(res, base, Bn128.R);
+            base = mulmod(base, base, Bn128.R);
+            exp >>= 1;
+        }
     }
 
     function _paramsOf(uint256 electionId) internal view returns (ElectionParams memory p) {
@@ -489,18 +609,31 @@ contract Tally is ITallyVerifier {
         uint256 aY,
         uint256 bX,
         uint256 bY,
-        uint256 z
+        uint256 z,
+        uint256 hourIndex,
+        bool finalPartial
     ) internal {
         if (slot.posted) revert PartialAlreadyPosted();
-        if (ceremony == address(0)) revert NotGuardian();
+        address cer = ceremonyOf[electionId];
+        if (cer == address(0)) revert NotGuardian();
         (uint256 pkX, uint256 pkY, bool guardian) =
-            GuardianCeremony(ceremony).guardianPk(electionId, electionType, msg.sender);
+            GuardianCeremony(cer).guardianPk(electionId, electionType, msg.sender);
         if (!guardian) revert NotGuardian();
-        if (!ChaumPedersen.verify(pkX, pkY, c1X, c1Y, dX, dY, aX, aY, bX, bY, z)) revert InvalidPartial();
+        if (
+            !ChaumPedersen.verify(
+                pkX, pkY, c1X, c1Y, dX, dY, aX, aY, bX, bY, z, electionId, hourIndex, msg.sender
+            )
+        ) revert InvalidPartial();
         slot.dX = dX;
         slot.dY = dY;
-        slot.proofHash = keccak256(abi.encode(aX, aY, bX, bY, z));
+        slot.index = GuardianCeremony(cer).guardianIndex(electionId, electionType, msg.sender);
         slot.posted = true;
+        if (finalPartial) {
+            _finalGuardians[electionId].push(msg.sender);
+            unchecked {
+                _finalPartialCount[electionId] += 1;
+            }
+        }
     }
 
     function _sum(uint256[] calldata counts) internal pure returns (uint256 total) {
