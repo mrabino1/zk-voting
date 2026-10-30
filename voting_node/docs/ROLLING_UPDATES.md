@@ -49,7 +49,7 @@ Archive stays on by default (`ARCHIVE_ENABLED=1`, `ARCHIVE_COMPRESS=1`). With an
 ## Idempotency
 
 - L2: the same tx hash already in the chain, mempool, or sealed set returns that hash. A different payload with the same `(electionId, nullifier)`, the same `(type, electionId, identityCommitment)` for register/disqualify, or a second tally for the election is rejected. Block files are created with `O_EXCL`. An existing file or a parent-hash mismatch is refused. The block hash does not include the epoch; the epoch is stored beside it.
-- Node: duplicate votes stay HTTP 409 `NULLIFIER_USED`. Standby mutations are HTTP 503 `STANDBY` with `Retry-After: 2`, before that check.
+- Node: a second ballot for the same nullifier is rejected (`NULLIFIER_USED`, HTTP 409) unless re-vote is enabled. After cutoff the code is `CLOSED`. Standby mutations are HTTP 503 `STANDBY` with `Retry-After: 2`. The L2 sequencer still rejects a duplicate nullifier.
 - Prover: never deploys. No `L1_RPC` keeps the local JSON proof path. `L1_RPC` set with a missing `SETTLEMENT_ADDRESS`, a missing or mismatched `L1_CHAIN_ID`, or `eth_getCode` of `0x` fails closed and does not advance the cursor. `submitBatch` is sent only when `batchIndex` equals L1 `batchCount`. The contract also reverts any other index.
 - Explorer: a block hash already in `seenBlockHashes` imports nothing.
 

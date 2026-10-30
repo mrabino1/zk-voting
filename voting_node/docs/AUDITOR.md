@@ -68,11 +68,11 @@ GET /api/outcomes/:id
 2. `acceptedBallots >=` that unique count (hourly disclosure may hide not-yet-public votes).
 3. Tally: if `tally.questions` lists plurality aspects, each aspect’s counts must respect `acceptedBallots` (undervotes allowed; a concatenated multi-question vector is **not** a unique-voter sum). If only a legacy flat `tally.counts` vector is present, `sum(counts) == acceptedBallots`. Solidity `Tally` still assumes that single-vector invariant.
 4. Disclosed rows have no `choice` / `optionId` / `userId`.
-5. No last-vote-counts artifacts: non-empty `supersededHashes` or `generation != 1` fail.
+5. No linkage artifacts: non-empty `supersededHashes` or `generation != 1` fail. The pack shows one current ballot hash per nullifier.
 6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present). If `coercion.policy` is present it must be `one-ballot-per-nullifier`.
 7. `startTime < cutoffTime`; NFP label; schema id. Contract addresses are included when known (chain export / configured Node); Node-only demo packs may omit them and still check uniqueness and tally.
 
-A second ballot for a spent nullifier is a contract / Node reject (`NullifierUsed`). Double voting remains impossible. Auditors see only the single accepted `ballotHash` per nullifier.
+The inbox rejects a second `submitVote` (`NullifierUsed`). The Node keeps one current `ballotHash` per nullifier, the latest. Double voting remains impossible. Auditors do not see a previous hash or a marker that ties two ballots together.
 
 ---
 

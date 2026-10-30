@@ -1,7 +1,7 @@
 /**
  * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
  * Final tally: per-option counts after a tally, plurality
- * winners and ties. No unofficial choice totals while polls are open.
+ * winners and ties. A poll may also show almost-live hourly choice sums.
  */
 
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
@@ -379,6 +379,10 @@ export async function renderResults(main, ctx) {
     children.push(h("p", { class: "lede", text: results.message }));
   }
 
+  if (payload.choiceBlocks) {
+    children.push(choiceBlocksSection(payload.choiceBlocks, h, formatTime));
+  }
+
   if (available && Array.isArray(results.questions)) {
     children.push(...results.questions.map((q) => questionBlock(questionWithDefaults(q), h)));
   } else if (Array.isArray(results.questions) && results.questions.length) {
@@ -441,6 +445,41 @@ function questionWithDefaults(q) {
   };
 }
 
+function choiceBlocksSection(choiceBlocks, h, formatTime) {
+  if (!choiceBlocks || !Array.isArray(choiceBlocks.blocks)) return null;
+  const rows = choiceBlocks.blocks.map((block) => {
+    const start = formatTime(block.hourStart);
+    const end = formatTime(block.hourEnd);
+    const questions =
+      Array.isArray(block.questions) && block.questions.length
+        ? block.questions.map((q) => questionBlock(questionWithDefaults({ ...q, id: `${block.id}-${q.id}` }), h))
+        : [
+            h("p", {
+              text:
+                block.decryption === "unavailable" || block.decryption === "decrypt_failed"
+                  ? t("results.blockUnavailable")
+                  : t("results.blockAwaiting"),
+            }),
+          ];
+    return h(
+      "section",
+      { class: "choice-block" },
+      h("h3", { text: `${start} – ${end}` }),
+      h("p", { class: "field-hint", text: t("results.blockBallots", { count: block.ballots }) }),
+      ...questions
+    );
+  });
+  return h(
+    "section",
+    { class: "almost-live", "aria-labelledby": "almost-live-heading" },
+    h("h2", { id: "almost-live-heading", text: t("results.almostLive") }),
+    h("p", { text: t("results.almostLiveBody") }),
+    h("p", { class: "field-hint", text: t("results.trailingHelp") }),
+    h("p", { class: "field-hint", text: t("results.certifiedSeparate") }),
+    ...rows
+  );
+}
+
 export async function renderResultsIndex(main, ctx) {
   const { h, loadElections, formatTime, electionStateInfo } = ctx;
   const { elections, source } = await loadElections();
@@ -497,7 +536,7 @@ export async function renderResultsIndex(main, ctx) {
         "p",
         {
           class: "lede",
-          text: "Plurality totals from the final tally. While a poll is open or awaiting a tally, this page does not show unofficial choice counts.",
+          text: t("results.lede"),
         }
       ),
       source === "sample"

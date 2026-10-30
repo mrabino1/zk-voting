@@ -418,7 +418,7 @@ export default {
   results: {
     observers: "Observadores",
     title: "Resultados da eleição",
-    lede: "Totais de pluralidade certificados após uma apuração. Enquanto uma votação está aberta ou aguardando apuração, esta página não mostra contagens extraoficiais por escolha.",
+    lede: "Totais de pluralidade certificados após uma apuração. Uma consulta também pode mostrar somas por escolha, quase ao vivo e por hora, depois que o portão de resultados abre. Uma votação permanece selada até terminar.",
     sampleNote: "Exibindo a lista de exemplo integrada porque /api/elections não está disponível.",
     tie: "Empate",
     lexTie: "Empate em primeiro lugar desfeito pelo id de opção lexicográfico.",
@@ -475,8 +475,19 @@ export default {
     typePoll: "Consulta",
     typeVote: "Votação",
     sealedUntil: "Resultados selados até {end}",
-    sealedBody: "Contagens por opção e apurações parciais ficam seladas para todos, inclusive os responsáveis, até esta eleição terminar. O comparecimento por hora é público.",
+    sealedBody: "Contagens por opção e apurações parciais ficam seladas para todos, inclusive os responsáveis, até esta eleição terminar. O comparecimento é visível.",
     sealedStatus: "Resultados selados",
+    almostLive: "Quase ao vivo",
+    almostLiveBody:
+      "Somas por escolha, por hora, desta consulta. O bloco das 08:00–08:59 pode ser publicado às 09:30, depois que o portão de resultados abre (100 cédulas ou o fim programado, o que ocorrer primeiro). Horas com menos de 10 cédulas se fundem para a frente. A série congela no encerramento. Um bloco publicado permanece como foi publicado pela primeira vez. Essas somas não são a apuração certificada.",
+    trailingHelp:
+      "Uma hora final com menos de 10 não é uma linha própria. No encerramento ela se dobra no bloco anterior. Se a consulta inteira ainda estiver abaixo de 10, um bloco de encerramento é o conjunto todo.",
+    blockBallots: "{count} cédulas",
+    blockBallots_one: "{count} cédula",
+    blockAwaiting: "As somas desta hora aguardam a decifração por limiar.",
+    blockUnavailable: "As somas desta hora não estão disponíveis.",
+    certifiedSeparate:
+      "A apuração certificada no encerramento é a final. Ela não precisa igualar estas somas horárias.",
   },
   info: {
     elections: "Eleições",
@@ -704,9 +715,9 @@ export default {
       "Padrão da eleição. YES_NO permanece pluralidade. Perguntas RANKED sempre usam IRV. Eleições criadas recebem um id público UUID e um link curto <code>/v/…</code>; o <code>uint256</code> da fábrica permanece <code>onChainElectionId</code>.",
     electionType: "Tipo de eleição",
     typePoll: "Consulta",
-    typePollHelp: "Os resultados permanecem visíveis no painel enquanto a votação está aberta, segundo as regras de divulgação já existentes. Depois da data de encerramento, nenhum voto entra no total.",
+    typePollHelp: "Depois que o portão de resultados abre (100 cédulas, ou o fim programado, o que ocorrer primeiro), as somas por escolha são publicadas por hora, 30 minutos após cada hora. Horas com menos de 10 cédulas se fundem à seguinte. Um bloco publicado não muda. A apuração certificada no encerramento é a final. Uma votação não publica essas somas.",
     typeVote: "Votação",
-    typeVoteHelp: "O resultado só aparece depois que a eleição termina. Até lá, ninguém — inclusive os responsáveis — pode ver contagens por escolha ou uma apuração parcial. O comparecimento horário é público.",
+    typeVoteHelp: "O resultado só aparece depois que a eleição termina. Antes do prazo, ninguém, inclusive os responsáveis, pode ver contagens por opção ou uma apuração parcial. O comparecimento é visível.",
     typeLocked: "O tipo fica fixo na criação e não pode ser alterado.",
     loadExisting: "Carregar cédula existente",
     newElection: "Nova eleição…",

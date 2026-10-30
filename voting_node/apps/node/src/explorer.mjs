@@ -409,13 +409,27 @@ export class Explorer {
     return sealed.some((item) => sameNullifier(payloadNullifier(item.payload || {}), nullifier));
   }
 
+  /**
+   * A published row stays the first ballot. Rewriting the hash or the hour
+   * would mark a re-vote.
+   */
+  async replaceVote(payload) {
+    const body = votePayload(payload);
+    await this.refresh();
+    return {
+      duplicate: true,
+      published: Boolean(this.findByNullifier(body.nullifier)),
+      sealed: this.sealedHasNullifier(body.nullifier),
+    };
+  }
+
   async recordVote(payload, now, intervalSeconds) {
     const body = votePayload(payload);
     await this.refresh();
     this.chain.sealed = this.chain.sealed || [];
 
     if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) {
-      return { duplicate: true, published: Boolean(this.findByNullifier(body.nullifier)) };
+      return this.replaceVote(body);
     }
 
     const interval = Number(intervalSeconds) || 0;

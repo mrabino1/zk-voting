@@ -418,7 +418,7 @@ export default {
   results: {
     observers: "Observadores",
     title: "Resultados de la elección",
-    lede: "Totales de pluralidad certificados después de un escrutinio. Mientras una votación está abierta o espera un escrutinio, esta página no muestra conteos oficiosos por opción.",
+    lede: "Totales de pluralidad certificados después de un escrutinio. Una encuesta también puede mostrar sumas por opción casi en vivo, por hora, cuando se abre la puerta de resultados. Una votación permanece sellada hasta que termina.",
     sampleNote: "Se muestra el padrón de muestra integrado porque /api/elections no está disponible.",
     tie: "Empate",
     lexTie: "Empate en el primer lugar resuelto por el id lexicográfico de la opción.",
@@ -475,8 +475,19 @@ export default {
     typePoll: "Encuesta",
     typeVote: "Votación",
     sealedUntil: "Resultados sellados hasta {end}",
-    sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación por hora es pública.",
+    sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación es visible.",
     sealedStatus: "Resultados sellados",
+    almostLive: "Casi en vivo",
+    almostLiveBody:
+      "Sumas por opción, por hora, de esta encuesta. El bloque de las 08:00–08:59 puede publicarse a las 09:30, después de que se abre la puerta de resultados (100 boletas o el fin programado, lo que ocurra primero). Las horas con menos de 10 boletas se fusionan hacia adelante. La serie se congela al cierre. Un bloque publicado permanece como se publicó por primera vez. Estas sumas no son el escrutinio certificado.",
+    trailingHelp:
+      "Una hora final con menos de 10 boletas no es una fila propia. Al cierre se pliega en el bloque anterior. Si toda la encuesta sigue bajo 10, un bloque de cierre es el conjunto entero.",
+    blockBallots: "{count} boletas",
+    blockBallots_one: "{count} boleta",
+    blockAwaiting: "Las sumas de esta hora esperan el descifrado umbral.",
+    blockUnavailable: "Las sumas de esta hora no están disponibles.",
+    certifiedSeparate:
+      "El escrutinio certificado al cierre es el final. No tiene que igualar estas sumas por hora.",
   },
   info: {
     elections: "Elecciones",
@@ -706,9 +717,9 @@ export default {
       "Valor predeterminado de la elección. YES_NO permanece en pluralidad. Las preguntas RANKED siempre usan IRV. Las elecciones creadas obtienen un id público UUID y un enlace corto <code>/v/…</code>; el <code>uint256</code> de la fábrica permanece como <code>onChainElectionId</code>.",
     electionType: "Tipo de elección",
     typePoll: "Encuesta",
-    typePollHelp: "Los resultados siguen visibles en el panel mientras la votación está abierta, con las reglas de divulgación habituales. Después de la fecha de cierre no se suman más votos al total.",
+    typePollHelp: "Cuando se abre la puerta de resultados (100 boletas, o el fin programado, lo que ocurra primero), las sumas por opción se publican por hora, 30 minutos después de cada hora. Las horas con menos de 10 boletas se fusionan con la siguiente. Un bloque publicado no cambia. El escrutinio certificado al cierre es el final. Una votación no publica estas sumas.",
     typeVote: "Votación",
-    typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Hasta entonces, nadie —incluidos los funcionarios— puede ver conteos por opción ni un escrutinio parcial. La participación horaria es pública.",
+    typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Antes del plazo, nadie, incluidos los funcionarios, puede ver los conteos por opción ni un escrutinio parcial. La participación es visible.",
     typeLocked: "El tipo queda fijo al crear la elección y no se puede cambiar.",
     loadExisting: "Cargar boleta existente",
     newElection: "Elección nueva…",

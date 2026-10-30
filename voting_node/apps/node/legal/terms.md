@@ -57,7 +57,7 @@ You must be old enough, under the hosting jurisdiction’s law, to participate i
 
 ## 7. Ballots, receipts, and coercion
 
-Each voter is counted once. Where the election allows it, a voter may re-vote until the deadline, with the last vote counting; otherwise a second ballot is rejected.
+One ballot is kept per nullifier. A second ballot is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block keeps the first ballot. Two ballots are not both counted. Double voting is impossible on that rule.
 
 Receipts list hashes only (ballot hash, nullifier, related identifiers). They cannot prove “I voted for X.” After a ballot is accepted you may email yourself that receipt (message body and a PDF of the same evidence). The vote-receipt PDF is encrypted and locked against modification; a changed file will not match the SHA-256 the Node recorded. Public dashboards delay vote proofs until the UTC hour has closed and the disclosure delay has elapsed, so walking out of a polling place cannot be matched to a live tick.
 

@@ -418,7 +418,7 @@ export default {
   results: {
     observers: "观察员",
     title: "选举结果",
-    lede: "计票后的核证相对多数合计。投票进行中或等待计票时，本页不显示非正式选项计数。",
+    lede: "计票后的核证相对多数合计。民意调查在结果门槛打开后也可以显示近实时的每小时选项合计。表决在结束前保持密封。",
     sampleNote: "因 /api/elections 不可用，正在显示内置示例名册。",
     tie: "平票",
     lexTie: "第一名平票按选项 id 的字典序打破。",
@@ -477,6 +477,17 @@ export default {
     sealedUntil: "结果密封至 {end}",
     sealedBody: "在本次选举结束之前，各选项票数和部分计票对所有人密封，包括管理人员。每小时投票率是公开的。",
     sealedStatus: "结果已密封",
+    almostLive: "近实时",
+    almostLiveBody:
+      "本民意调查的每小时选项合计。08:00–08:59 的区块可在 09:30 发布，且须在结果门槛打开之后（100 张选票或预定结束，以先到者为准）。不足 10 张的小时向前合并。结束时序列冻结。已发布的区块保持首次发布时的样子。这些合计不是核证计票。",
+    trailingHelp:
+      "不足 10 张的收尾小时不单独成行。结束时并入前一个区块。若整场调查仍不足 10 张，一个收尾区块就是全部。",
+    blockBallots: "{count} 张选票",
+    blockBallots_one: "{count} 张选票",
+    blockAwaiting: "这一小时的选项合计正在等待门限解密。",
+    blockUnavailable: "这一小时的选项合计不可用。",
+    certifiedSeparate:
+      "结束时的核证计票是最终结果。它不必等于这些每小时合计。",
   },
   info: {
     elections: "选举",
@@ -705,9 +716,9 @@ export default {
       "选举默认。YES_NO 保持相对多数。RANKED 问题始终使用 IRV。已创建的选举获得 UUID 公开 id 和短 <code>/v/…</code> 链接；工厂 <code>uint256</code> 仍为 <code>onChainElectionId</code>。",
     electionType: "选举类型",
     typePoll: "民意调查",
-    typePollHelp: "投票进行期间，结果按现有的披露规则显示在面板上。截止日期之后，不再把新的选票计入总数。",
+    typePollHelp: "结果门槛打开之后（100 张选票或预定结束时间，以先到者为准），每小时选项合计在该小时结束后 30 分钟发布。不足 10 张的小时并入下一小时。已发布的区块不会改变。结束时的核证计票才是最终结果。表决不发布这些合计。",
     typeVote: "表决",
-    typeVoteHelp: "结果只在选举结束后公布。在此之前，任何人都不能看到选项票数或部分计票，管理人员也不例外。每小时投票率是公开的。",
+    typeVoteHelp: "结果只在选举结束后公布。截止之前，任何人都不能看到选项票数或部分计票，管理人员也不例外。投票率是可见的。",
     typeLocked: "类型在创建时确定，之后不能更改。",
     loadExisting: "加载现有选票",
     newElection: "新选举…",

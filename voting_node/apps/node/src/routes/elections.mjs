@@ -32,7 +32,7 @@ import {
   sealedResultsBody,
   sealedResultsMessage,
 } from '../electionType.mjs';
-import { acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
+import { acceptChoiceBlockPartials, acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts, withoutExcludedEnvelopes } from '../tallyOpen.mjs';
 import { publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
@@ -1375,6 +1375,17 @@ export function electionsRouter(deps) {
         excluded,
         ...(firstReason ? { firstReason } : {}),
       });
+    }),
+  );
+
+  router.post(
+    '/:id/choice-blocks/partials',
+    requireAuth,
+    requireElectionRole(store, 'tally_operator'),
+    asyncHandler(async (req, res) => {
+      const election = store.requireElection(req.params.id);
+      const saved = await acceptChoiceBlockPartials(store, election.id, req.body || {}, deps);
+      res.status(201).json({ ok: true, index: saved.index, blockId: saved.blockId, count: saved.count, nfp: true });
     }),
   );
 

@@ -418,7 +418,7 @@ export default {
   results: {
     observers: "Người quan sát",
     title: "Kết quả bầu cử",
-    lede: "Tổng số đa số tương đối đã chứng nhận sau kiểm phiếu. Khi cuộc bỏ phiếu đang mở hoặc chờ kiểm phiếu, trang này không hiện số lựa chọn không chính thức.",
+    lede: "Tổng số đa số tương đối đã chứng nhận sau kiểm phiếu. Một thăm dò cũng có thể hiện tổng lựa chọn gần như trực tiếp theo giờ sau khi cổng kết quả mở. Một cuộc bỏ phiếu vẫn được niêm phong cho đến khi kết thúc.",
     sampleNote: "Đang hiện danh sách mẫu có sẵn vì /api/elections không khả dụng.",
     tie: "Hòa",
     lexTie: "Hòa hạng nhất được phá theo id lựa chọn theo thứ tự từ điển.",
@@ -477,6 +477,17 @@ export default {
     sealedUntil: "Kết quả được niêm phong đến {end}",
     sealedBody: "Số phiếu theo lựa chọn và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc. Tỷ lệ đi bỏ phiếu theo giờ là công khai.",
     sealedStatus: "Kết quả được niêm phong",
+    almostLive: "Gần như trực tiếp",
+    almostLiveBody:
+      "Tổng lựa chọn theo giờ của thăm dò này. Khối 08:00–08:59 có thể được công bố lúc 09:30, sau khi cổng kết quả mở (100 phiếu hoặc thời điểm kết thúc đã định, cái nào đến trước). Giờ dưới 10 phiếu được gộp về phía trước. Chuỗi đóng băng lúc kết thúc. Khối đã công bố giữ nguyên như lần công bố đầu. Các tổng này không phải kiểm phiếu chứng nhận.",
+    trailingHelp:
+      "Giờ cuối dưới 10 không phải một hàng riêng. Lúc đóng nó được gập vào khối trước. Nếu cả thăm dò vẫn dưới 10, một khối đóng là toàn bộ tập.",
+    blockBallots: "{count} phiếu",
+    blockBallots_one: "{count} phiếu",
+    blockAwaiting: "Tổng lựa chọn của giờ này đang chờ giải mã ngưỡng.",
+    blockUnavailable: "Tổng lựa chọn của giờ này không có sẵn.",
+    certifiedSeparate:
+      "Kiểm phiếu chứng nhận lúc đóng là kết quả cuối. Nó không bắt buộc bằng các tổng theo giờ.",
   },
   info: {
     elections: "Bầu cử",
@@ -704,9 +715,9 @@ export default {
       "Mặc định cuộc bầu cử. YES_NO giữ đa số tương đối. Câu RANKED luôn dùng IRV. Cuộc bầu cử đã tạo nhận id công khai UUID và liên kết ngắn <code>/v/…</code>; <code>uint256</code> nhà máy vẫn là <code>onChainElectionId</code>.",
     electionType: "Loại bầu cử",
     typePoll: "Thăm dò",
-    typePollHelp: "Kết quả vẫn hiện trên bảng điều khiển khi còn mở, theo quy tắc công bố hiện có. Sau ngày đóng cửa, không cộng thêm phiếu vào tổng.",
+    typePollHelp: "Sau khi cổng kết quả mở (100 phiếu, hoặc thời điểm kết thúc đã định, cái nào đến trước), tổng lựa chọn theo giờ được công bố 30 phút sau mỗi giờ. Giờ có ít hơn 10 phiếu được gộp vào giờ sau. Khối đã công bố không đổi. Kiểm phiếu chứng nhận lúc đóng là kết quả cuối. Một cuộc bỏ phiếu không công bố các tổng này.",
     typeVote: "Bỏ phiếu",
-    typeVoteHelp: "Kết quả chỉ được hiển thị sau khi cuộc bầu cử kết thúc. Trước đó, không ai — kể cả cán bộ — có thể thấy số phiếu theo lựa chọn hoặc kết quả tạm. Tỷ lệ tham gia theo giờ là công khai.",
+    typeVoteHelp: "Kết quả chỉ được hiển thị sau khi cuộc bầu cử kết thúc. Trước hạn chót, không ai, kể cả cán bộ, có thể thấy số phiếu theo lựa chọn hoặc kết quả tạm. Tỷ lệ đi bỏ phiếu thì thấy được.",
     typeLocked: "Loại được chốt khi tạo và không thể đổi.",
     loadExisting: "Tải phiếu hiện có",
     newElection: "Cuộc bầu cử mới…",

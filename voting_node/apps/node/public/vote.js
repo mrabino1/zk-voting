@@ -587,7 +587,7 @@ export async function renderVote(main, ctx) {
     }
 
     if (state.receipt && (state.step === "receipt" || election.state === 2)) {
-      children.push(renderReceipt(state, { h, api, announce, election, paint, allowRevote }));
+      children.push(renderReceipt(state, { h, api, announce, election, paint, voteCopy }));
       children.push(
         h(
           "p",
@@ -893,7 +893,7 @@ export async function renderVote(main, ctx) {
   paint();
 }
 
-function renderReceipt(state, { h, api, announce, election, paint, allowRevote }) {
+function renderReceipt(state, { h, api, announce, election, paint, voteCopy }) {
   const receipt = state.receipt || {};
   const proof =
     receipt.proofText ||
@@ -1001,7 +1001,7 @@ function renderReceipt(state, { h, api, announce, election, paint, allowRevote }
     h(
       "p",
       {
-        text: t(receiptHelpKey(allowRevote)),
+        text: voteCopy("vote.receiptHelp"),
       }
     ),
     h("p", {

@@ -1,10 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Final tally from a posted tally. Plurality only (no IRV).
-// Public option counts exist after tally; never invent unofficial choice totals.
+// A poll may also show almost-live hourly choice sums. A vote does not.
 
 import { presentTally } from './ballot.mjs';
 import { electionState, publicElection } from './electionState.mjs';
-import { electionTypeName, electionTypeOf, sealedResultsBody } from './electionType.mjs';
+import { electionTypeName, electionTypeOf, isPollElection, sealedResultsBody } from './electionType.mjs';
+import { buildPollChoiceView } from './pollChoiceBlocks.mjs';
 import { electionDisclosurePolicy, publicExclusion } from './store.mjs';
 
 const RANKED_TYPES = new Set(['RANKED', 'IRV', 'RCV', 'RANKED_CHOICE']);
@@ -371,13 +372,39 @@ export function presentResults(election, deps, opts = {}) {
     publishedAcceptedBallots,
     resultsSealed: false,
   });
-  return {
+  const results = buildResults(election, { now, publishedAcceptedBallots });
+  const choiceBlocks = isPollElection(election) ? buildPollChoiceView(election, deps, now) : null;
+  if (choiceBlocks && isPollElection(election)) {
+    for (const block of choiceBlocks.blocks || []) {
+      if (!Array.isArray(block.counts)) continue;
+      const slices = sliceOptionCounts(election.questions || [], block.counts);
+      block.questions = slices.map(({ question, counts }) => questionResult(question, counts, { available: true }));
+    }
+    if (Array.isArray(choiceBlocks.totals) && choiceBlocks.totals.length) {
+      const slices = sliceOptionCounts(election.questions || [], choiceBlocks.totals);
+      choiceBlocks.questions = slices.map(({ question, counts }) =>
+        questionResult(question, counts, { available: true }),
+      );
+    }
+    if (!results.available) {
+      const gate = Number(policy.minVotes) || 0;
+      if (!choiceBlocks.gateOpen) {
+        results.message = `Option counts stay hidden until the results gate opens: ${gate} ballots, or the scheduled end, whichever comes first.`;
+      } else if ((choiceBlocks.blocks || []).length) {
+        results.message =
+          'Almost-live per-choice sums for this poll. A published block stays as first published. The final tally at close counts the latest ballot.';
+      }
+    }
+  }
+  const body = {
     ...dto,
     electionId: String(election.id),
     electionType: electionTypeOf(election),
     electionTypeName: electionTypeName(election),
     resultsSealed: false,
-    results: buildResults(election, { now, publishedAcceptedBallots }),
+    results,
     explorerPath: `/explorer#/election/${encodeURIComponent(String(election.id))}`,
   };
+  if (choiceBlocks) body.choiceBlocks = choiceBlocks;
+  return body;
 }

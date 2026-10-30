@@ -55,10 +55,10 @@ export const FAQ_ENTRIES = [
   {
     id: "one-vote",
     topic: "one-vote",
-    q: "Can I vote more than once in an election?",
+    q: "Can I change my vote?",
     a: [
-      "No. Each nullifier is accepted once. A second ballot — including a new ciphertext — is rejected (NullifierUsed). Double voting is impossible on that rule. You may change your mind privately on the ballot form before you submit. After the inbox accepts the ballot you cannot recast.",
-      "This is not MACI and not “last vote counts.” Coercion-resistance upgrades of that kind are still later work.",
+      "Not by default. A second ballot for the same nullifier is rejected unless the operator has enabled re-vote. When that is on, a later ballot before the deadline updates the final tally only. A published poll block keeps the first ballot. After the deadline the Node rejects another ballot.",
+      "The receipt still cannot prove how you voted. The inbox accepts a nullifier once, so the Node does not submit a replacement again. This is not MACI.",
     ],
   },
   {

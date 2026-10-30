@@ -297,9 +297,8 @@ describe('ALLOW_REVOTE', () => {
       const checked = await api('POST', '/api/receipts/verify', {
         body: { ballotHash: second.json.receipt.ballotHash, electionId: id },
       });
-      assert.equal(checked.status, 200, checked.text);
-      assert.equal(checked.json.counted, true);
-      assert.equal(checked.json.ballotHash, second.json.receipt.ballotHash);
+      assert.equal(checked.status, 404, checked.text);
+      assert.equal(checked.json.counted, false);
       const firstChecked = await api('POST', '/api/receipts/verify', {
         body: { ballotHash: publishedHash, electionId: id },
       });

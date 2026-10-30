@@ -128,10 +128,8 @@ export async function renderReceiptPortal(main, ctx) {
       await loadMetrics(state.electionId);
       state.info = result.counted
         ? result.pdfUnmodified === false
-          ? "This ballot counted, but that PDF does not match the locked file the Node issued."
-          : result.published
-          ? "This ballot is in the public record. The receipt still cannot prove how you voted."
-          : "This ballot counted. Public explorer rows wait until this hour closes."
+          ? "This ballot was accepted, but that PDF does not match the locked file the Node issued."
+          : result.note
         : "This proof did not match an accepted ballot.";
       announce(state.info);
     } catch (err) {
@@ -278,7 +276,19 @@ export async function renderReceiptPortal(main, ctx) {
         })
       ),
       state.error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: state.error })) : null,
-      state.info ? h("div", { class: "notice notice-ok", role: "status" }, h("p", { text: state.info })) : null,
+      state.info
+        ? h(
+            "div",
+            {
+              class:
+                state.result && state.result.counted && state.result.pdfUnmodified === false
+                  ? "notice notice-warn"
+                  : "notice notice-ok",
+              role: "status",
+            },
+            h("p", { text: state.info })
+          )
+        : null,
       h(
         "form",
         { class: "stack receipt-verify-form", onSubmit: onVerify },

@@ -8,7 +8,7 @@
 export const DEFAULT_BRAND_NAME = "ZK-Voting";
 
 function meta(name) {
-  if (typeof document === "undefined") return "";
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return "";
   const el = document.querySelector(`meta[name="${name}"]`);
   return (el && el.getAttribute("content")) || "";
 }
