@@ -133,9 +133,8 @@ export function isDisclosed(eventTs, now, intervalSeconds, delaySeconds = 0) {
 
 /**
  * Poll per-choice counts wait until 100 first ballots are in, or the scheduled
- * end has passed. minVotes <= 0 leaves the gate open.
- * TODO(#116): resultsGateOpen has no production caller yet and must be wired
- * into hourly per-choice blocks.
+ * end has passed. minVotes <= 0 leaves the gate open. Hourly choice blocks
+ * call this. Turnout does not.
  */
 export function resultsGateOpen({
   submittedVotes = 0,
@@ -290,7 +289,7 @@ export function publicDisclosureView(now, intervalSeconds, extras = {}) {
     nextPublishAt: nextPublishAt(ts, interval, delay),
     secondsUntilNext: secondsUntilNext(ts, interval, delay),
     note:
-      'Vote proofs and turnout publish after the hour closes and the disclosure delay has elapsed, from the first ballot. Per-choice counts publish with the posted tally; hourly per-choice blocks after the gate are planned. A block smaller than the minimum merges into a later hour. A person leaving a voting office cannot be matched to the publish.',
+      'Vote proofs and turnout publish after the hour closes and the disclosure delay has elapsed, from the first ballot. A poll publishes hourly choice sums after the results gate. A published block stays as first published. A vote publishes choices only in the final tally. A block smaller than the minimum merges into a later hour. A person leaving a voting office cannot be matched to the publish.',
   };
   if (typeof extras.resultsMinVotes === 'number') view.resultsMinVotes = extras.resultsMinVotes;
   if (typeof extras.minBlockVotes === 'number') view.minBlockVotes = extras.minBlockVotes;

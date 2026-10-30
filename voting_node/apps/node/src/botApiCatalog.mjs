@@ -430,7 +430,7 @@ export const BOT_OPERATIONS = [
   }),
   R('/api/elections/:id/results', {
     tag: 'Elections',
-    summary: 'Plurality or IRV results from the final tally. Empty of option counts before tally. Excluded ballots are not counted.',
+    summary: 'Plurality or IRV results from the final tally. Empty of option counts before tally. A poll may include almost-live hourly choice sums after the results gate. A vote stays empty of those sums. Excluded ballots are not counted.',
   }),
   R('/api/elections/:id/summary', {
     tag: 'Elections',
@@ -504,7 +504,7 @@ export const BOT_OPERATIONS = [
   V('POST', '/api/elections/:id/vote', {
     tag: 'Elections',
     summary:
-      'Submit one ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. The same nullifier is accepted once. A read-only key is refused.',
+      'Submit a ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. A second ballot for the same nullifier is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block does not change. A read-only key is refused.',
     body: 'proof, public inputs, ciphertext, pinToken, identityCommitment when an external party is active',
   }),
   O('POST', '/api/elections/:id/disqualify', {
@@ -545,7 +545,14 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/elections/:id/guardians/partials', {
     tag: 'Elections',
     auth: true,
-    summary: 'Tally operator submits partial decryptions after cutoff.',
+    summary: 'Tally operator submits partial decryptions of the full aggregate after cutoff.',
+  }),
+  O('POST', '/api/elections/:id/choice-blocks/partials', {
+    tag: 'Elections',
+    auth: true,
+    summary:
+      'Tally operator submits partial decryptions for one published poll hour block. A vote has no block. The response is the guardian index and the block id.',
+    body: 'blockId, index, partials tagged for that block aggregate',
   }),
   O('POST', '/api/elections/:id/tally', {
     tag: 'Elections',

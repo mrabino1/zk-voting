@@ -191,7 +191,8 @@ describe('hourly polling-place unlinkability', () => {
         identityCommitment: '0xabc1',
       },
     });
-    assert.equal(dup.status, 409);
+    assert.equal(dup.status, 409, dup.json?.error);
+    assert.equal(dup.json.code, 'NULLIFIER_USED');
 
     const detail = await api('GET', `/api/elections/${id}`);
     assert.equal(detail.json.acceptedBallots, 0);

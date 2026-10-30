@@ -307,17 +307,21 @@ describe('ZK-Voting Node API', () => {
     assert.equal(json.vote.choice, undefined);
   });
 
-  test('nullifier uniqueness', async () => {
+  test('a later ballot for the same nullifier is rejected until re-vote is enabled', async () => {
+    const before = store.listEnvelopes(electionId)[0].encryptedBallot;
     const { status, json } = await api('POST', `/api/elections/${electionId}/vote`, {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '99', electionId },
-        encryptedBallot: '0xc0ffee',
+        encryptedBallot: '0xdecaf',
         identityCommitment: '0x1234',
       },
     });
-    assert.equal(status, 409);
+    assert.equal(status, 409, json?.error);
     assert.equal(json.code, 'NULLIFIER_USED');
+    assert.equal(store.requireElection(electionId).acceptedBallots, 1);
+    assert.equal(store.listVotes(electionId).length, 1);
+    assert.equal(store.listEnvelopes(electionId)[0].encryptedBallot, before);
   });
 
   test('vote records never map passkey user id to a ballot', async () => {

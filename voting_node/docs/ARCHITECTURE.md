@@ -128,24 +128,25 @@ the open window it still does not invent unofficial option counts. After
 SHA-256 / HMAC authenticity page; `/outcomes/verify` checks the file was not
 changed. Subscribing to that PDF is opt-in on `/me`; casting a ballot never
 creates a subscription (see `docs/OPERATOR.md`, "Ballot unlinkability"). This is
-**not** MACI and
-**not** last-vote-counts: a coercer who can force the first (and only) submit
-still wins that ballot.
+**not** MACI. A second ballot is rejected unless re-vote is enabled. When it
+is on, the replacement is counted only in the final tally, and a published
+poll block keeps the original ballot. The receipt cannot prove the choice.
 
 ### Hourly public disclosure (polling-place unlinkability)
 
-Votes are **accepted immediately** (each nullifier **once**; a second ballot is
-rejected). Public proof of those votes — explorer rows, jurisdiction
-`acceptedBallots`, any dashboard turnout tick — waits for the hourly clock
-and the block floor, from the first ballot.
+Votes are **accepted immediately** (one ballot per nullifier; a second ballot
+is rejected unless re-vote is enabled). Public proof of those votes — explorer rows, jurisdiction
+`acceptedBallots`, any dashboard turnout tick — waits for these server-side
+checks, from the first ballot:
 
 - The UTC hour has closed and `DISCLOSURE_DELAY_SECONDS` (default **1800**)
   has elapsed. A vote at 08:59 publishes at **09:30**. An earlier note that a
   14:05 vote appears at 15:00 is replaced by **15:30**, once the block floor
   is also met. Turnout is public from the first ballot.
 - Poll per-choice counts wait until 100 first ballots are in or the scheduled
-  end (`RESULTS_MIN_VOTES`, default **100**). Per-choice counts publish with
-  the posted tally; hourly per-choice blocks after the gate are planned.
+  end (`RESULTS_MIN_VOTES`, default **100**). After that gate, hourly choice
+  sums publish with the same delay. A published block stays as first published.
+  A vote publishes choices only in the final tally.
 - The disclosure block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots
   (default **10**). Smaller hours merge forward. A remainder publishes at
   election end when the election met that floor; a short election publishes
@@ -873,7 +874,7 @@ stored. The SPA does not send them.
 | `code` | Meaning |
 | --- | --- |
 | `ELIGIBLE_ROOT_MISMATCH` / `DISQUALIFICATION_ROOT_MISMATCH` | Proof roots do not match the open-window set |
-| `NULLIFIER_USED` | This nullifier already voted |
+| `NULLIFIER_USED` | Inbox revert when `submitVote` is called again for a nullifier. The Node replaces its envelope instead of submitting again. |
 
 `store.assertCanVote` still throws when a caller that already holds a leaf
 asks the roll helper:

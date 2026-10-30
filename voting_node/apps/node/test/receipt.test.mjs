@@ -13,6 +13,7 @@ import {
   formatReceiptProof,
   parseReceiptProof,
   receiptLines,
+  receiptEmailBodies,
   buildReceiptPdf,
   hashReceiptToken,
 } from '../src/receipts.mjs';
@@ -53,8 +54,8 @@ function cookieHeader(jar) {
     .join('; ');
 }
 
-async function api(method, url, { body, jar, headers } = {}) {
-  const res = await fetch(base + url, {
+async function request(baseUrl, method, url, { body, jar, headers } = {}) {
+  const res = await fetch(baseUrl + url, {
     method,
     headers: {
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
@@ -72,6 +73,10 @@ async function api(method, url, { body, jar, headers } = {}) {
     json = null;
   }
   return { res, json, text, status: res.status };
+}
+
+function api(method, url, opts) {
+  return request(base, method, url, opts);
 }
 
 function listen(application) {
@@ -142,6 +147,17 @@ describe('receipt proof helpers', () => {
     assert.match(blob, /Ballot hash/);
     assert.match(blob, /does not list which option/);
     assert.match(blob, /locked against modification/);
+    assert.match(blob, /ballot was accepted/);
+    assert.doesNotMatch(blob, /was counted/);
+    const mailed = receiptEmailBodies({
+      election: { id: 'el-1', title: 'Town poll' },
+      vote: { electionId: 'el-1' },
+      token: 'holder-token',
+    });
+    assert.match(mailed.text, /ballot was accepted/);
+    assert.match(mailed.html, /ballot was accepted/);
+    assert.doesNotMatch(mailed.text, /was counted/);
+    assert.doesNotMatch(mailed.html, /was counted/);
     assert.doesNotMatch(blob, new RegExp(ZEBRA));
     assert.doesNotMatch(blob, /I voted for/i);
     const { pdf, pdfSha256, pdfProtected, integrity } = buildReceiptPdf({
@@ -491,5 +507,699 @@ describe('instant disclosure still hides choice on receipts', () => {
 
   test('placeholder so after() runs', () => {
     assert.ok(localMailer.lastVoteReceipt());
+  });
+});
+
+describe('re-vote receipt lookup', () => {
+  let localTmp;
+  let localApp;
+  let localStore;
+  let localVotePass;
+  let localServer;
+  let localBase;
+  let localClock;
+  const localAdmin = {};
+
+  function call(method, url, opts) {
+    return request(localBase, method, url, opts);
+  }
+
+  before(async () => {
+    localTmp = await mkdtemp(path.join(os.tmpdir(), 'poll-blocks-'));
+    localClock = HOUR_START + 90;
+    const created = await createApp({
+      dataDir: localTmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      allowRevote: true,
+      disclosureIntervalSeconds: HOUR,
+      disclosureDelaySeconds: 0,
+      resultsMinVotes: 0,
+      disclosureMinBlockVotes: 1,
+      nowFn: () => localClock,
+    });
+    localApp = created.app;
+    localStore = created.store;
+    localVotePass = created.votePass;
+    localServer = await listen(localApp);
+    localBase = `http://127.0.0.1:${localServer.address().port}`;
+    await call('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: localAdmin });
+  });
+
+  after(async () => {
+    await new Promise((resolve, reject) => {
+      localServer.close((err) => (err ? reject(err) : resolve()));
+    });
+    await rm(localTmp, { recursive: true, force: true });
+  });
+
+  async function pdfBytes(token) {
+    const res = await fetch(localBase + '/api/receipts/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    assert.equal(res.status, 200);
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  test('token and hash checks use that receipt, and the PDF follows the ballot hash', async () => {
+    const created = await call('POST', '/api/elections', {
+      jar: localAdmin,
+      body: {
+        title: 'Receipt re-vote',
+        startTime: localClock - 10,
+        cutoffTime: localClock + 86400,
+        treeDepth: 16,
+        questions: [{ type: 'YES_NO', prompt: 'Adopt the sample ordinance?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    const id = created.json.id;
+    const reg = await call('POST', `/api/elections/${id}/register`, {
+      jar: localAdmin,
+      body: { identityCommitment: '0xca11' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await call('POST', `/api/elections/${id}/freeze`, { jar: localAdmin });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+    const pass = await localVotePass.mintForTest(id);
+
+    const first = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xabc', electionId: id },
+        encryptedBallot: '0x01',
+        identityCommitment: '0xca11',
+        votePass: pass,
+      },
+    });
+    assert.equal(first.status, 201, first.json?.error);
+    const second = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xabc', electionId: id },
+        encryptedBallot: '0x02',
+        identityCommitment: '0xca11',
+        votePass: pass,
+      },
+    });
+    assert.equal(second.status, 201, second.json?.error);
+    const firstHash = first.json.vote.ballotHash;
+    const secondHash = second.json.receipt.ballotHash;
+    assert.equal(second.json.vote.ballotHash, firstHash);
+    const nullifier = first.json.vote.nullifier;
+    assert.notEqual(secondHash, firstHash);
+    assert.equal(second.json.receipt.ballotHash, secondHash);
+
+    const byFirstToken = await call('POST', '/api/receipts/verify', { body: { token: first.json.receipt.token } });
+    assert.equal(byFirstToken.status, 200, byFirstToken.json?.error);
+    assert.equal(byFirstToken.json.counted, true);
+    assert.equal(byFirstToken.json.ballotHash, firstHash);
+
+    const bySecondToken = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(bySecondToken.status, 200, bySecondToken.json?.error);
+    assert.equal(bySecondToken.json.counted, true);
+    assert.equal(bySecondToken.json.accepted, true);
+    assert.equal(bySecondToken.json.ballotHash, secondHash);
+    assert.equal(bySecondToken.json.published, false);
+    assert.equal(bySecondToken.json.replacement, true);
+    assert.equal(bySecondToken.json.inFinalTally, false);
+    assert.equal(bySecondToken.json.explorerUrl, null);
+    assert.equal(byFirstToken.json.replacement, false);
+    assert.equal(byFirstToken.json.counted, bySecondToken.json.counted);
+    assert.equal(byFirstToken.json.accepted, bySecondToken.json.accepted);
+    assert.equal(byFirstToken.json.counted, true);
+    assert.equal(bySecondToken.json.accepted, true);
+    assert.equal(
+      bySecondToken.json.note,
+      'Your replacement ballot was accepted. It will appear in the final tally, not in an hourly block.',
+    );
+    assert.equal(bySecondToken.json.nextPublishAt, null);
+    assert.notEqual(byFirstToken.json.note, bySecondToken.json.note);
+
+    const pendingCurrent = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(pendingCurrent.status, 404);
+    assert.equal(pendingCurrent.json.counted, false);
+
+    const firstPdf = await pdfBytes(first.json.receipt.token);
+    const secondPdf = await pdfBytes(second.json.receipt.token);
+    const rows = (localStore.data.receipts || []).filter((row) => String(row.electionId) === String(id));
+    const firstRow = rows.find((row) => row.ballotHash === firstHash);
+    const secondRow = rows.find((row) => row.ballotHash === secondHash);
+    assert.ok(firstRow && secondRow);
+    assert.notEqual(firstRow.pdfSha256, secondRow.pdfSha256);
+    const others = (localStore.data.receipts || []).filter((row) => String(row.electionId) !== String(id));
+    localStore.data.receipts = [secondRow, firstRow, ...others];
+    assert.equal(localStore.findReceiptForVote(id, nullifier, firstHash).ballotHash, firstHash);
+    assert.equal(localStore.findReceiptForVote(id, nullifier, secondHash).ballotHash, secondHash);
+    assert.equal(localStore.findReceiptForVote(id, nullifier, firstHash).pdfSha256, firstRow.pdfSha256);
+    assert.equal(localStore.findReceiptForVote(id, nullifier, secondHash).pdfSha256, secondRow.pdfSha256);
+
+    localClock = HOUR_START + HOUR;
+    const bySecondHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(bySecondHash.status, 404);
+    assert.equal(bySecondHash.json.counted, false);
+
+    const firstFile = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: firstHash, electionId: id, pdf: firstPdf.toString('base64') },
+    });
+    assert.equal(firstFile.status, 200, firstFile.json?.error);
+    assert.equal(firstFile.json.ballotHash, firstHash);
+    assert.equal(firstFile.json.pdfUnmodified, true);
+
+    const crossed = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: firstHash, electionId: id, pdf: secondPdf.toString('base64') },
+    });
+    assert.equal(crossed.status, 200, crossed.json?.error);
+    assert.equal(crossed.json.pdfUnmodified, false);
+
+    await localStore.setTally(id, [0, 1]);
+    const secondFile = await call('POST', '/api/receipts/verify', {
+      body: { token: second.json.receipt.token, pdf: secondPdf.toString('base64') },
+    });
+    assert.equal(secondFile.status, 200, secondFile.json?.error);
+    assert.equal(secondFile.json.published, false);
+    assert.equal(secondFile.json.inFinalTally, true);
+    assert.equal(secondFile.json.replacement, true);
+    assert.equal(secondFile.json.explorerUrl, null);
+    assert.equal(secondFile.json.ballotHash, secondHash);
+    assert.equal(secondFile.json.pdfUnmodified, true);
+    assert.equal(
+      secondFile.json.note,
+      'Your replacement ballot is counted in the final tally. The receipt still cannot prove which option was marked.',
+    );
+    const secondByHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id, pdf: secondPdf.toString('base64') },
+    });
+    assert.equal(secondByHash.status, 200, secondByHash.json?.error);
+    assert.deepEqual(secondByHash.json, secondFile.json);
+    const hashOnly = await call('POST', '/api/receipts/verify', {
+      body: { ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(hashOnly.status, 404);
+    assert.equal(hashOnly.json.counted, false);
+    const wrongNullifier = `0x${'11'.repeat(32)}`;
+    assert.notEqual(wrongNullifier, nullifier);
+    const wrong = await call('POST', '/api/receipts/verify', {
+      body: { nullifier: wrongNullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(wrong.status, 404);
+    assert.equal(wrong.json.counted, false);
+
+    const byNullifier = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, electionId: id, pdf: firstPdf.toString('base64') },
+    });
+    assert.equal(byNullifier.status, 200, byNullifier.json?.error);
+    assert.equal(byNullifier.json.ballotHash, firstHash);
+    assert.equal(byNullifier.json.pdfUnmodified, true);
+  });
+
+  test('a vote replacement stays unpublished and joins the final tally after the seal lifts', async () => {
+    localClock = HOUR_START + 90;
+    const cutoff = HOUR_START + 3 * HOUR;
+    const created = await call('POST', '/api/elections', {
+      jar: localAdmin,
+      body: {
+        title: 'Receipt re-vote vote',
+        startTime: localClock - 10,
+        cutoffTime: cutoff,
+        treeDepth: 16,
+        electionType: 1,
+        questions: [{ type: 'YES_NO', prompt: 'Adopt the sample ordinance?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    assert.equal(created.json.election.electionType, 1);
+    const id = created.json.id;
+    const reg = await call('POST', `/api/elections/${id}/register`, {
+      jar: localAdmin,
+      body: { identityCommitment: '0xca33' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await call('POST', `/api/elections/${id}/freeze`, { jar: localAdmin });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+    const pass = await localVotePass.mintForTest(id);
+    const first = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xcee', electionId: id },
+        encryptedBallot: '0x01',
+        identityCommitment: '0xca33',
+        votePass: pass,
+      },
+    });
+    assert.equal(first.status, 201, first.json?.error);
+    const second = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xcee', electionId: id },
+        encryptedBallot: '0x02',
+        identityCommitment: '0xca33',
+        votePass: pass,
+      },
+    });
+    assert.equal(second.status, 201, second.json?.error);
+    const firstHash = first.json.vote.ballotHash;
+    const secondHash = second.json.receipt.ballotHash;
+    assert.equal(second.json.vote.ballotHash, firstHash);
+    const nullifier = first.json.vote.nullifier;
+    assert.notEqual(secondHash, firstHash);
+
+    const before = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(before.status, 200, before.json?.error);
+    assert.equal(before.json.published, false);
+    assert.equal(before.json.replacement, true);
+    assert.equal(before.json.inFinalTally, false);
+    assert.equal(before.json.explorerUrl, null);
+    assert.equal(
+      before.json.note,
+      'Your replacement ballot was accepted. It will appear in the final tally, not in an hourly block.',
+    );
+    const beforeHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(beforeHash.status, 404);
+
+    await localStore.setTally(id, [0, 1]);
+    const sealed = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(sealed.status, 200, sealed.json?.error);
+    assert.equal(sealed.json.published, false);
+    assert.equal(sealed.json.inFinalTally, false);
+    assert.equal(sealed.json.replacement, true);
+    const sealedHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(sealedHash.status, 404);
+
+    localClock = cutoff;
+    const holder = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(holder.status, 200, holder.json?.error);
+    assert.equal(holder.json.published, false);
+    assert.equal(holder.json.inFinalTally, true);
+    assert.equal(holder.json.replacement, true);
+    assert.equal(holder.json.explorerUrl, null);
+    assert.equal(holder.json.ballotHash, secondHash);
+    assert.equal(
+      holder.json.note,
+      'Your replacement ballot is counted in the final tally. The receipt still cannot prove which option was marked.',
+    );
+    const byHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(byHash.status, 200, byHash.json?.error);
+    assert.deepEqual(byHash.json, holder.json);
+    assert.equal(JSON.stringify(byHash.json).includes(firstHash), false);
+  });
+});
+
+describe('re-vote receipt uses its own hour', () => {
+  const DELAY = 1800;
+  const H = HOUR_START;
+  const H1 = H + HOUR;
+  const H2 = H + 2 * HOUR;
+  let localTmp;
+  let localStore;
+  let localVotePass;
+  let localServer;
+  let localBase;
+  let localClock;
+  const localAdmin = {};
+
+  function call(method, url, opts) {
+    return request(localBase, method, url, opts);
+  }
+
+  before(async () => {
+    localTmp = await mkdtemp(path.join(os.tmpdir(), 'poll-blocks-'));
+    localClock = H + 90;
+    const created = await createApp({
+      dataDir: localTmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      allowRevote: true,
+      disclosureIntervalSeconds: HOUR,
+      disclosureDelaySeconds: DELAY,
+      resultsMinVotes: 0,
+      disclosureMinBlockVotes: 1,
+      nowFn: () => localClock,
+    });
+    localStore = created.store;
+    localVotePass = created.votePass;
+    localServer = await listen(created.app);
+    localBase = `http://127.0.0.1:${localServer.address().port}`;
+    await call('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: localAdmin });
+  });
+
+  after(async () => {
+    await new Promise((resolve, reject) => {
+      localServer.close((err) => (err ? reject(err) : resolve()));
+    });
+    await rm(localTmp, { recursive: true, force: true });
+  });
+
+  test('a replacement stays unpublished through H+2 plus 30 minutes and counts in the final tally', async () => {
+    const created = await call('POST', '/api/elections', {
+      jar: localAdmin,
+      body: {
+        title: 'Receipt hours',
+        startTime: H - 10,
+        cutoffTime: H2 + DELAY + 86400,
+        treeDepth: 16,
+        questions: [{ type: 'YES_NO', prompt: 'Adopt the sample ordinance?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    const id = created.json.id;
+    const reg = await call('POST', `/api/elections/${id}/register`, {
+      jar: localAdmin,
+      body: { identityCommitment: '0xca11' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await call('POST', `/api/elections/${id}/freeze`, { jar: localAdmin });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+    const pass = await localVotePass.mintForTest(id);
+
+    const first = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xabc', electionId: id },
+        encryptedBallot: '0x01',
+        identityCommitment: '0xca11',
+        votePass: pass,
+      },
+    });
+    assert.equal(first.status, 201, first.json?.error);
+    localClock = H1 + 90;
+    const second = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xabc', electionId: id },
+        encryptedBallot: '0x02',
+        identityCommitment: '0xca11',
+        votePass: pass,
+      },
+    });
+    assert.equal(second.status, 201, second.json?.error);
+    const firstHash = first.json.vote.ballotHash;
+    const secondHash = second.json.receipt.ballotHash;
+    assert.equal(second.json.vote.ballotHash, firstHash);
+    const nullifier = first.json.vote.nullifier;
+    assert.notEqual(secondHash, firstHash);
+    const rows = (localStore.data.receipts || []).filter((row) => String(row.electionId) === String(id));
+    const firstRow = rows.find((row) => row.ballotHash === firstHash);
+    const secondRow = rows.find((row) => row.ballotHash === secondHash);
+    assert.equal(firstRow.acceptedAt, H);
+    assert.equal(secondRow.acceptedAt, H1);
+
+    localClock = H1 + DELAY;
+    const early = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(early.status, 200, early.json?.error);
+    assert.equal(early.json.published, false);
+    assert.equal(early.json.counted, true);
+    assert.equal(early.json.accepted, true);
+    assert.equal(early.json.ballotHash, secondHash);
+    assert.equal(early.json.acceptedAt, secondRow.acceptedAt);
+    assert.equal(early.json.acceptedAtIso, new Date(secondRow.acceptedAt * 1000).toISOString());
+    assert.equal(early.json.disclosureHourClosedAt, null);
+    const earlyHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(earlyHash.status, 404);
+    assert.equal(earlyHash.json.counted, false);
+
+    const firstNow = await call('POST', '/api/receipts/verify', { body: { token: first.json.receipt.token } });
+    assert.equal(firstNow.status, 200, firstNow.json?.error);
+    assert.equal(firstNow.json.published, true);
+    assert.equal(firstNow.json.counted, early.json.counted);
+    assert.equal(firstNow.json.accepted, early.json.accepted);
+    assert.equal(firstNow.json.acceptedAt, firstRow.acceptedAt);
+    assert.notEqual(firstNow.json.acceptedAt, early.json.acceptedAt);
+
+    localClock = H2;
+    const atHourClose = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(atHourClose.status, 200, atHourClose.json?.error);
+    assert.equal(atHourClose.json.published, false);
+    assert.equal(atHourClose.json.counted, true);
+    assert.equal(atHourClose.json.accepted, true);
+
+    localClock = H2 + DELAY;
+    const atDelay = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(atDelay.status, 200, atDelay.json?.error);
+    assert.equal(atDelay.json.published, false);
+    assert.equal(atDelay.json.counted, true);
+    assert.equal(atDelay.json.accepted, true);
+    assert.equal(atDelay.json.ballotHash, secondHash);
+    assert.equal(atDelay.json.acceptedAt, secondRow.acceptedAt);
+    assert.equal(atDelay.json.acceptedAtIso, new Date(secondRow.acceptedAt * 1000).toISOString());
+    assert.equal(atDelay.json.nextPublishAt, null);
+    assert.equal(atDelay.json.disclosureHourClosedAt, null);
+    assert.equal(atDelay.json.replacement, true);
+    assert.equal(atDelay.json.inFinalTally, false);
+    assert.equal(atDelay.json.explorerUrl, null);
+    assert.equal(
+      atDelay.json.note,
+      'Your replacement ballot was accepted. It will appear in the final tally, not in an hourly block.',
+    );
+    const delayedHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(delayedHash.status, 404);
+    assert.equal(delayedHash.json.counted, false);
+
+    await localStore.setTally(id, [0, 1]);
+    const open = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(open.status, 200, open.json?.error);
+    assert.equal(open.json.published, false);
+    assert.equal(open.json.inFinalTally, true);
+    assert.equal(open.json.replacement, true);
+    assert.equal(open.json.explorerUrl, null);
+    assert.equal(open.json.counted, true);
+    assert.equal(open.json.accepted, true);
+    assert.equal(open.json.ballotHash, secondHash);
+    assert.equal(open.json.acceptedAt, secondRow.acceptedAt);
+    assert.equal(open.json.acceptedAtIso, new Date(secondRow.acceptedAt * 1000).toISOString());
+    assert.equal(open.json.nextPublishAt, null);
+    assert.equal(
+      open.json.note,
+      'Your replacement ballot is counted in the final tally. The receipt still cannot prove which option was marked.',
+    );
+    const byHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: secondHash, electionId: id },
+    });
+    assert.equal(byHash.status, 200, byHash.json?.error);
+    assert.deepEqual(byHash.json, open.json);
+  });
+
+  test('the explorer row after the final tally does not expose the replacement hash', async () => {
+    localClock = H + 90;
+    const created = await call('POST', '/api/elections', {
+      jar: localAdmin,
+      body: {
+        title: 'Explorer replacement',
+        startTime: H - 10,
+        cutoffTime: H2 + DELAY + 86400,
+        treeDepth: 16,
+        questions: [{ type: 'YES_NO', prompt: 'Adopt the sample ordinance?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    const id = created.json.id;
+    const reg = await call('POST', `/api/elections/${id}/register`, {
+      jar: localAdmin,
+      body: { identityCommitment: '0xca22' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await call('POST', `/api/elections/${id}/freeze`, { jar: localAdmin });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+    const pass = await localVotePass.mintForTest(id);
+    const first = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xbee', electionId: id },
+        encryptedBallot: '0x01',
+        identityCommitment: '0xca22',
+        votePass: pass,
+      },
+    });
+    assert.equal(first.status, 201, first.json?.error);
+    localClock = H1 + 90;
+    const second = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xbee', electionId: id },
+        encryptedBallot: '0x02',
+        identityCommitment: '0xca22',
+        votePass: pass,
+      },
+    });
+    assert.equal(second.status, 201, second.json?.error);
+    const firstHash = first.json.vote.ballotHash;
+    const secondHash = second.json.receipt.ballotHash;
+    assert.equal(second.json.vote.ballotHash, firstHash);
+    const nullifier = first.json.vote.nullifier;
+    assert.notEqual(secondHash, firstHash);
+
+    localClock = H2 + DELAY;
+    await localStore.setTally(id, [0, 1]);
+    const holder = await call('POST', '/api/receipts/verify', { body: { token: second.json.receipt.token } });
+    assert.equal(holder.status, 200, holder.json?.error);
+    assert.equal(holder.json.published, false);
+    assert.equal(holder.json.inFinalTally, true);
+    assert.equal(holder.json.replacement, true);
+    assert.equal(holder.json.explorerUrl, null);
+    assert.equal(holder.json.ballotHash, secondHash);
+    assert.equal(
+      holder.json.note,
+      'Your replacement ballot is counted in the final tally. The receipt still cannot prove which option was marked.',
+    );
+
+    const row = await call('GET', `/api/explorer/nullifiers/${encodeURIComponent(nullifier)}`);
+    assert.equal(row.status, 200, row.json?.error);
+    assert.equal(row.json.ballotHash, firstHash);
+    assert.equal(row.json.tx?.payload?.ballotHash, firstHash);
+    const rowText = JSON.stringify(row.json);
+    assert.equal(rowText.includes(secondHash), false);
+    assert.equal(rowText.includes('"superseded"'), false);
+    assert.equal(rowText.includes('"replaced"'), false);
+    const blocks = await call('GET', '/api/explorer/blocks');
+    assert.equal(blocks.status, 200, blocks.json?.error);
+    let sawFirst = false;
+    for (const block of blocks.json.blocks || []) {
+      const one = await call('GET', `/api/explorer/blocks/${block.number}`);
+      const body = JSON.stringify(one.json);
+      assert.equal(body.includes(secondHash), false);
+      for (const tx of one.json?.block?.txs || []) {
+        if (String(tx.electionId) !== String(id)) continue;
+        assert.notEqual(tx.payload?.ballotHash, secondHash);
+        assert.notEqual(tx.ballotHash, secondHash);
+        if (String(tx.type).toLowerCase() === 'vote') {
+          assert.equal(tx.payload.ballotHash, firstHash);
+          sawFirst = true;
+        }
+      }
+    }
+    assert.equal(sawFirst, true);
+  });
+});
+
+describe('first-ballot receipts keep the disclosure gates', () => {
+  const DELAY = 1800;
+  const H = HOUR_START;
+  const H1 = H + HOUR;
+  let localTmp;
+  let localStore;
+  let localServer;
+  let localBase;
+  let localClock;
+  const localAdmin = {};
+
+  function call(method, url, opts) {
+    return request(localBase, method, url, opts);
+  }
+
+  before(async () => {
+    localTmp = await mkdtemp(path.join(os.tmpdir(), 'poll-blocks-'));
+    localClock = H + 90;
+    const created = await createApp({
+      dataDir: localTmp,
+      allowDevLogin: true,
+      adminHandle: 'admin',
+      quiet: true,
+      port: 0,
+      disclosureIntervalSeconds: HOUR,
+      disclosureDelaySeconds: DELAY,
+      resultsMinVotes: 100,
+      disclosureMinBlockVotes: 10,
+      nowFn: () => localClock,
+    });
+    localStore = created.store;
+    localServer = await listen(created.app);
+    localBase = `http://127.0.0.1:${localServer.address().port}`;
+    await call('POST', '/api/auth/dev-login', { body: { handle: 'admin', role: 'platform_admin' }, jar: localAdmin });
+  });
+
+  after(async () => {
+    await new Promise((resolve, reject) => {
+      localServer.close((err) => (err ? reject(err) : resolve()));
+    });
+    await rm(localTmp, { recursive: true, force: true });
+  });
+
+  test('one ballot stays sealed after the hour and after the deadline until the tally', async () => {
+    const created = await call('POST', '/api/elections', {
+      jar: localAdmin,
+      body: {
+        title: 'Gated receipt',
+        startTime: H - 10,
+        cutoffTime: H1 + DELAY + 10,
+        treeDepth: 16,
+        questions: [{ type: 'YES_NO', prompt: 'Adopt the sample ordinance?' }],
+      },
+    });
+    assert.equal(created.status, 201, created.json?.error);
+    const id = created.json.id;
+    const reg = await call('POST', `/api/elections/${id}/register`, {
+      jar: localAdmin,
+      body: { identityCommitment: '0xca11' },
+    });
+    assert.equal(reg.status, 201, reg.json?.error);
+    const freeze = await call('POST', `/api/elections/${id}/freeze`, { jar: localAdmin });
+    assert.equal(freeze.status, 200, freeze.json?.error);
+    const voted = await call('POST', `/api/elections/${id}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: '0xabc', electionId: id },
+        encryptedBallot: '0x01',
+        identityCommitment: '0xca11',
+      },
+    });
+    assert.equal(voted.status, 201, voted.json?.error);
+    const hash = voted.json.vote.ballotHash;
+    const nullifier = voted.json.vote.nullifier;
+
+    localClock = H1 + DELAY;
+    const afterHour = await call('POST', '/api/receipts/verify', { body: { token: voted.json.receipt.token } });
+    assert.equal(afterHour.status, 200, afterHour.json?.error);
+    assert.equal(afterHour.json.published, false);
+    assert.equal(afterHour.json.counted, true);
+    assert.equal(afterHour.json.accepted, true);
+    assert.notEqual(
+      afterHour.json.note,
+      'Your replacement ballot was accepted. It will appear in the final tally, not in an hourly block.',
+    );
+    const afterHourHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: hash, electionId: id },
+    });
+    assert.equal(afterHourHash.status, 404);
+
+    localClock = H1 + DELAY + 11;
+    const afterEnd = await call('POST', '/api/receipts/verify', { body: { token: voted.json.receipt.token } });
+    assert.equal(afterEnd.status, 200, afterEnd.json?.error);
+    assert.equal(afterEnd.json.published, false);
+    const afterEndHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: hash, electionId: id },
+    });
+    assert.equal(afterEndHash.status, 404);
+
+    await localStore.setTally(id, [1, 0]);
+    const tallied = await call('POST', '/api/receipts/verify', { body: { token: voted.json.receipt.token } });
+    assert.equal(tallied.status, 200, tallied.json?.error);
+    assert.equal(tallied.json.published, true);
+    assert.equal(tallied.json.ballotHash, hash);
+    const talliedHash = await call('POST', '/api/receipts/verify', {
+      body: { nullifier, ballotHash: hash, electionId: id },
+    });
+    assert.equal(talliedHash.status, 200, talliedHash.json?.error);
+    assert.equal(talliedHash.json.published, true);
+    assert.equal(talliedHash.json.ballotHash, hash);
   });
 });

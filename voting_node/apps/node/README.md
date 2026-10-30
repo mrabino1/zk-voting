@@ -27,14 +27,18 @@ Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
 as `better-sqlite3` are **not** used.
 
 Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
-One ballot per nullifier: a later ciphertext for the same nullifier is rejected
-(`NULLIFIER_USED`). Double voting is impossible. The Node never writes a
+One ballot per nullifier. A second ballot is rejected unless re-vote is enabled.
+When it is on, the replacement is counted only in the final tally, a published
+poll block keeps the original ballot, and `acceptedBallots` does not increase.
+Double voting is impossible. The Node never writes a
 passkey user id onto the same record as an encrypted ballot or a choice. The UI
 must not print “I voted for X” (receipts are hashes only). After accept, voters
 may email a PDF of that receipt and paste the proof at `/receipt` to confirm it
 counted. The PDF is encrypted and locked against modification; drop it on that
-portal to confirm the bytes still match. Turnout there is hourly (when and how many), never by candidate. Voters
-may change their mind on the ballot form before submit; after accept they cannot recast.
+portal to confirm the bytes still match. Turnout there is hourly (when and how many), never by candidate. A poll
+may show hourly choice sums after the results gate; a vote does not show choice
+counts before the deadline. Turnout for a vote is visible. The inbox still accepts a nullifier once,
+so a replacement is not submitted again.
 Public dashboards and the explorer show vote proofs only after the hour that
 contained the vote has closed (`DISCLOSURE_INTERVAL_SECONDS`, default 3600; `0`
 in tests). The explorer snapshot lists last closed hour, ballots disclosed so far,

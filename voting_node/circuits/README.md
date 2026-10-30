@@ -56,7 +56,7 @@ Constraints:
 4. Non-membership of `leaf` in the disqualification chain under `disqRoot`. The chain is sorted currently-disqualified commitments with a 0 sentinel: `Hash(0, v0) … Hash(vLast, 0)`, or `Hash(0, 0)` when nobody is disqualified. The witness is one link whose open interval contains `leaf`. A disqualified leaf is a boundary, so the range check fails. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). `MockVerifier` evaluates this only when a test arms the witness.
 5. `ballotHash = Poseidon(choice, choiceRandomness)`, with `choice` in 0..15. Choice is not a public input. The ElGamal body after an `AG` tag is not constrained in this circuit.
 
-The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier; not last-vote-counts). The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.
+The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier). The node also rejects a second ballot unless re-vote is enabled, and it does not submit a replacement. The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.
 
 Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to match a given election. The Solidity incremental tree and this template argument **must agree**.
 

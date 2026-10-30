@@ -236,7 +236,10 @@ describe('results gate on the public API', () => {
     assert.equal(afterEnd.ballots, 1);
     const afterResults = await app.api('GET', `/api/elections/${id}/results`);
     assert.equal(afterResults.json.tally, null);
-    assert.doesNotMatch(afterResults.text, /"counts"\s*:/);
+    assert.equal(afterResults.json.results.available, false);
+    for (const block of afterResults.json.choiceBlocks?.blocks || []) {
+      assert.equal(block.counts, null);
+    }
   });
 });
 

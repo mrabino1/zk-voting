@@ -137,6 +137,7 @@ export function electionDisclosurePolicy(election, config, now, submittedVotes) 
     minBlockVotes: settings.minBlockVotes,
     minVotes: vote ? 0 : settings.minVotes,
     endTime: election?.cutoffTime ?? null,
+    // TODO: switch tallied to certification after the challenge window once the #113 contracts land. Until then it follows setTally.
     tallied: sealed ? false : Boolean(election?.tally),
     submittedVotes: votes,
     resultsSealed: sealed,
@@ -303,7 +304,7 @@ function insertAtRandom(list, item) {
 }
 
 /** Soft-deleted rows stay in the document. Every read skips them. */
-function isSoftDeleted(row) {
+export function isSoftDeleted(row) {
   return Boolean(row && typeof row === 'object' && row.is_deleted === true);
 }
 
@@ -573,6 +574,7 @@ export class Store {
     store.writerActive = config.writerActive !== false;
     store.allowRevote = config.allowRevote === true;
     store.lease = config.writerLeaseHandle || null;
+    store.allowRevote = config.allowRevote === true;
     for (const user of store.data.users) {
       ensurePersonFields(user);
       for (const cred of user.credentials) {
@@ -3391,6 +3393,19 @@ export class Store {
     bucket.partials.push({ index: n, partials });
     await this.persist();
     return bucket.partials;
+  }
+
+  async saveChoiceBlockPartials(electionId, { blockId, index, partials }) {
+    const bucket = this.getTallyGuardian(electionId);
+    if (!bucket) throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
+    const key = String(blockId);
+    const n = Number(index);
+    bucket.choiceBlockPartials = (bucket.choiceBlockPartials || []).filter(
+      (row) => !(row.blockId === key && row.index === n),
+    );
+    bucket.choiceBlockPartials.push({ blockId: key, index: n, partials });
+    await this.persist();
+    return bucket.choiceBlockPartials;
   }
 
   async setTally(id, counts, extras = {}) {

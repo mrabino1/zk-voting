@@ -182,7 +182,7 @@ export function verifyAuditorBundle(bundle) {
       check(
         'oneBallotPolicy',
         bundle.coercion.policy === 'one-ballot-per-nullifier',
-        'coercion.policy must be one-ballot-per-nullifier (last-vote-counts is not accepted)',
+        'coercion.policy must be one-ballot-per-nullifier (one current ballot per nullifier)',
       );
     }
   } else {

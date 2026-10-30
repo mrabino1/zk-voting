@@ -147,12 +147,12 @@ nullifier = Hash(nullifierSecret, electionId)
 | Rule | Effect |
 | --- | --- |
 | Derived from `nullifierSecret` + `electionId` | Different elections → different nullifiers. Not a lifetime ban. |
-| Accepted **once** (`NullifierUsed`) | A second `submitVote`, including a **new ciphertext**, reverts. Double voting is impossible. |
-| `acceptedBallots` = unique spent nullifiers | Tally `sum(counts)` is a unique-voter invariant. |
+| Accepted **once** on the inbox (`NullifierUsed`) | A second `submitVote`, including a **new ciphertext**, reverts. The Node does not send it. Double voting is impossible. |
+| `acceptedBallots` = unique nullifiers | A second ballot is rejected unless re-vote is enabled. When it is on, the final tally uses the replacement and `acceptedBallots` does not increase. |
 | Unlinkable without the secret | Chain data does not map nullifier → wallet or nullifier → civil name. |
-| Change of mind | Allowed on the form **before** submit. After accept, no recast (not MACI, not last-vote-counts). |
+| Change of mind | Off unless re-vote is enabled. When it is on, the replacement is counted only in the final tally. A published poll block keeps the original ballot. Not MACI. |
 
-Voters may change answers privately on `/vote/:id` until they submit. After accept, the inbox will not take a second ballot for that nullifier ([`CoercionResistance.t.sol`](./smart-contracts/test/CoercionResistance.t.sol), [`BallotInbox.sol`](./smart-contracts/src/BallotInbox.sol)).
+A second ballot on `/vote/:id` is rejected unless re-vote is enabled. The inbox will not take a second `submitVote` for that nullifier ([`CoercionResistance.t.sol`](./smart-contracts/test/CoercionResistance.t.sol), [`BallotInbox.sol`](./smart-contracts/src/BallotInbox.sol)), so the Node does not submit a replacement.
 
 Without `nullifierSecret` (and the trapdoor that built the leaf), an observer cannot prove which person a nullifier belongs to. With a coerced **witness** (the device still holds the secret, or the voter is forced to reproduce it), that cryptographic unlinkability does not stop an off-chain confession. That is §7.
 
@@ -202,7 +202,7 @@ Do **not** tell a court, a legislature, or the public that this `test/unstable` 
 | **`opens_ballots` key** | Feldman t-of-n. `GET .../tally-key` is public commitments and verification keys, not shares. | `t` guardians **can** decrypt. The Node host alone **cannot**. Still not a production ceremony. |
 | **`sum_only`** | Invented partitions of the sum succeed. | Hides **individual** choice from the public; does **not** bind the operator to the real histogram. |
 | **Circuit vs disqualification** | `vote.circom` proves inclusion in `eligibleRoot` and non-membership in the indexed `disqRoot` chain. The Node stores that chain under keccak-dev-v1; a Poseidon election must publish the Poseidon chain or the roots will not match. The vote POST does not take a leaf, so it does not call `assertCanVote`. | Unarmed MockVerifier does not evaluate the witness. A JSON-path ballot can still be accepted without a real Groth16 proof ([README](./README.md) eligibility section). An officer who omits someone from the chain can publish a root that does not bar them. |
-| **Coercion / receipts** | Receipt = nullifier, `ballotHash`, holder token. Each voter is counted once. Where the election allows it, a voter may re-vote until the deadline, with the last vote counting; otherwise a second ballot is rejected. Chain-backed deployments do not support last-vote-counts yet. Email copy is opt-in, token-only, no attachment. PDF locked against edit. `receiptsProveChoice: false`. | A coercer who watches the **screen**, copies the device, or demands the **witness** (trapdoor / marked paper) still wins. Not MACI. |
+| **Coercion / receipts** | Receipt = nullifier, `ballotHash`, holder token. A second ballot is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block keeps the first ballot. Chain-backed deployments do not support re-voting yet. Email copy is opt-in, token-only, no attachment. PDF locked against edit. `receiptsProveChoice: false`. | A coercer who watches the **screen**, copies the device, or demands the **witness** (trapdoor / marked paper) still wins. Not MACI. |
 | **Hourly interval `0`** | Tests and local instant demo. | Publishes immediately. Do not use on a public polling place. |
 | **EVM `acceptedBallots()`** | Increments **immediately** on `submitVote`. | If BallotInbox is on a **public EVM RPC**, live inbox size / `VoteAccepted` is visible even while the Node explorer still waits. Civic JSON L2 **seals** vote txs until the delay and the block floor allow publication (`eth_getTransactionByHash` → null). Know which path you deployed. |
 
@@ -221,7 +221,7 @@ The public is not entitled to a live “this person just voted” tick. Sometime
 Votes are **accepted immediately** (nullifier uniqueness). Proof of those votes is public after the hour-and-delay check and the block floor, both enforced in the API and on the civic L2. Poll per-choice counts have a separate gate.
 
 1. **Hour plus delay.** The UTC hour that contained the vote has closed, then `DISCLOSURE_DELAY_SECONDS` (default **1800**) has elapsed. A vote at 08:59 publishes at **09:30**, not at 09:00. `DISCLOSURE_INTERVAL_SECONDS` stays **3600**. Turnout and per-block vote rows publish on that clock from the first ballot.
-2. **Choice gate.** Poll per-choice counts wait until 100 first ballots are in or the scheduled end (`RESULTS_MIN_VOTES`, default **100**). Per-choice counts publish with the posted tally; hourly per-choice blocks after the gate are planned.
+2. **Choice gate.** Poll per-choice counts wait until 100 first ballots are in or the scheduled end (`RESULTS_MIN_VOTES`, default **100**). After that gate, hourly choice sums publish with the same delay. A published block stays as first published. A vote publishes choices only in the final tally.
 3. **Block floor.** A disclosure block needs at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots (default **10**). Smaller hours merge into the next block. After the election ends, a remainder is published when the election as a whole met that floor. If the whole election is below the floor, those rows stay sealed until the final tally.
 
 An earlier note in this file said a 14:05 vote appears at 15:00, as soon as the hour closes. That guarantee is **replaced**. The same vote now appears at **15:30**, once the block floor is met.

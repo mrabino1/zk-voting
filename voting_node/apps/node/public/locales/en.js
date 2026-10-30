@@ -392,22 +392,22 @@ export default {
     maxOptions: "You may choose at most {count} options.",
     receiptTitle: "Ballot receipt",
     receiptHelp:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may vote only once; a second ballot from you is rejected. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You can submit one ballot. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     recorded: "Recorded",
     ballotHash: "Ballot hash",
     nullifier: "Nullifier",
     userOpHash: "UserOp hash",
     results: "Results",
     envelopeHelp:
-      "Mark every question. One envelope covers the whole ballot. You may change your mind on this form until you submit. After the Node accepts a ballot, that nullifier is spent — you cannot vote again. Double voting is impossible. The receipt cannot prove how you voted.",
+      "Mark every question. One envelope covers the whole ballot. You can submit one ballot. Two ballots are not both counted. The receipt cannot prove how you voted.",
     envelopeHelpTally:
-      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening it after cutoff takes t verified partial decryptions (NON-PRODUCTION). After the Node accepts a ballot, that nullifier is spent — you cannot vote again. The receipt cannot prove how you voted.",
+      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening the aggregate after cutoff takes t verified partial decryptions (NON-PRODUCTION). You can submit one ballot. The receipt cannot prove how you voted.",
     receiptHelpRevote:
-      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. Each voter is counted once and may re-vote until the deadline, with the last vote counting. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
+      "This receipt cannot prove how you voted. It lists only hashes. It does not include your marked options, ciphertext opening, or trapdoor. You may submit a later ballot until the deadline. A published poll block keeps the first ballot. The replacement counts only in the final tally. Public explorer rows wait until the hour closes and the disclosure delay elapses.",
     envelopeHelpRevote:
-      "Mark every question. One envelope covers the whole ballot. You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. Two ballots are not both counted. The receipt cannot prove how you voted.",
+      "Mark every question. One envelope covers the whole ballot. You may submit a later ballot until the deadline. A published poll block keeps the first ballot. The replacement counts only in the final tally. Two ballots are not both counted. The receipt cannot prove how you voted.",
     envelopeHelpTallyRevote:
-      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening the aggregate after cutoff takes t verified partial decryptions (NON-PRODUCTION). You may submit a later ballot until the deadline. A published block keeps the first ballot. The replacement counts only in the final tally. The receipt cannot prove how you voted.",
+      "Mark every question. One envelope covers the whole ballot. Your selections stay on this form until you submit. The posted envelope is encrypted to the guardian tally public key. Opening the aggregate after cutoff takes t verified partial decryptions (NON-PRODUCTION). You may submit a later ballot until the deadline. A published poll block keeps the first ballot. The replacement counts only in the final tally. The receipt cannot prove how you voted.",
     aspectsCount: "{count} questions on this ballot",
     aspectsCount_one: "{count} question on this ballot",
     nonePublished: "None published",
@@ -418,7 +418,7 @@ export default {
   results: {
     observers: "Observers",
     title: "Election results",
-    lede: "Plurality totals from the final tally. While a poll is open or awaiting a tally, this page does not show unofficial choice counts.",
+    lede: "Plurality totals from the final tally. A poll may also show almost-live hourly choice sums after the results gate opens. A vote stays sealed until it ends.",
     sampleNote: "Showing the built-in sample roll because /api/elections is not available.",
     tie: "Tie",
     lexTie: "First-place tie broken by lexicographic option id.",
@@ -475,8 +475,19 @@ export default {
     typePoll: "Poll",
     typeVote: "Vote",
     sealedUntil: "Results sealed until {end}",
-    sealedBody: "Choice counts and partial tallies stay sealed for everyone, including officials, until this election ends. Hourly turnout is public.",
+    sealedBody: "Choice counts and partial tallies stay sealed for everyone, including officials, until this election ends. Turnout is visible.",
     sealedStatus: "Results sealed",
+    almostLive: "Almost live",
+    almostLiveBody:
+      "Hourly choice sums for this poll. A block for 08:00–08:59 can publish at 09:30, after the results gate opens (100 ballots or the scheduled end, whichever comes first). Hours under 10 ballots merge forward. The series freezes at close. A published block stays as first published. These sums are not the final tally.",
+    trailingHelp:
+      "A trailing hour under 10 is not its own row. At close it folds into the previous block. If the whole poll is still under 10, one closing block is the entire set.",
+    blockBallots: "{count} ballots",
+    blockBallots_one: "{count} ballot",
+    blockAwaiting: "Choice sums for this hour are waiting for threshold decryption.",
+    blockUnavailable: "Choice sums for this hour are not available.",
+    certifiedSeparate:
+      "The final tally at close is final. It is not required to equal these hourly sums.",
   },
   info: {
     elections: "Elections",
@@ -706,9 +717,10 @@ export default {
       "Election default. YES_NO stays plurality. RANKED questions always use IRV. Created elections get a UUID public id and a short <code>/v/…</code> link; the factory <code>uint256</code> stays <code>onChainElectionId</code>.",
     electionType: "Election type",
     typePoll: "Poll",
-    typePollHelp: "Results stay visible on the dashboard while voting is open, under the usual disclosure rules. After the closing date, no further votes are added to the total.",
+    typePollHelp:
+      "After the results gate opens (100 ballots, or the scheduled end, whichever comes first), hourly choice sums publish 30 minutes after each hour. Hours with fewer than 10 ballots merge forward. A published block does not change. The final tally at close is final. A vote does not publish these sums.",
     typeVote: "Vote",
-    typeVoteHelp: "The outcome is shown only after the election ends. Until then, nobody — including officials — can see choice counts or a partial tally. Hourly turnout is public.",
+    typeVoteHelp: "The outcome is shown only after the election ends. Before the deadline, nobody, including officials, can see choice counts or a partial tally. Turnout is visible.",
     typeLocked: "The type is fixed when the election is created and cannot be changed.",
     loadExisting: "Load existing ballot",
     newElection: "New election…",

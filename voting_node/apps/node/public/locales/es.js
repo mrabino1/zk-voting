@@ -392,22 +392,22 @@ export default {
     maxOptions: "Puede elegir como máximo {count} opciones.",
     receiptTitle: "Recibo de la boleta",
     receiptHelp:
-      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Solo puede votar una vez; una segunda boleta de usted es rechazada. Las filas públicas del explorador esperan a que cierre la hora que contuvo esta boleta.",
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una sola boleta. Las filas públicas del explorador esperan a que cierre la hora, pase el retraso de divulgación y se abra la puerta de resultados.",
     recorded: "Registrado",
     ballotHash: "Hash de la boleta",
     nullifier: "Nullifier",
     userOpHash: "Hash del UserOp",
     results: "Resultados",
     envelopeHelp:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede cambiar de opinión en este formulario hasta enviarlo. Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El voto doble es imposible. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una sola boleta. No se cuentan las dos. El recibo no puede probar cómo votó.",
     envelopeHelpTally:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrirlo después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Cuando el Node acepta una boleta, ese nullifier queda gastado — no puede votar de nuevo. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una sola boleta. El recibo no puede probar cómo votó.",
     receiptHelpRevote:
-      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Cada votante se cuenta una vez y puede volver a votar hasta la fecha límite, y cuenta el último voto. Las filas públicas del explorador esperan a que cierre la hora y pase el retraso de divulgación.",
+      "Este recibo no puede probar cómo votó. Solo lista hashes. No incluye las opciones marcadas, la apertura del cifrado ni el trapdoor. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. Las filas públicas del explorador esperan a que cierre la hora, pase el retraso de divulgación y se abra la puerta de resultados.",
     envelopeHelpRevote:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio final. No se cuentan las dos. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. No se cuentan las dos. El recibo no puede probar cómo votó.",
     envelopeHelpTallyRevote:
-      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio final. El recibo no puede probar cómo votó.",
+      "Marque cada pregunta. Un sobre cubre toda la boleta. Sus selecciones permanecen en este formulario hasta enviarlo. El sobre publicado se cifra con la clave pública de escrutinio de los guardianes. Abrir el agregado después del cierre exige t descifrados parciales verificados (NO PRODUCCIÓN). Puede enviar una boleta posterior hasta la fecha límite. Un bloque publicado conserva la primera boleta. El reemplazo cuenta solo en el escrutinio certificado. El recibo no puede probar cómo votó.",
     aspectsCount: "{count} preguntas en esta boleta",
     aspectsCount_one: "{count} pregunta en esta boleta",
     nonePublished: "Ninguna publicada",
@@ -418,7 +418,7 @@ export default {
   results: {
     observers: "Observadores",
     title: "Resultados de la elección",
-    lede: "Totales de pluralidad certificados después de un escrutinio. Mientras una votación está abierta o espera un escrutinio, esta página no muestra conteos oficiosos por opción.",
+    lede: "Totales de pluralidad certificados después de un escrutinio. Una encuesta también puede mostrar sumas por opción casi en vivo, por hora, cuando se abre la puerta de resultados. Una votación permanece sellada hasta que termina.",
     sampleNote: "Se muestra el padrón de muestra integrado porque /api/elections no está disponible.",
     tie: "Empate",
     lexTie: "Empate en el primer lugar resuelto por el id lexicográfico de la opción.",
@@ -475,8 +475,19 @@ export default {
     typePoll: "Encuesta",
     typeVote: "Votación",
     sealedUntil: "Resultados sellados hasta {end}",
-    sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación por hora es pública.",
+    sealedBody: "Los conteos por opción y los escrutinios parciales permanecen sellados para todos, incluidos los funcionarios, hasta que esta elección termine. La participación es visible.",
     sealedStatus: "Resultados sellados",
+    almostLive: "Casi en vivo",
+    almostLiveBody:
+      "Sumas por opción, por hora, de esta encuesta. El bloque de las 08:00–08:59 puede publicarse a las 09:30, después de que se abre la puerta de resultados (100 boletas o el fin programado, lo que ocurra primero). Las horas con menos de 10 boletas se fusionan hacia adelante. La serie se congela al cierre. Un bloque publicado permanece como se publicó por primera vez. Estas sumas no son el escrutinio certificado.",
+    trailingHelp:
+      "Una hora final con menos de 10 boletas no es una fila propia. Al cierre se pliega en el bloque anterior. Si toda la encuesta sigue bajo 10, un bloque de cierre es el conjunto entero.",
+    blockBallots: "{count} boletas",
+    blockBallots_one: "{count} boleta",
+    blockAwaiting: "Las sumas de esta hora esperan el descifrado umbral.",
+    blockUnavailable: "Las sumas de esta hora no están disponibles.",
+    certifiedSeparate:
+      "El escrutinio certificado al cierre es el final. No tiene que igualar estas sumas por hora.",
   },
   info: {
     elections: "Elecciones",
@@ -706,9 +717,9 @@ export default {
       "Valor predeterminado de la elección. YES_NO permanece en pluralidad. Las preguntas RANKED siempre usan IRV. Las elecciones creadas obtienen un id público UUID y un enlace corto <code>/v/…</code>; el <code>uint256</code> de la fábrica permanece como <code>onChainElectionId</code>.",
     electionType: "Tipo de elección",
     typePoll: "Encuesta",
-    typePollHelp: "Los resultados siguen visibles en el panel mientras la votación está abierta, con las reglas de divulgación habituales. Después de la fecha de cierre no se suman más votos al total.",
+    typePollHelp: "Cuando se abre la puerta de resultados (100 boletas, o el fin programado, lo que ocurra primero), las sumas por opción se publican por hora, 30 minutos después de cada hora. Las horas con menos de 10 boletas se fusionan con la siguiente. Un bloque publicado no cambia. El escrutinio certificado al cierre es el final. Una votación no publica estas sumas.",
     typeVote: "Votación",
-    typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Hasta entonces, nadie —incluidos los funcionarios— puede ver conteos por opción ni un escrutinio parcial. La participación horaria es pública.",
+    typeVoteHelp: "El resultado se muestra solo cuando la elección termina. Antes del plazo, nadie, incluidos los funcionarios, puede ver los conteos por opción ni un escrutinio parcial. La participación es visible.",
     typeLocked: "El tipo queda fijo al crear la elección y no se puede cambiar.",
     loadExisting: "Cargar boleta existente",
     newElection: "Elección nueva…",
