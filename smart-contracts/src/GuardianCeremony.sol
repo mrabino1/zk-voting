@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {Bn128} from "./zk/Bn128.sol";
+import {BabyJub} from "./zk/BabyJub.sol";
 import {ElectionParams} from "./interfaces/ElectionParams.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
@@ -19,6 +19,8 @@ contract GuardianCeremony {
     uint8 public constant MAX_N = 16;
     /// @notice After this, an absent dealer can be dropped if at least `k` posted.
     uint256 public constant COMPLAINT_WINDOW = 1 hours;
+    /// @notice A dealer who does not reveal a Feldman-valid share in this window is excluded.
+    uint256 public constant REVEAL_WINDOW = 1 hours;
     bytes32 internal constant SCHNORR_DOMAIN = keccak256("GUARDIAN_SCHNORR_V1");
     bytes32 internal constant SHARE_DOMAIN = keccak256("GUARDIAN_SHARE_V1");
 
@@ -41,6 +43,9 @@ contract GuardianCeremony {
     error ComplaintWindowOpen();
     error NotEnoughGuardians();
     error ShareNotDerived();
+    error ShareDisputeOpen();
+    error NoShareDispute();
+    error DisputeWindowOpen();
 
     event CeremonyOpened(uint256 indexed electionId, uint8 indexed electionType, uint8 k, uint8 n);
     event GuardianPosted(uint256 indexed electionId, uint8 indexed electionType, address indexed guardian, uint8 index);
@@ -68,6 +73,15 @@ contract GuardianCeremony {
     mapping(uint256 => mapping(uint8 => mapping(uint8 => mapping(uint8 => uint256)))) private _cy;
     mapping(uint256 => mapping(uint8 => mapping(address => uint256))) private _pkX;
     mapping(uint256 => mapping(uint8 => mapping(address => uint256))) private _pkY;
+
+    struct ShareClaim {
+        uint8 recipient;
+        uint64 openedAt;
+        bool open;
+    }
+
+    /// @notice Open reveal-or-exclude dispute, keyed by the dealer.
+    mapping(uint256 => mapping(uint8 => mapping(uint8 => ShareClaim))) private _claim;
 
     constructor(address factory_) {
         if (factory_ == address(0)) revert ZeroAddress();
@@ -134,7 +148,7 @@ contract GuardianCeremony {
         if (_posted[electionId][electionType][index]) revert AlreadyPosted();
         if (cx.length != deal.k || cy.length != deal.k) revert FeldmanMismatch();
         for (uint8 t; t < deal.k; ++t) {
-            if (!Bn128.onCurve(cx[t], cy[t])) revert PointOffCurve();
+            if (!BabyJub.onCurve(cx[t], cy[t]) || !BabyJub.validPoint(cx[t], cy[t])) revert PointOffCurve();
             _cx[electionId][electionType][index][t] = cx[t];
             _cy[electionId][electionType][index][t] = cy[t];
         }
@@ -176,8 +190,7 @@ contract GuardianCeremony {
                 e
             )) revert ShareSignatureInvalid();
         (uint256 ex, uint256 ey) = _eval(electionId, electionType, dealerIndex, mine, deal.k);
-        (bool ok, uint256 sx, uint256 sy) = Bn128.mul(1, 2, share % Bn128.R);
-        if (!ok) revert PointOffCurve();
+        (uint256 sx, uint256 sy) = BabyJub.mulBase(share);
         if (sx == ex && sy == ey) revert ComplaintUnfounded();
         _exclude(electionId, electionType, dealerIndex);
     }
@@ -191,10 +204,65 @@ contract GuardianCeremony {
         uint256 share,
         uint256 rX,
         uint256 rY
-    ) public pure returns (uint256) {
+    ) public view returns (uint256) {
         return uint256(
-            keccak256(abi.encode(SHARE_DOMAIN, electionId, electionType, dealerIndex, recipientIndex, share, rX, rY))
-        ) % Bn128.R;
+            keccak256(
+                abi.encode(
+                    SHARE_DOMAIN,
+                    block.chainid,
+                    address(this),
+                    electionId,
+                    electionType,
+                    dealerIndex,
+                    recipientIndex,
+                    share,
+                    rX,
+                    rY
+                )
+            )
+        ) % BabyJub.ORDER;
+    }
+
+    /// @notice Recipient opens a dispute. The dealer must reveal the Feldman share or be excluded.
+    ///         An unsigned off-chain share is this path: there is no signature to check, so silence excludes.
+    function openShareDispute(uint256 electionId, uint8 electionType, uint8 dealerIndex) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.open || deal.posted) revert CeremonyNotOpen();
+        uint8 mine = _index[electionId][electionType][msg.sender];
+        if (mine == 0 || _isExcluded(deal, mine)) revert NotGuardian();
+        if (dealerIndex == 0 || dealerIndex > deal.n || _isExcluded(deal, dealerIndex)) revert NotGuardian();
+        if (!_posted[electionId][electionType][dealerIndex]) revert NotGuardian();
+        ShareClaim storage claim = _claim[electionId][electionType][dealerIndex];
+        if (claim.open) revert ShareDisputeOpen();
+        claim.recipient = mine;
+        claim.openedAt = uint64(block.timestamp);
+        claim.open = true;
+    }
+
+    /// @notice Dealer reveals the share for the open dispute. A matching share closes it.
+    ///         A share that misses the Feldman commitments excludes the dealer.
+    function revealShare(uint256 electionId, uint8 electionType, uint256 share) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.open || deal.posted) revert CeremonyNotOpen();
+        uint8 dealer = _index[electionId][electionType][msg.sender];
+        if (dealer == 0 || _isExcluded(deal, dealer)) revert NotGuardian();
+        ShareClaim storage claim = _claim[electionId][electionType][dealer];
+        if (!claim.open) revert NoShareDispute();
+        claim.open = false;
+        (uint256 ex, uint256 ey) = _eval(electionId, electionType, dealer, claim.recipient, deal.k);
+        (uint256 sx, uint256 sy) = BabyJub.mulBase(share);
+        if (sx != ex || sy != ey) _exclude(electionId, electionType, dealer);
+    }
+
+    /// @notice Exclude a dealer who never revealed. Covers an unsigned or withheld share.
+    function expireShareDispute(uint256 electionId, uint8 electionType, uint8 dealerIndex) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.open || deal.posted) revert CeremonyNotOpen();
+        ShareClaim storage claim = _claim[electionId][electionType][dealerIndex];
+        if (!claim.open) revert NoShareDispute();
+        if (block.timestamp < uint256(claim.openedAt) + REVEAL_WINDOW) revert DisputeWindowOpen();
+        claim.open = false;
+        _exclude(electionId, electionType, dealerIndex);
     }
 
     /// @notice After the complaint window, finalize from the guardians who posted when at least `k` remain.
@@ -228,7 +296,7 @@ contract GuardianCeremony {
         uint256 rY
     ) public pure returns (uint256) {
         return uint256(keccak256(abi.encode(SCHNORR_DOMAIN, electionId, electionType, guardian, cx, cy, rX, rY)))
-            % Bn128.R;
+            % BabyJub.ORDER;
     }
 
     function keyPosted(uint256 electionId, uint8 electionType) external view returns (bool) {
@@ -281,13 +349,11 @@ contract GuardianCeremony {
         view
         returns (bool)
     {
-        if (!Bn128.onCurve(rX, rY)) return false;
-        (bool okL, uint256 lx, uint256 ly) = Bn128.mul(1, 2, z);
-        if (!okL) return false;
-        (bool okE, uint256 ex, uint256 ey) = Bn128.mul(c0x, c0y, e);
-        if (!okE) return false;
-        (bool okR, uint256 rx, uint256 ry) = Bn128.add(rX, rY, ex, ey);
-        return okR && lx == rx && ly == ry;
+        if (!BabyJub.onCurve(rX, rY)) return false;
+        (uint256 lx, uint256 ly) = BabyJub.mulBase(z);
+        (uint256 ex, uint256 ey) = BabyJub.mul(c0x, c0y, e);
+        (uint256 rx, uint256 ry) = BabyJub.add(rX, rY, ex, ey);
+        return lx == rx && ly == ry;
     }
 
     function _isExcluded(Deal storage deal, uint8 index) internal view returns (bool) {
@@ -315,10 +381,7 @@ contract GuardianCeremony {
                 jy = cy;
                 started = true;
             } else {
-                (bool ok, uint256 nx, uint256 ny) = Bn128.add(jx, jy, cx, cy);
-                if (!ok) revert PointOffCurve();
-                jx = nx;
-                jy = ny;
+                (jx, jy) = BabyJub.add(jx, jy, cx, cy);
             }
         }
         if (!started || deal.postedCount < deal.k) revert NotEnoughGuardians();
@@ -347,18 +410,16 @@ contract GuardianCeremony {
         uint256 pow = 1;
         bool any;
         for (uint8 t; t < k; ++t) {
-            (bool ok, uint256 mx, uint256 my) =
-                Bn128.mul(_cx[electionId][electionType][dealer][t], _cy[electionId][electionType][dealer][t], pow);
-            if (!ok) revert PointOffCurve();
+            (uint256 mx, uint256 my) =
+                BabyJub.mul(_cx[electionId][electionType][dealer][t], _cy[electionId][electionType][dealer][t], pow);
             if (!any) {
                 px = mx;
                 py = my;
                 any = true;
             } else {
-                (ok, px, py) = Bn128.add(px, py, mx, my);
-                if (!ok) revert PointOffCurve();
+                (px, py) = BabyJub.add(px, py, mx, my);
             }
-            pow = mulmod(pow, at, Bn128.R);
+            pow = mulmod(pow, at, BabyJub.ORDER);
         }
     }
 
@@ -375,18 +436,16 @@ contract GuardianCeremony {
             if ((excluded & (uint32(1) << j)) != 0 || !_posted[electionId][electionType][j]) continue;
             uint256 pow = 1;
             for (uint8 t; t < k; ++t) {
-                (bool ok, uint256 mx, uint256 my) =
-                    Bn128.mul(_cx[electionId][electionType][j][t], _cy[electionId][electionType][j][t], pow);
-                if (!ok) revert PointOffCurve();
+                (uint256 mx, uint256 my) =
+                    BabyJub.mul(_cx[electionId][electionType][j][t], _cy[electionId][electionType][j][t], pow);
                 if (!any) {
                     px = mx;
                     py = my;
                     any = true;
                 } else {
-                    (ok, px, py) = Bn128.add(px, py, mx, my);
-                    if (!ok) revert PointOffCurve();
+                    (px, py) = BabyJub.add(px, py, mx, my);
                 }
-                pow = mulmod(pow, index, Bn128.R);
+                pow = mulmod(pow, index, BabyJub.ORDER);
             }
         }
     }

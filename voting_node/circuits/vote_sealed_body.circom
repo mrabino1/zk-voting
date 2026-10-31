@@ -7,6 +7,7 @@ pragma circom 2.1.9;
 // Production depth is 20. The smoke main is circuits/mains/vote_sealed_smoke.circom.
 
 include "./per_ballot_lib.circom";
+include "./one_hot.circom";
 
 template VoteSealed(levels, ballotLevels) {
     signal input identityTrapdoor;
@@ -39,6 +40,10 @@ template VoteSealed(levels, ballotLevels) {
     signal input oldOptionC1y[4];
     signal input oldOptionC2x[4];
     signal input oldOptionC2y[4];
+    signal input optionR[4];
+    signal input optionB[4];
+    signal input primaryR;
+    signal input primaryB;
     signal input pathElementsBallot[ballotLevels];
     signal input pathIndicesBallot[ballotLevels];
 
@@ -48,6 +53,19 @@ template VoteSealed(levels, ballotLevels) {
     signal input ballotHash;
     signal input electionId;
     signal input boundRoot;
+    signal input pkX;
+    signal input pkY;
+    // Copies of the ciphertext, declared last so they sit after the existing
+    // public words. Acceptance compares them to the blob. No Poseidon on chain.
+    signal input pubC1x;
+    signal input pubC1y;
+    signal input pubC2x;
+    signal input pubC2y;
+    signal input pubN;
+    signal input pubOptionC1x[4];
+    signal input pubOptionC1y[4];
+    signal input pubOptionC2x[4];
+    signal input pubOptionC2y[4];
 
     component identity = IdentityCommitment();
     identity.identityTrapdoor <== identityTrapdoor;
@@ -95,9 +113,10 @@ template VoteSealed(levels, ballotLevels) {
     gapHigh <== (1 - nextIsZero.out) * leafLtNext.out;
     nextIsZero.out + gapHigh === 1;
 
-    // One commitment: the public ballot hash is the ciphertext, not a separate
-    // tag of the choice. The one-hot opening under the joint key is checked
-    // on chain against these same points.
+    // One commitment: the public ballot hash is the ordered ciphertext digest.
+    // The same points are Enc(0) or Enc(1) under the public joint key, and a
+    // vector of options sums to one. Acceptance passes pkX and pkY as public
+    // inputs and checks them against the posted ceremony key.
     component cipher = BallotDigest(4);
     cipher.c1x <== c1x;
     cipher.c1y <== c1y;
@@ -111,6 +130,37 @@ template VoteSealed(levels, ballotLevels) {
         cipher.optionC2y[u] <== optionC2y[u];
     }
     cipher.out === ballotHash;
+
+    component oneHot = OneHotVector();
+    oneHot.pkx <== pkX;
+    oneHot.pky <== pkY;
+    oneHot.c1x <== c1x;
+    oneHot.c1y <== c1y;
+    oneHot.c2x <== c2x;
+    oneHot.c2y <== c2y;
+    oneHot.n <== optionN;
+    oneHot.primaryR <== primaryR;
+    oneHot.primaryB <== primaryB;
+    for (var t = 0; t < 4; t++) {
+        oneHot.optionC1x[t] <== optionC1x[t];
+        oneHot.optionC1y[t] <== optionC1y[t];
+        oneHot.optionC2x[t] <== optionC2x[t];
+        oneHot.optionC2y[t] <== optionC2y[t];
+        oneHot.optionR[t] <== optionR[t];
+        oneHot.optionB[t] <== optionB[t];
+    }
+
+    pubC1x === c1x;
+    pubC1y === c1y;
+    pubC2x === c2x;
+    pubC2y === c2y;
+    pubN === optionN;
+    for (var w = 0; w < 4; w++) {
+        pubOptionC1x[w] === optionC1x[w];
+        pubOptionC1y[w] === optionC1y[w];
+        pubOptionC2x[w] === optionC2x[w];
+        pubOptionC2y[w] === optionC2y[w];
+    }
 
     component oldCipher = BallotDigest(4);
     oldCipher.c1x <== oldC1x;

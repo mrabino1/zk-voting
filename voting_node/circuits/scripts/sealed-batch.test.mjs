@@ -32,6 +32,15 @@ test("legacy vote public word is the voter id; sealed public word is the submiss
   assert.doesNotMatch(sealed, /voterId\.out === nullifier/);
   assert.match(sealed, /BallotMembership/);
   assert.match(sealed, /boundRoot/);
+  assert.match(sealed, /cipher\.out === ballotHash/);
+  assert.match(sealed, /component oneHot = OneHotVector\(\)/);
+  assert.match(sealed, /pubC1x === c1x/);
+  assert.match(sealed, /pubN === optionN/);
+  const main = read("vote_sealed.circom");
+  assert.match(
+    main,
+    /pkX, pkY, pubC1x, pubC1y, pubC2x, pubC2y, pubN, pubOptionC1x, pubOptionC1y, pubOptionC2x, pubOptionC2y/,
+  );
 });
 
 test("per-ballot proof selects membership or non-membership at the bound root", () => {

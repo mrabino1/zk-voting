@@ -10,6 +10,7 @@ import {IElection} from "../../src/interfaces/IElection.sol";
 import {Roles} from "../../src/Roles.sol";
 
 import {KeccakHasher} from "../../src/hasher/KeccakHasher.sol";
+import {BabyJub} from "../../src/zk/BabyJub.sol";
 import {MockVerifier} from "../../src/zk/MockVerifier.sol";
 import {Election} from "../../src/Election.sol";
 import {ElectionFactory} from "../../src/ElectionFactory.sol";
@@ -374,12 +375,51 @@ contract Deployer is Test {
         if (inbox.settlementOf(electionId) == address(0)) return inputs;
         bytes32 posted = RollupSettlement(inbox.settlementOf(electionId)).lastHourlyRoot(electionId);
         uint256 bound = posted == bytes32(0) ? inbox.emptyBallotRoot(20) : uint256(posted);
-        uint256[] memory withRoot = new uint256[](6);
+        // Sealed layout: [0..4] legacy words, [5] bound root, [6..7] joint key,
+        // [8..11] primary, [12] n, [13..28] four option slots (c1x, c1y, c2x, c2y).
+        uint256[] memory withRoot = new uint256[](29);
         for (uint256 i; i < 5; ++i) {
             withRoot[i] = inputs[i];
         }
         withRoot[5] = bound;
+        (withRoot[6], withRoot[7]) = _jointOrZero(electionId, election);
+        if (encrypted.length >= 130) {
+            withRoot[8] = _blobWord(encrypted, 2);
+            withRoot[9] = _blobWord(encrypted, 34);
+            withRoot[10] = _blobWord(encrypted, 66);
+            withRoot[11] = _blobWord(encrypted, 98);
+            uint256 n = encrypted.length == 130 ? 0 : _blobWord(encrypted, 130);
+            withRoot[12] = n;
+            if (n <= 4) {
+                for (uint256 k; k < n; ++k) {
+                    uint256 base = 162 + k * 128;
+                    if (encrypted.length < base + 128) break;
+                    withRoot[13 + k] = _blobWord(encrypted, base);
+                    withRoot[17 + k] = _blobWord(encrypted, base + 32);
+                    withRoot[21 + k] = _blobWord(encrypted, base + 64);
+                    withRoot[25 + k] = _blobWord(encrypted, base + 96);
+                }
+            }
+        }
         return withRoot;
+    }
+
+    /// @dev Ceremony joint key, or (0, 0) when the key is not posted yet.
+    ///      Acceptance still reverts KeyNotPosted; this helper must not.
+    function _jointOrZero(uint256 electionId, address election) internal view returns (uint256 x, uint256 y) {
+        address ceremony = inbox.ceremonyOf(electionId);
+        if (ceremony == address(0)) return (0, 0);
+        uint8 electionType = IElection(election).params().electionType;
+        (bool ok, bytes memory ret) =
+            ceremony.staticcall(abi.encodeWithSignature("jointKey(uint256,uint8)", electionId, electionType));
+        if (!ok || ret.length < 64) return (0, 0);
+        (x, y) = abi.decode(ret, (uint256, uint256));
+    }
+
+    function _blobWord(bytes memory blob, uint256 offset) internal pure returns (uint256 word) {
+        assembly {
+            word := mload(add(add(blob, 32), offset))
+        }
     }
 
     /// @dev Private legacy counter. Not the public turnout getter.
@@ -387,11 +427,13 @@ contract Deployer is Test {
         return uint256(vm.load(address(inbox), keccak256(abi.encode(id, uint256(1)))));
     }
 
-    /// @dev `EG` prefix plus four coordinates. The inbox hashes this as CipherHash.
+    /// @dev `EG` prefix plus two on-curve Baby Jubjub points derived from `word`.
     function egBallot(uint256 word) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            bytes2("EG"), bytes32(uint256(1)), bytes32(uint256(2)), bytes32(word), bytes32(uint256(4))
-        );
+        uint256 s = word % BabyJub.ORDER;
+        if (s == 0) s = 1;
+        (uint256 x, uint256 y) = BabyJub.mulBase(s);
+        (uint256 u, uint256 v) = BabyJub.mulBase(s + 1);
+        return abi.encodePacked(bytes2("EG"), bytes32(x), bytes32(y), bytes32(u), bytes32(v));
     }
 
     function submitVote(uint256 electionId, address election, uint256 nullifier) internal {

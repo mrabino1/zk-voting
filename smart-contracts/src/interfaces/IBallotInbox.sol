@@ -47,6 +47,9 @@ interface IBallotInbox {
     error TurnoutNotPublished();
     error BadTreeDepth();
     error EgCiphertextRequired();
+    error NonCanonicalBallot();
+    error PointOffCurve();
+    error JointKeyMismatch();
     error UnknownSubmission();
     error SubmissionAlreadySettled();
 
@@ -85,9 +88,43 @@ interface IBallotInbox {
 
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 
-    /// @notice Public turnout. A VOTE reverts until cutoff. A sealed POLL returns the
-    ///         last posted unique count. A legacy election reverts until cutoff.
+    /// @notice Public turnout. A sealed VOTE or POLL returns the unique count last
+    ///         posted by an hourly or supplementary batch, including during the window.
+    ///         A legacy election reverts until cutoff.
     function closedBallotCount(uint256 electionId) external view returns (uint256);
+
+    /// @notice Acceptance order of a submission. Zero means it was not accepted.
+    ///         A replacement may settle only in increasing order.
+    function acceptanceSeq(uint256 electionId, uint256 submissionId) external view returns (uint64);
+
+    /// @notice Primary ciphertext stored at acceptance. `set` is false when the id is unknown.
+    function acceptedPrimary(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (uint256 c1X, uint256 c1Y, uint256 c2X, uint256 c2Y, uint8 n, bool set);
+
+    /// @notice Option ciphertext stored at acceptance, index-aligned with the ballot vector.
+    function acceptedOption(uint256 electionId, uint256 submissionId, uint256 option)
+        external
+        view
+        returns (uint256 c1X, uint256 c1Y, uint256 c2X, uint256 c2Y);
+
+    /// @notice Primary, ballot hash, and the option ciphertexts stored at acceptance.
+    ///         Option `i` occupies `opts[4*i .. 4*i+3]` as `(c1x, c1y, c2x, c2y)`.
+    ///         One call, so a batch can sum the committed vector without a read per point.
+    function acceptedVector(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (
+            uint256 c1X,
+            uint256 c1Y,
+            uint256 c2X,
+            uint256 c2Y,
+            uint8 n,
+            bool set,
+            bytes32 ballotHash,
+            uint256[16] memory opts
+        );
 
     /// @notice Accepted submissions not yet included in a settled batch.
     function unconsumedCount(uint256 electionId) external view returns (uint256);

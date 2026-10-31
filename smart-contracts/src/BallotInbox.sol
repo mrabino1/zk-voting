@@ -10,6 +10,7 @@ import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
+import {BabyJub} from "./zk/BabyJub.sol";
 import {BallotDigest} from "./zk/BallotDigest.sol";
 import {IndexedRoot} from "./zk/IndexedRoot.sol";
 import {PoseidonT3} from "./hasher/PoseidonT3.sol";
@@ -96,10 +97,30 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => uint256)) public pendingChunk;
     /// @notice Next unsealed force-in index. Chunked finalization walks forward from here.
     mapping(uint256 => uint256) public pendingCursor;
-    /// @notice Accepted submissions already included in a settled batch. A second settle reverts.
-    mapping(uint256 => mapping(uint256 => bool)) private _settledSubmission;
+    /// @notice Settled acceptance-sequence bits. Sequence `s` is bit `s % 256` of word `s / 256`.
+    ///         One word covers a 64-row batch, so later rows update a warm slot.
+    mapping(uint256 => mapping(uint256 => uint256)) private _settledBits;
     /// @notice Accepted submissions waiting for a settled batch. Appended after the settled map.
     mapping(uint256 => uint256) public unconsumedCount;
+
+    struct AcceptedCipher {
+        uint256 c1X;
+        uint256 c1Y;
+        uint256 c2X;
+        uint256 c2Y;
+    }
+
+    struct AcceptedBallot {
+        AcceptedCipher primary;
+        uint8 n;
+        uint64 seq;
+        bool set;
+    }
+
+    /// @notice Vector committed at acceptance, keyed by submission id. Settlement reads this, not a free total.
+    mapping(uint256 => mapping(uint256 => AcceptedBallot)) private _accepted;
+    mapping(uint256 => mapping(uint256 => mapping(uint8 => AcceptedCipher))) private _acceptedOpt;
+    mapping(uint256 => uint64) private _acceptClock;
 
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
@@ -164,7 +185,7 @@ contract BallotInbox is IBallotInbox {
         uint256[] memory order = _nullifierOrder(nullifiers);
         for (uint256 i; i < n; ++i) {
             uint256 j = order[i];
-            _recordAcceptance(electionId, nullifiers[j], hashes[j]);
+            _recordAcceptance(electionId, nullifiers[j], hashes[j], encryptedBallots[j]);
         }
         _lastBatchAt[electionId] = uint64(block.timestamp);
         // Count only. A yes/no split here would publish the batch tally.
@@ -176,14 +197,11 @@ contract BallotInbox is IBallotInbox {
         return _nullifierUsed[electionId][nullifier % SNARK_SCALAR_FIELD];
     }
 
-    /// @notice Turnout once it is allowed to be public.
-    ///         A VOTE reverts until cutoff, including when a settlement is set.
-    ///         A sealed POLL returns the unique count last written by an hourly
-    ///         or supplementary batch. A legacy election reverts until cutoff, then
-    ///         returns the private acceptance counter. There is no live getter.
+    /// @notice Turnout once a settlement has posted it, for both VOTE and POLL.
+    ///         A legacy election reverts until cutoff, then returns the private
+    ///         acceptance counter. There is no live getter.
     function closedBallotCount(uint256 electionId) external view returns (uint256) {
         ElectionParams memory p = _getElection(electionId).params();
-        if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) revert TurnoutNotPublished();
         address settlement = settlementOf[electionId];
         if (settlement != address(0)) {
             (bool ok, bytes memory ret) =
@@ -252,7 +270,7 @@ contract BallotInbox is IBallotInbox {
         bytes calldata encryptedBallot
     ) internal {
         (uint256 nullifier, bytes32 ballotHash) = _checkOne(electionId, a, b, c, publicInputs, encryptedBallot);
-        _recordAcceptance(electionId, nullifier, ballotHash);
+        _recordAcceptance(electionId, nullifier, ballotHash, encryptedBallot);
     }
 
     function _checkOne(
@@ -354,7 +372,12 @@ contract BallotInbox is IBallotInbox {
         }
         if (publicInputs[4] != electionId) revert ElectionIdMismatch();
 
-        if (publicInputs[3] != ballotHashOfCiphertext(encryptedBallot)) revert BallotHashMismatch();
+        if (settlementOf[electionId] != address(0)) {
+            _requireJoint(electionId, election.params().electionType, publicInputs);
+            _requireCipherPublic(encryptedBallot, publicInputs);
+        } else if (publicInputs[3] != ballotHashOfCiphertext(encryptedBallot)) {
+            revert BallotHashMismatch();
+        }
 
         address voters = election.voterRegistry();
         if (voters != address(0)) {
@@ -385,7 +408,6 @@ contract BallotInbox is IBallotInbox {
         return uint256(keccak256(encryptedBallot)) % SNARK_SCALAR_FIELD;
     }
 
-    /// @dev Zero means "not a canonical EG blob", unless the digest itself is zero.
     function _egCanonical(bytes calldata blob) private pure returns (bool) {
         if (blob.length == 130) return true;
         if (blob.length < 162) return false;
@@ -425,14 +447,41 @@ contract BallotInbox is IBallotInbox {
         if (encryptedBallot.length < 130 || encryptedBallot[0] != 0x45 || encryptedBallot[1] != 0x47) {
             revert EgCiphertextRequired();
         }
+        if (!_egCanonical(encryptedBallot)) revert NonCanonicalBallot();
+        (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) = _cipherAt(encryptedBallot, 2);
+        _requireOnCurve(c1x, c1y, c2x, c2y);
+        if (encryptedBallot.length == 130) return;
+        uint256 n = _coord(encryptedBallot, 130);
+        for (uint256 i; i < n; ++i) {
+            (c1x, c1y, c2x, c2y) = _cipherAt(encryptedBallot, 162 + i * 128);
+            _requireOnCurve(c1x, c1y, c2x, c2y);
+        }
     }
 
-    function _recordAcceptance(uint256 electionId, uint256 nullifier, bytes32 ballotHash) internal {
+    function _requireOnCurve(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) private pure {
+        if (!BabyJub.onCurve(c1x, c1y) || !BabyJub.onCurve(c2x, c2y)) revert PointOffCurve();
+    }
+
+    function _cipherAt(bytes calldata blob, uint256 offset)
+        private
+        pure
+        returns (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y)
+    {
+        c1x = _coord(blob, offset);
+        c1y = _coord(blob, offset + 32);
+        c2x = _coord(blob, offset + 64);
+        c2y = _coord(blob, offset + 96);
+    }
+
+    function _recordAcceptance(uint256 electionId, uint256 nullifier, bytes32 ballotHash, bytes calldata blob)
+        internal
+    {
         uint256 key = nullifier % SNARK_SCALAR_FIELD;
         _nullifierUsed[electionId][key] = true;
         _ballotHashOf[electionId][key] = ballotHash;
         _ballotHashList[electionId].push(ballotHash);
         _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
+        if (settlementOf[electionId] != address(0)) _storeAccepted(electionId, key, blob);
         if (settlementOf[electionId] == address(0)) {
             unchecked {
                 _acceptedBallots[electionId] += 1;
@@ -443,6 +492,85 @@ contract BallotInbox is IBallotInbox {
             }
         }
         emit VoteAccepted(electionId, nullifier, ballotHash, msg.sender);
+    }
+
+    function _storeAccepted(uint256 electionId, uint256 id, bytes calldata blob) internal {
+        AcceptedBallot storage row = _accepted[electionId][id];
+        (row.primary.c1X, row.primary.c1Y, row.primary.c2X, row.primary.c2Y) = _cipherAt(blob, 2);
+        uint8 n;
+        if (blob.length != 130) {
+            n = uint8(_coord(blob, 130));
+            for (uint8 i; i < n; ++i) {
+                AcceptedCipher storage opt = _acceptedOpt[electionId][id][i];
+                (opt.c1X, opt.c1Y, opt.c2X, opt.c2Y) = _cipherAt(blob, 162 + uint256(i) * 128);
+            }
+        }
+        row.n = n;
+        row.set = true;
+        unchecked {
+            row.seq = ++_acceptClock[electionId];
+        }
+    }
+
+    /// @inheritdoc IBallotInbox
+    function acceptanceSeq(uint256 electionId, uint256 submissionId) external view returns (uint64) {
+        return _accepted[electionId][submissionId % SNARK_SCALAR_FIELD].seq;
+    }
+
+    /// @inheritdoc IBallotInbox
+    function acceptedPrimary(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (uint256 c1X, uint256 c1Y, uint256 c2X, uint256 c2Y, uint8 n, bool set)
+    {
+        AcceptedBallot storage row = _accepted[electionId][submissionId % SNARK_SCALAR_FIELD];
+        return (row.primary.c1X, row.primary.c1Y, row.primary.c2X, row.primary.c2Y, row.n, row.set);
+    }
+
+    /// @inheritdoc IBallotInbox
+    function acceptedOption(uint256 electionId, uint256 submissionId, uint256 option)
+        external
+        view
+        returns (uint256 c1X, uint256 c1Y, uint256 c2X, uint256 c2Y)
+    {
+        AcceptedCipher storage opt = _acceptedOpt[electionId][submissionId % SNARK_SCALAR_FIELD][uint8(option)];
+        return (opt.c1X, opt.c1Y, opt.c2X, opt.c2Y);
+    }
+
+    /// @inheritdoc IBallotInbox
+    function acceptedVector(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (
+            uint256 c1X,
+            uint256 c1Y,
+            uint256 c2X,
+            uint256 c2Y,
+            uint8 n,
+            bool set,
+            bytes32 ballotHash,
+            uint256[16] memory opts
+        )
+    {
+        uint256 id = submissionId % SNARK_SCALAR_FIELD;
+        AcceptedBallot storage row = _accepted[electionId][id];
+        c1X = row.primary.c1X;
+        c1Y = row.primary.c1Y;
+        c2X = row.primary.c2X;
+        c2Y = row.primary.c2Y;
+        n = row.n;
+        set = row.set;
+        ballotHash = _ballotHashOf[electionId][id];
+        uint256 len = n;
+        if (len > 4) len = 4;
+        for (uint256 i; i < len; ++i) {
+            AcceptedCipher storage opt = _acceptedOpt[electionId][id][uint8(i)];
+            uint256 o = i << 2;
+            opts[o] = opt.c1X;
+            opts[o + 1] = opt.c1Y;
+            opts[o + 2] = opt.c2X;
+            opts[o + 3] = opt.c2Y;
+        }
     }
 
     function setSettlement(uint256 electionId, address settlement_) external {
@@ -515,8 +643,13 @@ contract BallotInbox is IBallotInbox {
         uint256 id = submissionId % SNARK_SCALAR_FIELD;
         if (id == 0 || !_nullifierUsed[electionId][id]) revert UnknownSubmission();
         if (_ballotHashOf[electionId][id] != bytes32(cipherHash)) revert BallotHashMismatch();
-        if (_settledSubmission[electionId][id]) revert SubmissionAlreadySettled();
-        _settledSubmission[electionId][id] = true;
+        uint64 seq = _accepted[electionId][id].seq;
+        if (seq == 0) revert UnknownSubmission();
+        uint256 wordIndex = uint256(seq) >> 8;
+        uint256 mask = uint256(1) << (uint256(seq) & 255);
+        uint256 word = _settledBits[electionId][wordIndex];
+        if ((word & mask) != 0) revert SubmissionAlreadySettled();
+        _settledBits[electionId][wordIndex] = word | mask;
         unconsumedCount[electionId] -= 1;
     }
 
@@ -556,9 +689,13 @@ contract BallotInbox is IBallotInbox {
     }
 
     function _requireInputShape(uint256 electionId, uint256[] calldata publicInputs) internal view {
-        uint256 expect = settlementOf[electionId] == address(0) ? 5 : 6;
+        // Sealed public words: [root, disq, submissionId, ballotHash, electionId,
+        // boundRoot, pkX, pkY, c1x, c1y, c2x, c2y, n, optionC1x[4], optionC1y[4],
+        // optionC2x[4], optionC2y[4]]. The proof binds the hash, the joint key,
+        // and the 0/1 sum-to-one statement on those coordinates.
+        uint256 expect = settlementOf[electionId] == address(0) ? 5 : 29;
         if (publicInputs.length != expect) revert InvalidPublicInputs();
-        if (expect == 6) _requireBoundWord(electionId, publicInputs[5]);
+        if (expect == 29) _requireBoundWord(electionId, publicInputs[5]);
     }
 
     /// @dev A posted ballot-set root, or the empty Merkle root before any batch.
@@ -579,6 +716,40 @@ contract BallotInbox is IBallotInbox {
             settlement.staticcall(abi.encodeWithSignature("lastHourlyRoot(uint256)", electionId));
         if (!ok || ret.length < 32) return bytes32(0);
         root = abi.decode(ret, (bytes32));
+    }
+
+    /// @dev Public inputs 6 and 7 are the ceremony joint key. The proof's 0/1
+    ///      statement is under this key, so a proof for a different key reverts.
+    function _requireJoint(uint256 electionId, uint8 electionType, uint256[] calldata publicInputs) internal view {
+        address ceremony = ceremonyOf[electionId];
+        if (ceremony == address(0)) revert KeyNotPosted();
+        (bool ok, bytes memory ret) =
+            ceremony.staticcall(abi.encodeWithSignature("jointKey(uint256,uint8)", electionId, electionType));
+        if (!ok || ret.length < 64) revert KeyNotPosted();
+        (uint256 x, uint256 y) = abi.decode(ret, (uint256, uint256));
+        if (publicInputs[6] != x || publicInputs[7] != y) revert JointKeyMismatch();
+    }
+
+    /// @dev Public inputs 8..28 are the blob's primary, its option count, and the
+    ///      four option slots. Unused slots are zero. The proof binds these words.
+    function _requireCipherPublic(bytes calldata blob, uint256[] calldata publicInputs) internal pure {
+        (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) = _cipherAt(blob, 2);
+        if (
+            publicInputs[8] != c1x || publicInputs[9] != c1y || publicInputs[10] != c2x || publicInputs[11] != c2y
+        ) revert BallotHashMismatch();
+        uint256 n = blob.length == 130 ? 0 : _coord(blob, 130);
+        if (publicInputs[12] != n) revert BallotHashMismatch();
+        for (uint256 i; i < 4; ++i) {
+            uint256 x;
+            uint256 y;
+            uint256 u;
+            uint256 v;
+            if (i < n) (x, y, u, v) = _cipherAt(blob, 162 + i * 128);
+            if (
+                publicInputs[13 + i] != x || publicInputs[17 + i] != y || publicInputs[21 + i] != u
+                    || publicInputs[25 + i] != v
+            ) revert BallotHashMismatch();
+        }
     }
 
     function _requireKey(uint256 electionId, uint8 electionType) internal view {
@@ -621,7 +792,9 @@ contract BallotInbox is IBallotInbox {
         uint256 spentId = publicInputs[2] % SNARK_SCALAR_FIELD;
         if (spentId != receipt.submissionId % SNARK_SCALAR_FIELD) revert ReceiptMismatch();
         if (bytes32(publicInputs[3]) != receipt.ballotHash) revert ReceiptMismatch();
-        if (publicInputs[3] != ballotHashOfCiphertext(encryptedBallot)) revert BallotHashMismatch();
+        if (settlementOf[electionId] == address(0) && publicInputs[3] != ballotHashOfCiphertext(encryptedBallot)) {
+            revert BallotHashMismatch();
+        }
         address who = _signer(receiptDigest(electionId, receipt), signature);
         (bool ok, bytes memory ret) = address(_factory).staticcall(abi.encodeWithSignature("isRelayer(address)", who));
         if (!ok || ret.length < 32 || !abi.decode(ret, (bool))) revert BadSignature();
@@ -672,7 +845,7 @@ contract BallotInbox is IBallotInbox {
         if (!CappedVerifierCall.accepted(verifier, a, b, c, publicInputs)) revert InvalidProof();
         if (_nullifierUsed[electionId][spent]) revert NullifierUsed();
         _requireKey(electionId, election.params().electionType);
-        _recordAcceptance(electionId, spent, bytes32(publicInputs[3]));
+        _recordAcceptance(electionId, spent, bytes32(publicInputs[3]), encryptedBallot);
     }
 
     function _pushForced(uint256 electionId, RelayerReceipt calldata receipt) internal {

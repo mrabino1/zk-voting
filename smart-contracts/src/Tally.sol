@@ -10,7 +10,7 @@ import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IRollupSettlement} from "./interfaces/IRollupSettlement.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
-import {Bn128} from "./zk/Bn128.sol";
+import {BabyJub} from "./zk/BabyJub.sol";
 import {ChaumPedersen} from "./zk/ChaumPedersen.sol";
 import {TallyPublicInputs} from "./zk/TallyPublicInputs.sol";
 import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
@@ -567,7 +567,7 @@ contract Tally is ITallyVerifier {
         for (uint256 i; i < counts.length; ++i) {
             (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, bool set) = _optionPoint(electionId, i);
             if (!set) revert CiphertextMissing();
-            if (!Bn128.validPoint(c1x, c1y) || !Bn128.validPoint(c2x, c2y)) revert CiphertextMissing();
+            if (!BabyJub.validPoint(c1x, c1y) || !BabyJub.validPoint(c2x, c2y)) revert CiphertextMissing();
             if (c1x == 0 && c1y == 0 && c2x == 0 && c2y == 0) {
                 if (counts[i] != 0) revert PlaintextMismatch();
                 continue;
@@ -575,8 +575,8 @@ contract Tally is ITallyVerifier {
             needShares = true;
             if (subset.length != k) revert NotEnoughPartials(electionId);
             (uint256 mx, uint256 my) = _combine(electionId, electionType, i, c2x, c2y, subset);
-            (bool ok, uint256 ex, uint256 ey) = Bn128.mul(1, 2, counts[i]);
-            if (!ok || mx != ex || my != ey) revert PlaintextMismatch();
+            (uint256 ex, uint256 ey) = BabyJub.mulBase(counts[i]);
+            if (mx != ex || my != ey) revert PlaintextMismatch();
         }
         if (!needShares && subset.length != 0) revert InvalidPartial();
     }
@@ -626,11 +626,9 @@ contract Tally is ITallyVerifier {
         my = c2y;
         for (uint256 i; i < k; ++i) {
             uint256 lambda = _lambda(idx, i, k);
-            (bool ok, uint256 sx, uint256 sy) = Bn128.mul(dx[i], dy[i], lambda);
-            if (!ok) revert InvalidPartial();
-            (uint256 nx, uint256 ny) = Bn128.neg(sx, sy);
-            (ok, mx, my) = Bn128.add(mx, my, nx, ny);
-            if (!ok) revert InvalidPartial();
+            (uint256 sx, uint256 sy) = BabyJub.mul(dx[i], dy[i], lambda);
+            (uint256 nx, uint256 ny) = BabyJub.neg(sx, sy);
+            (mx, my) = BabyJub.add(mx, my, nx, ny);
         }
     }
 
@@ -638,23 +636,23 @@ contract Tally is ITallyVerifier {
     function _lambda(uint256[16] memory idx, uint256 i, uint256 k) internal pure returns (uint256) {
         uint256 num = 1;
         uint256 den = 1;
-        uint256 xi = idx[i] % Bn128.R;
+        uint256 xi = idx[i] % BabyJub.ORDER;
         for (uint256 j; j < k; ++j) {
             if (j == i) continue;
-            uint256 xj = idx[j] % Bn128.R;
-            num = mulmod(num, xj, Bn128.R);
-            den = mulmod(den, addmod(xj, Bn128.R - xi, Bn128.R), Bn128.R);
+            uint256 xj = idx[j] % BabyJub.ORDER;
+            num = mulmod(num, xj, BabyJub.ORDER);
+            den = mulmod(den, addmod(xj, BabyJub.ORDER - xi, BabyJub.ORDER), BabyJub.ORDER);
         }
-        return mulmod(num, _inv(den), Bn128.R);
+        return mulmod(num, _inv(den), BabyJub.ORDER);
     }
 
     function _inv(uint256 a) internal pure returns (uint256 res) {
         res = 1;
-        uint256 base = a % Bn128.R;
-        uint256 exp = Bn128.R - 2;
+        uint256 base = a % BabyJub.ORDER;
+        uint256 exp = BabyJub.ORDER - 2;
         while (exp > 0) {
-            if (exp & 1 == 1) res = mulmod(res, base, Bn128.R);
-            base = mulmod(base, base, Bn128.R);
+            if (exp & 1 == 1) res = mulmod(res, base, BabyJub.ORDER);
+            base = mulmod(base, base, BabyJub.ORDER);
             exp >>= 1;
         }
     }
@@ -674,7 +672,7 @@ contract Tally is ITallyVerifier {
         bool finalPartial
     ) internal {
         uint256 electionId = w[0];
-        if (!Bn128.validPoint(w[1], w[2]) || (w[1] == 0 && w[2] == 0)) revert InvalidPartial();
+        if (!BabyJub.validPoint(w[1], w[2]) || (w[1] == 0 && w[2] == 0)) revert InvalidPartial();
         if (slot.posted) revert PartialAlreadyPosted();
         address cer = ceremonyOf[electionId];
         if (cer == address(0)) revert NotGuardian();

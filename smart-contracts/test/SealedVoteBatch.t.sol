@@ -16,6 +16,7 @@ import {IElectionFactory} from "../src/interfaces/IElectionFactory.sol";
 import {L1TallyMirror} from "../src/l2/L1TallyMirror.sol";
 import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 import {PoseidonT3} from "../src/hasher/PoseidonT3.sol";
+import {BabyJub} from "../src/zk/BabyJub.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
@@ -99,33 +100,16 @@ contract PartialMath {
         p.sz = addmod(schnorrNonce, mulmod(es, share, field), field);
     }
 
-    function mulG(uint256 s) external view returns (uint256 xOut, uint256 yOut) {
-        return this.mul(1, 2, s);
+    function mulG(uint256 s) external pure returns (uint256 xOut, uint256 yOut) {
+        return BabyJub.mulBase(s);
     }
 
-    function add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external view returns (uint256 xOut, uint256 yOut) {
-        if (x1 == 0 && y1 == 0) return (x2, y2);
-        if (x2 == 0 && y2 == 0) return (x1, y1);
-        uint256[4] memory input;
-        input[0] = x1;
-        input[1] = y1;
-        input[2] = x2;
-        input[3] = y2;
-        uint256[2] memory output;
-        bool ok;
-        assembly ("memory-safe") {
-            ok := staticcall(gas(), 6, input, 128, output, 64)
-        }
-        require(ok, "ecadd");
-        xOut = output[0];
-        yOut = output[1];
+    function add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external pure returns (uint256 xOut, uint256 yOut) {
+        return BabyJub.add(x1, y1, x2, y2);
     }
 
-    function sub(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external view returns (uint256 xOut, uint256 yOut) {
-        if (x2 == 0 && y2 == 0) return (x1, y1);
-        uint256 p = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
-        uint256 ny = y2 == 0 ? uint256(0) : p - y2;
-        return this.add(x1, y1, x2, ny);
+    function sub(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external pure returns (uint256 xOut, uint256 yOut) {
+        return BabyJub.sub(x1, y1, x2, y2);
     }
 
     struct Hot {
@@ -238,7 +222,7 @@ contract PartialMath {
     function encMsg(Hot memory h) external view returns (uint256 x, uint256 y) {
         (uint256 rx, uint256 ry) = this.mul(h.pkX, h.pkY, h.r);
         if (h.bit == 0) return (rx, ry);
-        return this.add(rx, ry, 1, 2);
+        return this.add(rx, ry, BabyJub.GX, BabyJub.GY);
     }
 
     function cdsProof(Hot memory h) external view returns (uint256[12] memory proof) {
@@ -259,7 +243,7 @@ contract PartialMath {
     function simCommit(Hot memory h) external view returns (uint256[4] memory p) {
         uint256 mX = h.c2x;
         uint256 mY = h.c2y;
-        if (h.bit == 0) (mX, mY) = this.sub(h.c2x, h.c2y, 1, 2);
+        if (h.bit == 0) (mX, mY) = this.sub(h.c2x, h.c2y, BabyJub.GX, BabyJub.GY);
         (uint256 zx, uint256 zy) = this.mulG(h.zSim);
         (uint256 ex, uint256 ey) = this.mul(h.c1x, h.c1y, h.eSim);
         (p[0], p[1]) = this.sub(zx, zy, ex, ey);
@@ -340,27 +324,49 @@ contract PartialMath {
         }
     }
 
-    function mul(uint256 x, uint256 y, uint256 s) external view returns (uint256 xOut, uint256 yOut) {
-        uint256[3] memory input;
-        input[0] = x;
-        input[1] = y;
-        input[2] = s % _field();
-        uint256[2] memory output;
-        bool ok;
-        assembly ("memory-safe") {
-            ok := staticcall(gas(), 7, input, 96, output, 64)
-        }
-        require(ok, "ecmul");
-        xOut = output[0];
-        yOut = output[1];
+    function mul(uint256 x, uint256 y, uint256 s) external pure returns (uint256 xOut, uint256 yOut) {
+        return BabyJub.mul(x, y, s);
     }
 
     function _field() private pure returns (uint256) {
-        return 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+        return BabyJub.ORDER;
     }
 }
 
 /// @notice Sealed hourly, final, and supplementary batches.
+/// @notice Prices one Groth16 pairing (four BN254 pairs, the snarkjs shape) and accepts.
+/// @dev The points have to be on-curve. An invalid point makes the precompile burn the
+///      whole stipend, which would price the chunk as "all remaining gas".
+contract PairingBurn {
+    function verifyProof(uint256[2] calldata, uint256[2][2] calldata, uint256[2] calldata, uint256[] calldata)
+        external
+        view
+        returns (bool)
+    {
+        uint256[24] memory input;
+        // G1 generator (1, 2) and the G2 generator, imaginary part then real part.
+        uint256 g2xi = 11559732032986387107991004021392285783925812861821192530917403151452391805634;
+        uint256 g2xr = 10857046999023057135944570762232829481370756359578518086990519993285655852781;
+        uint256 g2yi = 4082367875863433681332203403145435568316851327593401208105741076214120093531;
+        uint256 g2yr = 8495653923123431417604973247489272438418190587263600148770280649306958101930;
+        for (uint256 i; i < 4; ++i) {
+            uint256 o = i * 6;
+            input[o] = 1;
+            input[o + 1] = 2;
+            input[o + 2] = g2xi;
+            input[o + 3] = g2xr;
+            input[o + 4] = g2yi;
+            input[o + 5] = g2yr;
+        }
+        bool ok;
+        assembly ("memory-safe") {
+            ok := staticcall(gas(), 8, input, 768, 0, 0)
+        }
+        ok;
+        return true;
+    }
+}
+
 contract SealedVoteBatchTest is Deployer {
     using stdStorage for StdStorage;
 
@@ -405,7 +411,7 @@ contract SealedVoteBatchTest is Deployer {
         (, bool pending) = inbox.forcedInRoot(id, sid);
         assertFalse(pending);
         assertEq(inbox.pendingForcedIn(id).length, 0);
-        assertEq(settlement.postedUnique(id), 0, "a replacement does not add a voter");
+        assertEq(settlement.postedUnique(id), 1, "the forced ballot is summed");
         assertTrue(settlement.supplementaryPosted(id));
     }
 
@@ -453,7 +459,7 @@ contract SealedVoteBatchTest is Deployer {
         vm.warp(tally.tallyAllowedAt(id));
         this.expectBadChain(id, finalRoot, hourly, sid);
         this.suppOne(id, finalRoot, hourly, keccak256("f4b"), sid, false);
-        assertEq(settlement.postedUnique(id), 0, "an unsettled force-in is not a first-ballot step");
+        assertEq(settlement.postedUnique(id), 1, "the forced ballot is summed");
         (, bool stillPending) = inbox.forcedInRoot(id, sid);
         assertFalse(stillPending);
     }
@@ -553,6 +559,19 @@ contract SealedVoteBatchTest is Deployer {
         assertEq(inbox.unconsumedCount(id), 1);
     }
 
+    function testSupplementaryOmittingABallotReverts() public {
+        (uint256 id, address el) = this.openLinked(1 hours);
+        submitVote(id, el, 7);
+        bytes32 hourly = keccak256("h-supp-omit");
+        bytes32 root = keccak256("r-supp-omit");
+        this.hour(id, root, hourly, keccak256("f-supp-omit"), 0, 0);
+        vm.warp(tally.tallyAllowedAt(id) + settlement.SUPPLEMENTARY_GRACE());
+        vm.expectRevert(IRollupSettlement.UnconsumedBallot.selector);
+        this.suppEmpty(id, root, hourly, keccak256("f-supp-omit"), sequencer);
+        assertEq(inbox.unconsumedCount(id), 1);
+        assertFalse(settlement.supplementaryPosted(id));
+    }
+
     function testChallengeWindowRejectsZeroAndGatesTally() public {
         (uint256 id, address el) = createElection();
         assertEq(tally.challengeWindow(id), tally.MIN_CHALLENGE_WINDOW());
@@ -625,8 +644,8 @@ contract SealedVoteBatchTest is Deployer {
         vm.expectRevert(GuardianCeremony.NotGuardian.selector);
         this.postDeal(id, makeAddr("stranger"), 2, 3, 19);
         vm.expectRevert(GuardianCeremony.BadSchnorr.selector);
-        this.postBadDeal(id, gs[1], 3, FIELD - 2, 13);
-        this.postDeal(id, gs[1], 3, FIELD - 2, 13);
+        this.postBadDeal(id, gs[1], 3, BabyJub.ORDER - 2, 13);
+        this.postDeal(id, gs[1], 3, BabyJub.ORDER - 2, 13);
         assertEq(ceremony.guardianIndex(id, ElectionType.POLL, gs[1]), 2);
         this.postDeal(id, gs[0], 2, 3, 11);
         assertTrue(ceremony.keyPosted(id, ElectionType.POLL));
@@ -776,7 +795,9 @@ contract SealedVoteBatchTest is Deployer {
         tally.submitFinalPartial(id, 0, bad.dX, bad.dY, bad.aX, bad.aY, bad.bX, bad.bY, bad.z);
         assertFalse(tally.optionPartialPosted(id, 0, makeAddr("g2")));
         uint256 share3 = addmod(
-            addmod(2, mulmod(3, 3, FIELD), FIELD), addmod(3, mulmod(FIELD - 2, 3, FIELD), FIELD), FIELD
+            addmod(2, mulmod(3, 3, BabyJub.ORDER), BabyJub.ORDER),
+            addmod(3, mulmod((BabyJub.ORDER - 2) % BabyJub.ORDER, 3, BabyJub.ORDER), BabyJub.ORDER),
+            BabyJub.ORDER
         );
         this.oneOption(id, makeAddr("g3"), 1, share3, 51, opt1.c1X, opt1.c1Y);
         assertTrue(tally.optionPartialPosted(id, 1, makeAddr("g3")));
@@ -1046,7 +1067,7 @@ contract SealedVoteBatchTest is Deployer {
         vm.warp(tally.tallyAllowedAt(id) + settlement.SUPPLEMENTARY_GRACE());
         this.suppIds(id, hourRoot, hourly, keccak256("fchunk"), ids);
         assertEq(inbox.pendingForcedIn(id).length, 0);
-        assertEq(settlement.postedUnique(id), 0);
+        assertEq(settlement.postedUnique(id), 9);
     }
 
     function testEmptyIndexedRootOnlyAtDepth20() public {
@@ -1120,17 +1141,24 @@ contract SealedVoteBatchTest is Deployer {
         assertFalse(ceremony.keyPosted(id, ElectionType.POLL));
     }
 
-    function testClosedBallotCountMidVoteReverts() public {
+    function testClosedBallotCountMidVoteReturnsPostedTurnout() public {
         ElectionParams memory params = defaultParams();
         params.electionType = ElectionType.VOTE;
         vm.warp(Fixtures.TIME_ORIGIN);
         (uint256 id, address el) = createElection(params);
-        vm.prank(admin);
+        ceremony = new GuardianCeremony(address(factory));
+        vm.startPrank(admin);
         inbox.setSettlement(id, address(settlement));
+        inbox.setCeremony(id, address(ceremony));
+        tally.setCeremony(id, address(ceremony));
+        vm.stopPrank();
+        this.sealKey(id);
+        registerVoter(id, Fixtures.identityCommitment(uint256(1)));
+        freezeRoll(el);
         warpOpen(el);
+        this.hourMany(id, keccak256("vote-hour"), keccak256("vh"), keccak256("vf"), 2);
         assertLt(block.timestamp, uint256(IElection(el).params().cutoffTime));
-        vm.expectRevert(IBallotInbox.TurnoutNotPublished.selector);
-        inbox.closedBallotCount(id);
+        assertEq(inbox.closedBallotCount(id), 2);
     }
 
     function testDropAbsentFinalizesTwoOfThree() public {
@@ -1143,7 +1171,7 @@ contract SealedVoteBatchTest is Deployer {
         vm.prank(tallyOperator);
         ceremony.openCeremony(id, ElectionType.POLL, 2, 3, gs);
         this.postDeal(id, gs[0], 2, 3, 11);
-        this.postDeal(id, gs[1], 3, FIELD - 2, 13);
+        this.postDeal(id, gs[1], 3, BabyJub.ORDER - 2, 13);
         vm.expectRevert(GuardianCeremony.ComplaintWindowOpen.selector);
         ceremony.dropAbsent(id, ElectionType.POLL);
         vm.warp(block.timestamp + 1 hours);
@@ -1289,9 +1317,9 @@ contract SealedVoteBatchTest is Deployer {
 
     function testOneHotReplayAcrossElectionAndSubmission() public {
         (uint256 id,) = this.openLinked(2 hours);
-        vm.expectRevert(IRollupSettlement.OneHotRejected.selector);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         this.replayRow(id, id + 1, 71);
-        vm.expectRevert(IRollupSettlement.OneHotRejected.selector);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         this.replayRow(id, id, 72);
     }
 
@@ -1342,14 +1370,15 @@ contract SealedVoteBatchTest is Deployer {
     function testIndexSwappedOneHotProofReverts() public {
         (uint256 id,) = this.openLinked(2 hours);
         (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed) = this.threeRows(id);
-        rows[0].options[0] = this.oneCipher(id, 42, 1, 1, 1);
-        vm.expectRevert(IRollupSettlement.OneHotRejected.selector);
+        rows[0].options[0] = this.oneCipher(id, 42, 9, 1, 1);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         this.postRows(id, keccak256("opt-index"), 0, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
     }
 
     function testUnknownOldVectorReverts() public {
         (uint256 id, address el) = this.openLinked(4 hours);
         this.hourOptions(id, keccak256("old-hour"), keccak256("oh"), keccak256("of"), 4200);
+        this.acceptFresh(id, 99999);
         this.acceptFresh(id, 4201);
         warpClosed(el);
         vm.expectRevert(IRollupSettlement.OldOptionsMismatch.selector);
@@ -1380,18 +1409,135 @@ contract SealedVoteBatchTest is Deployer {
     }
 
     function testSixtyFourRowFourOptionBatchGas() public {
-        (uint256 id,) = this.openLinked(4 hours);
+        PairingBurn burn = new PairingBurn();
+        vm.prank(admin);
+        settlement.setChunkVerifier(address(burn));
+        (uint256 id, address el) = this.openLinked(4 hours);
         (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed, uint256[4] memory sum)
             = this.buildSixtyFour(id);
-        uint256 used = this.measureRows(id, keccak256("g64"), rows, claimed, sum);
+        (bool ok, bytes memory ret) = address(this).call(
+            abi.encodeWithSelector(this.measureRows.selector, id, keccak256("g64"), rows, claimed, sum)
+        );
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(ret, 0x20), mload(ret))
+            }
+        }
+        uint256 used = abi.decode(ret, (uint256));
         console2.log("option-64x4-gas", used);
-        // On-chain 0/1 checks for 64 ballots and 4 options. Measured near 3.26e9.
-        assertLt(used, 4_000_000_000);
+        assertLt(used, 15_000_000);
+        warpClosed(el);
+        uint256 finalGas = this.measureFinal(id, keccak256("g64-final"));
+        console2.log("final-batch-gas", finalGas);
+        assertLt(finalGas, 15_000_000);
+    }
+
+    function testAcceptFourOptionBallotGas() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        IRollupSettlement.BallotRow memory row = this.buildRow(id, 4242, 3, 1);
+        row.options = new IRollupSettlement.OptionCipher[](4);
+        row.options[0] = this.oneCipher(id, 4242, 1, 1, 0);
+        row.options[1] = this.oneCipher(id, 4242, 2, 0, 1);
+        row.options[2] = this.oneCipher(id, 4242, 4, 0, 2);
+        row.options[3] = this.oneCipher(id, 4242, 8, 0, 3);
+        uint256 used = this.measureAccept(id, row);
+        console2.log("accept-4opt-gas", used);
+        assertLt(used, 1_000_000);
+    }
+
+    function testBadBlobRejectedAndFinalSettles() public {
+        (uint256 id, address el) = this.openLinked(2 hours);
+        bytes memory bad = abi.encodePacked(bytes2("EG"), bytes32(uint256(1)), bytes32(uint256(2)), bytes32(uint256(3)), bytes32(uint256(4)), bytes32(uint256(1)));
+        vm.expectRevert(IBallotInbox.NonCanonicalBallot.selector);
+        this.submitRaw(id, 77, bad);
+        bytes memory off = abi.encodePacked(bytes2("EG"), bytes32(uint256(1)), bytes32(uint256(2)), bytes32(uint256(3)), bytes32(uint256(4)));
+        vm.expectRevert(IBallotInbox.PointOffCurve.selector);
+        this.submitRaw(id, 78, off);
+        assertEq(inbox.unconsumedCount(id), 0);
+        this.hourOpening(id, keccak256("good"), keccak256("hg"), keccak256("fg"), 0, 1);
+        warpClosed(el);
+        this.sealFinal(id, keccak256("fin"), keccak256("hg"), keccak256("fg"), 1);
+        assertTrue(settlement.finalBatchPosted(id));
+    }
+
+    function testOlderReplacementReverts() public {
+        (uint256 id, address el) = this.openLinked(4 hours);
+        this.hourOptions(id, keccak256("old-a"), keccak256("ha"), keccak256("fa"), 4200);
+        this.acceptFresh(id, 4201);
+        this.acceptFresh(id, 4202);
+        assertLt(inbox.acceptanceSeq(id, 4201), inbox.acceptanceSeq(id, 4202));
+        warpClosed(el);
+        vm.expectRevert(IRollupSettlement.StaleReplacement.selector);
+        this.finalReplace(id, keccak256("stale"), 4201, 4202);
+    }
+
+    function testSecondReplacementOfOldSidReverts() public {
+        (uint256 id, address el) = this.openLinked(4 hours);
+        this.hourOptions(id, keccak256("rep-h"), keccak256("rh2"), keccak256("rf2"), 4200);
+        this.acceptFresh(id, 4201);
+        this.acceptFresh(id, 4202);
+        warpClosed(el);
+        vm.expectRevert(IRollupSettlement.OldOptionsMismatch.selector);
+        this.finalReplaceBoth(id, keccak256("rep-both"));
+    }
+
+    function testHonestDealerSurvivesFalseComplaint() public {
+        (uint256 id,) = createElection();
+        ceremony = new GuardianCeremony(address(factory));
+        address[] memory gs = new address[](2);
+        gs[0] = makeAddr("g1");
+        gs[1] = makeAddr("g2");
+        vm.prank(tallyOperator);
+        ceremony.openCeremony(id, ElectionType.POLL, 2, 2, gs);
+        this.postDeal(id, gs[0], 2, 3, 11);
+        vm.prank(gs[1]);
+        ceremony.openShareDispute(id, ElectionType.POLL, 1);
+        vm.prank(gs[0]);
+        ceremony.revealShare(id, ElectionType.POLL, 8);
+        this.postDeal(id, gs[1], 3, 5, 13);
+        assertTrue(ceremony.keyPosted(id, ElectionType.POLL));
+    }
+
+    function testBadShareRevealExcludesDealer() public {
+        (uint256 id,) = createElection();
+        ceremony = new GuardianCeremony(address(factory));
+        address[] memory gs = new address[](2);
+        gs[0] = makeAddr("g1");
+        gs[1] = makeAddr("g2");
+        vm.prank(tallyOperator);
+        ceremony.openCeremony(id, ElectionType.POLL, 2, 2, gs);
+        this.postDeal(id, gs[0], 2, 3, 11);
+        vm.prank(gs[1]);
+        ceremony.openShareDispute(id, ElectionType.POLL, 1);
+        vm.prank(gs[0]);
+        ceremony.revealShare(id, ElectionType.POLL, 9);
+        assertFalse(ceremony.keyPosted(id, ElectionType.POLL));
+        vm.expectRevert(GuardianCeremony.NotGuardian.selector);
+        this.postDeal(id, gs[0], 2, 3, 19);
+    }
+
+    function testUnsignedShareExpiresDealer() public {
+        (uint256 id,) = createElection();
+        ceremony = new GuardianCeremony(address(factory));
+        address[] memory gs = new address[](2);
+        gs[0] = makeAddr("g1");
+        gs[1] = makeAddr("g2");
+        vm.prank(tallyOperator);
+        ceremony.openCeremony(id, ElectionType.POLL, 2, 2, gs);
+        this.postDeal(id, gs[0], 2, 3, 11);
+        vm.prank(gs[1]);
+        ceremony.openShareDispute(id, ElectionType.POLL, 1);
+        vm.expectRevert(GuardianCeremony.DisputeWindowOpen.selector);
+        ceremony.expireShareDispute(id, ElectionType.POLL, 1);
+        vm.warp(block.timestamp + 1 hours);
+        ceremony.expireShareDispute(id, ElectionType.POLL, 1);
+        assertFalse(ceremony.keyPosted(id, ElectionType.POLL));
     }
 
     function replayRow(uint256 id, uint256 proofElection, uint256 submissionId) external {
         IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
         rows[0] = this.proofRow(id, proofElection, submissionId);
+        (rows[0].c1X, rows[0].c1Y) = math.mulG(9);
         this.postRows(
             id,
             keccak256(abi.encodePacked("replay", submissionId)),
@@ -1435,7 +1581,6 @@ contract SealedVoteBatchTest is Deployer {
         rows = new IRollupSettlement.BallotRow[](1);
         rows[0] = this.buildRow(id, submissionId, 7, 1);
         rows[0].options = this.threeCiphers(id, submissionId);
-        rows[0].sumProof = this.sumAt(id, submissionId, 7, 19, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
         this.acceptRow(id, rows[0]);
         claimed = new IRollupSettlement.OptionPoint[](3);
         claimed[0] = this.pointOf(rows[0].options[0]);
@@ -1459,7 +1604,6 @@ contract SealedVoteBatchTest is Deployer {
         row.options = new IRollupSettlement.OptionCipher[](2);
         row.options[0] = this.oneCipher(id, submissionId, 4, 0, 0);
         row.options[1] = this.oneCipher(id, submissionId, 5, 1, 1);
-        row.sumProof = this.sumAt(id, submissionId, 9, 23, row.c1X, row.c1Y, row.c2X, row.c2Y);
         this.acceptRow(id, row);
     }
 
@@ -1503,6 +1647,55 @@ contract SealedVoteBatchTest is Deployer {
         settlement.submitFinalBatch(p, none, none, rows, claimed, pa, pb, pc);
     }
 
+    /// @dev Two replacements of submission 4200. The second sees the stored vector cleared.
+    function finalReplaceBoth(uint256 id, bytes32 root) external {
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](2);
+        rows[0] = this.revoteRow(id, 4201, 4200);
+        rows[1] = this.revoteRow(id, 4202, 4200);
+        IRollupSettlement.OptionPoint[] memory claimed = new IRollupSettlement.OptionPoint[](2);
+        (uint256 x0, uint256 y0) = math.add(rows[0].options[0].c1X, rows[0].options[0].c1Y, rows[1].options[0].c1X, rows[1].options[0].c1Y);
+        (uint256 u0, uint256 v0) = math.add(rows[0].options[0].c2X, rows[0].options[0].c2Y, rows[1].options[0].c2X, rows[1].options[0].c2Y);
+        (uint256 x1, uint256 y1) = math.add(rows[0].options[1].c1X, rows[0].options[1].c1Y, rows[1].options[1].c1X, rows[1].options[1].c1Y);
+        (uint256 u1, uint256 v1) = math.add(rows[0].options[1].c2X, rows[0].options[1].c2Y, rows[1].options[1].c2X, rows[1].options[1].c2Y);
+        IRollupSettlement.Ciphertext memory old0 = settlement.optionCiphertext(id, 0);
+        IRollupSettlement.Ciphertext memory old1 = settlement.optionCiphertext(id, 1);
+        (x0, y0) = math.sub(x0, y0, old0.c1X, old0.c1Y);
+        (x0, y0) = math.sub(x0, y0, old0.c1X, old0.c1Y);
+        (u0, v0) = math.sub(u0, v0, old0.c2X, old0.c2Y);
+        (u0, v0) = math.sub(u0, v0, old0.c2X, old0.c2Y);
+        (x1, y1) = math.sub(x1, y1, old1.c1X, old1.c1Y);
+        (x1, y1) = math.sub(x1, y1, old1.c1X, old1.c1Y);
+        (u1, v1) = math.sub(u1, v1, old1.c2X, old1.c2Y);
+        (u1, v1) = math.sub(u1, v1, old1.c2X, old1.c2Y);
+        claimed[0] = IRollupSettlement.OptionPoint(x0, y0, u0, v0);
+        claimed[1] = IRollupSettlement.OptionPoint(x1, y1, u1, v1);
+        IRollupSettlement.Ciphertext memory prev = settlement.chainedHourly(id);
+        (uint256 px, uint256 py) = math.sub(prev.c1X, prev.c1Y, prev.c1X, prev.c1Y);
+        (px, py) = math.sub(px, py, prev.c1X, prev.c1Y);
+        (uint256 pu, uint256 pv) = math.sub(prev.c2X, prev.c2Y, prev.c2X, prev.c2Y);
+        (pu, pv) = math.sub(pu, pv, prev.c2X, prev.c2Y);
+        (px, py) = math.add(px, py, rows[0].c1X, rows[0].c1Y);
+        (pu, pv) = math.add(pu, pv, rows[0].c2X, rows[0].c2Y);
+        (px, py) = math.add(px, py, rows[1].c1X, rows[1].c1Y);
+        (pu, pv) = math.add(pu, pv, rows[1].c2X, rows[1].c2Y);
+        bytes32[] memory none = new bytes32[](0);
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 2, root, settlement.hourlyProduct(id), keccak256("both"), 1, 1, bytes32(0), sequencer), none, none
+        );
+        p.prevC1X = prev.c1X;
+        p.prevC1Y = prev.c1Y;
+        p.prevC2X = prev.c2X;
+        p.prevC2Y = prev.c2Y;
+        p.nextC1X = px;
+        p.nextC1Y = py;
+        p.nextC2X = pu;
+        p.nextC2Y = pv;
+        p.chainHash = settlement.chainHashOf(rows);
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_FINAL());
+        vm.prank(sequencer);
+        settlement.submitFinalBatch(p, none, none, rows, claimed, pa, pb, pc);
+    }
+
     function revoteRow(uint256 id, uint256 submissionId, uint256 oldId)
         external
         view
@@ -1513,7 +1706,6 @@ contract SealedVoteBatchTest is Deployer {
         row.options = new IRollupSettlement.OptionCipher[](2);
         row.options[0] = this.oneCipher(id, submissionId, 4, 0, 0);
         row.options[1] = this.oneCipher(id, submissionId, 5, 1, 1);
-        row.sumProof = this.sumAt(id, submissionId, 9, 23, row.c1X, row.c1Y, row.c2X, row.c2Y);
     }
 
     function buildSixtyFour(uint256 id)
@@ -1546,8 +1738,7 @@ contract SealedVoteBatchTest is Deployer {
         row.options[1] = this.oneCipher(id, submissionId, 2, 0, 1);
         row.options[2] = this.oneCipher(id, submissionId, 4, 0, 2);
         row.options[3] = this.oneCipher(id, submissionId, 8, 0, 3);
-        row.sumProof = this.sumAt(id, submissionId, 15, 29, row.c1X, row.c1Y, row.c2X, row.c2Y);
-        this.acceptRow(id, row);
+        this.acceptStored(id, row);
         (next[0], next[1]) = math.add(sum[0], sum[1], row.c1X, row.c1Y);
         (next[2], next[3]) = math.add(sum[2], sum[3], row.c2X, row.c2Y);
         optNext = opt;
@@ -1579,12 +1770,48 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC1Y = sum[1];
         p.nextC2X = sum[2];
         p.nextC2Y = sum[3];
-        p.chainHash = settlement.chainHashOf(rows);
+        // The batch does not recompute this fold. A placeholder keeps the measured call free of it.
+        p.chainHash = bytes32(uint256(1));
         p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        used = this.priceHourly(p, bound, tags, rows, options);
+    }
+
+    function priceHourly(
+        IRollupSettlement.SealedParams calldata p,
+        bytes32[] calldata bound,
+        bytes32[] calldata tags,
+        IRollupSettlement.BallotRow[] calldata rows,
+        IRollupSettlement.OptionPoint[] calldata options
+    ) external returns (uint256 used) {
         uint256 before = gasleft();
         vm.prank(sequencer);
         settlement.submitHourlyBatch(p, bound, tags, rows, options, pa, pb, pc);
         used = before - gasleft();
+    }
+
+    function acceptStored(uint256 id, IRollupSettlement.BallotRow memory row) external {
+        bytes memory enc = abi.encodePacked(bytes2("EG"), bytes32(row.c1X), bytes32(row.c1Y), bytes32(row.c2X), bytes32(row.c2Y));
+        enc = abi.encodePacked(enc, bytes32(row.options.length));
+        for (uint256 i; i < row.options.length; ++i) {
+            enc = abi.encodePacked(
+                enc,
+                bytes32(row.options[i].c1X),
+                bytes32(row.options[i].c1Y),
+                bytes32(row.options[i].c2X),
+                bytes32(row.options[i].c2Y)
+            );
+        }
+        uint256[] memory inputs = this.cheapInputs(id, row.submissionId, enc);
+        vm.prank(relayer);
+        inbox.submitVote(id, pa, pb, pc, inputs, enc);
+    }
+
+    function cheapInputs(uint256 id, uint256 submissionId, bytes memory enc)
+        external
+        view
+        returns (uint256[] memory inputs)
+    {
+        inputs = voteInputs(id, factory.getElection(id), submissionId, enc);
     }
 
     function threeCiphers(uint256 id, uint256 submissionId)
@@ -1603,8 +1830,8 @@ contract SealedVoteBatchTest is Deployer {
         view
         returns (IRollupSettlement.OptionCipher memory o)
     {
-        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, ElectionType.POLL);
-        (o.c1X, o.c1Y, o.c2X, o.c2Y, o.oneHot) =
+        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, this.kindOf(id));
+        (o.c1X, o.c1Y, o.c2X, o.c2Y,) =
             math.oneHotAt(r, bit, pkX, pkY, 11, 5, 13, id, submissionId, address(settlement), optionIndex);
     }
 
@@ -1618,7 +1845,7 @@ contract SealedVoteBatchTest is Deployer {
         uint256 c2x,
         uint256 c2y
     ) external view returns (uint256[5] memory) {
-        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, ElectionType.POLL);
+        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, this.kindOf(id));
         return math.sumToOne(r, pkX, pkY, c1x, c1y, c2x, c2y, a, id, submissionId, address(settlement));
     }
 
@@ -1710,7 +1937,7 @@ contract SealedVoteBatchTest is Deployer {
         vm.prank(tallyOperator);
         ceremony.openCeremony(id, ElectionType.POLL, 2, 3, gs);
         this.postDeal(id, gs[0], 2, 3, 11);
-        this.postDeal(id, gs[1], 3, FIELD - 2, 13);
+        this.postDeal(id, gs[1], 3, BabyJub.ORDER - 2, 13);
         vm.warp(block.timestamp + 1 hours);
         ceremony.dropAbsent(id, ElectionType.POLL);
         ceremony.deriveShare(id, ElectionType.POLL, 1);
@@ -1721,16 +1948,21 @@ contract SealedVoteBatchTest is Deployer {
         warpOpen(el);
     }
 
+    function kindOf(uint256 id) public view returns (uint8) {
+        return uint8(IElection(factory.getElection(id)).params().electionType);
+    }
+
     function sealKey(uint256 id) external {
+        uint8 kind = this.kindOf(id);
         address[] memory gs = new address[](2);
         gs[0] = makeAddr("g1");
         gs[1] = makeAddr("g2");
         vm.prank(tallyOperator);
-        ceremony.openCeremony(id, ElectionType.POLL, 2, 2, gs);
+        ceremony.openCeremony(id, kind, 2, 2, gs);
         this.postDeal(id, gs[0], 2, 3, 11);
-        this.postDeal(id, gs[1], 3, FIELD - 2, 13);
-        ceremony.deriveShare(id, ElectionType.POLL, 1);
-        ceremony.deriveShare(id, ElectionType.POLL, 2);
+        this.postDeal(id, gs[1], 3, BabyJub.ORDER - 2, 13);
+        ceremony.deriveShare(id, kind, 1);
+        ceremony.deriveShare(id, kind, 2);
     }
 
     function postDeal(uint256 id, address guardian, uint256 a0, uint256 a1, uint256 nonce) external {
@@ -1747,11 +1979,12 @@ contract SealedVoteBatchTest is Deployer {
         (cx[0], cy[0]) = math.mulG(a0);
         (cx[1], cy[1]) = math.mulG(a1);
         (uint256 rX, uint256 rY) = math.mulG(nonce);
-        uint256 e = ceremony.schnorrChallenge(id, ElectionType.POLL, guardian, cx, cy, rX, rY);
-        uint256 z = addmod(nonce, mulmod(e, a0, FIELD), FIELD);
+        uint8 kind = this.kindOf(id);
+        uint256 e = ceremony.schnorrChallenge(id, kind, guardian, cx, cy, rX, rY);
+        uint256 z = addmod(nonce, mulmod(e, a0, BabyJub.ORDER), BabyJub.ORDER);
         if (bad) z += 1;
         vm.prank(guardian);
-        ceremony.postGuardian(id, ElectionType.POLL, cx, cy, rX, rY, z);
+        ceremony.postGuardian(id, kind, cx, cy, rX, rY, z);
     }
 
     function signShare(uint256 id, uint8 dealer, uint8 recipient, uint256 share, uint256 a0, uint256 nonce)
@@ -1760,8 +1993,8 @@ contract SealedVoteBatchTest is Deployer {
         returns (uint256 rX, uint256 rY, uint256 z)
     {
         (rX, rY) = math.mulG(nonce);
-        uint256 e = ceremony.shareChallenge(id, ElectionType.POLL, dealer, recipient, share, rX, rY);
-        z = addmod(nonce, mulmod(e, a0, FIELD), FIELD);
+        uint256 e = ceremony.shareChallenge(id, this.kindOf(id), dealer, recipient, share, rX, rY);
+        z = addmod(nonce, mulmod(e, a0, BabyJub.ORDER), BabyJub.ORDER);
     }
 
     function postWide(uint256 id, address guardian, uint256 a0, uint256 nonce) external {
@@ -1789,7 +2022,7 @@ contract SealedVoteBatchTest is Deployer {
         }
         (uint256 rX, uint256 rY) = math.mulG(nonce);
         uint256 e = ceremony.schnorrChallenge(id, ElectionType.POLL, guardian, cx, cy, rX, rY);
-        uint256 z = addmod(nonce, mulmod(e, a0, FIELD), FIELD);
+        uint256 z = addmod(nonce, mulmod(e, a0, BabyJub.ORDER), BabyJub.ORDER);
         vm.prank(guardian);
         ceremony.postGuardian(id, ElectionType.POLL, cx, cy, rX, rY, z);
     }
@@ -1871,7 +2104,7 @@ contract SealedVoteBatchTest is Deployer {
         if (word == bytes32(0)) word = bytes32(inbox.emptyBallotRoot(20));
     }
 
-    function openingRow(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, uint256[12] memory proof)
+    function openingRow(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, uint256[12] memory)
         external
         pure
         returns (IRollupSettlement.BallotRow memory row)
@@ -1880,14 +2113,13 @@ contract SealedVoteBatchTest is Deployer {
         row.c1Y = c1y;
         row.c2X = c2x;
         row.c2Y = c2y;
-        row.oneHot = proof;
     }
 
     /// @dev One first ballot encrypting 0 under the joint key, with c1 = G.
     function hourOpening(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 prevU, uint256 nextU)
         external
     {
-        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, ElectionType.POLL);
+        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, this.kindOf(id));
         uint256 submissionId = 9100;
         (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, uint256[12] memory proof) =
             math.oneHot(1, 0, pkX, pkY, 11, 5, 13, id, submissionId, address(settlement));
@@ -1951,7 +2183,7 @@ contract SealedVoteBatchTest is Deployer {
         view
         returns (IRollupSettlement.BallotRow memory row)
     {
-        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, ElectionType.POLL);
+        (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, this.kindOf(id));
         (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, uint256[12] memory proof) =
             math.oneHot(r, bit, pkX, pkY, 11, 5, 13, id, submissionId, address(settlement));
         row = this.openingRow(c1x, c1y, c2x, c2y, proof);
@@ -2031,11 +2263,10 @@ contract SealedVoteBatchTest is Deployer {
         this.hourPost(id, root, hourly, finalP, 0, 1, rows, sum);
     }
 
-    function hourOptions(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 submissionId) external {
+    function hourOptions(uint256 id, bytes32 root, bytes32, bytes32, uint256 submissionId) external {
         IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
         rows[0] = this.buildRow(id, submissionId, 3, 1);
         rows[0].options = this.twoCiphers(id, submissionId);
-        rows[0].sumProof = this.sumAt(id, submissionId, 3, 17, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
         this.acceptRow(id, rows[0]);
         IRollupSettlement.OptionPoint[] memory claimed = new IRollupSettlement.OptionPoint[](2);
         claimed[0] = this.pointOf(rows[0].options[0]);
@@ -2160,7 +2391,6 @@ contract SealedVoteBatchTest is Deployer {
         nextU = n + 1;
         if (withOption) {
             rows[0].options = this.twoCiphers(id, submissionId);
-            rows[0].sumProof = this.sumAt(id, submissionId, 3, 17, c1x, c1y, c2x, c2y);
             options = new IRollupSettlement.OptionPoint[](2);
             options[0] = this.pointOf(rows[0].options[0]);
             options[1] = this.pointOf(rows[0].options[1]);
@@ -2226,7 +2456,8 @@ contract SealedVoteBatchTest is Deployer {
     function submitHour(uint256 id, address guardian, uint256 share, uint256 nonce, uint256 hourIndex, bool bad)
         external
     {
-        this.submitHourAt(id, guardian, share, nonce, hourIndex, 1, 2, bad);
+        IRollupSettlement.Ciphertext memory ct = settlement.hourlyCiphertext(id, hourIndex);
+        this.submitHourAt(id, guardian, share, nonce, hourIndex, ct.c1X, ct.c1Y, bad);
     }
 
     function submitHourAt(
@@ -2379,14 +2610,51 @@ contract SealedVoteBatchTest is Deployer {
     }
 
     function postSupp(Job memory job, uint256[] memory included) external {
+        (IRollupSettlement.BallotRow[] memory rows, uint256[4] memory sum) = this.forcedRows(job.id, included);
+        if (included.length > 0) job.nextU = job.prevU + included.length;
         bytes32[] memory none = new bytes32[](0);
         IRollupSettlement.SealedParams memory p = this.filled(job, none, none);
         p.tagHash = bytes32(settlement.foldScalars(included));
+        p.nextC1X = sum[0];
+        p.nextC1Y = sum[1];
+        p.nextC2X = sum[2];
+        p.nextC2Y = sum[3];
+        p.chainHash = settlement.chainHashOf(rows);
         p.dataHash = settlement.computeSealedDataHash(p, job.kind);
         vm.prank(job.who);
         settlement.submitSupplementaryBatch(
-            p, included, new IRollupSettlement.BallotRow[](0), new IRollupSettlement.OptionPoint[](0), pa, pb, pc
+            p, included, rows, new IRollupSettlement.OptionPoint[](0), pa, pb, pc
         );
+    }
+
+    /// @dev A forced receipt is an accepted ballot. The supplementary batch sums it and consumes it.
+    function forcedRows(uint256 id, uint256[] memory included)
+        external
+        view
+        returns (IRollupSettlement.BallotRow[] memory rows, uint256[4] memory sum)
+    {
+        rows = new IRollupSettlement.BallotRow[](included.length);
+        IRollupSettlement.Ciphertext memory prev = settlement.chainedFinal(id);
+        if (
+            !settlement.finalBatchPosted(id) && prev.c1X == 0 && prev.c1Y == 0 && prev.c2X == 0 && prev.c2Y == 0
+        ) {
+            prev = settlement.chainedHourly(id);
+        }
+        sum[0] = prev.c1X;
+        sum[1] = prev.c1Y;
+        sum[2] = prev.c2X;
+        sum[3] = prev.c2Y;
+        for (uint256 i; i < included.length; ++i) {
+            (uint256 x, uint256 y, uint256 u, uint256 v,, bool set) = inbox.acceptedPrimary(id, included[i]);
+            require(set, "forced");
+            rows[i].submissionId = included[i];
+            rows[i].c1X = x;
+            rows[i].c1Y = y;
+            rows[i].c2X = u;
+            rows[i].c2Y = v;
+            (sum[0], sum[1]) = math.add(sum[0], sum[1], x, y);
+            (sum[2], sum[3]) = math.add(sum[2], sum[3], u, v);
+        }
     }
 
     function filled(Job memory job, bytes32[] memory bound, bytes32[] memory tags)
@@ -2434,6 +2702,57 @@ contract SealedVoteBatchTest is Deployer {
         p.finalProduct = finalP;
         p.previousUnique = prevU;
         p.nextUnique = nextU;
+    }
+
+    function measureFinal(uint256 id, bytes32 root) external returns (uint256 used) {
+        uint256 n = settlement.postedUnique(id);
+        bytes32 hourly = settlement.hourlyProduct(id);
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 2, root, hourly, keccak256("ff"), n, n, bytes32(0), sequencer), new bytes32[](0), new bytes32[](0)
+        );
+        used = this.priceFinal(p);
+    }
+
+    function priceFinal(IRollupSettlement.SealedParams calldata p) external returns (uint256 used) {
+        uint256 before = gasleft();
+        vm.prank(sequencer);
+        settlement.submitFinalBatch(
+            p,
+            new bytes32[](0),
+            new bytes32[](0),
+            new IRollupSettlement.BallotRow[](0),
+            new IRollupSettlement.OptionPoint[](0),
+            pa,
+            pb,
+            pc
+        );
+        used = before - gasleft();
+    }
+
+    function measureAccept(uint256 id, IRollupSettlement.BallotRow memory row) external returns (uint256 used) {
+        bytes memory enc = abi.encodePacked(bytes2("EG"), bytes32(row.c1X), bytes32(row.c1Y), bytes32(row.c2X), bytes32(row.c2Y));
+        enc = abi.encodePacked(enc, bytes32(row.options.length));
+        for (uint256 i; i < row.options.length; ++i) {
+            enc = abi.encodePacked(
+                enc, bytes32(row.options[i].c1X), bytes32(row.options[i].c1Y), bytes32(row.options[i].c2X), bytes32(row.options[i].c2Y)
+            );
+        }
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        uint256[] memory inputs = voteInputs(id, factory.getElection(id), row.submissionId, enc);
+        uint256 before = gasleft();
+        vm.prank(relayer);
+        inbox.submitVote(id, a, b, c, inputs, enc);
+        used = before - gasleft();
+    }
+
+    function submitRaw(uint256 id, uint256 submissionId, bytes memory enc) external {
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        uint256[] memory inputs = new uint256[](6);
+        inputs[2] = submissionId;
+        inputs[4] = id;
+        inputs[5] = uint256(inbox.emptyBallotRoot(20));
+        vm.prank(relayer);
+        inbox.submitVote(id, a, b, c, inputs, enc);
     }
 
     function _sign(uint256 id, IBallotInbox.RelayerReceipt memory receipt) internal view returns (bytes memory) {

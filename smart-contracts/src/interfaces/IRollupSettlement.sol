@@ -44,6 +44,7 @@ interface IRollupSettlement {
     error ReplacementOnHourly();
     error OldOptionsMismatch();
     error UnconsumedBallot();
+    error StaleReplacement();
 
     event SealedBatchPosted(
         uint256 indexed electionId, uint8 kind, uint64 indexed batchIndex, bytes32 ballotSetRoot, uint256 uniqueCount
@@ -95,22 +96,19 @@ interface IRollupSettlement {
         bool set;
     }
 
-    /// @notice One option ciphertext and its 0/1 proof under the joint key.
+    /// @notice One option ciphertext. The 0/1 proof is the per-ballot Groth16 checked at acceptance.
     struct OptionCipher {
         uint256 c1X;
         uint256 c1Y;
         uint256 c2X;
         uint256 c2Y;
-        uint256[12] oneHot;
     }
 
-    /// @notice One ballot in a batch. `oneHot` is the CDS proof under the joint key.
-    ///         `oldSubmissionId` 0 is a first ballot and adds the ciphertext.
-    ///         Any other value names the previous submission. The contract subtracts the
-    ///         vector it stored for that submission. The previous ciphertexts are not
-    ///         fields of this row. `options` is one ciphertext per choice, index-aligned.
-    ///         Their sum is this row's ciphertext, each is 0 or 1, and `sumProof` shows
-    ///         that sum encrypts 1. `sumProof` is A, B, z.
+    /// @notice One ballot in a batch. `oldSubmissionId` 0 is a first ballot and adds the ciphertext.
+    ///         Any other value names the previous submission. The contract subtracts the vector
+    ///         stored at acceptance. `options` is one ciphertext per choice, index-aligned.
+    ///         Acceptance already checked that each option is 0 or 1 and that the vector sums to 1.
+    ///         The batch sums the stored points. It does not take those proofs as inputs.
     struct BallotRow {
         uint256 submissionId;
         uint256 c1X;
@@ -118,9 +116,7 @@ interface IRollupSettlement {
         uint256 c2X;
         uint256 c2Y;
         uint256 oldSubmissionId;
-        uint256[12] oneHot;
         OptionCipher[] options;
-        uint256[5] sumProof;
     }
 
     /// @notice One choice ciphertext, index-aligned with the row vector.
