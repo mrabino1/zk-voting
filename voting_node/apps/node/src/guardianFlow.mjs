@@ -12,7 +12,7 @@ import { expectedVerificationKey, jointPublicKey, pointToHex } from './guardians
 import { pointFromHex, pointXBytes } from './guardians/p256.mjs';
 import { verifyPartial } from './guardians/threshold.mjs';
 import { electionHasRanked } from './ballot.mjs';
-import { rankingForTally, rankingTag, verifyRankingPartial } from './rankedTally.mjs';
+import { rankingForTally, rankingTag, sealedRankingAllowed, verifyRankingPartial } from './rankedTally.mjs';
 
 function fail(status, message, code) {
   throw new HttpError(status, message, { code });
@@ -124,12 +124,16 @@ export async function acceptPartials(store, electionId, body) {
   if (rankingRows.length) {
     // Sealed ranked-choice: one partial per counted ranking envelope, on its C1.
     if (!electionHasRanked(election)) {
-      fail(400, 'ranking partials are only accepted for ranked elections', 'PER_BALLOT_PARTIAL');
+      fail(400, 'ranking partials are only accepted for ranked elections', 'RANKING_NOT_ALLOWED');
+    }
+    if (!sealedRankingAllowed(election)) {
+      fail(409, 'ranked tally is disabled for this sealed vote', 'RANKED_TALLY_DISABLED');
     }
     const byTag = new Map();
     for (const env of envelopes) {
+      if (env?.is_deleted === true) continue;
       const ranking = rankingForTally(env);
-      if (ranking) byTag.set(rankingTag(env.nullifier), ranking.envelope);
+      if (ranking?.id) byTag.set(rankingTag(ranking.id), ranking.envelope);
     }
     for (const row of rankingRows) {
       row.ballotHash = row.ballotHash.toLowerCase();

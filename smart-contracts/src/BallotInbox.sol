@@ -126,7 +126,6 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => uint64) private _acceptClock;
 
     /// @dev Appended slots. Ranked-choice ranking envelope commitments.
-    mapping(uint256 => mapping(uint256 => bytes32)) private _rankingHashOf;
     mapping(uint256 => bytes32) private _rankingRoot;
     mapping(uint256 => uint256) private _rankingCount;
 
@@ -168,6 +167,49 @@ contract BallotInbox is IBallotInbox {
         uint256[][] calldata publicInputs,
         bytes[] calldata encryptedBallots
     ) external nonReentrant {
+        _acceptBatch(electionId, a, b, c, publicInputs, encryptedBallots);
+    }
+
+    /// @inheritdoc IBallotInbox
+    /// @dev The ranking hashes ride in the same hourly batch as the ballots. They must be
+    ///      strictly ascending, so their order carries no link to the batch's nullifiers.
+    ///      Only a per-election chain over (batch digest, count) is stored.
+    function submitVoteBatchRanked(
+        uint256 electionId,
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots,
+        bytes32[] calldata rankingHashes
+    ) external nonReentrant {
+        uint256 n = _acceptBatch(electionId, a, b, c, publicInputs, encryptedBallots);
+        uint256 m = rankingHashes.length;
+        if (m == 0 || m > n) revert RankingCountMismatch();
+        bytes32 prev;
+        for (uint256 i; i < m; ++i) {
+            bytes32 h = rankingHashes[i];
+            if (h == bytes32(0)) revert EmptyRankingCommitment();
+            if (i != 0 && uint256(h) <= uint256(prev)) revert RankingsNotSorted();
+            prev = h;
+        }
+        bytes32 digest = keccak256(abi.encodePacked(rankingHashes));
+        bytes32 root = keccak256(abi.encodePacked(_rankingRoot[electionId], digest, m));
+        _rankingRoot[electionId] = root;
+        unchecked {
+            _rankingCount[electionId] += m;
+        }
+        emit RankingBatchCommitted(electionId, digest, m, root);
+    }
+
+    function _acceptBatch(
+        uint256 electionId,
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots
+    ) internal returns (uint256) {
         _requireNotPaused();
         _requireRelayer();
         uint256 n = encryptedBallots.length;
@@ -198,31 +240,7 @@ contract BallotInbox is IBallotInbox {
         _lastBatchAt[electionId] = uint64(block.timestamp);
         // Count only. A yes/no split here would publish the batch tally.
         emit VoteBatchAccepted(electionId, n, msg.sender);
-    }
-
-    /// @inheritdoc IBallotInbox
-    /// @dev The ranking is not readable here. Only the hash of its ciphertext is bound,
-    ///      so a node cannot swap a ranking after acceptance without a mismatch.
-    function commitRanking(uint256 electionId, uint256 submissionId, bytes32 rankingHash) external nonReentrant {
-        _requireNotPaused();
-        _requireRelayer();
-        if (rankingHash == bytes32(0)) revert EmptyRankingCommitment();
-        uint256 key = submissionId % SNARK_SCALAR_FIELD;
-        if (!_nullifierUsed[electionId][key]) revert UnknownSubmission();
-        if (_rankingHashOf[electionId][key] != bytes32(0)) revert RankingAlreadyCommitted();
-        _requireNotTallied(electionId);
-        _rankingHashOf[electionId][key] = rankingHash;
-        bytes32 root = keccak256(abi.encodePacked(_rankingRoot[electionId], key, rankingHash));
-        _rankingRoot[electionId] = root;
-        unchecked {
-            _rankingCount[electionId] += 1;
-        }
-        emit RankingCommitted(electionId, key, rankingHash, root);
-    }
-
-    /// @inheritdoc IBallotInbox
-    function rankingHashOf(uint256 electionId, uint256 submissionId) external view returns (bytes32) {
-        return _rankingHashOf[electionId][submissionId % SNARK_SCALAR_FIELD];
+        return n;
     }
 
     /// @inheritdoc IBallotInbox

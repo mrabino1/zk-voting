@@ -118,7 +118,7 @@ export default {
     unionsTitle: "Mga unyon at samahan",
     unionsBody: "Magdaos ng halalan ng pamunuan at boto ng pagpapatibay ng kontrata kung saan nagtitiwala ang mga kasapi sa bilang nang hindi nagtitiwala sa mga opisyal.",
     coopsTitle: "Mga kooperatiba at lupon",
-    coopsBody: "Kumuha ng boto ng lupon at palatanungan ng mga kasapi, kasama ang may timbang at ranggong balota sa palatanungan at selyadong botohan, na may masusuring ulat ng resulta.",
+    coopsBody: "Kumuha ng boto ng lupon at palatanungan ng mga kasapi, kasama ang may timbang at ranggong balota: sa palatanungan at, kung pipiliin, sa selyadong botohan (makikita ng mga tagapag-ingat ang bawat ranggo, hindi ang pagkakakilanlan), na may masusuring ulat ng resulta.",
     schoolsTitle: "Mga paaralan at kampus",
     schoolsBody: "Magpatakbo ng pamahalaang mag-aaral at boto ng guro gamit ang passkey at balotang magagamit sa anumang aparato.",
     clubsTitle: "Mga komunidad at klub",

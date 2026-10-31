@@ -118,7 +118,7 @@ export default {
     unionsTitle: "Công đoàn và hội thành viên",
     unionsBody: "Tổ chức bầu lãnh đạo và phiếu phê chuẩn hợp đồng, nơi thành viên tin bảng đếm mà không cần tin ban cán sự.",
     coopsTitle: "Hợp tác xã và ban",
-    coopsBody: "Lấy phiếu của ban và thăm dò thành viên, kể cả phiếu có trọng số và phiếu xếp hạng trong thăm dò và bỏ phiếu niêm phong, với báo cáo kết quả kiểm được.",
+    coopsBody: "Lấy phiếu của ban và thăm dò thành viên, kể cả phiếu có trọng số và phiếu xếp hạng: trong thăm dò và, nếu bật tùy chọn, trong bỏ phiếu niêm phong (khi đó người giám hộ thấy từng thứ hạng, không thấy danh tính), với báo cáo kết quả kiểm được.",
     schoolsTitle: "Trường và khuôn viên",
     schoolsBody: "Tổ chức chính quyền học sinh và phiếu của giảng viên với đăng nhập khóa truy cập và phiếu dùng được trên mọi thiết bị.",
     clubsTitle: "Cộng đồng và câu lạc bộ",

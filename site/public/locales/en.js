@@ -119,7 +119,7 @@ export default {
     unionsTitle: "Unions and member associations",
     unionsBody: "Hold leadership elections and contract ratification votes where members trust the count without trusting the officers.",
     coopsTitle: "Cooperatives and boards",
-    coopsBody: "Take board votes and member polls, including weighted and ranked-choice ballots in polls and sealed votes, with an auditable outcome report.",
+    coopsBody: "Take board votes and member polls, including weighted and ranked-choice ballots: ranked choice in polls and, as an opt-in, in sealed votes (guardians then see individual rankings, not identities), with an auditable outcome report.",
     schoolsTitle: "Schools and campuses",
     schoolsBody: "Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.",
     clubsTitle: "Communities and clubs",

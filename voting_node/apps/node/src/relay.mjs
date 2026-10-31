@@ -28,7 +28,8 @@ import {
   presentHolderReceipt,
 } from './receipts.mjs';
 import { answersFromVoteBody, assertBallotAnswers, electionHasRanked, extractRankingPayload } from './ballot.mjs';
-import { isRankingEnvelope, parseRankingEnvelope, rankingHash } from '../public/ranked-envelope.js';
+import { isRankingEnvelope, parseRankingEnvelope, rankingEnvelopeBytes, rankingHash } from '../public/ranked-envelope.js';
+import { sealedRankingAllowed } from './rankedTally.mjs';
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
 
@@ -267,15 +268,25 @@ export function coarseAcceptedAt(ts, intervalSeconds) {
 export async function sealedRankingFromBody(election, body) {
   const raw = body?.encryptedRanking;
   const ranked = electionHasRanked(election);
+  const allowed = ranked && sealedRankingAllowed(election);
   if (raw == null || raw === '') {
-    if (ranked && election.tallyPubKey && election.tallyCeremony?.status === 'ready') {
+    if (allowed && election.tallyPubKey && election.tallyCeremony?.status === 'ready') {
       throw new HttpError(400, 'ranked ballots must include encryptedRanking', { code: 'RANKING_REQUIRED' });
     }
     return null;
   }
   if (!ranked) throw new HttpError(400, 'this election is not ranked', { code: 'RANKING_NOT_ALLOWED' });
+  if (!allowed) {
+    // Sealed vote without the opt-in: no ranking is accepted or stored.
+    throw new HttpError(400, 'sealed ranked choice is not enabled for this vote', { code: 'RANKING_NOT_ALLOWED' });
+  }
   if (typeof raw !== 'string' || raw.length > 2 + 2 * 8192 || !isRankingEnvelope(raw)) {
     throw new HttpError(400, 'encryptedRanking must be an RK ranking envelope', { code: 'BAD_RANKING' });
+  }
+  const hexLen = (raw.startsWith('0x') || raw.startsWith('0X') ? raw.length - 2 : raw.length) / 2;
+  if (hexLen !== rankingEnvelopeBytes(election.questions || [])) {
+    // One fixed envelope size per election, so length never hints at a ranking.
+    throw new HttpError(400, 'encryptedRanking is not this election\'s fixed envelope size', { code: 'BAD_RANKING' });
   }
   try {
     parseRankingEnvelope(raw);
@@ -377,6 +388,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
             proof: payload.proof,
             publicInputs: payload.publicInputs,
             encryptedBallot: payload.encryptedBallot,
+            ...(payload.rankingHash ? { rankingHash: payload.rankingHash } : {}),
             startTime: payload.startTime,
             cutoffTime: payload.cutoffTime,
             now: ts,
@@ -401,6 +413,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     proof: parsed.proof,
     publicInputs,
     encryptedBallot: parsed.encryptedBallot,
+    ...(sealedRanking?.rankingHash ? { rankingHash: sealedRanking.rankingHash } : {}),
     startTime: election.startTime,
     cutoffTime: election.cutoffTime,
     now: ts,
@@ -448,6 +461,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
             proof: parsed.proof,
             publicInputs,
             encryptedBallot: parsed.encryptedBallot,
+            ...(sealedRanking?.rankingHash ? { rankingHash: sealedRanking.rankingHash } : {}),
             startTime: election.startTime,
             cutoffTime: election.cutoffTime,
           },
