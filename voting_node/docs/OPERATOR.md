@@ -565,8 +565,9 @@ identity commitment. The Node-side mechanics:
   tally does not open that ballot, so the token does not reveal the option.
   It can still show that the person voted.
 - The clearance entry point and per-ballot tally openings are not in the
-  client ABI. Plurality totals are an aggregate decryption. Ranked tally is
-  disabled until a verified shuffle exists.
+  client ABI. Plurality totals are an aggregate decryption. Ranked tally opens
+  each sealed ranking with `t` guardian partials and runs IRV (recomputable,
+  not ZK proof-verified; no verified shuffle).
 
 ## Secrets and production
 
@@ -575,7 +576,7 @@ identity commitment. The Node-side mechanics:
 - `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `zk-voting.json`. If the chain rejects a proof, the UI reports failure.
-- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. After cutoff, `t` guardians decrypt the **summed** option ciphertexts (`aggregate:<option>`), not each ballot. The guardian CLI refuses a per-ballot partial. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). The ceremony is NON-PRODUCTION. Do not use it for a binding election. Ranked tally is disabled.
+- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. After cutoff, `t` guardians decrypt the **summed** option ciphertexts (`aggregate:<option>`), not each ballot. The guardian CLI refuses a per-ballot partial. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). The ceremony is NON-PRODUCTION. Do not use it for a binding election. Ranked questions also need `ranking:<nullifier>` partials; the guardian CLI emits them.
 
 ## L1 certification (tally hash on Ethereum)
 

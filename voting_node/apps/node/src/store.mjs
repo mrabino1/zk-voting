@@ -2644,6 +2644,9 @@ export class Store {
         ballotHash: record.ballotHash,
         encryptedBallot: envelope.encryptedBallot,
         ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
+        ...(envelope.rankingEnvelope
+          ? { rankingEnvelope: envelope.rankingEnvelope, rankingHash: envelope.rankingHash }
+          : {}),
       });
     }
     if (spentPassHash) this._rememberSpentPass(vote.electionId, spentPassHash);
@@ -2752,6 +2755,10 @@ export class Store {
         env.tallyEncryptedBallot = envelope.encryptedBallot;
       }
       if (Array.isArray(envelope.rankingPayload)) env.tallyRankingPayload = envelope.rankingPayload;
+      if (envelope.rankingEnvelope) {
+        env.tallyRankingEnvelope = envelope.rankingEnvelope;
+        env.tallyRankingHash = envelope.rankingHash;
+      }
     }
     if (vote.chainPayload && typeof vote.chainPayload === 'object') {
       this.upsertChainBallotPayload(electionId, nullifier, vote.chainPayload);
@@ -3453,6 +3460,23 @@ export class Store {
     return bucket.partials;
   }
 
+  /** Guardian partials on sealed ranking envelopes (`ranking:<nullifier>`). Merged per tag. */
+  async saveRankingPartials(electionId, { index, partials }) {
+    const bucket = this.getTallyGuardian(electionId);
+    if (!bucket) throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
+    const n = Number(index);
+    bucket.rankingPartials = bucket.rankingPartials || [];
+    let group = bucket.rankingPartials.find((row) => row.index === n);
+    if (!group) {
+      group = { index: n, partials: [] };
+      bucket.rankingPartials.push(group);
+    }
+    const tags = new Set(partials.map((row) => String(row.ballotHash)));
+    group.partials = group.partials.filter((row) => !tags.has(String(row.ballotHash))).concat(partials);
+    await this.persist();
+    return bucket.rankingPartials;
+  }
+
   async saveChoiceBlockPartials(electionId, { blockId, index, partials }) {
     const bucket = this.getTallyGuardian(electionId);
     if (!bucket) throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });
@@ -3487,6 +3511,7 @@ export class Store {
     if (Array.isArray(extras.questions) && extras.questions.length) {
       election.tally.questions = extras.questions;
     }
+    if (extras.ranked && typeof extras.ranked === 'object') election.tally.ranked = { ...extras.ranked };
     await this.persist();
     return election;
   }

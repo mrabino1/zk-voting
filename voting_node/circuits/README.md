@@ -83,7 +83,7 @@ Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to matc
 [version=2, electionId, acceptedCount, countsHash, ballotRoot, aggregateHash, tallyKeyHash]
 ```
 
-Word 5 is one aggregate hash. It is not a list of per-ballot openings. Plurality tally multiplies one-hot P-256 ElGamal ciphertexts and decrypts the product. Ranked tally is disabled until a verified shuffle exists (`RANKED_TALLY_DISABLED`). Do not publish decrypted ballots linked to nullifiers.
+Word 5 is one aggregate hash. It is not a list of per-ballot openings. Plurality tally multiplies one-hot P-256 ElGamal ciphertexts and decrypts the product. Ranked tally opens each sealed `RK` ranking envelope by guardian threshold and runs IRV on the Node; the circuit is unchanged and IRV is not ZK-proven (no verified shuffle). Do not publish decrypted ballots linked to nullifiers.
 
 The vote circuit binds `ballotHash` to `Poseidon(choice, choiceRandomness)` with `choice` in 0..15 and the randomness private. The ElGamal bytes after an `AG` tag are not checked inside this circuit. A ceremony circuit has to add that curve check. `circuits:smoke` writes an **UNTRUSTED** Vote(4) dev zkey under `circuits/build/` (gitignored). Production replaces that file with a ceremony Vote(20) zkey and regenerates the Solidity verifier. The committed Vote(4) fixture is stale until `circuits:smoke` is re-run against this circuit.
 

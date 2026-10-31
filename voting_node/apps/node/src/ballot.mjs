@@ -1,6 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Multi-question ballots (“aspects”). Plurality tally is per-question.
-// Ranked-choice / IRV is computed on this Node from accepted ranking envelopes.
+// Ranked-choice / IRV runs on this Node after guardians threshold-open each
+// sealed ranking envelope (sealed) or from plaintext payloads (sum-only).
 
 import { hexToString } from 'viem';
 

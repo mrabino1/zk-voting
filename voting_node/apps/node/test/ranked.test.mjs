@@ -232,7 +232,7 @@ describe('Ranked-choice ballots and IRV tally', () => {
     assert.equal(env.userId, undefined);
   });
 
-  test('ranked tally is refused instead of opening envelopes', async () => {
+  test('ranked tally runs IRV with an elimination round', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -271,11 +271,12 @@ describe('Ranked-choice ballots and IRV tally', () => {
       jar: adminJar,
       body: {},
     });
-    assert.equal(tallied.status, 409, tallied.json?.error);
-    assert.equal(tallied.json.code, 'RANKED_TALLY_DISABLED');
-    const stored = store.listEnvelopes(id);
-    assert.ok(stored.length > 1);
-    assert.equal(stored.some((row) => row.rankingPayload), false);
+    assert.equal(tallied.status, 200, tallied.json?.error);
+    const tally = store.requireElection(id).tally;
+    const q = tally.questions.find((row) => row.questionId === 'q-office');
+    assert.equal(q.winner, 'a');
+    assert.equal(q.rounds.length, 2);
+    assert.equal(tally.ranked.rankedBallots, 12);
   });
 
   test('plurality tally is unchanged', async () => {

@@ -186,7 +186,7 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 | Path | After cutoff | Invented `counts[]` that only match the **sum** |
 | --- | --- | --- |
 | **`sum_only` (default)** | Operator posts any vector with `sum(counts) == acceptedBallots` | **Accepted** (legacy demo). Operator cannot add or drop ballots; they **can** rearrange which option received them. |
-| **`opens_ballots`** | `t` guardians’ partials open the **summed** option ciphertexts. The Node stores those aggregate partials only. Ranked contests return `RANKED_TALLY_DISABLED` and are not opened. | A histogram that is not the discrete log of the product is **rejected** (`INVENTED_COUNTS`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A partial for one ballot hash fails `PER_BALLOT_PARTIAL`. |
+| **`opens_ballots`** | `t` guardians’ partials open the **summed** option ciphertexts. The Node stores those aggregate partials only. Ranked contests also open each sealed ranking (`ranking:<nullifier>` partials) so the Node can run IRV; guardians therefore see individual rankings, unlinked to identity (no verified shuffle). | A histogram that is not the discrete log of the product is **rejected** (`INVENTED_COUNTS`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A partial for one ballot hash fails `PER_BALLOT_PARTIAL`. |
 
 Counts are aggregates. There is no per-ballot openings list on the tally response or in the envelope row ([`tallyOpen.mjs`](./apps/node/src/tallyOpen.mjs)).
 

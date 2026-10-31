@@ -125,6 +125,11 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => mapping(uint8 => AcceptedCipher))) private _acceptedOpt;
     mapping(uint256 => uint64) private _acceptClock;
 
+    /// @dev Appended slots. Ranked-choice ranking envelope commitments.
+    mapping(uint256 => mapping(uint256 => bytes32)) private _rankingHashOf;
+    mapping(uint256 => bytes32) private _rankingRoot;
+    mapping(uint256 => uint256) private _rankingCount;
+
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
         _reentrancyLock = 1;
@@ -193,6 +198,41 @@ contract BallotInbox is IBallotInbox {
         _lastBatchAt[electionId] = uint64(block.timestamp);
         // Count only. A yes/no split here would publish the batch tally.
         emit VoteBatchAccepted(electionId, n, msg.sender);
+    }
+
+    /// @inheritdoc IBallotInbox
+    /// @dev The ranking is not readable here. Only the hash of its ciphertext is bound,
+    ///      so a node cannot swap a ranking after acceptance without a mismatch.
+    function commitRanking(uint256 electionId, uint256 submissionId, bytes32 rankingHash) external nonReentrant {
+        _requireNotPaused();
+        _requireRelayer();
+        if (rankingHash == bytes32(0)) revert EmptyRankingCommitment();
+        uint256 key = submissionId % SNARK_SCALAR_FIELD;
+        if (!_nullifierUsed[electionId][key]) revert UnknownSubmission();
+        if (_rankingHashOf[electionId][key] != bytes32(0)) revert RankingAlreadyCommitted();
+        _requireNotTallied(electionId);
+        _rankingHashOf[electionId][key] = rankingHash;
+        bytes32 root = keccak256(abi.encodePacked(_rankingRoot[electionId], key, rankingHash));
+        _rankingRoot[electionId] = root;
+        unchecked {
+            _rankingCount[electionId] += 1;
+        }
+        emit RankingCommitted(electionId, key, rankingHash, root);
+    }
+
+    /// @inheritdoc IBallotInbox
+    function rankingHashOf(uint256 electionId, uint256 submissionId) external view returns (bytes32) {
+        return _rankingHashOf[electionId][submissionId % SNARK_SCALAR_FIELD];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function rankingRoot(uint256 electionId) external view returns (bytes32) {
+        return _rankingRoot[electionId];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function rankingCount(uint256 electionId) external view returns (uint256) {
+        return _rankingCount[electionId];
     }
 
     /// @inheritdoc IBallotInbox

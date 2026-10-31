@@ -120,7 +120,7 @@ export default {
     unionsTitle: "Syndicats et associations",
     unionsBody: "Tenez des élections de direction et des votes de ratification où les membres font confiance au décompte sans faire confiance aux dirigeants.",
     coopsTitle: "Coopératives et conseils",
-    coopsBody: "Prenez des votes de conseil et des sondages de membres, y compris des bulletins pondérés et préférentiels, avec un rapport de résultat auditable.",
+    coopsBody: "Prenez des votes de conseil et des sondages de membres, y compris des bulletins pondérés et préférentiels, en sondage comme en vote scellé, avec un rapport de résultat auditable.",
     schoolsTitle: "Écoles et campus",
     schoolsBody: "Menez des gouvernements étudiants et des votes du corps enseignant avec une clé d'accès et un bulletin utilisable sur tout appareil.",
     clubsTitle: "Communautés et clubs",

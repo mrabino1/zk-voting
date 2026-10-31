@@ -6,6 +6,7 @@
 import { brandName } from "./brand.js";
 import { expectedCountLength, openingIndexFromAnswers } from "./tally-crypto.js";
 import { proveVote } from "./vote-proof.js";
+import { encryptRankingEnvelope } from "./ranked-envelope.js";
 import {
   collectAnswers,
   cssQuestionName,
@@ -92,6 +93,7 @@ export function buildVoteRequestBody({
   nullifier,
   ballotHash,
   encryptedBallot,
+  encryptedRanking,
   votePass,
   proof,
 }) {
@@ -102,6 +104,7 @@ export function buildVoteRequestBody({
     encryptedBallot,
     proof,
   };
+  if (encryptedRanking) body.encryptedRanking = encryptedRanking;
   if (votePass?.token && votePass?.signature) {
     body.votePass = { token: votePass.token, signature: votePass.signature };
   }
@@ -770,13 +773,10 @@ export async function renderVote(main, ctx) {
     paint();
     announce("Confirm your passkey. Your choices will not appear on the receipt.");
 
-    if (questions.some((q) => isRankedQuestion(q, election.ballotMethod))) {
-      state.busy = false;
-      state.error =
-        "Ranked tally is disabled. A verified shuffle is not available, so individual rankings are not collected or opened.";
-      paint();
-      return;
-    }
+    // Sealed ranked-choice: the full ranking is encrypted to the guardian
+    // key; the one-hot ciphertext below carries the first choice only.
+    const hasRanked = questions.some((q) => isRankedQuestion(q, election.ballotMethod));
+    let sealedRanking = null;
     const choiceIndex = openingIndexFromAnswers(answers, questions);
     const tallyPubKey = election.tallyPubKey || election.tallyCeremony?.publicKey || null;
     const nOptions = expectedCountLength(questions);
@@ -818,7 +818,15 @@ export async function renderVote(main, ctx) {
         chainId = source === "sample" ? 31337 : chainId;
       }
       const proof = await proveVote({ publicInputs, chainId });
+      if (hasRanked) {
+        sealedRanking = await encryptRankingEnvelope({
+          jointPublicKey: election.tallyCeremony?.publicKey || tallyPubKey,
+          electionId: election.id,
+          answers: answers.filter((a) => Array.isArray(a.ranking)),
+        });
+      }
       const body = buildVoteRequestBody({
+        encryptedRanking: sealedRanking?.rankingEnvelope,
         electionId: String(election.id),
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,

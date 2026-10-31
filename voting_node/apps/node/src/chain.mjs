@@ -50,6 +50,41 @@ export const ballotInboxAbi = [
   },
   {
     type: 'function',
+    name: 'commitRanking',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'electionId', type: 'uint256' },
+      { name: 'submissionId', type: 'uint256' },
+      { name: 'rankingHash', type: 'bytes32' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'rankingHashOf',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'electionId', type: 'uint256' },
+      { name: 'submissionId', type: 'uint256' },
+    ],
+    outputs: [{ type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'rankingRoot',
+    stateMutability: 'view',
+    inputs: [{ name: 'electionId', type: 'uint256' }],
+    outputs: [{ type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'rankingCount',
+    stateMutability: 'view',
+    inputs: [{ name: 'electionId', type: 'uint256' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
+    type: 'function',
     name: 'closedBallotCount',
     stateMutability: 'view',
     inputs: [{ name: 'electionId', type: 'uint256' }],
@@ -1351,6 +1386,77 @@ export function createChain(config, extras = {}) {
     },
     reloadVoteQueue() {
       loadQueue();
+    },
+    /**
+     * Bind each counted sealed ranking hash on chain under its submission
+     * (nullifier). Runs after the deadline so a re-vote commits only its final
+     * ranking. Already-committed equal hashes are skipped; a different hash
+     * already on chain is refused.
+     * @param {string|number} electionId on-chain election id
+     * @param {{nullifier: string, rankingHash: string}[]} rows
+     */
+    async commitRankings(electionId, rows) {
+      if (!configured) return { skipped: true, reason: 'chain not configured' };
+      const inbox = inboxAddress();
+      const injected = typeof extras.writeCommitRanking === 'function';
+      if (!injected && (!hasWallet || !inbox || !publicClient)) {
+        return { skipped: true, reason: 'BALLOT_INBOX_ADDRESS or RELAYER_PRIVATE_KEY missing' };
+      }
+      let committed = 0;
+      let already = 0;
+      for (const row of rows || []) {
+        const id = asBigInt(electionId);
+        const sub = asBigInt(row.nullifier);
+        const hash = row.rankingHash;
+        if (injected) {
+          const out = await extras.writeCommitRanking({ electionId: id, submissionId: sub, rankingHash: hash });
+          if (out?.already) already += 1;
+          else committed += 1;
+          continue;
+        }
+        const existing = await publicClient.readContract({
+          address: inbox,
+          abi: ballotInboxAbi,
+          functionName: 'rankingHashOf',
+          args: [id, sub],
+        });
+        if (existing && !/^0x0+$/.test(existing)) {
+          if (String(existing).toLowerCase() !== String(hash).toLowerCase()) {
+            throw new HttpError(409, 'a different ranking hash is already committed on chain', {
+              code: 'RANKING_MISMATCH',
+              nullifier: String(row.nullifier),
+            });
+          }
+          already += 1;
+          continue;
+        }
+        try {
+          const tx = await wallet.writeContract({
+            address: inbox,
+            abi: ballotInboxAbi,
+            functionName: 'commitRanking',
+            args: [id, sub, hash],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: tx });
+          committed += 1;
+        } catch (err) {
+          throw new HttpError(502, `BallotInbox commitRanking failed: ${err.message || err}`, {
+            code: 'CHAIN_RANKING_FAILED',
+          });
+        }
+      }
+      let rankingRoot = null;
+      if (injected && typeof extras.readRankingRoot === 'function') {
+        rankingRoot = await extras.readRankingRoot(asBigInt(electionId));
+      } else if (publicClient && inbox) {
+        rankingRoot = await publicClient.readContract({
+          address: inbox,
+          abi: ballotInboxAbi,
+          functionName: 'rankingRoot',
+          args: [asBigInt(electionId)],
+        });
+      }
+      return { committed, already, rankingRoot };
     },
     async flushVoteQueue(now) {
       if (!configured) return [];
