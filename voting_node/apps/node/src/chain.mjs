@@ -434,6 +434,19 @@ function failureKind(err) {
   return 'transport';
 }
 
+/** True when a ranking hash is present but not a non-zero 32-byte hex value. */
+export function isBadRankingHash(value) {
+  if (value == null || value === '') return false;
+  const h = String(value).toLowerCase();
+  return !/^0x[0-9a-f]{64}$/.test(h) || /^0x0+$/.test(h);
+}
+
+function assertRankingHashOk(rankingHash) {
+  if (isBadRankingHash(rankingHash)) {
+    throw new HttpError(400, 'rankingHash must be a non-zero 32-byte hex value', { code: 'BAD_RANKING_HASH' });
+  }
+}
+
 /**
  * Ranking hashes of a batch, ascending (the inbox requires strict order).
  * Rows without a ranking are fine. A malformed or zero hash is never dropped
@@ -446,7 +459,7 @@ export function sortedRankingHashes(batch) {
   for (const row of batch || []) {
     if (row?.rankingHash == null || row.rankingHash === '') continue;
     const h = String(row.rankingHash).toLowerCase();
-    if (!/^0x[0-9a-f]{64}$/.test(h) || /^0x0+$/.test(h)) {
+    if (isBadRankingHash(h)) {
       bad.push(row?.nullifier != null ? String(row.nullifier) : null);
       continue;
     }
@@ -794,7 +807,7 @@ export function createChain(config, extras = {}) {
     }
   }
 
-  function deadLetterRow(key, row, err, at) {
+  function deadLetterRow(key, row, err, at, kind = 'chain_dead_letter') {
     const id = nullifierKey(row.nullifier);
     attempts.delete(attemptKey(key, id));
     const letter = {
@@ -811,7 +824,8 @@ export function createChain(config, extras = {}) {
     dropNullifiers(key, [row.nullifier]);
     backoffUntil.delete(revertBackoffKey(key, row.nullifier));
     splitLimit.delete(key);
-    pushAlert({ kind: 'chain_dead_letter', electionKey: key, nullifier: id, error: errorText(err), at });
+    pushAlert({ kind, electionKey: key, nullifier: id, error: errorText(err), at });
+    if (kind !== 'chain_dead_letter') letter.kind = kind;
     if (!config.quiet) {
       console.warn(`[zk-voting] isolated ballot ${id} for election ${key} moved to the dead letter: ${errorText(err)}`);
     }
@@ -929,9 +943,36 @@ export function createChain(config, extras = {}) {
    * @returns {{action: 'pending'|'transport'|'delivered'|'split'|'dead', error?: string, nullifier?: string}}
    */
   async function handleFlushError(key, batch, err, now) {
+    const at = Number(now) || Math.floor(Date.now() / 1000);
+    if (err?.code === 'BAD_RANKING_HASH') {
+      // Nothing was broadcast. Quarantine only the malformed rows (found from
+      // the batch itself, so a row without a nullifier is still caught) and let
+      // the rest of the batch, and the final batch, flush. Never retried.
+      inFlight.delete(key);
+      const listed = new Set((err.nullifiers || []).filter((n) => n != null).map((n) => String(n)));
+      const bad = batch.filter(
+        (row) => isBadRankingHash(row?.rankingHash) || (row?.nullifier != null && listed.has(nullifierKey(row.nullifier))),
+      );
+      if (!bad.length) {
+        rememberTransport(key, err, at);
+        return { action: 'transport' };
+      }
+      for (const row of bad) {
+        if (row?.nullifier == null) {
+          const queued = voteQueue.get(key) || [];
+          const left = queued.filter((q) => q !== row);
+          if (left.length) voteQueue.set(key, left);
+          else voteQueue.delete(key);
+          deadLetter.push({ electionKey: key, nullifier: null, kind: 'bad_ranking_hash', error: errorText(err), at });
+          pushAlert({ kind: 'bad_ranking_hash', electionKey: key, nullifier: null, error: errorText(err), at });
+          continue;
+        }
+        deadLetterRow(key, row, err, at, 'bad_ranking_hash');
+      }
+      return { action: 'dead', error: errorText(err), nullifier: bad[0]?.nullifier != null ? nullifierKey(bad[0].nullifier) : null };
+    }
     const kind = failureKind(err);
     const marker = inFlight.get(key);
-    const at = Number(now) || Math.floor(Date.now() / 1000);
     const flags = await spentMap(key, batch);
     if (flags.unknown) {
       if (marker?.txHash) return { action: 'pending' };
@@ -1165,6 +1206,7 @@ export function createChain(config, extras = {}) {
           { code: 'CHAIN_NOT_READY' },
         );
       }
+      assertRankingHashOk(rankingHash);
       const interval = Number(config.disclosureIntervalSeconds) || 0;
       const key = String(electionId);
       const { a, b, c } = groth16Points(proof);
@@ -1231,6 +1273,7 @@ export function createChain(config, extras = {}) {
      * is left alone so the caller can retry without deleting the stored ballot.
      */
     async replaceQueuedVote({ electionId, proof, publicInputs, encryptedBallot, rankingHash, startTime, cutoffTime }) {
+      assertRankingHashOk(rankingHash);
       const key = String(electionId);
       const { a, b, c } = groth16Points(proof);
       const inputs = (publicInputs || []).map((x) => asBigInt(x));

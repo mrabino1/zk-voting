@@ -2090,12 +2090,29 @@
 })();
 
 // Sealed ranked-choice disclosure: one localized source shared with the ballot and the API.
-(function fillSealedRankedDisclosure() {
-  const slot = document.getElementById("e-sealed-ranked-disclosure-text");
-  if (!slot) return;
-  Promise.all([import("/i18n.js"), import("/sealed-ranked-disclosure.js")])
-    .then(([i18n, d]) => {
-      slot.textContent = i18n.t(d.SEALED_RANKED_DISCLOSURE_KEY);
-    })
-    .catch(() => {});
-})();
+// If the localized text cannot load, show the English text from the module, or
+// this static copy if the module itself fails. The acknowledgment checkbox stays
+// disabled until non-empty disclosure text is on screen.
+const SEALED_RANKED_DISCLOSURE_STATIC_EN = // keep in sync with locales/en.js (test enforces)
+  "Ranked choice on a sealed vote: until a verified shuffle exists, guardians can see each individual ranking (not who cast it). Whoever opens the rankings can also match each ranking to its encrypted ballot on chain (not to the voter's identity). The instant-runoff result is recomputable from the published rankings but is not ZK-proven. Coercion risk: a voter who keeps their ballot randomness can show a coercer which on-chain ballot is theirs and point to their ranking in the published set, and a distinctive ranking pattern can identify a ballot too.";
+async function fillSealedRankedDisclosure(doc, load) {
+  const slot = doc.getElementById("e-sealed-ranked-disclosure-text");
+  const ack = doc.getElementById("e-sealed-ranked-ack");
+  if (!slot) return "";
+  let text = "";
+  let mod = null;
+  try {
+    mod = await load("/sealed-ranked-disclosure.js");
+    const i18n = await load("/i18n.js");
+    text = String(i18n.t(mod.SEALED_RANKED_DISCLOSURE_KEY) || "");
+    if (text === mod.SEALED_RANKED_DISCLOSURE_KEY) text = "";
+  } catch {
+    text = "";
+  }
+  if (!text.trim()) text = String((mod && mod.SEALED_RANKED_DISCLOSURE) || "");
+  if (!text.trim()) text = SEALED_RANKED_DISCLOSURE_STATIC_EN;
+  slot.textContent = text;
+  if (ack) ack.disabled = !String(slot.textContent || "").trim();
+  return text;
+}
+fillSealedRankedDisclosure(document, (path) => import(path));

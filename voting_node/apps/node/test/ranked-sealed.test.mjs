@@ -594,6 +594,84 @@ describe('ranking hashes ride the ballot batches', () => {
     assert.equal(now[0][0].rankingHash, h('aa'));
   });
 
+  function memQueue() {
+    const saved = { rows: [], batchAt: {}, inFlight: {}, deadLetter: [], attempts: {} };
+    return {
+      saved,
+      loadChainVoteQueue: () => JSON.parse(JSON.stringify(saved)),
+      async saveChainVoteQueue(doc) {
+        for (const k of Object.keys(saved)) delete saved[k];
+        Object.assign(saved, JSON.parse(JSON.stringify(doc || {})));
+      },
+    };
+  }
+
+  // A writer that builds the ranked args the way the real one does.
+  function rankedWriter(sent) {
+    return async ({ batch }) => {
+      const hashes = sortedRankingHashes(batch);
+      sent.push({ nullifiers: batch.map((r) => String(r.nullifier)), hashes });
+      return { hash: '0xabc', batched: true, count: batch.length };
+    };
+  }
+
+  async function queueWithOneBadRow(cutoffTime) {
+    const queueStore = memQueue();
+    const cfg = { chainRpc: 'http://127.0.0.1:9', ballotInboxAddress: INBOX, disclosureIntervalSeconds: 3600, chainId: 31337, nowFn: () => 10_000, quiet: true };
+    const seed = createChain(cfg, { queueStore, writeSubmitBatch: async () => { throw new Error('not yet'); } });
+    const vote = (n, rankingHash) => ({
+      electionId: '7', proof: { accept: true }, publicInputs: [1n, 2n, BigInt(n), 4n, 5n],
+      encryptedBallot: '0x01', rankingHash, startTime: 0, cutoffTime, now: 100,
+    });
+    for (const [n, hh] of [[1, h('cc')], [2, h('11')], [3, h('77')]]) await seed.submitVote(vote(n, hh));
+    // Simulate a corrupted persisted row: the enqueue check would refuse it.
+    queueStore.saved.rows.find((r) => r.nullifier === '2').rankingHash = '0x12';
+    const sent = [];
+    const chain = createChain(cfg, { queueStore, writeSubmitBatch: rankedWriter(sent) });
+    return { chain, sent, queueStore };
+  }
+
+  test('a malformed ranking hash quarantines only its row; the two good rows land; no endless retry', async () => {
+    const { chain, sent, queueStore } = await queueWithOneBadRow(99_999);
+    await chain.flushVoteQueue(3600);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].nullifiers.sort(), ['1', '3']);
+    assert.deepEqual(sent[0].hashes, [h('77'), h('cc')]);
+    assert.equal(queueStore.saved.rows.length, 0);
+    assert.deepEqual(Object.keys(queueStore.saved.inFlight || {}), []);
+    const letters = queueStore.saved.deadLetter;
+    assert.equal(letters.length, 1);
+    assert.equal(letters[0].nullifier, '2');
+    assert.equal(letters[0].kind, 'bad_ranking_hash');
+    assert.ok(queueStore.saved.alerts.some((a) => a.kind === 'bad_ranking_hash' && a.nullifier === '2'));
+    assert.equal(queueStore.saved.alerts.some((a) => a.kind === 'chain_transport'), false);
+    await chain.flushVoteQueue(7200);
+    await chain.flushVoteQueue(10_800);
+    assert.equal(sent.length, 1, 'nothing is retried');
+  });
+
+  test('a malformed ranking hash does not block the final batch at cutoff', async () => {
+    const { chain, sent, queueStore } = await queueWithOneBadRow(5000);
+    await chain.flushVoteQueue(5000);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].nullifiers.sort(), ['1', '3']);
+    assert.equal(queueStore.saved.rows.length, 0);
+    assert.equal(queueStore.saved.deadLetter[0].kind, 'bad_ranking_hash');
+  });
+
+  test('a malformed or zero ranking hash is refused when the ballot is queued', async () => {
+    const chain = createChain(
+      { chainRpc: 'http://127.0.0.1:9', ballotInboxAddress: INBOX, disclosureIntervalSeconds: 3600, chainId: 31337, nowFn: () => 10_000, quiet: true },
+      { queueStore: memQueue(), writeSubmitBatch: rankedWriter([]) },
+    );
+    for (const bad of ['0x12', h('00'), 'zz']) {
+      await assert.rejects(
+        chain.submitVote({ electionId: '7', proof: { accept: true }, publicInputs: [1n, 2n, 9n, 4n, 5n], encryptedBallot: '0x01', rankingHash: bad, startTime: 0, cutoffTime: 99_999, now: 100 }),
+        (e) => e.code === 'BAD_RANKING_HASH' || e.extra?.code === 'BAD_RANKING_HASH' || /rankingHash/.test(e.message),
+      );
+    }
+  });
+
   test('sortedRankingHashes sorts, skips unranked rows, throws on bad or zero hashes; ranked gas default 24M, ceiling 200M', () => {
     assert.deepEqual(sortedRankingHashes([{ rankingHash: h('22') }, { rankingHash: h('0a') }, {}]), [h('0a'), h('22')]);
     assert.throws(() => sortedRankingHashes([{ rankingHash: h('22') }, { rankingHash: '0x12', nullifier: '5' }]), (e) => e.code === 'BAD_RANKING_HASH' && e.nullifiers[0] === '5');
