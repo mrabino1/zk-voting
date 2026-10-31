@@ -111,13 +111,16 @@ L1_RPC=<node> ./scripts/get-gas-economics.sh --measure       # + forge gas repor
 | `GAS_L2_RPC` | `--l2-rpc` | none; L2 rows then use the L1 price |
 | `GAS_L2_GWEI` | `--l2-gas-gwei` | from `eth_gasPrice` on `GAS_L2_RPC` |
 | `L1_CHAIN_ID` | | if set, a mismatch with the node prints a warning |
-| `ETH_USD` | `--eth-usd` | fetched; `--no-price` skips it |
+| `ETH_USD` | `--eth-usd` | fetched; if the feed does not answer, **10000**. `--no-price` skips the fetch and uses 10000 |
 | `PRICE_API_URL` / `PRICE_JSON_PATH` | | CoinGecko `simple/price` / `ethereum.usd` |
 | `PRICE_FALLBACK_URL` / `PRICE_FALLBACK_JSON_PATH` | | Coinbase spot / `data.amount` |
 | `GAS_MATCH_CONTRACT` | `--match-contract` | all unit and integration tests (fuzz and invariant skipped) |
 | | `--ops-filter RE` | also list every measured function matching `RE` |
-| `VOTERS` / `BATCHES` | `--voters` / `--batches` | `1000` / `1` |
-| `GROTH16_EXTRA_GAS` | `--groth16-gas` | `250000` per ballot (`0` hides the line) |
+| `VOTERS` | `--voters` | `1000` unique voters in the highlighted run |
+| `BALLOTS` | `--ballots` | same as voters. Higher means re-votes |
+| `HOURS` | `--hours` | `12` open hours. L1 batches default to hours + 2 (hourly, final, supplementary) |
+| `BATCHES` | `--batches` | overrides that L1 batch count for the highlighted run |
+| `GROTH16_EXTRA_GAS` | `--groth16-gas` | `250000` once per L1 settlement (`0` hides it). Not per ballot |
 | `DEPLOYMENTS_FILE` | `--record` | `deployments/<chainId>.json` for the L2, then L1, chain |
 | `OUT_DIR` | `--out-dir` | `smart-contracts/out`; `--build` runs `forge build` first |
 | `RPC_TIMEOUT` / `RPC_CONNECT_TIMEOUT` | | `15` / `5` seconds |
@@ -126,19 +129,21 @@ L1_RPC=<node> ./scripts/get-gas-economics.sh --measure       # + forge gas repor
 What it reports:
 
 1. L1 gas price and base fee from the node, an optional L2 gas price, and ETH/USD.
-2. Every concrete contract compiled from `smart-contracts/src`, found from `out/` (so renames need no edit here): runtime and initcode size against EIP-170 and EIP-3860, `TIGHT` at 90 % or more, `OVER` past a cap, the optimizer and `viaIR` settings, and the three contracts closest to the limit.
+2. Every concrete contract compiled from `smart-contracts/src`, found from `out/` (so renames need no edit here): runtime and initcode size against today's EIP-170 / EIP-3860 caps and the Glamsterdam EIP-7954 caps (65,536 B runtime, 131,072 B initcode). `PRE` exceeds today's cap and fits Glamsterdam. `OVER` exceeds Glamsterdam. `TIGHT` is 90 % or more of the Glamsterdam cap. The L1 sum is a one-time shared deploy, not a per-election cost.
 3. Deploy gas per contract: measured from a `deploy.sh` record when one exists, otherwise a size-based floor marked `~`.
-4. With `--measure`: the median gas of the calls one election makes (`forge test --gas-report`), split into the L1 settlement contracts (`RollupSettlement`, `L1TallyMirror`, `ZkVotingMailbox`) and the election stack, then a per-election total for `VOTERS` and `BATCHES`. Tests use `MockVerifier`; the Groth16 line adds `GROTH16_EXTRA_GAS` per ballot.
+4. The L1 bill only. The civic L2 is the operator's VPS, so its gas is $0, and a poll and a vote post the same Ethereum transactions. One-time: deploy `RollupSettlement`, `L1TallyMirror`, and `ZkVotingMailbox` once. During an election: one `submitBatch` per open hour, plus the final batch, plus one supplementary batch, plus one certification. Ballot count does not change that count. A second figure shows the prover posting every 4 L2 blocks while a block is sealed every 2 seconds. Tests use `MockVerifier`; `GROTH16_EXTRA_GAS` is added once per settlement. Without a live gas price, dollars use 10 gwei at the ETH price above.
 
-If a source fails it says so and keeps going: no price means USD shows `n/a`;
-an unreachable node means costs show `n/a`. Exit status: `0` ok, `1` a
-contract is over a size cap or there are no artifacts, `2` bad arguments.
+If a source fails it says so and keeps going: a missing price feed uses $10,000;
+an unreachable node prices the scenarios at 1 / 10 / 30 gwei. Exit status: `0` ok, `1` a
+contract exceeds the Glamsterdam cap or there are no artifacts, `2` bad arguments.
+`PRE` does not fail.
 `smart-contracts/script/get-gas-economics.sh` forwards here.
 
 ## Sample run
 
 Anvil from `start-anvil.sh`, `deploy.sh --target local`, then the gas script
 with a public mainnet RPC as `L1_RPC` and the Anvil as the L2 (2026-10-24).
+The sample predates the Glamsterdam size columns and the poll-versus-vote scenarios.
 
 ```text
 $ ./scripts/start-anvil.sh --background

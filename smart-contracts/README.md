@@ -31,13 +31,13 @@ ZK_VOTING_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://
 
 ## Gas economics
 
-Live gas price and ETH/USD, compiled bytecode versus EIP-170 (24,576 bytes) and EIP-3860 (49,152 bytes), deploy gas, and per-call gas from the test suite:
+Live gas price and ETH/USD ($10,000 when no price feed answers), compiled bytecode versus today's EIP-170 / EIP-3860 caps and the Glamsterdam EIP-7954 caps (65,536 and 131,072 bytes), one-time L1 deploy gas, and poll-versus-vote cost across ballot counts and open hours:
 
 ```bash
 forge build
-L1_RPC=<your Ethereum JSON-RPC> ../scripts/get-gas-economics.sh --measure
+L1_RPC=<your Ethereum JSON-RPC> ../voting_node/scripts/get-gas-economics.sh --measure
 ```
 
-`./script/get-gas-economics.sh` forwards to the root script. Options, environment variables, and sample output: [`../scripts/README.md`](../scripts/README.md).
+`./script/get-gas-economics.sh` forwards to that script. Options, environment variables, and sample output: [`../voting_node/scripts/README.md`](../voting_node/scripts/README.md).
 
 Solidity 0.8.24. License AGPL-3.0-or-later. See `/NOT_FOR_PROFIT.md`.

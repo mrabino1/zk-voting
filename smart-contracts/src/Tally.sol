@@ -338,10 +338,9 @@ contract Tally is ITallyVerifier {
         if (msg.sender != p.tallyOperator) revert NotTallyOperator();
         // VOTE publishes nothing before the end. POLL keeps the cutoff rule below.
         _revertIfVoteSealed(electionId, p);
-        // CLOSED once cutoff and a nonzero challenge window have both passed.
-        uint64 window = _effectiveWindow(electionId, p);
-        if (window == 0) revert ZeroChallengeWindow();
-        if (block.timestamp < uint256(p.cutoffTime) + window) revert ChallengeWindowOpen(electionId);
+        // The window starts when the final batch is proven, and at cutoff when
+        // no settlement is linked. A commit that is still unproven does not start it.
+        if (block.timestamp < _tallyOpensAt(electionId, p)) revert ChallengeWindowOpen(electionId);
         _requireSupplementary(electionId);
         verifier = tallyProofVerifier;
         if (verifier == address(0)) revert TallyVerifierNotSet();
@@ -430,10 +429,26 @@ contract Tally is ITallyVerifier {
     function tallyAllowedAt(uint256 electionId) public view returns (uint256) {
         address electionAddr = _factory.getElection(electionId);
         if (electionAddr == address(0)) revert UnknownElection();
-        ElectionParams memory p = IElection(electionAddr).params();
+        return _tallyOpensAt(electionId, IElection(electionAddr).params());
+    }
+
+    /// @dev Before the final batch is proven, the clock is still `cutoff + window`,
+    ///      so a commit does not open or close the challenge. After the proof,
+    ///      the window is `provenAt + window` when that is later than the cutoff clock.
+    function _tallyOpensAt(uint256 electionId, ElectionParams memory p) internal view returns (uint256) {
         uint64 window = _effectiveWindow(electionId, p);
         if (window == 0) revert ZeroChallengeWindow();
-        return uint256(p.cutoffTime) + window;
+        uint256 opens = uint256(p.cutoffTime) + window;
+        address settlement = settlementOf[electionId];
+        if (settlement == address(0)) return opens;
+        (bool ok, bytes memory ret) =
+            settlement.staticcall(abi.encodeWithSignature("finalProvenAt(uint256)", electionId));
+        if (!ok || ret.length < 32) return opens;
+        uint256 provenAt = abi.decode(ret, (uint256));
+        if (provenAt == 0) return opens;
+        uint256 fromProof = provenAt + window;
+        if (fromProof > opens) return fromProof;
+        return opens;
     }
 
     function setRollupSettlement(uint256 electionId, address settlement_) external {
