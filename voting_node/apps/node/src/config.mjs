@@ -410,6 +410,7 @@ export function getConfig(overrides = {}) {
     origins: authority.origins,
     adminHandle: process.env.ADMIN_HANDLE || 'admin',
     chainRpc: process.env.CHAIN_RPC || '',
+    rankedBatchGas: process.env.RANKED_BATCH_GAS || '',
     ballotInboxAddress: process.env.BALLOT_INBOX_ADDRESS || '',
     electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || process.env.FACTORY || '',
     verifierAddress: process.env.VERIFIER_ADDRESS || process.env.VERIFIER || '',

@@ -9,7 +9,7 @@ import {ITallyVerifier} from "../src/interfaces/ITallyVerifier.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
-/// @notice Sealed ranked choice: ranking envelope commitments and the IRV result commitment.
+/// @notice Sealed ranked choice: ranking hashes ride in the hourly vote batch; IRV result commitment.
 contract RankedChoiceTest is Deployer {
     uint256 internal constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256[2] internal a;
@@ -23,7 +23,7 @@ contract RankedChoiceTest is Deployer {
         (a, b, c) = Fixtures.dummyProof();
     }
 
-    function _open(uint256 n) internal returns (uint256 id, address el, uint256[] memory ids) {
+    function _setup(uint256 n) internal returns (uint256 id, address el, uint256[] memory ids) {
         ElectionParams memory p = Fixtures.withTallyScheme(defaultParams(), TallyScheme.SUM_ONLY);
         (id, el) = createElection(p);
         for (uint256 i; i < n; ++i) {
@@ -34,61 +34,110 @@ contract RankedChoiceTest is Deployer {
         ids = new uint256[](n);
         for (uint256 i; i < n; ++i) {
             ids[i] = uint256(keccak256(abi.encodePacked("rk", i))) % R;
-            submitVote(id, el, ids[i]);
         }
     }
 
-    function testCommitRankingChainsRoot() public {
-        (uint256 id,, uint256[] memory ids) = _open(2);
-        bytes32 h0 = keccak256("ranking-0");
-        bytes32 h1 = keccak256("ranking-1");
-        vm.prank(relayer);
-        inbox.commitRanking(id, ids[0], h0);
-        bytes32 r0 = keccak256(abi.encodePacked(bytes32(0), ids[0], h0));
-        assertEq(inbox.rankingRoot(id), r0);
-        vm.prank(relayer);
-        inbox.commitRanking(id, ids[1], h1);
-        assertEq(inbox.rankingRoot(id), keccak256(abi.encodePacked(r0, ids[1], h1)));
-        assertEq(inbox.rankingHashOf(id, ids[0]), h0);
-        assertEq(inbox.rankingCount(id), 2);
+    function _args(uint256 id, address el, uint256[] memory ids)
+        internal
+        view
+        returns (
+            uint256[2][] memory pa,
+            uint256[2][2][] memory pb,
+            uint256[2][] memory pc,
+            uint256[][] memory inputs,
+            bytes[] memory ballots
+        )
+    {
+        uint256 n = ids.length;
+        pa = new uint256[2][](n);
+        pb = new uint256[2][2][](n);
+        pc = new uint256[2][](n);
+        inputs = new uint256[][](n);
+        ballots = new bytes[](n);
+        for (uint256 i; i < n; ++i) {
+            pa[i] = a;
+            pb[i] = b;
+            pc[i] = c;
+            ballots[i] = Fixtures.encryptedBallot(ids[i]);
+            inputs[i] = voteInputs(id, el, ids[i], ballots[i]);
+        }
     }
 
-    function testCommitRankingIsRelayerOnly() public {
-        (uint256 id,, uint256[] memory ids) = _open(1);
-        vm.prank(clerk);
-        vm.expectRevert(IBallotInbox.NotRelayer.selector);
-        inbox.commitRanking(id, ids[0], keccak256("x"));
+    function _sorted(uint256 n, string memory salt) internal pure returns (bytes32[] memory hs) {
+        hs = new bytes32[](n);
+        for (uint256 i; i < n; ++i) {
+            hs[i] = keccak256(abi.encodePacked(salt, i));
+        }
+        for (uint256 i = 1; i < n; ++i) {
+            bytes32 v = hs[i];
+            uint256 j = i;
+            while (j > 0 && uint256(hs[j - 1]) > uint256(v)) {
+                hs[j] = hs[j - 1];
+                --j;
+            }
+            hs[j] = v;
+        }
     }
 
-    function testCommitRankingNeedsAcceptedSubmission() public {
-        (uint256 id,,) = _open(1);
+    function _ranked(uint256 id, address el, uint256[] memory ids, bytes32[] memory hs) internal {
+        (uint256[2][] memory pa, uint256[2][2][] memory pb, uint256[2][] memory pc, uint256[][] memory inputs, bytes[] memory ballots) =
+            _args(id, el, ids);
         vm.prank(relayer);
-        vm.expectRevert(IBallotInbox.UnknownSubmission.selector);
-        inbox.commitRanking(id, 12345, keccak256("x"));
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, hs);
     }
 
-    function testRankingCannotBeSwappedAfterCommit() public {
-        (uint256 id,, uint256[] memory ids) = _open(1);
-        vm.prank(relayer);
-        inbox.commitRanking(id, ids[0], keccak256("a"));
-        vm.prank(relayer);
-        vm.expectRevert(IBallotInbox.RankingAlreadyCommitted.selector);
-        inbox.commitRanking(id, ids[0], keccak256("b"));
+    function testBatchCarriesRankingRoot() public {
+        (uint256 id, address el, uint256[] memory ids) = _setup(3);
+        bytes32[] memory hs = _sorted(3, "r");
+        _ranked(id, el, ids, hs);
+        bytes32 digest = keccak256(abi.encodePacked(hs));
+        assertEq(inbox.rankingRoot(id), keccak256(abi.encodePacked(bytes32(0), digest, uint256(3))));
+        assertEq(inbox.rankingCount(id), 3);
+        assertEq(inbox.acceptedCount(id), 3);
     }
 
-    function testEmptyRankingRejected() public {
-        (uint256 id,, uint256[] memory ids) = _open(1);
+    function testUnsortedRankingsRevertWithTheBallots() public {
+        (uint256 id, address el, uint256[] memory ids) = _setup(2);
+        bytes32[] memory hs = _sorted(2, "r");
+        (hs[0], hs[1]) = (hs[1], hs[0]);
+        (uint256[2][] memory pa, uint256[2][2][] memory pb, uint256[2][] memory pc, uint256[][] memory inputs, bytes[] memory ballots) =
+            _args(id, el, ids);
+        vm.prank(relayer);
+        vm.expectRevert(IBallotInbox.RankingsNotSorted.selector);
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, hs);
+        // The whole batch reverted, so no ballot landed without its ranking.
+        assertEq(inbox.acceptedCount(id), 0);
+    }
+
+    function testRankingCountBoundedByBallots() public {
+        (uint256 id, address el, uint256[] memory ids) = _setup(1);
+        (uint256[2][] memory pa, uint256[2][2][] memory pb, uint256[2][] memory pc, uint256[][] memory inputs, bytes[] memory ballots) =
+            _args(id, el, ids);
+        bytes32[] memory two = _sorted(2, "r");
+        vm.prank(relayer);
+        vm.expectRevert(IBallotInbox.RankingCountMismatch.selector);
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, two);
+        vm.prank(relayer);
+        vm.expectRevert(IBallotInbox.RankingCountMismatch.selector);
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, new bytes32[](0));
+        bytes32[] memory zero = new bytes32[](1);
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.EmptyRankingCommitment.selector);
-        inbox.commitRanking(id, ids[0], bytes32(0));
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, zero);
+    }
+
+    function testRankedBatchIsRelayerOnly() public {
+        (uint256 id, address el, uint256[] memory ids) = _setup(1);
+        (uint256[2][] memory pa, uint256[2][2][] memory pb, uint256[2][] memory pc, uint256[][] memory inputs, bytes[] memory ballots) =
+            _args(id, el, ids);
+        vm.prank(clerk);
+        vm.expectRevert(IBallotInbox.NotRelayer.selector);
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, _sorted(1, "r"));
     }
 
     function testPublishRankedResultAfterTally() public {
-        (uint256 id, address el, uint256[] memory ids) = _open(3);
-        for (uint256 i; i < 3; ++i) {
-            vm.prank(relayer);
-            inbox.commitRanking(id, ids[i], keccak256(abi.encodePacked("r", i)));
-        }
+        (uint256 id, address el, uint256[] memory ids) = _setup(3);
+        _ranked(id, el, ids, _sorted(3, "r"));
         bytes32 root = inbox.rankingRoot(id);
         warpClosed(el);
 
@@ -126,20 +175,20 @@ contract RankedChoiceTest is Deployer {
         vm.prank(tallyOperator);
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.ResultAlreadyFinal.selector, id));
         tally.publishRankedResult(id, keccak256("set2"), keccak256("rounds"), 3);
-
-        vm.prank(relayer);
-        vm.expectRevert();
-        inbox.commitRanking(id, ids[0], keccak256("late"));
     }
 
-    function testCommitRankingGas() public {
-        (uint256 id,, uint256[] memory ids) = _open(1);
+    /// @dev Marginal cost of carrying rankings: a full 64-ballot batch with and without
+    ///      its 64 ranking hashes. Must stay far inside the 24M default batch budget.
+    function testRankingBatchGas() public {
+        (uint256 id, address el, uint256[] memory ids) = _setup(64);
+        bytes32[] memory hs = _sorted(64, "g");
+        (uint256[2][] memory pa, uint256[2][2][] memory pb, uint256[2][] memory pc, uint256[][] memory inputs, bytes[] memory ballots) =
+            _args(id, el, ids);
         vm.prank(relayer);
         uint256 g = gasleft();
-        inbox.commitRanking(id, ids[0], keccak256("g"));
+        inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, hs);
         uint256 used = g - gasleft();
-        // Three cold SSTOREs plus an event; well inside any batch budget.
-        // Cold writes: hash slot, root, count, event (~137k measured). One tx per ranking.
-        assertLt(used, 160_000);
+        emit log_named_uint("submitVoteBatchRanked(64) gas", used);
+        assertLt(used, 24_000_000);
     }
 }

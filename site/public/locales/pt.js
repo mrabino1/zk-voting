@@ -120,7 +120,7 @@ export default {
     unionsTitle: "Sindicatos e associações",
     unionsBody: "Faça eleições de diretoria e votações de ratificação em que a membresia confia na contagem sem confiar na diretoria.",
     coopsTitle: "Cooperativas e conselhos",
-    coopsBody: "Faça votos de conselho e enquetes de membros, inclusive cédulas ponderadas e por ordem de preferência em enquetes e votações seladas, com um relatório de resultado auditável.",
+    coopsBody: "Faça votos de conselho e enquetes de membros, inclusive cédulas ponderadas e por ordem de preferência: em enquetes e, como opção, em votações seladas (os guardiões então veem cada classificação, não a identidade), com um relatório de resultado auditável.",
     schoolsTitle: "Escolas e campi",
     schoolsBody: "Conduza grêmios e votações docentes com entrada por chave de acesso e uma cédula usável em qualquer aparelho.",
     clubsTitle: "Comunidades e clubes",

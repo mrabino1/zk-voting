@@ -20,7 +20,13 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
-import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { freshChoiceRandomness } from "./aggregate-ballot.js";
+
+const SEALED_RANKED_DISCLOSURE =
+  "Ranked choice on a sealed vote: until a verified shuffle exists, guardians can see each individual ranking " +
+  "(not who cast it). The instant-runoff result is recomputable from the published rankings but is not " +
+  "ZK-proven. A distinctive ranking pattern could be used to prove how someone voted (coercion risk).";
 import { receiptHelpKey, t } from "./i18n.js";
 
 function tallyEncryptionBlurb(election) {
@@ -433,6 +439,9 @@ export async function renderVote(main, ctx) {
         h("span", { class: "aspect-prompt", text: question.prompt })
       ),
       question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+      ranked && electionTypeNameOf(election) === "vote" && election.sealedRankedChoice === true
+        ? h("p", { class: "field-hint ranked-disclosure", role: "note", text: SEALED_RANKED_DISCLOSURE })
+        : null,
       ranked
         ? rankedField(question, index)
         : h("p", { class: "field-hint", text: multi ? `Select up to ${question.maxSelections}.` : "Select one. Leaving this blank is an undervote." }),
@@ -775,7 +784,11 @@ export async function renderVote(main, ctx) {
 
     // Sealed ranked-choice: the full ranking is encrypted to the guardian
     // key; the one-hot ciphertext below carries the first choice only.
-    const hasRanked = questions.some((q) => isRankedQuestion(q, election.ballotMethod));
+    // Polls always seal rankings; a sealed vote only with the opt-in setting.
+    const isVote = electionTypeNameOf(election) === "vote";
+    const hasRanked =
+      questions.some((q) => isRankedQuestion(q, election.ballotMethod)) &&
+      (!isVote || election.sealedRankedChoice === true);
     let sealedRanking = null;
     const choiceIndex = openingIndexFromAnswers(answers, questions);
     const tallyPubKey = election.tallyPubKey || election.tallyCeremony?.publicKey || null;
@@ -783,12 +796,27 @@ export async function renderVote(main, ctx) {
 
     try {
       const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
+      // Sealed ranked-choice: encrypt the ranking first (with the first-choice
+      // index and tag randomness inside), then bind its hash into the proven
+      // AG tag, so the ranking cannot be swapped after the ballot is cast.
+      let choiceRandomness;
+      if (hasRanked) {
+        choiceRandomness = freshChoiceRandomness();
+        sealedRanking = await encryptRankingEnvelope({
+          jointPublicKey: election.tallyCeremony?.publicKey || tallyPubKey,
+          electionId: election.id,
+          answers: answers.filter((a) => Array.isArray(a.ranking)),
+          questions,
+          first: { index: choiceIndex, r: choiceRandomness.toString() },
+        });
+      }
       const auth = await wallet.authorizeBallot({
         electionId: election.id,
         chainElectionId: onChainId,
         tallyPubKey,
         choiceIndex,
         nOptions,
+        ...(sealedRanking ? { choiceRandomness, rankingHash: sealedRanking.rankingHash } : {}),
       });
       const publicInputs = mockVotePublicInputs({
         eligibleRoot: election.eligibleRoot,
@@ -818,13 +846,6 @@ export async function renderVote(main, ctx) {
         chainId = source === "sample" ? 31337 : chainId;
       }
       const proof = await proveVote({ publicInputs, chainId });
-      if (hasRanked) {
-        sealedRanking = await encryptRankingEnvelope({
-          jointPublicKey: election.tallyCeremony?.publicKey || tallyPubKey,
-          electionId: election.id,
-          answers: answers.filter((a) => Array.isArray(a.ranking)),
-        });
-      }
       const body = buildVoteRequestBody({
         encryptedRanking: sealedRanking?.rankingEnvelope,
         electionId: String(election.id),

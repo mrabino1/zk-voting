@@ -31,6 +31,17 @@ describe("external party factory ABI", () => {
     );
   });
 
+  test("INBOX_ABI carries sealed ranked batch methods and no per-ballot commit", () => {
+    const names = INBOX_ABI.filter((item) => item.type === "function").map((item) => item.name);
+    for (const n of ["submitVoteBatchRanked", "rankingRoot", "rankingCount"]) assert.equal(names.includes(n), true, n);
+    assert.equal(names.includes("commitRanking"), false);
+    assert.equal(names.includes("rankingHashOf"), false);
+    const ranked = INBOX_ABI.find((item) => item.name === "submitVoteBatchRanked");
+    assert.equal(ranked.inputs.at(-1).type, "bytes32[]");
+    const ev = INBOX_ABI.find((item) => item.type === "event" && item.name === "RankingBatchCommitted");
+    assert.deepEqual(ev.inputs.map((i) => i.name), ["electionId", "digest", "count", "rankingRoot"]);
+  });
+
   test("ElectionCreated carries electionType and createElection sends it", () => {
     const created = FACTORY_ABI.find((item) => item.type === "event" && item.name === "ElectionCreated");
     assert.deepEqual(

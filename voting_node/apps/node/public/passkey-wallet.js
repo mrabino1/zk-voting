@@ -1418,6 +1418,8 @@ export async function authorizeBallot({
   tallyPubKey,
   choiceIndex,
   nOptions,
+  choiceRandomness: presetRandomness,
+  rankingHash,
 } = {}) {
   const { seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
   let trapdoor = identity.trapdoor;
@@ -1438,7 +1440,7 @@ export async function authorizeBallot({
     if (choiceIndex != null) {
       const n = Number(nOptions ?? Number(choiceIndex) + 1);
       choice = Number(choiceIndex);
-      choiceRandomness = privateChoiceRandomness();
+      choiceRandomness = presetRandomness != null ? BigInt(presetRandomness) : privateChoiceRandomness();
       let joint = tallyPubKey;
       if (!joint) {
         joint = "0x" + bytesToHex(pointToRaw(p256Mul(randomScalar(), P256_G)));
@@ -1448,6 +1450,7 @@ export async function authorizeBallot({
         choice,
         choiceRandomness,
         nOptions: n,
+        bindHash: rankingHash || undefined,
       });
       encryptedBallot = sealed.encryptedBallot;
       ballotHash = sealed.ballotHash;

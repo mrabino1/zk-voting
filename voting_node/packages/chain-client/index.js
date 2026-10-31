@@ -139,6 +139,46 @@ const INBOX_ABI = [
   },
   {
     type: "function",
+    name: "submitVoteBatchRanked",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "a", type: "uint256[2][]" },
+      { name: "b", type: "uint256[2][2][]" },
+      { name: "c", type: "uint256[2][]" },
+      { name: "publicInputs", type: "uint256[][]" },
+      { name: "encryptedBallots", type: "bytes[]" },
+      { name: "rankingHashes", type: "bytes32[]" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "rankingRoot",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "rankingCount",
+    stateMutability: "view",
+    inputs: [{ name: "electionId", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "RankingBatchCommitted",
+    anonymous: false,
+    inputs: [
+      { name: "electionId", type: "uint256", indexed: true },
+      { name: "digest", type: "bytes32", indexed: false },
+      { name: "count", type: "uint256", indexed: false },
+      { name: "rankingRoot", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "function",
     name: "nullifierUsed",
     stateMutability: "view",
     inputs: [

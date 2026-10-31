@@ -68,6 +68,7 @@ import {
 import { disqualificationTree, emptyTree, insertLeaf, toBytes32 } from './merkle.mjs';
 import { isOfficerRole, isPlatformOperator, isRole } from './roles.mjs';
 import { isValidReasonCode, reasonName } from './reasonCodes.mjs';
+import { newRankingId } from './rankedTally.mjs';
 import {
   defaultSite,
   normalizeKind,
@@ -1705,6 +1706,7 @@ export class Store {
       tallyOperator: params.tallyOperator || '',
       verifier: params.verifier || '',
       lateUpdateAllowed: Boolean(params.lateUpdateAllowed),
+      sealedRankedChoice: params.sealedRankedChoice === true,
       tallyScheme,
       tallyPubKey,
       tallyPubKeyX,
@@ -2645,7 +2647,7 @@ export class Store {
         encryptedBallot: envelope.encryptedBallot,
         ...(Array.isArray(envelope.rankingPayload) ? { rankingPayload: envelope.rankingPayload } : {}),
         ...(envelope.rankingEnvelope
-          ? { rankingEnvelope: envelope.rankingEnvelope, rankingHash: envelope.rankingHash }
+          ? { rankingEnvelope: envelope.rankingEnvelope, rankingHash: envelope.rankingHash, rankingId: newRankingId() }
           : {}),
       });
     }
@@ -2758,6 +2760,7 @@ export class Store {
       if (envelope.rankingEnvelope) {
         env.tallyRankingEnvelope = envelope.rankingEnvelope;
         env.tallyRankingHash = envelope.rankingHash;
+        env.tallyRankingId = newRankingId();
       }
     }
     if (vote.chainPayload && typeof vote.chainPayload === 'object') {
@@ -3460,7 +3463,7 @@ export class Store {
     return bucket.partials;
   }
 
-  /** Guardian partials on sealed ranking envelopes (`ranking:<nullifier>`). Merged per tag. */
+  /** Guardian partials on sealed ranking envelopes (`ranking:<rankingId>`). Merged per tag. */
   async saveRankingPartials(electionId, { index, partials }) {
     const bucket = this.getTallyGuardian(electionId);
     if (!bucket) throw new HttpError(400, 'election has no guardian ceremony', { code: 'NO_CEREMONY' });

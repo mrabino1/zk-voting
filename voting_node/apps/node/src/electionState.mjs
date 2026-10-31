@@ -132,6 +132,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
         }
       : null,
     lateUpdateAllowed: election.lateUpdateAllowed,
+    sealedRankedChoice: election.sealedRankedChoice === true,
     onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
     onChainElectionAddress: election.onChainElectionAddress || null,
     factoryAddress: election.factoryAddress || null,

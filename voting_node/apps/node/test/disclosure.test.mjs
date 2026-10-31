@@ -75,7 +75,8 @@ function leakKeys(value, acc = []) {
       k !== 'published' &&
       k !== 'resultsSealed' &&
       k !== 'sealed' &&
-      k !== 'sealedUntil'
+      k !== 'sealedUntil' &&
+      k !== 'sealedRankedChoice'
     ) {
       acc.push(k);
     }

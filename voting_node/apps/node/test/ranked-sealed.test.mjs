@@ -11,7 +11,13 @@ import { aggregateCiphertexts, encryptAggregateBallot } from '../src/aggregateBa
 import { partialDecrypt } from '../src/guardians/threshold.mjs';
 import { createSealedDeal, finalizeShare, initGuardian } from '../src/guardians/index.mjs';
 import { createApp } from '../src/server.mjs';
-import { decryptRankingEnvelope, encryptRankingEnvelope, isRankingEnvelope } from '../public/ranked-envelope.js';
+import { decryptRankingEnvelope, encryptRankingEnvelope, isRankingEnvelope, rankingEnvelopeBytes } from '../public/ranked-envelope.js';
+import { rankingTag } from '../src/rankedTally.mjs';
+import { rankedBatchGas, sortedRankingHashes } from '../src/chain.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { writeFile, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { computeIrv } from '../src/irv.mjs';
 import { createChain } from '../src/chain.mjs';
 
@@ -160,41 +166,63 @@ function partialBody(share, electionId, envelopes) {
   };
 }
 
-function rankingPartialBody(share, electionId, envelopes) {
-  const partials = [];
-  for (const env of envelopes) {
-    const ranking = env.tallyRankingEnvelope || env.rankingEnvelope;
-    if (!ranking) continue;
-    const c1 = `0x${ranking.slice(2 + 6, 2 + 6 + 130)}`;
-    partials.push(
+function rankingPartialBody(share, electionId, rankings) {
+  // Guardians work from the published `rankings` list (random ids, sorted).
+  return {
+    index: share.index,
+    partials: rankings.map((row) =>
       partialDecrypt({
         shareScalar: share.shareScalar,
         index: share.index,
         electionId,
-        ballotHash: `ranking:${String(env.nullifier).toLowerCase()}`,
+        ballotHash: rankingTag(row.rankingId),
         jointPublicKey: share.jointPublicKey,
-        ephemeral: c1,
+        ephemeral: `0x${row.rankingEnvelope.slice(2 + 6, 2 + 6 + 130)}`,
       }),
-    );
-  }
-  return { index: share.index, partials };
+    ),
+  };
 }
 
 const OPTIONS = ['a', 'b', 'c', 'd'];
+const QUESTIONS = [
+  { id: 'q-seat', type: 'RANKED', prompt: 'Rank the seat', options: OPTIONS.map((id) => ({ id, label: id.toUpperCase() })) },
+];
 
-async function castRanked(electionId, pub, nullifier, ranking, commitment, { firstChoice } = {}) {
+/** A bound ranked ballot: the ranking hash is folded into the AG tag. */
+async function sealedPair(pub, electionId, ranking, { firstChoice, seed = 1n, swapTo } = {}) {
   const first = firstChoice ?? ranking[0] ?? 'a';
-  const ag = encryptAggregateBallot({
-    jointPublicKey: pub,
-    choice: OPTIONS.indexOf(first),
-    choiceRandomness: 5000n + BigInt(nullifier),
-    nOptions: OPTIONS.length,
-  });
+  const index = OPTIONS.indexOf(first);
+  const r = 5000n + BigInt(seed);
   const rk = await encryptRankingEnvelope({
     jointPublicKey: pub,
     electionId,
     answers: [{ questionId: 'q-seat', ranking }],
+    questions: QUESTIONS,
+    first: { index, r: r.toString() },
   });
+  const ag = encryptAggregateBallot({
+    jointPublicKey: pub,
+    choice: index,
+    choiceRandomness: r,
+    nOptions: OPTIONS.length,
+    bindHash: rk.rankingHash,
+  });
+  let sent = rk;
+  if (swapTo) {
+    // Same first choice and r, different ranking: hash no longer matches the tag.
+    sent = await encryptRankingEnvelope({
+      jointPublicKey: pub,
+      electionId,
+      answers: [{ questionId: 'q-seat', ranking: swapTo }],
+      questions: QUESTIONS,
+      first: { index, r: r.toString() },
+    });
+  }
+  return { ag, rk: sent, bound: rk };
+}
+
+async function castRanked(electionId, pub, nullifier, ranking, commitment, opts = {}) {
+  const { ag, rk } = await sealedPair(pub, electionId, ranking, { seed: BigInt(nullifier), ...opts });
   const res = await api('POST', `/api/elections/${electionId}/vote`, {
     body: {
       proof: { accept: true },
@@ -212,19 +240,35 @@ describe('ranking envelope (RK)', () => {
     const { p256 } = await import('@noble/curves/p256');
     const x = 0x1234567n;
     const Y = `0x${Buffer.from(p256.ProjectivePoint.BASE.multiply(x).toRawBytes(false)).toString('hex')}`;
-    const one = await encryptRankingEnvelope({ jointPublicKey: Y, electionId: 'e1', answers: [{ questionId: 'q', ranking: ['a'] }] });
+    const qs = [{ id: 'q', type: 'RANKED', options: ['a', 'b', 'c', 'd'].map((id) => ({ id })) }];
+    const one = await encryptRankingEnvelope({
+      jointPublicKey: Y, electionId: 'e1', questions: qs, first: { index: 0, r: '1' },
+      answers: [{ questionId: 'q', ranking: ['a'] }],
+    });
     const all = await encryptRankingEnvelope({
       jointPublicKey: Y,
       electionId: 'e1',
+      questions: qs,
+      first: { index: 3, r: '9'.repeat(76) },
       answers: [{ questionId: 'q', ranking: ['a', 'b', 'c', 'd'] }],
     });
     assert.ok(isRankingEnvelope(one.rankingEnvelope));
+    // One fixed envelope size per election, independent of ranking length or r.
     assert.equal(one.rankingEnvelope.length, all.rankingEnvelope.length);
+    assert.equal((all.rankingEnvelope.length - 2) / 2, rankingEnvelopeBytes(qs));
     assert.match(one.rankingHash, /^0x[0-9a-f]{64}$/);
     const c1 = p256.ProjectivePoint.fromHex(all.rankingEnvelope.slice(8, 8 + 130));
     const shared = c1.multiply(x).toRawBytes(false);
     const opened = await decryptRankingEnvelope({ envelope: all.rankingEnvelope, electionId: 'e1', sharedPoint: shared });
     assert.deepEqual(opened, [{ questionId: 'q', ranking: ['a', 'b', 'c', 'd'] }]);
+    // A ranking that cannot fit the fixed pad is refused, never grown.
+    await assert.rejects(
+      encryptRankingEnvelope({
+        jointPublicKey: Y, electionId: 'e1', questions: qs, first: { index: 0, r: '1' },
+        answers: [{ questionId: 'q', ranking: ['x'.repeat(5000)] }],
+      }),
+      (err) => err.code === 'BAD_RANKING',
+    );
     await assert.rejects(
       decryptRankingEnvelope({ envelope: all.rankingEnvelope, electionId: 'e2', sharedPoint: shared }),
       /did not decrypt/,
@@ -244,6 +288,24 @@ describe('ranking envelope (RK)', () => {
     assert.ok(ex.exhausted >= 1);
   });
 });
+
+async function createRankedElection(extra = {}) {
+  return api('POST', '/api/elections', {
+    jar: adminJar,
+    body: {
+      title: 'Sealed IRV',
+      startTime: nowSec() - 10,
+      cutoffTime: nowSec() + 3600,
+      ballotMethod: 'ranked_choice',
+      questions: QUESTIONS,
+      jurisdictionId: 'demo',
+      tallyScheme: 'opens_ballots',
+      threshold: 2,
+      guardianCount: 3,
+      ...extra,
+    },
+  });
+}
 
 describe('sealed ranked-choice tally (guardian threshold)', () => {
   before(async () => {
@@ -276,52 +338,60 @@ describe('sealed ranked-choice tally (guardian threshold)', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
-  test('4-option IRV with re-vote, exhausted and invalid rankings, threshold partials', async () => {
-    const created = await api('POST', '/api/elections', {
-      jar: adminJar,
-      body: {
-        title: 'Sealed IRV',
-        startTime: nowSec() - 10,
-        cutoffTime: nowSec() + 3600,
-        ballotMethod: 'ranked_choice',
-        questions: [
-          {
-            id: 'q-seat',
-            type: 'RANKED',
-            prompt: 'Rank the seat',
-            options: OPTIONS.map((id) => ({ id, label: id.toUpperCase() })),
-          },
-        ],
-        jurisdictionId: 'demo',
-        tallyScheme: 'opens_ballots',
-        threshold: 2,
-        guardianCount: 3,
-      },
-    });
+  test('sealed vote with the setting off: no rankings accepted, ranked tally disabled', async () => {
+    // Turning the setting on without the acknowledgment is refused.
+    const noAck = await createRankedElection({ electionType: 1, sealedRankedChoice: true });
+    assert.equal(noAck.status, 400, noAck.text);
+    assert.equal(noAck.json.code, 'DISCLOSURE_ACK_REQUIRED');
+
+    const created = await createRankedElection({ electionType: 1 });
+    assert.equal(created.status, 201, created.text);
+    const electionId = created.json.election.id;
+    assert.notEqual(store.requireElection(electionId).sealedRankedChoice, true);
+    await establishGuardians(electionId);
+    const pub = store.requireElection(electionId).tallyPubKey;
+    const commitment = '0xf01';
+    await registerVoter(electionId, commitment);
+    const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
+    assert.equal(freeze.status, 200, freeze.text);
+    const { res } = await castRanked(electionId, pub, 3001, ['a', 'b'], commitment);
+    assert.equal(res.status, 400, res.text);
+    assert.equal(res.json.code, 'RANKING_NOT_ALLOWED');
+    const election = store.requireElection(electionId);
+    election.cutoffTime = nowSec() - 1;
+    await store.persist();
+    const tallied = await api('POST', `/api/elections/${electionId}/tally`, { jar: adminJar, body: {} });
+    assert.equal(tallied.status, 409, tallied.text);
+    assert.equal(tallied.json.code, 'RANKED_TALLY_DISABLED');
+  });
+
+  test('setting is bound into ballotSpecHash and locked after creation', async () => {
+    const off = await createRankedElection({ electionType: 1 });
+    const on = await createRankedElection({ electionType: 1, sealedRankedChoice: true, sealedRankedDisclosureAck: true });
+    assert.equal(on.status, 201, on.text);
+    const a = store.requireElection(off.json.election.id);
+    const b = store.requireElection(on.json.election.id);
+    assert.equal(b.sealedRankedChoice, true);
+    assert.ok(a.ballotSpecHash && b.ballotSpecHash);
+    assert.notEqual(a.ballotSpecHash, b.ballotSpecHash);
+    const patched = await api('PATCH', `/api/elections/${b.id}`, { jar: adminJar, body: { sealedRankedChoice: false } });
+    assert.equal(patched.status, 409, patched.text);
+    assert.equal(patched.json.code, 'SETTING_LOCKED');
+  });
+
+  test('opt-in sealed vote: 4-option IRV end to end, re-vote, swap rejected, no nullifier linkage', async () => {
+    const created = await createRankedElection({ electionType: 1, sealedRankedChoice: true, sealedRankedDisclosureAck: true });
     assert.equal(created.status, 201, created.text);
     const electionId = created.json.election.id;
     const shares = await establishGuardians(electionId, { guardians: 3, threshold: 2 });
     const pub = store.requireElection(electionId).tallyPubKey;
 
-    // a:3 b:3 c:2 d:1 first choices. d is eliminated and transfers to c,
-    // then b vs c ... see assertions. One ballot ranks only d (exhausts).
-    const stacks = [
-      ['a', 'b'],
-      ['a', 'b'],
-      ['a'],
-      ['b', 'c'],
-      ['b', 'c'],
-      ['b', 'a'],
-      ['c', 'b'],
-      ['c', 'b'],
-      ['d'],
-    ];
-    const commitments = [...stacks, null].map((_, i) => `0x${(0xc01 + i).toString(16)}`);
+    const stacks = [['a', 'b'], ['a', 'b'], ['a'], ['b', 'c'], ['b', 'c'], ['b', 'a'], ['c', 'b'], ['c', 'b'], ['d']];
+    const commitments = [...stacks, null, null].map((_, i) => `0x${(0xc01 + i).toString(16)}`);
     for (const c of commitments) await registerVoter(electionId, c);
     const freeze = await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
     assert.equal(freeze.status, 200, freeze.text);
 
-    // A ranked election with a ready ceremony refuses a ballot with no ranking.
     const bare = encryptAggregateBallot({ jointPublicKey: pub, choice: 0, choiceRandomness: 9n, nOptions: 4 });
     const noRanking = await voteEncrypted(electionId, 77, bare.encryptedBallot, commitments[0]);
     assert.equal(noRanking.status, 400, noRanking.text);
@@ -337,15 +407,34 @@ describe('sealed ranked-choice tally (guardian threshold)', () => {
     });
     assert.equal(badRanking.status, 400, badRanking.text);
     assert.equal(badRanking.json.code, 'BAD_RANKING');
+    // A well-formed envelope with the wrong (larger) padding is refused.
+    const bigger = await encryptRankingEnvelope({
+      jointPublicKey: pub,
+      electionId,
+      questions: [...QUESTIONS, { ...QUESTIONS[0], id: 'q-extra' }],
+      first: { index: 0, r: '1' },
+      answers: [{ questionId: 'q-seat', ranking: ['a'] }],
+    });
+    const wrongSize = await api('POST', `/api/elections/${electionId}/vote`, {
+      body: {
+        proof: { accept: true },
+        publicInputs: { nullifier: 79, electionId },
+        encryptedBallot: bare.encryptedBallot,
+        encryptedRanking: bigger.rankingEnvelope,
+        identityCommitment: commitments[0],
+      },
+    });
+    assert.equal(wrongSize.status, 400, wrongSize.text);
+    assert.equal(wrongSize.json.code, 'BAD_RANKING');
 
-    const hashes = [];
+    const nullifiers = [];
     for (let i = 0; i < stacks.length; i++) {
-      // Voter 5 first casts ['d'] and then re-votes ['b','a']: last vote counts.
       if (i === 5) {
+        // Voter 5 first casts ['d'], then re-votes ['b','a']: last vote counts.
         const first = await castRanked(electionId, pub, 2000 + i, ['d'], commitments[i]);
         assert.equal(first.res.status, 201, first.res.text);
-        const ag = encryptAggregateBallot({ jointPublicKey: pub, choice: 1, choiceRandomness: 77n, nOptions: 4 });
-        const rk = await encryptRankingEnvelope({ jointPublicKey: pub, electionId, answers: [{ questionId: 'q-seat', ranking: stacks[i] }] });
+        nullifiers.push(String(first.res.json.vote.nullifier));
+        const { ag, rk } = await sealedPair(pub, electionId, stacks[i], { seed: 77n });
         const stored = store.findVote(electionId, first.res.json.vote.nullifier);
         const spent = store.votePassSpent;
         store.votePassSpent = () => true;
@@ -357,27 +446,43 @@ describe('sealed ranked-choice tally (guardian threshold)', () => {
         } finally {
           store.votePassSpent = spent;
         }
-        hashes.push(rk.rankingHash);
         continue;
       }
       const { res, rk } = await castRanked(electionId, pub, 2000 + i, stacks[i], commitments[i]);
       assert.equal(res.status, 201, res.text);
       assert.equal(res.json.rankingHash, rk.rankingHash);
       assert.equal(JSON.stringify(res.json).includes('"ranking"'), false);
-      hashes.push(rk.rankingHash);
+      nullifiers.push(String(res.json.vote.nullifier));
     }
-    // One ranking names an unknown option: it opens but counts as exhausted.
+    // First choice 'a' in the one-hot, but the ranking starts with 'z': fatal for this ballot.
     const rogue = await castRanked(electionId, pub, 2100, ['z'], commitments[stacks.length], { firstChoice: 'a' });
     assert.equal(rogue.res.status, 201, rogue.res.text);
+    // Swap: the AG tag binds ['c','b'] but a different ranking ['d'] is sent.
+    const swap = await castRanked(electionId, pub, 2101, ['c', 'b'], commitments[stacks.length + 1], { swapTo: ['d'] });
+    assert.equal(swap.res.status, 201, swap.res.text);
 
     const election = store.requireElection(electionId);
     election.cutoffTime = nowSec() - 1;
     await store.persist();
 
-    const envelopes = store.listEnvelopes(electionId);
-    const revoted = envelopes.find((env) => env.tallyRankingEnvelope);
-    assert.ok(revoted, 'the re-vote keeps a tally copy of the replacement ranking');
-    assert.notEqual(revoted.rankingHash, revoted.tallyRankingHash);
+    // Guardian download: rankings in a separate list, sorted by random id, no nullifier.
+    const dl = await api('GET', `/api/elections/${electionId}/envelopes`, { jar: adminJar });
+    assert.equal(dl.status, 200, dl.text);
+    const { envelopes, rankings } = dl.json;
+    assert.equal(rankings.length, stacks.length + 2);
+    const ids = rankings.map((row) => row.rankingId);
+    assert.deepEqual([...ids].sort(), ids);
+    for (const row of rankings) assert.deepEqual(Object.keys(row).sort(), ['rankingEnvelope', 'rankingId']);
+    for (const row of envelopes) {
+      for (const k of ['rankingEnvelope', 'rankingHash', 'rankingId', 'tallyRankingEnvelope', 'tallyRankingId']) {
+        assert.equal(k in row, false, k);
+      }
+    }
+    const rankingsJson = JSON.stringify(rankings);
+    for (const n of nullifiers) assert.equal(rankingsJson.includes(n), false);
+    assert.equal(rankingsJson.includes('nullifier'), false);
+    assert.equal(rankingsJson.includes('ranking:'), false);
+
     for (const share of shares.slice(0, 2)) {
       const posted = await api('POST', `/api/elections/${electionId}/guardians/partials`, {
         jar: adminJar,
@@ -385,25 +490,23 @@ describe('sealed ranked-choice tally (guardian threshold)', () => {
       });
       assert.equal(posted.status, 201, posted.text);
     }
-    // Only one guardian has opened the rankings so far: below threshold.
     const r1 = await api('POST', `/api/elections/${electionId}/guardians/partials`, {
       jar: adminJar,
-      body: rankingPartialBody(shares[0], electionId, envelopes),
+      body: rankingPartialBody(shares[0], electionId, rankings),
     });
     assert.equal(r1.status, 201, r1.text);
     const early = await api('POST', `/api/elections/${electionId}/tally`, { jar: adminJar, body: {} });
     assert.equal(early.status, 409, early.text);
     assert.equal(early.json.code, 'THRESHOLD_NOT_MET');
 
-    // A partial computed on the wrong C1 is refused.
-    const wrong = rankingPartialBody(shares[1], electionId, envelopes);
+    const wrong = rankingPartialBody(shares[1], electionId, rankings);
     wrong.partials[0] = { ...wrong.partials[1], ballotHash: wrong.partials[0].ballotHash };
     const refused = await api('POST', `/api/elections/${electionId}/guardians/partials`, { jar: adminJar, body: wrong });
     assert.equal(refused.status, 400, refused.text);
 
     const r2 = await api('POST', `/api/elections/${electionId}/guardians/partials`, {
       jar: adminJar,
-      body: rankingPartialBody(shares[1], electionId, envelopes),
+      body: rankingPartialBody(shares[1], electionId, rankings),
     });
     assert.equal(r2.status, 201, r2.text);
 
@@ -412,44 +515,121 @@ describe('sealed ranked-choice tally (guardian threshold)', () => {
     const tally = store.requireElection(electionId).tally;
     const q = tally.questions.find((row) => row.questionId === 'q-seat');
     assert.equal(q.ballotMethod, 'ranked_choice');
-    // Round 1: a3 b3 c2 d1 (+1 invalid exhausted). d out (exhausts).
-    // Round 2: a3 b3 c2. c out → b. Round 3: b5 a3. b wins.
     assert.equal(q.winner, 'b');
-    assert.ok(q.exhausted >= 2, `exhausted ${q.exhausted}`);
-    assert.equal(tally.ranked.rankedBallots, stacks.length + 1);
-    assert.equal(tally.ranked.invalidRankings, 1);
-    // The rogue ballot's one-hot says 'a' but its ranking is invalid, so the
-    // homomorphic first choices and IRV round one differ; reported, not fatal.
+    assert.ok(q.exhausted >= 3, `exhausted ${q.exhausted}`);
+    assert.equal(tally.ranked.rankedBallots, stacks.length + 2);
+    assert.equal(tally.ranked.invalidRankings, 2);
+    assert.equal(tally.ranked.swappedRankings, 1);
+    assert.equal(tally.ranked.firstChoiceMismatches, 1);
     assert.equal(tally.ranked.firstChoiceConsistent, false);
     assert.match(tally.ranked.rankingSetHash, /^0x[0-9a-f]{64}$/);
     assert.match(tally.ranked.roundsHash, /^0x[0-9a-f]{64}$/);
     assert.match(tally.ranked.verification, /recomputable, not ZK proof-verified; no verified shuffle/);
-    assert.deepEqual(tally.counts, [4, 3, 2, 1]);
+    assert.deepEqual(tally.counts, [4, 3, 3, 1]);
+    // Published output: sorted canonical lines and sorted hashes, no ids, no nullifiers.
+    const published = JSON.stringify(tally.ranked);
+    for (const n of nullifiers) assert.equal(published.includes(`"${n}"`), false);
+    for (const id of ids) assert.equal(published.includes(id.slice(2)), false);
+    assert.equal(published.includes('nullifier'), false);
+    const lines = tally.ranked.openedRankings || [];
+    assert.deepEqual([...lines].sort(), lines);
+    const hashes = tally.ranked.rankingHashes || [];
+    assert.deepEqual([...hashes].sort(), hashes);
+  });
+
+  test('poll: sealed rankings work without the opt-in', async () => {
+    const created = await createRankedElection({});
+    assert.equal(created.status, 201, created.text);
+    const electionId = created.json.election.id;
+    await establishGuardians(electionId);
+    const pub = store.requireElection(electionId).tallyPubKey;
+    await registerVoter(electionId, '0xe01');
+    await api('POST', `/api/elections/${electionId}/freeze`, { jar: adminJar });
+    const { res } = await castRanked(electionId, pub, 4001, ['b', 'a'], '0xe01');
+    assert.equal(res.status, 201, res.text);
   });
 });
 
-describe('chain.commitRankings', () => {
-  test('commits each ranking once and reports the root (injected writer)', async () => {
-    const seen = new Map();
+describe('ranking hashes ride the ballot batches', () => {
+  const INBOX = '0x0000000000000000000000000000000000000001';
+  const h = (b) => `0x${b.repeat(32)}`;
+
+  test('hourly batch carries sorted ranking hashes; interval 0 sends a batch of one', async () => {
+    const sent = [];
     const chain = createChain(
-      { chainRpc: '', quiet: true },
-      {
-        writeSubmitBatch: async () => ({}),
-        writeCommitRanking: async ({ submissionId, rankingHash }) => {
-          if (seen.has(submissionId)) return { already: true };
-          seen.set(submissionId, rankingHash);
-          return {};
-        },
-        readRankingRoot: async () => '0xabc',
-      },
+      { chainRpc: 'http://127.0.0.1:9', ballotInboxAddress: INBOX, disclosureIntervalSeconds: 3600, chainId: 31337, nowFn: () => 10_000, quiet: true },
+      { writeSubmitBatch: async ({ batch }) => { sent.push(batch); return { hash: '0xabc', batched: true, count: batch.length }; } },
     );
-    const rows = [
-      { nullifier: '1', rankingHash: `0x${'11'.repeat(32)}` },
-      { nullifier: '2', rankingHash: `0x${'22'.repeat(32)}` },
-    ];
-    const first = await chain.commitRankings('7', rows);
-    assert.deepEqual(first, { committed: 2, already: 0, rankingRoot: '0xabc' });
-    const again = await chain.commitRankings('7', rows);
-    assert.equal(again.already, 2);
+    const vote = (n, rankingHash) => ({
+      electionId: '7', proof: { accept: true }, publicInputs: [1n, 2n, BigInt(n), 4n, 5n],
+      encryptedBallot: '0x01', rankingHash, startTime: 0, cutoffTime: 99_999, now: 100,
+    });
+    await chain.submitVote(vote(1, h('cc')));
+    await chain.submitVote(vote(2, h('11')));
+    await chain.submitVote(vote(3, h('77')));
+    assert.equal(sent.length, 0);
+    await chain.flushVoteQueue(3600);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sortedRankingHashes(sent[0]), [h('11'), h('77'), h('cc')]);
+
+    const now = [];
+    const instant = createChain(
+      { chainRpc: 'http://127.0.0.1:9', ballotInboxAddress: INBOX, disclosureIntervalSeconds: 0, chainId: 31337, quiet: true },
+      { writeSubmitBatch: async ({ batch }) => { now.push(batch); return { hash: '0xdef' }; } },
+    );
+    await instant.submitVote(vote(9, h('aa')));
+    assert.equal(now.length, 1);
+    assert.equal(now[0][0].rankingHash, h('aa'));
+  });
+
+  test('sortedRankingHashes drops bad and zero hashes; ranked gas default 24M, ceiling 200M', () => {
+    assert.deepEqual(sortedRankingHashes([{ rankingHash: h('22') }, { rankingHash: '0x12' }, { rankingHash: h('00') }, { rankingHash: h('22') }, {}]), [h('22')]);
+    assert.equal(rankedBatchGas({}), 24_000_000n);
+    assert.equal(rankedBatchGas({ rankedBatchGas: '30000000' }), 30_000_000n);
+    assert.equal(rankedBatchGas({ rankedBatchGas: '900000000' }), 200_000_000n);
+    assert.equal(typeof createChain({ chainRpc: '', quiet: true }).commitRankings, 'undefined');
+  });
+});
+
+describe('guardian CLI skips excluded and deleted envelopes', () => {
+  test('partial counts only live envelopes and rankings', async () => {
+    const { p256 } = await import('@noble/curves/p256');
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-voting-guardian-cli-'));
+    try {
+      const x = 0x2345n;
+      const Y = `0x${Buffer.from(p256.ProjectivePoint.BASE.multiply(x).toRawBytes(false)).toString('hex')}`;
+      const ag = () => encryptAggregateBallot({ jointPublicKey: Y, choice: 0, choiceRandomness: 3n, nOptions: 2 }).encryptedBallot;
+      const live = ag();
+      const rk = await encryptRankingEnvelope({
+        jointPublicKey: Y, electionId: 'e1', questions: QUESTIONS, first: { index: 0, r: '3' },
+        answers: [{ questionId: 'q-seat', ranking: ['a'] }],
+      });
+      const doc = {
+        envelopes: [
+          { ballotHash: '0x01', encryptedBallot: live },
+          { ballotHash: '0x02', encryptedBallot: '0xdeadbeef', excluded: true },
+          { ballotHash: '0x03', encryptedBallot: '0xdeadbeef', is_deleted: true },
+        ],
+        rankings: [
+          { rankingId: '0x01', rankingEnvelope: rk.rankingEnvelope },
+          { rankingId: '0x02', rankingEnvelope: rk.rankingEnvelope, excluded: true },
+          { rankingId: '0x03', rankingEnvelope: rk.rankingEnvelope, is_deleted: true },
+        ],
+      };
+      const share = { index: 1, shareScalar: '0x05', jointPublicKey: Y };
+      await writeFile(path.join(dir, 'env.json'), JSON.stringify(doc));
+      await writeFile(path.join(dir, 'share.json'), JSON.stringify(share));
+      const script = fileURLToPath(new URL('../scripts/guardian.mjs', import.meta.url));
+      await promisify(execFile)(process.execPath, [
+        script, 'partial', '--share', path.join(dir, 'share.json'), '--election', 'e1',
+        '--envelopes', path.join(dir, 'env.json'), '--out', path.join(dir, 'out.json'),
+      ]);
+      const out = JSON.parse(await readFile(path.join(dir, 'out.json'), 'utf8'));
+      // 2 aggregate option partials + 1 live ranking.
+      assert.equal(out.partials.length, 3);
+      assert.deepEqual(out.partials.filter((p) => String(p.ballotHash).startsWith('ranking:')).map((p) => p.ballotHash), ['ranking:0x01']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

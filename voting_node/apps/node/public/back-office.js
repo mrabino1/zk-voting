@@ -1294,6 +1294,15 @@
       ballotMethod: $("e-method") ? $("e-method").value || "plurality" : "plurality",
       electionType: selectedElectionType(),
     };
+    const sealedRankedOn = $("e-sealed-ranked-on") ? $("e-sealed-ranked-on").checked : false;
+    if (sealedRankedOn && String(body.electionType) === "1") {
+      if (!($("e-sealed-ranked-ack") && $("e-sealed-ranked-ack").checked)) {
+        flash($("flash-election"), "err", "Acknowledge the sealed ranked-choice disclosure to enable it.");
+        return;
+      }
+      body.sealedRankedChoice = true;
+      body.sealedRankedDisclosureAck = true;
+    }
     if (body.tallyScheme === "opens_ballots") {
       body.threshold = Number($("e-threshold") ? $("e-threshold").value : 2);
       body.guardianCount = Number($("e-guardian-count") ? $("e-guardian-count").value : 3);
