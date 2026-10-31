@@ -93,6 +93,8 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => uint256)) public pendingChunk;
     /// @notice Next unsealed force-in index. Chunked finalization walks forward from here.
     mapping(uint256 => uint256) public pendingCursor;
+    /// @notice Accepted submissions already included in a settled batch. A second settle reverts.
+    mapping(uint256 => mapping(uint256 => bool)) private _settledSubmission;
 
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
@@ -467,6 +469,16 @@ contract BallotInbox is IBallotInbox {
     function forcedInRoot(uint256 electionId, uint256 submissionId) external view returns (bytes32 root, bool pending) {
         Inclusion storage row = _forcedIn[electionId][submissionId];
         return (row.boundRoot, row.pending);
+    }
+
+    /// @inheritdoc IBallotInbox
+    function consumeForSettlement(uint256 electionId, uint256 submissionId, uint256 cipherHash) external {
+        if (msg.sender != settlementOf[electionId] || msg.sender == address(0)) revert NotAuthorized();
+        uint256 id = submissionId % SNARK_SCALAR_FIELD;
+        if (id == 0 || !_nullifierUsed[electionId][id]) revert UnknownSubmission();
+        if (_ballotHashOf[electionId][id] != bytes32(cipherHash)) revert BallotHashMismatch();
+        if (_settledSubmission[electionId][id]) revert SubmissionAlreadySettled();
+        _settledSubmission[electionId][id] = true;
     }
 
     function markSealed(uint256 electionId, uint256[] calldata submissionIds) external {

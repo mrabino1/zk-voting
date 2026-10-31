@@ -195,7 +195,7 @@ export function configRouter(deps) {
         proving: {
           path: 'in-progress',
           ceremony: 'not-done',
-          mockVerifierDefault: deps.config.useMockVerifier !== false,
+          mockVerifierDefault: deps.config.useMockVerifier === true,
           provingPath: Boolean(deps.config.provingPath),
           hashScheme: deps.config.hashScheme || 'zk-voting.hash.keccak-dev-v1',
           circuitHashScheme: 'zk-voting.hash.poseidon-bn254-x5-t3-v1',

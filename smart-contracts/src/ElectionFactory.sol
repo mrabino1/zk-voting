@@ -83,7 +83,7 @@ contract ElectionFactory is IElectionFactory {
         roles[Roles.PLATFORM_SUPER_ADMIN_ROLE][admin_] = true;
         roles[Roles.PLATFORM_ADMIN_ROLE][admin_] = true;
         roles[Roles.ADMIN_ROLE][admin_] = true;
-        allowMockVerifiers = block.chainid == 31337;
+        allowMockVerifiers = false;
     }
 
     /// @notice Dev / test only: allow mock verifiers on this chain.

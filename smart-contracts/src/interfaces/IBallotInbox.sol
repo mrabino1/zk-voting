@@ -47,6 +47,8 @@ interface IBallotInbox {
     error TurnoutNotPublished();
     error BadTreeDepth();
     error EgCiphertextRequired();
+    error UnknownSubmission();
+    error SubmissionAlreadySettled();
 
     struct RelayerReceipt {
         uint256 submissionId;
@@ -145,4 +147,8 @@ interface IBallotInbox {
     function forcedInRoot(uint256 electionId, uint256 submissionId) external view returns (bytes32 root, bool pending);
 
     function markSealed(uint256 electionId, uint256[] calldata submissionIds) external;
+
+    /// @notice Spend an accepted submission inside a settled batch. Settlement only.
+    ///         `cipherHash` is CipherHash of the row, and it must match the stored ballot hash.
+    function consumeForSettlement(uint256 electionId, uint256 submissionId, uint256 cipherHash) external;
 }

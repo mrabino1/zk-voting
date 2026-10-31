@@ -54,7 +54,7 @@ function provingPathEnabled(env = process.env) {
 
 function useMockVerifier(env = process.env) {
   if (provingPathEnabled(env)) return false;
-  return parseEnvFlag(env.ZK_VOTING_USE_MOCK_VERIFIER, true);
+  return parseEnvFlag(env.ZK_VOTING_USE_MOCK_VERIFIER, false);
 }
 
 function normalizeHashScheme(name) {

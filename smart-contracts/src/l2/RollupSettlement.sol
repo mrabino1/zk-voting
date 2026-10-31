@@ -247,14 +247,14 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     /// @dev Poseidon chain, same order as `circuits/batch_transition_lib.circom`.
-    ///      `pointTag` is the Poseidon fold of the eight curve coordinates, reduced mod r.
-    ///      Extra option ciphertexts are folded after those eight when `options` is non-empty.
+    ///      `pointTag` is the Poseidon fold of the eight running coordinates, reduced mod r.
+    ///      Option totals are not in this hash. The contract sums them from the ballot rows.
     function computeSealedDataHash(SealedParams memory params, uint8 kind) public pure returns (bytes32) {
         OptionPoint[] memory none;
         return computeSealedDataHash(params, kind, none);
     }
 
-    function computeSealedDataHash(SealedParams memory params, uint8 kind, OptionPoint[] memory options)
+    function computeSealedDataHash(SealedParams memory params, uint8 kind, OptionPoint[] memory)
         public
         pure
         returns (bytes32)
@@ -271,12 +271,6 @@ contract RollupSettlement is IRollupSettlement {
                 params.nextC2Y
             )
         );
-        for (uint256 i; i < options.length; ++i) {
-            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c1X % SNARK_SCALAR_FIELD);
-            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c1Y % SNARK_SCALAR_FIELD);
-            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c2X % SNARK_SCALAR_FIELD);
-            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c2Y % SNARK_SCALAR_FIELD);
-        }
         uint256[16] memory words;
         words[0] = kind;
         words[1] = params.electionId;
@@ -316,7 +310,7 @@ contract RollupSettlement is IRollupSettlement {
         }
     }
 
-    /// @notice Poseidon fold of each ballot link, matching `per_ballot_lib.circom`.
+    /// @notice Poseidon fold of each ballot link, matching the batch circuit's chainHash.
     function chainHashOf(BallotRow[] memory rows) public pure returns (bytes32) {
         uint256 h;
         for (uint256 i; i < rows.length; ++i) {
@@ -370,6 +364,7 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     function optionCiphertext(uint256 electionId, uint256 option) external view returns (Ciphertext memory) {
+        if (_optionCt[electionId][option].set) return _optionCt[electionId][option];
         if (option == 0) return _finalCt[electionId];
         return _optionCt[electionId][option];
     }
@@ -398,7 +393,7 @@ contract RollupSettlement is IRollupSettlement {
         _consumeTags(params.electionId, firstBallotTags);
         _rememberRoot(params);
         _storePoints(params, true);
-        _storeOptions(params.electionId, options);
+        _storeOptions(params.electionId, KIND_HOURLY, rows, options);
         _hourPosted[params.electionId][hourIndex] = true;
         _hourClosedAt[params.electionId][hourIndex] = uint64(block.timestamp);
         _hourCt[params.electionId][hourIndex] =
@@ -434,7 +429,7 @@ contract RollupSettlement is IRollupSettlement {
         _finalRoot[params.electionId] = params.ballotSetRoot;
         _rememberRoot(params);
         _storePoints(params, false);
-        _storeOptions(params.electionId, options);
+        _storeOptions(params.electionId, KIND_FINAL, rows, options);
         emit SealedBatchPosted(
             params.electionId, KIND_FINAL, params.batchIndex, params.ballotSetRoot, params.previousUnique
         );
@@ -471,7 +466,7 @@ contract RollupSettlement is IRollupSettlement {
         _verifyAndStore(params, a, b, c);
         _finalProduct[params.electionId] = params.finalProduct;
         _storePoints(params, false);
-        _storeOptions(params.electionId, options);
+        _storeOptions(params.electionId, KIND_SUPPLEMENTARY, rows, options);
         _finalCt[params.electionId] =
             Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
         if (!_finalPosted[params.electionId]) {
@@ -640,7 +635,11 @@ contract RollupSettlement is IRollupSettlement {
 
     /// @dev First ballots add the ciphertext. Replacements leave the hourly total
     ///      unchanged and replace the old ciphertext in the final total.
-    function _checkRows(SealedParams calldata params, uint8 kind, BallotRow[] calldata rows) internal view {
+    ///      The number of `isFirst` rows must equal `nextUnique - previousUnique`.
+    ///      Each row spends an accepted inbox submission whose ballot hash is this ciphertext.
+    function _checkRows(SealedParams calldata params, uint8 kind, BallotRow[] calldata rows) internal {
+        if (params.nextUnique < params.previousUnique) revert UniqueCountDecreased();
+        uint256 step = params.nextUnique - params.previousUnique;
         uint256 x = params.prevC1X;
         uint256 y = params.prevC1Y;
         uint256 u = params.prevC2X;
@@ -649,42 +648,147 @@ contract RollupSettlement is IRollupSettlement {
             if (x != params.nextC1X || y != params.nextC1Y || u != params.nextC2X || v != params.nextC2Y) {
                 revert PointsMismatch();
             }
+            if (step != 0) revert UniqueStepMismatch();
             return;
         }
         (uint256 pkX, uint256 pkY) = _joint(params.electionId);
+        uint256 firsts;
         for (uint256 i; i < rows.length; ++i) {
             BallotRow calldata row = rows[i];
             if (row.isFirst > 1) revert PointsMismatch();
+            if (_isIdentity(row.c1X, row.c1Y, row.c2X, row.c2Y)) revert IdentityCiphertext();
             if (!_pointOk(row.c1X, row.c1Y, row.c2X, row.c2Y)) revert PointOffCurve();
             if (!_pointOk(row.oldC1X, row.oldC1Y, row.oldC2X, row.oldC2Y)) revert PointOffCurve();
-            if (!_isIdentity(row.c1X, row.c1Y, row.c2X, row.c2Y)) {
-                if (!OneHot.verify(pkX, pkY, row.c1X, row.c1Y, row.c2X, row.c2Y, row.oneHot)) revert OneHotRejected();
-            }
-            if (kind == KIND_HOURLY) {
-                if (row.isFirst == 1) (x, y, u, v) = _addCt(x, y, u, v, row.c1X, row.c1Y, row.c2X, row.c2Y);
-            } else if (row.isFirst == 1) {
+            if (!OneHot.verify(
+                    pkX, pkY, row.c1X, row.c1Y, row.c2X, row.c2Y, row.oneHot, params.electionId, row.submissionId
+                )) revert OneHotRejected();
+            IBallotInbox(inbox).consumeForSettlement(params.electionId, row.submissionId, _cipherHash(row));
+            if (row.isFirst == 1) {
+                firsts += 1;
                 (x, y, u, v) = _addCt(x, y, u, v, row.c1X, row.c1Y, row.c2X, row.c2Y);
-            } else {
+            } else if (kind != KIND_HOURLY) {
                 (x, y, u, v) = _subCt(x, y, u, v, row.oldC1X, row.oldC1Y, row.oldC2X, row.oldC2Y);
                 (x, y, u, v) = _addCt(x, y, u, v, row.c1X, row.c1Y, row.c2X, row.c2Y);
             }
         }
+        if (firsts != step) revert UniqueStepMismatch();
         if (x != params.nextC1X || y != params.nextC1Y || u != params.nextC2X || v != params.nextC2Y) {
             revert PointsMismatch();
         }
     }
 
-    function _storeOptions(uint256 electionId, OptionPoint[] calldata options) internal {
-        for (uint256 i; i < options.length; ++i) {
-            if (!_pointOk(options[i].c1X, options[i].c1Y, options[i].c2X, options[i].c2Y)) revert PointOffCurve();
-            _optionCt[electionId][i + 1] = Ciphertext({
-                c1X: options[i].c1X,
-                c1Y: options[i].c1Y,
-                c2X: options[i].c2X,
-                c2Y: options[i].c2Y,
-                set: true
-            });
+    function _cipherHash(BallotRow calldata row) internal pure returns (uint256) {
+        return PoseidonT3.hashLeftRight(
+            PoseidonT3.hashLeftRight(row.c1X, row.c1Y), PoseidonT3.hashLeftRight(row.c2X, row.c2Y)
+        );
+    }
+
+    /// @dev Option totals are the sum of the row vectors. A claimed point that differs reverts.
+    ///      An empty vector may publish the identity (count 0) and nothing else.
+    function _storeOptions(
+        uint256 electionId,
+        uint8 kind,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata claimed
+    ) internal {
+        uint256 n = _vectorLen(rows);
+        if (n == 0) {
+            for (uint256 i; i < claimed.length; ++i) {
+                if (!_isIdentity(claimed[i].c1X, claimed[i].c1Y, claimed[i].c2X, claimed[i].c2Y)) {
+                    revert OptionTotalMismatch();
+                }
+                _optionCt[electionId][i + 1] = Ciphertext(0, 0, 0, 0, true);
+            }
+            return;
         }
+        if (n > 4) revert BoundRootMismatch();
+        if (claimed.length != n) revert OptionTotalMismatch();
+        (uint256 pkX, uint256 pkY) = _joint(electionId);
+        for (uint256 i; i < rows.length; ++i) {
+            _foldRowOptions(electionId, kind, rows[i], n, pkX, pkY);
+        }
+        for (uint256 j; j < n; ++j) {
+            Ciphertext storage ct = _optionCt[electionId][j];
+            if (
+                ct.c1X != claimed[j].c1X || ct.c1Y != claimed[j].c1Y || ct.c2X != claimed[j].c2X
+                    || ct.c2Y != claimed[j].c2Y
+            ) revert OptionTotalMismatch();
+        }
+    }
+
+    function _vectorLen(BallotRow[] calldata rows) internal pure returns (uint256 n) {
+        for (uint256 i; i < rows.length; ++i) {
+            uint256 len = rows[i].options.length;
+            if (i == 0) n = len;
+            else if (len != n) revert OptionTotalMismatch();
+        }
+    }
+
+    function _foldRowOptions(
+        uint256 electionId,
+        uint8 kind,
+        BallotRow calldata row,
+        uint256 n,
+        uint256 pkX,
+        uint256 pkY
+    ) internal {
+        (uint256 sx, uint256 sy, uint256 su, uint256 sv) = _sumChecked(row, pkX, pkY, electionId);
+        if (sx != row.c1X || sy != row.c1Y || su != row.c2X || sv != row.c2Y) revert OptionTotalMismatch();
+        if (!OneHot.verifySum(pkX, pkY, sx, sy, su, sv, row.sumProof, electionId, row.submissionId)) {
+            revert SumToOneRejected();
+        }
+        bool replace = row.isFirst == 0 && kind != KIND_HOURLY;
+        if (replace && row.oldOptions.length != n) revert OptionTotalMismatch();
+        if (row.isFirst == 0 && kind == KIND_HOURLY) return;
+        for (uint256 j; j < n; ++j) {
+            if (replace) {
+                OptionCipher calldata old = row.oldOptions[j];
+                if (_isIdentity(old.c1X, old.c1Y, old.c2X, old.c2Y)) revert IdentityCiphertext();
+                _bump(electionId, j, old.c1X, old.c1Y, old.c2X, old.c2Y, false);
+            }
+            OptionCipher calldata cur = row.options[j];
+            _bump(electionId, j, cur.c1X, cur.c1Y, cur.c2X, cur.c2Y, true);
+        }
+    }
+
+    function _sumChecked(BallotRow calldata row, uint256 pkX, uint256 pkY, uint256 electionId)
+        internal
+        view
+        returns (uint256 sx, uint256 sy, uint256 su, uint256 sv)
+    {
+        uint256 n = row.options.length;
+        for (uint256 j; j < n; ++j) {
+            OptionCipher calldata o = row.options[j];
+            if (_isIdentity(o.c1X, o.c1Y, o.c2X, o.c2Y)) revert IdentityCiphertext();
+            if (!_pointOk(o.c1X, o.c1Y, o.c2X, o.c2Y)) revert PointOffCurve();
+            if (!OneHot.verify(pkX, pkY, o.c1X, o.c1Y, o.c2X, o.c2Y, o.oneHot, electionId, row.submissionId)) {
+                revert OneHotRejected();
+            }
+            (sx, sy, su, sv) = _addCt(sx, sy, su, sv, o.c1X, o.c1Y, o.c2X, o.c2Y);
+        }
+    }
+
+    function _bump(
+        uint256 electionId,
+        uint256 option,
+        uint256 x,
+        uint256 y,
+        uint256 u,
+        uint256 v,
+        bool add
+    ) internal {
+        Ciphertext storage ct = _optionCt[electionId][option];
+        uint256 nx;
+        uint256 ny;
+        uint256 nu;
+        uint256 nv;
+        if (add) (nx, ny, nu, nv) = _addCt(ct.c1X, ct.c1Y, ct.c2X, ct.c2Y, x, y, u, v);
+        else (nx, ny, nu, nv) = _subCt(ct.c1X, ct.c1Y, ct.c2X, ct.c2Y, x, y, u, v);
+        ct.c1X = nx;
+        ct.c1Y = ny;
+        ct.c2X = nu;
+        ct.c2Y = nv;
+        ct.set = true;
     }
 
     function _markChunks(uint256 electionId, uint256[] calldata included) internal {

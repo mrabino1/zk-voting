@@ -96,7 +96,7 @@ export function configDiag(deps) {
     archiveEnabled: config.archiveEnabled !== false,
     hashScheme: config.hashScheme || null,
     provingPath: Boolean(config.provingPath),
-    useMockVerifier: config.useMockVerifier !== false,
+    useMockVerifier: config.useMockVerifier === true,
     allowDevLogin: Boolean(config.allowDevLogin),
     requireEmailMfa: Boolean(config.requireEmailMfa),
     sesDryRun: Boolean(config.sesDryRun),

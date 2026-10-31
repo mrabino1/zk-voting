@@ -185,6 +185,19 @@ contract HighRegressionsTest is Deployer {
         assertFalse(prod.allowMockVerifiers());
     }
 
+    function testH02_FactoryMockOffUntilOptIn() public {
+        assertEq(block.chainid, 31337);
+        ElectionFactory fresh = new ElectionFactory(admin, address(0));
+        assertFalse(fresh.allowMockVerifiers());
+        ElectionParams memory p = defaultParams();
+        vm.prank(admin);
+        vm.expectRevert(IElectionFactory.MockVerifierNotAllowed.selector);
+        fresh.createElection(p);
+        vm.prank(admin);
+        fresh.setAllowMockVerifiers(true);
+        assertTrue(fresh.allowMockVerifiers());
+    }
+
     function testH02_ExploitMockVerifierElectionNowRefused() public {
         vm.prank(admin);
         factory.setAllowMockVerifiers(false);

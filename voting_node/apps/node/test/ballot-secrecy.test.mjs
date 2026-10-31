@@ -11,6 +11,7 @@ import { keccak256, toHex } from 'viem';
 
 import { createApp } from '../src/server.mjs';
 import { planDisclosureBatch } from '../src/chain.mjs';
+import { getConfig } from '../src/config.mjs';
 import { mockVoteProofAllowed } from '../src/voteProof.mjs';
 import { buildVoteRequestBody } from '../public/vote.js';
 import { electionNullifierHex } from '../public/passkey-wallet.js';
@@ -70,11 +71,33 @@ describe('ballot secrecy regressions', () => {
     }
   });
 
-  test('mock proofs are refused off the local dev chain and the test default', () => {
-    assert.equal(mockVoteProofAllowed({ chainId: 31337 }), true);
+  test('mock proofs run only with an explicit opt-in', () => {
+    assert.equal(mockVoteProofAllowed({ chainId: 31337 }), false);
     assert.equal(mockVoteProofAllowed({ chainId: 1 }), false);
     assert.equal(mockVoteProofAllowed({ chainId: 27427, allowMockProofs: false }), false);
     assert.equal(mockVoteProofAllowed({ allowMockProofs: true, chainId: 1 }), true);
+  });
+
+  test('unset mock env stays off and an explicit flag turns it on', () => {
+    const prevUse = process.env.ZK_VOTING_USE_MOCK_VERIFIER;
+    const prevAllow = process.env.ZK_VOTING_ALLOW_MOCK_PROOFS;
+    delete process.env.ZK_VOTING_USE_MOCK_VERIFIER;
+    delete process.env.ZK_VOTING_ALLOW_MOCK_PROOFS;
+    try {
+      const off = getConfig({});
+      assert.equal(off.useMockVerifier, false);
+      assert.equal(off.allowMockProofs, false);
+      process.env.ZK_VOTING_USE_MOCK_VERIFIER = '1';
+      process.env.ZK_VOTING_ALLOW_MOCK_PROOFS = '1';
+      const on = getConfig({});
+      assert.equal(on.useMockVerifier, true);
+      assert.equal(on.allowMockProofs, true);
+    } finally {
+      if (prevUse === undefined) delete process.env.ZK_VOTING_USE_MOCK_VERIFIER;
+      else process.env.ZK_VOTING_USE_MOCK_VERIFIER = prevUse;
+      if (prevAllow === undefined) delete process.env.ZK_VOTING_ALLOW_MOCK_PROOFS;
+      else process.env.ZK_VOTING_ALLOW_MOCK_PROOFS = prevAllow;
+    }
   });
 
   test('disclosure batch waits, then sorts by nullifier', () => {
@@ -121,6 +144,7 @@ describe('ballot secrecy regressions', () => {
       quiet: true,
       port: 0,
       chainId: 1,
+      allowMockProofs: false,
       disclosureIntervalSeconds: 0,
     });
     const server = await new Promise((resolve, reject) => {

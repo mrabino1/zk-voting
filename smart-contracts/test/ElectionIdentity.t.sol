@@ -113,6 +113,8 @@ contract ElectionIdentitySeparationTest is Deployer {
     ///      create; an admin-granted CLERK_ROLE plus an approved verifier does.
     function testWithoutRegistrySelfDeclaredClerkNeedsRoleAndApprovedVerifier() public {
         ElectionFactory naked = new ElectionFactory(admin, address(0));
+        vm.prank(admin);
+        naked.setAllowMockVerifiers(true);
         ElectionParams memory p = defaultParams();
         vm.prank(p.clerk);
         vm.expectRevert(IElectionFactory.MissingRole.selector);
@@ -134,6 +136,8 @@ contract ElectionIdentitySeparationTest is Deployer {
 
     function testSameUint256OnTwoFactoriesAreDistinctL1Slots() public {
         ElectionFactory factoryB = new ElectionFactory(admin, address(0));
+        vm.prank(admin);
+        factoryB.setAllowMockVerifiers(true);
         ElectionParams memory p = defaultParams();
         vm.prank(admin);
         (uint256 idA,) = factory.createElection(p);

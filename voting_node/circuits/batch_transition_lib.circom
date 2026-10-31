@@ -68,13 +68,8 @@ template BatchTransition(n, levels) {
     signal input nextC1Y;
     signal input nextC2X;
     signal input nextC2Y;
-    // Extra option ciphertexts, option 1..optionCount. Option 0 is nextC*.
-    // optionCount 0 leaves pointTag equal to the eight running coordinates.
-    signal input optionCount;
-    signal input optC1X[4];
-    signal input optC1Y[4];
-    signal input optC2X[4];
-    signal input optC2Y[4];
+    // Option totals are not circuit inputs. The settlement sums each ballot's
+    // option ciphertexts on chain. pointTag is only the eight running coordinates.
 
     signal activeSq[n];
     signal firstSq[n];
@@ -152,6 +147,8 @@ template BatchTransition(n, levels) {
         oldZeroY[i] <== firstContrib[i] * oldC1y[i];
         oldZeroY[i] === 0;
 
+        // Leaf key is voterKey. An active row's submission id is Poseidon(voterKey, ballotHash),
+        // the id the inbox accepted for this ciphertext. A different key cannot open that leaf.
         sidOf[i] = Hasher();
         sidOf[i].a <== voterKey[i];
         sidOf[i].b <== ballotHash[i];
@@ -404,56 +401,7 @@ template BatchTransition(n, levels) {
         pointFold[q].b <== coords[q];
         pointAcc[q + 1] <== pointFold[q].out;
     }
-    // optionCount is 0..4. Unused slots are zero and are not folded in,
-    // so a batch with no extra options keeps the eight-coordinate tag.
-    signal od;
-    od <== optionCount;
-    signal op12;
-    op12 <== od * (optionCount - 1);
-    signal op123;
-    op123 <== op12 * (optionCount - 2);
-    signal op1234;
-    op1234 <== op123 * (optionCount - 3);
-    signal opOk;
-    opOk <== op1234 * (optionCount - 4);
-    opOk === 0;
-    component oEq0 = IsZero();
-    oEq0.in <== optionCount;
-    component oEq2 = IsZero();
-    oEq2.in <== optionCount - 2;
-    component oEq3 = IsZero();
-    oEq3.in <== optionCount - 3;
-    component oEq4 = IsZero();
-    oEq4.in <== optionCount - 4;
-    signal oUse[4];
-    oUse[0] <== 1 - oEq0.out;
-    oUse[1] <== oEq2.out + oEq3.out + oEq4.out;
-    oUse[2] <== oEq3.out + oEq4.out;
-    oUse[3] <== oEq4.out;
-    signal optCoord[16];
-    for (var oi = 0; oi < 4; oi++) {
-        optCoord[oi * 4] <== optC1X[oi];
-        optCoord[oi * 4 + 1] <== optC1Y[oi];
-        optCoord[oi * 4 + 2] <== optC2X[oi];
-        optCoord[oi * 4 + 3] <== optC2Y[oi];
-    }
-    signal optZero[16];
-    component optFold[16];
-    signal optAcc[17];
-    signal optTake[16];
-    signal optKeep[16];
-    optAcc[0] <== pointAcc[8];
-    for (var oq = 0; oq < 16; oq++) {
-        optZero[oq] <== (1 - oUse[oq \ 4]) * optCoord[oq];
-        optZero[oq] === 0;
-        optFold[oq] = Hasher();
-        optFold[oq].a <== optAcc[oq];
-        optFold[oq].b <== optCoord[oq];
-        optTake[oq] <== oUse[oq \ 4] * optFold[oq].out;
-        optKeep[oq] <== (1 - oUse[oq \ 4]) * optAcc[oq];
-        optAcc[oq + 1] <== optTake[oq] + optKeep[oq];
-    }
-    optAcc[16] === pointTag;
+    pointAcc[8] === pointTag;
 
     signal words[16];
     words[0] <== kind;

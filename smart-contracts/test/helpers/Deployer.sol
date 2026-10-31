@@ -107,6 +107,8 @@ contract Deployer is Test {
             require(addr != address(0), "ElectionFactory deploy");
             factory = ElectionFactory(addr);
         }
+        vm.prank(admin);
+        factory.setAllowMockVerifiers(true);
 
         vm.prank(admin);
         jurisdictions = new JurisdictionRegistry(admin);

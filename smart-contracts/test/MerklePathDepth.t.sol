@@ -156,6 +156,7 @@ contract MerklePathDepthTest is Test {
         vm.expectRevert(IMockVerifier.InvalidWitnessDepth.selector);
         v.armNonMembershipWitness(1, node, 0, 0, els, idx);
 
+        v.setAccept(true);
         v.armInclusionWitness(1, leaves[0], p.pathElements, p.pathIndices);
         uint256[] memory input = new uint256[](5);
         input[0] = p.root;

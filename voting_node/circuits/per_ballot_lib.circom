@@ -89,10 +89,9 @@ template PerBallot(levels) {
     signal input ballotHash;
 
     // Intermediate. The proof's public signals are only electionId, ballotHash,
-    // and boundRoot. These three stay inside the witness.
+    // and boundRoot. submissionId and uniqueStep stay inside the witness.
     signal submissionId;
     signal uniqueStep;
-    signal link;
 
     component voter = Hasher();
     voter.a <== nullifierSecret;
@@ -137,28 +136,4 @@ template PerBallot(levels) {
         set.pathIndices[i] <== pathIndices[i];
     }
     uniqueStep <== set.uniqueStep;
-
-    // link = Poseidon fold of the submission and the ciphertext points.
-    // A replacement folds the previous points too, so the batch can subtract them.
-    signal words[10];
-    words[0] <== submissionId;
-    words[1] <== uniqueStep;
-    words[2] <== c1x;
-    words[3] <== c1y;
-    words[4] <== c2x;
-    words[5] <== c2y;
-    words[6] <== oldC1x;
-    words[7] <== oldC1y;
-    words[8] <== oldC2x;
-    words[9] <== oldC2y;
-    component fold[10];
-    signal acc[11];
-    acc[0] <== 0;
-    for (var w = 0; w < 10; w++) {
-        fold[w] = Hasher();
-        fold[w].a <== acc[w];
-        fold[w].b <== words[w];
-        acc[w + 1] <== fold[w].out;
-    }
-    link <== acc[10];
 }

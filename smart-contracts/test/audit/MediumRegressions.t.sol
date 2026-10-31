@@ -119,6 +119,8 @@ contract MediumRegressionsTest is Deployer {
 
     function testM02_ExploitPermissionlessCreationWithoutRegistryRefused() public {
         ElectionFactory naked = new ElectionFactory(admin, address(0));
+        vm.prank(admin);
+        naked.setAllowMockVerifiers(true);
         ElectionParams memory p = defaultParams();
         address attacker = makeAddr("attacker");
         p.clerk = attacker;

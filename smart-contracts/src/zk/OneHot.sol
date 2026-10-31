@@ -13,7 +13,10 @@ import {Bn128} from "./Bn128.sol";
 library OneHot {
     bytes32 internal constant DOMAIN = keccak256("ONE_HOT_CDS_V1");
 
+    bytes32 internal constant SUM_DOMAIN = keccak256("SUM_TO_ONE_V1");
+
     /// @dev Proof words: A0, B0, e0, z0, A1, B1, e1, z1. Twelve field elements.
+    ///      The challenge binds chain id, this settlement, the election, and the submission.
     function verify(
         uint256 pkX,
         uint256 pkY,
@@ -21,7 +24,9 @@ library OneHot {
         uint256 c1Y,
         uint256 c2X,
         uint256 c2Y,
-        uint256[12] memory proof
+        uint256[12] memory proof,
+        uint256 electionId,
+        uint256 submissionId
     ) internal view returns (bool) {
         if (!Bn128.validPoint(pkX, pkY) || !Bn128.validPoint(c1X, c1Y) || !Bn128.validPoint(c2X, c2Y)) {
             return false;
@@ -31,6 +36,10 @@ library OneHot {
             keccak256(
                 abi.encode(
                     DOMAIN,
+                    block.chainid,
+                    address(this),
+                    electionId,
+                    submissionId,
                     pkX,
                     pkY,
                     c1X,
@@ -54,6 +63,48 @@ library OneHot {
         uint256[6] memory right = [proof[6], proof[7], proof[8], proof[9], proof[10], proof[11]];
         if (!_branch(base, left, false)) return false;
         return _branch(base, right, true);
+    }
+
+    /// @dev Chaum-Pedersen that `log_G(S1) = log_PK(S2 - G)`, so the option ciphertexts sum to Enc(1).
+    ///      `proof` is A, B, z. The challenge uses the same chain, settlement, election, and submission.
+    function verifySum(
+        uint256 pkX,
+        uint256 pkY,
+        uint256 s1X,
+        uint256 s1Y,
+        uint256 s2X,
+        uint256 s2Y,
+        uint256[5] memory proof,
+        uint256 electionId,
+        uint256 submissionId
+    ) internal view returns (bool) {
+        if (!Bn128.validPoint(pkX, pkY) || !Bn128.validPoint(s1X, s1Y) || !Bn128.validPoint(s2X, s2Y)) return false;
+        if (!Bn128.validPoint(proof[0], proof[1]) || !Bn128.validPoint(proof[2], proof[3])) return false;
+        (bool okS, uint256 mx, uint256 my) = Bn128.ecSub(s2X, s2Y, 1, 2);
+        if (!okS) return false;
+        uint256 e = uint256(
+            keccak256(
+                abi.encode(
+                    SUM_DOMAIN,
+                    block.chainid,
+                    address(this),
+                    electionId,
+                    submissionId,
+                    pkX,
+                    pkY,
+                    s1X,
+                    s1Y,
+                    s2X,
+                    s2Y,
+                    proof[0],
+                    proof[1],
+                    proof[2],
+                    proof[3]
+                )
+            )
+        ) % Bn128.R;
+        if (!_eq(1, 2, proof[4], proof[0], proof[1], s1X, s1Y, e)) return false;
+        return _eq(pkX, pkY, proof[4], proof[2], proof[3], mx, my, e);
     }
 
     /// @dev `base` is pk, c1, c2. `limb` is A, B, e, z. `minusG` checks the bit-1 ciphertext.

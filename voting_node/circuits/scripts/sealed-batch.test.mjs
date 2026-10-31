@@ -51,7 +51,8 @@ test("batch transition uses the merkle ballot set and binds products", () => {
   assert.match(src, /finalGate === 0/);
   assert.match(src, /running\[n\] === ballotSetRoot/);
   assert.match(src, /chainAcc\[4\] === chainHash/);
-  assert.match(src, /optAcc\[16\] === pointTag/);
+  assert.match(src, /pointAcc\[8\] === pointTag/);
+  assert.doesNotMatch(src, /optC1X/);
   assert.match(src, /hashAcc\[16\] === dataHash/);
   assert.match(src, /voterKey\[n\]/);
   assert.doesNotMatch(src, /nullifierSecret/);

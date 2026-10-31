@@ -37,6 +37,10 @@ interface IRollupSettlement {
     error PointOffCurve();
     error OneHotRejected();
     error ContractPaused();
+    error UniqueStepMismatch();
+    error IdentityCiphertext();
+    error OptionTotalMismatch();
+    error SumToOneRejected();
 
     event SealedBatchPosted(
         uint256 indexed electionId, uint8 kind, uint64 indexed batchIndex, bytes32 ballotSetRoot, uint256 uniqueCount
@@ -88,8 +92,19 @@ interface IRollupSettlement {
         bool set;
     }
 
+    /// @notice One option ciphertext and its 0/1 proof under the joint key.
+    struct OptionCipher {
+        uint256 c1X;
+        uint256 c1Y;
+        uint256 c2X;
+        uint256 c2Y;
+        uint256[12] oneHot;
+    }
+
     /// @notice One ballot in a batch. `oneHot` is the CDS proof under the joint key.
     ///         A first ballot adds the ciphertext. A replacement subtracts `old` on the final tally only.
+    ///         `options` is one ciphertext per choice. Their sum is this row's ciphertext, each is 0 or 1,
+    ///         and `sumProof` shows that sum encrypts 1. `sumProof` is A, B, z.
     struct BallotRow {
         uint256 submissionId;
         uint8 isFirst;
@@ -102,6 +117,9 @@ interface IRollupSettlement {
         uint256 oldC2X;
         uint256 oldC2Y;
         uint256[12] oneHot;
+        OptionCipher[] options;
+        OptionCipher[] oldOptions;
+        uint256[5] sumProof;
     }
 
     /// @notice Option ciphertext after option 0. Option 0 is the batch's next ciphertext.
