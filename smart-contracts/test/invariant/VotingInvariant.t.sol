@@ -65,7 +65,7 @@ contract VotingInvariant is StdInvariant, Test {
                 assertTrue(handler.getInbox().nullifierUsed(electionId, nullifier), "chain missing spent nullifier");
                 handler.getInbox().ballotHashOf(electionId, nullifier);
             }
-            uint256 onChainAccepted = handler.getInbox().acceptedBallots(electionId);
+            uint256 onChainAccepted = handler.liveAccepted(electionId);
             assertEq(onChainAccepted, handler.acceptedByElection(electionId));
             assertEq(onChainAccepted, used, "per-election: acceptedBallots == unique spent nullifiers");
             assertFalse(handler.getInbox().nullifierUsed(electionId, 0), "zero nullifier must stay unspent");
@@ -79,7 +79,7 @@ contract VotingInvariant is StdInvariant, Test {
         uint256 n = handler.trackedElectionCount();
         for (uint256 i; i < n; ++i) {
             uint256 electionId = handler.trackedElectionIds(i);
-            uint256 accepted = handler.getInbox().acceptedBallots(electionId);
+            uint256 accepted = handler.liveAccepted(electionId);
             if (accepted == 0) continue;
             uint64 start = handler.startOf(electionId);
             uint64 cutoff = handler.cutoffOf(electionId);
@@ -119,7 +119,7 @@ contract VotingInvariant is StdInvariant, Test {
             for (uint256 j; j < counts.length; ++j) {
                 sum += counts[j];
             }
-            assertEq(sum, handler.getInbox().acceptedBallots(electionId), "tally != acceptedBallots");
+            assertEq(sum, handler.liveAccepted(electionId), "tally != acceptedBallots");
         }
     }
 
@@ -141,7 +141,7 @@ contract VotingInvariant is StdInvariant, Test {
         uint256 n = handler.trackedElectionCount();
         for (uint256 i; i < n; ++i) {
             uint256 electionId = handler.trackedElectionIds(i);
-            uint256 accepted = handler.getInbox().acceptedBallots(electionId);
+            uint256 accepted = handler.liveAccepted(electionId);
             uint256 enrolled = handler.getRegistry().participantCount(electionId);
             assertLe(accepted, enrolled, "acceptedBallots > registered");
             assertLe(accepted, handler.registeredByElection(electionId));

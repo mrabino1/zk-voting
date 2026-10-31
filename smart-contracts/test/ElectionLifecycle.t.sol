@@ -76,7 +76,7 @@ contract ElectionLifecycleTest is Deployer {
         uint8 st = IElection(election).state();
         assertTrue(st == ElectionState.OPEN || st == ElectionState.ROLL_FROZEN);
         submitVote(electionId, election, uint256(keccak256("n-open")));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
         assertTrue(inbox.nullifierUsed(electionId, uint256(keccak256("n-open"))));
     }
 

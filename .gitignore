@@ -12,6 +12,11 @@ node_modules/
 *.pem
 *.key
 
+# Guardian key ceremony outputs (passphrases and sealed shares)
+guardian-ceremony-out/
+**/shards/
+**/payload/secured/
+
 # OS / IDE
 .DS_Store
 .idea/

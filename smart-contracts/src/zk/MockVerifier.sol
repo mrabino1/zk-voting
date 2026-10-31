@@ -31,7 +31,8 @@ import {EligibleSet} from "../tree/EligibleSet.sol";
 ///      has no satisfying gap, so the armed proof returns false.
 contract MockVerifier is IMockVerifier {
     address public immutable owner;
-    bool public acceptAll = true;
+    /// @notice Off until the owner calls `setAccept(true)`. A deployed mock does not accept proofs by itself.
+    bool public acceptAll;
 
     /// @notice Optional denylist keyed by `bytes32(nullifier)` (publicInputs[2]).
     mapping(bytes32 => bool) public deniedNullifiers;

@@ -4,6 +4,8 @@
  * per candidate / measure choice (read-only). Choice is never recorded here.
  */
 
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+
 function publicOption(raw, index = 0) {
   if (typeof raw === "string" || typeof raw === "number") {
     return { id: `o${index + 1}`, label: String(raw), summary: "", body: "", imageUrl: "", links: [] };
@@ -104,6 +106,7 @@ function header(h, election, formatTime, electionStateInfo, source, lede) {
       "p",
       { class: "cluster" },
       h("span", { class: `status-pill ${st.className}`, text: st.label }),
+      h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
       source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
     ),
     h("p", { class: "lede", text: lede }),
@@ -116,6 +119,9 @@ function header(h, election, formatTime, electionStateInfo, source, lede) {
         : null,
       election.cutoffTime
         ? h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) }))
+        : null,
+      resultsAreSealed(election)
+        ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
         : null
     )
   );

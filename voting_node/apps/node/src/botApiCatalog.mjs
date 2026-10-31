@@ -19,6 +19,7 @@ function op(method, path, minLevel, fields) {
     minLevel,
     auth: Boolean(fields.auth),
     apiKey: fields.apiKey !== false,
+    gate: fields.gate || '',
     tag: fields.tag,
     summary: fields.summary,
     body: fields.body || '',
@@ -378,7 +379,25 @@ export const BOT_OPERATIONS = [
     tag: 'Elections',
     auth: true,
     summary: 'Clerk creates an election in a jurisdiction they already serve.',
-    body: 'title, jurisdictionId, startTime, cutoffTime, questions or ballot',
+    body: 'title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable'
+  }),
+  O('POST', '/api/elections/:id/l2-open', {
+    tag: 'Elections',
+    auth: true,
+    summary: 'Retry the sequencer open for one election. Idempotent: an open election is not opened again.',
+  }),
+  O('POST', '/api/elections/:id/chain-dead-letter/replay', {
+    tag: 'Elections',
+    auth: true,
+    summary: 'Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row.',
+    body: 'nullifier (optional)',
+  }),
+  O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
+    tag: 'Elections',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted.',
+    body: 'nullifier, reason',
   }),
   R('/api/elections/:id', {
     tag: 'Elections',
@@ -411,7 +430,7 @@ export const BOT_OPERATIONS = [
   }),
   R('/api/elections/:id/results', {
     tag: 'Elections',
-    summary: 'Certified plurality or IRV results after tally. Empty of option counts before tally.',
+    summary: 'Plurality or IRV results from the final tally. Empty of option counts before tally. A poll may include almost-live hourly choice sums after the results gate. A vote stays empty of those sums. Excluded ballots are not counted.',
   }),
   R('/api/elections/:id/summary', {
     tag: 'Elections',
@@ -485,7 +504,7 @@ export const BOT_OPERATIONS = [
   V('POST', '/api/elections/:id/vote', {
     tag: 'Elections',
     summary:
-      'Submit one ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. The same nullifier is accepted once. A read-only key is refused.',
+      'Submit a ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. A second ballot for the same nullifier is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block stays as first published. A read-only key is refused.',
     body: 'proof, public inputs, ciphertext, pinToken, identityCommitment when an external party is active',
   }),
   O('POST', '/api/elections/:id/disqualify', {
@@ -526,7 +545,14 @@ export const BOT_OPERATIONS = [
   O('POST', '/api/elections/:id/guardians/partials', {
     tag: 'Elections',
     auth: true,
-    summary: 'Tally operator submits partial decryptions after cutoff.',
+    summary: 'Tally operator submits partial decryptions of the full aggregate after cutoff.',
+  }),
+  O('POST', '/api/elections/:id/choice-blocks/partials', {
+    tag: 'Elections',
+    auth: true,
+    summary:
+      'Tally operator submits partial decryptions for one published poll hour block. A vote has no block. The response is the guardian index and the block id.',
+    body: 'blockId, index, partials tagged for that block aggregate',
   }),
   O('POST', '/api/elections/:id/tally', {
     tag: 'Elections',
@@ -1184,7 +1210,7 @@ function guideBody() {
   lines.push('```');
   lines.push('');
   lines.push(
-    'JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout waits until the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor.',
+    'JSON errors look like `{ "error": "…", "nfp": true, "code": "…" }`. Successful JSON includes `"nfp": true`. Ballot choice is never a response field. Public turnout publishes hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor.',
   );
   lines.push('');
   lines.push('Machine-readable copies:');
@@ -1203,7 +1229,8 @@ function guideBody() {
       lines.push(`### ${tag}`);
       lines.push('');
     }
-    const gate = entry.apiKey ? `key ${entry.minLevel}${entry.auth ? ', signed in' : ''}` : 'API key refused';
+    const who = entry.gate || `key ${entry.minLevel}`;
+    const gate = entry.apiKey ? `${who}${entry.auth ? ', signed in' : ''}` : 'API key refused';
     const body = entry.body ? ` Body: ${entry.body}.` : '';
     lines.push(`- \`${entry.method} ${entry.path}\` (${gate}). ${entry.summary}${body}`);
   }

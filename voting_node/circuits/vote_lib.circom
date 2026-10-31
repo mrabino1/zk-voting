@@ -199,11 +199,20 @@ template Vote(levels) {
     }
     merkle.root === root;
 
-    // nullifier === Hash(nullifierSecret, electionId)
-    component nullifierCheck = ComputeNullifier();
-    nullifierCheck.nullifierSecret <== nullifierSecret;
-    nullifierCheck.electionId <== electionId;
-    nullifierCheck.nullifier === nullifier;
+    // Public input 2 of this template is the once-only voter id
+    // Poseidon(nullifierSecret, electionId). VoteSealed publishes the nested
+    // submission id instead and keeps this voter id private. This tree's
+    // Poseidon permutation is t = 3 (two inputs). A three-input Poseidon is not here.
+    component voterId = Hasher();
+    voterId.a <== nullifierSecret;
+    voterId.b <== electionId;
+    voterId.out === nullifier;
+
+    component sealedId = Hasher();
+    sealedId.a <== voterId.out;
+    sealedId.b <== ballotHash;
+    signal submissionId;
+    submissionId <== sealedId.out;
 
     // Non-membership: Hash(disqLow, disqNext) is in the disqualification chain,
     // and the identity commitment sits strictly inside that gap.

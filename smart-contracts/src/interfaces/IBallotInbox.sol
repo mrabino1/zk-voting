@@ -31,6 +31,35 @@ interface IBallotInbox {
     error BallotTooLarge();
     error ContractPaused();
     error ReentrantCall();
+    error NotAuthorized();
+    error SettlementAlreadySet();
+    error CeremonyAlreadySet();
+    error KeyNotPosted();
+    error BadSignature();
+    error ReceiptMismatch();
+    error ReceiptAfterCutoff();
+    error ForceInClosed();
+    error BoundRootMismatch();
+    error UnknownBoundRoot();
+    error UnknownInclusion();
+    error PendingListFull();
+    error LinksLocked();
+    error TurnoutNotPublished();
+    error BadTreeDepth();
+    error EgCiphertextRequired();
+    error NonCanonicalBallot();
+    error PointOffCurve();
+    error JointKeyMismatch();
+    error UnknownSubmission();
+    error SubmissionAlreadySettled();
+
+    struct RelayerReceipt {
+        uint256 submissionId;
+        bytes32 ballotHash;
+        bytes32 ciphertextHash;
+        bytes32 boundRoot;
+        uint64 receivedAt;
+    }
 
     event VoteAccepted(uint256 indexed electionId, uint256 indexed nullifier, bytes32 ballotHash, address relayer);
 
@@ -59,7 +88,54 @@ interface IBallotInbox {
 
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 
-    function acceptedBallots(uint256 electionId) external view returns (uint256);
+    /// @notice Public turnout. A sealed VOTE or POLL returns the unique count last
+    ///         posted by an hourly or supplementary batch, including during the window.
+    ///         A legacy election reverts until cutoff.
+    function closedBallotCount(uint256 electionId) external view returns (uint256);
+
+    /// @notice Acceptance order of a submission. Zero means it was not accepted.
+    ///         A replacement may settle only in increasing order.
+    function acceptanceSeq(uint256 electionId, uint256 submissionId) external view returns (uint64);
+
+    /// @notice Primary ciphertext stored at acceptance. `set` is false when the id is unknown.
+    function acceptedPrimary(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (uint256 c1X, uint256 c1Y, uint256 c2X, uint256 c2Y, uint8 n, bool set);
+
+    /// @notice Option ciphertext stored at acceptance, index-aligned with the ballot vector.
+    function acceptedOption(uint256 electionId, uint256 submissionId, uint256 option)
+        external
+        view
+        returns (uint256 c1X, uint256 c1Y, uint256 c2X, uint256 c2Y);
+
+    /// @notice Primary, ballot hash, and the option ciphertexts stored at acceptance.
+    ///         Option `i` occupies `opts[4*i .. 4*i+3]` as `(c1x, c1y, c2x, c2y)`.
+    ///         One call, so a batch can sum the committed vector without a read per point.
+    function acceptedVector(uint256 electionId, uint256 submissionId)
+        external
+        view
+        returns (
+            uint256 c1X,
+            uint256 c1Y,
+            uint256 c2X,
+            uint256 c2Y,
+            uint8 n,
+            bool set,
+            bytes32 ballotHash,
+            uint256[16] memory opts
+        );
+
+    /// @notice Accepted submissions not yet included in a settled batch.
+    function unconsumedCount(uint256 electionId) external view returns (uint256);
+
+    function emptyBallotRoot(uint256 depth) external pure returns (uint256);
+
+    function pendingCount(uint256 electionId) external view returns (uint256);
+
+    function pendingIdAt(uint256 electionId, uint256 index) external view returns (uint256);
+
+    function pendingChunk(uint256 electionId, uint256 chunk) external view returns (uint256);
 
     function ballotHashOf(uint256 electionId, uint256 nullifier) external view returns (bytes32);
 
@@ -81,4 +157,38 @@ interface IBallotInbox {
     ) external;
 
     function ballotHashOfCiphertext(bytes calldata encryptedBallot) external pure returns (uint256);
+
+    function settlementOf(uint256 electionId) external view returns (address);
+
+    function ceremonyOf(uint256 electionId) external view returns (address);
+
+    function setSettlement(uint256 electionId, address settlement_) external;
+
+    function setCeremony(uint256 electionId, address ceremony_) external;
+
+    /// @notice Covers chain id, this inbox, and the receipt fields, including `boundRoot`.
+    function receiptDigest(uint256 electionId, RelayerReceipt calldata receipt) external view returns (bytes32);
+
+    /// @notice Include an omitted ballot while `block.timestamp < tallyAllowedAt`.
+    ///         The ballot is checked against `receipt.boundRoot`.
+    function forceIn(
+        uint256 electionId,
+        RelayerReceipt calldata receipt,
+        bytes calldata signature,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[] calldata publicInputs,
+        bytes calldata encryptedBallot
+    ) external;
+
+    function pendingForcedIn(uint256 electionId) external view returns (uint256[] memory);
+
+    function forcedInRoot(uint256 electionId, uint256 submissionId) external view returns (bytes32 root, bool pending);
+
+    function markSealed(uint256 electionId, uint256[] calldata submissionIds) external;
+
+    /// @notice Spend an accepted submission inside a settled batch. Settlement only.
+    ///         `cipherHash` is the ordered-vector ballot digest, and it must match the stored ballot hash.
+    function consumeForSettlement(uint256 electionId, uint256 submissionId, uint256 cipherHash) external;
 }

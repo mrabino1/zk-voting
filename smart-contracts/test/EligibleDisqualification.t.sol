@@ -159,7 +159,7 @@ contract EligibleDisqualificationTest is Deployer {
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, publishedDq, encDq);
         assertFalse(inbox.nullifierUsed(electionId, nullifierDq));
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
 
         bytes memory encOk = Fixtures.encryptedBallot(nullifierOk);
         verifier.armInclusionWitness(nullifierOk, A, okProof.pathElements, okProof.pathIndices);
@@ -168,7 +168,7 @@ contract EligibleDisqualificationTest is Deployer {
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, publishedOk, encOk);
         assertTrue(inbox.nullifierUsed(electionId, nullifierOk));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     /// @notice A disqualified commitment has no indexed-chain gap under disqRoot.
@@ -284,7 +284,7 @@ contract EligibleDisqualificationTest is Deployer {
         assertFalse(verifier.inclusionArmed(nullifier));
         submitVote(electionId, election, nullifier);
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     function _registerTrio() internal {

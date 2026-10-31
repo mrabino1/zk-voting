@@ -25,10 +25,23 @@ contract PoseidonTest is Test {
         assertEq(h.hashLeftRight(1, 2), POSEIDON_1_2);
         assertEq(h.hashLeftRight(0, 0), POSEIDON_0_0);
         assertEq(h.hashLeftRight(2, 3), POSEIDON_2_3);
-        assertEq(IdentityCommitment.poseidonLeaf(1, 2), POSEIDON_1_2);
-        assertEq(IdentityCommitment.demoPasskeyLeaf(2, 3), IdentityCommitment.poseidonLeaf(2, 3));
-        assertTrue(IdentityCommitment.demoPasskeyLeaf(2, 3) != IdentityCommitment.keccakLeaf(2, 3));
-        assertEq(IdentityCommitment.poseidonNullifier(3, 1), h.hashLeftRight(3, 1));
+        // External calls so the permutation is not copied into this function.
+        assertEq(this.poseidonLeaf(1, 2), POSEIDON_1_2);
+        assertEq(this.passkeyLeaf(2, 3), this.poseidonLeaf(2, 3));
+        assertTrue(this.passkeyLeaf(2, 3) != IdentityCommitment.keccakLeaf(2, 3));
+        assertEq(this.poseidonNullifier(3, 1), h.hashLeftRight(3, 1));
         assertTrue(h.hashLeftRight(1, 2) != HashScheme.hashLeftRightStandIn(1, 2));
+    }
+
+    function poseidonLeaf(uint256 a, uint256 b) external pure returns (uint256) {
+        return IdentityCommitment.poseidonLeaf(a, b);
+    }
+
+    function passkeyLeaf(uint256 a, uint256 b) external pure returns (uint256) {
+        return IdentityCommitment.demoPasskeyLeaf(a, b);
+    }
+
+    function poseidonNullifier(uint256 secret, uint256 electionId) external pure returns (uint256) {
+        return IdentityCommitment.poseidonNullifier(secret, electionId);
     }
 }

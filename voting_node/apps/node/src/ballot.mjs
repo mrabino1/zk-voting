@@ -5,6 +5,7 @@
 import { hexToString } from 'viem';
 
 import { HttpError } from './http.mjs';
+import { ciphertextForTally } from './tallyOpen.mjs';
 import { computeIrv, firstRoundCounts } from './irv.mjs';
 
 export const BALLOT_METHODS = Object.freeze(['plurality', 'ranked_choice']);
@@ -426,6 +427,9 @@ export function presentTally(election, acceptedBallots) {
     countsHash: election.tally.countsHash || null,
     l1: election.tally.l1 || null,
     ballotMethod: election.tally.ballotMethod || election.ballotMethod || 'plurality',
+    ...(election.tally.excluded?.count
+      ? { excluded: { count: election.tally.excluded.count, reasons: election.tally.excluded.reasons || [] } }
+      : {}),
   };
 }
 
@@ -749,11 +753,12 @@ export function tallyBallots(election, ballots) {
 export function payloadsFromEnvelopes(envelopes) {
   const out = [];
   for (const env of envelopes || []) {
-    if (Array.isArray(env.rankingPayload)) {
-      out.push(env.rankingPayload);
+    const ranking = env.tallyRankingPayload ?? env.rankingPayload;
+    if (Array.isArray(ranking)) {
+      out.push(ranking);
       continue;
     }
-    const decoded = extractAnswers({}, env.encryptedBallot);
+    const decoded = extractAnswers({}, ciphertextForTally(env));
     out.push(Array.isArray(decoded) ? decoded : []);
   }
   return out;

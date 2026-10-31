@@ -119,6 +119,8 @@ contract MediumRegressionsTest is Deployer {
 
     function testM02_ExploitPermissionlessCreationWithoutRegistryRefused() public {
         ElectionFactory naked = new ElectionFactory(admin, address(0));
+        vm.prank(admin);
+        naked.setAllowMockVerifiers(true);
         ElectionParams memory p = defaultParams();
         address attacker = makeAddr("attacker");
         p.clerk = attacker;
@@ -203,7 +205,7 @@ contract MediumRegressionsTest is Deployer {
 
         vm.clearMockedCalls();
         submitVote(id, el, 7);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     // ------------------------------------------------------------------ M-05
@@ -243,10 +245,10 @@ contract MediumRegressionsTest is Deployer {
     function testM05_PinnedSettlementRequiresSettledRoot() public {
         L1TallyMirror mirror = new L1TallyMirror(admin, address(0));
         vm.prank(admin);
-        mirror.setSettlement(address(settlement));
+        mirror.setSettlement(1, address(settlement));
         vm.prank(admin);
         vm.expectRevert(IL1TallyMirror.SettlementAlreadySet.selector);
-        mirror.setSettlement(address(settlement));
+        mirror.setSettlement(1, address(settlement));
 
         vm.prank(admin);
         vm.expectRevert(IL1TallyMirror.UnsettledStateRoot.selector);

@@ -392,7 +392,7 @@ export default {
     maxOptions: "Vous pouvez choisir au plus {count} options.",
     receiptTitle: "Reçu du bulletin",
     receiptHelp:
-      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous ne pouvez voter qu’une fois ; un second bulletin pour le même nullifier est rejeté. Le double vote est impossible. Les lignes publiques de l’explorateur attendent la clôture de l’heure qui contenait ce bulletin.",
+      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Vous ne pouvez voter qu’une fois ; un second bulletin de votre part est rejeté. Les lignes publiques de l’explorateur attendent la clôture de l’heure qui contenait ce bulletin.",
     recorded: "Enregistré",
     ballotHash: "Hachage du bulletin",
     nullifier: "Nullifier",
@@ -401,7 +401,13 @@ export default {
     envelopeHelp:
       "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez changer d’avis sur ce formulaire jusqu’à la soumission. Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le double vote est impossible. Le reçu ne peut pas prouver comment vous avez voté.",
     envelopeHelpTally:
-      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement pour que l’opérateur puisse ouvrir les bulletins après la clôture (clé de démo, NON PRODUCTION). Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le reçu ne peut pas prouver comment vous avez voté.",
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. L’ouvrir après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Une fois le bulletin accepté par le Node, ce nullifier est dépensé — vous ne pouvez plus voter. Le reçu ne peut pas prouver comment vous avez voté.",
+    receiptHelpRevote:
+      "Ce reçu ne peut pas prouver comment vous avez voté. Il ne liste que des hachages. Il n’inclut pas vos options cochées, l’ouverture du chiffré, ni le trapdoor. Chaque électeur n’est compté qu’une fois et peut revoter jusqu’à la date limite ; le dernier vote compte. Les lignes publiques de l’explorateur attendent la clôture de l’heure et le délai de publication.",
+    envelopeHelpRevote:
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement final. Les deux ne sont pas comptés ensemble. Le reçu ne peut pas prouver comment vous avez voté.",
+    envelopeHelpTallyRevote:
+      "Remplissez chaque question. Une enveloppe couvre tout le bulletin. Vos sélections restent sur ce formulaire jusqu’à la soumission. L’enveloppe publiée est chiffrée vers la clé publique de dépouillement des gardiens. Ouvrir l’agrégat après la clôture exige t déchiffrements partiels vérifiés (NON PRODUCTION). Vous pouvez soumettre un bulletin plus tard jusqu’à la date limite. Un bloc publié conserve le premier bulletin. Le remplacement ne compte que dans le dépouillement final. Le reçu ne peut pas prouver comment vous avez voté.",
     aspectsCount: "{count} questions sur ce bulletin",
     aspectsCount_one: "{count} question sur ce bulletin",
     nonePublished: "Aucune publiée",
@@ -412,7 +418,7 @@ export default {
   results: {
     observers: "Observateurs",
     title: "Résultats de l’élection",
-    lede: "Totaux de pluralité certifiés après un dépouillement. Tant qu’un scrutin est ouvert ou en attente de dépouillement, cette page n’affiche pas de décomptes officieux par choix.",
+    lede: "Totaux de pluralité certifiés après un dépouillement. Un sondage peut aussi montrer des sommes par choix, presque en direct et par heure, une fois le seuil de résultats ouvert. Un vote reste scellé jusqu’à sa fin.",
     sampleNote: "Affichage de la liste d’exemple intégrée, car /api/elections n’est pas disponible.",
     tie: "Égalité",
     lexTie: "Égalité pour la première place départagée par l’id d’option lexicographique.",
@@ -431,6 +437,8 @@ export default {
     opens: "Ouverture",
     cutoff: "Clôture",
     publishedBallots: "Bulletins publiés",
+    ballotsDisclosed: "Bulletins divulgués",
+    choiceResults: "Résultats par choix",
     tallyPosted: "Dépouillement publié",
     privacy:
       "Les données au niveau du choix ne sont jamais affichées ici. Les preuves de vote de l’explorateur attendent la clôture de l’heure qui les contenait.",
@@ -464,6 +472,22 @@ export default {
     pluralitySeats: "Pluralité, {count} sièges.",
     questionFallback: "Question",
     declared: "{names} déclaré(s).",
+    typePoll: "Sondage",
+    typeVote: "Vote",
+    sealedUntil: "Résultats scellés jusqu’au {end}",
+    sealedBody: "Les décomptes par choix et les dépouillements partiels restent scellés pour tout le monde, y compris les responsables, jusqu’à la fin de cette élection. La participation horaire est publique.",
+    sealedStatus: "Résultats scellés",
+    almostLive: "Presque en direct",
+    almostLiveBody:
+      "Sommes par choix, par heure, pour ce sondage. Le bloc de 08:00–08:59 peut être publié à 09:30, après l’ouverture du seuil de résultats (une fois que 100 votants ont déposé leur premier bulletin, ou à la fin prévue, selon le premier). Les heures de moins de 10 bulletins fusionnent vers l’avant. La série se fige à la clôture. Un bloc publié reste tel qu’il a été publié la première fois. Ces sommes ne sont pas le dépouillement certifié.",
+    trailingHelp:
+      "Une dernière heure de moins de 10 n’est pas une ligne à part. À la clôture, elle est repliée dans le bloc précédent. Si tout le sondage reste sous 10, un bloc de clôture est l’ensemble.",
+    blockBallots: "{count} bulletins",
+    blockBallots_one: "{count} bulletin",
+    blockAwaiting: "Les sommes de cette heure attendent le déchiffrement à seuil.",
+    blockUnavailable: "Les sommes de cette heure ne sont pas disponibles.",
+    certifiedSeparate:
+      "Le dépouillement certifié à la clôture est définitif. Il n’a pas à égaler ces sommes horaires.",
   },
   info: {
     elections: "Élections",
@@ -659,7 +683,7 @@ export default {
   office: {
     kicker: "Officiers d’élection",
     title: "Bureau interne",
-    lede: "Les greffiers mettent en place les élections. Les registraires insèrent des identity commitments (jamais des noms). Les officiers de disqualification appliquent le catalogue public de motifs. Les opérateurs de dépouillement publient les décomptes. Le texte en clair du choix n’apparaît jamais ici. La participation et les preuves de vote sur chaque tableau de bord attendent la clôture de l’heure qui contenait le bulletin — une personne quittant un bureau de vote ne peut pas être associée à une hausse en direct.",
+    lede: "Les greffiers mettent en place les élections. Les registraires insèrent des identity commitments (jamais des noms). Les officiers de disqualification appliquent le catalogue public de motifs. Les opérateurs de dépouillement publient les décomptes. Le texte en clair du choix n’apparaît jamais ici. La participation et les preuves de vote sur chaque tableau de bord sont publiées chaque heure dès le premier bulletin, après la clôture de l’heure qui contenait le bulletin — une personne quittant un bureau de vote ne peut pas être associée à une hausse en direct.",
     checkingSession: "Vérification de la session…",
     sections: "Sections du bureau interne",
     navClerk: "Greffier",
@@ -689,6 +713,12 @@ export default {
     rankedChoice: "ranked_choice — second tour instantané (IRV)",
     methodHint:
       "Défaut de l’élection. YES_NO reste en pluralité. Les questions RANKED utilisent toujours IRV. Les élections créées reçoivent un id public UUID et un court lien <code>/v/…</code> ; le <code>uint256</code> d’usine reste <code>onChainElectionId</code>.",
+    electionType: "Type d’élection",
+    typePoll: "Sondage",
+    typePollHelp: "Une fois le seuil de résultats ouvert (une fois que 100 votants ont déposé leur premier bulletin, ou à la fin prévue, selon le premier), les sommes par choix sont publiées par heure, 30 minutes après chaque heure. Les heures de moins de 10 bulletins fusionnent avec la suivante. Un bloc publié reste tel qu’il a été publié la première fois. Le dépouillement final à la clôture compte le dernier bulletin. Un vote ne publie pas ces sommes.",
+    typeVote: "Vote",
+    typeVoteHelp: "Le résultat n’est affiché qu’après la fin de l’élection. Avant la date limite, personne, y compris les responsables, ne peut voir les décomptes par choix ni un dépouillement partiel. La participation est visible.",
+    typeLocked: "Le type est fixé à la création et ne peut plus être modifié.",
     loadExisting: "Charger un bulletin existant",
     newElection: "Nouvelle élection…",
     loadHint: "Les élections créées peuvent être modifiées jusqu’au gel de la liste. Les bulletins gelés restent hachés tels quels.",
@@ -759,7 +789,7 @@ export default {
     partiesHint: "Chaque élection clone son propre registre de parties. Le personnel peut ajouter autant de systèmes externes que nécessaire (casiers de crime, statistiques vitales, vérification de l’âge, …). Ces systèmes peuvent encore rejeter une personne <strong>après l’approbation de l’inscription</strong>. L’engagement d’identité est vérifié, puis écarté — il n’est jamais stocké sur le bulletin. Les oracles HTTP échouent fermés : un délai ou une réponse qui n’est pas <code>allow: true</code> rejette le vote.",
     tallyTitle: "Opérateur de dépouillement",
     tallyHint:
-      "Publiez les décomptes de pluralité par question après la clôture. Chaque question est décomptée sur ses propres options — ne sommez pas chaque contestation en un vecteur qui doit égaler les bulletins acceptés. Les questions préférentielles sont calculées avec IRV à partir des enveloppes de classement acceptées (laissez le vecteur de pluralité vide sur un bulletin entièrement classé). Sur les élections <code>opens_ballots</code>, laissez les décomptes vides pour ouvrir les enveloppes ECIES de démo, ou soumettez des décomptes qui doivent correspondre aux bulletins ouverts — les partitions inventées sont rejetées. La clé d’opérateur threshold-1 est NON PRODUCTION. Si <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code> et <code>L1_PUBLISHER_PRIVATE_KEY</code> sont définis, le Node copie aussi <code>keccak256(abi.encodePacked(counts))</code> vers <code>L1TallyMirror</code>. Un env L1 non défini est un no-op.",
+      "Publiez les décomptes de pluralité par question après la clôture. Chaque question est décomptée sur ses propres options — ne sommez pas chaque contestation en un vecteur qui doit égaler les bulletins acceptés. Les questions préférentielles sont calculées avec IRV à partir des enveloppes de classement acceptées (laissez le vecteur de pluralité vide sur un bulletin entièrement classé). Sur les élections <code>opens_ballots</code>, laissez les décomptes vides pour ouvrir les enveloppes ECIES de démo, ou soumettez des décomptes qui doivent correspondre aux bulletins ouverts — les partitions inventées sont rejetées. La clé d’opérateur threshold-1 est NON PRODUCTION. Si <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code> et <code>L1_PUBLISHER_PRIVATE_KEY</code> sont définis, le Node copie aussi <code>keccak256(abi.encode(counts))</code> vers <code>L1TallyMirror</code>. Un env L1 non défini est un no-op.",
     countsJson: "JSON des décomptes",
     countsHint:
       "Options de pluralité concaténées dans l’ordre du bulletin, ou utilisez les champs par question ci-dessus. Pour un bulletin entièrement classé, laissez vide pour calculer l’IRV à partir des enveloppes. Sur <code>opens_ballots</code>, omettez pour dériver les décomptes des enveloppes ouvertes ; les partitions inventées sont rejetées. Exemple YES_NO → <code>[yesCount, noCount]</code>.",
@@ -951,6 +981,9 @@ export default {
     head: "Tête #{head}",
     chain: "chaîne {id}",
     notTallied: "non décompté ({note})",
+    status: "Statut",
+    superseded: "remplacé",
+    orderUnknown: "ordre inconnu",
     irvShort: "IRV",
   },
   sample: {

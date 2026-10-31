@@ -14,6 +14,7 @@ import {
   presentElection,
 } from './electionState.mjs';
 import { buildAuditorPack } from './auditorPack.mjs';
+import { sealedResultsBody, voteResultsSealed } from './electionType.mjs';
 import { buildResults } from './results.mjs';
 import { verifyAuditorBundle } from '../../../tools/auditor/verify.mjs';
 import { OUTCOME_VERIFY_PATH } from './outcomeReports.mjs';
@@ -34,9 +35,9 @@ export const PHASE_NOTES = {
   before:
     'The roll is still forming, or it is frozen and polls have not opened. Verification covers the published window, Merkle roots, and whether this contest is mapped on chain.',
   during:
-    'Voting is open. Public turnout is the last closed hour, not a live precinct tick. Option counts are not published until a certified tally is posted.',
+    'Voting is open. Public turnout is the last closed hour, not a live precinct tick. Option counts are not published until a final tally is posted.',
   after:
-    'Polls are closed. Certified option counts appear only after a tally is posted. When L1 is configured, the tally hash may be mirrored on Ethereum.',
+    'Polls are closed. Option counts appear only after the final tally is posted. Excluded ballots are not counted. When L1 is configured, the tally hash may be mirrored on Ethereum.',
 };
 
 /**
@@ -266,6 +267,10 @@ function rootsView(election) {
 function verifyOutcome(election, deps, now, state, phase) {
   const pack = buildAuditorPack(election, deps);
   const auditor = verifyAuditorBundle(pack);
+  if (pack.resultsSealed && auditor.summary) {
+    auditor.summary.resultsSealed = true;
+    auditor.summary.tallied = false;
+  }
   const chain = verifyChainStatus(election, deps, now, state, phase);
   const errors = [...auditor.errors, ...chain.errors];
   return {
@@ -328,7 +333,12 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
     startTime: election.startTime,
     cutoffTime: election.cutoffTime,
     rollFrozen: Boolean(election.rollFrozen),
-    tallied,
+    tallied: dto.resultsSealed ? false : tallied,
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: Boolean(dto.resultsSealed),
+    sealedUntil: dto.sealedUntil,
+    resultsMessage: dto.resultsMessage,
     acceptedBallots: dto.acceptedBallots,
     participantCount: election.participantCount,
     eligibleCount:
@@ -348,7 +358,7 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
 }
 
 /**
- * Full public monitor for one election. Certified option counts only after a
+ * Full public monitor for one election. Final tally option counts only after a
  * posted tally (phase after). During and before never include unofficial totals.
  */
 export function presentOutcomeDetail(election, deps, opts = {}) {
@@ -359,11 +369,13 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
   const verification = verifyOutcome(election, deps, now, state, phase);
   const tallied = Boolean(election.tally);
   const official = deps.store.getOutcomeReportForElection?.(election.id) || null;
+  const sealed = Boolean(dto.resultsSealed) || voteResultsSealed(election, now);
   const publishedAcceptedBallots = dto.acceptedBallots;
   const certified =
-    phase === PHASE_AFTER && tallied
+    !sealed && phase === PHASE_AFTER && tallied
       ? buildResults(election, { now, publishedAcceptedBallots })
       : null;
+  const seal = sealed ? sealedResultsBody(election, now) : null;
 
   return {
     nfp: true,
@@ -378,6 +390,12 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
     phaseNote: PHASE_NOTES[phase],
     state,
     stateName: dto.stateName || STATE_NAMES[state],
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: sealed,
+    sealedUntil: seal?.sealedUntil ?? null,
+    resultsMessage: seal?.message ?? null,
+    code: seal?.code ?? null,
     window: {
       startTime: election.startTime,
       cutoffTime: election.cutoffTime,
@@ -391,12 +409,13 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
       eligibleCount:
         typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
       disclosure: dto.disclosure,
+      ...(sealed ? { resultsSealed: true } : {}),
     },
     questions: presentAspects(election),
     verification,
     certified,
-    tallyPostedAt: election.tally?.postedAt || null,
-    countsHash: election.tally?.countsHash || null,
+    tallyPostedAt: sealed ? null : election.tally?.postedAt || null,
+    ...(sealed ? {} : { countsHash: election.tally?.countsHash || null }),
     officialReport: official
       ? {
           id: official.id,
@@ -413,14 +432,14 @@ export function presentOutcomeDetail(election, deps, opts = {}) {
       policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
       note:
-        'This portal verifies process and certified outcomes. It never shows how any person voted. During voting it does not invent unofficial option counts.',
+        'This portal verifies process and the final tally. It never shows how any person voted. During voting it does not invent unofficial option counts.',
     },
   };
 }
 
 export function presentOutcomesIndex(deps, opts = {}) {
   const now = opts.now ?? deps.config.nowFn();
-  const elections = deps.store.listElections().map((election) => presentOutcomeSummary(election, deps, { now }));
+  const elections = deps.store.listPublicElections().map((election) => presentOutcomeSummary(election, deps, { now }));
   const phases = {
     before: elections.filter((e) => e.phase === PHASE_BEFORE),
     during: elections.filter((e) => e.phase === PHASE_DURING),

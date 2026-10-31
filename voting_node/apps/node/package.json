@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "dev": "node --watch src/server.mjs",
-    "test": "NODE_ENV=test node --test test/*.test.mjs",
+    "test": "NODE_ENV=test ZK_VOTING_USE_MOCK_VERIFIER=1 ZK_VOTING_ALLOW_MOCK_PROOFS=1 node --test test/*.test.mjs",
     "test:a11y": "NODE_ENV=test node --test test/a11y.test.mjs",
     "certify:l1": "node scripts/certify-l1.mjs",
     "guardian": "node scripts/guardian.mjs",

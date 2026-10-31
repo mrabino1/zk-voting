@@ -116,8 +116,8 @@ ballot hash, no attachment — and nothing about the send is stored. The PDF use
 so it cannot be edited (print and copy remain allowed). The Node records
 SHA-256 of the exact bytes; `/receipt` accepts the proof or the file and
 rejects a modified PDF. A public `/receipt` portal answers whether the ballot
-counted, plus disclosed turnout (after the hour, the disclosure delay, the
-results gate, and the block floor) — never a candidate or option. A holder token
+counted, plus disclosed turnout (hourly from the first ballot, after the hour,
+the disclosure delay, and the block floor) — never a candidate or option. A holder token
 on the receipt can confirm a count before that publication; looking up public
 hashes still waits for disclosure. Double voting remains impossible. A separate public `/outcomes`
 portal monitors every election before, during, and after voting from chain
@@ -128,27 +128,30 @@ the open window it still does not invent unofficial option counts. After
 SHA-256 / HMAC authenticity page; `/outcomes/verify` checks the file was not
 changed. Subscribing to that PDF is opt-in on `/me`; casting a ballot never
 creates a subscription (see `docs/OPERATOR.md`, "Ballot unlinkability"). This is
-**not** MACI and
-**not** last-vote-counts: a coercer who can force the first (and only) submit
-still wins that ballot.
+**not** MACI. A second ballot is rejected unless re-vote is enabled. When it
+is on, the replacement is counted only in the final tally, and a published
+poll block keeps the original ballot. The receipt cannot prove the choice.
 
 ### Hourly public disclosure (polling-place unlinkability)
 
-Votes are **accepted immediately** (each nullifier **once**; a second ballot is
-rejected). Public proof of those votes — explorer rows, jurisdiction
-`acceptedBallots`, any dashboard turnout tick — waits for three server-side
-checks:
+Votes are **accepted immediately** (one ballot per nullifier; a second ballot
+is rejected unless re-vote is enabled). Public proof of those votes — explorer rows, jurisdiction
+`acceptedBallots`, any dashboard turnout tick — waits for these server-side
+checks, from the first ballot:
 
 - The UTC hour has closed and `DISCLOSURE_DELAY_SECONDS` (default **1800**)
   has elapsed. A vote at 08:59 publishes at **09:30**. An earlier note that a
-  14:05 vote appears at 15:00 is replaced by **15:30**, and only if the next
-  two checks also pass.
-- The results gate is open: `RESULTS_MIN_VOTES` ballots (default **100**) or
-  the scheduled end, whichever is earlier. A certified tally also opens it.
+  14:05 vote appears at 15:00 is replaced by **15:30**, once the block floor
+  is also met. Turnout is public from the first ballot.
+- Poll per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled
+  end (`RESULTS_MIN_VOTES`, default **100**). After that gate, hourly choice
+  sums publish with the same delay. A published block stays as first published.
+  A vote publishes choices only in the final tally.
+
 - The disclosure block has at least `DISCLOSURE_MIN_BLOCK_VOTES` ballots
   (default **10**). Smaller hours merge forward. A remainder publishes at
   election end when the election met that floor; a short election publishes
-  at the certified tally.
+  at the final tally.
 
 - Do not leak a pending-per-election count (that still identifies the
   jurisdiction).
@@ -156,8 +159,8 @@ checks:
   a disclosure block, timestamped at the disclosure clock (hour end + delay),
   ordered by nullifier (not arrival).
 - Default interval is 3600 seconds (`DISCLOSURE_INTERVAL_SECONDS`). Tests
-  and local instant demo may set the interval to `0` (and the gate and block
-  floor to their test defaults).
+  and local instant demo may set the interval to `0` (and the choice gate and
+  block floor to their test defaults).
 
 Hasher note: the vote circuit, proof-helpers, browser `poseidon.js`, Solidity `PoseidonHasher`, and the demo passkey leaf share Poseidon(2) (`zk-voting.hash.poseidon-bn254-x5-t3-v1`). Unit-test Merkle trees stay `KeccakHasher` (`keccak-dev-v1`). The stand-in bilinear mix is legacy and not included. Poseidon wiring is not a ceremony. See [`circuits/HASH_SCHEME.md`](../circuits/HASH_SCHEME.md).
 
@@ -310,7 +313,7 @@ address, the factory uint256, and the `jurisdictionId` baked into
 `Election.params`. A copied UUID therefore lands in a different L1 slot —
 or, if the attacker also claims the honest factory + id + jurisdiction,
 they must be a publisher for that body and `AlreadyPosted` keeps the first
-certified tally. Outcome verification recomputes UUID v5 from those fields;
+final tally. Outcome verification recomputes UUID v5 from those fields;
 a copied id fails `publicIdMatchesScope`.
 
 `GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
@@ -427,7 +430,7 @@ Public inputs **must** be length ≥ 5, same order as `@zk-voting/proof-helpers`
 Rejects when: verifier returns false; nullifier already used (`NullifierUsed`),
 including a new `ballotHash`; outside window; roll not frozen; election mismatch;
 eligible / disqualification root in the proof does not match;
-`ballotHash` does not match `keccak256(encryptedBallot)`.
+`ballotHash` does not match the ciphertext. A canonical `EG` ballot hashes the ordered option vector with Poseidon. Any other ciphertext is `keccak256(encryptedBallot) mod r`.
 
 A nullifier is accepted **once**. `acceptedBallots` counts unique nullifiers.
 Double voting is impossible. Event: `VoteAccepted`. Relayer/bundler is
@@ -732,7 +735,7 @@ PATCH /api/office/site              (title/tagline/contracts: platform_admin)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction)
 GET  /api/elections/:id             (UUID, shortCode, or on-chain uint256)
-GET  /api/elections/:id/results     (public; certified plurality/IRV after tally; empty before)
+GET  /api/elections/:id/results     (public; final tally plurality/IRV after tally; empty before)
 GET  /api/elections/:id/summary     (public hour-bucket snapshot; resultsUrl after tally)
 GET  /api/elections/:id/info
 GET  /api/elections/:id/info/:questionId/:optionId
@@ -758,7 +761,7 @@ POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry 
 GET  /api/elections/:id/l1          (public countsHash + L1 tx if posted)
 GET  /api/elections/:id/artifacts   (public auditor pack; no private DB fields)
 GET  /api/outcomes                  (public monitor: every election before/during/after)
-GET  /api/outcomes/:id              (verification + certified outcome after tally)
+GET  /api/outcomes/:id              (verification + final tally after tally)
 GET  /api/outcomes/reports          (issued official outcome PDFs)
 GET  /api/outcomes/reports/:id
 GET  /api/outcomes/reports/:id/pdf  (locked official PDF; X-Pdf-Protected)
@@ -872,7 +875,7 @@ stored. The SPA does not send them.
 | `code` | Meaning |
 | --- | --- |
 | `ELIGIBLE_ROOT_MISMATCH` / `DISQUALIFICATION_ROOT_MISMATCH` | Proof roots do not match the open-window set |
-| `NULLIFIER_USED` | This nullifier already voted |
+| `NULLIFIER_USED` | Inbox revert when `submitVote` is called again for a nullifier. The Node replaces its envelope instead of submitting again. |
 
 `store.assertCanVote` still throws when a caller that already holds a leaf
 asks the roll helper:
@@ -948,7 +951,7 @@ PRF; no seed phrase is shown.
 | `/explorer` | `public/explorer.html` + `explorer.js` | Implemented |
 | `/office/pages`, `/office/site` | `public/cms.js` | Clerk CMS; pin shared factory |
 | `/p/:slug` | published custom pages | Implemented |
-| `/elections/:id/results` | `public/results.js` | Implemented certified plurality / IRV |
+| `/elections/:id/results` | `public/results.js` | Implemented final tally plurality / IRV |
 
 No commercialization copy. Footer on every page: **NOT FOR PROFIT**.
 

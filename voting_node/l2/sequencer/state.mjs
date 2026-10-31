@@ -18,6 +18,7 @@ import {
 } from '../disclosure.mjs';
 import { StaleFenceError, WriterLease } from '../lease/lease.mjs';
 import { isAdminTxType, verifyAdminCivic } from '../adminAuth.mjs';
+import { normalizeElectionType, voteResultsSealed } from '../../apps/node/src/electionType.mjs';
 
 export const L2_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CHAIN_ID = 27427;
@@ -386,7 +387,7 @@ export function loadConfig(root = L2_ROOT) {
       : 'open',
     adminSecret: String(process.env.L2_ADMIN_SECRET || '').trim(),
     l2Uuid: String(process.env.L2_UUID || file.l2Uuid || '').trim().toLowerCase(),
-    devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof !== false),
+    devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof === true),
     voteProvingPath: parseBool(process.env.ZK_VOTING_PROVING_PATH, false),
     l2RpcUrl:
       process.env.L2_RPC_URL ||
@@ -831,8 +832,37 @@ export class ChainState {
   }
 
   shouldHoldVote(tx) {
-    const interval = Number(this.config.disclosureIntervalSeconds) || 0;
-    return interval > 0 && isHeldVoteType(tx.civicType);
+    if (!isHeldVoteType(tx.civicType)) return false;
+    return (Number(this.config.disclosureIntervalSeconds) || 0) > 0;
+  }
+
+  /**
+   * Ballot rows follow the hourly gate for both types. A tally is choice
+   * data: refuse it for an election this L2 never opened, and while a vote
+   * is sealed. An invalid stored type fails closed.
+   */
+  _assertChoicePolicy(tx) {
+    const type = String(tx.civicType || '').toLowerCase();
+    const civic = tx.civic || {};
+    if (type === 'election_open') {
+      if (civic.electionType != null && civic.electionType !== '') {
+        normalizeElectionType(civic.electionType, { required: true });
+      }
+      return;
+    }
+    if (type !== 'tally') return;
+    const id = String(civic.electionId ?? '').toLowerCase();
+    const entry = this.electionRegistry.get(id);
+    if (!entry) {
+      throw Object.assign(new Error('unknown election on this L2'), { code: -32001 });
+    }
+    const typed = {
+      electionType: entry.typeInvalid ? 1 : entry.electionType,
+      cutoffTime: entry.typeInvalid ? null : entry.cutoffTime,
+    };
+    if (entry.typeInvalid || voteResultsSealed(typed, this.now())) {
+      throw Object.assign(new Error('choice results are sealed until cutoff'), { code: -32001 });
+    }
   }
 
   decodeCivicRaw(rawHex) {
@@ -911,6 +941,7 @@ export class ChainState {
     this.assertWritable();
     this._assertUniqueCivic(tx);
     this._assertAdmitted(tx);
+    this._assertChoicePolicy(tx);
     if (this.shouldHoldVote(tx)) {
       tx.receivedAt = this.now();
       this.rememberSealed(tx);
@@ -954,21 +985,35 @@ export class ChainState {
     const key = raw.toLowerCase();
     const entry = this.electionRegistry.get(key);
     let submitted = 0;
-    for (const tx of this.sealed) {
-      if (String(tx.civicType || '').toLowerCase() !== 'vote') continue;
-      if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
-    }
+    const countTx = (tx) => {
+      if (!tx || typeof tx !== 'object') return;
+      if (String(tx.civicType || tx.civic?.type || '').toLowerCase() !== 'vote') return;
+      const id = String(tx.civic?.electionId ?? '');
+      if (id !== raw && id.toLowerCase() !== key) return;
+      submitted += 1;
+    };
+    for (const tx of this.sealed) countTx(tx);
     for (const block of this.blocks) {
-      for (const tx of block.transactions || []) {
-        if (!tx || typeof tx !== 'object') continue;
-        if (String(tx.civicType || tx.civic?.type || '').toLowerCase() !== 'vote') continue;
-        if (String(tx.civic?.electionId ?? '') === raw) submitted += 1;
-      }
+      for (const tx of block.transactions || []) countTx(tx);
     }
+    const vote = Boolean(entry && (entry.typeInvalid || Number(entry.electionType) === 1));
+    const sealed =
+      vote &&
+      (entry.typeInvalid ||
+        voteResultsSealed(
+          {
+            electionType: 1,
+            cutoffTime: entry.typeInvalid ? null : entry.cutoffTime,
+          },
+          this.now(),
+        ));
     return {
       submittedVotes: submitted,
-      endTime: entry?.cutoffTime ?? null,
-      tallied: this.tallyIndex.has(raw) || this.tallyIndex.has(key),
+      endTime: entry?.typeInvalid ? null : entry?.cutoffTime ?? null,
+      // A sealed vote has no public tally yet. The hourly planner still sees turnout.
+      tallied: sealed ? false : this.tallyIndex.has(raw) || this.tallyIndex.has(key),
+      resultsSealed: sealed,
+      ...(vote ? { minVotes: 0 } : {}),
     };
   }
 
@@ -976,14 +1021,14 @@ export class ChainState {
     const now = this.now();
     const interval = Number(this.config.disclosureIntervalSeconds) || 0;
     const delay = Number(this.config.disclosureDelaySeconds) || 0;
-    const votes = [];
+    const hourly = [];
     const other = [];
     for (const tx of this.sealed) {
-      if (String(tx.civicType || '').toLowerCase() === 'vote') votes.push(tx);
+      if (String(tx.civicType || '').toLowerCase() === 'vote') hourly.push(tx);
       else other.push(tx);
     }
     const planned = planPublicBlocks(
-      votes.map((tx) => ({
+      hourly.map((tx) => ({
         tx,
         receivedAt: tx.receivedAt,
         electionId: String(tx.civic?.electionId ?? ''),
@@ -1479,6 +1524,19 @@ export class ChainState {
       if (civic.cutoffTime != null && Number.isFinite(Number(civic.cutoffTime))) {
         entry.cutoffTime = Number(civic.cutoffTime);
       }
+      if (civic.electionType != null && civic.electionType !== '') {
+        try {
+          entry.electionType = normalizeElectionType(civic.electionType, { required: true });
+          entry.typeInvalid = false;
+        } catch {
+          // Fail closed on replay: an unknown type seals choice results.
+          // Ballot rows still follow the hourly clock. They are not held.
+          entry.electionType = 1;
+          entry.cutoffTime = null;
+          entry.typeInvalid = true;
+          console.warn(`invalid election type on this L2; choice results for ${key} stay sealed`);
+        }
+      }
       if (civic.eligibleRoot != null) entry.eligibleRoots.add(topicWord(civic.eligibleRoot));
       for (const a of Array.isArray(civic.approvedSenders) ? civic.approvedSenders : []) {
         entry.approvedSenders.add(normalizeAddress(a));
@@ -1539,6 +1597,15 @@ export class ChainState {
     const key = String(electionUuid || '').toLowerCase();
     const entry = this.electionRegistry.get(key);
     if (!entry) return null;
+    const sealedVote =
+      entry.typeInvalid ||
+      voteResultsSealed(
+        {
+          electionType: entry.typeInvalid ? 1 : entry.electionType,
+          cutoffTime: entry.typeInvalid ? null : entry.cutoffTime,
+        },
+        this.now(),
+      );
     let registered = 0;
     let votes = 0;
     let tally = null;
@@ -1553,13 +1620,21 @@ export class ChainState {
         else if (t === 'register') registered += 1;
         else if (t === 'vote') votes += 1;
         else if (t === 'tally') {
-          tally = {
-            blockNumber: block.number,
-            txHash: tx.hash,
-            countsHash: c.countsHash != null ? topicWord(c.countsHash) : null,
-            resultHash: c.resultHash != null ? topicWord(c.resultHash) : null,
-            counts: Array.isArray(c.counts) || (c.counts && typeof c.counts === 'object') ? c.counts : null,
-          };
+          const choiceSealed =
+            entry.typeInvalid ||
+            voteResultsSealed(
+              { electionType: entry.electionType, cutoffTime: entry.cutoffTime },
+              this.now(),
+            );
+          if (!choiceSealed) {
+            tally = {
+              blockNumber: block.number,
+              txHash: tx.hash,
+              countsHash: c.countsHash != null ? topicWord(c.countsHash) : null,
+              resultHash: c.resultHash != null ? topicWord(c.resultHash) : null,
+              counts: Array.isArray(c.counts) || (c.counts && typeof c.counts === 'object') ? c.counts : null,
+            };
+          }
         }
       }
     }
@@ -1570,8 +1645,11 @@ export class ChainState {
       eligibleRoots: [...entry.eligibleRoots],
       approvedSenders: entry.approvedSenders.size,
       registered,
+      electionType: entry.typeInvalid ? null : entry.electionType ?? null,
+      typeInvalid: Boolean(entry.typeInvalid),
+      // Turnout already in blocks. Choice data stays on tally, which is null while sealed.
       votesSealedInBlocks: votes,
-      tally,
+      tally: sealedVote ? null : tally,
     };
   }
 

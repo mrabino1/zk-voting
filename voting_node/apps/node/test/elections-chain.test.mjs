@@ -8,16 +8,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, test } from 'node:test';
 
-import { encodeAbiParameters, encodeEventTopics, keccak256, stringToHex } from 'viem';
+import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, keccak256, stringToHex } from 'viem';
 
 import {
   chainElectionIdOf,
   createChain,
   decodeElectionCreated,
   electionFactoryAbi,
+  factoryElectionParams,
   resolveCreateElectionParams,
   toJurisdictionBytes32,
 } from '../src/chain.mjs';
+import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
 import { HttpError } from '../src/http.mjs';
 import { createApp } from '../src/server.mjs';
 import { isUuid } from '../src/electionIds.mjs';
@@ -165,7 +167,7 @@ function electionBody(extra = {}) {
 }
 
 describe('ElectionCreated log decode', () => {
-  test('decodeElectionCreated reads factory logs', () => {
+  function createdLog(electionType) {
     const topics = encodeEventTopics({
       abi: electionFactoryAbi,
       eventName: 'ElectionCreated',
@@ -179,12 +181,23 @@ describe('ElectionCreated log decode', () => {
       [
         { name: 'startTime', type: 'uint64' },
         { name: 'cutoffTime', type: 'uint64' },
+        { name: 'electionType', type: 'uint8' },
       ],
-      [1n, 2n],
+      [1n, 2n, electionType],
     );
-    const decoded = decodeElectionCreated({ logs: [{ data, topics }] });
-    assert.equal(decoded.electionId, 7n);
-    assert.equal(String(decoded.election).toLowerCase(), CLONE.toLowerCase());
+    return decodeElectionCreated({ logs: [{ data, topics }] });
+  }
+
+  test('decodeElectionCreated reads a POLL and a VOTE', () => {
+    const poll = createdLog(0);
+    const vote = createdLog(1);
+    assert.equal(poll.electionId, 7n);
+    assert.equal(String(poll.election).toLowerCase(), CLONE.toLowerCase());
+    assert.equal(poll.startTime, 1n);
+    assert.equal(poll.cutoffTime, 2n);
+    assert.equal(poll.electionType, 0);
+    assert.equal(vote.electionType, 1);
+    assert.equal(vote.electionId, poll.electionId);
   });
 });
 
@@ -215,6 +228,7 @@ describe('factory param helpers', () => {
     assert.equal(params.verifier, VERIFIER);
     assert.equal(params.questionCount, 1);
     assert.equal(params.jurisdictionId, keccak256(stringToHex('demo')));
+    assert.equal(params.electionType, 0);
   });
 
   test('resolveCreateElectionParams requires verifier when chain env is used', () => {

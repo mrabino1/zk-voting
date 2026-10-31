@@ -4,6 +4,8 @@
  */
 
 import { brandName } from "./brand.js";
+import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { t } from "./i18n.js";
 import {
   COMMUNITY_URL,
   MAIN_SITE_URL,
@@ -88,12 +90,20 @@ function publicCalendar(h, ctx, elections, source) {
         cardIcon(h, "ballot"),
         h("p", { class: "kicker", text: election.jurisdiction }),
         h("h2", { text: election.title }),
-        h("p", { class: "cluster" }, h("span", { class: `status-pill ${st.className}`, text: st.label })),
+        h(
+          "p",
+          { class: "cluster" },
+          h("span", { class: `status-pill ${st.className}`, text: st.label }),
+          h("span", { class: "status-pill status-created", text: electionTypeLabel(election) })
+        ),
         h(
           "ul",
           { class: "meta-list" },
           h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
           h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
+          resultsAreSealed(election)
+            ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
+            : null,
           election.shortCode
             ? h(
                 "li",
@@ -121,7 +131,7 @@ function publicCalendar(h, ctx, elections, source) {
             class: election.state >= 4 ? "btn" : "btn btn-secondary",
             href: `/elections/${encodeURIComponent(election.id)}/results`,
             "data-nav": "",
-            text: election.state >= 4 ? "Results" : "Results status",
+            text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
           }),
           election.state <= 2
             ? h("a", {

@@ -2,9 +2,12 @@
 // Hourly public disclosure so a person leaving a polling place cannot be
 // matched to a live jurisdiction tick. Votes are accepted immediately (nullifier
 // uniqueness). A block stays sealed until the hour has closed and
-// DISCLOSURE_DELAY_SECONDS has elapsed, the election's results gate is open,
-// and the block has enough ballots. An earlier note that promised publication
-// at the hour boundary is replaced by this delay.
+// DISCLOSURE_DELAY_SECONDS has elapsed, and the block has enough ballots.
+// Turnout follows that clock from the first ballot. Poll per-choice counts
+// wait for the results gate. An earlier note that promised publication at
+// the hour boundary is replaced by this delay.
+
+import { sealedResultsMessage } from './electionType.mjs';
 
 export const DEFAULT_DISCLOSURE_INTERVAL_SECONDS = 3600;
 export const DEFAULT_DISCLOSURE_DELAY_SECONDS = 1800;
@@ -41,7 +44,7 @@ export function resolveDisclosureDelaySeconds(raw, { isTest = false } = {}) {
   });
 }
 
-/** Public turnout stays hidden until this many ballots, or the scheduled end. Tests default to 0 (gate open). */
+/** Poll per-choice counts wait until the gate opens once this many voters have cast their first ballot, or until the scheduled end. Turnout does not. Tests default to 0 (gate open). */
 export function resolveResultsMinVotes(raw, { isTest = false } = {}) {
   return resolveDefaultInt(raw, {
     isTest,
@@ -129,8 +132,10 @@ export function isDisclosed(eventTs, now, intervalSeconds, delaySeconds = 0) {
 }
 
 /**
- * Public results may appear once enough ballots are in, or the scheduled end
- * has passed, or a certified tally exists. minVotes <= 0 leaves the gate open.
+ * Poll per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled
+ * end has passed. minVotes <= 0 leaves the gate open. A persisted openedAt
+ * hour keeps the gate open once that hour has been reached. Hourly choice blocks
+ * call this. Turnout does not.
  */
 export function resultsGateOpen({
   submittedVotes = 0,
@@ -138,10 +143,19 @@ export function resultsGateOpen({
   endTime = null,
   minVotes = 0,
   tallied = false,
+  openedAt = null,
 } = {}) {
   const min = Number(minVotes) || 0;
   if (min <= 0) return true;
   if (tallied) return true;
+  if (
+    openedAt != null &&
+    openedAt !== '' &&
+    Number.isFinite(Number(openedAt)) &&
+    Number(openedAt) <= Number(now)
+  ) {
+    return true;
+  }
   if (Number(submittedVotes) >= min) return true;
   if (endTime != null && endTime !== '' && Number.isFinite(Number(endTime)) && Number(now) >= Number(endTime)) {
     return true;
@@ -152,9 +166,10 @@ export function resultsGateOpen({
 /**
  * Split sealed ballots into blocks that are safe to publish and rows that stay sealed.
  * Small hours merge forward. A trailing block under the minimum stays sealed until a
- * later hour fills it. Once the election has ended and every ready hour is in, the
- * remainder is published if the election as a whole met the minimum. An election
- * that never reached the minimum stays sealed until a certified tally.
+ * later hour fills it. At the deadline the still-open hour is the final block when
+ * the election met the block floor. An election that never reached the block floor
+ * stays sealed until a final tally. Turnout uses this clock from the first ballot.
+ * The results gate is not applied here.
  */
 export function planPublicBlocks(items, policy = {}) {
   const now = policy.now;
@@ -162,7 +177,6 @@ export function planPublicBlocks(items, policy = {}) {
   const delay = Math.max(0, Math.floor(Number(policy.delaySeconds) || 0));
   const minRaw = Number(policy.minBlockVotes);
   const floor = Number.isFinite(minRaw) && minRaw > 1 ? Math.floor(minRaw) : 1;
-  const minVotes = Number(policy.minVotes) || 0;
   const electionContext = typeof policy.electionContext === 'function' ? policy.electionContext : () => ({});
   const byElection = new Map();
   for (const item of items || []) {
@@ -174,18 +188,23 @@ export function planPublicBlocks(items, policy = {}) {
   const hold = [];
   for (const [electionId, group] of byElection) {
     const ctx = electionContext(electionId) || {};
+    // Ballot rows are turnout. They publish on the hourly clock from the first
+    // ballot. Per-choice counts stay with the callers that serve tallies.
     const submitted = ctx.submittedVotes ?? group.length;
     const tallied = Boolean(ctx.tallied);
     const endTime = ctx.endTime ?? null;
-    if (!resultsGateOpen({ submittedVotes: submitted, now, endTime, minVotes, tallied })) {
-      hold.push(...group);
-      continue;
-    }
+    const ended =
+      endTime != null &&
+      endTime !== '' &&
+      Number.isFinite(Number(endTime)) &&
+      Number(now) >= Number(endTime);
     const buckets = new Map();
     let waitingOnClock = 0;
     for (const item of group) {
       const ts = Number(item.receivedAt ?? item.acceptedAt);
-      if (interval > 0 && !isDisclosed(ts, now, interval, delay)) {
+      // Before the deadline the open hour stays sealed. At the deadline it is
+      // the final block, for a poll and for a vote.
+      if (!ended && interval > 0 && !isDisclosed(ts, now, interval, delay)) {
         waitingOnClock += 1;
         hold.push(item);
         continue;
@@ -199,7 +218,9 @@ export function planPublicBlocks(items, policy = {}) {
     let carryLast = null;
     const emit = (chunk, lastBucket) => {
       if (!chunk.length) return;
-      const timestamp = interval > 0 ? lastBucket + interval + delay : Number(now);
+      const scheduled = interval > 0 ? lastBucket + interval + delay : Number(now);
+      // A deadline release of the still-open hour is stamped now, not in the future.
+      const timestamp = ended && scheduled > Number(now) ? Number(now) : scheduled;
       publish.push({ electionId, items: chunk, timestamp });
     };
     for (const key of keys) {
@@ -211,11 +232,6 @@ export function planPublicBlocks(items, policy = {}) {
         carryLast = null;
       }
     }
-    const ended =
-      endTime != null &&
-      endTime !== '' &&
-      Number.isFinite(Number(endTime)) &&
-      Number(now) >= Number(endTime);
     if (carry.length && (tallied || (ended && waitingOnClock === 0 && submitted >= floor))) {
       emit(carry, carryLast);
     } else if (carry.length) hold.push(...carry);
@@ -241,6 +257,8 @@ export function selectPublicVotes(votes, policy = {}) {
       submittedVotes: policy.submittedVotes ?? list.length,
       endTime: policy.endTime ?? null,
       tallied: Boolean(policy.tallied),
+      resultsSealed: Boolean(policy.resultsSealed),
+      minVotes: policy.minVotes,
     }),
   });
   const out = [];
@@ -281,7 +299,7 @@ export function publicDisclosureView(now, intervalSeconds, extras = {}) {
     nextPublishAt: nextPublishAt(ts, interval, delay),
     secondsUntilNext: secondsUntilNext(ts, interval, delay),
     note:
-      'Vote proofs and jurisdiction ballot counts publish after the hour closes and the disclosure delay has elapsed. Turnout stays hidden until the results gate opens. A block smaller than the minimum merges into a later hour. A person leaving a voting office cannot be matched to the publish.',
+      'Vote proofs and turnout publish after the hour closes and the disclosure delay has elapsed, from the first ballot. A poll publishes hourly choice sums after the results gate. A published block stays as first published. A vote publishes choices only in the final tally. A block smaller than the minimum merges into a later hour. A person leaving a voting office cannot be matched to the publish.',
   };
   if (typeof extras.resultsMinVotes === 'number') view.resultsMinVotes = extras.resultsMinVotes;
   if (typeof extras.minBlockVotes === 'number') view.minBlockVotes = extras.minBlockVotes;
@@ -297,4 +315,13 @@ export function withDisclosedCount(view, acceptedBallotsDisclosed) {
     ...base,
     acceptedBallotsDisclosed: Number(acceptedBallotsDisclosed) || 0,
   };
+}
+
+/** Mark a disclosure view as waiting on choice results. The disclosed ballot count stays. */
+export function sealDisclosureView(view, election) {
+  const base = view && typeof view === 'object' ? { ...view } : {};
+  base.resultsSealed = true;
+  base.sealedUntil = Number.isFinite(Number(election?.cutoffTime)) ? Number(election.cutoffTime) : null;
+  base.note = sealedResultsMessage(election);
+  return base;
 }

@@ -97,8 +97,6 @@ export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock =
   const disqualificationRoot = decodeBytes32(
     await ethCall(rpcUrl, electionAddr, selector('disqualificationRoot()')),
   );
-  const accepted = Number(decodeUint(await ethCall(rpcUrl, inbox, calldataUint256('acceptedBallots(uint256)', eid))));
-
   const voteAcceptedTopic = topic('VoteAccepted(uint256,uint256,bytes32,address)');
   const electionTopic = proof.toHex32(eid);
 
@@ -158,8 +156,8 @@ export async function exportFromChain({ rpcUrl, factory, electionId, fromBlock =
     },
     window: { startTime: 0, cutoffTime: 1 },
     rollFrozen: true,
-    publicAcceptedBallots: accepted,
-    acceptedBallots: accepted,
+    publicAcceptedBallots: current.size,
+    acceptedBallots: current.size,
     disclosedBallots,
     tally,
     coercion: {

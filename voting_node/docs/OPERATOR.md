@@ -353,11 +353,11 @@ Mismatch or failure at any verify stage: **do not prune**; that hour exits non-z
 
 ### Block explorer
 
-Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in block N: commitments, nullifiers, reason codes, tallies, batches — **not** ballot choices. Vote proofs and public turnout publish on an hourly block, `DISCLOSURE_DELAY_SECONDS` (default 1800) after that hour closes, and only after `RESULTS_MIN_VOTES` (default 100) or the scheduled end. Blocks smaller than `DISCLOSURE_MIN_BLOCK_VOTES` (default 10) merge forward. A person leaving a voting office at 08:59 cannot be matched to a 09:00 tick; the block is 09:30 at the earliest. Local instant demo: `DISCLOSURE_INTERVAL_SECONDS=0`. [`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
+Node route `/explorer` plus `GET /api/explorer/blocks`. Shows what happened in block N: commitments, nullifiers, reason codes, tallies, batches — **not** ballot choices. Vote proofs and public turnout publish hourly from the first ballot, on a block `DISCLOSURE_DELAY_SECONDS` (default 1800) after that hour closes. `RESULTS_MIN_VOTES` (default **100**; the gate opens once 100 voters have cast their first ballot) gates poll per-choice counts only. After that gate, hourly choice sums publish on the same delay, and a published block stays as first published. Blocks smaller than `DISCLOSURE_MIN_BLOCK_VOTES` (default 10) merge forward. A person leaving a voting office at 08:59 cannot be matched to a 09:00 tick; the block is 09:30 at the earliest. Local instant demo: `DISCLOSURE_INTERVAL_SECONDS=0`. On load, a `poll_params` or `poll_tally` row that has no stored source order is recovered from `closeBlock`, `sequence`, or `postedAt` on the payload, so a later close block can become the latest row. Lookups use that stored order, or the same fields on the payload when the stored order is missing. The poll-params sequence is per process: two Node instances can issue the same sequence, which raises `poll_params_conflict`, and `postedAt` still orders a later clock. When sequence and postedAt are both equal, the first row stays latest. [`docs/BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md).
 
 ### Outcomes monitor
 
-Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. This is not `/receipt` and not `/elections/:id/results`.
+Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. The final tally appears only after it is posted. This is not `/receipt` and not `/elections/:id/results`.
 
 ### Passkeys
 
@@ -427,9 +427,9 @@ Acceptance (checkbox on `/register`, or “I agree” while signed in on `/terms
 
 The PDF is emailed with **AWS SES** on first accept of a hash, using the same env as MFA. Vote-receipt PDFs use PDF Standard Security so they cannot be edited; `/receipt` checks SHA-256 of the exact bytes.
 
-A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; certified option counts appear after a tally. It is not the receipt portal.
+A separate public monitor at `/outcomes` (alias `/monitor`) lists every election before / during / after voting from chain and election state. It runs the public auditor pack plus freeze-root and L1 checks. During voting it shows disclosed turnout only; option counts appear in the final tally. It is not the receipt portal.
 
-After `cutoffTime` has fully expired **and** a certified tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Subscribing to that email is opt-in on `/me`; casting a ballot never creates a subscription (see "Ballot unlinkability" below). Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
+After `cutoffTime` has fully expired **and** a final tally is posted, the Node issues a locked **official outcome PDF** (how many people voted for each option, when voting started, when it ended). Subscribing to that email is opt-in on `/me`; casting a ballot never creates a subscription (see "Ballot unlinkability" below). Platform admin customizes letterhead and intro on `/admin`; the QR verification mark and SHA-256 / HMAC seals cannot be removed. Anyone can drop the file (or scan the QR at `/o/<reportId>`) on `/outcomes/verify` to confirm the bytes still match.
 
 | Variable | Role |
 | --- | --- |
@@ -500,6 +500,10 @@ identity commitment. The Node-side mechanics:
   `GET /api/elections/:id/vote-pass` and must stay the same for every voter.
   When external parties are active, a ballot without a pass gets
   `403 VOTE_PASS_REQUIRED`.
+  Older backups may still hold `votePassTags` keyed with `receiptPdfSecret`.
+  Those tags tie a pass to a nullifier. Purge them. Current data keeps spent
+  passes only as an unlinked hash list (`votePassSpent`), and load deletes
+  leftover tags and `spentPassHash` fields.
 - **No identity on the ballot request.** `sanitizeVoteBody` strips
   `identityCommitment`, `userId`, `pinToken`, `userOpHash`, `address`,
   `credentialId` and choice keys. The API-key "last used" stamp is not touched
@@ -575,7 +579,7 @@ identity commitment. The Node-side mechanics:
 
 ## L1 certification (tally hash on Ethereum)
 
-After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postCertifiedResult`. The L1 slot is `(factory, onChainElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
+After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encode(counts))`, the same `countsHash` as `Tally.TallyPosted` — to the Ethereum L1 tally mirror. The L1 slot is `(factory, onChainElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
 
 `RollupSettlement` is the batch-root contract. When `L1_SETTLEMENT_ADDRESS` is set, the Node/script reads `stateRoot()` and attaches it as `l2StateRoot`. That is optional court context, not a substitute for the tally hash.
 

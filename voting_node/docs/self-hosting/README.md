@@ -40,7 +40,7 @@ The same pages are served by every running Node at `/docs`, so operators can rea
 
 | Page | Use it when |
 | --- | --- |
-| [Community forum (optional Discourse)](./discourse.md) | You want constituents to discuss polls and elections on an open-source forum next to the Node. |
+| [Community forum (optional Discourse)](./discourse.md) | You want constituents to discuss polls and elections on an open-source forum next to the Node, and you need the rule for when a result may be mentioned. |
 
 ## What runs
 

@@ -41,7 +41,9 @@ function nobleToPoint(noblePoint) {
 /**
  * Decrypt one summed option. `partialGroups` is the ceremony bucket:
  * `{ index, partials: [{ ballotHash, point, proof }] }[]`.
- * Partials must be tagged `aggregate:<option>`.
+ * Partials must be tagged `aggregate:<option>`, unless `hashForSlot`
+ * names a block sum (`block:<id>:aggregate:<option>`). A per-ballot tag
+ * is not accepted here.
  */
 export function decryptAggregateCounts({
   product,
@@ -51,10 +53,12 @@ export function decryptAggregateCounts({
   partialGroups,
   threshold,
   maxCount,
+  hashForSlot = null,
 }) {
+  const tagFor = typeof hashForSlot === 'function' ? hashForSlot : (j) => aggregateOptionId(j);
   const counts = [];
   for (let j = 0; j < product.nOptions; j += 1) {
-    const ballotHash = aggregateOptionId(j);
+    const ballotHash = tagFor(j);
     const ephemeral = product.options[j].c1Hex;
     const checked = [];
     for (const group of partialGroups || []) {

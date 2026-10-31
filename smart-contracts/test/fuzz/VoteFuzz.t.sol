@@ -49,12 +49,12 @@ contract VoteFuzz is Deployer {
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
         assertTrue(inbox.nullifierUsed(electionId, nullifier), "nullifier not marked used");
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
 
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
-        assertEq(inbox.acceptedBallots(electionId), 1, "double-vote accepted in same election");
+        assertEq(this.liveAccepted(electionId), 1, "double-vote accepted in same election");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
 
@@ -92,7 +92,7 @@ contract VoteFuzz is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
-        assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot in this election");
+        assertEq(this.liveAccepted(electionId), 1, "mind-change must not accept a second ballot in this election");
         assertEq(inbox.ballotHashOf(electionId, nullifier), stored, "first ballot must not be superseded");
     }
 
@@ -127,14 +127,14 @@ contract VoteFuzz is Deployer {
         uint256[] memory inputsA = voteInputs(electionId, election, nullifier, ballotA);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, inputsA, ballotA);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
 
         uint256[] memory inputsB = voteInputs(idB, elB, nullifier, ballotB);
         vm.prank(relayer);
         inbox.submitVote(idB, a, b, c, inputsB, ballotB);
         assertTrue(inbox.nullifierUsed(idB, nullifier), "first vote in election B must succeed");
-        assertEq(inbox.acceptedBallots(idB), 1);
-        assertEq(inbox.acceptedBallots(electionId), 1, "election A count unchanged");
+        assertEq(this.liveAccepted(idB), 1);
+        assertEq(this.liveAccepted(electionId), 1, "election A count unchanged");
     }
 
     function testFuzz_voteOutsideWindowReverts(uint256 ts, uint256 nullifier, bytes calldata encryptedBallot) public {
@@ -158,7 +158,7 @@ contract VoteFuzz is Deployer {
         vm.prank(relayer);
         vm.expectRevert();
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
     }
 
     function testFuzz_voteInWindowAccepted(uint256 ts, uint256 nullifier, bytes calldata encryptedBallot) public {
@@ -170,11 +170,11 @@ contract VoteFuzz is Deployer {
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
         uint256[] memory inputs = voteInputs(electionId, election, nullifier, encryptedBallot);
-        uint256 before = inbox.acceptedBallots(electionId);
+        uint256 before = this.liveAccepted(electionId);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, inputs, encryptedBallot);
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), before + 1);
+        assertEq(this.liveAccepted(electionId), before + 1);
     }
 
     function testFuzz_encryptedBallots(bytes calldata encryptedBallot, uint256 nullifier) public {
@@ -229,7 +229,7 @@ contract VoteFuzz is Deployer {
             vm.prank(relayer);
             inbox.submitVote(id, a, b, c, inputs, ballot);
             assertTrue(inbox.nullifierUsed(id, nullifier));
-            assertEq(inbox.acceptedBallots(id), 1);
+            assertEq(this.liveAccepted(id), 1);
         }
     }
 
@@ -254,7 +254,7 @@ contract VoteFuzz is Deployer {
         vm.expectRevert();
         inbox.submitVote(electionId, a, b, c, secondInputs, secondBallot);
 
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(firstBallot)));
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }

@@ -117,11 +117,12 @@ export function verifyAuditorBundle(bundle) {
     `acceptedBallots (${accepted}) must be >= unique disclosed nullifiers (${seen.size})`,
   );
 
-  const publicAccepted = Number(bundle.publicAcceptedBallots ?? accepted);
+  const publicRaw = bundle.publicAcceptedBallots;
+  const publicAccepted = Number(publicRaw);
   check(
     'publicAcceptedLeq',
-    Number.isInteger(publicAccepted) && publicAccepted >= 0 && publicAccepted <= accepted,
-    'publicAcceptedBallots must be <= acceptedBallots',
+    publicRaw != null && Number.isInteger(publicAccepted) && publicAccepted >= 0 && publicAccepted <= accepted,
+    'publicAcceptedBallots is required and must be <= acceptedBallots',
   );
 
   const labeledQuestions = Array.isArray(bundle.tally?.questions)
@@ -182,7 +183,7 @@ export function verifyAuditorBundle(bundle) {
       check(
         'oneBallotPolicy',
         bundle.coercion.policy === 'one-ballot-per-nullifier',
-        'coercion.policy must be one-ballot-per-nullifier (last-vote-counts is not accepted)',
+        'coercion.policy must be one-ballot-per-nullifier (one current ballot per nullifier)',
       );
     }
   } else {

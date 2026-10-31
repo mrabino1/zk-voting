@@ -9,7 +9,7 @@
 const assert = require("node:assert/strict");
 const { describe, test } = require("node:test");
 
-const { FACTORY_ABI, INBOX_ABI, PARTY_REGISTRY_ABI } = require("../index.js");
+const { FACTORY_ABI, INBOX_ABI, PARTY_REGISTRY_ABI, decodeElectionCreated } = require("../index.js");
 
 describe("external party factory ABI", () => {
   test("ElectionFactory exposes getPartyRegistry", () => {
@@ -29,6 +29,21 @@ describe("external party factory ABI", () => {
       batch.inputs.some((input) => input.name === "identityCommitment"),
       false,
     );
+  });
+
+  test("ElectionCreated carries electionType and createElection sends it", () => {
+    const created = FACTORY_ABI.find((item) => item.type === "event" && item.name === "ElectionCreated");
+    assert.deepEqual(
+      created.inputs.map((input) => input.name),
+      ["electionId", "election", "jurisdictionId", "startTime", "cutoffTime", "electionType"],
+    );
+    const field = created.inputs[5];
+    assert.equal(field.type, "uint8");
+    assert.equal(field.indexed, false);
+    const create = FACTORY_ABI.find((item) => item.type === "function" && item.name === "createElection");
+    const names = create.inputs[0].components.map((component) => component.name);
+    assert.equal(names[names.length - 1], "electionType");
+    assert.equal(typeof decodeElectionCreated, "function");
   });
 
   test("party registry ABI includes live gates", () => {

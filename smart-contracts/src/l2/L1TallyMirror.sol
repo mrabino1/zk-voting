@@ -4,7 +4,7 @@ pragma solidity 0.8.24;
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import {ElectionIdentity} from "../ElectionIdentity.sol";
-import {ElectionParams} from "../interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "../interfaces/ElectionParams.sol";
 import {IElection} from "../interfaces/IElection.sol";
 import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
 import {IL1TallyMirror} from "../interfaces/IL1TallyMirror.sol";
@@ -22,9 +22,9 @@ contract L1TallyMirror is IL1TallyMirror {
     uint256 public constant DISPUTE_WINDOW = 7 days;
 
     address public admin;
-    /// @notice Optional `RollupSettlement`. When set, every post must cite an
-    ///         L2 state root that settlement has accepted (audit M-05).
-    address public settlement;
+    /// @notice Optional per-election `RollupSettlement`. When set for that election,
+    ///         a post must cite an L2 state root that settlement has accepted.
+    mapping(uint256 => address) public settlementOf;
     /// @notice Block time each identity certification was (last) written.
     mapping(bytes32 => uint256) public postedAt;
     address public related;
@@ -67,13 +67,13 @@ contract L1TallyMirror is IL1TallyMirror {
         l2Factory = factory_;
     }
 
-    /// @notice Audit M-05: pin the rollup settlement contract (set once).
-    function setSettlement(address settlement_) external {
+    /// @notice Pin the rollup settlement contract for one election (set once).
+    function setSettlement(uint256 electionId, address settlement_) external {
         if (msg.sender != admin) revert NotAuthorized();
         if (settlement_ == address(0)) revert ZeroAddress();
-        if (settlement != address(0)) revert SettlementAlreadySet();
-        settlement = settlement_;
-        emit SettlementSet(settlement_);
+        if (settlementOf[electionId] != address(0)) revert SettlementAlreadySet();
+        settlementOf[electionId] = settlement_;
+        emit SettlementSet(electionId, settlement_);
     }
 
     /// @notice Audit M-05: governance correction inside the dispute window.
@@ -92,7 +92,7 @@ contract L1TallyMirror is IL1TallyMirror {
         CertifiedResult storage c = certificationOf[certificationId];
         if (c.resultHash == bytes32(0)) revert NotPosted();
         if (block.timestamp >= postedAt[certificationId] + DISPUTE_WINDOW) revert DisputeWindowClosed();
-        _requireSettled(l2StateRoot);
+        _requireSettled(c.electionId, l2StateRoot);
         bytes32 previous = c.resultHash;
         c.resultHash = resultHash;
         c.totalBallots = totalBallots;
@@ -115,7 +115,7 @@ contract L1TallyMirror is IL1TallyMirror {
         if (!publishers[msg.sender] && msg.sender != admin) revert NotAuthorized();
         if (resultHashOf[electionId] != bytes32(0)) revert AlreadyPosted();
         if (resultHash == bytes32(0)) revert ZeroResultHash();
-        _requireSettled(l2StateRoot);
+        _requireSettled(electionId, l2StateRoot);
         resultHashOf[electionId] = resultHash;
         totalBallotsOf[electionId] = totalBallots;
         claimedStateRoot[electionId] = l2StateRoot;
@@ -145,7 +145,7 @@ contract L1TallyMirror is IL1TallyMirror {
         if (cert.factory == address(0)) revert ZeroFactory();
         if (cert.jurisdictionId == bytes32(0)) revert ZeroJurisdiction();
         if (l2Factory != address(0) && cert.factory != l2Factory) revert WrongFactory();
-        _requireSettled(cert.l2StateRoot);
+        _requireSettled(cert.electionId, cert.l2StateRoot);
 
         address election = cert.election;
         address tallyOperator;
@@ -158,6 +158,10 @@ contract L1TallyMirror is IL1TallyMirror {
                 revert ElectionMismatch();
             }
             ElectionParams memory p = IElection(clone).params();
+            // POLL may publish before the end (unchanged). VOTE may not.
+            if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) {
+                revert ResultsSealedUntilEnd(cert.electionId);
+            }
             if (p.jurisdictionId != cert.jurisdictionId) revert JurisdictionMismatch();
             if (cert.ballotSpecHash != bytes32(0) && p.ballotSpecHash != cert.ballotSpecHash) {
                 revert BallotSpecMismatch();
@@ -233,8 +237,8 @@ contract L1TallyMirror is IL1TallyMirror {
         return false;
     }
 
-    function _requireSettled(bytes32 l2StateRoot) internal view {
-        address s = settlement;
+    function _requireSettled(uint256 electionId, bytes32 l2StateRoot) internal view {
+        address s = settlementOf[electionId];
         if (s == address(0)) return;
         if (!ISettledRoots(s).isSettledRoot(l2StateRoot)) revert UnsettledStateRoot();
     }

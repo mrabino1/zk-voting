@@ -6,7 +6,7 @@ pragma solidity 0.8.24;
 import {Clones} from "./Clones.sol";
 import {Election} from "./Election.sol";
 import {ExternalPartyRegistry} from "./ExternalPartyRegistry.sol";
-import {ElectionParams} from "./interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "./interfaces/ElectionParams.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {IJurisdictionRegistry} from "./interfaces/IJurisdictionRegistry.sol";
@@ -83,7 +83,7 @@ contract ElectionFactory is IElectionFactory {
         roles[Roles.PLATFORM_SUPER_ADMIN_ROLE][admin_] = true;
         roles[Roles.PLATFORM_ADMIN_ROLE][admin_] = true;
         roles[Roles.ADMIN_ROLE][admin_] = true;
-        allowMockVerifiers = block.chainid == 31337;
+        allowMockVerifiers = false;
     }
 
     /// @notice Dev / test only: allow mock verifiers on this chain.
@@ -288,6 +288,7 @@ contract ElectionFactory is IElectionFactory {
     /// @inheritdoc IElectionFactory
     function createElection(ElectionParams calldata params) external returns (uint256 electionId, address election) {
         _validate(params);
+        if (params.electionType == ElectionType.VOTE && tallyVerifier == address(0)) revert TallyVerifierNotSet();
         if (!allowMockVerifiers && _reportsMock(params.verifier)) revert MockVerifierNotAllowed();
         if (!_canCreate(params)) {
             if (jurisdictionRegistry != address(0)) revert NotJurisdictionClerk();
@@ -309,7 +310,20 @@ contract ElectionFactory is IElectionFactory {
         _electionStaff[electionId][params.clerk] = true;
         emit ElectionStaffApproved(electionId, params.clerk);
         emit PartyRegistryCreated(electionId, parties);
-        emit ElectionCreated(electionId, election, params.jurisdictionId, params.startTime, params.cutoffTime);
+        emit ElectionCreated(
+            electionId, election, params.jurisdictionId, params.startTime, params.cutoffTime, params.electionType
+        );
+        if (tallyVerifier != address(0)) {
+            (bool armed,) = tallyVerifier.call(abi.encodeWithSignature("armChallengeWindow(uint256)", electionId));
+            if (!armed) revert TallyVerifierNotSet();
+        }
+    }
+
+    /// @inheritdoc IElectionFactory
+    function electionType(uint256 electionId) external view returns (uint8) {
+        address el = _elections[electionId];
+        if (el == address(0)) revert UnknownElection();
+        return IElection(el).electionType();
     }
 
     /// @inheritdoc IElectionFactory
@@ -327,6 +341,7 @@ contract ElectionFactory is IElectionFactory {
         if (params.treeDepth < MIN_DEPTH || params.treeDepth > MAX_DEPTH) revert InvalidTreeDepth();
         if (params.questionCount < 1) revert InvalidQuestionCount();
         if (params.tallyScheme > 1) revert InvalidTallyScheme();
+        if (params.electionType > ElectionType.VOTE) revert InvalidElectionType();
         if (params.jurisdictionId == bytes32(0)) revert InvalidJurisdiction();
         if (
             params.clerk == address(0) || params.registrar == address(0) || params.disqualificationOfficer == address(0)

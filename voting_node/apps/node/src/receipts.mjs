@@ -10,7 +10,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { hourBucket, isDisclosed, nextPublishAt, planPublicBlocks, publicDisclosureView, withDisclosedCount } from './disclosure.mjs';
-import { electionDisclosurePolicy } from './store.mjs';
+import { sealedResultsBody, voteResultsSealed } from './electionType.mjs';
+import { electionDisclosurePolicy, isSoftDeleted } from './store.mjs';
 import { HttpError } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { emailHint, normalizeEmail } from './identity.mjs';
@@ -307,7 +308,7 @@ export function receiptLines({ election, vote, receipt, token, includeToken = tr
     `Relayer: ${vote?.relayer || 'node'}`,
     includeToken && token ? `Receipt token: ${token}` : null,
     '',
-    'Paste this proof at /receipt to confirm the ballot was counted. Turnout metrics on that page are hourly snapshots and never include a candidate or option.',
+    'Paste this proof at /receipt to confirm the ballot was accepted. Turnout metrics on that page are hourly snapshots and never include a candidate or option.',
     '',
     formatReceiptProof({
       electionId: bits.electionId || vote?.electionId,
@@ -372,7 +373,12 @@ export async function issueAndStoreReceiptPdf(deps, { election, vote, receiptRow
   const secret = deps.config.receiptPdfSecret;
   const artifact = buildReceiptPdf({
     election,
-    vote: { ...vote, userOpHash: receiptRow?.userOpHash || vote?.userOpHash },
+    vote: {
+      ...vote,
+      ballotHash: receiptRow?.ballotHash || vote?.ballotHash,
+      acceptedAt: receiptRow?.acceptedAt ?? vote?.acceptedAt,
+      userOpHash: receiptRow?.userOpHash || vote?.userOpHash,
+    },
     receipt: receiptRow,
     token,
     hmacSecret: secret,
@@ -406,7 +412,7 @@ export function receiptEmailBodies({ election, vote, receipt, token }) {
     `Election: ${bits.electionTitle || '—'}`,
     `Election id: ${electionId || '—'}`,
     '',
-    'Paste the receipt below at /receipt to confirm the ballot was counted, or to download the locked PDF. Anyone holding this token can do the same, so delete this message if you do not need it.',
+    'Paste the receipt below at /receipt to confirm the ballot was accepted, or to download the locked PDF. Anyone holding this token can do the same, so delete this message if you do not need it.',
     '',
     proof,
   ].join('\n');
@@ -416,7 +422,7 @@ export function receiptEmailBodies({ election, vote, receipt, token }) {
 <p>You asked for a copy of your vote receipt by email. This message is <strong>evidence of voting</strong>, not of how you voted. It does not list a candidate, an option, or the ballot nullifier.</p>
 <p>Election: ${htmlEscape(bits.electionTitle || '—')}<br/>
 Election id: <code>${htmlEscape(electionId || '—')}</code></p>
-<p>Paste the receipt below at <code>/receipt</code> to confirm the ballot was counted, or to download the locked PDF. Anyone holding this token can do the same, so delete this message if you do not need it.</p>
+<p>Paste the receipt below at <code>/receipt</code> to confirm the ballot was accepted, or to download the locked PDF. Anyone holding this token can do the same, so delete this message if you do not need it.</p>
 <pre style="font-family:ui-monospace,monospace;font-size:0.85rem;white-space:pre-wrap;word-break:break-all;background:#f6f4ef;padding:0.85rem;border:1px solid #ccc">${htmlEscape(proof)}</pre>
 <p style="color:#444">Civic public good. Not a commercial product.</p>
 </body></html>`;
@@ -504,6 +510,8 @@ function publishedBlocksForElection(election, deps, now) {
       submittedVotes: policy.submittedVotes,
       endTime: policy.endTime,
       tallied: policy.tallied,
+      resultsSealed: false,
+      minVotes: policy.minVotes,
     }),
   }).publish;
 }
@@ -535,7 +543,7 @@ export function publicReceiptMetrics(election, deps, { now, interval, view } = {
       minBlockVotes: policy.minBlockVotes,
     });
   const disclosure = withDisclosedCount(base, acceptedBallotsDisclosed);
-  return stripReceiptChoice({
+  const body = stripReceiptChoice({
     nfp: true,
     receiptsProveChoice: false,
     electionId: election ? String(election.id) : null,
@@ -548,6 +556,16 @@ export function publicReceiptMetrics(election, deps, { now, interval, view } = {
     note:
       'Hourly snapshots of how many ballots were accepted. Original intra-hour times are not published. This is not a count by candidate or option.',
   });
+  if (election && voteResultsSealed(election, ts)) {
+    const seal = sealedResultsBody(election, ts);
+    return {
+      ...body,
+      ...seal,
+      receiptsProveChoice: false,
+      note: seal.message,
+    };
+  }
+  return body;
 }
 
 function voteIsPublic(store, election, vote, now, policy) {
@@ -555,6 +573,45 @@ function voteIsPublic(store, election, vote, now, policy) {
   return store
     .listPublishedVotes(election.id, now, policy.intervalSeconds, policy)
     .some((row) => String(row.nullifier) === String(vote.nullifier));
+}
+
+const REPLACEMENT_RECEIPT_NOTE =
+  'Your replacement ballot was accepted. It will appear in the final tally, not in an hourly block.';
+
+const REPLACEMENT_TALLIED_NOTE =
+  'Your replacement ballot is counted in the final tally. The receipt still cannot prove which option was marked.';
+
+/** The stored vote keeps the first hash. A later receipt is not in that hourly block. */
+function receiptUsesOwnHour(vote, receiptRow) {
+  if (!vote || !receiptRow?.ballotHash) return false;
+  const receiptHash = tryBytes32(receiptRow.ballotHash);
+  const publishedHash = tryBytes32(vote.publishedBallotHash || vote.ballotHash);
+  return Boolean(receiptHash && publishedHash && receiptHash !== publishedHash);
+}
+
+function receiptIsPublic(store, election, vote, receiptRow, now, policy) {
+  // A replacement hash is never published. It is not an explorer row.
+  if (receiptUsesOwnHour(vote, receiptRow)) return false;
+  return voteIsPublic(store, election, vote, now, policy);
+}
+
+/** Holder-only. Elections have no tallied field; the disclosure policy does. */
+function replacementInFinalTally(vote, receiptRow, policy) {
+  if (!receiptUsesOwnHour(vote, receiptRow)) return false;
+  return Boolean(policy?.tallied);
+}
+
+function receiptsWithBallotHash(store, proof, ballotHash) {
+  const election = proof.electionId ? store.getElection(proof.electionId) : null;
+  if (proof.electionId && !election) return [];
+  const nullifier = tryBytes32(proof.nullifier);
+  return (store.data.receipts || []).filter((row) => {
+    if (isSoftDeleted(row)) return false;
+    if (tryBytes32(row.ballotHash) !== ballotHash) return false;
+    if (election && String(row.electionId) !== String(election.id)) return false;
+    if (nullifier && tryBytes32(row.nullifier) !== nullifier) return false;
+    return true;
+  });
 }
 
 function matchingPublishedVotes(store, proof, now, interval, config) {
@@ -570,7 +627,9 @@ function matchingPublishedVotes(store, proof, now, interval, config) {
   if (ballotHash) rows = rows.filter((v) => tryBytes32(v.ballotHash) === ballotHash);
   const election = proof.electionId ? store.getElection(proof.electionId) : null;
   const policy = electionDisclosurePolicy(election, config, now);
-  if (election) return rows.filter((v) => voteIsPublic(store, election, v, now, policy));
+  if (election) {
+    return rows.filter((v) => voteIsPublic(store, election, v, now, policy));
+  }
   return rows.filter((v) => isDisclosed(v.acceptedAt, now, interval, policy.delaySeconds));
 }
 
@@ -607,23 +666,52 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     fromIssuedPdf = true;
     holder = true;
   } else {
-    const published = matchingPublishedVotes(deps.store, proof, now, interval, deps.config);
-    if (published.length !== 1) {
-      throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+    const wantedHash = tryBytes32(proof.ballotHash);
+    const hashRows = wantedHash ? receiptsWithBallotHash(deps.store, proof, wantedHash) : [];
+    if (wantedHash && hashRows.length === 1) {
+      receiptRow = hashRows[0];
+      vote = deps.store.findVote(receiptRow.electionId, receiptRow.nullifier);
+      if (!vote) {
+        throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+      }
+      const electionRow = deps.store.getElection(vote.electionId);
+      const hashPolicy = electionDisclosurePolicy(electionRow, deps.config, now);
+      // A replacement hash is not a public row. After the final tally, a nullifier
+      // plus that hash gets the same holder result as the token. A hash alone stays 404.
+      if (tryBytes32(proof.nullifier) && replacementInFinalTally(vote, receiptRow, hashPolicy)) {
+        holder = true;
+      } else if (!receiptIsPublic(deps.store, electionRow, vote, receiptRow, now, hashPolicy)) {
+        throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+      }
+    } else {
+      const published = matchingPublishedVotes(deps.store, proof, now, interval, deps.config);
+      if (published.length !== 1) {
+        throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
+      }
+      vote = published[0];
+      receiptRow = deps.store.findReceiptForVote(
+        vote.electionId,
+        vote.nullifier,
+        wantedHash || vote.ballotHash,
+      );
     }
-    vote = published[0];
-    receiptRow = deps.store.findReceiptForVote(vote.electionId, vote.nullifier);
   }
   if (!vote) {
     throw new HttpError(404, 'receipt not found', { code: 'RECEIPT_NOT_FOUND', counted: false });
   }
   const election = deps.store.getElection(vote.electionId);
   const votePolicy = electionDisclosurePolicy(election, deps.config, now);
-  const published = voteIsPublic(deps.store, election, vote, now, votePolicy);
-  const nextAt = published ? null : nextPublishAt(now, interval, votePolicy.delaySeconds);
+  const replacement = receiptUsesOwnHour(vote, receiptRow);
+  const published = receiptIsPublic(deps.store, election, vote, receiptRow, now, votePolicy);
+  const inFinalTally = replacementInFinalTally(vote, receiptRow, votePolicy);
+  const nextAt = replacement || published ? null : nextPublishAt(now, interval, votePolicy.delaySeconds);
   const metrics = publicReceiptMetrics(election, deps, { now, interval });
   const publicVote = publicVoteRecord(vote);
-  const hourClosed = published ? disclosureHourClosedAt(vote.acceptedAt, interval, votePolicy.delaySeconds) : null;
+  const receiptAcceptedAt = receiptRow?.acceptedAt ?? vote.acceptedAt;
+  const hourClosed =
+    published && !replacement
+      ? disclosureHourClosedAt(receiptAcceptedAt, interval, votePolicy.delaySeconds)
+      : null;
   const storedPdfSha256 = receiptRow?.pdfSha256 || null;
   let pdfUnmodified = null;
   if (submittedPdfHash) {
@@ -632,9 +720,18 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     pdfUnmodified = storedPdfSha256 === String(proof.pdfSha256).toLowerCase();
   }
   const showPdfSeal = holder || fromIssuedPdf || pdfUnmodified === true;
+  // The holder asked about one receipt. Return that receipt's hash. Falling
+  // back to the published hash would tell them an earlier ballot exists.
+  const queriedHash = receiptRow?.ballotHash || null;
+  const showHash = queriedHash && (holder || fromIssuedPdf || tryBytes32(proof.ballotHash))
+    ? queriedHash
+    : publicVote.ballotHash;
   return stripReceiptChoice({
     ok: true,
     nfp: true,
+    // counted means the ballot was accepted, not that it is in the tally.
+    // The first receipt stays counted after a replacement so a coercer
+    // cannot tell that a later ballot exists.
     counted: true,
     accepted: true,
     published,
@@ -644,11 +741,11 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     jurisdictionId: election?.jurisdictionId || null,
     shortCode: election?.shortCode || null,
     nullifier: publicVote.nullifier,
-    ballotHash: publicVote.ballotHash,
+    ballotHash: showHash,
     relayer: publicVote.relayer,
     userOpHash: holder ? receiptRow?.userOpHash || null : null,
-    acceptedAt: holder ? vote.acceptedAt : null,
-    acceptedAtIso: holder ? isoUtc(vote.acceptedAt) : null,
+    acceptedAt: holder ? receiptAcceptedAt : null,
+    acceptedAtIso: holder ? isoUtc(receiptAcceptedAt) : null,
     disclosureHourClosedAt: hourClosed,
     disclosureHourClosedAtIso: isoUtc(hourClosed),
     nextPublishAt: nextAt,
@@ -659,10 +756,18 @@ export function lookupReceipt(deps, rawProof, extras = {}) {
     pdfSha256: showPdfSeal ? storedPdfSha256 : null,
     pdfUnmodified,
     integrity: showPdfSeal ? receiptRow?.pdfIntegrity || null : null,
-    explorerUrl: `/explorer#/nullifier/${encodeURIComponent(publicVote.nullifier)}`,
-    note: published
-      ? 'This ballot is in the public record. The receipt still cannot prove which option was marked.'
-      : 'This ballot is in the inbox. Public explorer rows and turnout ticks wait until this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction increase.',
+    replacement,
+    inFinalTally,
+    explorerUrl: replacement
+      ? null
+      : `/explorer#/nullifier/${encodeURIComponent(publicVote.nullifier)}`,
+    note: replacement
+      ? inFinalTally
+        ? REPLACEMENT_TALLIED_NOTE
+        : REPLACEMENT_RECEIPT_NOTE
+      : published
+        ? 'This ballot is in the public record. The receipt still cannot prove which option was marked.'
+        : 'This ballot is in the inbox. Public explorer rows and turnout ticks wait until this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction increase.',
   });
 }
 

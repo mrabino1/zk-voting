@@ -57,13 +57,13 @@ You must be old enough, under the hosting jurisdiction’s law, to participate i
 
 ## 7. Ballots, receipts, and coercion
 
-Each nullifier is accepted once. Double voting is impossible on that rule. You may change your mind on the form before submit; after accept you cannot recast.
+One ballot is kept per nullifier. A second ballot is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block keeps the first ballot. Two ballots are not both counted. Double voting is impossible on that rule.
 
-Receipts list hashes only (ballot hash, nullifier, related identifiers). They cannot prove “I voted for X.” After a ballot is accepted you may email yourself that receipt (message body and a PDF of the same evidence). The vote-receipt PDF is encrypted and locked against modification; a changed file will not match the SHA-256 the Node recorded. Public dashboards delay vote proofs until the UTC hour has closed and the disclosure delay has elapsed, and until the results gate is open, so walking out of a polling place cannot be matched to a live tick.
+Receipts list hashes only (ballot hash, nullifier, related identifiers). They cannot prove “I voted for X.” After a ballot is accepted you may email yourself that receipt (message body and a PDF of the same evidence). The vote-receipt PDF is encrypted and locked against modification; a changed file will not match the SHA-256 the Node recorded. Public dashboards delay vote proofs until the UTC hour has closed and the disclosure delay has elapsed, so walking out of a polling place cannot be matched to a live tick.
 
 Choice is never printed on a receipt, email, PDF, explorer row, or officer live feed.
 
-A separate public monitor at `/outcomes` lists every election before, during, and after voting according to chain and election state, and runs the public auditor checks. It does not show how any person voted. Certified option counts appear there only after a tally is posted.
+A separate public monitor at `/outcomes` lists every election before, during, and after voting according to chain and election state, and runs the public auditor checks. It does not show how any person voted. Final tally option counts appear there only after a tally is posted. Excluded ballots are not counted.
 
 ## 8. Privacy, cookies, and data the Node stores
 

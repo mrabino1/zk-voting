@@ -73,7 +73,7 @@ contract BallotInboxBindingTest is Deployer {
         vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 11));
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
     }
 
     function testInvalidProofDoesNotConsumeNullifier() public {
@@ -85,13 +85,13 @@ contract BallotInboxBindingTest is Deployer {
         vm.expectRevert(IBallotInbox.InvalidProof.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 13));
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
 
         verifier.setAccept(true);
         vm.prank(relayer);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertTrue(inbox.nullifierUsed(electionId, 13));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     function testDeniedNullifierIsInvalidProof() public {
@@ -111,7 +111,7 @@ contract BallotInboxBindingTest is Deployer {
         vm.expectRevert(IBallotInbox.InvalidNullifier.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 0));
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
     }
 
     function testMaxUintNullifierIsAcceptedOnce() public {
@@ -124,13 +124,13 @@ contract BallotInboxBindingTest is Deployer {
     function testSameBlockDoubleSubmitReverts() public {
         submitVote(electionId, election, 21);
         _expectNullifierUsed(21);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     function testVoteAtExactStartTimeSucceeds() public {
         vm.warp(IElection(election).params().startTime);
         submitVote(electionId, election, 23);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     function testVoteOneSecondBeforeStartReverts() public {
@@ -146,7 +146,7 @@ contract BallotInboxBindingTest is Deployer {
     function testVoteOneSecondBeforeCutoffSucceeds() public {
         vm.warp(IElection(election).params().cutoffTime - 1);
         submitVote(electionId, election, 37);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     function testVoteOneSecondAfterCutoffReverts() public {
@@ -194,7 +194,7 @@ contract BallotInboxBindingTest is Deployer {
     function testAcceptedCountAndBallotRootChain() public {
         submitVote(electionId, election, 61);
         submitVote(electionId, election, 67);
-        assertEq(inbox.acceptedBallots(electionId), 2);
+        assertEq(this.liveAccepted(electionId), 2);
         bytes32 h0 = inbox.ballotHashOf(electionId, 61);
         bytes32 h1 = inbox.ballotHashOf(electionId, 67);
         assertEq(inbox.ballotHashAt(electionId, 0), h0);
@@ -218,7 +218,7 @@ contract BallotInboxBindingTest is Deployer {
         vm.expectRevert(selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
         assertFalse(inbox.nullifierUsed(electionId, 11));
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
     }
 
     function _expectNullifierUsed(uint256 nullifier) internal {
@@ -235,6 +235,6 @@ contract BallotInboxBindingTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.OutsideVotingWindow.selector);
         inbox.submitVote(electionId, a, b, c, inputs, enc);
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
     }
 }

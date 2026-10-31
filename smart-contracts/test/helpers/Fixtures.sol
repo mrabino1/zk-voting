@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {ElectionParams} from "../../src/interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "../../src/interfaces/ElectionParams.sol";
 
 /// @title Fixtures
 /// @notice Sample `ElectionParams` builders and dummy Groth16 / ballot values for Foundry tests.
@@ -73,6 +73,7 @@ library Fixtures {
         p.tallyPubKeyX = bytes32(0);
         p.tallyPubKeyY = bytes32(0);
         p.tallyScheme = 0;
+        p.electionType = ElectionType.POLL;
     }
 
     function withCap(ElectionParams memory p, uint32 cap) internal pure returns (ElectionParams memory) {
@@ -101,6 +102,15 @@ library Fixtures {
         returns (ElectionParams memory)
     {
         p.jurisdictionId = jurisdictionId;
+        return p;
+    }
+
+    function withElectionType(ElectionParams memory p, uint8 electionType)
+        internal
+        pure
+        returns (ElectionParams memory)
+    {
+        p.electionType = electionType;
         return p;
     }
 

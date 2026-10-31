@@ -91,6 +91,8 @@ contract HighRegressionsTest is Deployer {
         warpClosed(el);
         uint256[] memory counts = new uint256[](2);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        vm.prank(address(factory));
+        fresh.armChallengeWindow(id);
         vm.prank(tallyOperator);
         vm.expectRevert(ITallyVerifier.TallyVerifierNotSet.selector);
         fresh.submitTally(id, counts, a, b, c);
@@ -137,6 +139,8 @@ contract HighRegressionsTest is Deployer {
         assertEq(address(tallyMock), address(verifier), "test stack wires the same dev mock");
         Tally fresh = new Tally(address(factory));
         FieldStrictVerifier strict = new FieldStrictVerifier();
+        vm.prank(address(factory));
+        fresh.armChallengeWindow(id);
         vm.prank(admin);
         fresh.setTallyProofVerifier(address(strict));
         uint256[] memory counts = new uint256[](2);
@@ -179,6 +183,19 @@ contract HighRegressionsTest is Deployer {
         vm.chainId(27427);
         ElectionFactory prod = new ElectionFactory(admin, address(0));
         assertFalse(prod.allowMockVerifiers());
+    }
+
+    function testH02_FactoryMockOffUntilOptIn() public {
+        assertEq(block.chainid, 31337);
+        ElectionFactory fresh = new ElectionFactory(admin, address(0));
+        assertFalse(fresh.allowMockVerifiers());
+        ElectionParams memory p = defaultParams();
+        vm.prank(admin);
+        vm.expectRevert(IElectionFactory.MockVerifierNotAllowed.selector);
+        fresh.createElection(p);
+        vm.prank(admin);
+        fresh.setAllowMockVerifiers(true);
+        assertTrue(fresh.allowMockVerifiers());
     }
 
     function testH02_ExploitMockVerifierElectionNowRefused() public {
@@ -270,7 +287,7 @@ contract HighRegressionsTest is Deployer {
         assertEq(voterRegistry.eligibleCount(id), n - 1);
 
         submitVote(id, el, 5);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testH03_ContinueWithoutPendingReverts() public {
@@ -301,7 +318,7 @@ contract HighRegressionsTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.EligibleRootMismatch.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
 
         // The old clearance selector is gone: a commitment cannot ride next to a nullifier.
         (bool ok,) = address(inbox)
@@ -339,7 +356,7 @@ contract HighRegressionsTest is Deployer {
         }
         assertEq(inbox.ballotHashOfCiphertext(enc), uint256(keccak256(enc)) % R);
         submitVoteWithBallot(id, el, 42, enc);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testH05_RawKeccakBallotHashRejected() public {

@@ -65,11 +65,15 @@ contract TallyEdgesTest is Deployer {
         assertTrue(tally.isTallied(id));
     }
 
-    function testTallyExactlyAtCutoffSucceeds() public {
+    function testTallyAtCutoffStaysInsideTheWindow() public {
         (uint256 id, address el) = _openWithVotes(1);
         vm.warp(IElection(el).params().cutoffTime);
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
+        vm.prank(tallyOperator);
+        vm.expectPartialRevert(ITallyVerifier.ChallengeWindowOpen.selector);
+        tally.submitTally(id, counts, a, b, c);
+        vm.warp(tally.tallyAllowedAt(id));
         vm.prank(tallyOperator);
         tally.submitTally(id, counts, a, b, c);
         assertTrue(tally.isTallied(id));
@@ -81,7 +85,7 @@ contract TallyEdgesTest is Deployer {
         uint256[] memory counts = new uint256[](1);
         counts[0] = 1;
         vm.prank(tallyOperator);
-        vm.expectRevert(ITallyVerifier.ElectionNotClosed.selector);
+        vm.expectPartialRevert(ITallyVerifier.ChallengeWindowOpen.selector);
         tally.submitTally(id, counts, a, b, c);
     }
 
