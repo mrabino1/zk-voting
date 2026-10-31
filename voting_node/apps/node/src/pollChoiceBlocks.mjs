@@ -119,6 +119,7 @@ export function planChoiceBlocks(items, policy = {}) {
     endTime,
     minVotes,
     tallied: false,
+    openedAt: policy.resultsGateOpenedAt,
   });
   if (!gateOpen) {
     return {
@@ -363,7 +364,7 @@ export function buildPollChoiceView(election, deps, now = deps.config.nowFn()) {
       ...policy,
       now,
       endTime: election.cutoffTime,
-      submittedVotes: Number(election.acceptedBallots) || votes.length,
+      submittedVotes: choiceSubmittedVotes(deps.store, election, votes),
       electionType: 0,
       resultsSealed: false,
     },
@@ -382,8 +383,14 @@ export function serverChoicePlan(election, deps, now = deps.config.nowFn()) {
     ...policy,
     now,
     endTime: election.cutoffTime,
-    submittedVotes: Number(election.acceptedBallots) || votes.length,
+    submittedVotes: choiceSubmittedVotes(deps.store, election, votes),
     electionType: 0,
     resultsSealed: false,
   });
+}
+
+/** Visible ballots only. A soft-deleted row does not open the results gate. */
+function choiceSubmittedVotes(store, election, votes) {
+  if (typeof store?.visibleAcceptedBallots === 'function') return store.visibleAcceptedBallots(election);
+  return Number(election?.acceptedBallots) || (votes || []).length;
 }

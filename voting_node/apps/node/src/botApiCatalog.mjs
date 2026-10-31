@@ -504,7 +504,7 @@ export const BOT_OPERATIONS = [
   V('POST', '/api/elections/:id/vote', {
     tag: 'Elections',
     summary:
-      'Submit a ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. A second ballot for the same nullifier is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block does not change. A read-only key is refused.',
+      'Submit a ballot. A signed-in voter must send pinToken from POST /api/me/pin/verify. The body is a proof plus ciphertext. Choice is not a public field. A second ballot for the same nullifier is rejected unless re-vote is enabled. When it is on, the replacement is counted only in the final tally, and a published poll block stays as first published. A read-only key is refused.',
     body: 'proof, public inputs, ciphertext, pinToken, identityCommitment when an external party is active',
   }),
   O('POST', '/api/elections/:id/disqualify', {

@@ -479,7 +479,7 @@ export default {
     sealedStatus: "Resultados selados",
     almostLive: "Quase ao vivo",
     almostLiveBody:
-      "Somas por escolha, por hora, desta consulta. O bloco das 08:00–08:59 pode ser publicado às 09:30, depois que o portão de resultados abre (100 cédulas ou o fim programado, o que ocorrer primeiro). Horas com menos de 10 cédulas se fundem para a frente. A série congela no encerramento. Um bloco publicado permanece como foi publicado pela primeira vez. Essas somas não são a apuração certificada.",
+      "Somas por escolha, por hora, desta consulta. O bloco das 08:00–08:59 pode ser publicado às 09:30, depois que o portão de resultados abre (quando 100 eleitores tiverem emitido a sua primeira cédula, ou no fim programado, o que ocorrer primeiro). Horas com menos de 10 cédulas se fundem para a frente. A série congela no encerramento. Um bloco publicado permanece como foi publicado pela primeira vez. Essas somas não são a apuração certificada.",
     trailingHelp:
       "Uma hora final com menos de 10 não é uma linha própria. No encerramento ela se dobra no bloco anterior. Se a consulta inteira ainda estiver abaixo de 10, um bloco de encerramento é o conjunto todo.",
     blockBallots: "{count} cédulas",
@@ -715,7 +715,7 @@ export default {
       "Padrão da eleição. YES_NO permanece pluralidade. Perguntas RANKED sempre usam IRV. Eleições criadas recebem um id público UUID e um link curto <code>/v/…</code>; o <code>uint256</code> da fábrica permanece <code>onChainElectionId</code>.",
     electionType: "Tipo de eleição",
     typePoll: "Consulta",
-    typePollHelp: "Depois que o portão de resultados abre (100 cédulas, ou o fim programado, o que ocorrer primeiro), as somas por escolha são publicadas por hora, 30 minutos após cada hora. Horas com menos de 10 cédulas se fundem à seguinte. Um bloco publicado não muda. A apuração certificada no encerramento é a final. Uma votação não publica essas somas.",
+    typePollHelp: "Depois que o portão de resultados abre (quando 100 eleitores tiverem emitido a sua primeira cédula, ou no fim programado, o que ocorrer primeiro), as somas por escolha são publicadas por hora, 30 minutos após cada hora. Horas com menos de 10 cédulas se fundem à seguinte. Um bloco publicado permanece como foi publicado pela primeira vez. A apuração final no encerramento conta a cédula mais recente. Uma votação não publica essas somas.",
     typeVote: "Votação",
     typeVoteHelp: "O resultado só aparece depois que a eleição termina. Antes do prazo, ninguém, inclusive os responsáveis, pode ver contagens por opção ou uma apuração parcial. O comparecimento é visível.",
     typeLocked: "O tipo fica fixo na criação e não pode ser alterado.",

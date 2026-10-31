@@ -479,7 +479,7 @@ export default {
     sealedStatus: "Résultats scellés",
     almostLive: "Presque en direct",
     almostLiveBody:
-      "Sommes par choix, par heure, pour ce sondage. Le bloc de 08:00–08:59 peut être publié à 09:30, après l’ouverture du seuil de résultats (100 bulletins ou la fin prévue, selon le premier). Les heures de moins de 10 bulletins fusionnent vers l’avant. La série se fige à la clôture. Un bloc publié reste tel qu’il a été publié. Ces sommes ne sont pas le dépouillement certifié.",
+      "Sommes par choix, par heure, pour ce sondage. Le bloc de 08:00–08:59 peut être publié à 09:30, après l’ouverture du seuil de résultats (une fois que 100 votants ont déposé leur premier bulletin, ou à la fin prévue, selon le premier). Les heures de moins de 10 bulletins fusionnent vers l’avant. La série se fige à la clôture. Un bloc publié reste tel qu’il a été publié la première fois. Ces sommes ne sont pas le dépouillement certifié.",
     trailingHelp:
       "Une dernière heure de moins de 10 n’est pas une ligne à part. À la clôture, elle est repliée dans le bloc précédent. Si tout le sondage reste sous 10, un bloc de clôture est l’ensemble.",
     blockBallots: "{count} bulletins",
@@ -715,7 +715,7 @@ export default {
       "Défaut de l’élection. YES_NO reste en pluralité. Les questions RANKED utilisent toujours IRV. Les élections créées reçoivent un id public UUID et un court lien <code>/v/…</code> ; le <code>uint256</code> d’usine reste <code>onChainElectionId</code>.",
     electionType: "Type d’élection",
     typePoll: "Sondage",
-    typePollHelp: "Une fois le seuil de résultats ouvert (100 bulletins, ou la fin prévue, selon le premier), les sommes par choix sont publiées par heure, 30 minutes après chaque heure. Les heures de moins de 10 bulletins fusionnent avec la suivante. Un bloc publié ne change pas. Le dépouillement certifié à la clôture est définitif. Un vote ne publie pas ces sommes.",
+    typePollHelp: "Une fois le seuil de résultats ouvert (une fois que 100 votants ont déposé leur premier bulletin, ou à la fin prévue, selon le premier), les sommes par choix sont publiées par heure, 30 minutes après chaque heure. Les heures de moins de 10 bulletins fusionnent avec la suivante. Un bloc publié reste tel qu’il a été publié la première fois. Le dépouillement final à la clôture compte le dernier bulletin. Un vote ne publie pas ces sommes.",
     typeVote: "Vote",
     typeVoteHelp: "Le résultat n’est affiché qu’après la fin de l’élection. Avant la date limite, personne, y compris les responsables, ne peut voir les décomptes par choix ni un dépouillement partiel. La participation est visible.",
     typeLocked: "Le type est fixé à la création et ne peut plus être modifié.",
