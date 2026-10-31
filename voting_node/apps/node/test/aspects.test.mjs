@@ -278,7 +278,7 @@ describe('multi-question ballots (aspects)', () => {
     assert.equal(publicPage.json.tally.questions[2].prompt, 'Park board — choose up to two');
   });
 
-  test('a ranked question disables the whole tally instead of opening envelopes', async () => {
+  test('a mixed ballot runs IRV for the ranked question and labels it recomputable', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -325,10 +325,11 @@ describe('multi-question ballots (aspects)', () => {
       jar: adminJar,
       body: { counts: [1, 0] },
     });
-    assert.equal(tallied.status, 409, tallied.json?.error);
-    assert.equal(tallied.json.code, 'RANKED_TALLY_DISABLED');
-    const stored = store.listEnvelopes(id);
-    assert.equal(stored.some((row) => row.rankingPayload), false);
-    assert.equal(store.requireElection(id).tally, null);
+    assert.equal(tallied.status, 200, tallied.json?.error);
+    const tally = store.requireElection(id).tally;
+    const irvQ = tally.questions.find((q) => q.ballotMethod === 'ranked_choice');
+    assert.equal(irvQ.winner, rankedQ.options[0].id);
+    assert.match(tally.ranked.verification, /recomputable, not ZK/);
+    assert.match(tally.ranked.rankingSetHash, /^0x[0-9a-f]{64}$/);
   });
 });

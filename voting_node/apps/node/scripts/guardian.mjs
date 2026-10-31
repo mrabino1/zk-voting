@@ -14,6 +14,8 @@ import {
 } from '../src/guardians/index.mjs';
 import { aggregateCiphertexts, isAggregateEnvelope, parseAggregateEnvelope } from '../src/aggregateBallot.mjs';
 import { verifyPartial } from '../src/guardians/threshold.mjs';
+import { rankingForTally, rankingTag } from '../src/rankedTally.mjs';
+import { parseRankingEnvelope } from '../public/ranked-envelope.js';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -144,7 +146,7 @@ async function main() {
     if (!envelopes.every((env) => isAggregateEnvelope(env.encryptedBallot))) {
       throw new Error('PER_BALLOT_OPEN_DISABLED: partials are computed on the aggregate, not on one ballot');
     }
-    const product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
+    const product = aggregateCiphertexts(envelopes.map((env) => env.tallyEncryptedBallot || env.encryptedBallot));
     const partials = product.options.map((opt, j) =>
       partialDecrypt({
         shareScalar: share.shareScalar,
@@ -155,6 +157,21 @@ async function main() {
         ephemeral: opt.c1Hex,
       }),
     );
+    // Sealed ranked-choice: one partial per counted ranking envelope, on its C1.
+    for (const env of envelopes) {
+      const ranking = rankingForTally(env);
+      if (!ranking) continue;
+      partials.push(
+        partialDecrypt({
+          shareScalar: share.shareScalar,
+          index: share.index,
+          electionId: args.election,
+          ballotHash: rankingTag(env.nullifier),
+          jointPublicKey: share.jointPublicKey,
+          ephemeral: parseRankingEnvelope(ranking.envelope).c1Hex,
+        }),
+      );
+    }
     await writeJson(args.out, { index: share.index, partials });
     process.stdout.write(`wrote ${args.out} partials=${partials.length}\n`);
     return;

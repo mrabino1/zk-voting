@@ -120,7 +120,7 @@ export default {
     unionsTitle: "Sindicatos y asociaciones",
     unionsBody: "Haga elecciones de dirigencia y votos de ratificación de contratos en los que la membresía confía en el recuento sin confiar en la dirigencia.",
     coopsTitle: "Cooperativas y consejos",
-    coopsBody: "Tome votos de consejo y encuestas de membresía, incluidas boletas ponderadas y de voto rankeado, con un informe de resultado auditable.",
+    coopsBody: "Tome votos de consejo y encuestas de membresía, incluidas boletas ponderadas y de voto rankeado en encuestas y votaciones selladas, con un informe de resultado auditable.",
     schoolsTitle: "Escuelas y campus",
     schoolsBody: "Ejecute gobiernos estudiantiles y votos del profesorado con acceso por clave de acceso y una boleta usable en cualquier dispositivo.",
     clubsTitle: "Comunidades y clubes",

@@ -6,6 +6,8 @@ import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody, requ
 import { assertExternalClearance } from '../voteGate.mjs';
 import {
   electionHasRanked,
+  payloadsFromEnvelopes,
+  tallyBallots,
   normalizeBallotMethod,
   parseTallyCounts,
   withQuestionMethods,
@@ -33,6 +35,7 @@ import {
   sealedResultsMessage,
 } from '../electionType.mjs';
 import { acceptChoiceBlockPartials, acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
+import { RANKED_VERIFICATION, firstChoiceMatches, openRankedTally, rankingSetHash, roundsHash } from '../rankedTally.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts, withoutExcludedEnvelopes } from '../tallyOpen.mjs';
 import { publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
@@ -1078,6 +1081,7 @@ export function electionsRouter(deps) {
         nextPublishAt: result.nextPublishAt,
         vote: result.vote,
         receipt: result.receipt,
+        ...(result.rankingHash ? { rankingHash: result.rankingHash } : {}),
         message: ballotAcceptedMessage({ published: result.published, allowRevote: config.allowRevote === true }),
         nfp: true,
       });
@@ -1446,13 +1450,6 @@ export function electionsRouter(deps) {
         Number(election.acceptedBallots) - store.hiddenVoteCount(election.id) - store.liveExcludedCount(election.id),
       );
 
-      if (electionHasRanked(election)) {
-        throw new HttpError(
-          409,
-          'ranked tally is disabled until a verified shuffle exists; individual envelopes are not opened',
-          { code: 'RANKED_TALLY_DISABLED' },
-        );
-      }
 
       if (isOpensBallots(election)) {
         const bucket = store.guardianMaterial(election.id);
@@ -1475,13 +1472,43 @@ export function electionsRouter(deps) {
         nums = opened.counts;
         source = 'opens_ballots';
         openedBallots = null;
+        if (electionHasRanked(election)) {
+          // Sealed ranked-choice: guardians opened each ranking envelope; IRV
+          // runs here and is recomputable from the published ranking set.
+          irv = await openRankedTally(election, split.envelopes.filter((env) => env?.is_deleted !== true), bucket?.rankingPartials || []);
+          irv.firstChoiceConsistent = firstChoiceMatches(election, nums, irv.counts);
+          if (typeof chain?.commitRankings === 'function' && chain.isConfigured?.()) {
+            irv.chainCommit = await chain.commitRankings(chainElectionId(election), irv.commitments);
+          }
+        }
       } else {
-        nums = parseTallyCounts(
-          req.body || {},
-          election.questions || [],
-          countedBallots,
-          election.ballotMethod,
-        );
+        if (!electionHasRanked(election)) {
+          nums = parseTallyCounts(
+            req.body || {},
+            election.questions || [],
+            countedBallots,
+            election.ballotMethod,
+          );
+        } else {
+          // Fixture / sum-only ranked elections: rankings were validated as
+          // plaintext payloads at intake, so IRV runs on them directly.
+          const listed = store.listEnvelopes(election.id);
+          const live = withoutExcludedEnvelopes(listed, store.excludedNullifiers(election.id)).envelopes;
+          const ballots = payloadsFromEnvelopes(live);
+          const ran = tallyBallots(election, ballots);
+          const rankedQuestions = ran.questions.filter((q) => q.ballotMethod === 'ranked_choice');
+          irv = {
+            ...ran,
+            rankedBallots: ballots.length,
+            invalidRankings: 0,
+            rankingSetHash: rankingSetHash(ballots),
+            roundsHash: roundsHash(rankedQuestions),
+            verification: RANKED_VERIFICATION,
+          };
+          // Counts are derived from the rankings (first-round for ranked
+          // questions), never typed in by the operator.
+          nums = ran.counts;
+        }
       }
 
       const countsHash = computeTallyHash(nums);
@@ -1494,6 +1521,17 @@ export function electionsRouter(deps) {
         guardianThreshold: election.tallyCeremony?.threshold ?? null,
       };
       if (irv?.questions?.length) extras.questions = irv.questions;
+      if (irv?.rankingSetHash) {
+        extras.ranked = {
+          rankingSetHash: irv.rankingSetHash,
+          roundsHash: irv.roundsHash,
+          rankedBallots: irv.rankedBallots,
+          invalidRankings: irv.invalidRankings,
+          firstChoiceConsistent: irv.firstChoiceConsistent,
+          rankingRoot: irv.chainCommit?.rankingRoot || null,
+          verification: irv.verification,
+        };
+      }
       const tallied = await store.setTally(election.id, nums, extras);
       await explorer.append('tally', {
         electionId: String(tallied.id),
@@ -1505,6 +1543,7 @@ export function electionsRouter(deps) {
         countsHash,
         ballotMethod: tallied.tally?.ballotMethod,
         winners: (tallied.tally?.questions || []).map((q) => q.winner).filter(Boolean),
+        ...(extras.ranked ? { ranked: extras.ranked } : {}),
       });
       let l1Certification = {
         status: 'skipped',

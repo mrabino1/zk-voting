@@ -274,7 +274,7 @@ export function openingIndexFromAnswers(answers, questions) {
       (Array.isArray(answers) &&
         answers.find((a) => String(a.questionId) === String(q.id))) ||
       (Array.isArray(answers) ? answers[qi] : null);
-    const selected = ans?.optionIds?.[0] ?? ans?.optionId ?? ans?.choice;
+    const selected = ans?.ranking?.[0] ?? ans?.optionIds?.[0] ?? ans?.optionId ?? ans?.choice;
     if (selected != null && selected !== "") {
       const local = opts.findIndex(
         (o) =>

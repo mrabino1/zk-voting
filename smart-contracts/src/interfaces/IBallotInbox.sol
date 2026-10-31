@@ -52,6 +52,8 @@ interface IBallotInbox {
     error JointKeyMismatch();
     error UnknownSubmission();
     error SubmissionAlreadySettled();
+    error EmptyRankingCommitment();
+    error RankingAlreadyCommitted();
 
     struct RelayerReceipt {
         uint256 submissionId;
@@ -65,6 +67,24 @@ interface IBallotInbox {
 
     /// @notice One batch landed. `count` is the number of ballots, not a choice total.
     event VoteBatchAccepted(uint256 indexed electionId, uint256 count, address relayer);
+
+    /// @notice A sealed ranked ballot's ranking envelope hash was bound to an accepted submission.
+    /// @dev The ranking itself stays encrypted to the guardian key until the deadline.
+    event RankingCommitted(uint256 indexed electionId, uint256 indexed submissionId, bytes32 rankingHash, bytes32 rankingRoot);
+
+    /// @notice Bind the hash of an encrypted ranking envelope to an accepted submission.
+    ///         Relayer only, once per submission, before the tally. A re-vote is a new
+    ///         submission with its own ranking, so last-vote-counts applies to rankings too.
+    function commitRanking(uint256 electionId, uint256 submissionId, bytes32 rankingHash) external;
+
+    /// @notice Ranking envelope hash bound to `submissionId`, or zero.
+    function rankingHashOf(uint256 electionId, uint256 submissionId) external view returns (bytes32);
+
+    /// @notice Running keccak chain over (submissionId, rankingHash) in commit order.
+    function rankingRoot(uint256 electionId) external view returns (bytes32);
+
+    /// @notice Number of ranking commitments for the election.
+    function rankingCount(uint256 electionId) external view returns (uint256);
 
     function MAX_VOTE_BATCH() external view returns (uint256);
 

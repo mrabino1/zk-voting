@@ -11,6 +11,8 @@ import { isTallyEnvelope } from './tallyCrypto.mjs';
 import { expectedVerificationKey, jointPublicKey, pointToHex } from './guardians/index.mjs';
 import { pointFromHex, pointXBytes } from './guardians/p256.mjs';
 import { verifyPartial } from './guardians/threshold.mjs';
+import { electionHasRanked } from './ballot.mjs';
+import { rankingForTally, rankingTag, verifyRankingPartial } from './rankedTally.mjs';
 
 function fail(status, message, code) {
   throw new HttpError(status, message, { code });
@@ -113,7 +115,34 @@ export async function acceptPartials(store, electionId, body) {
   } catch (err) {
     fail(400, err.message, err.code || 'BAD_ENVELOPE');
   }
+  const rankingRows = [];
+  const aggregateRows = [];
   for (const row of partials) {
+    if (/^ranking:/i.test(row.ballotHash)) rankingRows.push(row);
+    else aggregateRows.push(row);
+  }
+  if (rankingRows.length) {
+    // Sealed ranked-choice: one partial per counted ranking envelope, on its C1.
+    if (!electionHasRanked(election)) {
+      fail(400, 'ranking partials are only accepted for ranked elections', 'PER_BALLOT_PARTIAL');
+    }
+    const byTag = new Map();
+    for (const env of envelopes) {
+      const ranking = rankingForTally(env);
+      if (ranking) byTag.set(rankingTag(env.nullifier), ranking.envelope);
+    }
+    for (const row of rankingRows) {
+      row.ballotHash = row.ballotHash.toLowerCase();
+      const envelope = byTag.get(row.ballotHash);
+      if (!envelope) fail(400, 'partial does not match a counted ranking', 'BAD_PARTIAL');
+      if (!verifyRankingPartial({ election, index, partial: row, envelope })) {
+        fail(400, `ranking partial from guardian ${index} is not valid`, 'BAD_PARTIAL');
+      }
+    }
+    await store.saveRankingPartials(electionId, { index, partials: rankingRows });
+    if (!aggregateRows.length) return { index, count: rankingRows.length, rankings: rankingRows.length };
+  }
+  for (const row of aggregateRows) {
     const option = /^aggregate:(\d+)$/.exec(row.ballotHash);
     if (!option) {
       fail(400, 'per-ballot decryption partials are refused', 'PER_BALLOT_PARTIAL');
@@ -133,8 +162,8 @@ export async function acceptPartials(store, electionId, body) {
       fail(400, `partial decryption from guardian ${index} is not valid`, 'BAD_PARTIAL');
     }
   }
-  await store.saveGuardianPartials(electionId, { index, partials });
-  return { index, count: partials.length };
+  await store.saveGuardianPartials(electionId, { index, partials: aggregateRows });
+  return { index, count: partials.length, rankings: rankingRows.length };
 }
 
 /**

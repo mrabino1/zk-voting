@@ -1,9 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Plurality tally decrypts the product of one-hot ciphertexts.
-// Individual envelopes are not opened. Ranked ballots are not tallied here.
+// Individual envelopes are not opened here. Sealed rankings open in rankedTally.mjs.
 
 import { aggregateCiphertexts, decryptAggregateCounts } from './aggregateBallot.mjs';
-import { electionHasRanked } from './ballot.mjs';
 import { HttpError } from './http.mjs';
 import { TALLY_SCHEME_OPENS_BALLOTS, countsEqual, expectedCountLength } from './tallyCrypto.mjs';
 
@@ -70,13 +69,6 @@ function splitSoftDeleted(envelopes) {
  * The returned object has counts only. There is no per-ballot openings list.
  */
 export async function openBallots(election, envelopes, partialGroups, questions, excludedCount = 0) {
-  if (electionHasRanked(election)) {
-    throw new HttpError(
-      409,
-      'ranked tally is disabled until a verified shuffle exists; individual envelopes are not opened',
-      { code: 'RANKED_TALLY_DISABLED' },
-    );
-  }
   const ceremony = election?.tallyCeremony;
   if (!ceremony || ceremony.status !== 'ready' || !ceremony.publicKey || !ceremony.verificationKeys) {
     throw new HttpError(409, 'guardian ceremony is not ready', { code: 'CEREMONY_INCOMPLETE' });

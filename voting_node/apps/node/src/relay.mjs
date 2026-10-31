@@ -27,7 +27,8 @@ import {
   mintHolderToken,
   presentHolderReceipt,
 } from './receipts.mjs';
-import { answersFromVoteBody, assertBallotAnswers, extractRankingPayload } from './ballot.mjs';
+import { answersFromVoteBody, assertBallotAnswers, electionHasRanked, extractRankingPayload } from './ballot.mjs';
+import { isRankingEnvelope, parseRankingEnvelope, rankingHash } from '../public/ranked-envelope.js';
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
 
@@ -258,6 +259,33 @@ export function coarseAcceptedAt(ts, intervalSeconds) {
   return Math.floor(Number(ts) / bucket) * bucket;
 }
 
+/**
+ * A ranked election with a guardian key takes the full ranking as a sealed
+ * "RK" envelope next to the one-hot first-choice ciphertext. Only the shape is
+ * checked here; the node cannot read it before guardians open it.
+ */
+export async function sealedRankingFromBody(election, body) {
+  const raw = body?.encryptedRanking;
+  const ranked = electionHasRanked(election);
+  if (raw == null || raw === '') {
+    if (ranked && election.tallyPubKey && election.tallyCeremony?.status === 'ready') {
+      throw new HttpError(400, 'ranked ballots must include encryptedRanking', { code: 'RANKING_REQUIRED' });
+    }
+    return null;
+  }
+  if (!ranked) throw new HttpError(400, 'this election is not ranked', { code: 'RANKING_NOT_ALLOWED' });
+  if (typeof raw !== 'string' || raw.length > 2 + 2 * 8192 || !isRankingEnvelope(raw)) {
+    throw new HttpError(400, 'encryptedRanking must be an RK ranking envelope', { code: 'BAD_RANKING' });
+  }
+  try {
+    parseRankingEnvelope(raw);
+  } catch {
+    throw new HttpError(400, 'encryptedRanking must be an RK ranking envelope', { code: 'BAD_RANKING' });
+  }
+  const rankingEnvelope = raw.toLowerCase().startsWith('0x') ? `0x${raw.slice(2).toLowerCase()}` : `0x${raw.toLowerCase()}`;
+  return { rankingEnvelope, rankingHash: await rankingHash(rankingEnvelope) };
+}
+
 export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds, config, spentPassHash = null }) {
   const election = store.requireElection(electionId);
   const envelope = sanitizeVoteBody(body);
@@ -275,6 +303,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
   // Validate a plaintext ranking when the fixture flag allows one, then drop
   // it. The envelope row does not keep a per-ballot opening.
   extractRankingPayload(election, envelope, parsed.encryptedBallot);
+  const sealedRanking = await sealedRankingFromBody(election, envelope);
   const ts = now ?? Math.floor(Date.now() / 1000);
   const interval = Number(intervalSeconds) || 0;
   assertVoteWindow(election, ts);
@@ -425,7 +454,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
         }
       : {}),
   };
-  const storedEnvelope = { encryptedBallot: parsed.encryptedBallot };
+  const storedEnvelope = { encryptedBallot: parsed.encryptedBallot, ...(sealedRanking || {}) };
   const vote = replacing
     ? await store.replaceVote(storedBallot, storedEnvelope)
     : await store.acceptVote(storedBallot, storedEnvelope);
@@ -510,6 +539,7 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     vote: publicVoteRecord(vote),
     published,
     nextPublishAt: nextAt,
+    ...(sealedRanking ? { rankingHash: sealedRanking.rankingHash } : {}),
     receipt: presentHolderReceipt({
       election,
       vote: receiptVote,

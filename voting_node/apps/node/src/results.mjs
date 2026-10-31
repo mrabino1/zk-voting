@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Final tally from a posted tally. Plurality only (no IRV).
+// Final tally from a posted tally. Plurality here; ranked questions carry IRV rounds from rankedTally.mjs.
 // A poll may also show almost-live hourly choice sums. A vote does not.
 
 import { presentTally } from './ballot.mjs';
