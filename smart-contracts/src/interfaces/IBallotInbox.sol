@@ -142,6 +142,12 @@ interface IBallotInbox {
     /// @notice Hash-chain of accepted ballot hashes: `keccak256(prev || hash)`, starting at 0.
     function ballotRoot(uint256 electionId) external view returns (bytes32);
 
+    /// @notice Running Poseidon chain of accepted ballot hashes, in acceptance order.
+    function acceptedPoseidon(uint256 electionId) external view returns (bytes32);
+
+    /// @notice How many ballots have been accepted. Distinct from `unconsumedCount`.
+    function acceptedCount(uint256 electionId) external view returns (uint256);
+
     function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32);
 
     /// @notice Relayer-only batch. When the factory disclosure interval is
@@ -191,4 +197,7 @@ interface IBallotInbox {
     /// @notice Spend an accepted submission inside a settled batch. Settlement only.
     ///         `cipherHash` is the ordered-vector ballot digest, and it must match the stored ballot hash.
     function consumeForSettlement(uint256 electionId, uint256 submissionId, uint256 cipherHash) external;
+
+    /// @notice Undo `consumeForSettlement` when an unproven batch is rolled back.
+    function unconsumeForSettlement(uint256 electionId, uint256 submissionId) external;
 }
