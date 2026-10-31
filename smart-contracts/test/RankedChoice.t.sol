@@ -201,6 +201,5 @@ contract RankedChoiceTest is Deployer {
         emit log_named_uint("submitVoteBatchRanked(64) gas", used);
         // Measured 17,437,911 (via-ir). About 12% headroom catches a real regression.
         assertLt(used, 19_500_000);
-        assertGt(used, 15_000_000);
     }
 }

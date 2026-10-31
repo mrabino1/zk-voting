@@ -1,0 +1,1409 @@
+{
+  "note": "Pinned BallotInbox ABI. Regenerate from smart-contracts/out/BallotInbox.sol/BallotInbox.json after a contract change; inbox-abi-artifact.test.mjs checks it against forge.",
+  "abi": [
+    {
+      "type": "constructor",
+      "inputs": [
+        {
+          "name": "factory_",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "MAX_BALLOT_BYTES",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "MAX_PENDING",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "MAX_VOTE_BATCH",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "SEAL_CHUNK",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "SNARK_SCALAR_FIELD",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptanceSeq",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint64",
+          "internalType": "uint64"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptedCount",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptedOption",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "option",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "c1X",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c1Y",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c2X",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c2Y",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptedPoseidon",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptedPrimary",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "c1X",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c1Y",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c2X",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c2Y",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "n",
+          "type": "uint8",
+          "internalType": "uint8"
+        },
+        {
+          "name": "set",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "acceptedVector",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "c1X",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c1Y",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c2X",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "c2Y",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "n",
+          "type": "uint8",
+          "internalType": "uint8"
+        },
+        {
+          "name": "set",
+          "type": "bool",
+          "internalType": "bool"
+        },
+        {
+          "name": "ballotHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "opts",
+          "type": "uint256[16]",
+          "internalType": "uint256[16]"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "ballotHashAt",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "index",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "ballotHashOf",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "nullifier",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "ballotHashOfCiphertext",
+      "inputs": [
+        {
+          "name": "encryptedBallot",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "pure"
+    },
+    {
+      "type": "function",
+      "name": "ballotRoot",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "ceremonyOf",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "closedBallotCount",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "consumeForSettlement",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "cipherHash",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "emptyBallotRoot",
+      "inputs": [
+        {
+          "name": "depth",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "pure"
+    },
+    {
+      "type": "function",
+      "name": "factory",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "forceIn",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "receipt",
+          "type": "tuple",
+          "internalType": "struct IBallotInbox.RelayerReceipt",
+          "components": [
+            {
+              "name": "submissionId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "ballotHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "ciphertextHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "boundRoot",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "receivedAt",
+              "type": "uint64",
+              "internalType": "uint64"
+            }
+          ]
+        },
+        {
+          "name": "signature",
+          "type": "bytes",
+          "internalType": "bytes"
+        },
+        {
+          "name": "a",
+          "type": "uint256[2]",
+          "internalType": "uint256[2]"
+        },
+        {
+          "name": "b",
+          "type": "uint256[2][2]",
+          "internalType": "uint256[2][2]"
+        },
+        {
+          "name": "c",
+          "type": "uint256[2]",
+          "internalType": "uint256[2]"
+        },
+        {
+          "name": "publicInputs",
+          "type": "uint256[]",
+          "internalType": "uint256[]"
+        },
+        {
+          "name": "encryptedBallot",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "forcedInRoot",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "root",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "pending",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "markSealed",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionIds",
+          "type": "uint256[]",
+          "internalType": "uint256[]"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "nullifierUsed",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "nullifier",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingChunk",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingCount",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingCursor",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingForcedIn",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "ids",
+          "type": "uint256[]",
+          "internalType": "uint256[]"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "pendingIdAt",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "rankingCount",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "rankingRoot",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "receiptDigest",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "receipt",
+          "type": "tuple",
+          "internalType": "struct IBallotInbox.RelayerReceipt",
+          "components": [
+            {
+              "name": "submissionId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "ballotHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "ciphertextHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "boundRoot",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "receivedAt",
+              "type": "uint64",
+              "internalType": "uint64"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "setCeremony",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "ceremony_",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "setSettlement",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "settlement_",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "settlementOf",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "submitVote",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "a",
+          "type": "uint256[2]",
+          "internalType": "uint256[2]"
+        },
+        {
+          "name": "b",
+          "type": "uint256[2][2]",
+          "internalType": "uint256[2][2]"
+        },
+        {
+          "name": "c",
+          "type": "uint256[2]",
+          "internalType": "uint256[2]"
+        },
+        {
+          "name": "publicInputs",
+          "type": "uint256[]",
+          "internalType": "uint256[]"
+        },
+        {
+          "name": "encryptedBallot",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "submitVoteBatch",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "a",
+          "type": "uint256[2][]",
+          "internalType": "uint256[2][]"
+        },
+        {
+          "name": "b",
+          "type": "uint256[2][2][]",
+          "internalType": "uint256[2][2][]"
+        },
+        {
+          "name": "c",
+          "type": "uint256[2][]",
+          "internalType": "uint256[2][]"
+        },
+        {
+          "name": "publicInputs",
+          "type": "uint256[][]",
+          "internalType": "uint256[][]"
+        },
+        {
+          "name": "encryptedBallots",
+          "type": "bytes[]",
+          "internalType": "bytes[]"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "submitVoteBatchRanked",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "a",
+          "type": "uint256[2][]",
+          "internalType": "uint256[2][]"
+        },
+        {
+          "name": "b",
+          "type": "uint256[2][2][]",
+          "internalType": "uint256[2][2][]"
+        },
+        {
+          "name": "c",
+          "type": "uint256[2][]",
+          "internalType": "uint256[2][]"
+        },
+        {
+          "name": "publicInputs",
+          "type": "uint256[][]",
+          "internalType": "uint256[][]"
+        },
+        {
+          "name": "encryptedBallots",
+          "type": "bytes[]",
+          "internalType": "bytes[]"
+        },
+        {
+          "name": "rankingHashes",
+          "type": "bytes32[]",
+          "internalType": "bytes32[]"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "unconsumeForSettlement",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "submissionId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "unconsumedCount",
+      "inputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "event",
+      "name": "RankingBatchCommitted",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "digest",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "count",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "rankingRoot",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "VoteAccepted",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "nullifier",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "ballotHash",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "relayer",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "VoteBatchAccepted",
+      "inputs": [
+        {
+          "name": "electionId",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "count",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "relayer",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "error",
+      "name": "AlreadyTallied",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadSignature",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadTreeDepth",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BallotHashMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BallotTooLarge",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BatchLengthMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BatchTooEarly",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BatchTooLarge",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BoundRootMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "CeremonyAlreadySet",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ContractPaused",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "DisqualificationRootMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "DuplicateNullifier",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EgCiphertextRequired",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ElectionIdMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EligibleRootMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EligibleRootPending",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmptyBallot",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmptyBatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmptyRankingCommitment",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ForceInClosed",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "InvalidNullifier",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "InvalidProof",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "InvalidPublicInputs",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "JointKeyMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "KeyNotPosted",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "LinksLocked",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NonCanonicalBallot",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NotAuthorized",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NotRelayer",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NullifierUsed",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "OutsideVotingWindow",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PendingListFull",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PointOffCurve",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "RankingCountMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "RankingsNotSorted",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ReceiptAfterCutoff",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ReceiptMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ReentrantCall",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "RollNotFrozen",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SettlementAlreadySet",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SubmissionAlreadySettled",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "TallyStatusUnavailable",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "TurnoutNotPublished",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "UnknownBoundRoot",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "UnknownElection",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "UnknownInclusion",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "UnknownSubmission",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "UseVoteBatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ZeroAddress",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ZeroVerifier",
+      "inputs": []
+    }
+  ],
+  "methodIdentifiers": {
+    "MAX_BALLOT_BYTES()": "6fd9265f",
+    "MAX_PENDING()": "6843392e",
+    "MAX_VOTE_BATCH()": "aed8919c",
+    "SEAL_CHUNK()": "882762c2",
+    "SNARK_SCALAR_FIELD()": "25c2cd12",
+    "acceptanceSeq(uint256,uint256)": "31bd6d22",
+    "acceptedCount(uint256)": "a03a17ae",
+    "acceptedOption(uint256,uint256,uint256)": "0775ff5b",
+    "acceptedPoseidon(uint256)": "f5f891ce",
+    "acceptedPrimary(uint256,uint256)": "d7f924a0",
+    "acceptedVector(uint256,uint256)": "46a81caa",
+    "ballotHashAt(uint256,uint256)": "36fb0a8a",
+    "ballotHashOf(uint256,uint256)": "bcc93e8e",
+    "ballotHashOfCiphertext(bytes)": "57902b97",
+    "ballotRoot(uint256)": "66bc12ff",
+    "ceremonyOf(uint256)": "7808beeb",
+    "closedBallotCount(uint256)": "85e627f8",
+    "consumeForSettlement(uint256,uint256,uint256)": "d5de9058",
+    "emptyBallotRoot(uint256)": "55252764",
+    "factory()": "c45a0155",
+    "forceIn(uint256,(uint256,bytes32,bytes32,bytes32,uint64),bytes,uint256[2],uint256[2][2],uint256[2],uint256[],bytes)": "e9672d4f",
+    "forcedInRoot(uint256,uint256)": "fba20eed",
+    "markSealed(uint256,uint256[])": "6b7d0c42",
+    "nullifierUsed(uint256,uint256)": "e78ffc96",
+    "pendingChunk(uint256,uint256)": "e94a8eca",
+    "pendingCount(uint256)": "29441d97",
+    "pendingCursor(uint256)": "516e654a",
+    "pendingForcedIn(uint256)": "6703ec79",
+    "pendingIdAt(uint256,uint256)": "97d95960",
+    "rankingCount(uint256)": "35943c88",
+    "rankingRoot(uint256)": "513784ed",
+    "receiptDigest(uint256,(uint256,bytes32,bytes32,bytes32,uint64))": "e601e65b",
+    "setCeremony(uint256,address)": "66eb42f2",
+    "setSettlement(uint256,address)": "3424a37d",
+    "settlementOf(uint256)": "9dd72c9d",
+    "submitVote(uint256,uint256[2],uint256[2][2],uint256[2],uint256[],bytes)": "e6a0a949",
+    "submitVoteBatch(uint256,uint256[2][],uint256[2][2][],uint256[2][],uint256[][],bytes[])": "812cc289",
+    "submitVoteBatchRanked(uint256,uint256[2][],uint256[2][2][],uint256[2][],uint256[][],bytes[],bytes32[])": "39c1f2c5",
+    "unconsumeForSettlement(uint256,uint256)": "26fed333",
+    "unconsumedCount(uint256)": "fbd30e60"
+  }
+}

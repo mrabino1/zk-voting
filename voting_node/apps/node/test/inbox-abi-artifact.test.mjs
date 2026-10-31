@@ -1,7 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// The node and chain-client BallotInbox ABIs must match the compiled contract:
-// every selector they use equals the forge artifact's, and a real ranked batch
-// encoded with the node ABI decodes with the artifact ABI.
+// The node and chain-client BallotInbox ABIs must match the compiled contract.
+// They are always checked against a committed, pinned ABI fixture; when forge is
+// available the fixture is checked against the fresh forge artifact. In CI
+// (CI=true) a missing forge is a failure, not a skip.
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -42,26 +43,34 @@ function loadArtifact() {
   return existsSync(artifactPath) ? JSON.parse(readFileSync(artifactPath, 'utf8')) : null;
 }
 
+const fixture = JSON.parse(readFileSync(path.join(here, 'fixtures/ballot-inbox-abi.json'), 'utf8'));
 const artifact = loadArtifact();
-const skip = artifact ? false : 'forge artifacts unavailable (no forge on PATH)';
+const inCi = process.env.CI === 'true';
+const skipForge = artifact ? false : inCi ? false : 'forge artifacts unavailable (no forge on PATH)';
 
 function sig(item) {
   return `${item.name}(${item.inputs.map((i) => i.type).join(',')})`;
 }
 
+test('forge artifact is available in CI and matches the pinned fixture', { skip: skipForge }, () => {
+  assert.ok(artifact, 'CI=true but no forge artifact: install Foundry for this job');
+  assert.deepEqual(fixture.methodIdentifiers, artifact.methodIdentifiers, 'pinned selectors drifted: regenerate test/fixtures/ballot-inbox-abi.json');
+  assert.deepEqual(fixture.abi, artifact.abi, 'pinned ABI drifted: regenerate test/fixtures/ballot-inbox-abi.json');
+});
+
 for (const [label, abi] of [
   ['node ballotInboxAbi', ballotInboxAbi],
   ['chain-client INBOX_ABI', INBOX_ABI],
 ]) {
-  test(`${label}: every function selector matches the compiled BallotInbox`, { skip }, () => {
-    const ids = artifact.methodIdentifiers;
-    const byName = new Map(Object.entries(ids).map(([s, id]) => [s.slice(0, s.indexOf('(')), [s, id]]));
+  test(`${label}: every function selector matches the pinned BallotInbox`, () => {
+    const ids = fixture.methodIdentifiers;
+    const bySig = new Map(Object.entries(ids));
     const fns = abi.filter((x) => x.type === 'function');
     assert.ok(fns.some((f) => f.name === 'submitVoteBatchRanked'));
     for (const f of fns) {
-      const hit = byName.get(f.name);
-      assert.ok(hit, `${f.name} is not a BallotInbox method`);
-      assert.equal(toFunctionSelector(sig(f)), `0x${hit[1]}`, `${sig(f)} vs ${hit[0]}`);
+      const id = bySig.get(sig(f));
+      assert.ok(id, `${sig(f)} is not a BallotInbox method`);
+      assert.equal(toFunctionSelector(sig(f)), `0x${id}`, sig(f));
     }
   });
 }
@@ -76,7 +85,7 @@ test('submitVoteBatchRanked selector is the documented signature', () => {
   }
 });
 
-test('a real ranked batch encoded with the node ABI decodes with the artifact ABI', { skip }, () => {
+test('a real ranked batch encoded with the node ABI decodes with the pinned ABI', () => {
   const n = 3;
   const args = [
     7n,
@@ -88,10 +97,10 @@ test('a real ranked batch encoded with the node ABI decodes with the artifact AB
     ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32), '0x' + 'ff'.repeat(32)],
   ];
   const data = encodeFunctionData({ abi: ballotInboxAbi, functionName: 'submitVoteBatchRanked', args });
-  assert.equal(data.slice(0, 10), `0x${artifact.methodIdentifiers[
+  assert.equal(data.slice(0, 10), `0x${fixture.methodIdentifiers[
     'submitVoteBatchRanked(uint256,uint256[2][],uint256[2][2][],uint256[2][],uint256[][],bytes[],bytes32[])'
   ]}`);
-  const dec = decodeFunctionData({ abi: artifact.abi, data });
+  const dec = decodeFunctionData({ abi: fixture.abi, data });
   assert.equal(dec.functionName, 'submitVoteBatchRanked');
   assert.deepEqual(dec.args[4], args[4]);
   assert.deepEqual(dec.args[6], args[6]);
