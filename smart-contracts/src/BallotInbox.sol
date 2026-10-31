@@ -126,6 +126,8 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => uint64) private _acceptClock;
 
     /// @dev Appended slots. Ranked-choice ranking envelope commitments.
+    /// @dev Reserved: was `_rankingHashOf` (#129). Kept so later slots never shift under a proxy.
+    mapping(uint256 => mapping(uint256 => bytes32)) private __deprecatedRankingHashOf;
     mapping(uint256 => bytes32) private _rankingRoot;
     mapping(uint256 => uint256) private _rankingCount;
 

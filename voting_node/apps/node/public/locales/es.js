@@ -1113,4 +1113,8 @@ export default {
     retryIn: "Puede enviar otro mensaje en unos {minutes} minutos.",
     retryIn_one: "Puede enviar otro mensaje en alrededor de {minutes} minuto.",
   },
+  sealedRanked: {
+    disclosure:
+      "Voto preferencial en una votación sellada: hasta que exista una mezcla verificada, los guardianes pueden ver cada clasificación individual (no quién la emitió). Quien abre las clasificaciones también puede vincular cada una con su boleta cifrada en la cadena (no con la identidad del votante). El resultado de segunda vuelta instantánea se puede recalcular con las clasificaciones publicadas, pero no tiene prueba ZK. Riesgo de coacción: un votante que guarda la aleatoriedad de su boleta puede mostrarle a quien lo coacciona cuál boleta en la cadena es la suya y señalar su clasificación en el conjunto publicado; un patrón de clasificación inusual también puede identificar una boleta.",
+  },
 };
