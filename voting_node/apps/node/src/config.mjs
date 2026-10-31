@@ -15,6 +15,7 @@ import { normalizeEmail } from './identity.mjs';
 import { resolveEnvCeremonyUrl, resolveEnvEntropy } from './entropy.mjs';
 import { DEFAULT_CHAIN_ID, resolveEnvChainId } from './setup.mjs';
 import { resolveSetupToken } from './setupToken.mjs';
+import { resolveTallyChallengeSeconds } from './supplementaryBatch.mjs';
 import { resolveVotingToken, tokenRpcMap } from './tokenSource.mjs';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -303,6 +304,10 @@ export function resolveRequestWebAuthn(config, req = {}) {
   };
 }
 
+// TODO(#113): remove the ALLOW_REVOTE chain refusal once the inbox contracts accept a replacement ballot.
+export const ALLOW_REVOTE_CHAIN_CONFIGURED =
+  'ALLOW_REVOTE cannot be on while a chain is configured. The inbox accepts each nullifier once, so a replacement counted on the node cannot be recomputed from the chain. Leave ALLOW_REVOTE off until the inbox accepts replacements.';
+
 /**
  * @param {Record<string, unknown>} [overrides]
  */
@@ -336,6 +341,22 @@ export function getConfig(overrides = {}) {
     overrides.disclosureMinBlockVotes ?? process.env.DISCLOSURE_MIN_BLOCK_VOTES,
     { isTest },
   );
+  // Off until the inbox can store the latest ballot. The node must not count
+  // a replacement the chain still rejects.
+  const allowRevote = envFlag(
+    Object.prototype.hasOwnProperty.call(overrides, 'allowRevote')
+      ? overrides.allowRevote
+      : process.env.ALLOW_REVOTE,
+    false,
+  );
+  const chainRpcConfigured = String(
+    Object.prototype.hasOwnProperty.call(overrides, 'chainRpc')
+      ? overrides.chainRpc ?? ''
+      : process.env.CHAIN_RPC ?? '',
+  ).trim();
+  if (allowRevote && chainRpcConfigured) {
+    throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
+  }
 
   const provingPath = envFlag(overrides.provingPath ?? process.env.ZK_VOTING_PROVING_PATH, false);
   const useMockVerifier = provingPath
@@ -382,6 +403,7 @@ export function getConfig(overrides = {}) {
     disclosureDelaySeconds,
     resultsMinVotes,
     disclosureMinBlockVotes,
+    allowRevote,
     nowFn: overrides.nowFn || (() => Math.floor(Date.now() / 1000)),
     rpID: authority.rpID,
     voteFqdn: authority.voteFqdn,
@@ -417,6 +439,9 @@ export function getConfig(overrides = {}) {
     // test suite stays on JSON unless TEST_DATABASE_URL points at a scratch DB.
     databaseUrl: isTest ? process.env.TEST_DATABASE_URL || '' : process.env.DATABASE_URL || '',
     l2ChainFile: process.env.L2_CHAIN_FILE || '',
+    l2CivicRpc: String(
+      overrides.l2CivicRpc !== undefined ? overrides.l2CivicRpc : process.env.L2_CIVIC_RPC || '',
+    ).trim(),
     allowDevLogin: (() => {
       if (process.env.NODE_ENV === 'production') return false;
       if (overrides.allowDevLogin !== undefined) return Boolean(overrides.allowDevLogin);
@@ -497,6 +522,14 @@ export function getConfig(overrides = {}) {
     ceremonyBeaconMinBlocksAhead: strictPositiveInt(process.env.CEREMONY_BEACON_MIN_BLOCKS_AHEAD, 32),
     ...overrides,
   };
+  // The spread copies a raw override, including 0. Re-apply the floor after it.
+  // TODO(#113): align this window with the sealed-vote contracts challenge period.
+  config.tallyChallengeSeconds = resolveTallyChallengeSeconds(
+    Object.prototype.hasOwnProperty.call(overrides, 'tallyChallengeSeconds')
+      ? overrides.tallyChallengeSeconds
+      : process.env.TALLY_CHALLENGE_SECONDS,
+    { isTest, isProduction: process.env.NODE_ENV === 'production' },
+  );
   // Display name (site admin > BRAND_NAME > "ZK-Voting"); live, so a rename in
   // site admin reaches mail, PDFs and the WebAuthn rpName without a restart.
   for (const key of ['product', 'rpName']) {

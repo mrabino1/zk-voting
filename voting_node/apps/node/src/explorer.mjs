@@ -1,10 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Append-only L2 log. Vote proofs stay sealed until the hour that contained them
-// has closed, the disclosure delay has elapsed, the results gate is open, and the
-// block meets the floor. Ready rows land in one disclosure block (disclosure-clock
+// has closed, the disclosure delay has elapsed, and the block meets the floor.
+// Turnout follows that clock from the first ballot. Choice rows stay on their
+// own rule. Ready rows land in one disclosure block (disclosure-clock
 // timestamp, ordered by nullifier). Payloads never include a voter choice or a passkey user id.
 
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -19,6 +20,70 @@ import {
 } from './disclosure.mjs';
 import { PgDocument, migrate, recordImport, usingPostgres } from './db.mjs';
 
+const CHOICE_FIELD_KEYS = new Set([
+  'counts',
+  'countshash',
+  'resulthash',
+  'winners',
+  'winner',
+  'openedballots',
+  'choice',
+  'plaintext',
+  'ranking',
+  'rankingpayload',
+]);
+
+function isChoiceDisclosure(type, payload) {
+  const name = String(type || '').toLowerCase();
+  if (name === 'tally' || name === 'l1_certify') return true;
+  if (!payload || typeof payload !== 'object') return false;
+  return Object.keys(payload).some((key) => CHOICE_FIELD_KEYS.has(String(key).toLowerCase()));
+}
+
+function withoutChoiceFields(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const out = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (CHOICE_FIELD_KEYS.has(String(key).toLowerCase())) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** Vote rows follow the same hourly import as a poll. An unknown election fails closed. */
+function pollIdOf(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const id = payload.pollId ?? payload.electionId;
+  return id != null ? String(id) : '';
+}
+
+function voteImportBlocked(explorer, payload) {
+  const policy = explorer.disclosurePolicySnapshot();
+  const id = pollIdOf(payload);
+  const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
+  return ctx.known === false;
+}
+
+/**
+ * Choice rows stay out of the explorer until the block timestamp is at the
+ * deadline. The node clock is not the seal: a late node must not drop a
+ * block the chain already released. Unknown elections fail closed.
+ */
+function choiceRowBlocked(explorer, type, payload, at) {
+  if (!isChoiceDisclosure(type, payload)) return false;
+  const policy = explorer.disclosurePolicySnapshot();
+  const id = pollIdOf(payload);
+  const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
+  if (ctx.known === false) return true;
+  if (ctx.vote === true) {
+    const end = Number(ctx.endTime);
+    const when = Number(at);
+    if (!Number.isFinite(end) || !Number.isFinite(when)) return true;
+    return when < end;
+  }
+  return Boolean(ctx.resultsSealed);
+}
+
 function emptyChain(chainId) {
   return {
     chainId,
@@ -30,8 +95,18 @@ function emptyChain(chainId) {
     sealed: [],
     sealedPolls: [],
     seenBlockHashes: [],
+    ingestedTxHashes: [],
+    ingestedTxByBlock: {},
+    ingestedOutcomeKeys: [],
+    // Not part of a block hash. Maps an earlier poll row hash to the later one.
+    supersededBy: {},
+    // Not part of a block hash. Source L2 height, sequence, or postedAt per tx.
+    sourceOrder: {},
   };
 }
+
+/** Hashless outcomes rows have no block to prune, so the remembered keys are capped. */
+export const OUTCOMES_ONLY_KEY_CAP = 64;
 
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -40,6 +115,92 @@ function stable(value) {
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function payloadIndexKey(type, payload) {
+  return `${String(type || '').toLowerCase()}|${stable(payload)}`;
+}
+
+function finiteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Poll tally order is closeBlock. Poll params use the monotonic sequence
+ * stamped at post, then postedAt. Otherwise source L2 height and index.
+ */
+function sourceOrderOf(payload, block, index) {
+  const body = payload && typeof payload === 'object' ? payload : {};
+  const listed = finiteNumber(body.txIndex);
+  const at = listed != null ? listed : finiteNumber(index) ?? 0;
+  const closeBlock = finiteNumber(body.closeBlock);
+  if (closeBlock != null) return { closeBlock, index: at };
+  const sequence = finiteNumber(body.sequence ?? body.tallySequence);
+  if (sequence != null) {
+    const postedAt = finiteNumber(body.postedAt);
+    return postedAt != null ? { sequence, postedAt, index: 0 } : { sequence, index: 0 };
+  }
+  const height = finiteNumber(block?.number ?? block?.height ?? body.l2Block ?? body.blockNumber ?? body.sourceBlock);
+  if (height != null) return { height, index: at };
+  const postedAt = finiteNumber(body.postedAt);
+  if (postedAt != null) return { postedAt, index: 0 };
+  return null;
+}
+
+/** Negative when `a` is older than `b`. Null when the two orders cannot be compared. */
+function compareSource(a, b) {
+  if (!a || !b) return null;
+  if (a.closeBlock != null && b.closeBlock != null) {
+    if (a.closeBlock !== b.closeBlock) return a.closeBlock < b.closeBlock ? -1 : 1;
+    // Same closeBlock is a tie. The batch-local index is not a source order.
+    return 0;
+  }
+  if (a.height != null && b.height != null) {
+    if (a.height !== b.height) return a.height < b.height ? -1 : 1;
+    const ai = a.index ?? 0;
+    const bi = b.index ?? 0;
+    if (ai !== bi) return ai < bi ? -1 : 1;
+    return 0;
+  }
+  if (a.sequence != null && b.sequence != null) {
+    if (a.sequence !== b.sequence) return a.sequence < b.sequence ? -1 : 1;
+    // Same sequence: a later postedAt wins. An equal or missing postedAt stays a tie.
+    if (a.postedAt != null && b.postedAt != null && a.postedAt !== b.postedAt) {
+      return a.postedAt < b.postedAt ? -1 : 1;
+    }
+    return 0;
+  }
+  if (
+    a.postedAt != null &&
+    b.postedAt != null &&
+    a.sequence == null &&
+    b.sequence == null
+  ) {
+    if (a.postedAt !== b.postedAt) return a.postedAt < b.postedAt ? -1 : 1;
+    return 0;
+  }
+  return null;
+}
+
+function sharesSequence(a, b) {
+  return a?.sequence != null && b?.sequence != null && a.sequence === b.sequence;
+}
+
+/** True only when next is strictly newer. An unknown order never replaces a latest row. */
+function pollCandidateWins(next, prev) {
+  const cmp = compareSource(next.order, prev.order);
+  if (cmp == null) return false;
+  return cmp > 0;
+}
+
+/** Stable id for a row that arrived without a transaction hash. */
+function ingestKey(type, payload, blockHash, index) {
+  const listed = payload && payload.hash != null ? String(payload.hash).trim().toLowerCase() : '';
+  if (listed && listed !== 'undefined') return listed;
+  const block = blockHash ? String(blockHash).toLowerCase() : '';
+  const tail = block && index != null ? `${index}|${stable(payload)}` : stable(payload);
+  return createHash('sha256').update(`${type}|${block}|${tail}`).digest('hex');
 }
 
 function votePayload(payload) {
@@ -74,6 +235,17 @@ function normalizeChain(chain, chainId) {
   chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
   chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
   chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
+  chain.ingestedTxHashes = Array.isArray(chain.ingestedTxHashes) ? chain.ingestedTxHashes : [];
+  if (!chain.ingestedTxByBlock || typeof chain.ingestedTxByBlock !== 'object' || Array.isArray(chain.ingestedTxByBlock)) {
+    chain.ingestedTxByBlock = {};
+  }
+  chain.ingestedOutcomeKeys = Array.isArray(chain.ingestedOutcomeKeys) ? chain.ingestedOutcomeKeys : [];
+  if (!chain.supersededBy || typeof chain.supersededBy !== 'object' || Array.isArray(chain.supersededBy)) {
+    chain.supersededBy = {};
+  }
+  if (!chain.sourceOrder || typeof chain.sourceOrder !== 'object' || Array.isArray(chain.sourceOrder)) {
+    chain.sourceOrder = {};
+  }
   return chain;
 }
 
@@ -162,9 +334,24 @@ export class Explorer {
     // the chain, so its in-memory copy is authoritative: skip the full reload
     // the JSON backend does before each append. Standbys still reload.
     if (this.pg && this.writerActive !== false && this.pg.epoch > 0) return this.chain;
+    const side = this.chain
+      ? {
+          supersededBy: { ...(this.chain.supersededBy || {}) },
+          sourceOrder: { ...(this.chain.sourceOrder || {}) },
+          alerts: Array.isArray(this.chain.alerts) ? this.chain.alerts.slice() : [],
+        }
+      : null;
     const stored = this.pg ? await this.pg.load() : await readChainFile(this.filePath);
     if (stored && Array.isArray(stored.blocks)) {
       this.chain = normalizeChain(stored, this.chain.chainId);
+      if (side) {
+        this.chain.supersededBy = { ...(this.chain.supersededBy || {}), ...side.supersededBy };
+        this.chain.sourceOrder = { ...(this.chain.sourceOrder || {}), ...side.sourceOrder };
+        const diskAlerts = Array.isArray(this.chain.alerts) ? this.chain.alerts : [];
+        const seen = new Set(diskAlerts.map((row) => `${row?.kind}|${row?.pollId}|${row?.hash}`));
+        const extra = side.alerts.filter((row) => !seen.has(`${row?.kind}|${row?.pollId}|${row?.hash}`));
+        this.chain.alerts = diskAlerts.concat(extra);
+      }
     }
     return this.chain;
   }
@@ -209,6 +396,13 @@ export class Explorer {
       };
       this.chain.txs[hash] = tx;
       hashes.push(hash);
+      this.rememberPayload(type, payload, hash);
+      // Ballots have no source order. Only poll params and tallies do.
+      const listed = String(type || '').toLowerCase();
+      if (listed === 'poll_params' || listed === 'poll_tally') {
+        this.noteSource(hash, sourceOrderOf(payload, null, i));
+      }
+      this.noteTrackedTx(type, payload, hash, { number, index: i });
     }
     const blockHash = keccak256(
       stringToHex(stable({ number, parentHash, timestamp: ts, transactions: hashes })),
@@ -231,16 +425,32 @@ export class Explorer {
     return sealed.some((item) => sameNullifier(payloadNullifier(item.payload || {}), nullifier));
   }
 
+  /**
+   * A published row stays the first ballot. Rewriting the hash or the hour
+   * would mark a re-vote.
+   */
+  async replaceVote(payload) {
+    const body = votePayload(payload);
+    await this.refresh();
+    return {
+      duplicate: true,
+      published: Boolean(this.findByNullifier(body.nullifier)),
+      sealed: this.sealedHasNullifier(body.nullifier),
+    };
+  }
+
   async recordVote(payload, now, intervalSeconds) {
     const body = votePayload(payload);
     await this.refresh();
     this.chain.sealed = this.chain.sealed || [];
 
     if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) {
-      return { duplicate: true, published: Boolean(this.findByNullifier(body.nullifier)) };
+      return this.replaceVote(body);
     }
 
     const interval = Number(intervalSeconds) || 0;
+    // Interval 0 publishes at once. A positive interval waits for the hour.
+    // A published block is never rewritten. A re-vote must not call this.
     if (!interval || interval <= 0) {
       return this.append('vote', body, { timestamp: now });
     }
@@ -250,6 +460,17 @@ export class Explorer {
     this.chain.sealed.splice(at, 0, { receivedAt: now, payload: body });
     await this.persist();
     return { sealed: true, published: false };
+  }
+
+  /** Drop one unpublished sealed ballot. Published blocks stay as they were. */
+  async dropSealedVote(nullifier) {
+    await this.refresh();
+    const sealed = this.chain.sealed || [];
+    const kept = sealed.filter((item) => !sameNullifier(payloadNullifier(item.payload || {}), nullifier));
+    if (kept.length === sealed.length) return false;
+    this.chain.sealed = kept;
+    await this.persist();
+    return true;
   }
 
   disclosurePolicySnapshot() {
@@ -276,7 +497,6 @@ export class Explorer {
       intervalSeconds: interval,
       delaySeconds: policy.delaySeconds || 0,
       minBlockVotes: policy.minBlockVotes ?? 1,
-      minVotes: policy.minVotes || 0,
       electionContext: policy.electionContext || (() => ({})),
     });
     this.chain.sealed = planned.hold.map(({ electionId: _id, ...item }) => item);
@@ -357,6 +577,7 @@ export class Explorer {
     const outcomes = src.outcomes && typeof src.outcomes === 'object' ? src.outcomes : {};
     await this.refresh();
     this.chain.seenBlockHashes = Array.isArray(this.chain.seenBlockHashes) ? this.chain.seenBlockHashes : [];
+    this.chain.ingestedTxHashes = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
     const blockHash = block && block.hash ? String(block.hash).toLowerCase() : '';
     if (blockHash && this.chain.seenBlockHashes.some((h) => String(h).toLowerCase() === blockHash)) {
       return { ok: true, imported: 0, duplicate: true };
@@ -382,45 +603,416 @@ export class Explorer {
     const rows = fromOutcomes.length ? fromOutcomes : fromBlock;
     const l2Delayed = src.source === 'zk-voting-l2';
     const blockTs = block?.timestamp != null ? Number(block.timestamp) : now;
+    let skipped = 0;
+    this.loadIngestedTxs();
 
-    for (const row of rows) {
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
       const type = String(row.type || '').toLowerCase();
       if (!type) continue;
+      const payload = row.payload || row;
+      const rowIndex = row.index == null ? index : row.index;
+      if (choiceRowBlocked(this, type, payload, blockTs)) {
+        skipped += 1;
+        continue;
+      }
+      if ((type === 'vote' || type === 'vote_superseded') && l2Delayed && voteImportBlocked(this, payload)) {
+        skipped += 1;
+        continue;
+      }
+      if (type === 'vote' || type === 'vote_superseded') {
+        row.payload = withoutChoiceFields(payload);
+      }
       if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
-        if (type === 'poll_vote' && !l2Delayed) {
-          await this.recordPollVote(row.payload || {}, now, intervalSeconds);
-        } else {
-          await this.append(type, row.payload || row, { timestamp: blockTs || now });
+        const body = row.payload || row;
+        let order = null;
+        if (type === 'poll_params' || type === 'poll_tally') {
+          // Source order first, so a late copy of an earlier row is not appended.
+          order = sourceOrderOf(body, block, rowIndex);
+          const pollId = body?.pollId ?? body?.electionId;
+          const id = pollId != null ? String(pollId) : '';
+          const cmp = this.compareWithLatest(type, body, order);
+          if (cmp === 0 && type === 'poll_tally' && id && !this.storedPayload(type, body)) {
+            const latest = this.latestPollRecord(type, id);
+            await this.noteAlert({ kind: 'poll_tally_conflict', pollId: id, hash: latest?.hash || '' });
+            this.noteIngestedTx(type, body, blockHash, rowIndex);
+            continue;
+          }
+          if (type === 'poll_params' && id && !this.storedPayload(type, body)) {
+            const latest = this.latestPollRecord(type, id);
+            const latestOrder = latest
+              ? this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0)
+              : null;
+            if (sharesSequence(order, latestOrder)) {
+              await this.noteAlert({ kind: 'poll_params_conflict', pollId: id, hash: latest?.hash || '' });
+              if (!(cmp > 0)) {
+                this.noteIngestedTx(type, body, blockHash, rowIndex);
+                continue;
+              }
+            }
+          }
+          if (this.olderThanLatestPoll(type, body, order)) {
+            this.noteIngestedTx(type, body, blockHash, rowIndex);
+            continue;
+          }
         }
+        // A, then B, then A: the final A matches a stored payload and is older than B.
+        // Source order already ran, so this fallback cannot make that older A the latest.
+        if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
+        if (type === 'poll_vote' && !l2Delayed) {
+          await this.recordPollVote(body, now, intervalSeconds);
+        } else if (type === 'poll_params' || type === 'poll_tally') {
+          const pollId = body?.pollId ?? body?.electionId;
+          const id = pollId != null ? String(pollId) : '';
+          const previous = id ? this.latestPollRecord(type, id) : null;
+          const appended = await this.append(type, body, { timestamp: blockTs || now });
+          const hash = appended?.tx?.hash;
+          if (hash) {
+            this.noteSource(hash, order);
+            this.noteTrackedTx(type, body, hash, { number: Number(appended.block?.number), index: 0 });
+          }
+          const latestOrder = previous
+            ? this.chain.sourceOrder?.[previous.hash] || sourceOrderOf(this.chain.txs?.[previous.hash]?.payload, null, 0)
+            : null;
+          const ranked = compareSource(order, latestOrder);
+          if (previous?.hash && hash && ranked == null) {
+            await this.noteAlert({ kind: 'poll_order_unknown', pollId: id, hash });
+          } else if (previous?.hash && hash && previous.hash !== hash && ranked > 0) {
+            this.noteSuperseded(previous.hash, hash);
+          }
+        } else {
+          await this.append(type, body, { timestamp: blockTs || now });
+        }
+        this.noteIngestedTx(type, body, blockHash, rowIndex);
         imported += 1;
       } else if (isDelayedPublicType(type) || type === 'vote_superseded') {
-        const payload = votePayload(row.payload);
-        if (!payload.nullifier) continue;
-        if (this.findByNullifier(payload.nullifier) || this.sealedHasNullifier(payload.nullifier)) continue;
+        const body = votePayload(row.payload);
+        if (!body.nullifier) continue;
+        if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) continue;
         if (l2Delayed) {
-          await this.append('vote', payload, { timestamp: blockTs || now });
+          await this.append('vote', body, { timestamp: blockTs || now });
           imported += 1;
         } else {
-          await this.recordVote(payload, now, intervalSeconds);
+          await this.recordVote(body, now, intervalSeconds);
           imported += 1;
         }
       } else if (type && type !== 'userop') {
-        await this.append(type, row.payload || row);
+        const body = row.payload || row;
+        if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
+        await this.append(type, body);
+        this.noteIngestedTx(type, body, blockHash, rowIndex);
         imported += 1;
       }
     }
-    if (blockHash) {
-      this.chain.seenBlockHashes.push(blockHash);
-      await this.persist();
+    if (blockHash && skipped === 0) {
+      this.pruneIngestedBlock(blockHash);
+      if (!this.chain.seenBlockHashes.some((item) => String(item).toLowerCase() === blockHash)) {
+        this.chain.seenBlockHashes.push(blockHash);
+      }
     }
+    await this.flushIngestedTxs();
     await this.disclose(now, intervalSeconds);
     return { ok: true, imported, duplicate: false };
+  }
+
+  loadIngestedTxs() {
+    const list = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
+    this._ingestedTxs = new Set(list.map((item) => String(item).toLowerCase()));
+    this._ingestedByBlock = new Map();
+    this._outcomeKeys = [];
+    const owners = this.chain.ingestedTxByBlock;
+    if (owners && typeof owners === 'object' && !Array.isArray(owners)) {
+      for (const [block, keys] of Object.entries(owners)) {
+        if (!Array.isArray(keys)) continue;
+        const bucket = new Set();
+        for (const key of keys) {
+          const clean = String(key).toLowerCase();
+          if (this._ingestedTxs.has(clean)) bucket.add(clean);
+        }
+        if (bucket.size) this._ingestedByBlock.set(String(block).toLowerCase(), bucket);
+      }
+    }
+    const savedOutcomes = Array.isArray(this.chain.ingestedOutcomeKeys) ? this.chain.ingestedOutcomeKeys : [];
+    for (const key of savedOutcomes) {
+      const clean = String(key).toLowerCase();
+      if (clean && this._ingestedTxs.has(clean)) this._outcomeKeys.push(clean);
+    }
+    this.trimOutcomeKeys();
+    this.indexStoredPayloads();
+  }
+
+  txAlreadyIngested(type, payload, blockHash, index) {
+    const key = ingestKey(type, payload, blockHash, index);
+    if (!key) return false;
+    if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
+    if (this._ingestedTxs.has(key)) return true;
+    return this.storedPayload(type, payload);
+  }
+
+  /** True when this type and canonical payload are already in the chain log. */
+  storedPayload(type, payload) {
+    if (!(this._payloadIndex instanceof Map)) this.indexStoredPayloads();
+    return this._payloadIndex.has(payloadIndexKey(type, payload));
+  }
+
+  /**
+   * type|stable(payload) → earliest tx hash, plus the latest poll row per id.
+   * Built once per load so a lookup does not scan every row.
+   */
+  indexStoredPayloads() {
+    this._payloadIndex = new Map();
+    this._txAt = new Map();
+    this._pollLatest = new Map();
+    const blocks = [...(this.chain?.blocks || [])].sort((a, b) => Number(a.number) - Number(b.number));
+    for (const block of blocks) {
+      const hashes = block.transactions || [];
+      for (let index = 0; index < hashes.length; index += 1) {
+        const hash = String(hashes[index]);
+        const tx = this.chain.txs?.[hash];
+        if (!tx) continue;
+        const position = { number: Number(block.number), index };
+        this._txAt.set(hash, position);
+        const key = payloadIndexKey(tx.type, tx.payload);
+        if (!this._payloadIndex.has(key)) this._payloadIndex.set(key, hash);
+        const name = String(tx.type || '').toLowerCase();
+        if ((name === 'poll_params' || name === 'poll_tally') && !this.chain.sourceOrder?.[hash]) {
+          const recovered = sourceOrderOf(tx.payload, null, 0);
+          if (recovered) this.noteSource(hash, recovered);
+        }
+        this.considerPoll(tx, hash, position);
+      }
+    }
+  }
+
+  rememberPayload(type, payload, hash) {
+    if (!(this._payloadIndex instanceof Map) || !hash) return;
+    const key = payloadIndexKey(type, payload);
+    if (!this._payloadIndex.has(key)) this._payloadIndex.set(key, String(hash));
+  }
+
+  noteTrackedTx(type, payload, hash, position) {
+    if (!(this._txAt instanceof Map) || !hash) return;
+    this._txAt.set(String(hash), position);
+    if (!(this._pollLatest instanceof Map)) return;
+    this.considerPoll({ type, payload }, hash, position);
+  }
+
+  considerPoll(tx, hash, position) {
+    const name = String(tx?.type || '').toLowerCase();
+    if (name !== 'poll_params' && name !== 'poll_tally') return;
+    const id = pollIdOf(tx.payload);
+    if (!id || !(this._pollLatest instanceof Map)) return;
+    const order = this.chain.sourceOrder?.[hash] || sourceOrderOf(this.chain.txs?.[hash]?.payload, null, 0);
+    const candidate = { hash: String(hash), order, position };
+    const key = `${name}|${id}`;
+    const prev = this._pollLatest.get(key);
+    if (!prev) {
+      this._pollLatest.set(key, candidate);
+      return;
+    }
+    const prevOrder = this.chain.sourceOrder?.[prev.hash] || sourceOrderOf(this.chain.txs?.[prev.hash]?.payload, null, 0);
+    if (pollCandidateWins(candidate, { hash: prev.hash, order: prevOrder, position: prev.position })) {
+      this._pollLatest.set(key, candidate);
+    }
+  }
+
+  /** Ids only. This stays off the block hash. */
+  async noteAlert(alert) {
+    const row = {
+      kind: alert?.kind != null ? String(alert.kind) : 'poll_order_unknown',
+      pollId: alert?.pollId != null ? String(alert.pollId) : '',
+      hash: alert?.hash != null ? String(alert.hash) : '',
+    };
+    if (!Array.isArray(this.chain.alerts)) this.chain.alerts = [];
+    this.chain.alerts.push(row);
+    if (this.chain.alerts.length > 20) this.chain.alerts.splice(0, this.chain.alerts.length - 20);
+  }
+
+  /** Side index only. Block and transaction hashes do not cover this map. */
+  noteSuperseded(oldHash, newHash) {
+    if (!this.chain.supersededBy || typeof this.chain.supersededBy !== 'object' || Array.isArray(this.chain.supersededBy)) {
+      this.chain.supersededBy = {};
+    }
+    const from = String(oldHash || '');
+    const to = String(newHash || '');
+    if (!from || !to || from === to) return;
+    this.chain.supersededBy[from] = to;
+  }
+
+  /** Side index only. Source order is not part of the block hash. */
+  noteSource(hash, order) {
+    if (!hash || !order) return;
+    if (!this.chain.sourceOrder || typeof this.chain.sourceOrder !== 'object' || Array.isArray(this.chain.sourceOrder)) {
+      this.chain.sourceOrder = {};
+    }
+    this.chain.sourceOrder[String(hash)] = order;
+  }
+
+  blockPosition(hash) {
+    const want = String(hash || '');
+    if (!want) return null;
+    if (!(this._txAt instanceof Map)) this.indexStoredPayloads();
+    return this._txAt.get(want) || null;
+  }
+
+  /**
+   * Latest poll_params or poll_tally for one poll. Tally order is closeBlock.
+   * Params order is the post sequence, then postedAt. L2 height is the fallback.
+   */
+  latestPollRecord(type, electionId) {
+    const name = String(type || '').toLowerCase();
+    const body = electionId && typeof electionId === 'object' ? electionId : { pollId: electionId };
+    const listed = body?.pollId ?? body?.electionId;
+    const id = listed != null && listed !== '' ? String(listed) : '';
+    if (!id || (name !== 'poll_params' && name !== 'poll_tally')) return null;
+    if (!(this._pollLatest instanceof Map)) this.indexStoredPayloads();
+    const hit = this._pollLatest.get(`${name}|${id}`);
+    if (!hit) return null;
+    return this.chain.txs?.[hit.hash] || null;
+  }
+
+  /**
+   * True when this row's source order is not strictly newer than the latest
+   * stored row for that poll. Appending it would make the older row win.
+   */
+  olderThanLatestPoll(type, payload, order) {
+    const name = String(type || '').toLowerCase();
+    if (name !== 'poll_params' && name !== 'poll_tally') return false;
+    const id = payload?.pollId ?? payload?.electionId;
+    if (id == null || id === '') return false;
+    const latest = this.latestPollRecord(name, id);
+    if (!latest) return false;
+    const latestOrder =
+      this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0);
+    const cmp = compareSource(order, latestOrder);
+    if (cmp == null) return false;
+    return cmp <= 0;
+  }
+
+  /** Null when there is no latest row or the orders cannot be compared. */
+  compareWithLatest(type, payload, order) {
+    const name = String(type || '').toLowerCase();
+    if (name !== 'poll_params' && name !== 'poll_tally') return null;
+    const id = payload?.pollId ?? payload?.electionId;
+    if (id == null || id === '') return null;
+    const latest = this.latestPollRecord(name, id);
+    if (!latest) return null;
+    const latestOrder =
+      this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0);
+    return compareSource(order, latestOrder);
+  }
+
+  /** Recompute every published block and transaction hash. */
+  verifyBlockHashes() {
+    let parent = this.chain.genesisHash;
+    for (const block of this.chain.blocks || []) {
+      if (block.parentHash !== parent) return false;
+      const hashes = Array.isArray(block.transactions) ? block.transactions : [];
+      if (hashes.length !== Number(block.txCount)) return false;
+      for (let index = 0; index < hashes.length; index += 1) {
+        const listed = hashes[index];
+        const tx = this.chain.txs[listed];
+        if (!tx) return false;
+        const body = {
+          type: tx.type,
+          payload: tx.payload,
+          number: block.number,
+          timestamp: block.timestamp,
+          parentHash: block.parentHash,
+          index,
+        };
+        const hash = keccak256(stringToHex(stable(body)));
+        if (hash !== listed || hash !== tx.hash) return false;
+      }
+      const blockHash = keccak256(
+        stringToHex(
+          stable({
+            number: block.number,
+            parentHash: block.parentHash,
+            timestamp: block.timestamp,
+            transactions: hashes,
+          }),
+        ),
+      );
+      if (blockHash !== block.hash) return false;
+      parent = block.hash;
+    }
+    return true;
+  }
+
+  noteIngestedTx(type, payload, blockHash, index) {
+    const key = ingestKey(type, payload, blockHash, index);
+    if (!key) return;
+    if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
+    this._ingestedTxs.add(key);
+    const block = blockHash ? String(blockHash).toLowerCase() : '';
+    if (!block) {
+      this.noteOutcomeKey(key);
+      return;
+    }
+    let bucket = this._ingestedByBlock.get(block);
+    if (!bucket) {
+      bucket = new Set();
+      this._ingestedByBlock.set(block, bucket);
+    }
+    bucket.add(key);
+  }
+
+  noteOutcomeKey(key) {
+    if (!Array.isArray(this._outcomeKeys)) this._outcomeKeys = [];
+    const existing = this._outcomeKeys.indexOf(key);
+    if (existing !== -1) this._outcomeKeys.splice(existing, 1);
+    this._outcomeKeys.push(key);
+    this.trimOutcomeKeys();
+  }
+
+  trimOutcomeKeys() {
+    if (!Array.isArray(this._outcomeKeys)) this._outcomeKeys = [];
+    const buckets = this._ingestedByBlock instanceof Map ? this._ingestedByBlock : new Map();
+    while (this._outcomeKeys.length > OUTCOMES_ONLY_KEY_CAP) {
+      const dropped = this._outcomeKeys.shift();
+      let still = false;
+      for (const other of buckets.values()) {
+        if (other.has(dropped)) {
+          still = true;
+          break;
+        }
+      }
+      if (!still && this._ingestedTxs instanceof Set) this._ingestedTxs.delete(dropped);
+    }
+  }
+
+  pruneIngestedBlock(blockHash) {
+    const block = String(blockHash || '').toLowerCase();
+    const bucket = this._ingestedByBlock?.get(block);
+    if (!bucket) return;
+    this._ingestedByBlock.delete(block);
+    for (const key of bucket) {
+      let still = false;
+      for (const other of this._ingestedByBlock.values()) {
+        if (other.has(key)) {
+          still = true;
+          break;
+        }
+      }
+      if (!still) this._ingestedTxs.delete(key);
+    }
+  }
+
+  async flushIngestedTxs() {
+    if (!(this._ingestedTxs instanceof Set)) return;
+    this.chain.ingestedTxHashes = [...this._ingestedTxs];
+    this.chain.ingestedOutcomeKeys = [...(this._outcomeKeys || [])];
+    const owners = {};
+    for (const [block, keys] of this._ingestedByBlock) owners[block] = [...keys];
+    this.chain.ingestedTxByBlock = owners;
+    await this.persist();
   }
 
   presentTx(tx) {
     if (!tx) return null;
     const payload = tx.payload && typeof tx.payload === 'object' ? tx.payload : {};
-    return {
+    const presented = {
       ...payload,
       hash: tx.hash,
       blockNumber: tx.blockNumber,
@@ -430,6 +1022,16 @@ export class Explorer {
       relayer: tx.relayer || payload.relayer,
       payload,
     };
+    const supersededBy = this.chain.supersededBy?.[tx.hash];
+    if (supersededBy) {
+      presented.superseded = true;
+      presented.supersededBy = supersededBy;
+    }
+    const kind = String(tx.type || '').toLowerCase();
+    if ((kind === 'poll_params' || kind === 'poll_tally') && !sourceOrderOf(tx.payload, null, 0)) {
+      presented.orderUnknown = true;
+    }
+    return presented;
   }
 
   listBlocks() {

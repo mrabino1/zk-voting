@@ -50,10 +50,14 @@ Day-two operations, keys, and incident handling: [`docs/OPERATOR.md`](./docs/OPE
 
 A vote tells you *what* people want. A conversation tells you *why*. We encourage every operator to run an open-source [Discourse](https://www.discourse.org) forum ([source](https://github.com/discourse/discourse)) next to zk-voting so constituents can discuss polls and elections with each other. It is **optional**: zk-voting works the same without it, and nothing in the app depends on it.
 
+The creator of each contest chooses a **poll** or a **vote**. Where the election allows it, a voter can change their vote until the deadline, and only the last vote counts. Chain-backed deployments do not support re-voting yet. Turnout is public hourly from the first ballot, for a poll and for a vote. Each hour publishes 30 minutes after it closes (`DISCLOSURE_DELAY_SECONDS`, default 1800): ballots from 08:00–08:59 appear at 09:30. An hour with fewer than 10 ballots (`DISCLOSURE_MIN_BLOCK_VOTES`) merges forward into a later block. When the scheduled end passes, no more ballots are accepted. The total freezes once the last hour clears the 30-minute delay. The published hourly blocks show the running turnout. A poll's per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end, whichever comes first (`RESULTS_MIN_VOTES`). After that gate, hourly choice sums publish on the same delay. A published block stays as first published. The final tally at close is final. Where the election allows it, that tally counts the latest ballot. A vote publishes choices only in the final tally. They are encrypted to a public key posted on the L2. The design generates the decryption key jointly by k-of-n guardians, so no single party, including the operator, can decrypt early; the current ceremony is not production-ready. The choices are decrypted and published only at the deadline. At the deadline, one final batch goes to L1 for both polls and votes. The forum may discuss a vote's published turnout. It must not post choice counts before the deadline.
+
+
 **Why**
 
 - **Deliberation before a vote:** read the question, ask what it means, hear the arguments before the poll opens.
-- **Reflection after a vote:** the tally shows the result; the forum shows the reasons and the next question.
+- **Reflection once a result may be shown:** turnout is public hourly from the first ballot, for a poll and for a vote. A poll's per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end. After that gate, hourly choice sums appear on the delayed hourly schedule. A published block stays as first published. A vote publishes choices only in the final tally. The forum shows the reasons and the next question.
+
 - **Transparency:** one public place for ballot text, timelines, eligibility rules, and published results.
 - **Q&A with candidates and organizers:** officers, candidates, and the independent auditor answer in public.
 
@@ -67,6 +71,8 @@ A vote tells you *what* people want. A conversation tells you *why*. We encourag
 **Rules that protect the ballot**
 
 - Nobody is ever required to say how they voted, and organizers must never ask.
+- For a vote, do not post choice counts before the deadline. Turnout may be discussed once it is published, on the same schedule as a poll. No single party, including the operator, can decrypt the choices early.
+- For a poll, discuss the published per-choice counts and turnout only after hourly disclosure has put them on the dashboard.
 - A forum identity is separate from the anonymous ballot. **Forum accounts must never be linked to ballots, receipts, nullifiers, or voting credentials**, by the operator or anyone else.
 - Remove vote-buying offers, coercion, and demands for proof of how someone voted.
 
@@ -188,7 +194,7 @@ The properties we are aiming for:
 
 1. **Eligibility.** A vote proof is only valid if the prover is in the current eligible set for that election.
 2. **Disqualification.** Being registered is not enough. If the person is on the disqualification set for that election (or that question), the same circuits must reject the vote.
-3. **One counted ballot per eligible person** (or one per question, depending on the election rules), via nullifiers. Each nullifier is accepted **once**. A second ballot — including a new ciphertext — is rejected (`NullifierUsed`). Double voting is impossible. Voters may change their mind privately on the ballot form **before** submit.
+3. **One counted ballot per eligible person** (or one per question, depending on the election rules), via nullifiers. The Node keeps one ballot per nullifier. A second ballot is rejected unless re-vote is enabled. That switch stays off until the inbox can store the latest ballot. When it is on, the replacement updates the final tally only; a published poll block keeps the original ballot; `acceptedBallots` does not increase. The inbox still accepts a nullifier once (`NullifierUsed`), so the Node does not submit the replacement again. Double voting is impossible.
 4. **Hidden choice.** The option selected is not an on-chain plaintext field anyone can read from the transaction.
 5. **Public tally.** After the poll closes, anyone can check a proof that the published totals match the accepted ballots.
 6. **Public process.** Registration events, disqualification actions, poll parameters, and final tallies are attributable to known roles (jurisdiction, clerk, registrar).
@@ -219,7 +225,7 @@ Code is **present** in this monorepo. Local **unit tests** use Foundry `MockVeri
 | Passkeys | WebAuthn PRF helper; demo address is `zk-voting-local-address` (not production secp256k1). [`docs/PASSKEYS.md`](./docs/PASSKEYS.md) |
 | Person identity | Passkey / Web3 / smart card / email / civic ID; vote PIN at ballot submit; one active ETH address. [`docs/IDENTITY.md`](./docs/IDENTITY.md) |
 | Tally that opens ballots | **Demo slice in-tree.** `tallyScheme=opens_ballots` encrypts choices to a Feldman t-of-n P-256 public key (**NON-PRODUCTION**). `t` proved partials open envelopes; `t-1` cannot. Invented `counts[]` are rejected. Homomorphic vs mixnet aggregation is not selected ([`docs/TALLY_GUARDIANS.md`](./docs/TALLY_GUARDIANS.md)). Legacy `sum_only` still allows any partition of `acceptedBallots`. Not MACI. |
-| Coercion slice | One accepted nullifier + hash-only receipts (not MACI, not last-vote-counts). |
+| Coercion slice | Vote choices stay encrypted to an L2 public key. The design generates the decryption key jointly by k-of-n guardians, so no single party, including the operator, can decrypt early; the current ceremony is not production-ready. Where the election allows it, a voter can change their vote until the deadline, and only the last vote counts. Chain-backed deployments do not support re-voting yet. Hash-only receipts. Not MACI. |
 | Independent auditor | `tools/auditor` + [`docs/AUDITOR.md`](./docs/AUDITOR.md); no Node private DB |
 | Ballot types | UI: `YES_NO`, `SINGLE_CHOICE`, `MULTI_CHOICE`, `RANKED` (IRV), `MEASURE`, `ARTICLE`. |
 | Voter info pages | `/elections/:id/info` and `/elections/:id/info/:questionId/:optionId` (vanilla JS) |
@@ -328,7 +334,7 @@ npm run test:fuzz
 npm run test:invariant
 ```
 
-Tests must pass with `MockVerifier`. Invariants include: a nullifier is **accepted at most once** (a second ballot, including a new ciphertext, reverts; double voting is impossible); no vote outside `[startTime, cutoffTime)`; no vote if `!rollFrozen`; `sum(counts) == acceptedBallots` after tally; factory clones do not share nullifier storage. See ARCHITECTURE.
+Tests must pass with `MockVerifier`. Invariants include: a vote counts one ballot per voter (a later ballot before the deadline replaces the earlier one; double voting is impossible); no vote outside `[startTime, cutoffTime)`; no vote if `!rollFrozen`; `sum(counts) == acceptedBallots` after tally; factory clones do not share nullifier storage. See ARCHITECTURE.
 
 Non-mock local deploy (fail closed until a VK is installed):
 
@@ -399,7 +405,7 @@ export ZK_VOTING_RPC_URL=http://127.0.0.1:8545
 
 ### Block explorer
 
-With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-chain.json` (Node writes + sequencer `POST /api/explorer/ingest`). API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`, `GET /api/explorer/disclosure`, plus search / nullifier / per-election. Public election snapshot: `GET /api/elections/:id/summary` (disclosed turnout, last closed hour, countdown; `resultsUrl` only after a certified tally — this repo does not invent a winner here). Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout wait until the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
+With the Node up: open `/explorer`. Backend is the JSON log `apps/node/data/l2-chain.json` (Node writes + sequencer `POST /api/explorer/ingest`). API: `GET /api/explorer/blocks`, `/api/explorer/blocks/:n`, `/api/explorer/txs/:hash`, `GET /api/explorer/disclosure`, plus search / nullifier / per-election. Public election snapshot: `GET /api/elections/:id/summary` (disclosed turnout, last closed hour, countdown; `resultsUrl` only after a final tally — this repo does not invent a winner here). Visible: commitments, nullifiers, ballot **hashes**, reason codes, tallies, batches. Hidden: choices, civil names, evidence files, trapdoors. Vote rows and public turnout publish hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor. [`docs/BLOCK_EXPLORER.md`](./docs/BLOCK_EXPLORER.md).
 
 ### Passkeys and person identity
 
@@ -696,7 +702,7 @@ The Node side is the human product: a long-lived Node process, a web frontend, a
 | `/admin` | Platform admin (file `admin.html`, URL has no `.html`) |
 | `/back-office` | Clerks / registrars / officers (file `back-office.html`) |
 | `/explorer` | Civic L2 explorer (file `explorer.html`) |
-| `/elections/:id/results` | Certified plurality / IRV results |
+| `/elections/:id/results` | Final tally plurality / IRV results |
 | `/outcomes`, `/outcomes/:id` | Public monitor of every election before / during / after voting, with auditor + chain verification |
 | `/outcomes/verify` | Drop the locked official outcome PDF (or scan its QR) to confirm SHA-256 authenticity |
 | `/api` | Public bot API documentation (HTML, OpenAPI at `/api/openapi.json`, LLM text at `/api/llms.txt`) |
@@ -1000,7 +1006,7 @@ A **corrupt tally operator** on the legacy **SUM_ONLY** path can still post any 
 - **This slice:** an `opens_ballots` election does not generate a private key on the Node. The admin sets `threshold` and `guardianCount` (both at least 2). Each guardian runs `node apps/node/scripts/guardian.mjs` (init, deal, finalize, partial). The Node stores Feldman commitments and shares encrypted to guardian transport keys. The joint P-256 point is `tallyPubKey` after every guardian has dealt (`p256-ecies-aesgcm-v1` envelopes under `p256-feldman-dkg-v1`). `GET /api/elections/:id/tally-key` returns the public ceremony only. After cutoff, `t` verified partials open every accepted envelope. A bad partial fails `BAD_PARTIAL`. Fewer than `t` fails `THRESHOLD_NOT_MET`. A vector whose sum still matches `acceptedBallots` but does not match the openings fails `INVENTED_COUNTS`.
 - **Aggregation:** homomorphic combination and a mixnet are both registered and both **refused** until a product owner selects one. The tally uses the `undecided` adapter, which decrypts each ciphertext as its own unit. That is not a shuffle and not a ciphertext product. See [`docs/TALLY_GUARDIANS.md`](./docs/TALLY_GUARDIANS.md).
 - **On-chain:** `ElectionParams.tallyScheme` is additive (`0` keeps old tests). `submitOpenedTally` binds openings ↔ counts ↔ inbox `ballotRoot`. `Tally.sol` Groth16 inputs are versioned as `TALLY_SOL_MOCK_V1` and are **not** `tally.circom`’s public signals. The joint key is computed after distributed key generation, so a chain create that runs before the ceremony still has empty `tallyPubKeyX|Y` unless a later transaction pins them.
-- **Not done:** a selected homomorphic or mixnet aggregator, verifiable shuffle, real Groth16 tally keys, MACI last-vote-counts. Do not run a binding election on this ceremony.
+- **Not done:** a selected homomorphic or mixnet aggregator, verifiable shuffle, real Groth16 tally keys, MACI. Do not run a binding election on this ceremony.
 
 ---
 
@@ -1033,7 +1039,7 @@ Mermaid source: [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election
 1. Polls open. Eligible-set root is frozen (or the election allows a documented refresh).
 2. Voter builds a ZK proof: I am in the eligible set, I am not in the disqualification set, this ciphertext is a well-formed ballot for these questions. The nullifier identifies me without naming me.
 3. `BallotInbox` accepts the message (bundler is `msg.sender`). Choice is not plaintext.
-4. A second vote for the same nullifier fails (`NullifierUsed`), including a later proof with a **new** `ballotHash`. Double voting is impossible. `acceptedBallots` is unique accepted nullifiers.
+4. The inbox accepts each nullifier once. A second `submitVote`, including a later proof with a **new** `ballotHash`, reverts `NullifierUsed`. The Node does not send that second transaction. A second ballot is rejected unless re-vote is enabled, and `acceptedBallots` stays the count of unique nullifiers. Double voting is impossible.
 
 ### D. Tally and certify
 
@@ -1053,8 +1059,8 @@ These three fight each other. The design chooses explicitly:
 | --- | --- |
 | **Privacy of choice** | Vote is encrypted / committed; proof talks about eligibility, not the option. |
 | **Public verifiability** | Anyone can check proofs, set roots, **hourly** published inbox size, and the tally. |
-| **Polling-place unlinkability** | Vote proofs and turnout ticks appear only after the hour closes, the disclosure delay elapses, the results gate opens, and the block meets the floor. A person leaving a voting office cannot be matched to a live jurisdiction increase. |
-| **Coercion resistance** | **Shipped slice (not MACI, not last-vote-counts):** one accepted nullifier. Voters may change their mind privately on the ballot form before submit; after accept they cannot recast. The Node prints a receipt of hashes only — it **cannot** prove choice (no option ids, no opening). Double voting remains impossible. **Still later:** MACI-style collusion-resistant messaging. |
+| **Polling-place unlinkability** | Vote proofs and turnout ticks appear hourly from the first ballot, after the hour closes, the disclosure delay elapses, and the block meets the floor. A person leaving a voting office cannot be matched to a live jurisdiction increase. |
+| **Coercion resistance** | **Shipped slice (not MACI):** one ballot per nullifier. A second ballot is rejected unless re-vote is enabled. Chain-backed deployments do not support re-voting yet. When the switch is on, the replacement is counted only in the final tally, and a published poll block keeps the original ballot. The Node prints a receipt of hashes only — it **cannot** prove choice (no option ids, no opening). Double voting remains impossible. The inbox still rejects a second submit. **Still later:** MACI-style collusion-resistant messaging. |
 | **Disqualification transparency** | Reason **codes** are public so a jurisdiction cannot hide mass purges. Personal evidence stays off-chain. |
 
 If a jurisdiction needs a fully public roll (some do), that is a configuration: commitments can be replaced or accompanied by identified records. ZK voting still hides the **ballot**.
@@ -1175,12 +1181,13 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 7. **Multi-question ballots** — “aspects.” **Node path in-tree:** clerks author several questions (structured back-office UI; JSON is advanced), `/vote/:id` renders every aspect on one envelope, plurality results are labeled per question (`GET /api/elections/:id/results`). Ranked-choice / IRV is computed on the Node from accepted ranking envelopes (winner + round transcript). Solidity `Tally` still assumes a single flat vector; mixed ballots certify the plurality-only concatenation on L1.
 8. **L1 certification** — tally or tally hash on Ethereum mainnet. **In-tree (testnet-friendly):** after Node tally, `L1TallyMirror.postCertifiedResult` keys by `(factory, electionId, jurisdictionId)`, not the public UUID, when L1 env is set; graceful no-op otherwise. See [`docs/OPERATOR.md`](./docs/OPERATOR.md). A live jurisdiction deploy on Ethereum mainnet (pinned addresses on `master`) is still **Future**.
 9. **EVM (or validity) execution on chainId 27427** so the same bytecode runs on the civic L2. **Future.**
-10. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice in-tree (not full MACI, not last-vote-counts):**
-   - **One accepted nullifier:** `submitVote` for a spent nullifier reverts `NullifierUsed`, including a new ciphertext. Double voting remains impossible. `acceptedBallots` is unique nullifiers, so tally `sum(counts)` is a unique-voter invariant. Voters may change their mind privately on the ballot form **before** submit; the inbox does not accept a second ballot.
+10. **Coercion-resistance upgrades** and independent auditor tooling. **Pragmatic slice in-tree (not full MACI):**
+   - **One ballot per nullifier:** `submitVote` for a spent nullifier reverts `NullifierUsed`, including a new ciphertext. The Node does not submit that second transaction. A second ballot is rejected unless re-vote is enabled. When it is on, the replacement updates the final tally only, a published poll block keeps the original ballot, and `acceptedBallots` stays a unique-nullifier count. Public rows do not link two ballots.
    - **Receipts cannot prove choice:** the Node receipt lists `ballotHash` and nullifier — never the marked options or the opening, and no UserOp hash. After accept, the voter downloads the receipt PDF (locked against modification); emailing a token-only copy is opt-in and off by default. The voter can paste the token, or drop the PDF, at `/receipt` to confirm it counted and that the file was not changed. Hourly turnout on that page is how many ballots were disclosed and when each hour closed, not a count by candidate. A receipt is not “I voted for X,” and it is not a second ballot.
    - **Auditor pack:** `tools/auditor` CLI + [`docs/AUDITOR.md`](./docs/AUDITOR.md) + `GET /api/elections/:id/artifacts` export public roots, disclosed ballot hashes, tally, and contract addresses and verify sum/invariants **without** the Node private DB. Packs assert unique nullifiers and `receiptsProveChoice: false`.
-   - **Outcomes monitor:** a separate public portal at `/outcomes` (alias `/monitor`) lists every election in before / during / after columns from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). It runs the auditor pack plus freeze-root and L1 hash checks. During voting it shows disclosed turnout only — never unofficial option counts. Certified counts appear only after a tally. After cutoff and a tally, a locked official outcome PDF is emailed to subscribers (opt-in on `/me`; casting a ballot never subscribes anyone) and can be checked at `/outcomes/verify`. This is not `/receipt` and not a live horse race.
-   - **Still later / Future:** MACI-style encrypted message queues / key-changing; guardian / forced-reveal if a tally operator stalls. Last-vote-counts / re-vote supersession is **out of scope** for this slice.
+   - **Outcomes monitor:** a separate public portal at `/outcomes` (alias `/monitor`) lists every election in before / during / after columns from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). It runs the auditor pack plus freeze-root and L1 hash checks. During a poll it publishes turnout hourly from the start. Hourly per-choice sums appear after the gate opens once 100 voters have cast their first ballot, or until the scheduled end is reached. A published block stays as first published. A vote publishes turnout on that same hourly schedule and publishes choices only in the final tally. The final tally appears only after it is posted. Excluded ballots are not counted. After cutoff and a tally, a locked official outcome PDF is emailed to subscribers (opt-in on `/me`; casting a ballot never subscribes anyone) and can be checked at `/outcomes/verify`. This is not `/receipt` and not a live horse race.
+   - **Still later / Future:** MACI-style encrypted message queues / key-changing; guardian / forced-reveal if a tally operator stalls. A contract change that would move the inbox hash to the latest ballot, without a second public acceptance and without incrementing `acceptedBallots`, is not in this slice.
+
 11. **Vote delegation** (MakerDAO-style `delegate()` / `undelegate()`). **Not planned for implementation; open research question.** Trade-offs and risks: [`docs/research/vote-delegation.md`](./docs/research/vote-delegation.md).
 
 ---
@@ -1197,7 +1204,7 @@ Dates are not committed. Items 1–4 are **in the tree** (with the honest caveat
 | **Eligible set** | Registered minus disqualified, for a given election/question. |
 | **Disqualification** | An on-chain record that blocks voting despite registration. |
 | **Aspect / question** | One decision on a ballot (office, measure, article). |
-| **Nullifier** | A unique value revealed at vote time so the same person is counted once, without publishing their name. Spent at most once: a second ballot for that nullifier is rejected. Double voting is impossible. |
+| **Nullifier** | A unique value revealed at vote time so the same person is counted once, without publishing their name. The Node keeps one current ballot for it. The inbox still accepts that value once. Double voting is impossible. |
 | **Tally proof** | A ZK proof that published totals match accepted ballots. |
 | **L1** | Ethereum mainnet (or an Ethereum testnet during development). |
 | **L2** | ZK-Voting L2 (chainId **27427**) by default: civic JSON sequencer in `l2/`. Lighter and other EVM L2s as portable Solidity venues. Execution off L1, security anchored to Ethereum. |

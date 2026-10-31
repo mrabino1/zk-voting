@@ -328,4 +328,16 @@ describe('token poll API', () => {
     const window = await fx.api('POST', '/api/polls', { jar, body: { ...base, startTime: 30, cutoffTime: 20 } });
     assert.equal(window.status, 400);
   });
+
+  test('scheduled poll params carry a monotonic sequence and postedAt', async () => {
+    const fx = await startPollNode();
+    stops.push(() => fx.stop());
+    const { poll } = await openPoll(fx);
+    const rows = Object.values(fx.explorer.chain.txs).filter((tx) => tx.type === 'poll_params');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].payload.pollId, poll.id);
+    assert.equal(rows[0].payload.sequence, 1);
+    assert.equal(rows[0].payload.postedAt, fx.clock.t);
+    assert.equal(fx.explorer.latestPollRecord('poll_params', poll.id).payload.sequence, 1);
+  });
 });

@@ -110,6 +110,7 @@ export function configRouter(deps) {
           verifier: contracts.verifier || null,
         },
         contracts,
+        allowRevote: deps.config.allowRevote === true,
         coercion: {
           policy: 'one-ballot-per-nullifier',
           receiptsProveChoice: false,
@@ -149,7 +150,7 @@ export function configRouter(deps) {
             issuedAfter: 'cutoff-expired-and-tallied',
             note: 'After voting time expires and a tally is posted, subscribers receive a locked official PDF (counts, start, end). Subscription is opt-in and never created by casting a ballot. QR and hash seals cannot be removed from the admin template.',
           },
-          note: 'Public monitor of every election, grouped before / during / after voting from chain and election state. Runs the auditor pack plus freeze-root and L1 checks. Certified option counts appear only after a tally. Separate from /receipt and from unofficial horse-race totals.',
+          note: 'Public monitor of every election, grouped before / during / after voting from chain and election state. Runs the auditor pack plus freeze-root and L1 checks. Final tally option counts appear only after a tally. Excluded ballots are not counted. Separate from /receipt and from unofficial horse-race totals.',
         },
         l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
         l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',

@@ -8,11 +8,21 @@ This is **optional**. zk-voting works the same with or without a forum, and noth
 
 ## Why run a forum
 
-- **Deliberation before a vote.** Voters can read the question, ask what it means, and hear arguments from neighbours before the poll opens.
-- **Reflection after a vote.** The tally shows *what* people chose. The forum shows *why*, and where the next question should come from.
+- **Deliberation before a vote.** Voters can read the question, ask what it means, and hear arguments from neighbors before the poll opens.
+- **Reflection once a result may be shown.** Turnout is public hourly from the first ballot, for a poll and for a vote. A poll's per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end. After that gate, hourly choice sums appear 30 minutes after each hour. A published block stays as first published. A vote publishes choices only in the final tally. The forum shows *why*, and where the next question should come from.
+
 - **Transparency.** Organizers can publish the ballot text, timeline, eligibility rules, and disqualification reason codes in one public, linkable place.
 - **Q&A with candidates and organizers.** A per-election category gives candidates, election officers, and the independent auditor a place to answer questions in public.
 - **Open source end to end.** Discourse is self-hosted and free, in the same spirit as zk-voting: no vendor owns the conversation.
+
+## Polls and votes
+
+The person who creates a contest chooses the kind. Say which kind it is in the category title or the pinned post, and follow that kind when anyone talks about numbers.
+
+**Poll.** Use a poll when the group wants an open picture while people are still responding: a temperature check, a non-binding question, a club show of hands. Turnout is public hourly from the first ballot. Each hour publishes 30 minutes after it closes (`DISCLOSURE_DELAY_SECONDS`, default 1800): ballots from 08:00–08:59 appear at 09:30. An hour with fewer than 10 ballots (`DISCLOSURE_MIN_BLOCK_VOTES`) merges forward into a later block. When the scheduled end passes, no more ballots are accepted. The total freezes once the last hour clears the 30-minute delay. The published hourly blocks show the running turnout. A poll's per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end, whichever comes first (`RESULTS_MIN_VOTES`). After that gate, hourly choice sums publish 30 minutes after each hour. A published block stays as first published. Voters and admins see the same published sums. The tally posted at close is final. Where the election allows it, a voter can change their vote until the deadline, and only the last vote counts. At the deadline, one final batch goes to L1 for both polls and votes. Discuss published turnout once the hour is out, and per-choice counts only after they are posted. Never ask anyone when they voted or which block their ballot is in. Discussing it is designed not to link a forum account to a ballot.
+
+
+**Vote (an election).** Use a vote when the choices must stay hidden until the deadline: leadership, a binding decision, or any contest where an early count of choices could change who still turns out or how they vote. Turnout is visible during the election, published in the same hourly blocks as a poll. Before the deadline, nobody, including officials, can see choice counts or a partial tally. The chain, the API and relayer, and the pages people use all refuse those counts. There is no private preview of those counts to copy onto the forum. Do not post them in an announcement, a pinned topic, or a reply. A second ballot is rejected unless re-vote is enabled. When it is on, only the last ballot counts in the final tally. At the deadline, one final batch goes to L1 for both polls and votes. After the deadline, announcements may link to the published choices and the auditor report.
 
 ## How to run it
 
@@ -39,8 +49,9 @@ Discourse supports [DiscourseConnect](https://meta.discourse.org/t/setup-discour
 
 | Category | Use |
 | --- | --- |
-| **Announcements** | Read-only for organizers. New polls, opening and closing times, published results, and links to the public tally and auditor reports. |
-| **One category per election or poll** | For example `2027 Budget Poll`. Pin the ballot text, timeline, and eligibility rules. Use it for questions, arguments, and candidate Q&A. Close it (read-only) after results are certified. |
+| **Announcements** | Read-only for organizers. New polls and elections, and opening and closing times. Link turnout once the hourly snapshot is published, from the first ballot. For a poll, link a choice-sum block only after it is published. Those counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end. For a vote, link the choices and the auditor report only after the deadline. |
+
+| **One category per election or poll** | For example `2027 Budget Poll` or `2027 Board Election`. Name the kind in the title. Pin the ballot text, timeline, and eligibility rules. Use it for questions, arguments, and candidate Q&A. For a vote, do not pin or discuss choice counts before the deadline. Turnout may be discussed once it is published. Close the category (read-only) after the choices are published. |
 | **Feedback** | Bugs, accessibility problems, and ideas for the voting site itself. |
 | **Meta / How this forum works** | Rules, moderation policy, and who the moderators are. |
 
@@ -49,8 +60,10 @@ Discourse supports [DiscourseConnect](https://meta.discourse.org/t/setup-discour
 Post these rules in the forum and enforce them.
 
 - **Nobody has to say how they voted.** Sharing your own choice is allowed, but it is never required, never rewarded, and never asked for by organizers, employers, candidates, or moderators.
-- **The forum identity is separate from the ballot.** zk-voting keeps ballots anonymous with zero-knowledge proofs. A forum account must **never** be linked to a ballot, a nullifier, a receipt, or a voting credential, by the operator or by anyone else. Do not build plugins, exports, or analytics that join forum data with voting data. Do not ask people to post receipts or screenshots of their ballot.
-- **No vote buying and no coercion.** Remove offers to pay for votes, threats, and demands for proof of how someone voted. Ban repeat offenders and report crimes to the relevant authority.
+- **Do not leak a vote's sealed choices.** For a vote, choice counts stay sealed until the deadline. Do not post them, and do not ask for an early decryption. No single party, including the operator, can decrypt them early. Turnout may be discussed once the hourly snapshot is published, from the first ballot, on the same schedule for a poll and for a vote. A poll's per-choice counts wait until the gate opens once 100 voters have cast their first ballot, or until the scheduled end. After that gate, hourly choice sums publish with the same delay. A published block stays as first published. Those posted counts may be discussed once they are on the dashboard. They are not the final tally.
+- **The forum identity is separate from the ballot.** zk-voting is designed to keep ballots anonymous with zero-knowledge proofs. A forum account must **never** be linked to a ballot, a nullifier, a receipt, or a voting credential, by the operator or by anyone else. Do not build plugins, exports, or analytics that join forum data with voting data. Do not ask people to post receipts or screenshots of their ballot.
+
+- **No vote buying and no coercion.** Remove offers to pay for votes, threats, and demands for proof of how someone voted. Remove posts asking whether someone re-voted or changed their vote, since that is a coercion vector. Ban repeat offenders and report crimes to the relevant authority.
 - **Keep personal data out.** Do not post voter-roll entries, addresses, or identity documents. Disqualification appeals go through the app's due-process flow, not public threads.
 - **Moderators are not officers.** Forum moderation powers give no power in the voting system, and the reverse. Use different accounts for each role.
 - **Publish your moderation log policy.** Say what gets removed and why, so moderation itself is transparent.

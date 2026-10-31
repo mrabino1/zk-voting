@@ -13,7 +13,8 @@ import { corsOptionsDelegate } from './corsPolicy.mjs';
 import { installConsoleCapture, recordLog, setLogLevel, watchSecrets } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
 import { createChain } from './chain.mjs';
-import { getConfig } from './config.mjs';
+import { startVoteFlushTimer } from './electionState.mjs';
+import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from './config.mjs';
 import { announceGeneratedSetupToken } from './setupToken.mjs';
 import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
@@ -28,6 +29,7 @@ import { registerDemoPurgeSchedule } from './demoPurge.mjs';
 import { createPinService } from './pin.mjs';
 import { createTermsService } from './terms.mjs';
 import { Store } from './store.mjs';
+import { isVoteElection, voteResultsSealed } from './electionType.mjs';
 import { loadReceiptPdfSecret } from './receipts.mjs';
 import { createVotePassService } from './votePass.mjs';
 import { adminRouter } from './routes/admin.mjs';
@@ -198,8 +200,20 @@ function electionShortLinks(store) {
  * Server-render branding into a page: replace the %BRAND_*% placeholders and
  * add <meta name="brand-*"> tags so client scripts (i18n `{brand}`) agree.
  */
+const BRAND_ICON_LINKS = [
+  '<link rel="icon" href="/brand-mark.svg" type="image/svg+xml"/>',
+  '<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32"/>',
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180"/>',
+  '<link rel="manifest" href="/site.webmanifest"/>',
+].join('\n    ');
+
+function withBrandIcons(html) {
+  if (/rel="(?:icon|manifest|apple-touch-icon)"/.test(html)) return html;
+  return html.replace(/<head([^>]*)>/i, (match) => `${match}\n    ${BRAND_ICON_LINKS}`);
+}
+
 function brandHtml(html, branding) {
-  let out = renderBrandedHtml(html, branding);
+  let out = withBrandIcons(renderBrandedHtml(html, branding));
   if (!/<meta name="brand-name"/.test(out)) {
     const meta =
       `<meta name="brand-name" content="${escapeHtml(branding.name)}"/>\n` +
@@ -280,6 +294,7 @@ export async function createApp(overrides = {}) {
   if (typeof runtime.archiveEnabled === 'boolean') config.archiveEnabled = runtime.archiveEnabled;
   installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper, config.setupToken]);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
+  if (store.data.__passLinksDirty && store.writerActive !== false) await store.persist();
   applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   explorer.writerActive = writer.active;
@@ -289,15 +304,27 @@ export async function createApp(overrides = {}) {
     minVotes: config.resultsMinVotes,
     electionContext(id) {
       const election = store.getElection(id);
-      if (!election) return { submittedVotes: 0, endTime: null, tallied: false };
+      const now = config.nowFn();
+      if (!election) {
+        return { submittedVotes: 0, endTime: null, tallied: false, resultsSealed: false, known: false };
+      }
+      const sealed = voteResultsSealed(election, now);
       return {
         submittedVotes: store.visibleAcceptedBallots(election),
         endTime: election.cutoffTime,
-        tallied: Boolean(election.tally),
+        tallied: sealed ? false : Boolean(election.tally),
+        resultsSealed: sealed,
+        vote: isVoteElection(election),
+        known: true,
+        ...(isVoteElection(election) ? { minVotes: 0 } : {}),
       };
     },
   });
-  const chain = chainOverride || createChain(config);
+  const chain = chainOverride || createChain(config, { queueStore: store });
+  if (config.allowRevote === true && chain?.isConfigured?.()) {
+    // TODO(#113): remove the ALLOW_REVOTE chain refusal once the inbox contracts accept a replacement ballot.
+    throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
+  }
   const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
   const mailer = configOverrides.mailer || createMailer(config);
@@ -420,6 +447,28 @@ export async function createApp(overrides = {}) {
     res.status(404).json({ error: 'not found', nfp: true });
   });
 
+  app.get('/site.webmanifest', (_req, res) => {
+    const branding = getBranding();
+    res.set('Cache-Control', 'no-cache');
+    res.type('application/manifest+json');
+    res.json({
+      name: branding.name,
+      short_name: branding.shortName,
+      icons: [
+        { src: '/favicon-32.png', sizes: '32x32', type: 'image/png', purpose: 'any' },
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
+        { src: '/brand-mark.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      ],
+      theme_color: '#03173A',
+      // #0e0f11 is this app's canvas. The landing manifest uses #0d0d0f, which is that page's background.
+      background_color: '#0e0f11',
+      display: 'standalone',
+    });
+  });
   app.get('/plugins-assets/:name/*', plugins.assetHandler());
   app.use(siteAdminCsp());
   app.use(electionShortLinks(store));
@@ -456,6 +505,14 @@ export async function startServer(overrides = {}) {
     );
   }
   const demoPurge = registerDemoPurgeSchedule({ config, store: created.store });
+  let voteFlush = null;
+  const armVoteFlush = () => {
+    if (voteFlush) return;
+    if (created.store?.writerActive === false) return;
+    if (created.writer?.enabled && !created.writer.acceptingWrites()) return;
+    voteFlush = startVoteFlushTimer(created);
+  };
+  armVoteFlush();
   if (created.writer?.enabled && !created.writer.active) {
     const timer = setInterval(async () => {
       if (!created.writer.tryPromote()) return;
@@ -469,6 +526,8 @@ export async function startServer(overrides = {}) {
         created.store.writerActive = true;
         created.explorer.writerActive = true;
         created.config.writerActive = true;
+        if (typeof created.chain?.reloadVoteQueue === 'function') created.chain.reloadVoteQueue();
+        armVoteFlush();
         await created.store.adoptSuperAdminEmail(created.config);
         if (typeof created.plugins?.onPromoted === 'function') await created.plugins.onPromoted();
         console.log(`node writer active epoch=${created.writer.epoch()}`);
@@ -479,7 +538,16 @@ export async function startServer(overrides = {}) {
     if (typeof timer.unref === 'function') timer.unref();
   }
 
-  return { ...created, server, port, demoPurge };
+  return {
+    ...created,
+    server,
+    port,
+    demoPurge,
+    stopVoteFlush() {
+      voteFlush?.stop();
+      voteFlush = null;
+    },
+  };
 }
 
 const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
@@ -492,6 +560,7 @@ if (isMain) {
         stopping = true;
         console.log('node stopping');
         created.demoPurge?.stop?.();
+        created.stopVoteFlush?.();
         created.writer?.beginDrain();
         const force = setTimeout(() => process.exit(0), 20_000);
         if (typeof force.unref === 'function') force.unref();

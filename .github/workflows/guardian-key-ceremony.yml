@@ -1,0 +1,36 @@
+# Guardian key ceremony scripts. No repository secrets and no network calls.
+name: Guardian key ceremony
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - test/unstable
+      - master
+
+concurrency:
+  group: guardian-key-ceremony-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guardian-key-ceremony:
+    name: guardian key ceremony scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Shamir selftest
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ceremony/ssss.sh selftest
+
+      - name: Ceremony round trip
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ceremony/roundtrip.sh

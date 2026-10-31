@@ -8,16 +8,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, test } from 'node:test';
 
-import { encodeAbiParameters, encodeEventTopics, keccak256, stringToHex } from 'viem';
+import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, keccak256, stringToHex } from 'viem';
 
 import {
   chainElectionIdOf,
   createChain,
   decodeElectionCreated,
   electionFactoryAbi,
+  factoryElectionParams,
   resolveCreateElectionParams,
   toJurisdictionBytes32,
 } from '../src/chain.mjs';
+import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
 import { HttpError } from '../src/http.mjs';
 import { createApp } from '../src/server.mjs';
 import { isUuid } from '../src/electionIds.mjs';

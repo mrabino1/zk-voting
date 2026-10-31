@@ -392,7 +392,7 @@ export default {
     maxOptions: "Você pode escolher no máximo {count} opções.",
     receiptTitle: "Recibo da cédula",
     receiptHelp:
-      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você só pode votar uma vez; uma segunda cédula para o mesmo nullifier é rejeitada. Voto em dobro é impossível. As linhas públicas do explorador esperam a hora que continha esta cédula se encerrar.",
+      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Você pode votar apenas uma vez; uma segunda cédula sua é rejeitada. As linhas públicas do explorador esperam a hora que continha esta cédula se encerrar.",
     recorded: "Registrado",
     ballotHash: "Hash da cédula",
     nullifier: "Nullifier",
@@ -401,7 +401,13 @@ export default {
     envelopeHelp:
       "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode mudar de ideia neste formulário até enviar. Depois que o Node aceita uma cédula, esse nullifier é gasto — você não pode votar de novo. Voto em dobro é impossível. O recibo não pode provar como você votou.",
     envelopeHelpTally:
-      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública da apuração para o operador abrir as cédulas após o encerramento (chave de demo, NÃO PRODUÇÃO). Depois que o Node aceita uma cédula, esse nullifier é gasto — você não pode votar de novo. O recibo não pode provar como você votou.",
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abri-lo após o encerramento exige t descriptografias parciais verificadas (NÃO PRODUÇÃO). Depois que o Node aceita uma cédula, esse nullifier é gasto — você não pode votar de novo. O recibo não pode provar como você votou.",
+    receiptHelpRevote:
+      "Este recibo não pode provar como você votou. Ele lista só hashes. Não inclui as opções marcadas, a abertura do texto cifrado nem o trapdoor. Cada eleitor é contado uma vez e pode votar de novo até o prazo; o último voto é o que conta. As linhas públicas do explorador esperam a hora fechar e o atraso de divulgação passar.",
+    envelopeHelpRevote:
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração final. As duas não são contadas juntas. O recibo não pode provar como você votou.",
+    envelopeHelpTallyRevote:
+      "Marque cada pergunta. Um envelope cobre a cédula inteira. Suas seleções ficam neste formulário até você enviar. O envelope publicado é criptografado para a chave pública de apuração dos guardiões. Abrir o agregado após o encerramento exige t decifragens parciais verificadas (NÃO PRODUÇÃO). Você pode enviar uma cédula posterior até o prazo. Um bloco publicado conserva a primeira cédula. A substituição conta só na apuração final. O recibo não pode provar como você votou.",
     aspectsCount: "{count} perguntas nesta cédula",
     aspectsCount_one: "{count} pergunta nesta cédula",
     nonePublished: "Nenhuma publicada",
@@ -412,7 +418,7 @@ export default {
   results: {
     observers: "Observadores",
     title: "Resultados da eleição",
-    lede: "Totais de pluralidade certificados após uma apuração. Enquanto uma votação está aberta ou aguardando apuração, esta página não mostra contagens extraoficiais por escolha.",
+    lede: "Totais de pluralidade certificados após uma apuração. Uma consulta também pode mostrar somas por escolha, quase ao vivo e por hora, depois que o portão de resultados abre. Uma votação permanece selada até terminar.",
     sampleNote: "Exibindo a lista de exemplo integrada porque /api/elections não está disponível.",
     tie: "Empate",
     lexTie: "Empate em primeiro lugar desfeito pelo id de opção lexicográfico.",
@@ -431,6 +437,8 @@ export default {
     opens: "Abre",
     cutoff: "Encerra",
     publishedBallots: "Cédulas publicadas",
+    ballotsDisclosed: "Cédulas divulgadas",
+    choiceResults: "Resultados por opção",
     tallyPosted: "Apuração publicada",
     privacy:
       "Dados no nível da escolha nunca são mostrados aqui. Provas de voto do explorador esperam a hora que as continha se encerrar.",
@@ -464,6 +472,22 @@ export default {
     pluralitySeats: "Pluralidade, {count} assentos.",
     questionFallback: "Pergunta",
     declared: "{names} declarado(s).",
+    typePoll: "Consulta",
+    typeVote: "Votação",
+    sealedUntil: "Resultados selados até {end}",
+    sealedBody: "Contagens por opção e apurações parciais ficam seladas para todos, inclusive os responsáveis, até esta eleição terminar. O comparecimento é visível.",
+    sealedStatus: "Resultados selados",
+    almostLive: "Quase ao vivo",
+    almostLiveBody:
+      "Somas por escolha, por hora, desta consulta. O bloco das 08:00–08:59 pode ser publicado às 09:30, depois que o portão de resultados abre (quando 100 eleitores tiverem emitido a sua primeira cédula, ou no fim programado, o que ocorrer primeiro). Horas com menos de 10 cédulas se fundem para a frente. A série congela no encerramento. Um bloco publicado permanece como foi publicado pela primeira vez. Essas somas não são a apuração certificada.",
+    trailingHelp:
+      "Uma hora final com menos de 10 não é uma linha própria. No encerramento ela se dobra no bloco anterior. Se a consulta inteira ainda estiver abaixo de 10, um bloco de encerramento é o conjunto todo.",
+    blockBallots: "{count} cédulas",
+    blockBallots_one: "{count} cédula",
+    blockAwaiting: "As somas desta hora aguardam a decifração por limiar.",
+    blockUnavailable: "As somas desta hora não estão disponíveis.",
+    certifiedSeparate:
+      "A apuração certificada no encerramento é a final. Ela não precisa igualar estas somas horárias.",
   },
   info: {
     elections: "Eleições",
@@ -659,7 +683,7 @@ export default {
   office: {
     kicker: "Oficiais eleitorais",
     title: "Escritório interno",
-    lede: "Escrivães montam eleições. Registradores inserem identity commitments (nunca nomes). Oficiais de desqualificação aplicam o catálogo público de motivos. Operadores de apuração publicam contagens. O texto claro da escolha nunca aparece aqui. Participação e provas de voto em cada painel esperam a hora que continha a cédula se encerrar — uma pessoa que sai de um local de votação não pode ser associada a um aumento ao vivo.",
+    lede: "Escrivães montam eleições. Registradores inserem identity commitments (nunca nomes). Oficiais de desqualificação aplicam o catálogo público de motivos. Operadores de apuração publicam contagens. O texto claro da escolha nunca aparece aqui. Participação e provas de voto em cada painel são publicadas de hora em hora desde a primeira cédula, depois que a hora que continha a cédula se encerra — uma pessoa que sai de um local de votação não pode ser associada a um aumento ao vivo.",
     checkingSession: "Verificando a sessão…",
     sections: "Seções do escritório interno",
     navClerk: "Escrivão",
@@ -689,6 +713,12 @@ export default {
     rankedChoice: "ranked_choice — segundo turno instantâneo (IRV)",
     methodHint:
       "Padrão da eleição. YES_NO permanece pluralidade. Perguntas RANKED sempre usam IRV. Eleições criadas recebem um id público UUID e um link curto <code>/v/…</code>; o <code>uint256</code> da fábrica permanece <code>onChainElectionId</code>.",
+    electionType: "Tipo de eleição",
+    typePoll: "Consulta",
+    typePollHelp: "Depois que o portão de resultados abre (quando 100 eleitores tiverem emitido a sua primeira cédula, ou no fim programado, o que ocorrer primeiro), as somas por escolha são publicadas por hora, 30 minutos após cada hora. Horas com menos de 10 cédulas se fundem à seguinte. Um bloco publicado permanece como foi publicado pela primeira vez. A apuração final no encerramento conta a cédula mais recente. Uma votação não publica essas somas.",
+    typeVote: "Votação",
+    typeVoteHelp: "O resultado só aparece depois que a eleição termina. Antes do prazo, ninguém, inclusive os responsáveis, pode ver contagens por opção ou uma apuração parcial. O comparecimento é visível.",
+    typeLocked: "O tipo fica fixo na criação e não pode ser alterado.",
     loadExisting: "Carregar cédula existente",
     newElection: "Nova eleição…",
     loadHint: "Eleições criadas podem ser editadas até a lista ser congelada. Cédulas congeladas permanecem com o hash original.",
@@ -951,6 +981,9 @@ export default {
     head: "Cabeça #{head}",
     chain: "cadeia {id}",
     notTallied: "não apurado ({note})",
+    status: "Estado",
+    superseded: "substituído",
+    orderUnknown: "ordem desconhecida",
     irvShort: "IRV",
   },
   sample: {

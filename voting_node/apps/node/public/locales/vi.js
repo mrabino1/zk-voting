@@ -392,7 +392,7 @@ export default {
     maxOptions: "Bạn được chọn tối đa {count} lựa chọn.",
     receiptTitle: "Biên lai phiếu",
     receiptHelp:
-      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai cho cùng nullifier bị từ chối. Không thể bỏ phiếu kép. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Bạn chỉ được bỏ phiếu một lần; phiếu thứ hai của bạn bị từ chối. Hàng trình khám phá công khai chờ đến khi giờ chứa phiếu này đóng.",
     recorded: "Đã ghi",
     ballotHash: "Hash phiếu",
     nullifier: "Nullifier",
@@ -401,7 +401,13 @@ export default {
     envelopeHelp:
       "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể đổi ý trên biểu mẫu này cho đến khi gửi. Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Không thể bỏ phiếu kép. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     envelopeHelpTally:
-      "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu để người vận hành mở phiếu sau hết hạn (khóa demo, KHÔNG PHẢI SẢN XUẤT). Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của các giám hộ. Mở nó sau hết hạn cần t giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Sau khi Node chấp nhận phiếu, nullifier đó đã dùng hết — bạn không thể bỏ phiếu lại. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+    receiptHelpRevote:
+      "Biên lai này không thể chứng minh bạn đã bỏ phiếu thế nào. Nó chỉ liệt kê hash. Không gồm lựa chọn đã đánh, mở ciphertext, hay trapdoor. Mỗi cử tri được tính một lần và có thể bỏ phiếu lại cho đến hạn chót; phiếu cuối cùng được tính. Hàng trình khám phá công khai chờ đến khi giờ đóng và độ trễ công bố trôi qua.",
+    envelopeHelpRevote:
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Không tính cả hai. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
+    envelopeHelpTallyRevote:
+      "Đánh mọi câu. Một phong bì bao cả phiếu. Lựa chọn ở lại biểu mẫu này cho đến khi bạn gửi. Phong bì đã đăng được mã hóa tới khóa công khai kiểm phiếu của người giám hộ. Mở tổng sau hết hạn cần t phần giải mã từng phần đã xác minh (KHÔNG PHẢI SẢN XUẤT). Bạn có thể nộp phiếu sau cho đến hạn chót. Khối đã công bố giữ phiếu đầu. Phiếu thay chỉ được tính trong kiểm phiếu cuối. Biên lai không thể chứng minh bạn đã bỏ phiếu thế nào.",
     aspectsCount: "{count} câu trên phiếu này",
     aspectsCount_one: "{count} câu trên phiếu này",
     nonePublished: "Chưa công bố",
@@ -412,7 +418,7 @@ export default {
   results: {
     observers: "Người quan sát",
     title: "Kết quả bầu cử",
-    lede: "Tổng số đa số tương đối đã chứng nhận sau kiểm phiếu. Khi cuộc bỏ phiếu đang mở hoặc chờ kiểm phiếu, trang này không hiện số lựa chọn không chính thức.",
+    lede: "Tổng số đa số tương đối đã chứng nhận sau kiểm phiếu. Một thăm dò cũng có thể hiện tổng lựa chọn gần như trực tiếp theo giờ sau khi cổng kết quả mở. Một cuộc bỏ phiếu vẫn được niêm phong cho đến khi kết thúc.",
     sampleNote: "Đang hiện danh sách mẫu có sẵn vì /api/elections không khả dụng.",
     tie: "Hòa",
     lexTie: "Hòa hạng nhất được phá theo id lựa chọn theo thứ tự từ điển.",
@@ -431,6 +437,8 @@ export default {
     opens: "Mở",
     cutoff: "Hết hạn",
     publishedBallots: "Phiếu đã công bố",
+    ballotsDisclosed: "Phiếu đã tiết lộ",
+    choiceResults: "Kết quả theo lựa chọn",
     tallyPosted: "Đã đăng kiểm phiếu",
     privacy:
       "Dữ liệu cấp lựa chọn không bao giờ hiện ở đây. Bằng chứng phiếu trên trình khám phá chờ đến khi giờ chứa chúng đóng.",
@@ -464,6 +472,22 @@ export default {
     pluralitySeats: "Đa số tương đối, {count} ghế.",
     questionFallback: "Câu hỏi",
     declared: "Công bố {names}.",
+    typePoll: "Thăm dò",
+    typeVote: "Bỏ phiếu",
+    sealedUntil: "Kết quả được niêm phong đến {end}",
+    sealedBody: "Số phiếu theo lựa chọn và kết quả tạm được niêm phong với mọi người, kể cả cán bộ, cho đến khi cuộc bầu cử này kết thúc. Tỷ lệ đi bỏ phiếu theo giờ là công khai.",
+    sealedStatus: "Kết quả được niêm phong",
+    almostLive: "Gần như trực tiếp",
+    almostLiveBody:
+      "Tổng lựa chọn theo giờ của thăm dò này. Khối 08:00–08:59 có thể được công bố lúc 09:30, sau khi cổng kết quả mở (khi 100 cử tri đã bỏ lá phiếu đầu tiên của mình, hoặc vào thời điểm kết thúc đã định, cái nào đến trước). Giờ dưới 10 phiếu được gộp về phía trước. Chuỗi đóng băng lúc kết thúc. Khối đã công bố giữ nguyên như lần công bố đầu. Các tổng này không phải kiểm phiếu chứng nhận.",
+    trailingHelp:
+      "Giờ cuối dưới 10 không phải một hàng riêng. Lúc đóng nó được gập vào khối trước. Nếu cả thăm dò vẫn dưới 10, một khối đóng là toàn bộ tập.",
+    blockBallots: "{count} phiếu",
+    blockBallots_one: "{count} phiếu",
+    blockAwaiting: "Tổng lựa chọn của giờ này đang chờ giải mã ngưỡng.",
+    blockUnavailable: "Tổng lựa chọn của giờ này không có sẵn.",
+    certifiedSeparate:
+      "Kiểm phiếu chứng nhận lúc đóng là kết quả cuối. Nó không bắt buộc bằng các tổng theo giờ.",
   },
   info: {
     elections: "Bầu cử",
@@ -659,7 +683,7 @@ export default {
   office: {
     kicker: "Cán bộ bầu cử",
     title: "Văn phòng nội bộ",
-    lede: "Thư ký lập cuộc bầu cử. Đăng ký viên chèn cam kết danh tính (không bao giờ tên). Cán bộ tước tư cách áp dụng danh mục lý do công khai. Người vận hành kiểm phiếu đăng số phiếu. Văn bản rõ của lựa chọn không bao giờ xuất hiện ở đây. Tỷ lệ tham gia và bằng chứng phiếu trên mọi bảng điều khiển chờ đến khi giờ chứa phiếu đóng — người rời phòng bỏ phiếu không thể bị khớp với mức tăng trực tiếp.",
+    lede: "Thư ký lập cuộc bầu cử. Đăng ký viên chèn cam kết danh tính (không bao giờ tên). Cán bộ tước tư cách áp dụng danh mục lý do công khai. Người vận hành kiểm phiếu đăng số phiếu. Văn bản rõ của lựa chọn không bao giờ xuất hiện ở đây. Tỷ lệ tham gia và bằng chứng phiếu trên mọi bảng điều khiển được công bố mỗi giờ từ phiếu đầu tiên, sau khi giờ chứa phiếu đóng — người rời phòng bỏ phiếu không thể bị khớp với mức tăng trực tiếp.",
     checkingSession: "Đang kiểm tra phiên…",
     sections: "Các phần văn phòng nội bộ",
     navClerk: "Thư ký",
@@ -689,6 +713,12 @@ export default {
     rankedChoice: "ranked_choice — instant-runoff (IRV)",
     methodHint:
       "Mặc định cuộc bầu cử. YES_NO giữ đa số tương đối. Câu RANKED luôn dùng IRV. Cuộc bầu cử đã tạo nhận id công khai UUID và liên kết ngắn <code>/v/…</code>; <code>uint256</code> nhà máy vẫn là <code>onChainElectionId</code>.",
+    electionType: "Loại bầu cử",
+    typePoll: "Thăm dò",
+    typePollHelp: "Sau khi cổng kết quả mở (khi 100 cử tri đã bỏ lá phiếu đầu tiên của mình, hoặc vào thời điểm kết thúc đã định, cái nào đến trước), tổng lựa chọn theo giờ được công bố 30 phút sau mỗi giờ. Giờ có ít hơn 10 phiếu được gộp vào giờ sau. Khối đã công bố giữ nguyên như lần công bố đầu. Kiểm phiếu cuối lúc đóng tính lá phiếu mới nhất. Một cuộc bỏ phiếu không công bố các tổng này.",
+    typeVote: "Bỏ phiếu",
+    typeVoteHelp: "Kết quả chỉ được hiển thị sau khi cuộc bầu cử kết thúc. Trước hạn chót, không ai, kể cả cán bộ, có thể thấy số phiếu theo lựa chọn hoặc kết quả tạm. Tỷ lệ đi bỏ phiếu thì thấy được.",
+    typeLocked: "Loại được chốt khi tạo và không thể đổi.",
     loadExisting: "Tải phiếu hiện có",
     newElection: "Cuộc bầu cử mới…",
     loadHint: "Cuộc bầu cử đã tạo có thể sửa đến khi danh sách đóng băng. Phiếu đã đóng băng giữ hash như cũ.",
@@ -951,6 +981,9 @@ export default {
     head: "Đầu #{head}",
     chain: "chuỗi {id}",
     notTallied: "chưa kiểm phiếu ({note})",
+    status: "Trạng thái",
+    superseded: "đã bị thay thế",
+    orderUnknown: "không rõ thứ tự",
     irvShort: "IRV",
   },
   sample: {

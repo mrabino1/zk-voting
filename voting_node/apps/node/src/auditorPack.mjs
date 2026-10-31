@@ -4,6 +4,7 @@
 
 import { brandName } from './branding.mjs';
 import { electionState, presentElection } from './electionState.mjs';
+import { sealedResultsBody } from './electionType.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from './store.mjs';
 
 export const AUDITOR_SCHEMA = 'zk-voting.auditor.v1';
@@ -16,11 +17,14 @@ export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 export function buildAuditorPack(election, deps) {
   const dto = presentElection(election, deps);
   const now = deps.config.nowFn();
-  const tallied = electionState(election, now) >= 4;
   const policy = electionDisclosurePolicy(election, deps.config, now);
+  const sealed = Boolean(policy.resultsSealed || dto?.resultsSealed);
+  const seal = sealed ? sealedResultsBody(election, now) : null;
+  const tallied = !sealed && electionState(election, now) >= 4;
   const disclosed = deps.store
     .listPublishedVotes(election.id, now, policy.intervalSeconds, policy)
     .map((vote) => publicVoteRecord(vote));
+  const disclosedCount = typeof dto.acceptedBallots === 'number' ? dto.acceptedBallots : disclosed.length;
   return {
     schema: AUDITOR_SCHEMA,
     nfp: true,
@@ -28,6 +32,10 @@ export function buildAuditorPack(election, deps) {
     chainId: deps.config.chainId,
     electionId: String(election.id),
     title: election.title,
+    electionType: dto.electionType,
+    electionTypeName: dto.electionTypeName,
+    resultsSealed: sealed,
+    ...(seal || {}),
     contracts: {
       factory: deps.config.electionFactoryAddress || null,
       ballotInbox: deps.config.ballotInboxAddress || election.inbox || null,
@@ -48,16 +56,17 @@ export function buildAuditorPack(election, deps) {
     },
     rollFrozen: Boolean(election.rollFrozen),
     participantCount: election.participantCount,
-    publicAcceptedBallots: dto.acceptedBallots,
-    acceptedBallots: tallied ? election.acceptedBallots : dto.acceptedBallots,
+    publicAcceptedBallots: disclosedCount,
+    acceptedBallots: sealed ? disclosedCount : tallied ? election.acceptedBallots : dto.acceptedBallots,
     disclosedBallots: disclosed,
-    tally: dto.tally,
+    tally: sealed ? null : dto.tally,
     disclosure: dto.disclosure,
     coercion: {
       policy: 'one-ballot-per-nullifier',
       receiptsProveChoice: false,
-      note:
-        'Each nullifier is accepted once. A second ballot, including a new ciphertext, is rejected. Double voting is impossible. A receipt lists hashes only; it cannot prove which option was marked. Voters may change their mind on the ballot form before submit. This is not MACI.',
+      note: deps.config?.allowRevote
+        ? 'One ballot per nullifier. A later ballot before the deadline updates the final tally only. Published blocks keep the original ballot. acceptedBallots does not increase. A receipt lists hashes only and cannot prove which option was marked. The inbox still accepts a nullifier once, so the node does not submit the replacement again. This is not MACI.'
+        : 'One ballot per nullifier. A second ballot is rejected until the inbox can store the latest ballot. A receipt lists hashes only and cannot prove which option was marked. This is not MACI.',
     },
   };
 }

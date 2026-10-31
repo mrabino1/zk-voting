@@ -392,7 +392,7 @@ export default {
     maxOptions: "您最多可选择 {count} 项。",
     receiptTitle: "选票收据",
     receiptHelp:
-      "此收据无法证明您如何投票。它只列出哈希。不含您勾选的选项、密文开口或 trapdoor。您只能投票一次；同一 nullifier 的第二张选票会被拒绝。重复投票不可能。公开浏览器行要等到包含此选票的小时结束。",
+      "此收据无法证明您如何投票。它只列出哈希。不含您勾选的选项、密文开口或 trapdoor。您只能投票一次；您的第二张选票会被拒绝。公开浏览器行要等到包含此选票的小时结束。",
     recorded: "已记录",
     ballotHash: "选票哈希",
     nullifier: "Nullifier",
@@ -401,7 +401,13 @@ export default {
     envelopeHelp:
       "请填写每一题。一张信封覆盖整张选票。提交前您可以在此表上改主意。Node 接受选票后，该 nullifier 即已用尽 — 您不能再投。重复投票不可能。收据无法证明您如何投票。",
     envelopeHelpTally:
-      "请填写每一题。一张信封覆盖整张选票。提交前您的选择留在此表上。提交的信封加密到计票公钥，以便操作员在截止后打开选票（演示密钥，非生产环境）。Node 接受选票后，该 nullifier 即已用尽 — 您不能再投。收据无法证明您如何投票。",
+      "请填写每一题。一张信封覆盖整张选票。提交前您的选择留在此表上。提交的信封加密到监护人计票公钥。截止后打开需要 t 份经核验的部分解密（非生产环境）。Node 接受选票后，该 nullifier 即已用尽 — 您不能再投。收据无法证明您如何投票。",
+    receiptHelpRevote:
+      "此收据无法证明您如何投票。它只列出哈希。不含您勾选的选项、密文开口或 trapdoor。每位选民只计一次，截止前可以重新投票，最后一次投票计入。公开浏览器行要等到该小时结束并且披露延迟过去。",
+    envelopeHelpRevote:
+      "请填写每一题。一张信封覆盖整张选票。截止前您可以提交后来的选票。已发布的区块保留第一张选票。替换只计入最终计票。两张不会同时计入。收据无法证明您如何投票。",
+    envelopeHelpTallyRevote:
+      "请填写每一题。一张信封覆盖整张选票。提交前您的选择留在此表上。提交的信封加密到监护人计票公钥。截止后打开合计需要 t 份已验证的部分解密（非生产环境）。截止前您可以提交后来的选票。已发布的区块保留第一张选票。替换只计入最终计票。收据无法证明您如何投票。",
     aspectsCount: "此选票有 {count} 题",
     aspectsCount_one: "此选票有 {count} 题",
     nonePublished: "尚未公布",
@@ -412,7 +418,7 @@ export default {
   results: {
     observers: "观察员",
     title: "选举结果",
-    lede: "计票后的核证相对多数合计。投票进行中或等待计票时，本页不显示非正式选项计数。",
+    lede: "计票后的核证相对多数合计。民意调查在结果门槛打开后也可以显示近实时的每小时选项合计。表决在结束前保持密封。",
     sampleNote: "因 /api/elections 不可用，正在显示内置示例名册。",
     tie: "平票",
     lexTie: "第一名平票按选项 id 的字典序打破。",
@@ -431,6 +437,8 @@ export default {
     opens: "开始",
     cutoff: "截止",
     publishedBallots: "已公布选票",
+    ballotsDisclosed: "已披露选票",
+    choiceResults: "选项结果",
     tallyPosted: "计票已公布",
     privacy:
       "此处从不显示选择级数据。浏览器投票证明等到包含它们的小时结束后才出现。",
@@ -464,6 +472,22 @@ export default {
     pluralitySeats: "相对多数，{count} 个席位。",
     questionFallback: "问题",
     declared: "宣布 {names}。",
+    typePoll: "民意调查",
+    typeVote: "表决",
+    sealedUntil: "结果密封至 {end}",
+    sealedBody: "在本次选举结束之前，各选项票数和部分计票对所有人密封，包括管理人员。每小时投票率是公开的。",
+    sealedStatus: "结果已密封",
+    almostLive: "近实时",
+    almostLiveBody:
+      "本民意调查的每小时选项合计。08:00–08:59 的区块可在 09:30 发布，且须在结果门槛打开之后（一旦有 100 位投票人投出第一张选票，或到达预定结束时间，以先到者为准）。不足 10 张的小时向前合并。结束时序列冻结。已发布的区块保持首次发布时的样子。这些合计不是核证计票。",
+    trailingHelp:
+      "不足 10 张的收尾小时不单独成行。结束时并入前一个区块。若整场调查仍不足 10 张，一个收尾区块就是全部。",
+    blockBallots: "{count} 张选票",
+    blockBallots_one: "{count} 张选票",
+    blockAwaiting: "这一小时的选项合计正在等待门限解密。",
+    blockUnavailable: "这一小时的选项合计不可用。",
+    certifiedSeparate:
+      "结束时的核证计票是最终结果。它不必等于这些每小时合计。",
   },
   info: {
     elections: "选举",
@@ -660,7 +684,7 @@ export default {
   office: {
     kicker: "选举官员",
     title: "内部办公室",
-    lede: "事务官设立选举。登记官插入身份承诺（绝不是姓名）。取消资格官员应用公开原因目录。计票操作员公布计数。选择明文从不出现在此。每个仪表盘上的投票率和投票证明等到包含该选票的小时结束后 — 离开投票点的人无法与实时增加对应。",
+    lede: "事务官设立选举。登记官插入身份承诺（绝不是姓名）。取消资格官员应用公开原因目录。计票操作员公布计数。选择明文从不出现在此。每个仪表盘上的投票率和投票证明从第一张选票起按小时公布，在包含该选票的小时结束后 — 离开投票点的人无法与实时增加对应。",
     checkingSession: "正在检查会话…",
     sections: "内部办公室分区",
     navClerk: "事务官",
@@ -690,6 +714,12 @@ export default {
     rankedChoice: "ranked_choice — 即时决选（IRV）",
     methodHint:
       "选举默认。YES_NO 保持相对多数。RANKED 问题始终使用 IRV。已创建的选举获得 UUID 公开 id 和短 <code>/v/…</code> 链接；工厂 <code>uint256</code> 仍为 <code>onChainElectionId</code>。",
+    electionType: "选举类型",
+    typePoll: "民意调查",
+    typePollHelp: "结果门槛打开之后（一旦有 100 位投票人投出第一张选票，或到达预定结束时间，以先到者为准），每小时选项合计在该小时结束后 30 分钟发布。不足 10 张的小时并入下一小时。已发布的区块保持首次发布时的样子。结束时的最终计票计入最新的一张选票。表决不发布这些合计。",
+    typeVote: "表决",
+    typeVoteHelp: "结果只在选举结束后公布。截止之前，任何人都不能看到选项票数或部分计票，管理人员也不例外。投票率是可见的。",
+    typeLocked: "类型在创建时确定，之后不能更改。",
     loadExisting: "加载现有选票",
     newElection: "新选举…",
     loadHint: "已创建的选举在名册冻结前可编辑。已冻结的选票保持原哈希。",
@@ -952,6 +982,9 @@ export default {
     head: "头部 #{head}",
     chain: "链 {id}",
     notTallied: "未计票（{note}）",
+    status: "状态",
+    superseded: "已取代",
+    orderUnknown: "顺序未知",
     irvShort: "IRV",
   },
   sample: {

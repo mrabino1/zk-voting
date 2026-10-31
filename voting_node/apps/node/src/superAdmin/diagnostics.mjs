@@ -7,6 +7,8 @@ import { createRequire } from 'node:module';
 
 import { brandName } from '../branding.mjs';
 import { electionState, STATE_NAMES } from '../electionState.mjs';
+import { electionTypeName, electionTypeOf, voteResultsSealed } from '../electionType.mjs';
+import { publicExclusion } from '../store.mjs';
 import { countPasskeys, emailHint } from '../identity.mjs';
 import { readArchiveIndex } from '../../../../l2/archive/job.mjs';
 
@@ -135,6 +137,7 @@ export function storeDiag(store) {
 
 function electionMeta(election, now, store) {
   const state = electionState(election, now);
+  const sealed = voteResultsSealed(election, now);
   const rawCast = Number(election.acceptedBallots || 0);
   const hidden = typeof store?.hiddenVoteCount === 'function' ? store.hiddenVoteCount(election.id) : 0;
   return {
@@ -142,6 +145,9 @@ function electionMeta(election, now, store) {
     title: election.title || '',
     status: STATE_NAMES[state] || 'Created',
     state,
+    electionType: electionTypeOf(election),
+    electionTypeName: electionTypeName(election),
+    resultsSealed: sealed,
     createdAt: election.createdAt || null,
     startTime: election.startTime ?? null,
     cutoffTime: election.cutoffTime ?? null,
@@ -154,7 +160,10 @@ function electionMeta(election, now, store) {
     lateUpdateAllowed: Boolean(election.lateUpdateAllowed),
     jurisdictionId: election.jurisdictionId || null,
     chainMode: election.createTxHash || election.onChainElectionAddress ? 'onchain' : 'demo',
-    tallied: Boolean(election.tally),
+    tallied: sealed ? false : Boolean(election.tally),
+    excludedCount: publicExclusion(election).count,
+    excludedReasons: publicExclusion(election).reasons,
+    pendingReleases: (election.excludedBallots || []).filter((row) => row && row.releasePending === true).length,
   };
 }
 
@@ -220,10 +229,10 @@ export function userDiag(store, handle) {
 
 export function l2Diag(deps) {
   const chain = deps.explorer?.chain || {};
+  const now = Number(deps.config?.nowFn?.() || Math.floor(Date.now() / 1000));
   const blocks = Array.isArray(chain.blocks) ? chain.blocks : [];
   const head = blocks.length ? blocks[blocks.length - 1] : null;
   const headTs = Number(head?.timestamp || 0);
-  const now = Number(deps.config?.nowFn?.() || Math.floor(Date.now() / 1000));
   let archive = { present: false, hours: 0, archivedThrough: null };
   try {
     const index = readArchiveIndex(deps.config.dataDir);
@@ -269,8 +278,12 @@ export function l2Diag(deps) {
       height: blocks.length,
       headTimestamp: headTs || null,
       lagSeconds: headTs ? Math.max(0, now - headTs) : null,
-      sealedCount: Array.isArray(chain.sealed) ? chain.sealed.length : 0,
+      sealedCount: count(chain.sealed),
+      alerts: Array.isArray(chain.alerts) ? chain.alerts.slice(-20) : [],
     },
+    inbox: typeof deps.chain?.diagnostics === 'function'
+      ? deps.chain.diagnostics()
+      : { deadLetter: [], alerts: [] },
   };
 }
 

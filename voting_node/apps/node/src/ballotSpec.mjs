@@ -7,6 +7,12 @@
 import { keccak256, stringToHex } from 'viem';
 
 import { electionState, STATE_NAMES } from './electionState.mjs';
+import {
+  electionTypeName,
+  electionTypeOf,
+  sealedResultsMessage,
+  voteResultsSealed,
+} from './electionType.mjs';
 import { HttpError } from './http.mjs';
 
 export const MAX_OPTION_LINKS = 8;
@@ -355,6 +361,11 @@ export function presentPublicBallotInfo(election, now = Math.floor(Date.now() / 
     cutoffTime: election.cutoffTime,
     ballotSpecHash: election.ballotSpecHash,
     ballotMethod: election.ballotMethod || 'plurality',
+    electionType: electionTypeOf(election),
+    electionTypeName: electionTypeName(election),
+    resultsSealed: voteResultsSealed(election, now),
+    sealedUntil: voteResultsSealed(election, now) ? election.cutoffTime : null,
+    resultsMessage: voteResultsSealed(election, now) ? sealedResultsMessage(election) : null,
     questionCount: election.questionCount ?? (election.questions ? election.questions.length : 0),
     questions: publicQuestions(election.questions),
     state,
