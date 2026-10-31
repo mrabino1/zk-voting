@@ -178,7 +178,7 @@ export default {
     poll: {
       name: "Sondage",
       summary: "Totaux horaires par choix, différés de 30 minutes, après le seuil.",
-      gate: "Les décomptes restent masqués jusqu'à ce que 100 votants aient déposé leur premier bulletin, ou à l'arrivée de la fin prévue, selon ce qui arrive en premier.",
+      gate: "Les décomptes restent masqués jusqu'à ce que 100 votants aient déposé leur premier bulletin ou que la fin prévue arrive, selon ce qui arrive en premier.",
       hourly: "Après ce seuil, les totaux par choix sont publiés pour chaque bloc horaire, 30 minutes après la fin de l'heure.",
       merge: "Une heure de moins de 10 bulletins fusionne vers l'avant jusqu'à ce qu'un bloc en ait au moins 10.",
       freeze: "Les blocs horaires publiés ne changent jamais : chaque bloc est conçu pour rester tel qu'il a été publié. Les bulletins de remplacement, si le revote est autorisé, n'apparaissent que dans le décompte final.",

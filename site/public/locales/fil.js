@@ -176,7 +176,7 @@ export default {
     poll: {
       name: "Palatanungan",
       summary: "Bilang ng bawat pagpipilian kada oras, 30 minutong antala, pagkatapos ng tarangkahan.",
-      gate: "Nakatago ang mga bilang hanggang makaboto ang 100 botante ng kanilang unang balota, o hanggang sa pagdating ng nakatakdang pagtatapos, alinman ang mauna.",
+      gate: "Nakatago ang mga bilang hanggang makaboto ang 100 botante ng kanilang unang balota o dumating ang nakatakdang pagtatapos, alinman ang mauna.",
       hourly: "Pagkatapos ng tarangkahang iyon, inilalathala ang bilang ng bawat pagpipilian sa bawat oras-oras na bloke, 30 minuto pagkatapos magsara ang oras.",
       merge: "Ang oras na wala pang 10 balota ay sumasama pasulong hanggang magkaroon ng hindi bababa sa 10 ang isang bloke.",
       freeze: "Hindi nagbabago ang mga nailathalang oras-oras na block: dinisenyo ang bawat block para manatili gaya noong unang nailathala. Ang mga kapalit na balota, kung pinapayagan ang muling pagboto, ay sa huling bilang lang lalabas.",

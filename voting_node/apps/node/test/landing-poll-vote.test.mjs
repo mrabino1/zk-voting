@@ -88,6 +88,14 @@ test('renders the poll vs vote section, both columns, and the named flow graphic
   assert.match(region, /data-i18n="pollVote\.both\.turnout"/);
 });
 
+test('Spanish coercion card places the poll sentence right after turnout', () => {
+  const dicts = catalogs();
+  assert.match(
+    lookup(dicts.es, 'why.coerceBody'),
+    /como en una encuesta\. Una encuesta también publica los recuentos por opción con ese calendario cuando 100 votantes hayan emitido su primera boleta, o al llegar el fin programado, lo que ocurra primero\./,
+  );
+});
+
 test('Spanish render keeps both columns and translates the accessible name', () => {
   const html = translateMarkup(pageHtml(), 'es');
   const region = regionOf(html);
@@ -154,7 +162,7 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.match(lookup(dicts.en, 'how.s5body'), /Anyone can check that the published totals match the accepted ballots/);
   assert.match(html, /once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first/);
   assert.match(html, /once 100 voters have cast their first ballot, or the scheduled end arrives, whichever comes first/);
-  assert.match(html, /Counts stay hidden until 100 voters have cast their first ballot, or at the scheduled end, whichever comes first/);
+  assert.match(html, /Counts stay hidden until 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first/);
   assert.doesNotMatch(html, /or the poll ends/);
   assert.doesNotMatch(html, /100 first ballots/);
   assert.doesNotMatch(lookup(dicts.en, 'hero.lead'), /100 first ballots/);
@@ -203,9 +211,9 @@ const TURNOUT_GATE = {
   es: { turnout: /participaci[oó]n/i, gate: /primeras 100 boletas/i, tied: /primera boleta/i },
   fr: { turnout: /participation/i, gate: /100 premiers bulletins/i, tied: /leur premier bulletin/i },
   pt: { turnout: /comparecimento/i, gate: /primeiras 100 c[eé]dulas/i, tied: /primeira cédula/i },
-  zh: { turnout: /投票率/, gate: /最先的 100/, tied: /100 位不同的投票人/ },
+  zh: { turnout: /投票率/, gate: /最先的 100/, tied: /100 位投票人投出第一张选票/ },
   ar: { turnout: /نسبة المشاركة/, gate: /أول 100/, tied: /بأوراقهم الأولى/ },
-  ko: { turnout: /투표율/, gate: /처음 100장/, tied: /서로 다른 투표자 100명/ },
+  ko: { turnout: /투표율/, gate: /처음 100장/, tied: /첫 투표용지/ },
   hi: { turnout: /मतदान प्रतिशत/, gate: /पहले 100 मत/, tied: /पहला मतपत्र/ },
   vi: { turnout: /Tỷ lệ tham gia/, gate: /100 phiếu đầu/i, tied: /lá phiếu đầu tiên/ },
   fil: { turnout: /\bturnout\b/i, gate: /unang 100 balota/i, tied: /unang balota/i },
@@ -224,7 +232,7 @@ test('turnout, re-voting and privacy copy match the agreed wording', () => {
     assert.match(lookup(dicts.en, key), /once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first/);
   }
   assert.match(lookup(dicts.en, 'how.s4body'), /once 100 voters have cast their first ballot, or the scheduled end arrives, whichever comes first/);
-  assert.match(lookup(dicts.en, 'pollVote.poll.gate'), /until 100 voters have cast their first ballot, or at the scheduled end, whichever comes first/);
+  assert.match(lookup(dicts.en, 'pollVote.poll.gate'), /until 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first/);
   assert.match(
     lookup(dicts.en, 'why.coerceBody'),
     /as in a poll\. A poll also publishes per-choice counts on that schedule once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first\./,
@@ -255,15 +263,15 @@ test('turnout, re-voting and privacy copy match the agreed wording', () => {
   }
   const marks = {
     en: { voters: /100 voters have cast their first ballot/, end: /or (?:at the scheduled end|the scheduled end arrives), whichever comes first/, locked: /that setting can't be changed afterward/i, l2p2: /mock verifier in tests/, privateBody: /designed so they don't show how you voted/ },
-    es: { voters: /100 votantes hayan emitido su primera boleta/, end: /o al llegar el fin programado, lo que ocurra primero/, locked: /no se puede cambiar después/, l2p2: /verificador simulado/, privateBody: /no mostrar cómo votaste/ },
-    fr: { voters: /100 votants (?:ont|aient) déposé leur premier bulletin/, end: /ou à l'arrivée de la fin prévue, selon ce qui arrive en premier/, locked: /ne peut plus être modifié par la suite/, l2p2: /vérificateur fictif/, privateBody: /ne pas révéler votre vote/ },
-    pt: { voters: /100 eleitores (?:tiverem|tenham) enviado sua primeira cédula/, end: /ou ao chegar o fim previsto, o que vier primeiro/, locked: /não pode ser alterada depois/, l2p2: /verificador simulado/, privateBody: /não mostrar como você votou/ },
-    zh: { voters: /100 位不同的投票人/, end: /预定结束(?:时|之前)（以先到者为准）/, locked: /该设置之后不能更改/, l2p2: /模拟验证器/, privateBody: /不显示你如何投票/ },
-    ar: { voters: /100 ناخب بأوراقهم الأولى/, end: /أو عند حلول النهاية المقررة، أيهما أسبق/, locked: /لا يمكن تغيير هذا الإعداد بعد ذلك/, l2p2: /المُحقق الوهمي/, privateBody: /لا تُظهر كيف صوّتّ/ },
-    ko: { voters: /서로 다른 투표자 100명/, end: /예정된 종료\(먼저 오는 쪽\)/, locked: /이후에는 바꿀 수 없습니다/, l2p2: /모의 검증기/, privateBody: /어떻게 투표했는지/ },
+    es: { voters: /100 votantes hayan emitido su primera boleta/, end: /o (?:al llegar|llegue) el fin programado, lo que ocurra primero/, locked: /no se puede cambiar después/, l2p2: /verificador simulado/, privateBody: /no mostrar cómo votaste/ },
+    fr: { voters: /100 votants (?:ont|aient) déposé leur premier bulletin/, end: /ou (?:à l'arrivée de la fin prévue|que la fin prévue arrive), selon ce qui arrive en premier/, locked: /ne peut plus être modifié par la suite/, l2p2: /vérificateur fictif/, privateBody: /ne pas révéler votre vote/ },
+    pt: { voters: /100 eleitores (?:tiverem|tenham) enviado sua primeira cédula/, end: /ou (?:ao chegar|chegue) o fim previsto, o que vier primeiro/, locked: /não pode ser alterada depois/, l2p2: /verificador simulado/, privateBody: /não mostrar como você votou/ },
+    zh: { voters: /100 位投票人投出第一张选票/, end: /预定结束(?:时|之前)（以先到者为准）/, locked: /该设置之后不能更改/, l2p2: /模拟验证器/, privateBody: /不显示你如何投票/ },
+    ar: { voters: /100 ناخب بأوراقهم الأولى/, end: /أو (?:عند حلول|تحل) النهاية المقررة، أيهما أسبق/, locked: /لا يمكن تغيير هذا الإعداد بعد ذلك/, l2p2: /المُحقق الوهمي/, privateBody: /لا تُظهر كيف صوّتّ/ },
+    ko: { voters: /100명의 투표자가 자신의 첫 투표용지/, end: /예정된 종료(?: 시점에, 먼저 오는 쪽|가 올 때까지\(먼저 오는 쪽\))/, locked: /이후에는 바꿀 수 없습니다/, l2p2: /모의 검증기/, privateBody: /어떻게 투표했는지/ },
     hi: { voters: /100 मतदाता अपना पहला मतपत्र/, end: /या तय समाप्ति आ जाए, जो पहले हो/, locked: /बाद में नहीं बदली जा सकती/, l2p2: /नकली सत्यापक/, privateBody: /आपने कैसे वोट किया/ },
-    vi: { voters: /100 cử tri đã bỏ lá phiếu đầu tiên của mình/, end: /hoặc khi đến thời điểm kết thúc dự kiến, tùy điều nào đến trước/, locked: /không thể thay đổi sau đó/, l2p2: /xác minh giả/, privateBody: /bạn đã bầu thế nào/ },
-    fil: { voters: /100 botante ng kanilang unang balota/, end: /pagdating ng nakatakdang pagtatapos, alinman ang mauna/, locked: /hindi na mababago ang setting na iyon pagkatapos/i, l2p2: /kunwang tagapagpatunay/, privateBody: /kung paano ka bumoto/ },
+    vi: { voters: /100 cử tri đã bỏ lá phiếu đầu tiên của mình/, end: /thời điểm kết thúc dự kiến(?: đến)?, tùy điều nào đến trước/, locked: /không thể thay đổi sau đó/, l2p2: /xác minh giả/, privateBody: /bạn đã bầu thế nào/ },
+    fil: { voters: /100 botante ng kanilang unang balota/, end: /(?:pagdating ng|dumating ang) nakatakdang pagtatapos, alinman ang mauna/, locked: /hindi na mababago ang setting na iyon pagkatapos/i, l2p2: /kunwang tagapagpatunay/, privateBody: /kung paano ka bumoto/ },
   };
   for (const code of LOCALE_CODES) {
     const mark = marks[code];

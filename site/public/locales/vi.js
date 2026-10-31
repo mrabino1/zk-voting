@@ -176,7 +176,7 @@ export default {
     poll: {
       name: "Thăm dò",
       summary: "Số phiếu từng lựa chọn theo giờ, trễ 30 phút, sau cửa.",
-      gate: "Số đếm được ẩn cho đến khi 100 cử tri đã bỏ lá phiếu đầu tiên của mình, hoặc khi đến thời điểm kết thúc dự kiến, tùy điều nào đến trước.",
+      gate: "Số đếm được ẩn cho đến khi 100 cử tri đã bỏ lá phiếu đầu tiên của mình hoặc thời điểm kết thúc dự kiến đến, tùy điều nào đến trước.",
       hourly: "Sau cửa đó, số phiếu từng lựa chọn của mỗi khối giờ được công bố 30 phút sau khi giờ đóng.",
       merge: "Giờ nào dưới 10 phiếu thì gộp tiếp tới khi một khối có ít nhất 10.",
       freeze: "Các khối hằng giờ đã công bố không bao giờ thay đổi: mỗi khối được thiết kế để giữ nguyên như lần đầu công bố. Lá phiếu thay thế, nếu được phép bỏ phiếu lại, chỉ xuất hiện trong kết quả cuối cùng.",

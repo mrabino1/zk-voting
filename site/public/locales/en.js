@@ -177,7 +177,7 @@ export default {
     poll: {
       name: "Poll",
       summary: "Hourly per-choice counts, 30 minutes delayed, after the gate.",
-      gate: "Counts stay hidden until 100 voters have cast their first ballot, or at the scheduled end, whichever comes first.",
+      gate: "Counts stay hidden until 100 voters have cast their first ballot or the scheduled end arrives, whichever comes first.",
       hourly: "After that gate, per-choice counts publish for each hourly block, 30 minutes after the hour closes.",
       merge: "An hour with fewer than 10 ballots merges forward until a block has at least 10.",
       freeze: "Published hourly blocks never change: each block is designed to stay as first published. Replacement ballots, if re-voting is allowed, show up only in the final tally.",

@@ -178,7 +178,7 @@ export default {
     poll: {
       name: "Enquete",
       summary: "Contagens horárias por opção, atrasadas 30 minutos, depois da barreira.",
-      gate: "As contagens ficam ocultas até que 100 eleitores tenham enviado sua primeira cédula, ou ao chegar o fim previsto, o que vier primeiro.",
+      gate: "As contagens ficam ocultas até que 100 eleitores tenham enviado sua primeira cédula ou chegue o fim previsto, o que vier primeiro.",
       hourly: "Depois dessa barreira, as contagens por opção são publicadas em cada bloco horário, 30 minutos após o fim da hora.",
       merge: "Uma hora com menos de 10 cédulas segue adiante até um bloco ter pelo menos 10.",
       freeze: "Os blocos por hora publicados nunca mudam: cada bloco é projetado para ficar como foi publicado. As cédulas substitutas, se votar de novo for permitido, aparecem só na apuração final.",
