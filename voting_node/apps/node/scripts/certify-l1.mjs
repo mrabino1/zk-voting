@@ -66,7 +66,7 @@ async function main() {
   if (hasFlag('--help') || hasFlag('-h')) {
     console.log(`ZK-Voting L1 tally certification (NOT FOR PROFIT)
 
-After POST /api/elections/:id/tally, copy keccak256(abi.encodePacked(counts))
+After POST /api/elections/:id/tally, copy keccak256(abi.encode(counts))
 to L1TallyMirror.postResult when L1 env is set. Unset env → no-op (exit 0).
 
   node apps/node/scripts/certify-l1.mjs --election-id ID --counts 2,0

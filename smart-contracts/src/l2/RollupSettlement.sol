@@ -3,8 +3,15 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
+import {ElectionParams} from "../interfaces/ElectionParams.sol";
+import {IBallotInbox} from "../interfaces/IBallotInbox.sol";
+import {IElection} from "../interfaces/IElection.sol";
+import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 import {IRollupSettlement} from "../interfaces/IRollupSettlement.sol";
+import {PoseidonT3} from "../hasher/PoseidonT3.sol";
+import {BabyJub} from "../zk/BabyJub.sol";
+import {IndexedRoot} from "../zk/IndexedRoot.sol";
 
 /// @title RollupSettlement
 /// @notice L1 settlement for ZK-Voting L2 (app-specific ZK rollup). No token.
@@ -24,6 +31,9 @@ contract RollupSettlement is IRollupSettlement {
     address public sequencer;
     address public prover;
     address public batchVerifier;
+    /// @notice Verifier for each 4-row chunk of a sealed batch. Unset is allowed
+    ///         only in mock mode, or when the batch has at most four rows.
+    address public chunkVerifier;
     bool public mockMode;
     bytes32 public stateRoot;
     uint64 public batchCount;
@@ -31,6 +41,47 @@ contract RollupSettlement is IRollupSettlement {
     /// @notice Audit M-05: every L2 state root this contract has settled
     ///         (genesis or a batch's `newStateRoot`), for `L1TallyMirror`.
     mapping(bytes32 => bool) public isSettledRoot;
+
+    /// @notice One hour. An honest sequencer can land the supplementary batch in that time.
+    ///         A stall cannot hold the tally for longer than one missed hour.
+    uint256 public constant SUPPLEMENTARY_GRACE = 1 hours;
+    uint8 public constant KIND_HOURLY = 1;
+    uint8 public constant KIND_FINAL = 2;
+    uint8 public constant KIND_SUPPLEMENTARY = 3;
+
+    address public electionFactory;
+    address public inbox;
+    mapping(uint256 => bool) private _supplementaryPosted;
+    mapping(uint256 => bytes32) private _lastHourlyRoot;
+    mapping(uint256 => bool) private _finalPosted;
+    mapping(uint256 => bytes32) private _finalRoot;
+    mapping(uint256 => bytes32) private _hourlyProduct;
+    mapping(uint256 => bytes32) private _finalProduct;
+    mapping(uint256 => bytes32[]) private _roots;
+    mapping(uint256 => mapping(bytes32 => uint256)) private _rootIndex;
+    mapping(uint256 => mapping(bytes32 => bool)) private _tagUsed;
+    mapping(uint256 => mapping(uint256 => bool)) private _hourPosted;
+    mapping(uint256 => mapping(uint256 => uint64)) private _hourClosedAt;
+    mapping(uint256 => mapping(uint256 => Ciphertext)) private _hourCt;
+    mapping(uint256 => Ciphertext) private _finalCt;
+    mapping(uint256 => Ciphertext) private _hourlyPoints;
+    mapping(uint256 => Ciphertext) private _finalPoints;
+    /// @notice Unique voters published by the last hourly or supplementary batch.
+    mapping(uint256 => uint256) public postedUnique;
+    /// @notice Unique voters on one posted hour. The hourly gate reads this, not a live counter.
+    mapping(uint256 => mapping(uint256 => uint256)) public hourUnique;
+    /// @notice Option ciphertexts, index-aligned with each ballot's choice vector.
+    mapping(uint256 => mapping(uint256 => Ciphertext)) private _optionCt;
+
+    /// @notice A submission this contract has applied. The ciphertext itself stays in the inbox.
+    ///         `set` is cleared when a later batch subtracts it, so it cannot be subtracted twice.
+    struct StoredBallot {
+        uint8 n;
+        bool set;
+    }
+
+    /// @notice Settled-submission flag, keyed by submission id. One slot.
+    mapping(uint256 => mapping(uint256 => StoredBallot)) private _stored;
 
     constructor(address admin_, address sequencer_, address prover_, address batchVerifier_, bool mockMode_) {
         if (admin_ == address(0) || sequencer_ == address(0) || prover_ == address(0)) revert ZeroAddress();
@@ -130,5 +181,857 @@ contract RollupSettlement is IRollupSettlement {
 
     function getBatch(uint64 batchIndex) external view returns (Batch memory) {
         return _batches[batchIndex];
+    }
+
+    function setElectionFactory(address factory_) external {
+        if (msg.sender != admin) revert NotAuthorized();
+        if (factory_ == address(0)) revert ZeroAddress();
+        if (electionFactory != address(0) && electionFactory != factory_) revert AlreadySet();
+        electionFactory = factory_;
+    }
+
+    function setChunkVerifier(address verifier_) external {
+        if (msg.sender != admin) revert NotAuthorized();
+        if (verifier_ == address(0)) revert ZeroAddress();
+        chunkVerifier = verifier_;
+    }
+
+    function setInbox(address inbox_) external {
+        if (msg.sender != admin) revert NotAuthorized();
+        if (inbox_ == address(0)) revert ZeroAddress();
+        if (inbox != address(0) && inbox != inbox_) revert AlreadySet();
+        inbox = inbox_;
+    }
+
+    function supplementaryPosted(uint256 electionId) external view returns (bool) {
+        return _supplementaryPosted[electionId];
+    }
+
+    function lastHourlyRoot(uint256 electionId) external view returns (bytes32) {
+        return _lastHourlyRoot[electionId];
+    }
+
+    function finalBatchPosted(uint256 electionId) external view returns (bool) {
+        return _finalPosted[electionId];
+    }
+
+    function finalBatchRoot(uint256 electionId) external view returns (bytes32) {
+        return _finalRoot[electionId];
+    }
+
+    function finalProduct(uint256 electionId) external view returns (bytes32) {
+        return _finalProduct[electionId];
+    }
+
+    function hourlyProduct(uint256 electionId) external view returns (bytes32) {
+        return _hourlyProduct[electionId];
+    }
+
+    function postedBallotRoot(uint256 electionId, bytes32 root) external view returns (bool) {
+        if (root == bytes32(0)) return false;
+        return _rootIndex[electionId][root] != 0;
+    }
+
+    function hourPosted(uint256 electionId, uint256 hourIndex) external view returns (bool) {
+        return _hourPosted[electionId][hourIndex];
+    }
+
+    function hourClosedAt(uint256 electionId, uint256 hourIndex) external view returns (uint64) {
+        return _hourClosedAt[electionId][hourIndex];
+    }
+
+    function hourlyCiphertext(uint256 electionId, uint256 hourIndex) external view returns (Ciphertext memory) {
+        return _hourCt[electionId][hourIndex];
+    }
+
+    function finalCiphertext(uint256 electionId) external view returns (Ciphertext memory) {
+        return _finalCt[electionId];
+    }
+
+    function chainedHourly(uint256 electionId) external view returns (Ciphertext memory) {
+        return _hourlyPoints[electionId];
+    }
+
+    function chainedFinal(uint256 electionId) external view returns (Ciphertext memory) {
+        return _finalPoints[electionId];
+    }
+
+    function supplementaryChainHash(uint256 electionId) public view returns (bytes32) {
+        return keccak256(abi.encodePacked(_roots[electionId]));
+    }
+
+    function hashWords(bytes32[] calldata words) external pure returns (bytes32) {
+        return keccak256(abi.encodePacked(words));
+    }
+
+    /// @dev Poseidon chain, same order as `circuits/batch_transition_lib.circom`.
+    ///      `pointTag` is the Poseidon fold of the eight running coordinates, reduced mod r.
+    ///      Option totals are not in this hash. The contract sums them from the ballot rows.
+    function computeSealedDataHash(SealedParams memory params, uint8 kind) public pure returns (bytes32) {
+        uint256 pointTag = foldScalars(
+            _eight(
+                params.prevC1X,
+                params.prevC1Y,
+                params.prevC2X,
+                params.prevC2Y,
+                params.nextC1X,
+                params.nextC1Y,
+                params.nextC2X,
+                params.nextC2Y
+            )
+        );
+        uint256[16] memory words;
+        words[0] = kind;
+        words[1] = params.electionId;
+        words[2] = params.batchIndex;
+        words[3] = uint256(params.prevStateRoot) % SNARK_SCALAR_FIELD;
+        words[4] = uint256(params.newStateRoot) % SNARK_SCALAR_FIELD;
+        words[5] = uint256(params.ballotSetRoot) % SNARK_SCALAR_FIELD;
+        words[6] = uint256(params.previousHourly) % SNARK_SCALAR_FIELD;
+        words[7] = uint256(params.hourlyProduct) % SNARK_SCALAR_FIELD;
+        words[8] = uint256(params.previousFinal) % SNARK_SCALAR_FIELD;
+        words[9] = uint256(params.finalProduct) % SNARK_SCALAR_FIELD;
+        words[10] = params.previousUnique;
+        words[11] = params.nextUnique;
+        words[12] = uint256(params.chainHash) % SNARK_SCALAR_FIELD;
+        words[13] = uint256(params.tagHash) % SNARK_SCALAR_FIELD;
+        words[14] = uint256(params.boundRootHash) % SNARK_SCALAR_FIELD;
+        words[15] = pointTag;
+        uint256 h;
+        for (uint256 i; i < words.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, words[i]);
+        }
+        return bytes32(h);
+    }
+
+    /// @notice Poseidon fold. An empty list folds to 0. Each word is reduced mod r.
+    function foldWords(bytes32[] memory words) public pure returns (bytes32) {
+        uint256 h;
+        for (uint256 i; i < words.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, uint256(words[i]) % SNARK_SCALAR_FIELD);
+        }
+        return bytes32(h);
+    }
+
+    function foldScalars(uint256[] memory words) public pure returns (uint256 h) {
+        for (uint256 i; i < words.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, words[i] % SNARK_SCALAR_FIELD);
+        }
+    }
+
+    /// @notice Poseidon fold of each ballot link, matching the batch circuit's chainHash.
+    function chainHashOf(BallotRow[] memory rows) public pure returns (bytes32) {
+        uint256 h;
+        for (uint256 i; i < rows.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, _link(rows[i]));
+        }
+        return bytes32(h);
+    }
+
+    /// @dev Six words: submission, the new primary, and the previous submission id.
+    ///      `isFirst` and the previous ciphertext are not in the public fold.
+    function _link(BallotRow memory row) private pure returns (uint256 h) {
+        h = PoseidonT3.hashLeftRight(h, row.submissionId % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c1X % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c1Y % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c2X % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c2Y % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.oldSubmissionId % SNARK_SCALAR_FIELD);
+    }
+
+    function _eight(
+        uint256 a,
+        uint256 b,
+        uint256 c,
+        uint256 d,
+        uint256 e,
+        uint256 f,
+        uint256 g,
+        uint256 h
+    ) private pure returns (uint256[] memory words) {
+        words = new uint256[](8);
+        words[0] = a;
+        words[1] = b;
+        words[2] = c;
+        words[3] = d;
+        words[4] = e;
+        words[5] = f;
+        words[6] = g;
+        words[7] = h;
+    }
+
+    /// @notice Fold of the bound-root list, or of the previous ballot-set root when the list is empty.
+    function expectedBoundHash(bytes32[] memory bound, bytes32 lastRoot) public pure returns (bytes32) {
+        if (bound.length == 0) {
+            bytes32[] memory one = new bytes32[](1);
+            one[0] = lastRoot;
+            return foldWords(one);
+        }
+        return foldWords(bound);
+    }
+
+    function optionCiphertext(uint256 electionId, uint256 option) external view returns (Ciphertext memory) {
+        if (_optionCt[electionId][option].set) return _optionCt[electionId][option];
+        if (option == 0) return _finalCt[electionId];
+        return _optionCt[electionId][option];
+    }
+
+    function submitHourlyBatch(
+        SealedParams calldata params,
+        bytes32[] calldata boundRoots,
+        bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) external {
+        _requireNotPaused();
+        _requireFactory();
+        _requireLinked(params.electionId);
+        _onlyOperator();
+        uint256 hourIndex = block.timestamp / 1 hours;
+        if (_hourPosted[params.electionId][hourIndex]) revert HourAlreadyPosted();
+        _prepareHourOrFinal(params, KIND_HOURLY, boundRoots, firstBallotTags, rows, options);
+        _matchUnique(params);
+        _matchProducts(params, true);
+        _settleRows(params, KIND_HOURLY, rows, options);
+        _verifyChunks(params.electionId, rows, a, b, c);
+        _verifyAndStore(params, a, b, c);
+        _consumeTags(params.electionId, firstBallotTags);
+        _rememberRoot(params);
+        _storePoints(params, true);
+        _hourPosted[params.electionId][hourIndex] = true;
+        _hourClosedAt[params.electionId][hourIndex] = uint64(block.timestamp);
+        _hourCt[params.electionId][hourIndex] =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
+        postedUnique[params.electionId] = params.nextUnique;
+        hourUnique[params.electionId][hourIndex] = params.nextUnique;
+        emit SealedBatchPosted(
+            params.electionId, KIND_HOURLY, params.batchIndex, params.ballotSetRoot, params.nextUnique
+        );
+    }
+
+    function submitFinalBatch(
+        SealedParams calldata params,
+        bytes32[] calldata boundRoots,
+        bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) external {
+        _requireNotPaused();
+        _requireFactory();
+        _requireLinked(params.electionId);
+        (bool known, uint256 allowedAt) = _allowedAt(params.electionId);
+        bool open = known && block.timestamp >= allowedAt + SUPPLEMENTARY_GRACE && !mockMode;
+        if (!open) _onlyOperator();
+        _prepareHourOrFinal(params, KIND_FINAL, boundRoots, firstBallotTags, rows, options);
+        _matchProducts(params, false);
+        _settleRows(params, KIND_FINAL, rows, options);
+        if (IBallotInbox(inbox).unconsumedCount(params.electionId) != 0) revert UnconsumedBallot();
+        _verifyChunks(params.electionId, rows, a, b, c);
+        _verifyAndStore(params, a, b, c);
+        _finalPosted[params.electionId] = true;
+        _finalRoot[params.electionId] = params.ballotSetRoot;
+        _rememberRoot(params);
+        _storePoints(params, false);
+        _finalCt[params.electionId] =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
+        emit SealedBatchPosted(
+            params.electionId, KIND_FINAL, params.batchIndex, params.ballotSetRoot, params.previousUnique
+        );
+    }
+
+    function submitSupplementaryBatch(
+        SealedParams calldata params,
+        uint256[] calldata includedIds,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) external {
+        _requireNotPaused();
+        _requireFactory();
+        _requireLinked(params.electionId);
+        (bool known, uint256 allowedAt) = _allowedAt(params.electionId);
+        _authSupplementary(known, allowedAt);
+        bool afterGrace = known && block.timestamp >= allowedAt + SUPPLEMENTARY_GRACE;
+        if (!_finalPosted[params.electionId] && !afterGrace) revert FinalBatchRequired();
+        if (_supplementaryPosted[params.electionId]) revert SupplementaryAlreadyPosted();
+        if (params.nextUnique < params.previousUnique) revert UniqueCountDecreased();
+        if (params.hourlyProduct != _hourlyProduct[params.electionId]) revert HourlyProductChanged();
+        if (params.previousHourly != _hourlyProduct[params.electionId]) revert ProductMismatch();
+        if (rows.length == 0) {
+            if (params.chainHash != bytes32(0)) revert DataHashMismatch();
+        }
+        if (uint256(params.tagHash) != foldScalars(includedIds)) revert DataHashMismatch();
+        if (options.length > 4) revert OptionTotalMismatch();
+        _matchUnique(params);
+        _matchProducts(params, false);
+        _settleRows(params, KIND_SUPPLEMENTARY, rows, options);
+        if (IBallotInbox(inbox).unconsumedCount(params.electionId) != 0) revert UnconsumedBallot();
+        _checkSealedHash(params, KIND_SUPPLEMENTARY);
+        _coverPending(params.electionId, includedIds);
+        _verifyChunks(params.electionId, rows, a, b, c);
+        _verifyAndStore(params, a, b, c);
+        _finalProduct[params.electionId] = params.finalProduct;
+        _storePoints(params, false);
+        _finalCt[params.electionId] =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
+        if (!_finalPosted[params.electionId]) {
+            _finalPosted[params.electionId] = true;
+            _finalRoot[params.electionId] = _lastHourlyRoot[params.electionId] == bytes32(0)
+                ? params.ballotSetRoot
+                : _lastHourlyRoot[params.electionId];
+        }
+        postedUnique[params.electionId] = params.nextUnique;
+        _markChunks(params.electionId, includedIds);
+        _supplementaryPosted[params.electionId] = true;
+        emit SupplementaryPosted(params.electionId);
+        emit SealedBatchPosted(
+            params.electionId, KIND_SUPPLEMENTARY, params.batchIndex, params.ballotSetRoot, params.nextUnique
+        );
+    }
+
+    function _onlyOperator() internal view {
+        if (msg.sender != sequencer && msg.sender != prover && msg.sender != admin) revert NotAuthorized();
+    }
+
+    function _prepareHourOrFinal(
+        SealedParams calldata params,
+        uint8 kind,
+        bytes32[] calldata boundRoots,
+        bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options
+    ) internal view {
+        (bool known, uint64 cutoff,) = _cutoff(params.electionId);
+        if (kind == KIND_HOURLY) {
+            if (known && block.timestamp >= cutoff) revert HourlyWindowClosed();
+            if (params.nextUnique < params.previousUnique) revert UniqueCountDecreased();
+        } else {
+            if (known && block.timestamp < cutoff) revert FinalBatchTooEarly();
+            if (_finalPosted[params.electionId]) revert FinalBatchAlreadyPosted();
+            if (params.nextUnique != params.previousUnique) revert TurnoutOnFinalBatch();
+        }
+        if (rows.length == 0) {
+            if (params.chainHash != bytes32(0)) revert DataHashMismatch();
+        }
+        if (options.length > 4) revert OptionTotalMismatch();
+        if (params.ballotSetRoot == bytes32(0)) revert EmptyRoot();
+        _checkBoundRoots(params.electionId, boundRoots);
+        _checkFirstTags(params.electionId, firstBallotTags);
+        if (params.tagHash != foldWords(firstBallotTags)) revert DataHashMismatch();
+        if (params.boundRootHash != expectedBoundHash(boundRoots, _lastHourlyRoot[params.electionId])) {
+            revert DataHashMismatch();
+        }
+        _checkSealedHash(params, kind);
+    }
+
+    function _checkBoundRoots(uint256 electionId, bytes32[] calldata boundRoots) internal view {
+        if (boundRoots.length > 4) revert BoundRootMismatch();
+        if (boundRoots.length == 0) return;
+        bytes32 last = _lastHourlyRoot[electionId];
+        bytes32 empty = bytes32(IndexedRoot.empty(IndexedRoot.DEPTH));
+        for (uint256 i; i < boundRoots.length; ++i) {
+            bytes32 root = boundRoots[i];
+            if (root == bytes32(0)) revert BoundRootMismatch();
+            bool known = _rootIndex[electionId][root] != 0 || root == empty;
+            if (!known) revert BoundRootMismatch();
+            if (i == 0) {
+                bytes32 expect = last == bytes32(0) ? empty : last;
+                if (root != expect) revert BoundRootMismatch();
+            }
+        }
+    }
+
+    function _checkFirstTags(uint256 electionId, bytes32[] calldata tags) internal view {
+        uint256 n = tags.length;
+        for (uint256 i; i < n; ++i) {
+            if (tags[i] == bytes32(0) || _tagUsed[electionId][tags[i]]) revert DuplicateFirstBallot();
+            for (uint256 j; j < i; ++j) {
+                if (tags[i] == tags[j]) revert DuplicateFirstBallot();
+            }
+        }
+    }
+
+    function _consumeTags(uint256 electionId, bytes32[] calldata tags) internal {
+        for (uint256 i; i < tags.length; ++i) {
+            _tagUsed[electionId][tags[i]] = true;
+        }
+    }
+
+    function _matchUnique(SealedParams calldata params) internal view {
+        if (params.previousUnique != postedUnique[params.electionId]) revert UniqueCountMismatch();
+    }
+
+    function _matchProducts(SealedParams calldata params, bool hourly) internal view {
+        if (params.previousHourly != _hourlyProduct[params.electionId]) revert ProductMismatch();
+        if (params.previousFinal != _finalProduct[params.electionId]) revert ProductMismatch();
+        Ciphertext memory stored =
+            hourly ? _hourlyPoints[params.electionId] : _finalOpening(params.electionId);
+        if (
+            params.prevC1X != stored.c1X || params.prevC1Y != stored.c1Y || params.prevC2X != stored.c2X
+                || params.prevC2Y != stored.c2Y
+        ) revert PointsMismatch();
+    }
+
+    /// @dev The first final or supplementary batch starts from the hourly ciphertext.
+    ///      Later batches continue the final chain.
+    function _finalOpening(uint256 electionId) internal view returns (Ciphertext memory) {
+        if (_finalPosted[electionId]) return _finalPoints[electionId];
+        Ciphertext memory fin = _finalPoints[electionId];
+        if (fin.c1X != 0 || fin.c1Y != 0 || fin.c2X != 0 || fin.c2Y != 0) return fin;
+        return _hourlyPoints[electionId];
+    }
+
+    function _storePoints(SealedParams calldata params, bool hourly) internal {
+        Ciphertext memory next =
+            Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
+        if (hourly) _hourlyPoints[params.electionId] = next;
+        else _finalPoints[params.electionId] = next;
+    }
+
+    /// @dev A stored batch always has a ciphertext, including the identity point (count 0).
+    function _pointsSet(SealedParams calldata) internal pure returns (bool) {
+        return true;
+    }
+
+    function _requireFactory() internal view {
+        if (electionFactory == address(0)) revert FactoryUnset();
+    }
+
+    function _checkSealedHash(SealedParams calldata params, uint8 kind) internal view {
+        if (params.batchIndex != batchCount) revert BadBatchIndex();
+        if (params.prevStateRoot != stateRoot) revert PrevRootMismatch();
+        if (params.dataHash != computeSealedDataHash(params, kind)) revert DataHashMismatch();
+    }
+
+    function _verifyAndStore(
+        SealedParams calldata params,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) internal {
+        if (!mockMode) {
+            uint256[] memory input = batchPublicInputs(
+                params.batchIndex, params.prevStateRoot, params.newStateRoot, params.dataHash
+            );
+            if (!IGroth16Verifier(batchVerifier).verifyProof(a, b, c, input)) revert InvalidProof();
+        }
+        _batches[params.batchIndex] = Batch({
+            prevStateRoot: params.prevStateRoot,
+            newStateRoot: params.newStateRoot,
+            dataHash: params.dataHash,
+            l1Block: block.number,
+            dataLength: 0
+        });
+        stateRoot = params.newStateRoot;
+        isSettledRoot[params.newStateRoot] = true;
+        unchecked {
+            batchCount += 1;
+        }
+        emit BatchSubmitted(params.batchIndex, params.newStateRoot, params.dataHash, block.number);
+    }
+
+    function _rememberRoot(SealedParams calldata params) internal {
+        _lastHourlyRoot[params.electionId] = params.ballotSetRoot;
+        _roots[params.electionId].push(params.ballotSetRoot);
+        _rootIndex[params.electionId][params.ballotSetRoot] = _roots[params.electionId].length;
+        _hourlyProduct[params.electionId] = params.hourlyProduct;
+        _finalProduct[params.electionId] = params.finalProduct;
+    }
+
+    function _requireLinked(uint256 electionId) internal view {
+        if (inbox == address(0)) revert NotAuthorized();
+        (bool ok, bytes memory ret) = inbox.staticcall(abi.encodeWithSignature("settlementOf(uint256)", electionId));
+        if (!ok || ret.length < 32 || abi.decode(ret, (address)) != address(this)) revert NotAuthorized();
+    }
+
+    function _requireNotPaused() internal view {
+        if (electionFactory == address(0)) return;
+        (bool ok, bytes memory ret) = electionFactory.staticcall(abi.encodeWithSignature("isPaused()"));
+        if (ok && ret.length >= 32 && abi.decode(ret, (bool))) revert ContractPaused();
+    }
+
+    /// @dev Each chunk's public inputs are the four submission ids and the four inbox ballot hashes.
+    ///      A real chunk verifier proves those hashes open to the vectors that sum into the batch.
+    function _verifyChunks(
+        uint256 electionId,
+        BallotRow[] calldata rows,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) internal view {
+        if (chunkVerifier == address(0)) {
+            if (!mockMode && rows.length > 4) revert VerifierRequired();
+            return;
+        }
+        uint256 chunks = (rows.length + 3) / 4;
+        for (uint256 i; i < chunks; ++i) {
+            uint256[] memory input = new uint256[](8);
+            for (uint256 j; j < 4; ++j) {
+                uint256 idx = i * 4 + j;
+                if (idx >= rows.length) continue;
+                input[j] = rows[idx].submissionId % SNARK_SCALAR_FIELD;
+                input[4 + j] = uint256(IBallotInbox(inbox).ballotHashOf(electionId, rows[idx].submissionId));
+            }
+            if (!IGroth16Verifier(chunkVerifier).verifyProof(a, b, c, input)) revert InvalidProof();
+        }
+    }
+
+    /// @dev A first ballot (`oldSubmissionId` 0) adds the inbox-stored ciphertext.
+    ///      A replacement is rejected on the hourly path before it is consumed.
+    ///      On a final or supplementary batch the stored vector is subtracted and the new one is added.
+    ///      Primary and per-option totals are that sum. They are not free inputs. Each row is consumed.
+    function _settleRows(
+        SealedParams calldata params,
+        uint8 kind,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata claimed
+    ) internal {
+        if (params.nextUnique < params.previousUnique) revert UniqueCountDecreased();
+        uint256 step = params.nextUnique - params.previousUnique;
+        uint256 n = _vectorLen(rows);
+        if (rows.length != 0 && claimed.length != n) revert OptionTotalMismatch();
+        if (n > 4) revert OptionTotalMismatch();
+        if (rows.length == 0) {
+            if (
+                params.prevC1X != params.nextC1X || params.prevC1Y != params.nextC1Y
+                    || params.prevC2X != params.nextC2X || params.prevC2Y != params.nextC2Y
+            ) revert PointsMismatch();
+            if (step != 0) revert UniqueStepMismatch();
+            _storeEmptyOptions(params.electionId, claimed);
+            return;
+        }
+        BabyJub.Run memory run;
+        run = BabyJub.runAdd(run, params.prevC1X, params.prevC1Y, params.prevC2X, params.prevC2Y);
+        BabyJub.Run[4] memory acc;
+        if (n != 0) {
+            for (uint256 j; j < n; ++j) {
+                Ciphertext storage prior = _optionCt[params.electionId][j];
+                acc[j] = BabyJub.runAdd(acc[j], prior.c1X, prior.c1Y, prior.c2X, prior.c2Y);
+            }
+        }
+        uint256 firsts;
+        for (uint256 i; i < rows.length; ++i) {
+            uint256 addFirst;
+            (run, addFirst) = _absorbRow(params.electionId, kind, rows[i], n, run, acc);
+            firsts += addFirst;
+        }
+        if (firsts != step) revert UniqueStepMismatch();
+        (uint256 x, uint256 y, uint256 u, uint256 v) = BabyJub.runOut(run);
+        if (x != params.nextC1X || y != params.nextC1Y || u != params.nextC2X || v != params.nextC2Y) {
+            revert PointsMismatch();
+        }
+        if (n == 0) {
+            _storeEmptyOptions(params.electionId, claimed);
+            return;
+        }
+        for (uint256 k; k < n; ++k) {
+            (x, y, u, v) = BabyJub.runOut(acc[k]);
+            if (x != claimed[k].c1X || y != claimed[k].c1Y || u != claimed[k].c2X || v != claimed[k].c2Y) {
+                revert OptionTotalMismatch();
+            }
+            _optionCt[params.electionId][k] = Ciphertext(x, y, u, v, true);
+        }
+    }
+
+    /// @dev One inbox read covers the primary and every option. The row must match that vector.
+    function _absorbRow(
+        uint256 electionId,
+        uint8 kind,
+        BallotRow calldata row,
+        uint256 n,
+        BabyJub.Run memory run,
+        BabyJub.Run[4] memory acc
+    ) internal returns (BabyJub.Run memory, uint256) {
+        if (row.oldSubmissionId != 0 && kind == KIND_HOURLY) revert ReplacementOnHourly();
+        if (_isIdentity(row.c1X, row.c1Y, row.c2X, row.c2Y)) revert IdentityCiphertext();
+        (
+            uint256 ax,
+            uint256 ay,
+            uint256 au,
+            uint256 av,
+            uint8 acceptedN,
+            bool set,
+            bytes32 ballotHash,
+            uint256[16] memory opts
+        ) = IBallotInbox(inbox).acceptedVector(electionId, row.submissionId);
+        if (!set) {
+            IBallotInbox(inbox).consumeForSettlement(electionId, row.submissionId, 0);
+        }
+        if (ax != row.c1X || ay != row.c1Y || au != row.c2X || av != row.c2Y) {
+            revert IBallotInbox.BallotHashMismatch();
+        }
+        uint256 first;
+        if (row.oldSubmissionId == 0) {
+            first = 1;
+            run = BabyJub.runAdd(run, row.c1X, row.c1Y, row.c2X, row.c2Y);
+        } else {
+            _requireNewer(electionId, row.submissionId, row.oldSubmissionId);
+            (uint256 ox, uint256 oy, uint256 ou, uint256 ov) = _loadOldPrimary(electionId, row.oldSubmissionId);
+            run = BabyJub.runSub(run, ox, oy, ou, ov);
+            run = BabyJub.runAdd(run, row.c1X, row.c1Y, row.c2X, row.c2Y);
+        }
+        IBallotInbox(inbox).consumeForSettlement(electionId, row.submissionId, uint256(ballotHash));
+        _foldOptions(electionId, row, n, acceptedN, set, opts, acc);
+        return (run, first);
+    }
+
+    function _foldOptions(
+        uint256 electionId,
+        BallotRow calldata row,
+        uint256 n,
+        uint8 acceptedN,
+        bool set,
+        uint256[16] memory opts,
+        BabyJub.Run[4] memory acc
+    ) internal {
+        if (n == 0) {
+            if (row.options.length != 0) revert OptionTotalMismatch();
+            if (row.oldSubmissionId != 0) _subtractStoredOptions(electionId, row.oldSubmissionId);
+            _remember(electionId, row);
+            return;
+        }
+        if (row.options.length != n) revert OptionTotalMismatch();
+        if (!set || acceptedN != n) revert IBallotInbox.BallotHashMismatch();
+        if (row.oldSubmissionId != 0) _subStoredOptions(electionId, row.oldSubmissionId, n, acc);
+        for (uint256 k; k < n; ++k) {
+            OptionCipher calldata cur = row.options[k];
+            if (_isIdentity(cur.c1X, cur.c1Y, cur.c2X, cur.c2Y)) revert IdentityCiphertext();
+            uint256 o = k << 2;
+            if (opts[o] != cur.c1X || opts[o + 1] != cur.c1Y || opts[o + 2] != cur.c2X || opts[o + 3] != cur.c2Y) {
+                revert IBallotInbox.BallotHashMismatch();
+            }
+            acc[k] = BabyJub.runAdd(acc[k], cur.c1X, cur.c1Y, cur.c2X, cur.c2Y);
+        }
+        _remember(electionId, row);
+    }
+
+    function _storeEmptyOptions(uint256 electionId, OptionPoint[] calldata claimed) internal {
+        for (uint256 i; i < claimed.length; ++i) {
+            if (!_isIdentity(claimed[i].c1X, claimed[i].c1Y, claimed[i].c2X, claimed[i].c2Y)) {
+                revert OptionTotalMismatch();
+            }
+            _optionCt[electionId][i] = Ciphertext(0, 0, 0, 0, true);
+        }
+    }
+
+    function _requireNewer(uint256 electionId, uint256 submissionId, uint256 oldSubmissionId) internal view {
+        uint64 newer = IBallotInbox(inbox).acceptanceSeq(electionId, submissionId);
+        uint64 older = IBallotInbox(inbox).acceptanceSeq(electionId, oldSubmissionId);
+        if (newer == 0 || older == 0 || newer <= older) revert StaleReplacement();
+    }
+
+    /// @dev The previous vector is the one the inbox stored at acceptance, and only while
+    ///      this contract still has `set`. A second replacement sees `set == false`.
+    function _loadOldPrimary(uint256 electionId, uint256 oldSubmissionId)
+        internal
+        view
+        returns (uint256 ox, uint256 oy, uint256 ou, uint256 ov)
+    {
+        if (!_stored[electionId][oldSubmissionId].set) revert OldOptionsMismatch();
+        bool set;
+        (ox, oy, ou, ov,, set) = IBallotInbox(inbox).acceptedPrimary(electionId, oldSubmissionId);
+        if (!set) revert OldOptionsMismatch();
+    }
+
+    function _subStoredOptions(
+        uint256 electionId,
+        uint256 oldSubmissionId,
+        uint256 n,
+        BabyJub.Run[4] memory acc
+    ) internal {
+        StoredBallot storage old = _stored[electionId][oldSubmissionId];
+        if (!old.set || old.n != n) revert OldOptionsMismatch();
+        (,,,, uint8 acceptedN, bool set,, uint256[16] memory opts) =
+            IBallotInbox(inbox).acceptedVector(electionId, oldSubmissionId);
+        if (!set || acceptedN != n) revert OldOptionsMismatch();
+        for (uint256 j; j < n; ++j) {
+            uint256 o = j << 2;
+            uint256 x = opts[o];
+            uint256 y = opts[o + 1];
+            uint256 u = opts[o + 2];
+            uint256 v = opts[o + 3];
+            if (_isIdentity(x, y, u, v)) revert IdentityCiphertext();
+            acc[j] = BabyJub.runSub(acc[j], x, y, u, v);
+        }
+        old.set = false;
+    }
+
+    function _vectorLen(BallotRow[] calldata rows) internal pure returns (uint256 n) {
+        for (uint256 i; i < rows.length; ++i) {
+            uint256 len = rows[i].options.length;
+            if (i == 0) n = len;
+            else if (len != n) revert OptionTotalMismatch();
+        }
+    }
+
+    function _subtractStoredOptions(uint256 electionId, uint256 oldSubmissionId) internal {
+        StoredBallot storage old = _stored[electionId][oldSubmissionId];
+        if (!old.set) revert OldOptionsMismatch();
+        uint256 n = old.n;
+        (,,,, uint8 acceptedN, bool set,, uint256[16] memory opts) =
+            IBallotInbox(inbox).acceptedVector(electionId, oldSubmissionId);
+        if (!set || acceptedN != n) revert OldOptionsMismatch();
+        for (uint256 j; j < n; ++j) {
+            uint256 o = j << 2;
+            uint256 x = opts[o];
+            uint256 y = opts[o + 1];
+            uint256 u = opts[o + 2];
+            uint256 v = opts[o + 3];
+            if (_isIdentity(x, y, u, v)) revert IdentityCiphertext();
+            _bump(electionId, j, x, y, u, v, false);
+        }
+        old.set = false;
+    }
+
+    function _remember(uint256 electionId, BallotRow calldata row) internal {
+        uint256 id = row.submissionId % SNARK_SCALAR_FIELD;
+        StoredBallot storage saved = _stored[electionId][id];
+        saved.n = uint8(row.options.length);
+        saved.set = true;
+    }
+
+    function _bump(
+        uint256 electionId,
+        uint256 option,
+        uint256 x,
+        uint256 y,
+        uint256 u,
+        uint256 v,
+        bool add
+    ) internal {
+        if ((x != 0 || y != 0) && !BabyJub.onCurve(x, y)) revert PointOffCurve();
+        if ((u != 0 || v != 0) && !BabyJub.onCurve(u, v)) revert PointOffCurve();
+        Ciphertext storage ct = _optionCt[electionId][option];
+        uint256 nx;
+        uint256 ny;
+        uint256 nu;
+        uint256 nv;
+        if (add) (nx, ny, nu, nv) = _addCt(ct.c1X, ct.c1Y, ct.c2X, ct.c2Y, x, y, u, v);
+        else (nx, ny, nu, nv) = _subCt(ct.c1X, ct.c1Y, ct.c2X, ct.c2Y, x, y, u, v);
+        ct.c1X = nx;
+        ct.c1Y = ny;
+        ct.c2X = nu;
+        ct.c2Y = nv;
+        ct.set = true;
+    }
+
+    function _markChunks(uint256 electionId, uint256[] calldata included) internal {
+        if (inbox == address(0)) revert NotAuthorized();
+        uint256 n = included.length;
+        if (n == 0) {
+            IBallotInbox(inbox).markSealed(electionId, included);
+            return;
+        }
+        uint256 offset;
+        while (offset < n) {
+            uint256 len = n - offset;
+            if (len > 8) len = 8;
+            uint256[] memory chunk = new uint256[](len);
+            for (uint256 j; j < len; ++j) {
+                chunk[j] = included[offset + j];
+            }
+            IBallotInbox(inbox).markSealed(electionId, chunk);
+            offset += len;
+        }
+    }
+
+    function _joint(uint256 electionId) internal view returns (uint256 x, uint256 y) {
+        (bool ok, bytes memory ret) = inbox.staticcall(abi.encodeWithSignature("ceremonyOf(uint256)", electionId));
+        if (!ok || ret.length < 32) revert OneHotRejected();
+        address cer = abi.decode(ret, (address));
+        if (cer == address(0)) revert OneHotRejected();
+        uint8 electionType = _electionType(electionId);
+        (ok, ret) = cer.staticcall(abi.encodeWithSignature("jointKey(uint256,uint8)", electionId, electionType));
+        if (!ok || ret.length < 64) revert OneHotRejected();
+        (x, y) = abi.decode(ret, (uint256, uint256));
+        if (!BabyJub.onCurve(x, y) || (x == 0 && y == 0)) revert OneHotRejected();
+    }
+
+    function _electionType(uint256 electionId) internal view returns (uint8) {
+        address el = IElectionFactory(electionFactory).getElection(electionId);
+        return IElection(el).params().electionType;
+    }
+
+    function _pointOk(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) internal view returns (bool) {
+        return BabyJub.onCurve(c1x, c1y) && BabyJub.onCurve(c2x, c2y);
+    }
+
+    function _isIdentity(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) internal pure returns (bool) {
+        return c1x == 0 && c1y == 0 && c2x == 0 && c2y == 0;
+    }
+
+    function _addCt(
+        uint256 x,
+        uint256 y,
+        uint256 u,
+        uint256 v,
+        uint256 ax,
+        uint256 ay,
+        uint256 bx,
+        uint256 by
+    ) internal view returns (uint256, uint256, uint256, uint256) {
+        (uint256 nx, uint256 ny) = BabyJub.add(x, y, ax, ay);
+        (uint256 nu, uint256 nv) = BabyJub.add(u, v, bx, by);
+        return (nx, ny, nu, nv);
+    }
+
+    function _subCt(
+        uint256 x,
+        uint256 y,
+        uint256 u,
+        uint256 v,
+        uint256 ax,
+        uint256 ay,
+        uint256 bx,
+        uint256 by
+    ) internal view returns (uint256, uint256, uint256, uint256) {
+        (uint256 nx, uint256 ny) = BabyJub.sub(x, y, ax, ay);
+        (uint256 nu, uint256 nv) = BabyJub.sub(u, v, bx, by);
+        return (nx, ny, nu, nv);
+    }
+
+    function _coverPending(uint256 electionId, uint256[] calldata included) internal view {
+        if (inbox == address(0)) revert NotAuthorized();
+        IBallotInbox box = IBallotInbox(inbox);
+        uint256 n = box.pendingCount(electionId);
+        if (included.length != n) revert PendingBallotOmitted();
+        for (uint256 i; i < n; ++i) {
+            if (included[i] != box.pendingIdAt(electionId, i)) revert PendingBallotOmitted();
+            (bytes32 root, bool pending) = box.forcedInRoot(electionId, included[i]);
+            if (!pending || root == bytes32(0) || _rootIndex[electionId][root] == 0) revert UnknownBoundRoot();
+        }
+    }
+
+    function _authSupplementary(bool known, uint256 allowedAt) internal view {
+        if (!known || block.timestamp < allowedAt) revert SupplementaryTooEarly();
+        // A mock settlement never grows a real proof, so the grace stays operator-only.
+        // Outside mock mode the grace is the permissionless liveness path.
+        if (mockMode || block.timestamp < allowedAt + SUPPLEMENTARY_GRACE) _onlyOperator();
+    }
+
+    function _allowedAt(uint256 electionId) internal view returns (bool known, uint256 allowedAt) {
+        (known,, allowedAt) = _cutoff(electionId);
+    }
+
+    function _cutoff(uint256 electionId) internal view returns (bool known, uint64 cutoff, uint256 allowedAt) {
+        if (electionFactory == address(0)) revert FactoryUnset();
+        address el = IElectionFactory(electionFactory).getElection(electionId);
+        if (el == address(0)) return (false, 0, 0);
+        ElectionParams memory params = IElection(el).params();
+        cutoff = params.cutoffTime;
+        address tally = IElectionFactory(electionFactory).tallyVerifier();
+        if (tally == address(0)) revert FactoryUnset();
+        (bool ok, bytes memory ret) = tally.staticcall(abi.encodeWithSignature("tallyAllowedAt(uint256)", electionId));
+        if (!ok || ret.length < 32) revert FactoryUnset();
+        allowedAt = abi.decode(ret, (uint256));
+        known = true;
     }
 }

@@ -1,14 +1,10 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// App-side election type. Stored on the Node. Not part of the current
-// ElectionFactory.createElection tuple.
-//
-// A later factory may add uint8 electionType as the LAST ElectionParams
-// component, with getter electionType(): 0 = POLL, 1 = VOTE. This Node does
-// not depend on that change. PASS_ELECTION_TYPE_ON_CHAIN stays false, so
-// createElection encodes the tuple that is deployed today.
+// Election type. Stored on the Node and passed to the factory as the LAST
+// ElectionParams component (uint8 electionType: 0 = POLL, 1 = VOTE), which the
+// sealed-vote contracts read on chain.
 
-/** When false, the factory tuple omits electionType. The L2 civic open still carries it. Do not flip this alone. */
-export const PASS_ELECTION_TYPE_ON_CHAIN = false;
+/** When true, the factory tuple carries electionType as its last component. */
+export const PASS_ELECTION_TYPE_ON_CHAIN = true;
 
 export const ELECTION_TYPE_POLL = 0;
 export const ELECTION_TYPE_VOTE = 1;

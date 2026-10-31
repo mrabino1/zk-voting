@@ -8,7 +8,7 @@
   "dataDir": "data",
   "maxTxsPerBlock": 4096,
   "paymasterBalanceWei": "1000000000000000000000000000",
-  "devMockProof": true,
+  "devMockProof": false,
   "disclosureIntervalSeconds": 3600,
   "skipEmptyBlocks": true,
   "heartbeatSeconds": 3600,

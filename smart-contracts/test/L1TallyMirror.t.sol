@@ -31,13 +31,13 @@ contract L1TallyMirrorTest is Test {
         uint256[] memory counts = new uint256[](2);
         counts[0] = a;
         counts[1] = b;
-        return keccak256(abi.encodePacked(counts));
+        return keccak256(abi.encode(counts));
     }
 
     function testPackedCountsHashIsStable() public pure {
-        // Packed keccak of [2, 0] — JS `computeTallyHash([2,0])` must match.
+        // keccak256(abi.encode([2, 0])) — JS `computeTallyHash([2,0])` must match.
         assertEq(
-            _countsHash(2, 0), bytes32(0xabbb5caa7dda850e60932de0934eb1f9d0f59695050f761dc64e443e5030a569)
+            _countsHash(2, 0), bytes32(0x67bf8fa5990b955cdd985e791a46ec9f0a3d26df2cb826aa7ce4bd2c6eaf197e)
         );
     }
 

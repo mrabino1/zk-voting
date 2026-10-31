@@ -789,7 +789,7 @@ export default {
     partiesHint: "각 선거는 자기 당사자 등록부를 복제합니다. 직원은 외부 시스템을 얼마든지 추가할 수 있습니다(중죄 기록, 인구 통계, 연령 확인 등). 그 시스템은 <strong>등록이 승인된 뒤에도</strong> 사람을 거부할 수 있습니다. 신원 커밋먼트는 확인된 뒤 버려지며 투표용지에 저장되지 않습니다. HTTP 오라클은 실패 시 닫힙니다. 시간 초과이거나 <code>allow: true</code>가 아닌 응답은 투표를 거부합니다.",
     tallyTitle: "집계 운영자",
     tallyHint:
-      "마감 후 문항별 상대다수 수를 게시하세요. 각 문항은 자체 선택지에서 집계됩니다 — 모든 경선을 접수된 투표용지와 같아야 하는 한 벡터로 합치지 마세요. 순위 문항은 접수된 순위 봉투에서 IRV로 계산됩니다(전부 순위 투표용지에서는 상대다수 벡터를 비우세요). <code>opens_ballots</code> 선거에서는 수를 비워 데모 ECIES 봉투를 열거나, 열린 투표용지와 일치해야 하는 수를 제출하세요 — 지어낸 분할은 거부됩니다. threshold-1 운영자 키는 비프로덕션입니다. <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, <code>L1_PUBLISHER_PRIVATE_KEY</code>가 설정되면 Node는 <code>keccak256(abi.encodePacked(counts))</code>도 <code>L1TallyMirror</code>에 복사합니다. L1 env가 없으면 no-op입니다.",
+      "마감 후 문항별 상대다수 수를 게시하세요. 각 문항은 자체 선택지에서 집계됩니다 — 모든 경선을 접수된 투표용지와 같아야 하는 한 벡터로 합치지 마세요. 순위 문항은 접수된 순위 봉투에서 IRV로 계산됩니다(전부 순위 투표용지에서는 상대다수 벡터를 비우세요). <code>opens_ballots</code> 선거에서는 수를 비워 데모 ECIES 봉투를 열거나, 열린 투표용지와 일치해야 하는 수를 제출하세요 — 지어낸 분할은 거부됩니다. threshold-1 운영자 키는 비프로덕션입니다. <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, <code>L1_PUBLISHER_PRIVATE_KEY</code>가 설정되면 Node는 <code>keccak256(abi.encode(counts))</code>도 <code>L1TallyMirror</code>에 복사합니다. L1 env가 없으면 no-op입니다.",
     countsJson: "집계 JSON",
     countsHint:
       "투표용지 순서로 이어 붙인 상대다수 선택지, 또는 위의 문항별 필드. 전부 순위 투표용지는 비워 봉투에서 IRV를 계산하세요. <code>opens_ballots</code>에서는 생략하여 열린 봉투에서 수를 도출합니다. 지어낸 분할은 거부됩니다. 예: YES_NO → <code>[yesCount, noCount]</code>.",

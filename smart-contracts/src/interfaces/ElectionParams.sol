@@ -19,13 +19,22 @@ struct ElectionParams {
     address verifier;
     uint8 questionCount;
     bytes32 jurisdictionId;
-    /// @notice P-256 tally encryption pubkey X. Zero with `tallyScheme == 0` keeps legacy sum-only demo mode.
+    /// @notice P-256 tally encryption pubkey X. Zero is allowed when `tallyScheme` is SUM_ONLY.
     bytes32 tallyPubKeyX;
     /// @notice P-256 tally encryption pubkey Y.
     bytes32 tallyPubKeyY;
-    /// @notice 0 = SUM_ONLY (any `counts` that sum to acceptedBallots).
+    /// @notice 0 = SUM_ONLY (`counts` sum to `closedBallotCount`; V2 instance; buckets are not proved).
     ///         1 = AGGREGATE (one aggregate ciphertext hash; no per-ballot openings).
     uint8 tallyScheme;
+    /// @notice 0 = POLL, 1 = VOTE. Chosen once in `createElection`. There is no setter.
+    uint8 electionType;
+}
+
+/// @notice Kind of election. Zero is POLL and keeps today's rules.
+library ElectionType {
+    uint8 internal constant POLL = 0;
+    /// @notice No tally, decryption, interim result, or disclosure before `cutoffTime`.
+    uint8 internal constant VOTE = 1;
 }
 
 /// @notice Tally binding mode. Additive: existing elections default to SUM_ONLY (0).

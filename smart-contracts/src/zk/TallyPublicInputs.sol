@@ -18,7 +18,7 @@ pragma solidity 0.8.24;
 ///   [0] TALLY_INSTANCE_VERSION (2)
 ///   [1] electionId
 ///   [2] acceptedCount
-///   [3] countsHash     = keccak256(abi.encodePacked(counts))           mod r
+///   [3] countsHash     = keccak256(abi.encode(counts))                 mod r
 ///   [4] ballotRoot     = inbox hash-chain of accepted ballot hashes     mod r
 ///                        (bound for BOTH schemes since V2)
 ///   [5] aggregateHash  = commitment to the summed ciphertext             mod r (0 if SUM_ONLY)
@@ -59,7 +59,7 @@ library TallyPublicInputs {
     }
 
     function countsHashOf(uint256[] memory counts) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(counts));
+        return keccak256(abi.encode(counts));
     }
 
     function tallyKeyHashOf(bytes32 pubX, bytes32 pubY) internal pure returns (bytes32) {

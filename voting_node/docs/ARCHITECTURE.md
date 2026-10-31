@@ -430,7 +430,7 @@ Public inputs **must** be length ≥ 5, same order as `@zk-voting/proof-helpers`
 Rejects when: verifier returns false; nullifier already used (`NullifierUsed`),
 including a new `ballotHash`; outside window; roll not frozen; election mismatch;
 eligible / disqualification root in the proof does not match;
-`ballotHash` does not match `keccak256(encryptedBallot)`.
+`ballotHash` does not match the ciphertext. A canonical `EG` ballot hashes the ordered option vector with Poseidon. Any other ciphertext is `keccak256(encryptedBallot) mod r`.
 
 A nullifier is accepted **once**. `acceptedBallots` counts unique nullifiers.
 Double voting is impossible. Event: `VoteAccepted`. Relayer/bundler is

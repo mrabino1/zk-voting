@@ -98,9 +98,10 @@ describe("hash schemes", () => {
     ]);
   });
 
-  test("env flags: mock by default, proving path disables mock", () => {
+  test("env flags: mock is off until opted in, proving path disables mock", () => {
     assert.equal(provingPathEnabled({}), false);
-    assert.equal(useMockVerifier({}), true);
+    assert.equal(useMockVerifier({}), false);
+    assert.equal(useMockVerifier({ ZK_VOTING_USE_MOCK_VERIFIER: "1" }), true);
     assert.equal(resolveHashScheme({}), HASH_SCHEMES.KECCAK_DEV_V1);
     assert.equal(provingPathEnabled({ ZK_VOTING_PROVING_PATH: "1" }), true);
     assert.equal(useMockVerifier({ ZK_VOTING_PROVING_PATH: "1" }), false);

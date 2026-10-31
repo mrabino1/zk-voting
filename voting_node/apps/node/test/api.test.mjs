@@ -313,7 +313,7 @@ describe('ZK-Voting Node API', () => {
       body: {
         proof: { accept: true },
         publicInputs: { nullifier: '99', electionId },
-        encryptedBallot: '0xdecaf',
+        encryptedBallot: '0xdecafe',
         identityCommitment: '0x1234',
       },
     });

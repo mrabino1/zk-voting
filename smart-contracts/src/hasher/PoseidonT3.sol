@@ -65,7 +65,7 @@ library PoseidonT3 {
     }
 
     function _word(bytes memory data, uint256 i) private pure returns (uint256 v) {
-        assembly {
+        assembly ("memory-safe") {
             v := mload(add(add(data, 0x20), mul(i, 0x20)))
         }
     }

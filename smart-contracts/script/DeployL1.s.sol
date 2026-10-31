@@ -42,7 +42,9 @@ contract DeployL1 is DeployOnce {
         // Audit M-05 (opt-in): require every certification to cite a settled
         // L2 state root. Off by default because the Node posts a zero root
         // until the sequencer publishes batches.
-        if (vm.envOr("TALLY_MIRROR_REQUIRE_SETTLED_ROOT", false)) mirror.setSettlement(address(settlement));
+        if (vm.envOr("TALLY_MIRROR_REQUIRE_SETTLED_ROOT", false)) {
+            mirror.setSettlement(vm.envOr("TALLY_MIRROR_ELECTION_ID", uint256(0)), address(settlement));
+        }
         vm.stopBroadcast();
 
         _log("SETTLEMENT", address(settlement));

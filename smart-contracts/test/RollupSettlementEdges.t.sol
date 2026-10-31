@@ -65,6 +65,18 @@ contract RollupSettlementEdgesTest is Deployer {
         settlement.setGenesis(bytes32(uint256(9)));
     }
 
+    function testMockModeIsOffWithoutTheFlag() public {
+        vm.expectRevert(IRollupSettlement.VerifierRequired.selector);
+        new RollupSettlement(admin, sequencer, prover, address(0), false);
+        RollupSettlement live = new RollupSettlement(admin, sequencer, prover, address(0), true);
+        assertTrue(live.mockMode());
+        bytes32 dataHash = live.computeDataHash(0, bytes32(0), bytes32(uint256(1)));
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
+        vm.prank(sequencer);
+        live.submitBatch(0, bytes32(0), bytes32(uint256(1)), dataHash, a, b, c);
+        assertEq(live.batchCount(), 1);
+    }
+
     function testInvalidProofWhenNotMockMode() public {
         MockVerifier v = new MockVerifier();
         v.setAccept(false);

@@ -95,7 +95,7 @@ contract BallotSecrecyTest is Deployer {
         vm.prank(relayer);
         inbox.submitVoteBatch(id, proofA, proofB, proofC, inputs, ballots);
 
-        assertEq(inbox.acceptedBallots(id), 3);
+        assertEq(this.liveAccepted(id), 3);
         assertEq(inbox.ballotHashAt(id, 0), bytes32(Fixtures.ballotHash(Fixtures.encryptedBallot(nLo))));
         assertEq(inbox.ballotHashAt(id, 1), bytes32(Fixtures.ballotHash(Fixtures.encryptedBallot(nMid))));
         assertEq(inbox.ballotHashAt(id, 2), bytes32(Fixtures.ballotHash(Fixtures.encryptedBallot(nHi))));

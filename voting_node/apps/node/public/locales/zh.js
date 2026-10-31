@@ -790,7 +790,7 @@ export default {
     partiesHint: "每次选举克隆自己的外部方登记。工作人员可以添加任意数量的外部系统（重罪记录、生命统计、年龄核验等）。这些系统仍可以在<strong>登记已获批准之后</strong>拒绝一个人。身份承诺被检查后即丢弃 — 绝不存储在选票上。HTTP 预言机失败时关闭：超时或不是 <code>allow: true</code> 的响应会拒绝该票。",
     tallyTitle: "计票操作员",
     tallyHint:
-      "截止后公布每题相对多数计数。每题在其自身选项上计票 — 不要把所有竞赛加进必须等于已接受选票的一个向量。排序选择题根据已接受的排序信封用 IRV 计算（全排序选票上把相对多数向量留空）。在 <code>opens_ballots</code> 选举上，留空计数以打开演示 ECIES 信封，或提交必须与打开的选票匹配的计数 — 编造的划分会被拒绝。threshold-1 操作员密钥为非生产环境。如果设置了 <code>L1_RPC</code>、<code>L1_TALLY_MIRROR_ADDRESS</code> 和 <code>L1_PUBLISHER_PRIVATE_KEY</code>，Node 还会把 <code>keccak256(abi.encodePacked(counts))</code> 复制到 <code>L1TallyMirror</code>。未设置 L1 环境则为空操作。",
+      "截止后公布每题相对多数计数。每题在其自身选项上计票 — 不要把所有竞赛加进必须等于已接受选票的一个向量。排序选择题根据已接受的排序信封用 IRV 计算（全排序选票上把相对多数向量留空）。在 <code>opens_ballots</code> 选举上，留空计数以打开演示 ECIES 信封，或提交必须与打开的选票匹配的计数 — 编造的划分会被拒绝。threshold-1 操作员密钥为非生产环境。如果设置了 <code>L1_RPC</code>、<code>L1_TALLY_MIRROR_ADDRESS</code> 和 <code>L1_PUBLISHER_PRIVATE_KEY</code>，Node 还会把 <code>keccak256(abi.encode(counts))</code> 复制到 <code>L1TallyMirror</code>。未设置 L1 环境则为空操作。",
     countsJson: "计数 JSON",
     countsHint:
       "按选票顺序拼接的相对多数选项，或使用上方每题字段。全排序选票请留空，以便从信封计算 IRV。在 <code>opens_ballots</code> 上省略以从打开的信封派生计数；编造的划分会被拒绝。示例 YES_NO → <code>[yesCount, noCount]</code>。",

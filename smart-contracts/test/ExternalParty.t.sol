@@ -140,7 +140,7 @@ contract ExternalPartyTest is Deployer {
             EligibleSet.rootOf(onlyOther, Fixtures.TREE_DEPTH, IHasher(address(hasher)))
         );
         _expectStaleRootRevert(id, el, 1, before);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
 
         vm.prank(felonyRecords);
         registry.clearRejection(felony, commitment, keccak256("appeal"));
@@ -149,7 +149,7 @@ contract ExternalPartyTest is Deployer {
         assertTrue(voterRegistry.isEligible(id, commitment));
 
         submitVote(id, el, 1);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
 
         bytes32 afterFirst = IElection(el).eligibleRoot();
         vm.prank(deathRecords);
@@ -164,7 +164,7 @@ contract ExternalPartyTest is Deployer {
         ExternalPartyRegistry registry = ExternalPartyRegistry(factory.getPartyRegistry(id));
 
         submitVote(id, el, 11);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
 
         vm.prank(clerk);
         registry.addParty(ageRecords, "Age verification", "", MODE_VETO);
@@ -172,7 +172,7 @@ contract ExternalPartyTest is Deployer {
         // A veto party that has not rejected this commitment does not block the
         // shared relayer, and the ballot carries no identity commitment.
         submitVote(id, el, 12);
-        assertEq(inbox.acceptedBallots(id), 2);
+        assertEq(this.liveAccepted(id), 2);
     }
 
     function testMustAttestExcludesLeafUntilAttested() public {
@@ -195,7 +195,7 @@ contract ExternalPartyTest is Deployer {
         assertFalse(registry.missingRequiredAttestation(commitment));
         assertTrue(voterRegistry.isEligible(id, commitment));
         submitVote(id, el, 1);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testPausedPartyDoesNotGate() public {
@@ -215,7 +215,7 @@ contract ExternalPartyTest is Deployer {
         // disqualification root, so the shared relayer can submit.
         assertFalse(disqualification.isDisqualified(id, commitment));
         submitVote(id, el, 99);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testPartyIsolationAcrossElections() public {

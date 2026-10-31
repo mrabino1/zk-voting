@@ -5,6 +5,10 @@ pragma circom 2.0.0;
 // Tally circuit: prove that published per-option counts equal the
 // accepted ballots (plaintext / mock-homomorphic path).
 //
+// The sealed aggregate instance is circuits/tally_aggregate.circom.
+// Guardian Chaum-Pedersen partials are checked on chain. This file stays
+// the plaintext histogram and does not replace that instance.
+//
 // =============================================================================
 // Public-input versioning (READ THIS BEFORE WIRING A VERIFIER)
 // =============================================================================

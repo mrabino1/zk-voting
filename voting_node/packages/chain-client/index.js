@@ -21,6 +21,9 @@ const {
   bytesToHex,
   functionSelector,
   encodePacked,
+  encodeEgBallot,
+  digestEgBallot,
+  ballotDigest,
 } = require("@zk-voting/proof-helpers");
 const { ZK_VOTING_CHAIN_ID } = require("@zk-voting/types");
 
@@ -54,6 +57,7 @@ const FACTORY_ABI = [
           { name: "tallyPubKeyX", type: "bytes32" },
           { name: "tallyPubKeyY", type: "bytes32" },
           { name: "tallyScheme", type: "uint8" },
+          { name: "electionType", type: "uint8" },
         ],
       },
     ],
@@ -71,6 +75,7 @@ const FACTORY_ABI = [
       { name: "jurisdictionId", type: "bytes32", indexed: true },
       { name: "startTime", type: "uint64", indexed: false },
       { name: "cutoffTime", type: "uint64", indexed: false },
+      { name: "electionType", type: "uint8", indexed: false },
     ],
   },
   {
@@ -144,7 +149,7 @@ const INBOX_ABI = [
   },
   {
     type: "function",
-    name: "acceptedBallots",
+    name: "closedBallotCount",
     stateMutability: "view",
     inputs: [{ name: "electionId", type: "uint256" }],
     outputs: [{ type: "uint256" }],
@@ -448,6 +453,7 @@ function toViemParams(params) {
     tallyPubKeyX: toHex32(params.tallyPubKeyX || 0),
     tallyPubKeyY: toHex32(params.tallyPubKeyY || 0),
     tallyScheme: Number(params.tallyScheme || 0),
+    electionType: Number(params.electionType || 0),
   };
 }
 
@@ -469,7 +475,7 @@ function unpackCreateResult(result) {
  * Read `ElectionCreated` from a transaction receipt.
  * @param {{logs?: Array<{data?: string, topics?: string[]}>}|null|undefined} receipt
  * @param {object} [viemLib]
- * @returns {{electionId?: bigint, election?: string, jurisdictionId?: string, startTime?: bigint, cutoffTime?: bigint}}
+ * @returns {{electionId?: bigint, election?: string, jurisdictionId?: string, startTime?: bigint, cutoffTime?: bigint, electionType?: number}}
  */
 function decodeElectionCreated(receipt, viemLib) {
   const viem = viemLib || tryViem();
@@ -489,6 +495,7 @@ function decodeElectionCreated(receipt, viemLib) {
           jurisdictionId: decoded.args.jurisdictionId,
           startTime: decoded.args.startTime,
           cutoffTime: decoded.args.cutoffTime,
+          electionType: decoded.args.electionType,
         };
       }
     } catch {
@@ -675,7 +682,7 @@ async function getElectionAddress(factoryAddressOrOpts, electionId, opts) {
   return factory.getElection(electionId);
 }
 
-async function acceptedBallots(inboxAddress, electionId, opts = {}) {
+async function closedBallotCount(inboxAddress, electionId, opts = {}) {
   const rpcUrl = opts.rpcUrl || process.env.ZK_VOTING_RPC_URL || "http://127.0.0.1:8545";
   const viem = tryViem();
   const inbox = padAddress(inboxAddress);
@@ -683,13 +690,13 @@ async function acceptedBallots(inboxAddress, electionId, opts = {}) {
     return opts.publicClient.readContract({
       address: inbox,
       abi: INBOX_ABI,
-      functionName: "acceptedBallots",
+      functionName: "closedBallotCount",
       args: [toBigInt(electionId)],
     });
   }
   const raw = await ethCall(rpcUrl, {
     to: inbox,
-    data: calldataUint256("acceptedBallots(uint256)", electionId),
+    data: calldataUint256("closedBallotCount(uint256)", electionId),
   });
   return decodeUintWord(raw);
 }
@@ -720,10 +727,13 @@ module.exports = {
   decodeElectionCreated,
   submitVote,
   getElectionAddress,
-  acceptedBallots,
+  closedBallotCount,
   nullifierUsed,
   serializePublicInputs,
   encodePacked,
+  encodeEgBallot,
+  digestEgBallot,
+  ballotDigest,
   padAddress,
   ...l1,
 };

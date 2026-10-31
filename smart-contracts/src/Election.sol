@@ -61,6 +61,11 @@ contract Election is IElection {
     }
 
     /// @inheritdoc IElection
+    function electionType() external view returns (uint8) {
+        return _params.electionType;
+    }
+
+    /// @inheritdoc IElection
     function params() external view returns (ElectionParams memory) {
         return _params;
     }

@@ -27,6 +27,8 @@ contract FakeSnarkVerifier {
 contract VoteVerifierTest is Test {
     function testUnconfiguredDelegatesToMock() public {
         MockVerifier mock = new MockVerifier();
+        assertFalse(mock.acceptAll());
+        mock.setAccept(true);
         VoteVerifier v = new VoteVerifier(address(mock));
         assertFalse(v.hasKey());
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
@@ -55,6 +57,8 @@ contract VoteVerifierTest is Test {
 
     function testMockAcceptAllCanBeDisabled() public {
         MockVerifier mock = new MockVerifier();
+        assertFalse(mock.acceptAll());
+        mock.setAccept(true);
         assertTrue(mock.acceptAll());
         mock.setAccept(false);
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();

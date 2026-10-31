@@ -579,7 +579,7 @@ identity commitment. The Node-side mechanics:
 
 ## L1 certification (tally hash on Ethereum)
 
-After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encodePacked(counts))`, the same `countsHash` as `Tally.TallyPosted` — to Ethereum L1 `L1TallyMirror.postCertifiedResult`. The L1 slot is `(factory, onChainElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
+After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encode(counts))`, the same `countsHash` as `Tally.TallyPosted` — to the Ethereum L1 tally mirror. The L1 slot is `(factory, onChainElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
 
 `RollupSettlement` is the batch-root contract. When `L1_SETTLEMENT_ADDRESS` is set, the Node/script reads `stateRoot()` and attaches it as `l2StateRoot`. That is optional court context, not a substitute for the tally hash.
 

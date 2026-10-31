@@ -15,6 +15,7 @@ import {
   readCursor,
   runProverTick,
 } from '../prover/settle.mjs';
+import { loadConfig } from '../sequencer/state.mjs';
 
 describe('prover settlement guard', () => {
   const temps = [];
@@ -65,6 +66,19 @@ describe('prover settlement guard', () => {
       }).mode,
       'submit',
     );
+  });
+
+  test('dev mock proof is off unless DEV_MOCK_PROOF is set', () => {
+    const prev = process.env.DEV_MOCK_PROOF;
+    delete process.env.DEV_MOCK_PROOF;
+    try {
+      assert.equal(loadConfig().devMockProof, false);
+      process.env.DEV_MOCK_PROOF = '1';
+      assert.equal(loadConfig().devMockProof, true);
+    } finally {
+      if (prev === undefined) delete process.env.DEV_MOCK_PROOF;
+      else process.env.DEV_MOCK_PROOF = prev;
+    }
   });
 
   test('DEPLOY_ON_START is refused', () => {

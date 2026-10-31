@@ -593,15 +593,11 @@ describe('live diagnostics count a sealed vote', () => {
   });
 });
 
-describe('on-chain create stays on the current factory tuple', () => {
-  test('electionType is not an ElectionParams component and is not attached', () => {
-    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, false);
+describe('on-chain create carries electionType as the last factory component', () => {
+  test('electionType is the last ElectionParams component and is attached', () => {
+    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, true);
     const components = electionFactoryAbi.find((item) => item.name === 'createElection').inputs[0].components;
-    assert.equal(components.at(-1).name, 'tallyScheme');
-    assert.equal(
-      components.some((item) => item.name === 'electionType'),
-      false,
-    );
+    assert.equal(components.at(-1).name, 'electionType');
     const tuple = factoryElectionParams(
       {
         title: 'T',
@@ -624,11 +620,10 @@ describe('on-chain create stays on the current factory tuple', () => {
       },
       1,
     );
-    assert.equal(Object.hasOwn(tuple, 'electionType'), false);
+    assert.equal(tuple.electionType, 1);
   });
 
-  test('the sequencer open carries type and cutoff while the factory flag stays off', () => {
-    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, false);
+  test('the sequencer open carries type and cutoff', () => {
     const civic = electionOpenCivic(
       { l2Uuid: '11111111-1111-4111-8111-111111111111' },
       {
@@ -639,7 +634,6 @@ describe('on-chain create stays on the current factory tuple', () => {
     );
     assert.equal(civic.electionType, 1);
     assert.equal(civic.cutoffTime, 1_700_000_000);
-    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, false);
   });
 });
 

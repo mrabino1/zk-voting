@@ -1,13 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Groth16 check for a vote. Mock proofs are limited to the local dev chain
-// and to the Node test default chain. A missing ceremony zkey is not treated
-// as success.
+// Groth16 check for a vote. Mock proofs run only when allowMockProofs is set.
+// A missing ceremony zkey is not treated as success.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_CHAIN_ID } from './setup.mjs';
 import { HttpError } from './http.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -40,16 +38,8 @@ export function zkArtifactRoute() {
   };
 }
 
-const LOCAL_DEV_CHAIN_ID = 31337;
-
 export function mockVoteProofAllowed(config) {
-  if (config && Object.prototype.hasOwnProperty.call(config, 'allowMockProofs')) {
-    return Boolean(config.allowMockProofs);
-  }
-  const chainId = Number(config?.chainId);
-  if (chainId === LOCAL_DEV_CHAIN_ID) return true;
-  const isTest = process.env.NODE_ENV === 'test';
-  return isTest && chainId === DEFAULT_CHAIN_ID;
+  return Boolean(config && config.allowMockProofs);
 }
 
 export function isMockVoteProof(proof) {

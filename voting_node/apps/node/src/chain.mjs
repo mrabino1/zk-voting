@@ -50,7 +50,7 @@ export const ballotInboxAbi = [
   },
   {
     type: 'function',
-    name: 'acceptedBallots',
+    name: 'closedBallotCount',
     stateMutability: 'view',
     inputs: [{ name: 'electionId', type: 'uint256' }],
     outputs: [{ type: 'uint256' }],
@@ -85,6 +85,7 @@ export const electionFactoryAbi = [
           { name: 'tallyPubKeyX', type: 'bytes32' },
           { name: 'tallyPubKeyY', type: 'bytes32' },
           { name: 'tallyScheme', type: 'uint8' },
+          { name: 'electionType', type: 'uint8' },
         ],
       },
     ],
@@ -102,6 +103,7 @@ export const electionFactoryAbi = [
       { name: 'jurisdictionId', type: 'bytes32', indexed: true },
       { name: 'startTime', type: 'uint64', indexed: false },
       { name: 'cutoffTime', type: 'uint64', indexed: false },
+      { name: 'electionType', type: 'uint8', indexed: false },
     ],
   },
 ];
@@ -122,6 +124,7 @@ export function decodeElectionCreated(receipt) {
           jurisdictionId: decoded.args.jurisdictionId,
           startTime: decoded.args.startTime,
           cutoffTime: decoded.args.cutoffTime,
+          electionType: decoded.args.electionType,
         };
       }
     } catch {
@@ -317,13 +320,14 @@ export function resolveCreateElectionParams(config, input, fromAddress) {
       input.tallyScheme === 'opens_ballots' || input.tallyScheme === 1 || input.tallyScheme === '1'
         ? 1
         : Number(input.tallyScheme || 0) || 0,
+    electionType:
+      input.electionType === 'VOTE' || input.electionType === 1 || input.electionType === '1' ? 1 : 0,
   };
 }
 
 /**
- * Isolated on-chain hook. The current factory ABI ends at tallyScheme.
- * electionType is accepted here so a later factory can append it, and is
- * dropped while PASS_ELECTION_TYPE_ON_CHAIN is false.
+ * Factory tuple builder. electionType is appended as the last component
+ * while PASS_ELECTION_TYPE_ON_CHAIN is true.
  */
 export function factoryElectionParams(params, electionType) {
   const tuple = {

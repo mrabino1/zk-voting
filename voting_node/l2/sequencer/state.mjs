@@ -387,7 +387,7 @@ export function loadConfig(root = L2_ROOT) {
       : 'open',
     adminSecret: String(process.env.L2_ADMIN_SECRET || '').trim(),
     l2Uuid: String(process.env.L2_UUID || file.l2Uuid || '').trim().toLowerCase(),
-    devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof !== false),
+    devMockProof: parseBool(process.env.DEV_MOCK_PROOF, file.devMockProof === true),
     voteProvingPath: parseBool(process.env.ZK_VOTING_PROVING_PATH, false),
     l2RpcUrl:
       process.env.L2_RPC_URL ||

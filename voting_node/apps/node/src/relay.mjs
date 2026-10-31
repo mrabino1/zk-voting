@@ -117,14 +117,16 @@ export const SNARK_SCALAR_FIELD =
 /**
  * Ballot hash bound as vote public input 3.
  * An AG envelope contributes the 32-byte Poseidon tag (the contracts bind that
- * tag, not keccak of the whole blob). Every other ciphertext stays
- * `uint256(keccak256(ciphertext)) % r`.
+ * tag, not keccak of the whole blob). A canonical EG ballot is the ordered-vector
+ * Poseidon digest. Every other ciphertext stays `uint256(keccak256(ciphertext)) % r`.
  */
 export function hashBallot(encryptedBallot) {
   const hex = toEncryptedHex(encryptedBallot);
   if (isAggregateEnvelope(hex)) {
     return parseAggregateEnvelope(hex).ballotHash;
   }
+  const eg = proofHelpers.digestEgBallot(hex);
+  if (eg != null) return toHex(eg, { size: 32 });
   const h = BigInt(keccak256(hex));
   return toHex(h % SNARK_SCALAR_FIELD, { size: 32 });
 }
