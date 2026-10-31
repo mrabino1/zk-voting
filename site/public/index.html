@@ -120,7 +120,7 @@
           <figure class="vz">
             <svg class="vz-svg" viewBox="0 0 520 470" width="100%" fill="#a1a1ad" font-size="14" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="vz-l2-title vz-l2-desc" focusable="false">
               <title id="vz-l2-title" data-i18n="vision.l2Title">L2 view: one election team's L2</title>
-              <desc id="vz-l2-desc" data-i18n="vision.l2Desc">Voters at the edge vote for free and send ballots to the sequencer. A voter who is not pre-approved is rejected by the prover. The sequencer and prover batch the accepted votes. The operator's minimally funded L1 key pays to submit each batch to Ethereum L1. The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</desc>
+              <desc id="vz-l2-desc" data-i18n="vision.l2Desc">Voters at the edge vote for free and send ballots to the sequencer. A voter who is not pre-approved is rejected by the prover. The sequencer batches the accepted votes. The L2 computes the state root and the tally. L1 commits that state root and is designed to check a proof later, in order. An unproven root publishes nothing and can roll back after a timeout. Until a real aggregate verifier is in place, the tally is checked by summing ciphertexts on chain. The operator's minimally funded L1 key pays to submit each batch to Ethereum L1. The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</desc>
               <rect class="vz-bg" width="520" height="470" rx="12" fill="#141418"/>
               <rect class="vz-frame" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="8 6" x="6" y="6" width="508" height="352" rx="16"/>
               <text class="vz-label" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="24" y="34" data-i18n="vision.oneTeam">One election team's L2</text>
@@ -146,7 +146,7 @@
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M226 193H272" marker-end="url(#vz-arrow2)"/>
               <rect class="vz-box" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5" x="278" y="156" width="218" height="74" rx="12"/>
               <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="387" y="188" text-anchor="middle" data-i18n="vision.prover">Prover</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="387" y="212" text-anchor="middle" data-i18n="vision.proverSub">proves each batch</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="387" y="212" text-anchor="middle" data-i18n="vision.proverSub">state root and tally</text>
               <text class="vz-reject" fill="#fca5a5" font-size="14" font-weight="600" x="312" y="142" data-i18n="vision.rejected">&#10005; rejected by the prover</text>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M387 232V268" marker-end="url(#vz-arrow2)"/>
               <text class="vz-m" fill="#a1a1ad" font-size="14" x="24" y="262" data-i18n="vision.uuids1">Election UUIDs are unique</text>
@@ -158,14 +158,14 @@
               <text class="vz-s" fill="#e9e9ee" font-size="13" x="347" y="372" text-anchor="end" data-i18n="vision.batchWord">batch</text>
               <rect class="vz-l1" fill="#231d36" stroke="#8b5cf6" stroke-width="2" x="10" y="388" width="500" height="72" rx="14"/>
               <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="420" text-anchor="middle">Ethereum L1</text>
-              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="444" text-anchor="middle" data-i18n="vision.settled">batch settled under hash(L2 ID, election UUID)</text>
+              <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="444" text-anchor="middle" data-i18n="vision.settled">root committed under hash(L2 ID, election UUID)</text>
             </svg>
             <figcaption>
               <h3 data-i18n="vision.l2Caption">L2 view: one election team</h3>
               <ul class="vz-points">
                 <li data-i18n="vision.l2p1">Voters at the edge vote for free.</li>
                 <li data-i18n="vision.l2p2">Only pre-approved voters are accepted. The prover rejects everyone else. (with the mock verifier in tests, this check is not yet enforced)</li>
-                <li data-i18n="vision.l2p3">The sequencer and prover batch the votes.</li>
+                <li data-i18n="vision.l2p3">The sequencer batches the votes. The L2 computes the state root and the tally. L1 commits that root hourly and is designed to check a proof of the computation later, in order. An unproven root publishes nothing and can roll back after a timeout. Until a real aggregate verifier is in place, the tally is checked by summing ciphertexts on chain.</li>
                 <li data-i18n="vision.l2p4">The operator's minimally funded L1 key pays to submit each batch to L1.</li>
                 <li data-i18n="vision.l2p5">The L2 ID is bound to the operator key plus a salt, and election UUIDs are unique within the L2.</li>
               </ul>
@@ -228,7 +228,7 @@
             </label>
           </div>
           <h2 id="poll-vote-title" data-i18n="pollVote.title">Poll vs Vote</h2>
-          <p class="sub" data-i18n="pollVote.intro">The creator chooses a poll or a vote. A poll publishes per-choice counts hourly, with a 30-minute delay, after a gate. A vote keeps choices sealed until the deadline. Both end with one final batch, a challenge window, and the final tally.</p>
+          <p class="sub" data-i18n="pollVote.intro">The creator chooses a poll or a vote. A poll publishes per-choice counts hourly, with a 30-minute delay, after a gate. A vote keeps choices sealed until the deadline. Both end with one final L1 batch at the deadline, a challenge window, and, after the grace period, a supplementary batch anyone may post, then the final tally.</p>
           <div class="ballot-compare">
             <article class="ballot-sheet" id="poll-column" aria-labelledby="poll-column-title">
               <h3 id="poll-column-title" data-i18n="pollVote.poll.name">Poll</h3>
@@ -285,57 +285,73 @@
             <li data-i18n="pollVote.both.revote">The operator decides at creation whether re-voting is allowed, and that setting can't be changed afterward. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</li>
             <li data-i18n="pollVote.both.receipt">Every ballot, including a re-vote, gets a receipt.</li>
             <li data-i18n="pollVote.both.turnout">Turnout is published on a delayed hourly schedule, with no padding.</li>
-            <li data-i18n="pollVote.both.batch">Ballots batch hourly while open, one final batch goes to L1 at the deadline, and one supplementary batch is posted before the tally.</li>
+            <li data-i18n="pollVote.both.batch">Ballots batch hourly while open. One final batch goes to L1 at the deadline. After the grace period, anyone may post a missing final batch and the supplementary batch, before the final tally.</li>
             <li data-i18n="pollVote.both.challenge">A challenge window, which must be longer than zero, comes before the final tally.</li>
           </ul>
           <div class="flow-figure">
             <h3 data-i18n="pollVote.flow.heading">How a ballot moves</h3>
-            <svg id="ballot-flow" class="flow-svg" viewBox="0 0 480 596" width="100%" role="img" aria-labelledby="flow-title flow-desc" focusable="false" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+            <svg id="ballot-flow" class="flow-svg" viewBox="0 0 480 728" width="100%" role="img" aria-labelledby="flow-title flow-desc" focusable="false" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
               <title id="flow-title" data-i18n="pollVote.flow.name">Ballot flow for a poll and a vote</title>
-              <desc id="flow-desc" data-i18n="pollVote.flow.desc">Cast, then a receipt, then an hourly batch. A poll publishes hourly results. A vote stays sealed and shows turnout only. Then the deadline, a challenge window, and the final tally.</desc>
-              <rect width="480" height="596" rx="12" fill="#141418"/>
+              <desc id="flow-desc" data-i18n="pollVote.flow.desc">Cast, then a receipt, then an hourly batch in which the L2 computes the state root and the tally. L1 commits that root and is designed to check a proof later, in order. An unproven root publishes nothing and can roll back after a timeout. A poll shows hourly turnout, and choice counts after the gate. A vote stays sealed and shows turnout only. Then the deadline and one final L1 batch, a challenge window designed to open after that proof, a supplementary batch anyone may post after the grace period, and the final tally. Until a real aggregate verifier is in place, the tally is checked by summing ciphertexts on chain.</desc>
+              <rect width="480" height="728" rx="12" fill="#141418"/>
               <defs>
                 <marker id="bf-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                   <path d="M0 0L10 5L0 10z" fill="#a78bfa"/>
                 </marker>
               </defs>
-              <rect x="80" y="16" width="320" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+              <rect x="40" y="16" width="400" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
               <text x="240" y="46" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.cast">Cast</text>
-              <path class="flow-edge" d="M240 68V84" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <rect x="80" y="92" width="320" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
-              <text x="240" y="122" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.receipt">Receipt</text>
-              <path class="flow-edge" d="M240 144V160" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <rect x="80" y="168" width="320" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
-              <text x="240" y="198" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.batch">Hourly batch</text>
-              <path class="flow-edge" d="M240 220V230" fill="none" stroke="#a78bfa" stroke-width="2"/>
-              <path class="flow-edge" d="M122 230H358" fill="none" stroke="#a78bfa" stroke-width="2"/>
-              <path class="flow-edge" d="M122 230V238" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <path class="flow-edge" d="M358 230V238" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <path class="flow-edge" d="M240 64V80" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <rect x="40" y="80" width="400" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+              <text x="240" y="110" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.receipt">Receipt</text>
+              <path class="flow-edge" d="M240 128V144" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <rect x="40" y="144" width="400" height="64" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+              <text x="240" y="170" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.batch">Hourly batch</text>
+              <text x="240" y="192" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.batchSub">State root and tally</text>
+              <path class="flow-edge" d="M240 208V224" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <g id="flow-commit">
+                <rect x="40" y="224" width="400" height="64" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+                <text x="240" y="250" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.commit">L1 commits the root</text>
+                <text x="240" y="272" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.commitSub">Unproven roots publish nothing</text>
+              </g>
+              <path class="flow-edge" d="M240 288V298" fill="none" stroke="#a78bfa" stroke-width="2"/>
+              <path class="flow-edge" d="M122 298H358" fill="none" stroke="#a78bfa" stroke-width="2"/>
+              <path class="flow-edge" d="M122 298V306" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <path class="flow-edge" d="M358 298V306" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
               <g id="flow-poll-lane">
-                <rect x="12" y="244" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5"/>
-                <text x="122" y="274" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollLane">Poll</text>
-                <text x="122" y="306" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollResults">Hourly results</text>
+                <rect x="12" y="306" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5"/>
+                <text x="122" y="332" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollLane">Poll</text>
+                <text x="122" y="360" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.pollResults">Hourly turnout</text>
+                <text x="122" y="382" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.pollChoices">Choices after the gate</text>
               </g>
               <g id="flow-vote-lane">
-                <rect x="248" y="244" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4"/>
-                <text x="358" y="270" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteLane">Vote</text>
-                <text x="358" y="298" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteSealed">Sealed</text>
-                <text x="358" y="320" fill="#a1a1ad" font-size="14" text-anchor="middle" data-i18n="pollVote.flow.voteTurnout">Turnout only</text>
+                <rect x="248" y="306" width="220" height="96" rx="10" fill="#0d0d0f" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4"/>
+                <text x="358" y="332" fill="#a78bfa" font-size="12" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteLane">Vote</text>
+                <text x="358" y="360" fill="#e9e9ee" font-size="15" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.voteSealed">Sealed</text>
+                <text x="358" y="382" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.voteTurnout">Turnout only</text>
               </g>
-              <path class="flow-edge" d="M122 342V352" fill="none" stroke="#a78bfa" stroke-width="2"/>
-              <path class="flow-edge" d="M358 342V352" fill="none" stroke="#a78bfa" stroke-width="2"/>
-              <path class="flow-edge" d="M122 352H358" fill="none" stroke="#a78bfa" stroke-width="2"/>
-              <path class="flow-edge" d="M240 352V360" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <rect x="80" y="368" width="320" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
-              <text x="240" y="398" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.deadline">Deadline</text>
-              <path class="flow-edge" d="M240 420V436" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <rect x="80" y="444" width="320" height="48" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
-              <text x="240" y="474" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.challenge">Challenge window</text>
-              <path class="flow-edge" d="M240 496V512" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
-              <rect x="80" y="520" width="320" height="52" rx="10" fill="#231d36" stroke="#8b5cf6" stroke-width="2"/>
-              <text x="240" y="552" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.tally">Final tally</text>
+              <path class="flow-edge" d="M122 402V412" fill="none" stroke="#a78bfa" stroke-width="2"/>
+              <path class="flow-edge" d="M358 402V412" fill="none" stroke="#a78bfa" stroke-width="2"/>
+              <path class="flow-edge" d="M122 412H358" fill="none" stroke="#a78bfa" stroke-width="2"/>
+              <path class="flow-edge" d="M240 412V420" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <rect x="40" y="420" width="400" height="64" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+              <text x="240" y="446" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.deadline">Deadline</text>
+              <text x="240" y="468" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.deadlineSub">One final L1 batch</text>
+              <path class="flow-edge" d="M240 484V500" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <rect x="40" y="500" width="400" height="64" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+              <text x="240" y="526" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.challenge">Challenge window</text>
+              <text x="240" y="548" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.challengeSub">After that proof</text>
+              <path class="flow-edge" d="M240 564V580" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <g id="flow-supplementary">
+                <rect x="40" y="580" width="400" height="64" rx="10" fill="#0d0d0f" stroke="#26262d" stroke-width="1.5"/>
+                <text x="240" y="606" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.supplementary">Supplementary batch</text>
+                <text x="240" y="628" fill="#a1a1ad" font-size="13" text-anchor="middle" data-i18n="pollVote.flow.supplementarySub">Anyone after the grace</text>
+              </g>
+              <path class="flow-edge" d="M240 644V660" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#bf-arrow)"/>
+              <rect x="40" y="660" width="400" height="52" rx="10" fill="#231d36" stroke="#8b5cf6" stroke-width="2"/>
+              <text x="240" y="692" fill="#e9e9ee" font-size="16" font-weight="700" text-anchor="middle" data-i18n="pollVote.flow.tally">Final tally</text>
             </svg>
-            <p class="sub flow-caption" data-i18n="pollVote.flow.caption">A poll publishes hourly results after the batch. A vote stays sealed and shows turnout only. The deadline, the challenge window, and the final tally are shared.</p>
+            <p class="sub flow-caption" data-i18n="pollVote.flow.caption">The L2 computes the state root and the tally. L1 commits that root hourly and is designed to check a proof later, in order. An unproven root publishes nothing and can roll back after a timeout. A poll shows hourly turnout, and choice counts after the gate. A vote stays sealed and shows turnout only. One final L1 batch is posted at the deadline. The challenge window is designed to open after that proof. After the grace period, anyone may post a missing final batch and the supplementary batch. Then the final tally is posted. Until a real aggregate verifier is in place, the tally is checked by summing ciphertexts on chain.</p>
           </div>
         </div>
         <ol class="steps">
@@ -343,7 +359,7 @@
           <li><span class="n">2</span><h3 data-i18n="how.s2title">Freeze the roll</h3><p data-i18n="how.s2body">Officials commit the eligible set and any disqualifications for the election.</p></li>
           <li><span class="n">3</span><h3 data-i18n="how.s3title">Vote with a proof</h3><p data-i18n="how.s3body">Each ballot proves eligibility. The operator decides at creation whether re-voting is allowed, and that setting can't be changed afterward. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</p></li>
           <li><span class="n">4</span><h3 data-i18n="how.s4title">While it is open</h3><p data-i18n="how.s4body">A poll publishes per-choice counts once 100 voters have cast their first ballot, or the scheduled end arrives, whichever comes first. Each hour publishes 30 minutes after it closes. An hour with fewer than 10 ballots merges forward until a block has at least 10. A vote publishes turnout on the same delayed hourly schedule and keeps choices sealed.</p></li>
-          <li><span class="n">5</span><h3 data-i18n="how.s5title">After the closing date</h3><p data-i18n="how.s5body">No more ballots are accepted. A poll's published hourly blocks are designed to stay as first published. If re-voting was allowed, replacement ballots show up only in the final tally. A vote's choices are designed to be decrypted only as an aggregate by k-of-n guardians. One final batch goes to L1 at the deadline, then a challenge window, then the final tally. Anyone can check that the published totals match the accepted ballots.</p></li>
+          <li><span class="n">5</span><h3 data-i18n="how.s5title">After the closing date</h3><p data-i18n="how.s5body">No more ballots are accepted. A poll's published hourly blocks are designed to stay as first published. If re-voting was allowed, replacement ballots show up only in the final tally. A vote's choices are designed to be decrypted only as an aggregate by k-of-n guardians. One final batch goes to L1 at the deadline. The challenge window is designed to open after that batch's proof. After the grace period, anyone may post a missing final batch and the supplementary batch, before the final tally. Anyone can check that the published totals match the accepted ballots.</p></li>
         </ol>
       </div>
     </section>
