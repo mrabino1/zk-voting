@@ -595,7 +595,7 @@ export class Store {
     store.ensureJurisdictionIds();
     store.ensureElectionPublicIds();
     store.rebuildAllEligibility();
-    if (store.backfillResultsGates() && store.writerActive) await store.persist();
+    store.backfillResultsGates();
     for (const key of ARRAY_COLLECTIONS) {
       if (!Array.isArray(store.data[key])) store.data[key] = [];
     }
