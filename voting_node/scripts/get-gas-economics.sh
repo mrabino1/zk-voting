@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # zk-voting gas economics: live gas price and ETH/USD, contract sizes vs the
-# EIP-170 / EIP-3860 caps, deploy gas, and (with --measure) per-call gas from
-# the Foundry test suite rolled up into a per-election cost.
+# pre-Glamsterdam caps and the Glamsterdam (EIP-7954) caps, one-time deploy
+# gas, and (with --measure) per-call gas for a poll and a vote.
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
-# Nothing is hardcoded: the L1 node is L1_RPC (env, .env, or --l1-rpc), the
-# price source is PRICE_API_URL, and every number can be overridden.
+# The L1 node is L1_RPC (env, .env, or --l1-rpc). The price source is
+# PRICE_API_URL. When no feed answers, ETH/USD falls back to 10000.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=lib/common.sh
@@ -20,24 +20,30 @@ Gas price (one is required unless --offline):
   --gas-gwei N         fixed L1 gas price, skips the RPC     (GAS_GWEI)
   --l2-rpc URL         optional EVM RPC for the election stack (GAS_L2_RPC)
   --l2-gas-gwei N      fixed L2 gas price                    (GAS_L2_GWEI)
-  --offline            no network: sizes and gas only, no prices
+  --offline            no network calls. ETH/USD falls back to 10000
 
 ETH/USD:
   --eth-usd N          fixed price, skips the API            (ETH_USD)
-  --no-price           do not fetch a price
+  --no-price           do not fetch a price; use 10000
                        Source: PRICE_API_URL + PRICE_JSON_PATH (default CoinGecko
                        simple/price, ethereum.usd), then PRICE_FALLBACK_URL +
-                       PRICE_FALLBACK_JSON_PATH (default Coinbase spot, data.amount)
+                       PRICE_FALLBACK_JSON_PATH (default Coinbase spot, data.amount).
+                       If neither answers, ETH/USD is 10000.
 
 Gas measurements:
   --measure            run forge test --gas-report and price the key calls
                        (alias: --gas-report)
   --match-contract RE  test contracts to run with --measure  (GAS_MATCH_CONTRACT)
   --ops-filter RE      also list every measured function matching RE
-  --voters N           voters in the per-election model      (VOTERS, default 1000)
-  --batches N          L1 batches per election               (BATCHES, default 1)
-  --groth16-gas N      extra gas per ballot for a real Groth16 verify
-                       (GROTH16_EXTRA_GAS, default 250000; 0 to hide)
+  --voters N           unique voters in the highlighted run (VOTERS, default 1000)
+  --ballots N          submissions, including re-votes       (BALLOTS, default = voters)
+  --hours N            open hours of the voting window       (HOURS, default 12)
+  --batches N          override L1 batch count for that run  (BATCHES; default is hours+2:
+                       one hourly batch per open hour, the final batch, and one
+                       supplementary batch)
+  --groth16-gas N      extra gas for a real Groth16 proof, once per L1
+                       settlement (GROTH16_EXTRA_GAS, default 250000; 0 to hide).
+                       Not once per ballot. Tests use a mock verifier.
   --record FILE        deployment record from scripts/deploy.sh for measured
                        deploy gas (DEPLOYMENTS_FILE; default
                        deployments/<chainId>.json for the L2, then L1, chain)
@@ -45,7 +51,9 @@ Gas measurements:
   --build              run forge build first
   -h, --help           this help
 
-Exit status: 0 ok, 1 a contract is over a size cap or no artifacts, 2 usage.
+Exit status: 0 ok, 1 a contract exceeds the Glamsterdam size cap or there are
+no artifacts, 2 usage. Exceeding today's 24 KiB cap while fitting 64 KiB is
+reported as PRE and does not fail.
 USAGE
 }
 
@@ -63,7 +71,9 @@ BUILD=0
 MATCH_CONTRACT="${GAS_MATCH_CONTRACT:-}"
 OPS_FILTER=""
 VOTERS="${VOTERS:-1000}"
-BATCHES="${BATCHES:-1}"
+BALLOTS="${BALLOTS:-}"
+HOURS="${HOURS:-12}"
+BATCHES="${BATCHES:-}"
 GROTH16="${GROTH16_EXTRA_GAS:-250000}"
 RECORD="${DEPLOYMENTS_FILE:-}"
 OUT_DIR="${OUT_DIR:-$SC_DIR/out}"
@@ -81,6 +91,8 @@ while [[ $# -gt 0 ]]; do
     --match-contract) MATCH_CONTRACT="${2:?$1 needs a value}"; shift 2 ;;
     --ops-filter) OPS_FILTER="${2:?$1 needs a value}"; shift 2 ;;
     --voters) VOTERS="${2:?$1 needs a value}"; shift 2 ;;
+    --ballots) BALLOTS="${2:?$1 needs a value}"; shift 2 ;;
+    --hours) HOURS="${2:?$1 needs a value}"; shift 2 ;;
     --batches) BATCHES="${2:?$1 needs a value}"; shift 2 ;;
     --groth16-gas) GROTH16="${2:?$1 needs a value}"; shift 2 ;;
     --record) RECORD="${2:?$1 needs a value}"; shift 2 ;;
@@ -91,8 +103,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for n in VOTERS BATCHES GROTH16; do
+for n in VOTERS HOURS GROTH16; do
   [[ "${!n}" =~ ^[0-9]+$ ]] || { printf 'error: %s must be a whole number (got %s)\n' "$n" "${!n}" >&2; exit 2; }
+done
+for n in BALLOTS BATCHES; do
+  [[ -z "${!n}" || "${!n}" =~ ^[0-9]+$ ]] || { printf 'error: %s must be a whole number (got %s)\n' "$n" "${!n}" >&2; exit 2; }
 done
 
 need python3 "It renders the report."
@@ -189,8 +204,12 @@ elif [[ "$NO_PRICE" -eq 0 ]]; then
     PRICE_SRC="$(redact_url "$f_url") (fallback)"
   else
     ETH_USD=""
-    warn "no ETH/USD price from the price APIs; USD columns show n/a (set ETH_USD to fix one)"
+    warn "no ETH/USD price from the price APIs; using 10000"
   fi
+fi
+if [[ -z "$ETH_USD" ]]; then
+  ETH_USD=10000
+  PRICE_SRC="default \$10,000 (no price feed)"
 fi
 
 # --- artifacts -------------------------------------------------------------------
@@ -239,5 +258,6 @@ GE_SC_DIR="$SC_DIR" GE_OUT_DIR="$OUT_DIR" \
   GE_L2_DESC="$L2_DESC" GE_L2_GWEI="$L2_GWEI" GE_L2_GAS_SRC="$L2_GAS_SRC" \
   GE_ETH_USD="$ETH_USD" GE_PRICE_SRC="$PRICE_SRC" \
   GE_RECORD="$RECORD" GE_RECORD_DESC="$RECORD_DESC" GE_GAS_REPORT="$GAS_REPORT" \
-  GE_VOTERS="$VOTERS" GE_BATCHES="$BATCHES" GE_GROTH16_EXTRA_GAS="$GROTH16" GE_OPS_FILTER="$OPS_FILTER" \
+  GE_VOTERS="$VOTERS" GE_BALLOTS="$BALLOTS" GE_HOURS="$HOURS" GE_BATCHES="$BATCHES" \
+  GE_GROTH16_EXTRA_GAS="$GROTH16" GE_OPS_FILTER="$OPS_FILTER" \
   python3 -B "$(dirname "${BASH_SOURCE[0]}")/lib/gas_economics.py"

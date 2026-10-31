@@ -26,6 +26,10 @@ guardian-ceremony-out/
 # Logs
 *.log
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Foundry (smart-contracts/)
 smart-contracts/out/
 smart-contracts/cache/
