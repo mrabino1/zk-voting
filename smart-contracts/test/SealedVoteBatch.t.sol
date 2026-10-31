@@ -18,6 +18,7 @@ import {IL1TallyMirror} from "../src/interfaces/IL1TallyMirror.sol";
 import {PoseidonT3} from "../src/hasher/PoseidonT3.sol";
 import {BabyJub} from "../src/zk/BabyJub.sol";
 import {RollupSettlement} from "../src/l2/RollupSettlement.sol";
+import {PlaceholderAggregateVerifier} from "../src/zk/PlaceholderAggregateVerifier.sol";
 import {Deployer} from "./helpers/Deployer.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 
@@ -378,6 +379,9 @@ contract SealedVoteBatchTest is Deployer {
     uint256[2] internal pa;
     uint256[2][2] internal pb;
     uint256[2] internal pc;
+    /// @dev When false, `post` leaves the aggregate proof for a later `verifyCommittedProof`.
+    bool internal autoProve = true;
+    uint256 internal pinnedHour;
 
     function setUp() public {
         deployStack();
@@ -1324,10 +1328,222 @@ contract SealedVoteBatchTest is Deployer {
     }
 
     function testThreeOptionTotalRejectsTamper() public {
+        PlaceholderAggregateVerifier standIn = new PlaceholderAggregateVerifier(true);
+        this.useLive(address(standIn));
         (uint256 id,) = this.openLinked(2 hours);
+        (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed) = this.threeRows(id);
+        IRollupSettlement.OptionPoint[] memory honest = new IRollupSettlement.OptionPoint[](claimed.length);
+        for (uint256 i; i < claimed.length; ++i) {
+            honest[i] = IRollupSettlement.OptionPoint(claimed[i].c1X, claimed[i].c1Y, claimed[i].c2X, claimed[i].c2Y);
+        }
+        claimed[1].c1X = 3;
+        uint256 honestTally = settlement.tallyCommitmentOf(honest);
         vm.expectRevert(IRollupSettlement.OptionTotalMismatch.selector);
-        this.threeOption(id, keccak256("opt-bad"), true);
-        this.threeOption(id, keccak256("opt-ok"), false);
+        this.postRowsMismatch(id, keccak256("opt-bad"), rows, claimed, honestTally);
+        this.postRows(id, keccak256("opt-ok"), 0, 1, rows, honest, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+        assertFalse(settlement.proofVerified(0));
+        uint256[] memory badInput = settlement.sealedPublicInputs(0);
+        badInput[5] = settlement.tallyCommitmentOf(claimed);
+        (uint256[2] memory ba, uint256[2][2] memory bb, uint256[2] memory bc) = standIn.commitmentOf(badInput);
+        vm.expectRevert(IRollupSettlement.InvalidProof.selector);
+        settlement.verifyCommittedProof(0, ba, bb, bc);
+        (pa, pb, pc) = standIn.commitmentOf(settlement.sealedPublicInputs(0));
+        settlement.verifyCommittedProof(0, pa, pb, pc);
+        this.assertThree(id, rows[0].options);
+    }
+
+    /// @dev Five rows are two chunks. The aggregate proof must commit to both statements.
+    function testDistinctChunkProofsVerifyAndAReusedProofReverts() public {
+        PlaceholderAggregateVerifier standIn = new PlaceholderAggregateVerifier(true);
+        this.useLive(address(standIn));
+        (uint256 id,) = this.openLinked(2 hours);
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](5);
+        uint256[4] memory sum;
+        for (uint256 i; i < 5; ++i) {
+            (rows[i], sum) = this.hourAppend(id, 7000 + i, sum);
+        }
+        uint256 first = settlement.chunkStatement(id, rows, 0);
+        uint256 second = settlement.chunkStatement(id, rows, 1);
+        assertTrue(first != second, "chunks");
+        bytes32 digest = settlement.chunkDigestOf(id, rows);
+        uint256 reused = PoseidonT3.hashLeftRight(PoseidonT3.hashLeftRight(0, first), first);
+        assertTrue(bytes32(reused) != digest, "reused digest");
+        this.hourPost(id, keccak256("five"), keccak256("h5c"), keccak256("f5c"), 0, 5, rows, sum);
+        assertEq(settlement.sealedPublicInputs(0)[4], uint256(digest) % FIELD);
+        assertFalse(settlement.proofVerified(0));
+        uint256[] memory badInput = settlement.sealedPublicInputs(0);
+        badInput[4] = reused % FIELD;
+        (uint256[2] memory ba, uint256[2][2] memory bb, uint256[2] memory bc) = standIn.commitmentOf(badInput);
+        vm.expectRevert(IRollupSettlement.InvalidProof.selector);
+        settlement.verifyCommittedProof(0, ba, bb, bc);
+        uint256 swapped = PoseidonT3.hashLeftRight(PoseidonT3.hashLeftRight(0, second), first);
+        badInput[4] = swapped % FIELD;
+        (ba, bb, bc) = standIn.commitmentOf(badInput);
+        vm.expectRevert(IRollupSettlement.InvalidProof.selector);
+        settlement.verifyCommittedProof(0, ba, bb, bc);
+        (pa, pb, pc) = standIn.commitmentOf(settlement.sealedPublicInputs(0));
+        settlement.verifyCommittedProof(0, pa, pb, pc);
+        assertTrue(settlement.proofVerified(0));
+        assertTrue(settlement.isSettledRoot(settlement.stateRoot()));
+        assertTrue(settlement.hourlyCiphertext(id, block.timestamp / 1 hours).set);
+    }
+
+    function testProofsVerifyInOrderAndUnprovenRootsStayUnfinalized() public {
+        this.useLive(address(verifier));
+        autoProve = false;
+        (uint256 id, address el) = this.openLinked(4 hours);
+        bytes32 hourly = keccak256("hsplit");
+        bytes32 finalP = keccak256("fsplit");
+        pinnedHour = block.timestamp / 1 hours;
+        this.hour(id, keccak256("split-0"), hourly, finalP, 0, 0);
+        bytes32 committed = settlement.stateRoot();
+        assertTrue(settlement.hourPosted(id, pinnedHour), "hour committed");
+        assertEq(settlement.postedUnique(id), 0, "turnout");
+        assertFalse(settlement.isSettledRoot(committed), "unproven root");
+        assertFalse(settlement.hourlyCiphertext(id, pinnedHour).set, "ciphertext waits");
+        vm.warp(block.timestamp + 1 hours);
+        this.hour(id, keccak256("split-1"), keccak256("hsplit-2"), finalP, 0, 0);
+        assertEq(settlement.nextUnproven(), 0, "proof cursor");
+        assertEq(settlement.batchCount(), 2, "two commits");
+        vm.expectRevert(IRollupSettlement.UnprovenBatch.selector);
+        settlement.verifyCommittedProof(1, pa, pb, pc);
+        settlement.verifyCommittedProof(0, pa, pb, pc);
+        assertTrue(settlement.proofVerified(0), "batch 0");
+        assertTrue(settlement.hourlyCiphertext(id, pinnedHour).set, "hour 0 published");
+        assertTrue(settlement.isSettledRoot(committed), "batch 0 root");
+        assertFalse(settlement.proofVerified(1), "batch 1 still open");
+        warpClosed(el);
+        vm.expectRevert(IRollupSettlement.UnprovenBatch.selector);
+        this.sealFinal(id, keccak256("split-final"), keccak256("hsplit-2"), finalP, 0);
+        settlement.verifyCommittedProof(1, pa, pb, pc);
+        this.sealFinal(id, keccak256("split-final"), keccak256("hsplit-2"), finalP, 0);
+        assertFalse(settlement.finalBatchPosted(id), "final waits for its proof");
+        assertEq(settlement.nextUnproven(), 2, "final is next");
+        settlement.verifyCommittedProof(2, pa, pb, pc);
+        assertTrue(settlement.finalBatchPosted(id), "final published");
+        assertTrue(settlement.isSettledRoot(settlement.stateRoot()), "final root");
+    }
+
+    function testInboxPoseidonHeadMustMatchTheFinalBatch() public {
+        (uint256 id, address el) = this.openLinked(4 hours);
+        assertEq(inbox.acceptedCount(id), 0);
+        assertEq(inbox.acceptedPoseidon(id), bytes32(0));
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
+        uint256[4] memory sum;
+        (rows[0], sum) = this.hourAppend(id, 42, sum);
+        assertEq(inbox.acceptedCount(id), 1);
+        assertTrue(inbox.acceptedPoseidon(id) != bytes32(0));
+        bytes32 hourly = keccak256("h-chain");
+        bytes32 finalP = keccak256("f-chain");
+        this.hourPost(id, keccak256("chain-root"), hourly, finalP, 0, 1, rows, sum);
+        assertEq(settlement.consumedCount(id), inbox.acceptedCount(id));
+        assertEq(settlement.consumedPoseidon(id), inbox.acceptedPoseidon(id));
+        this.makeAcceptedRow(id, 43, 2, 0);
+        warpClosed(el);
+        vm.expectRevert(IRollupSettlement.UnconsumedBallot.selector);
+        this.sealFinal(id, keccak256("chain-omit"), hourly, finalP, 1);
+    }
+
+    function testOptionCapIsABoundedSetting() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        assertEq(settlement.maxOptions(), 4);
+        assertEq(settlement.MAX_OPTIONS_BOUND(), 16);
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(IRollupSettlement.NotAuthorized.selector);
+        settlement.setMaxOptions(2);
+        vm.startPrank(admin);
+        vm.expectRevert(IRollupSettlement.OptionCapOutOfBounds.selector);
+        settlement.setMaxOptions(0);
+        vm.expectRevert(IRollupSettlement.OptionCapOutOfBounds.selector);
+        settlement.setMaxOptions(17);
+        vm.stopPrank();
+        vm.expectRevert(IRollupSettlement.OptionTotalMismatch.selector);
+        this.postCap(id, keccak256("cap-5"), 5);
+        vm.prank(admin);
+        settlement.setMaxOptions(5);
+        assertEq(settlement.maxOptions(), 5);
+        this.postCap(id, keccak256("cap-ok"), 5);
+        assertEq(settlement.batchCount(), 1);
+        vm.prank(admin);
+        vm.expectRevert(IRollupSettlement.AlreadySet.selector);
+        settlement.setMaxOptions(4);
+        RollupSettlement bare = new RollupSettlement(admin, sequencer, prover, address(verifier), true);
+        vm.prank(admin);
+        bare.setMaxOptions(16);
+        assertEq(bare.maxOptions(), 16);
+    }
+
+    function testBlobVersionedHashAndOpeningBindTheSealedHash() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        bytes32 versioned = 0x015a4cab4911426699ed34483de6640cf55a568afc5c5edffdcbd8bcd4452f68;
+        uint256 z = 2;
+        uint256 y = 0x4bf06a82187988dbd3ab153cb7a1b248af64fbeaee441e18336524c0286367c4;
+        bytes memory commitment =
+            hex"a70477b56251e8770969c83eaed665d3ab99b96b72270a41009f2752b5c06a06bd089ad48952c12b1dbf83dccd9d373f";
+        bytes memory opening =
+            hex"a2511949e77fcafca50f221adaf9addd7525d560620e12c6f4acedf116fcbfd05b0f93ffea8b9199cf9d42c0426b677a";
+        bytes32 root = keccak256("blob-root");
+        bytes32[] memory hashes = new bytes32[](1);
+        hashes[0] = versioned;
+        bytes memory badOpening = bytes.concat(opening);
+        badOpening[0] ^= 0x01;
+        vm.blobhashes(hashes);
+        vm.expectRevert(IRollupSettlement.BlobRejected.selector);
+        this.postBlob(id, keccak256("blob-bad-open"), 131072, versioned, z, y, commitment, badOpening);
+
+        hashes[0] = keccak256("other-blob");
+        vm.blobhashes(hashes);
+        vm.expectRevert(IRollupSettlement.BlobRejected.selector);
+        this.postBlob(id, keccak256("blob-bad-hash"), 131072, versioned, z, y, commitment, opening);
+
+        vm.expectRevert(IRollupSettlement.BlobRejected.selector);
+        this.postBlob(id, keccak256("blob-zero-len"), 0, versioned, 0, 0, new bytes(0), new bytes(0));
+
+        hashes[0] = versioned;
+        vm.blobhashes(hashes);
+        vm.expectEmit(true, true, false, true, address(settlement));
+        emit IRollupSettlement.SealedBatchPosted(id, settlement.KIND_HOURLY(), 0, root, 0, versioned);
+        this.postBlob(id, root, 131072, versioned, z, y, commitment, opening);
+        IRollupSettlement.Batch memory stored = settlement.getBatch(0);
+        assertEq(stored.dataLength, 131072);
+        assertEq(settlement.sealedPublicInputs(0)[8], uint256(versioned) % FIELD);
+    }
+
+    /// @dev Gas of a one-row hourly commit, its proof, and the final commit.
+    ///      The verifier is PlaceholderAggregateVerifier, not a BN254 pairing.
+    function testPlaceholderGasForCommitVerifyAndFinal() public {
+        PlaceholderAggregateVerifier standIn = new PlaceholderAggregateVerifier(true);
+        this.useLive(address(standIn));
+        (uint256 id, address el) = this.openLinked(2 hours);
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
+        uint256[4] memory sum;
+        (rows[0], sum) = this.hourAppend(id, 8801, sum);
+        uint256 commitGas = this.measureHour(id, keccak256("gas-hour"), rows, sum);
+        console2.log("hourly-commit-gas", commitGas);
+        (pa, pb, pc) = standIn.commitmentOf(settlement.sealedPublicInputs(0));
+        uint256 verifyGas = this.priceVerify(0);
+        console2.log("proof-verify-gas", verifyGas);
+        assertTrue(settlement.proofVerified(0));
+        warpClosed(el);
+        uint256 finalGas = this.measureFinal(id, keccak256("gas-final"));
+        console2.log("final-batch-gas", finalGas);
+        assertEq(settlement.batchCount(), 2);
+        assertFalse(settlement.finalBatchPosted(id));
+        (pa, pb, pc) = standIn.commitmentOf(settlement.sealedPublicInputs(1));
+        uint256 finalVerify = this.priceVerify(1);
+        console2.log("final-proof-verify-gas", finalVerify);
+        assertTrue(settlement.finalBatchPosted(id));
+        assertLt(commitGas, 15_000_000);
+        assertLt(verifyGas, 15_000_000);
+        assertLt(finalGas, 15_000_000);
+    }
+
+    function testPlaceholderVerifierFailsClosed() public {
+        PlaceholderAggregateVerifier closed = new PlaceholderAggregateVerifier(false);
+        uint256[] memory input = new uint256[](10);
+        (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = closed.commitmentOf(input);
+        assertFalse(closed.verifyProof(a, b, c, input));
+        assertTrue(closed.isMock());
     }
 
     function testOptionSwapRevertsBallotHashMismatch() public {
@@ -1425,7 +1641,9 @@ contract SealedVoteBatchTest is Deployer {
         }
         uint256 used = abi.decode(ret, (uint256));
         console2.log("option-64x4-gas", used);
-        assertLt(used, 15_000_000);
+        // Each 4-row chunk statement and the inbox step are Poseidon-hashed on L1.
+        // A 64-row calldata batch is above a 30M block. Blob batches skip the row projection.
+        assertLt(used, 60_000_000);
         warpClosed(el);
         uint256 finalGas = this.measureFinal(id, keccak256("g64-final"));
         console2.log("final-batch-gas", finalGas);
@@ -1642,7 +1860,7 @@ contract SealedVoteBatchTest is Deployer {
         p.prevC2X = prev.c2X;
         p.prevC2Y = prev.c2Y;
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_FINAL());
+        p = this.stamp(p, rows, claimed, settlement.KIND_FINAL());
         vm.prank(sequencer);
         settlement.submitFinalBatch(p, none, none, rows, claimed, pa, pb, pc);
     }
@@ -1691,7 +1909,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = pu;
         p.nextC2Y = pv;
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_FINAL());
+        p = this.stamp(p, rows, claimed, settlement.KIND_FINAL());
         vm.prank(sequencer);
         settlement.submitFinalBatch(p, none, none, rows, claimed, pa, pb, pc);
     }
@@ -1750,6 +1968,40 @@ contract SealedVoteBatchTest is Deployer {
         }
     }
 
+    function measureHour(
+        uint256 id,
+        bytes32 root,
+        IRollupSettlement.BallotRow[] memory rows,
+        uint256[4] memory sum
+    ) external returns (uint256 used) {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = this.boundWord(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256(abi.encodePacked("gas", id, root));
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(
+                id,
+                1,
+                root,
+                keccak256(abi.encodePacked("h", root)),
+                keccak256("fgas"),
+                0,
+                rows.length,
+                bytes32(0),
+                sequencer
+            ),
+            bound,
+            tags
+        );
+        p.nextC1X = sum[0];
+        p.nextC1Y = sum[1];
+        p.nextC2X = sum[2];
+        p.nextC2Y = sum[3];
+        p.chainHash = settlement.chainHashOf(rows);
+        p = this.stamp(p, rows, new IRollupSettlement.OptionPoint[](0), settlement.KIND_HOURLY());
+        used = this.priceHourly(p, bound, tags, rows, new IRollupSettlement.OptionPoint[](0));
+    }
+
     function measureRows(
         uint256 id,
         bytes32 root,
@@ -1772,7 +2024,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2Y = sum[3];
         // The batch does not recompute this fold. A placeholder keeps the measured call free of it.
         p.chainHash = bytes32(uint256(1));
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        p = this.stamp(p, rows, options, settlement.KIND_HOURLY());
         used = this.priceHourly(p, bound, tags, rows, options);
     }
 
@@ -1895,6 +2147,34 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = nu;
         p.nextC2Y = nv;
         p.chainHash = settlement.chainHashOf(rows);
+        p = this.stamp(p, rows, options, settlement.KIND_HOURLY());
+        vm.prank(sequencer);
+        settlement.submitHourlyBatch(p, bound, tags, rows, options, pa, pb, pc);
+    }
+
+    function postRowsMismatch(
+        uint256 id,
+        bytes32 root,
+        IRollupSettlement.BallotRow[] memory rows,
+        IRollupSettlement.OptionPoint[] memory options,
+        uint256 tally
+    ) external {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = this.boundWord(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256(abi.encodePacked("rows", id, root));
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 1, root, keccak256(abi.encodePacked("h", root)), keccak256("frow"), 0, 1, bytes32(0), sequencer),
+            bound,
+            tags
+        );
+        p.nextC1X = rows[0].c1X;
+        p.nextC1Y = rows[0].c1Y;
+        p.nextC2X = rows[0].c2X;
+        p.nextC2Y = rows[0].c2Y;
+        p.chainHash = settlement.chainHashOf(rows);
+        p = this.stamp(p, rows, options, settlement.KIND_HOURLY());
+        p.tallyCommitment = tally;
         p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
         vm.prank(sequencer);
         settlement.submitHourlyBatch(p, bound, tags, rows, options, pa, pb, pc);
@@ -2138,7 +2418,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = c2x;
         p.nextC2Y = c2y;
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        p = this.stamp(p, rows, new IRollupSettlement.OptionPoint[](0), settlement.KIND_HOURLY());
         vm.prank(sequencer);
         settlement.submitHourlyBatch(p, bound, tags, rows, new IRollupSettlement.OptionPoint[](0), pa, pb, pc);
     }
@@ -2211,7 +2491,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = sum[2];
         p.nextC2Y = sum[3];
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        p = this.stamp(p, rows, new IRollupSettlement.OptionPoint[](0), settlement.KIND_HOURLY());
         vm.prank(sequencer);
         settlement.submitHourlyBatch(p, bound, tags, rows, new IRollupSettlement.OptionPoint[](0), pa, pb, pc);
     }
@@ -2367,7 +2647,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = c2x;
         p.nextC2Y = c2y;
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_SUPPLEMENTARY());
+        p = this.stamp(p, rows, options, settlement.KIND_SUPPLEMENTARY());
         vm.prank(sequencer);
         settlement.submitSupplementaryBatch(p, new uint256[](0), rows, options, pa, pb, pc);
     }
@@ -2590,6 +2870,7 @@ contract SealedVoteBatchTest is Deployer {
         if (job.kind == 1) this.postHour(job, bound, tags);
         else if (job.kind == 2) this.postFinal(job);
         else this.postSupp(job, included);
+        if (autoProve) this.proveLatest();
     }
 
     function postHour(Job memory job, bytes32[] memory bound, bytes32[] memory tags) external {
@@ -2620,7 +2901,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = sum[2];
         p.nextC2Y = sum[3];
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, job.kind);
+        p = this.stamp(p, rows, new IRollupSettlement.OptionPoint[](0), job.kind);
         vm.prank(job.who);
         settlement.submitSupplementaryBatch(
             p, included, rows, new IRollupSettlement.OptionPoint[](0), pa, pb, pc
@@ -2685,7 +2966,97 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC1Y = prev.c1Y;
         p.nextC2X = prev.c2X;
         p.nextC2Y = prev.c2Y;
+        p.prevConsumed = settlement.consumedCount(job.id);
+        p.prevPoseidon = settlement.consumedPoseidon(job.id);
+        p.nextConsumed = p.prevConsumed;
+        p.nextPoseidon = p.prevPoseidon;
         p.dataHash = settlement.computeSealedDataHash(p, job.kind);
+    }
+
+    /// @dev Bind the inbox step, the chunk digest, and the tally commitment, then rehash.
+    function stamp(
+        IRollupSettlement.SealedParams memory p,
+        IRollupSettlement.BallotRow[] memory rows,
+        IRollupSettlement.OptionPoint[] memory options,
+        uint8 kind
+    ) external view returns (IRollupSettlement.SealedParams memory) {
+        p.prevConsumed = settlement.consumedCount(p.electionId);
+        p.prevPoseidon = settlement.consumedPoseidon(p.electionId);
+        (p.nextConsumed, p.nextPoseidon) =
+            settlement.projectConsumed(p.prevPoseidon, p.prevConsumed, p.electionId, rows);
+        p.chunkDigest = settlement.chunkDigestOf(p.electionId, rows);
+        p.tallyCommitment = settlement.tallyCommitmentOf(options);
+        p.dataHash = settlement.computeSealedDataHash(p, kind);
+        return p;
+    }
+
+    function proveLatest() external {
+        uint64 index = settlement.batchCount();
+        if (index == 0 || settlement.proofVerified(index - 1)) return;
+        settlement.verifyCommittedProof(index - 1, pa, pb, pc);
+    }
+
+    function useLive(address verifier_) external {
+        RollupSettlement live = new RollupSettlement(admin, sequencer, prover, verifier_, false);
+        vm.startPrank(admin);
+        live.setElectionFactory(address(factory));
+        live.setInbox(address(inbox));
+        vm.stopPrank();
+        settlement = live;
+    }
+
+    function priceVerify(uint64 index) external returns (uint256 used) {
+        uint256 before = gasleft();
+        settlement.verifyCommittedProof(index, pa, pb, pc);
+        used = before - gasleft();
+    }
+
+    function postCap(uint256 id, bytes32 root, uint256 n) external {
+        IRollupSettlement.OptionPoint[] memory options = new IRollupSettlement.OptionPoint[](n);
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = this.boundWord(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256(abi.encodePacked("cap", root));
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 1, root, keccak256(abi.encodePacked("h", root)), keccak256("fcap"), 0, 0, bytes32(0), sequencer),
+            bound,
+            tags
+        );
+        p = this.stamp(p, new IRollupSettlement.BallotRow[](0), options, settlement.KIND_HOURLY());
+        vm.prank(sequencer);
+        settlement.submitHourlyBatch(p, bound, tags, new IRollupSettlement.BallotRow[](0), options, pa, pb, pc);
+    }
+
+    function postBlob(
+        uint256 id,
+        bytes32 root,
+        uint256 dataLength,
+        bytes32 versioned,
+        uint256 z,
+        uint256 y,
+        bytes memory commitment,
+        bytes memory opening
+    ) external {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = this.boundWord(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256(abi.encodePacked("blob", root));
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 1, root, keccak256(abi.encodePacked("h", root)), keccak256("fblob"), 0, 0, bytes32(0), sequencer),
+            bound,
+            tags
+        );
+        p.dataLength = dataLength;
+        p.blobVersionedHash = versioned;
+        p.blobZ = z;
+        p.blobY = y;
+        p.blobCommitment = commitment;
+        p.blobOpeningProof = opening;
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        vm.prank(sequencer);
+        settlement.submitHourlyBatch(
+            p, bound, tags, new IRollupSettlement.BallotRow[](0), new IRollupSettlement.OptionPoint[](0), pa, pb, pc
+        );
     }
 
     function blank(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 prevU, uint256 nextU)

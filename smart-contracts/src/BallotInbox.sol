@@ -72,6 +72,9 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => bytes32)) private _ballotHashOf;
     mapping(uint256 => bytes32[]) private _ballotHashList;
     mapping(uint256 => bytes32) private _ballotRoot;
+    /// @notice Poseidon chain of accepted ballot hashes, acceptance order, starting at 0.
+    mapping(uint256 => bytes32) private _acceptedPoseidon;
+    mapping(uint256 => uint256) private _acceptedCount;
     mapping(uint256 => uint64) private _lastBatchAt;
 
     /// @dev Appended slot. 1 while a submission is inside `nonReentrant`.
@@ -232,6 +235,16 @@ contract BallotInbox is IBallotInbox {
     /// @inheritdoc IBallotInbox
     function ballotHashAt(uint256 electionId, uint256 index) external view returns (bytes32) {
         return _ballotHashList[electionId][index];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function acceptedPoseidon(uint256 electionId) external view returns (bytes32) {
+        return _acceptedPoseidon[electionId];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function acceptedCount(uint256 electionId) external view returns (uint256) {
+        return _acceptedCount[electionId];
     }
 
     function _requireNotPaused() internal view {
@@ -481,6 +494,12 @@ contract BallotInbox is IBallotInbox {
         _ballotHashOf[electionId][key] = ballotHash;
         _ballotHashList[electionId].push(ballotHash);
         _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
+        _acceptedPoseidon[electionId] = bytes32(
+            PoseidonT3.hashLeftRight(uint256(_acceptedPoseidon[electionId]), uint256(ballotHash) % SNARK_SCALAR_FIELD)
+        );
+        unchecked {
+            _acceptedCount[electionId] += 1;
+        }
         if (settlementOf[electionId] != address(0)) _storeAccepted(electionId, key, blob);
         if (settlementOf[electionId] == address(0)) {
             unchecked {

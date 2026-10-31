@@ -45,10 +45,20 @@ interface IRollupSettlement {
     error OldOptionsMismatch();
     error UnconsumedBallot();
     error StaleReplacement();
+    error UnprovenBatch();
+    error OptionCapOutOfBounds();
+    error BlobRejected();
 
     event SealedBatchPosted(
-        uint256 indexed electionId, uint8 kind, uint64 indexed batchIndex, bytes32 ballotSetRoot, uint256 uniqueCount
+        uint256 indexed electionId,
+        uint8 kind,
+        uint64 indexed batchIndex,
+        bytes32 ballotSetRoot,
+        uint256 uniqueCount,
+        bytes32 blobVersionedHash
     );
+    event BatchProofVerified(uint64 indexed batchIndex, bytes32 newStateRoot);
+    event MaxOptionsSet(uint8 maxOptions);
     event SupplementaryPosted(uint256 indexed electionId);
 
     /// @notice One hour, the same length as an hourly batch.
@@ -86,6 +96,24 @@ interface IRollupSettlement {
         uint256 nextC1Y;
         uint256 nextC2X;
         uint256 nextC2Y;
+        /// @notice Inbox Poseidon head before this batch.
+        uint256 prevConsumed;
+        bytes32 prevPoseidon;
+        /// @notice Inbox Poseidon head after this batch. The final batch must match the inbox.
+        uint256 nextConsumed;
+        bytes32 nextPoseidon;
+        /// @notice Poseidon fold of each 4-row chunk statement. One aggregate proof covers all of them.
+        bytes32 chunkDigest;
+        /// @notice Poseidon fold of the claimed option totals. L1 does not re-add the ciphertexts.
+        uint256 tallyCommitment;
+        /// @notice Versioned hash of the blob that carries the ballot bytes. Zero when there is no blob.
+        bytes32 blobVersionedHash;
+        uint256 blobZ;
+        uint256 blobY;
+        /// @notice Blob payload length in bytes. Zero skips the point-evaluation precompile.
+        uint256 dataLength;
+        bytes blobCommitment;
+        bytes blobOpeningProof;
     }
 
     struct Ciphertext {
@@ -104,11 +132,11 @@ interface IRollupSettlement {
         uint256 c2Y;
     }
 
-    /// @notice One ballot in a batch. `oldSubmissionId` 0 is a first ballot and adds the ciphertext.
-    ///         Any other value names the previous submission. The contract subtracts the vector
-    ///         stored at acceptance. `options` is one ciphertext per choice, index-aligned.
+    /// @notice One ballot in a batch. `oldSubmissionId` 0 is a first ballot.
+    ///         Any other value names the previous submission, which may be replaced once.
+    ///         `options` is one ciphertext per choice, index-aligned.
     ///         Acceptance already checked that each option is 0 or 1 and that the vector sums to 1.
-    ///         The batch sums the stored points. It does not take those proofs as inputs.
+    ///         The aggregate proof attests the tally. L1 does not add the points.
     struct BallotRow {
         uint256 submissionId;
         uint256 c1X;
@@ -168,7 +196,45 @@ interface IRollupSettlement {
     /// @notice Running final points chained into the next final or supplementary batch.
     function chainedFinal(uint256 electionId) external view returns (Ciphertext memory);
 
-    function computeSealedDataHash(SealedParams memory params, uint8 kind) external pure returns (bytes32);
+    function computeSealedDataHash(SealedParams memory params, uint8 kind) external view returns (bytes32);
+
+    function maxOptions() external view returns (uint8);
+
+    function MAX_OPTIONS_BOUND() external view returns (uint8);
+
+    function setMaxOptions(uint8 n) external;
+
+    function proofVerified(uint64 batchIndex) external view returns (bool);
+
+    function nextUnproven() external view returns (uint64);
+
+    function consumedCount(uint256 electionId) external view returns (uint256);
+
+    function consumedPoseidon(uint256 electionId) external view returns (bytes32);
+
+    /// @notice Prove the next committed batch. Roots commit first; proofs catch up in order.
+    function verifyCommittedProof(
+        uint64 batchIndex,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) external;
+
+    function sealedPublicInputs(uint64 batchIndex) external view returns (uint256[] memory input);
+
+    function projectConsumed(bytes32 prevPoseidon, uint256 prevCount, uint256 electionId, BallotRow[] memory rows)
+        external
+        view
+        returns (uint256 nextCount, bytes32 nextPoseidon);
+
+    function chunkDigestOf(uint256 electionId, BallotRow[] memory rows) external view returns (bytes32);
+
+    function chunkStatement(uint256 electionId, BallotRow[] memory rows, uint256 chunkIndex)
+        external
+        view
+        returns (uint256);
+
+    function tallyCommitmentOf(OptionPoint[] memory options) external pure returns (uint256);
 
     function chainHashOf(BallotRow[] memory rows) external pure returns (bytes32);
 
