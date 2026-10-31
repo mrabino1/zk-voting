@@ -54,6 +54,15 @@ cd zk-entropy && npm test && npm run test:all
 docker build -f zk-entropy/ceremony/Dockerfile -t zk-entropy-ceremony zk-entropy
 ```
 
+## Guardian key ceremony scripts
+
+[`scripts/ceremony/`](./scripts/ceremony) creates a 4096-bit RSA ceremony and backup key, encrypts the private key, and splits that passphrase into guardian shares. This private key is a ceremony and backup key. It is not wired into contracts or the application. This key is separate from the ballot encryption key. This ceremony does not produce the ballot encryption key. The L2 operator gets public/ only, never a share. Guide: [`docs/ceremony/guardian-key-ceremony.md`](./docs/ceremony/guardian-key-ceremony.md).
+
+```bash
+bash scripts/ceremony/ssss.sh selftest
+bash scripts/ceremony/roundtrip.sh
+```
+
 ## Canonical contract addresses
 
 The zk-voting maintainers will acknowledge the following Ethereum mainnet (L1) contracts as canonical. **None is deployed yet.** Every entry is **TBD** until it is published here, in a signed release, and on [zk-voting.org](https://zk-voting.org).
