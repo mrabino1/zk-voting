@@ -128,7 +128,7 @@ contract LowRegressionsTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     // ------------------------------------------------------------------ L-07

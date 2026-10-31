@@ -10,6 +10,9 @@ import {IElectionFactory} from "../interfaces/IElectionFactory.sol";
 import {IGroth16Verifier} from "../interfaces/IGroth16Verifier.sol";
 import {IRollupSettlement} from "../interfaces/IRollupSettlement.sol";
 import {PoseidonT3} from "../hasher/PoseidonT3.sol";
+import {Bn128} from "../zk/Bn128.sol";
+import {IndexedRoot} from "../zk/IndexedRoot.sol";
+import {OneHot} from "../zk/OneHot.sol";
 
 /// @title RollupSettlement
 /// @notice L1 settlement for ZK-Voting L2 (app-specific ZK rollup). No token.
@@ -61,6 +64,12 @@ contract RollupSettlement is IRollupSettlement {
     mapping(uint256 => Ciphertext) private _finalCt;
     mapping(uint256 => Ciphertext) private _hourlyPoints;
     mapping(uint256 => Ciphertext) private _finalPoints;
+    /// @notice Unique voters published by the last hourly or supplementary batch.
+    mapping(uint256 => uint256) public postedUnique;
+    /// @notice Unique voters on one posted hour. The hourly gate reads this, not a live counter.
+    mapping(uint256 => mapping(uint256 => uint256)) public hourUnique;
+    /// @notice Option ciphertexts after option 0, written by the batch that carries them.
+    mapping(uint256 => mapping(uint256 => Ciphertext)) private _optionCt;
 
     constructor(address admin_, address sequencer_, address prover_, address batchVerifier_, bool mockMode_) {
         if (admin_ == address(0) || sequencer_ == address(0) || prover_ == address(0)) revert ZeroAddress();
@@ -239,7 +248,17 @@ contract RollupSettlement is IRollupSettlement {
 
     /// @dev Poseidon chain, same order as `circuits/batch_transition_lib.circom`.
     ///      `pointTag` is the Poseidon fold of the eight curve coordinates, reduced mod r.
+    ///      Extra option ciphertexts are folded after those eight when `options` is non-empty.
     function computeSealedDataHash(SealedParams memory params, uint8 kind) public pure returns (bytes32) {
+        OptionPoint[] memory none;
+        return computeSealedDataHash(params, kind, none);
+    }
+
+    function computeSealedDataHash(SealedParams memory params, uint8 kind, OptionPoint[] memory options)
+        public
+        pure
+        returns (bytes32)
+    {
         uint256 pointTag = foldScalars(
             _eight(
                 params.prevC1X,
@@ -252,6 +271,12 @@ contract RollupSettlement is IRollupSettlement {
                 params.nextC2Y
             )
         );
+        for (uint256 i; i < options.length; ++i) {
+            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c1X % SNARK_SCALAR_FIELD);
+            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c1Y % SNARK_SCALAR_FIELD);
+            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c2X % SNARK_SCALAR_FIELD);
+            pointTag = PoseidonT3.hashLeftRight(pointTag, options[i].c2Y % SNARK_SCALAR_FIELD);
+        }
         uint256[16] memory words;
         words[0] = kind;
         words[1] = params.electionId;
@@ -291,6 +316,28 @@ contract RollupSettlement is IRollupSettlement {
         }
     }
 
+    /// @notice Poseidon fold of each ballot link, matching `per_ballot_lib.circom`.
+    function chainHashOf(BallotRow[] memory rows) public pure returns (bytes32) {
+        uint256 h;
+        for (uint256 i; i < rows.length; ++i) {
+            h = PoseidonT3.hashLeftRight(h, _link(rows[i]));
+        }
+        return bytes32(h);
+    }
+
+    function _link(BallotRow memory row) private pure returns (uint256 h) {
+        h = PoseidonT3.hashLeftRight(h, row.submissionId % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.isFirst);
+        h = PoseidonT3.hashLeftRight(h, row.c1X % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c1Y % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c2X % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.c2Y % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.oldC1X % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.oldC1Y % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.oldC2X % SNARK_SCALAR_FIELD);
+        h = PoseidonT3.hashLeftRight(h, row.oldC2Y % SNARK_SCALAR_FIELD);
+    }
+
     function _eight(
         uint256 a,
         uint256 b,
@@ -322,30 +369,42 @@ contract RollupSettlement is IRollupSettlement {
         return foldWords(bound);
     }
 
+    function optionCiphertext(uint256 electionId, uint256 option) external view returns (Ciphertext memory) {
+        if (option == 0) return _finalCt[electionId];
+        return _optionCt[electionId][option];
+    }
+
     function submitHourlyBatch(
         SealedParams calldata params,
         bytes32[] calldata boundRoots,
         bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
+        _requireNotPaused();
         _requireFactory();
+        _requireLinked(params.electionId);
         _onlyOperator();
         uint256 hourIndex = block.timestamp / 1 hours;
         if (_hourPosted[params.electionId][hourIndex]) revert HourAlreadyPosted();
-        _prepareHourOrFinal(params, KIND_HOURLY, boundRoots, firstBallotTags);
+        _prepareHourOrFinal(params, KIND_HOURLY, boundRoots, firstBallotTags, rows, options);
         _matchUnique(params);
         _matchProducts(params, true);
+        _checkRows(params, KIND_HOURLY, rows);
         _verifyAndStore(params, a, b, c);
         _consumeTags(params.electionId, firstBallotTags);
         _rememberRoot(params);
         _storePoints(params, true);
+        _storeOptions(params.electionId, options);
         _hourPosted[params.electionId][hourIndex] = true;
         _hourClosedAt[params.electionId][hourIndex] = uint64(block.timestamp);
         _hourCt[params.electionId][hourIndex] =
             Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
-        _commitUnique(params.electionId, params.nextUnique);
+        postedUnique[params.electionId] = params.nextUnique;
+        hourUnique[params.electionId][hourIndex] = params.nextUnique;
         emit SealedBatchPosted(
             params.electionId, KIND_HOURLY, params.batchIndex, params.ballotSetRoot, params.nextUnique
         );
@@ -355,21 +414,27 @@ contract RollupSettlement is IRollupSettlement {
         SealedParams calldata params,
         bytes32[] calldata boundRoots,
         bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
+        _requireNotPaused();
         _requireFactory();
+        _requireLinked(params.electionId);
         (bool known, uint256 allowedAt) = _allowedAt(params.electionId);
         bool open = known && block.timestamp >= allowedAt + SUPPLEMENTARY_GRACE && !mockMode;
         if (!open) _onlyOperator();
-        _prepareHourOrFinal(params, KIND_FINAL, boundRoots, firstBallotTags);
+        _prepareHourOrFinal(params, KIND_FINAL, boundRoots, firstBallotTags, rows, options);
         _matchProducts(params, false);
+        _checkRows(params, KIND_FINAL, rows);
         _verifyAndStore(params, a, b, c);
         _finalPosted[params.electionId] = true;
         _finalRoot[params.electionId] = params.ballotSetRoot;
         _rememberRoot(params);
         _storePoints(params, false);
+        _storeOptions(params.electionId, options);
         emit SealedBatchPosted(
             params.electionId, KIND_FINAL, params.batchIndex, params.ballotSetRoot, params.previousUnique
         );
@@ -378,11 +443,15 @@ contract RollupSettlement is IRollupSettlement {
     function submitSupplementaryBatch(
         SealedParams calldata params,
         uint256[] calldata includedIds,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
+        _requireNotPaused();
         _requireFactory();
+        _requireLinked(params.electionId);
         (bool known, uint256 allowedAt) = _allowedAt(params.electionId);
         _authSupplementary(known, allowedAt);
         bool afterGrace = known && block.timestamp >= allowedAt + SUPPLEMENTARY_GRACE;
@@ -391,14 +460,18 @@ contract RollupSettlement is IRollupSettlement {
         if (params.nextUnique < params.previousUnique) revert UniqueCountDecreased();
         if (params.hourlyProduct != _hourlyProduct[params.electionId]) revert HourlyProductChanged();
         if (params.previousHourly != _hourlyProduct[params.electionId]) revert ProductMismatch();
-        if (params.chainHash != supplementaryChainHash(params.electionId)) revert DataHashMismatch();
+        if (params.chainHash != chainHashOf(rows)) revert DataHashMismatch();
+        if (uint256(params.tagHash) != foldScalars(includedIds)) revert DataHashMismatch();
+        if (options.length > 4) revert BoundRootMismatch();
         _matchUnique(params);
         _matchProducts(params, false);
-        _checkSealedHash(params, KIND_SUPPLEMENTARY);
+        _checkRows(params, KIND_SUPPLEMENTARY, rows);
+        _checkSealedHash(params, KIND_SUPPLEMENTARY, options);
         _coverPending(params.electionId, includedIds);
         _verifyAndStore(params, a, b, c);
         _finalProduct[params.electionId] = params.finalProduct;
         _storePoints(params, false);
+        _storeOptions(params.electionId, options);
         _finalCt[params.electionId] =
             Ciphertext(params.nextC1X, params.nextC1Y, params.nextC2X, params.nextC2Y, _pointsSet(params));
         if (!_finalPosted[params.electionId]) {
@@ -407,9 +480,8 @@ contract RollupSettlement is IRollupSettlement {
                 ? params.ballotSetRoot
                 : _lastHourlyRoot[params.electionId];
         }
-        _commitUnique(params.electionId, params.nextUnique);
-        if (inbox == address(0)) revert NotAuthorized();
-        IBallotInbox(inbox).markSealed(params.electionId, includedIds);
+        postedUnique[params.electionId] = params.nextUnique;
+        _markChunks(params.electionId, includedIds);
         _supplementaryPosted[params.electionId] = true;
         emit SupplementaryPosted(params.electionId);
         emit SealedBatchPosted(
@@ -425,7 +497,9 @@ contract RollupSettlement is IRollupSettlement {
         SealedParams calldata params,
         uint8 kind,
         bytes32[] calldata boundRoots,
-        bytes32[] calldata firstBallotTags
+        bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options
     ) internal view {
         (bool known, uint64 cutoff,) = _cutoff(params.electionId);
         if (kind == KIND_HOURLY) {
@@ -436,7 +510,8 @@ contract RollupSettlement is IRollupSettlement {
             if (_finalPosted[params.electionId]) revert FinalBatchAlreadyPosted();
             if (params.nextUnique != params.previousUnique) revert TurnoutOnFinalBatch();
         }
-        if (params.chainHash != bytes32(0)) revert DataHashMismatch();
+        if (params.chainHash != chainHashOf(rows)) revert DataHashMismatch();
+        if (options.length > 4) revert BoundRootMismatch();
         if (params.ballotSetRoot == bytes32(0)) revert EmptyRoot();
         _checkBoundRoots(params.electionId, boundRoots);
         _checkFirstTags(params.electionId, firstBallotTags);
@@ -444,13 +519,23 @@ contract RollupSettlement is IRollupSettlement {
         if (params.boundRootHash != expectedBoundHash(boundRoots, _lastHourlyRoot[params.electionId])) {
             revert DataHashMismatch();
         }
-        _checkSealedHash(params, kind);
+        _checkSealedHash(params, kind, options);
     }
 
     function _checkBoundRoots(uint256 electionId, bytes32[] calldata boundRoots) internal view {
-        bytes32 expect = _lastHourlyRoot[electionId];
+        if (boundRoots.length > 4) revert BoundRootMismatch();
+        if (boundRoots.length == 0) return;
+        bytes32 last = _lastHourlyRoot[electionId];
+        bytes32 empty = bytes32(IndexedRoot.empty(IndexedRoot.DEPTH));
         for (uint256 i; i < boundRoots.length; ++i) {
-            if (boundRoots[i] != expect) revert BoundRootMismatch();
+            bytes32 root = boundRoots[i];
+            if (root == bytes32(0)) revert BoundRootMismatch();
+            bool known = _rootIndex[electionId][root] != 0 || root == empty;
+            if (!known) revert BoundRootMismatch();
+            if (i == 0) {
+                bytes32 expect = last == bytes32(0) ? empty : last;
+                if (root != expect) revert BoundRootMismatch();
+            }
         }
     }
 
@@ -471,10 +556,7 @@ contract RollupSettlement is IRollupSettlement {
     }
 
     function _matchUnique(SealedParams calldata params) internal view {
-        if (inbox == address(0)) revert NotAuthorized();
-        if (params.previousUnique != IBallotInbox(inbox).acceptedBallots(params.electionId)) {
-            revert UniqueCountMismatch();
-        }
+        if (params.previousUnique != postedUnique[params.electionId]) revert UniqueCountMismatch();
     }
 
     function _matchProducts(SealedParams calldata params, bool hourly) internal view {
@@ -503,10 +585,10 @@ contract RollupSettlement is IRollupSettlement {
         if (electionFactory == address(0)) revert FactoryUnset();
     }
 
-    function _checkSealedHash(SealedParams calldata params, uint8 kind) internal view {
+    function _checkSealedHash(SealedParams calldata params, uint8 kind, OptionPoint[] calldata options) internal view {
         if (params.batchIndex != batchCount) revert BadBatchIndex();
         if (params.prevStateRoot != stateRoot) revert PrevRootMismatch();
-        if (params.dataHash != computeSealedDataHash(params, kind)) revert DataHashMismatch();
+        if (params.dataHash != computeSealedDataHash(params, kind, options)) revert DataHashMismatch();
     }
 
     function _verifyAndStore(
@@ -544,12 +626,144 @@ contract RollupSettlement is IRollupSettlement {
         _finalProduct[params.electionId] = params.finalProduct;
     }
 
-    function _commitUnique(uint256 electionId, uint256 uniqueCount) internal {
+    function _requireLinked(uint256 electionId) internal view {
         if (inbox == address(0)) revert NotAuthorized();
-        (bool ok, bytes memory ret) =
-            inbox.staticcall(abi.encodeWithSignature("settlementOf(uint256)", electionId));
+        (bool ok, bytes memory ret) = inbox.staticcall(abi.encodeWithSignature("settlementOf(uint256)", electionId));
         if (!ok || ret.length < 32 || abi.decode(ret, (address)) != address(this)) revert NotAuthorized();
-        IBallotInbox(inbox).commitUniqueCount(electionId, uniqueCount);
+    }
+
+    function _requireNotPaused() internal view {
+        if (electionFactory == address(0)) return;
+        (bool ok, bytes memory ret) = electionFactory.staticcall(abi.encodeWithSignature("isPaused()"));
+        if (ok && ret.length >= 32 && abi.decode(ret, (bool))) revert ContractPaused();
+    }
+
+    /// @dev First ballots add the ciphertext. Replacements leave the hourly total
+    ///      unchanged and replace the old ciphertext in the final total.
+    function _checkRows(SealedParams calldata params, uint8 kind, BallotRow[] calldata rows) internal view {
+        uint256 x = params.prevC1X;
+        uint256 y = params.prevC1Y;
+        uint256 u = params.prevC2X;
+        uint256 v = params.prevC2Y;
+        if (rows.length == 0) {
+            if (x != params.nextC1X || y != params.nextC1Y || u != params.nextC2X || v != params.nextC2Y) {
+                revert PointsMismatch();
+            }
+            return;
+        }
+        (uint256 pkX, uint256 pkY) = _joint(params.electionId);
+        for (uint256 i; i < rows.length; ++i) {
+            BallotRow calldata row = rows[i];
+            if (row.isFirst > 1) revert PointsMismatch();
+            if (!_pointOk(row.c1X, row.c1Y, row.c2X, row.c2Y)) revert PointOffCurve();
+            if (!_pointOk(row.oldC1X, row.oldC1Y, row.oldC2X, row.oldC2Y)) revert PointOffCurve();
+            if (!_isIdentity(row.c1X, row.c1Y, row.c2X, row.c2Y)) {
+                if (!OneHot.verify(pkX, pkY, row.c1X, row.c1Y, row.c2X, row.c2Y, row.oneHot)) revert OneHotRejected();
+            }
+            if (kind == KIND_HOURLY) {
+                if (row.isFirst == 1) (x, y, u, v) = _addCt(x, y, u, v, row.c1X, row.c1Y, row.c2X, row.c2Y);
+            } else if (row.isFirst == 1) {
+                (x, y, u, v) = _addCt(x, y, u, v, row.c1X, row.c1Y, row.c2X, row.c2Y);
+            } else {
+                (x, y, u, v) = _subCt(x, y, u, v, row.oldC1X, row.oldC1Y, row.oldC2X, row.oldC2Y);
+                (x, y, u, v) = _addCt(x, y, u, v, row.c1X, row.c1Y, row.c2X, row.c2Y);
+            }
+        }
+        if (x != params.nextC1X || y != params.nextC1Y || u != params.nextC2X || v != params.nextC2Y) {
+            revert PointsMismatch();
+        }
+    }
+
+    function _storeOptions(uint256 electionId, OptionPoint[] calldata options) internal {
+        for (uint256 i; i < options.length; ++i) {
+            if (!_pointOk(options[i].c1X, options[i].c1Y, options[i].c2X, options[i].c2Y)) revert PointOffCurve();
+            _optionCt[electionId][i + 1] = Ciphertext({
+                c1X: options[i].c1X,
+                c1Y: options[i].c1Y,
+                c2X: options[i].c2X,
+                c2Y: options[i].c2Y,
+                set: true
+            });
+        }
+    }
+
+    function _markChunks(uint256 electionId, uint256[] calldata included) internal {
+        if (inbox == address(0)) revert NotAuthorized();
+        uint256 n = included.length;
+        if (n == 0) {
+            IBallotInbox(inbox).markSealed(electionId, included);
+            return;
+        }
+        uint256 offset;
+        while (offset < n) {
+            uint256 len = n - offset;
+            if (len > 8) len = 8;
+            uint256[] memory chunk = new uint256[](len);
+            for (uint256 j; j < len; ++j) {
+                chunk[j] = included[offset + j];
+            }
+            IBallotInbox(inbox).markSealed(electionId, chunk);
+            offset += len;
+        }
+    }
+
+    function _joint(uint256 electionId) internal view returns (uint256 x, uint256 y) {
+        (bool ok, bytes memory ret) = inbox.staticcall(abi.encodeWithSignature("ceremonyOf(uint256)", electionId));
+        if (!ok || ret.length < 32) revert OneHotRejected();
+        address cer = abi.decode(ret, (address));
+        if (cer == address(0)) revert OneHotRejected();
+        uint8 electionType = _electionType(electionId);
+        (ok, ret) = cer.staticcall(abi.encodeWithSignature("jointKey(uint256,uint8)", electionId, electionType));
+        if (!ok || ret.length < 64) revert OneHotRejected();
+        (x, y) = abi.decode(ret, (uint256, uint256));
+        if (!Bn128.validPoint(x, y) || (x == 0 && y == 0)) revert OneHotRejected();
+    }
+
+    function _electionType(uint256 electionId) internal view returns (uint8) {
+        address el = IElectionFactory(electionFactory).getElection(electionId);
+        return IElection(el).params().electionType;
+    }
+
+    function _pointOk(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) internal view returns (bool) {
+        return Bn128.validPoint(c1x, c1y) && Bn128.validPoint(c2x, c2y);
+    }
+
+    function _isIdentity(uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y) internal pure returns (bool) {
+        return c1x == 0 && c1y == 0 && c2x == 0 && c2y == 0;
+    }
+
+    function _addCt(
+        uint256 x,
+        uint256 y,
+        uint256 u,
+        uint256 v,
+        uint256 ax,
+        uint256 ay,
+        uint256 bx,
+        uint256 by
+    ) internal view returns (uint256, uint256, uint256, uint256) {
+        (bool ok1, uint256 nx, uint256 ny) = Bn128.ecAdd(x, y, ax, ay);
+        if (!ok1) revert PointOffCurve();
+        (bool ok2, uint256 nu, uint256 nv) = Bn128.ecAdd(u, v, bx, by);
+        if (!ok2) revert PointOffCurve();
+        return (nx, ny, nu, nv);
+    }
+
+    function _subCt(
+        uint256 x,
+        uint256 y,
+        uint256 u,
+        uint256 v,
+        uint256 ax,
+        uint256 ay,
+        uint256 bx,
+        uint256 by
+    ) internal view returns (uint256, uint256, uint256, uint256) {
+        (bool ok1, uint256 nx, uint256 ny) = Bn128.ecSub(x, y, ax, ay);
+        if (!ok1) revert PointOffCurve();
+        (bool ok2, uint256 nu, uint256 nv) = Bn128.ecSub(u, v, bx, by);
+        if (!ok2) revert PointOffCurve();
+        return (nx, ny, nu, nv);
     }
 
     function _coverPending(uint256 electionId, uint256[] calldata included) internal view {

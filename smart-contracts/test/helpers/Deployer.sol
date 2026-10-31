@@ -366,14 +366,12 @@ contract Deployer is Test {
             eligibleRoot(electionId, election),
             disqRoot(electionId, election),
             nullifier,
-            Fixtures.ballotHash(encrypted),
+            inbox.ballotHashOfCiphertext(encrypted),
             electionId
         );
         if (inbox.settlementOf(electionId) == address(0)) return inputs;
         bytes32 posted = RollupSettlement(inbox.settlementOf(electionId)).lastHourlyRoot(electionId);
-        uint256 bound = posted == bytes32(0)
-            ? inbox.emptyBallotRoot(IElection(election).params().treeDepth)
-            : uint256(posted);
+        uint256 bound = posted == bytes32(0) ? inbox.emptyBallotRoot(20) : uint256(posted);
         uint256[] memory withRoot = new uint256[](6);
         for (uint256 i; i < 5; ++i) {
             withRoot[i] = inputs[i];
@@ -382,8 +380,23 @@ contract Deployer is Test {
         return withRoot;
     }
 
+    /// @dev Private legacy counter. Not the public turnout getter.
+    function liveAccepted(uint256 id) public view returns (uint256) {
+        return uint256(vm.load(address(inbox), keccak256(abi.encode(id, uint256(1)))));
+    }
+
+    /// @dev `EG` prefix plus four coordinates. The inbox hashes this as CipherHash.
+    function egBallot(uint256 word) internal pure returns (bytes memory) {
+        return abi.encodePacked(
+            bytes2("EG"), bytes32(uint256(1)), bytes32(uint256(2)), bytes32(word), bytes32(uint256(4))
+        );
+    }
+
     function submitVote(uint256 electionId, address election, uint256 nullifier) internal {
-        submitVoteWithBallot(electionId, election, nullifier, Fixtures.encryptedBallot(nullifier));
+        bytes memory enc = inbox.settlementOf(electionId) == address(0)
+            ? Fixtures.encryptedBallot(nullifier)
+            : egBallot(nullifier);
+        submitVoteWithBallot(electionId, election, nullifier, enc);
     }
 
     function submitVoteWithBallot(uint256 electionId, address election, uint256 nullifier, bytes memory enc)

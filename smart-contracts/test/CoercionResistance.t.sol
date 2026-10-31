@@ -39,7 +39,7 @@ contract CoercionResistanceTest is Deployer {
         vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(electionId, a, b, c, inputs, later);
 
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
 
         vm.warp(tally.tallyAllowedAt(electionId));
@@ -61,7 +61,7 @@ contract CoercionResistanceTest is Deployer {
         vm.expectRevert(IBallotInbox.OutsideVotingWindow.selector);
         inbox.submitVote(electionId, a, b, c, inputs, late);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 
     function testReceiptFieldsDoNotIncludeChoice() public {
@@ -70,6 +70,6 @@ contract CoercionResistanceTest is Deployer {
         // On-chain public state is nullifier + ballotHash. There is no option id.
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(enc)));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
     }
 }

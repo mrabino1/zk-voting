@@ -62,7 +62,7 @@ contract ValidationFuzz is Deployer {
             expectSubmitVoteRevert(electionId, election, 1);
         } else {
             submitVote(electionId, election, uint256(offset) + 1);
-            assertEq(inbox.acceptedBallots(electionId), 1);
+            assertEq(this.liveAccepted(electionId), 1);
         }
     }
 }

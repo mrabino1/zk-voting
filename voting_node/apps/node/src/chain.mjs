@@ -49,7 +49,7 @@ export const ballotInboxAbi = [
   },
   {
     type: 'function',
-    name: 'acceptedBallots',
+    name: 'closedBallotCount',
     stateMutability: 'view',
     inputs: [{ name: 'electionId', type: 'uint256' }],
     outputs: [{ type: 'uint256' }],

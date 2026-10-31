@@ -17,15 +17,20 @@ template VoteSealed(levels, ballotLevels) {
     signal input disqNext;
     signal input disqPathElements[levels];
     signal input disqPathIndices[levels];
-    signal input choice;
-    signal input choiceRandomness;
+    signal input c1x;
+    signal input c1y;
+    signal input c2x;
+    signal input c2y;
     signal input isReplacement;
-    signal input memberPathElements[ballotLevels];
-    signal input memberPathIndices[ballotLevels];
-    signal input gapLow;
-    signal input gapNext;
-    signal input gapPathElements[ballotLevels];
-    signal input gapPathIndices[ballotLevels];
+    signal input low;
+    signal input nextKey;
+    signal input predCipher;
+    signal input oldC1x;
+    signal input oldC1y;
+    signal input oldC2x;
+    signal input oldC2y;
+    signal input pathElementsBallot[ballotLevels];
+    signal input pathIndicesBallot[ballotLevels];
 
     signal input root;
     signal input disqRoot;
@@ -80,32 +85,36 @@ template VoteSealed(levels, ballotLevels) {
     gapHigh <== (1 - nextIsZero.out) * leafLtNext.out;
     nextIsZero.out + gapHigh === 1;
 
-    signal choiceDiff[16];
-    signal choiceAcc[16];
-    choiceDiff[0] <== choice;
-    choiceAcc[0] <== choiceDiff[0];
-    for (var k = 1; k < 16; k++) {
-        choiceDiff[k] <== choice - k;
-        choiceAcc[k] <== choiceAcc[k - 1] * choiceDiff[k];
-    }
-    choiceAcc[15] === 0;
+    // One commitment: the public ballot hash is the ciphertext, not a separate
+    // tag of the choice. The one-hot opening under the joint key is checked
+    // on chain against these same points.
+    component cipher = CipherHash();
+    cipher.c1x <== c1x;
+    cipher.c1y <== c1y;
+    cipher.c2x <== c2x;
+    cipher.c2y <== c2y;
+    cipher.out === ballotHash;
 
-    component ballotTag = Hasher();
-    ballotTag.a <== choice;
-    ballotTag.b <== choiceRandomness;
-    ballotTag.out === ballotHash;
+    component oldCipher = CipherHash();
+    oldCipher.c1x <== oldC1x;
+    oldCipher.c1y <== oldC1y;
+    oldCipher.c2x <== oldC2x;
+    oldCipher.c2y <== oldC2y;
+    signal oldGate;
+    oldGate <== (1 - isReplacement) * oldC1x;
+    oldGate === 0;
 
     component set = BallotMembership(ballotLevels);
     set.voterKey <== voterId.out;
     set.isReplacement <== isReplacement;
     set.boundRoot <== boundRoot;
-    set.gapLow <== gapLow;
-    set.gapNext <== gapNext;
+    set.low <== low;
+    set.nextKey <== nextKey;
+    set.predCipher <== predCipher;
+    set.oldCipher <== oldCipher.out;
     for (var m = 0; m < ballotLevels; m++) {
-        set.memberPathElements[m] <== memberPathElements[m];
-        set.memberPathIndices[m] <== memberPathIndices[m];
-        set.gapPathElements[m] <== gapPathElements[m];
-        set.gapPathIndices[m] <== gapPathIndices[m];
+        set.pathElements[m] <== pathElementsBallot[m];
+        set.pathIndices[m] <== pathIndicesBallot[m];
     }
 }
 

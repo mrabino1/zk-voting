@@ -4,4 +4,4 @@ pragma circom 2.1.9;
 
 include "../per_ballot_lib.circom";
 
-component main {public [electionId, ballotHash, boundRoot, hourlyContribution, finalContribution]} = PerBallot(4);
+component main {public [electionId, ballotHash, boundRoot]} = PerBallot(4);

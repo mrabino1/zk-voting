@@ -4,7 +4,7 @@
  * NOT FOR PROFIT — civic public good, not a commercial product.
  *
  * After the Node (or L2 Tally contract) posts per-option counts, an operator
- * may copy `keccak256(abi.encodePacked(counts))` to L1
+ * may copy `keccak256(abi.encode(counts))` to L1
  * `L1TallyMirror.postCertifiedResult`. The L1 slot is
  * `(factory, electionId, jurisdictionId)` — not a public UUID and not a bare
  * uint256 — so a copied id cannot occupy the honest certification.
@@ -312,8 +312,8 @@ function hasCertifiedIdentity(opts = {}) {
 }
 
 /**
- * Solidity `keccak256(abi.encodePacked(uint256[] counts))` — packed 32-byte
- * words, no length prefix. Matches `Tally.submitTally` `countsHash`.
+ * Solidity `keccak256(abi.encode(uint256[] counts))`. The encoding is the
+ * array offset, the length, then each word. Matches `Tally.submitTally`.
  *
  * @param {Array<string|number|bigint>} counts
  * @returns {`0x${string}`}
@@ -322,9 +322,9 @@ function computeTallyHash(counts) {
   if (!Array.isArray(counts) || counts.length === 0) {
     throw new Error("computeTallyHash: non-empty counts[] required");
   }
-  const types = counts.map(() => "uint256");
   const values = counts.map((n) => toBigInt(n));
-  return keccak256(encodePacked(types, values));
+  const words = [32n, BigInt(values.length), ...values];
+  return keccak256(encodePacked(words.map(() => "uint256"), words));
 }
 
 function sumCounts(counts) {

@@ -110,7 +110,7 @@ contract ContractHardeningTest is Deployer {
         _expectInvalidNullifier(id, el, 0);
         _expectInvalidNullifier(id, el, field);
         _expectInvalidNullifier(id, el, field * 2);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
     }
 
     function testFuzz_fieldResidueIsOneSpentKey(uint256 residue, uint8 laps) public {
@@ -122,14 +122,14 @@ contract ContractHardeningTest is Deployer {
         (uint256 id, address el) = prepareOpenElection(Fixtures.identityCommitment(residue));
         submitVote(id, el, lifted);
         assertTrue(inbox.nullifierUsed(id, residue), "residue shares the spent key");
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
 
         bytes memory enc = Fixtures.encryptedBallot(residue);
         uint256[] memory inputs = voteInputs(id, el, residue, enc);
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.NullifierUsed.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
         assertEq(inbox.ballotHashOf(id, residue), bytes32(Fixtures.ballotHash(Fixtures.encryptedBallot(lifted))));
     }
 
@@ -157,7 +157,7 @@ contract ContractHardeningTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.InvalidProof.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
     }
 
     function testTrueVerifierTailStillAccepts() public {
@@ -169,7 +169,7 @@ contract ContractHardeningTest is Deployer {
         freezeRoll(el);
         warpOpen(el);
         submitVote(id, el, 11);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testVoteAcceptedDataIsHashAndRelayerOnly() public {
@@ -206,7 +206,7 @@ contract ContractHardeningTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.InvalidNullifier.selector);
         inbox.submitVoteBatch(id, proofA, proofB, proofC, badInputs, badBallots);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
         assertFalse(inbox.nullifierUsed(id, honest));
 
         uint256[] memory okNullifiers = new uint256[](2);
@@ -217,7 +217,7 @@ contract ContractHardeningTest is Deployer {
         vm.recordLogs();
         vm.prank(relayer);
         inbox.submitVoteBatch(id, proofA, proofB, proofC, okInputs, okBallots);
-        assertEq(inbox.acceptedBallots(id), 2);
+        assertEq(this.liveAccepted(id), 2);
 
         bytes32 sig = keccak256("VoteBatchAccepted(uint256,uint256,address)");
         uint256 seen;
@@ -256,7 +256,7 @@ contract ContractHardeningTest is Deployer {
         vm.expectRevert(IBallotInbox.ContractPaused.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
         assertEq(inbox.nullifierUsed(id, 15), false);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
 
         vm.prank(admin);
         vm.expectRevert(IElectionFactory.AlreadyPaused.selector);
@@ -265,7 +265,7 @@ contract ContractHardeningTest is Deployer {
         vm.warp(block.timestamp + factory.MAX_PAUSE_DURATION());
         assertFalse(factory.isPaused());
         submitVote(id, el, 15);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
 
         warpClosed(el);
         vm.prank(admin);
@@ -337,7 +337,7 @@ contract ContractHardeningTest is Deployer {
         tally.submitAggregateTally(id, counts, aggregate, a, b, c);
         assertEq(tally.aggregateHash(id), aggregate);
         assertEq(tally.tally(id).length, 1);
-        assertTrue(tally.tally(id).length != inbox.acceptedBallots(id));
+        assertTrue(tally.tally(id).length != this.liveAccepted(id));
     }
 
     function _expectInvalidNullifier(uint256 id, address el, uint256 nullifier) internal {

@@ -36,10 +36,11 @@ test("legacy vote public word is the voter id; sealed public word is the submiss
 
 test("per-ballot proof selects membership or non-membership at the bound root", () => {
   const src = read("per_ballot_lib.circom");
-  assert.match(src, /selected === boundRoot/);
+  assert.match(src, /proof\.root === boundRoot/);
   assert.match(src, /MerkleTreeInclusionProof/);
-  assert.match(src, /gapOk === 1/);
-  assert.match(src, /hourlyGate <== isReplacement \* hourlyContribution/);
+  assert.match(src, /rangeGate === 0/);
+  assert.match(src, /CipherHash/);
+  assert.match(src, /voterKey/);
   assert.match(read("per_ballot.circom"), /PerBallot\(20\)/);
   assert.match(read("mains/per_ballot_test.circom"), /PerBallot\(4\)/);
 });
@@ -49,12 +50,11 @@ test("batch transition uses the merkle ballot set and binds products", () => {
   assert.match(src, /step === stepAcc\[n\]/);
   assert.match(src, /finalGate === 0/);
   assert.match(src, /running\[n\] === ballotSetRoot/);
-  assert.match(src, /hourlyAcc\[n\] === nextHourly/);
-  assert.match(src, /finalAcc\[n\] === nextFinal/);
-  assert.match(src, /tagAcc\[n\] === tagHash/);
-  assert.match(src, /pointAcc\[8\] === pointTag/);
-  assert.match(src, /secret\[i\] <== voter\[i\]\.out/);
+  assert.match(src, /chainAcc\[4\] === chainHash/);
+  assert.match(src, /optAcc\[16\] === pointTag/);
   assert.match(src, /hashAcc\[16\] === dataHash/);
+  assert.match(src, /voterKey\[n\]/);
+  assert.doesNotMatch(src, /nullifierSecret/);
   assert.doesNotMatch(src, /rootAcc\[n\] === ballotSetRoot/);
   assert.match(read("batch_transition.circom"), /BatchTransition\(4, 4\)/);
   assert.match(read("mains/batch_transition_prod.circom"), /BatchTransition\(4, 20\)/);

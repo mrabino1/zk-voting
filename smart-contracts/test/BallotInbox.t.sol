@@ -57,7 +57,7 @@ contract BallotInboxTest is Deployer {
         inbox.submitVote(electionId, a, b, c, inputs, enc);
 
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(enc)));
     }
 
@@ -66,11 +66,11 @@ contract BallotInboxTest is Deployer {
     function testPerElection_sameIdentitySecondSubmitReverts() public {
         warpOpen(election);
         submitVote(electionId, election, nullifier);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
 
         _expectNullifierUsed(electionId, election, nullifier, Fixtures.encryptedBallot(nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1, "double-vote must not increment acceptedBallots");
+        assertEq(this.liveAccepted(electionId), 1, "double-vote must not increment acceptedBallots");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
 
@@ -95,10 +95,10 @@ contract BallotInboxTest is Deployer {
         _submitVote(electionId, election, nullifier, firstChoice);
         bytes32 stored = inbox.ballotHashOf(electionId, nullifier);
         assertEq(stored, bytes32(Fixtures.ballotHash(firstChoice)));
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
 
         _expectNullifierUsed(electionId, election, nullifier, mindChange);
-        assertEq(inbox.acceptedBallots(electionId), 1, "mind-change must not accept a second ballot in this election");
+        assertEq(this.liveAccepted(electionId), 1, "mind-change must not accept a second ballot in this election");
         assertEq(inbox.ballotHashOf(electionId, nullifier), stored, "first ballot must not be superseded");
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
     }
@@ -117,7 +117,7 @@ contract BallotInboxTest is Deployer {
         submitVote(electionId, election, n2);
         assertTrue(inbox.nullifierUsed(electionId, n1));
         assertTrue(inbox.nullifierUsed(electionId, n2));
-        assertEq(inbox.acceptedBallots(electionId), 2);
+        assertEq(this.liveAccepted(electionId), 2);
     }
 
     function testDistinctNullifiersCountSeparately() public {
@@ -149,8 +149,8 @@ contract BallotInboxTest is Deployer {
 
         submitVote(idA, elA, nA);
         submitVote(idB, elB, nB);
-        assertEq(inbox.acceptedBallots(idA), 1, "first vote in election A");
-        assertEq(inbox.acceptedBallots(idB), 1, "first vote in election B is not banned by A");
+        assertEq(this.liveAccepted(idA), 1, "first vote in election A");
+        assertEq(this.liveAccepted(idB), 1, "first vote in election B is not banned by A");
         assertTrue(inbox.nullifierUsed(idA, nA));
         assertTrue(inbox.nullifierUsed(idB, nB));
         assertFalse(inbox.nullifierUsed(idA, nB), "B's nullifier is not spent in A");
@@ -158,8 +158,8 @@ contract BallotInboxTest is Deployer {
 
         _expectNullifierUsed(idA, elA, nA, Fixtures.encryptedBallot(nA));
         _expectNullifierUsed(idB, elB, nB, Fixtures.encryptedBallot(nB));
-        assertEq(inbox.acceptedBallots(idA), 1);
-        assertEq(inbox.acceptedBallots(idB), 1);
+        assertEq(this.liveAccepted(idA), 1);
+        assertEq(this.liveAccepted(idB), 1);
     }
 
     /// @notice Inbox mapping isolation: the same field value may be spent once in
@@ -177,8 +177,8 @@ contract BallotInboxTest is Deployer {
 
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertTrue(inbox.nullifierUsed(idB, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1);
-        assertEq(inbox.acceptedBallots(idB), 1);
+        assertEq(this.liveAccepted(electionId), 1);
+        assertEq(this.liveAccepted(idB), 1);
     }
 
     function testOnceOnly_identityCommitmentNullifierIsElectionScoped() public {
@@ -199,10 +199,10 @@ contract BallotInboxTest is Deployer {
         bytes memory q2 = abi.encodePacked("ciphertext-question-aspect-2", n);
 
         _submitVote(id, el, n, q1);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
 
         _expectNullifierUsed(id, el, n, q2);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
         assertEq(inbox.ballotHashOf(id, n), bytes32(Fixtures.ballotHash(q1)));
     }
 
@@ -222,20 +222,20 @@ contract BallotInboxTest is Deployer {
 
         submitVote(id, el, uint256(keccak256("q2-n1")));
         submitVote(id, el, uint256(keccak256("q2-n2")));
-        assertEq(inbox.acceptedBallots(id), 2);
+        assertEq(this.liveAccepted(id), 2);
     }
 
     function testVotingBeforeStartReverts() public {
         assertTrue(block.timestamp < IElection(election).params().startTime);
         expectSubmitVoteRevert(electionId, election, nullifier);
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
         assertFalse(inbox.nullifierUsed(electionId, nullifier));
     }
 
     function testVotingAfterCutoffReverts() public {
         warpClosed(election);
         expectSubmitVoteRevert(electionId, election, uint256(keccak256("late-nullifier")));
-        assertEq(inbox.acceptedBallots(electionId), 0);
+        assertEq(this.liveAccepted(electionId), 0);
     }
 
     function testVoteWithoutFreezeReverts() public {
@@ -266,7 +266,7 @@ contract BallotInboxTest is Deployer {
         bytes memory first = Fixtures.encryptedBallot(nullifier);
         bytes memory second = abi.encodePacked(first, "changed-mind");
         submitVoteWithBallot(electionId, election, nullifier, first);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
         assertEq(inbox.ballotHashOf(electionId, nullifier), bytes32(Fixtures.ballotHash(first)));
 
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = Fixtures.dummyProof();
@@ -276,7 +276,7 @@ contract BallotInboxTest is Deployer {
         inbox.submitVote(electionId, a, b, c, inputs, second);
 
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
-        assertEq(inbox.acceptedBallots(electionId), 1, "second ballot must not mint a second voter");
+        assertEq(this.liveAccepted(electionId), 1, "second ballot must not mint a second voter");
         assertEq(
             inbox.ballotHashOf(electionId, nullifier),
             bytes32(Fixtures.ballotHash(first)),

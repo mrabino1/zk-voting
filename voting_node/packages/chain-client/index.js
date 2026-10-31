@@ -146,7 +146,7 @@ const INBOX_ABI = [
   },
   {
     type: "function",
-    name: "acceptedBallots",
+    name: "closedBallotCount",
     stateMutability: "view",
     inputs: [{ name: "electionId", type: "uint256" }],
     outputs: [{ type: "uint256" }],
@@ -679,7 +679,7 @@ async function getElectionAddress(factoryAddressOrOpts, electionId, opts) {
   return factory.getElection(electionId);
 }
 
-async function acceptedBallots(inboxAddress, electionId, opts = {}) {
+async function closedBallotCount(inboxAddress, electionId, opts = {}) {
   const rpcUrl = opts.rpcUrl || process.env.ZK_VOTING_RPC_URL || "http://127.0.0.1:8545";
   const viem = tryViem();
   const inbox = padAddress(inboxAddress);
@@ -687,13 +687,13 @@ async function acceptedBallots(inboxAddress, electionId, opts = {}) {
     return opts.publicClient.readContract({
       address: inbox,
       abi: INBOX_ABI,
-      functionName: "acceptedBallots",
+      functionName: "closedBallotCount",
       args: [toBigInt(electionId)],
     });
   }
   const raw = await ethCall(rpcUrl, {
     to: inbox,
-    data: calldataUint256("acceptedBallots(uint256)", electionId),
+    data: calldataUint256("closedBallotCount(uint256)", electionId),
   });
   return decodeUintWord(raw);
 }
@@ -724,7 +724,7 @@ module.exports = {
   decodeElectionCreated,
   submitVote,
   getElectionAddress,
-  acceptedBallots,
+  closedBallotCount,
   nullifierUsed,
   serializePublicInputs,
   encodePacked,

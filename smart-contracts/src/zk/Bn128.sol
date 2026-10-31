@@ -53,4 +53,37 @@ library Bn128 {
         (bool ok, uint256 xOut, uint256 yOut) = mul(x, y, 1);
         return ok && xOut == x && yOut == y && (x != 0 || y != 0);
     }
+
+    /// @notice Identity, or a prime-order point. The BN254 G1 cofactor is 1, so
+    ///         the curve equation is the subgroup check. Scalar `R` is 0 mod r
+    ///         and cannot be used as a membership test.
+    function validPoint(uint256 x, uint256 y) internal view returns (bool) {
+        if (x == 0 && y == 0) return true;
+        uint256 p = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
+        if (x >= p || y >= p) return false;
+        uint256 yy = mulmod(y, y, p);
+        uint256 xxx = mulmod(mulmod(x, x, p), x, p);
+        if (yy != addmod(xxx, 3, p)) return false;
+        return onCurve(x, y);
+    }
+
+    /// @notice Sum that treats the identity as a no-op. The precompile rejects `(0, 0)`.
+    function ecAdd(uint256 x1, uint256 y1, uint256 x2, uint256 y2)
+        internal
+        view
+        returns (bool ok, uint256 xOut, uint256 yOut)
+    {
+        if (x1 == 0 && y1 == 0) return (true, x2, y2);
+        if (x2 == 0 && y2 == 0) return (true, x1, y1);
+        return add(x1, y1, x2, y2);
+    }
+
+    function ecSub(uint256 x1, uint256 y1, uint256 x2, uint256 y2)
+        internal
+        view
+        returns (bool ok, uint256 xOut, uint256 yOut)
+    {
+        (uint256 nx, uint256 ny) = neg(x2, y2);
+        return ecAdd(x1, y1, nx, ny);
+    }
 }

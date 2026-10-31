@@ -47,7 +47,7 @@ contract PrivacyUnlinkabilityTest is Deployer {
         inbox.submitVote(electionId, a, b, c, inputs, enc);
 
         assertTrue(relayer != voterWallet);
-        assertEq(inbox.acceptedBallots(electionId), 1);
+        assertEq(this.liveAccepted(electionId), 1);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("VoteAccepted(uint256,uint256,bytes32,address)");
@@ -103,7 +103,7 @@ contract PrivacyUnlinkabilityTest is Deployer {
         assertTrue(inbox.nullifierUsed(electionId, nullifier));
         assertTrue(nullifier != uint256(uint160(voterWallet)));
         expectSubmitVoteRevert(electionId, election, nullifier);
-        assertEq(inbox.acceptedBallots(electionId), 1, "double-vote must not increment acceptedBallots");
+        assertEq(this.liveAccepted(electionId), 1, "double-vote must not increment acceptedBallots");
     }
 
     function testOnceOnly_nullifierUniquenessDoesNotIdentifyWallet() public {

@@ -17,6 +17,8 @@ import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 contract GuardianCeremony {
     uint8 public constant MIN_N = 2;
     uint8 public constant MAX_N = 16;
+    /// @notice After this, an absent dealer can be dropped if at least `k` posted.
+    uint256 public constant COMPLAINT_WINDOW = 1 hours;
     bytes32 internal constant SCHNORR_DOMAIN = keccak256("GUARDIAN_SCHNORR_V1");
 
     error ZeroAddress();
@@ -33,6 +35,10 @@ contract GuardianCeremony {
     error AlreadyPosted();
     error NotGuardian();
     error BadGuardianList();
+    error ComplaintUnfounded();
+    error ComplaintWindowOpen();
+    error NotEnoughGuardians();
+    error ShareNotDerived();
 
     event CeremonyOpened(uint256 indexed electionId, uint8 indexed electionType, uint8 k, uint8 n);
     event GuardianPosted(uint256 indexed electionId, uint8 indexed electionType, address indexed guardian, uint8 index);
@@ -46,6 +52,8 @@ contract GuardianCeremony {
         uint256 jointY;
         bool open;
         bool posted;
+        uint64 openedAt;
+        uint32 excluded;
     }
 
     IElectionFactory private immutable _factory;
@@ -92,8 +100,17 @@ contract GuardianCeremony {
             _guardianAt[electionId][electionType][index] = who;
             _index[electionId][electionType][who] = index;
         }
-        _deal[electionId][electionType] =
-            Deal({k: k, n: n, postedCount: 0, jointX: 0, jointY: 0, open: true, posted: false});
+        _deal[electionId][electionType] = Deal({
+            k: k,
+            n: n,
+            postedCount: 0,
+            jointX: 0,
+            jointY: 0,
+            open: true,
+            posted: false,
+            openedAt: uint64(block.timestamp),
+            excluded: 0
+        });
         emit CeremonyOpened(electionId, electionType, k, n);
     }
 
@@ -111,7 +128,7 @@ contract GuardianCeremony {
         Deal storage deal = _deal[electionId][electionType];
         if (!deal.open || deal.posted) revert CeremonyNotOpen();
         uint8 index = _index[electionId][electionType][msg.sender];
-        if (index == 0) revert NotGuardian();
+        if (index == 0 || _isExcluded(deal, index)) revert NotGuardian();
         if (_posted[electionId][electionType][index]) revert AlreadyPosted();
         if (cx.length != deal.k || cy.length != deal.k) revert FeldmanMismatch();
         for (uint8 t; t < deal.k; ++t) {
@@ -126,12 +143,43 @@ contract GuardianCeremony {
             deal.postedCount += 1;
         }
         emit GuardianPosted(electionId, electionType, msg.sender, index);
-        if (deal.postedCount == deal.n) {
-            _derive(electionId, electionType, deal.n, deal.k);
-            deal.posted = true;
-            deal.open = false;
-            emit CeremonyPosted(electionId, electionType, deal.k, deal.n);
-        }
+        if (deal.postedCount == _liveN(deal)) _finalize(electionId, electionType);
+    }
+
+    /// @notice A guardian shows that `dealerIndex` sent a share that does not open its commitments.
+    ///         A matching share reverts. A mismatch drops that dealer. The joint key is not derived here.
+    function complain(uint256 electionId, uint8 electionType, uint8 dealerIndex, uint256 share) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.open || deal.posted) revert CeremonyNotOpen();
+        uint8 mine = _index[electionId][electionType][msg.sender];
+        if (mine == 0 || _isExcluded(deal, mine)) revert NotGuardian();
+        if (dealerIndex == 0 || dealerIndex > deal.n || _isExcluded(deal, dealerIndex)) revert NotGuardian();
+        if (!_posted[electionId][electionType][dealerIndex]) revert NotGuardian();
+        (uint256 ex, uint256 ey) = _eval(electionId, electionType, dealerIndex, mine, deal.k);
+        (bool ok, uint256 sx, uint256 sy) = Bn128.mul(1, 2, share % Bn128.R);
+        if (!ok) revert PointOffCurve();
+        if (sx == ex && sy == ey) revert ComplaintUnfounded();
+        _exclude(electionId, electionType, dealerIndex);
+    }
+
+    /// @notice After the complaint window, finalize from the guardians who posted when at least `k` remain.
+    function dropAbsent(uint256 electionId, uint8 electionType) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.open || deal.posted) revert CeremonyNotOpen();
+        if (block.timestamp < uint256(deal.openedAt) + COMPLAINT_WINDOW) revert ComplaintWindowOpen();
+        if (deal.postedCount < deal.k) revert NotEnoughGuardians();
+        _finalize(electionId, electionType);
+    }
+
+    /// @notice One guardian public key. O(n·k) scalar multiplications, one guardian per call.
+    function deriveShare(uint256 electionId, uint8 electionType, uint8 index) external {
+        Deal storage deal = _deal[electionId][electionType];
+        if (!deal.posted) revert CeremonyNotOpen();
+        if (index == 0 || index > deal.n || _isExcluded(deal, index)) revert NotGuardian();
+        address who = _guardianAt[electionId][electionType][index];
+        (uint256 px, uint256 py) = _sharePoint(electionId, electionType, index, deal.n, deal.k, deal.excluded);
+        _pkX[electionId][electionType][who] = px;
+        _pkY[electionId][electionType][who] = py;
     }
 
     /// @notice Challenge for `g^z = R + e·C_0`, bound to every coefficient.
@@ -171,9 +219,11 @@ contract GuardianCeremony {
         view
         returns (uint256 x, uint256 y, bool ok)
     {
-        ok = _deal[electionId][electionType].posted && _index[electionId][electionType][guardian] != 0;
+        Deal storage deal = _deal[electionId][electionType];
+        uint8 index = _index[electionId][electionType][guardian];
         x = _pkX[electionId][electionType][guardian];
         y = _pkY[electionId][electionType][guardian];
+        ok = deal.posted && index != 0 && !_isExcluded(deal, index) && (x != 0 || y != 0);
     }
 
     /// @notice 1-based allowlist index. Zero if `guardian` is not on the list.
@@ -205,18 +255,30 @@ contract GuardianCeremony {
         return okR && lx == rx && ly == ry;
     }
 
-    /// @dev `Y_i = Σ_j Σ_t (i^t mod r) · C_{j,t}` and `joint = Σ_j C_{j,0}`.
-    function _derive(uint256 electionId, uint8 electionType, uint8 n, uint8 k) internal {
+    function _isExcluded(Deal storage deal, uint8 index) internal view returns (bool) {
+        return (deal.excluded & (uint32(1) << index)) != 0;
+    }
+
+    function _liveN(Deal storage deal) internal view returns (uint8 n) {
+        for (uint8 i = 1; i <= deal.n; ++i) {
+            if (!_isExcluded(deal, i)) n += 1;
+        }
+    }
+
+    /// @dev Joint key only. Each guardian key is `deriveShare`, so 16-of-16 does not do n²k multiplications.
+    function _finalize(uint256 electionId, uint8 electionType) internal {
+        Deal storage deal = _deal[electionId][electionType];
         uint256 jx;
         uint256 jy;
-        bool jointStarted;
-        for (uint8 j = 1; j <= n; ++j) {
+        bool started;
+        for (uint8 j = 1; j <= deal.n; ++j) {
+            if (_isExcluded(deal, j) || !_posted[electionId][electionType][j]) continue;
             uint256 cx = _cx[electionId][electionType][j][0];
             uint256 cy = _cy[electionId][electionType][j][0];
-            if (!jointStarted) {
+            if (!started) {
                 jx = cx;
                 jy = cy;
-                jointStarted = true;
+                started = true;
             } else {
                 (bool ok, uint256 nx, uint256 ny) = Bn128.add(jx, jy, cx, cy);
                 if (!ok) revert PointOffCurve();
@@ -224,33 +286,73 @@ contract GuardianCeremony {
                 jy = ny;
             }
         }
-        _deal[electionId][electionType].jointX = jx;
-        _deal[electionId][electionType].jointY = jy;
+        if (!started || deal.postedCount < deal.k) revert NotEnoughGuardians();
+        deal.jointX = jx;
+        deal.jointY = jy;
+        deal.posted = true;
+        deal.open = false;
+        emit CeremonyPosted(electionId, electionType, deal.k, deal.n);
+    }
 
-        for (uint8 i = 1; i <= n; ++i) {
-            uint256 px;
-            uint256 py;
-            bool any;
-            for (uint8 j = 1; j <= n; ++j) {
-                uint256 pow = 1;
-                for (uint8 t; t < k; ++t) {
-                    (bool ok, uint256 mx, uint256 my) =
-                        Bn128.mul(_cx[electionId][electionType][j][t], _cy[electionId][electionType][j][t], pow);
-                    if (!ok) revert PointOffCurve();
-                    if (!any) {
-                        px = mx;
-                        py = my;
-                        any = true;
-                    } else {
-                        (ok, px, py) = Bn128.add(px, py, mx, my);
-                        if (!ok) revert PointOffCurve();
-                    }
-                    pow = mulmod(pow, i, Bn128.R);
-                }
+    function _exclude(uint256 electionId, uint8 electionType, uint8 dealerIndex) internal {
+        Deal storage deal = _deal[electionId][electionType];
+        deal.excluded |= uint32(1) << dealerIndex;
+        if (_posted[electionId][electionType][dealerIndex]) {
+            _posted[electionId][electionType][dealerIndex] = false;
+            deal.postedCount -= 1;
+        }
+    }
+
+    /// @dev g^share == Σ_t index^t · C_t for one dealer.
+    function _eval(uint256 electionId, uint8 electionType, uint8 dealer, uint8 at, uint8 k)
+        internal
+        view
+        returns (uint256 px, uint256 py)
+    {
+        uint256 pow = 1;
+        bool any;
+        for (uint8 t; t < k; ++t) {
+            (bool ok, uint256 mx, uint256 my) =
+                Bn128.mul(_cx[electionId][electionType][dealer][t], _cy[electionId][electionType][dealer][t], pow);
+            if (!ok) revert PointOffCurve();
+            if (!any) {
+                px = mx;
+                py = my;
+                any = true;
+            } else {
+                (ok, px, py) = Bn128.add(px, py, mx, my);
+                if (!ok) revert PointOffCurve();
             }
-            address who = _guardianAt[electionId][electionType][i];
-            _pkX[electionId][electionType][who] = px;
-            _pkY[electionId][electionType][who] = py;
+            pow = mulmod(pow, at, Bn128.R);
+        }
+    }
+
+    function _sharePoint(
+        uint256 electionId,
+        uint8 electionType,
+        uint8 index,
+        uint8 n,
+        uint8 k,
+        uint32 excluded
+    ) internal view returns (uint256 px, uint256 py) {
+        bool any;
+        for (uint8 j = 1; j <= n; ++j) {
+            if ((excluded & (uint32(1) << j)) != 0 || !_posted[electionId][electionType][j]) continue;
+            uint256 pow = 1;
+            for (uint8 t; t < k; ++t) {
+                (bool ok, uint256 mx, uint256 my) =
+                    Bn128.mul(_cx[electionId][electionType][j][t], _cy[electionId][electionType][j][t], pow);
+                if (!ok) revert PointOffCurve();
+                if (!any) {
+                    px = mx;
+                    py = my;
+                    any = true;
+                } else {
+                    (ok, px, py) = Bn128.add(px, py, mx, my);
+                    if (!ok) revert PointOffCurve();
+                }
+                pow = mulmod(pow, index, Bn128.R);
+            }
         }
     }
 }

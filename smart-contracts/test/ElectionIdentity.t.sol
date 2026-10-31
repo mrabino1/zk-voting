@@ -44,7 +44,7 @@ contract ElectionIdentitySeparationTest is Deployer {
         uint256[] memory counts = new uint256[](2);
         counts[0] = a;
         counts[1] = b;
-        return keccak256(abi.encodePacked(counts));
+        return keccak256(abi.encode(counts));
     }
 
     function _cert(address factory_, uint256 electionId, bytes32 jurisdictionId, bytes32 publicIdHash, bytes32 resultHash)

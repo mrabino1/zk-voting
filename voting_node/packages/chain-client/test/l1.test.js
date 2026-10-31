@@ -29,13 +29,13 @@ const {
 } = require("../l1");
 
 describe("computeTallyHash", () => {
-  test("matches packed keccak256 of uint256 words (Solidity abi.encodePacked)", () => {
+  test("matches keccak256(abi.encode(uint256[])) of the counts", () => {
     const hash = computeTallyHash([2, 0]);
     assert.match(hash, /^0x[0-9a-f]{64}$/);
-    // keccak256(uint256(2) || uint256(0)) — same as Tally.sol countsHash.
+    // keccak256(abi.encode([2, 0])) — same as Tally.sol countsHash.
     assert.equal(
       hash,
-      "0xabbb5caa7dda850e60932de0934eb1f9d0f59695050f761dc64e443e5030a569",
+      "0x67bf8fa5990b955cdd985e791a46ec9f0a3d26df2cb826aa7ce4bd2c6eaf197e",
     );
     assert.equal(computeTallyHash(["2", 0n]), hash);
   });

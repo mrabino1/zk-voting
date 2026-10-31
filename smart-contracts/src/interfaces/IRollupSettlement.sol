@@ -34,6 +34,9 @@ interface IRollupSettlement {
     error UniqueCountMismatch();
     error HourAlreadyPosted();
     error PointsMismatch();
+    error PointOffCurve();
+    error OneHotRejected();
+    error ContractPaused();
 
     event SealedBatchPosted(
         uint256 indexed electionId, uint8 kind, uint64 indexed batchIndex, bytes32 ballotSetRoot, uint256 uniqueCount
@@ -85,6 +88,30 @@ interface IRollupSettlement {
         bool set;
     }
 
+    /// @notice One ballot in a batch. `oneHot` is the CDS proof under the joint key.
+    ///         A first ballot adds the ciphertext. A replacement subtracts `old` on the final tally only.
+    struct BallotRow {
+        uint256 submissionId;
+        uint8 isFirst;
+        uint256 c1X;
+        uint256 c1Y;
+        uint256 c2X;
+        uint256 c2Y;
+        uint256 oldC1X;
+        uint256 oldC1Y;
+        uint256 oldC2X;
+        uint256 oldC2Y;
+        uint256[12] oneHot;
+    }
+
+    /// @notice Option ciphertext after option 0. Option 0 is the batch's next ciphertext.
+    struct OptionPoint {
+        uint256 c1X;
+        uint256 c1Y;
+        uint256 c2X;
+        uint256 c2Y;
+    }
+
     function setElectionFactory(address factory_) external;
 
     function setInbox(address inbox_) external;
@@ -127,10 +154,25 @@ interface IRollupSettlement {
 
     function computeSealedDataHash(SealedParams memory params, uint8 kind) external pure returns (bytes32);
 
+    function computeSealedDataHash(SealedParams memory params, uint8 kind, OptionPoint[] memory options)
+        external
+        pure
+        returns (bytes32);
+
+    function chainHashOf(BallotRow[] memory rows) external pure returns (bytes32);
+
+    function postedUnique(uint256 electionId) external view returns (uint256);
+
+    function hourUnique(uint256 electionId, uint256 hourIndex) external view returns (uint256);
+
+    function optionCiphertext(uint256 electionId, uint256 option) external view returns (Ciphertext memory);
+
     function submitHourlyBatch(
         SealedParams calldata params,
         bytes32[] calldata boundRoots,
         bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
@@ -140,6 +182,8 @@ interface IRollupSettlement {
         SealedParams calldata params,
         bytes32[] calldata boundRoots,
         bytes32[] calldata firstBallotTags,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
@@ -148,6 +192,8 @@ interface IRollupSettlement {
     function submitSupplementaryBatch(
         SealedParams calldata params,
         uint256[] calldata includedIds,
+        BallotRow[] calldata rows,
+        OptionPoint[] calldata options,
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c

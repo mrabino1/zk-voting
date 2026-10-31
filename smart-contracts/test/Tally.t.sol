@@ -108,7 +108,7 @@ contract TallyTest is Deployer {
         counts[1] = 1;
         counts[2] = 1;
         bytes32 aggregate = keccak256("homomorphic-product");
-        assertTrue(counts.length != inbox.acceptedBallots(id));
+        assertTrue(counts.length != this.liveAccepted(id));
 
         vm.prank(tallyOperator);
         tally.submitAggregateTally(id, counts, aggregate, a, b, c);
@@ -240,6 +240,6 @@ contract TallyTest is Deployer {
         for (uint256 i; i < n; ++i) {
             submitVote(id, el, uint256(keccak256(abi.encodePacked("n", i))));
         }
-        assertEq(inbox.acceptedBallots(id), n);
+        assertEq(this.liveAccepted(id), n);
     }
 }

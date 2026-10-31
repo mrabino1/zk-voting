@@ -182,9 +182,11 @@ interface ITallyVerifier {
 
     function hourlyPartialPosted(uint256 electionId, uint256 hourIndex, address guardian) external view returns (bool);
 
-    /// @notice Partial of the stored final ciphertext. `c1` is not a caller argument.
+    /// @notice Partial of one stored option ciphertext. `c1` is not a caller argument.
+    ///         Option 0 is the batch ciphertext. Later options are the batch's option list.
     function submitFinalPartial(
         uint256 electionId,
+        uint8 option,
         uint256 dX,
         uint256 dY,
         uint256 aX,
@@ -193,6 +195,8 @@ interface ITallyVerifier {
         uint256 bY,
         uint256 z
     ) external;
+
+    function optionPartialPosted(uint256 electionId, uint8 option, address guardian) external view returns (bool);
 
     function finalPartialCount(uint256 electionId) external view returns (uint256);
 }

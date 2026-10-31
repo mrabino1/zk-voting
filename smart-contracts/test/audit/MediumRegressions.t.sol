@@ -203,7 +203,7 @@ contract MediumRegressionsTest is Deployer {
 
         vm.clearMockedCalls();
         submitVote(id, el, 7);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     // ------------------------------------------------------------------ M-05

@@ -274,7 +274,7 @@ contract HighRegressionsTest is Deployer {
         assertEq(voterRegistry.eligibleCount(id), n - 1);
 
         submitVote(id, el, 5);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testH03_ContinueWithoutPendingReverts() public {
@@ -305,7 +305,7 @@ contract HighRegressionsTest is Deployer {
         vm.prank(relayer);
         vm.expectRevert(IBallotInbox.EligibleRootMismatch.selector);
         inbox.submitVote(id, a, b, c, inputs, enc);
-        assertEq(inbox.acceptedBallots(id), 0);
+        assertEq(this.liveAccepted(id), 0);
 
         // The old clearance selector is gone: a commitment cannot ride next to a nullifier.
         (bool ok,) = address(inbox)
@@ -343,7 +343,7 @@ contract HighRegressionsTest is Deployer {
         }
         assertEq(inbox.ballotHashOfCiphertext(enc), uint256(keccak256(enc)) % R);
         submitVoteWithBallot(id, el, 42, enc);
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
     }
 
     function testH05_RawKeccakBallotHashRejected() public {

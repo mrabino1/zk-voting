@@ -44,6 +44,9 @@ interface IBallotInbox {
     error UnknownInclusion();
     error PendingListFull();
     error LinksLocked();
+    error TurnoutNotPublished();
+    error BadTreeDepth();
+    error EgCiphertextRequired();
 
     struct RelayerReceipt {
         uint256 submissionId;
@@ -80,10 +83,9 @@ interface IBallotInbox {
 
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 
-    function acceptedBallots(uint256 electionId) external view returns (uint256);
-
-    /// @notice First ballots committed by a batch. Re-votes do not increment it.
-    function firstBallots(uint256 electionId) external view returns (uint256);
+    /// @notice Public turnout. Sealed elections return the last posted unique count.
+    ///         Legacy elections revert until cutoff.
+    function closedBallotCount(uint256 electionId) external view returns (uint256);
 
     function emptyBallotRoot(uint256 depth) external pure returns (uint256);
 
@@ -121,9 +123,6 @@ interface IBallotInbox {
     function setSettlement(uint256 electionId, address settlement_) external;
 
     function setCeremony(uint256 electionId, address ceremony_) external;
-
-    /// @notice Published unique count. Only the linked settlement may write it.
-    function commitUniqueCount(uint256 electionId, uint256 uniqueCount) external;
 
     /// @notice Covers chain id, this inbox, and the receipt fields, including `boundRoot`.
     function receiptDigest(uint256 electionId, RelayerReceipt calldata receipt) external view returns (bytes32);

@@ -3,10 +3,11 @@ pragma circom 2.1.9;
 // Hourly, final, and supplementary batch.
 // Public inputs match RollupSettlement.batchPublicInputs:
 //   prevStateRoot, newStateRoot, dataHash, batchIndex, each reduced mod r.
-// The ballot-set root is a Merkle root of voter keys, the same construction as
-// per_ballot's boundRoot. First ballots are inserted. Replacements add nothing
-// to the products. secret[i] is Poseidon(nullifierSecret, electionId), not a
-// free input. pointTag and tagHash are Poseidon folds.
+// The ballot set is the indexed tree in indexed_merkle.circom. The witness
+// carries the voter key bound by the per-ballot proof, never the secret.
+// A first ballot updates its predecessor and inserts Valued(key, next, cipher).
+// A re-vote updates that leaf from the old ciphertext to the new one and adds
+// nothing to the hourly product. chainHash is the fold of per-ballot links.
 // This file has no main.
 
 include "./per_ballot_lib.circom";
@@ -31,19 +32,34 @@ template BatchTransition(n, levels) {
     signal input boundRootHash;
     signal input pointTag;
     signal input boundRoot;
+    signal input boundList[4];
+    signal input boundLen;
     signal input active[n];
     signal input isFirst[n];
-    signal input nullifierSecret[n];
-    signal input hourlyContrib[n];
-    signal input finalContrib[n];
-    signal input memberPathElements[n][levels];
-    signal input memberPathIndices[n][levels];
-    signal input gapLow[n];
-    signal input gapNext[n];
-    signal input gapPathElements[n][levels];
-    signal input gapPathIndices[n][levels];
-    signal input insertPathElements[n][levels];
-    signal input insertPathIndices[n][levels];
+    signal input voterKey[n];
+    signal input submissionId[n];
+    signal input ballotHash[n];
+    signal input c1x[n];
+    signal input c1y[n];
+    signal input c2x[n];
+    signal input c2y[n];
+    signal input oldC1x[n];
+    signal input oldC1y[n];
+    signal input oldC2x[n];
+    signal input oldC2y[n];
+    signal input predKey[n];
+    signal input predNext[n];
+    signal input predCipher[n];
+    signal input predOldRoot[n];
+    signal input emptyOldRoot[n];
+    signal input replOldRoot[n];
+    signal input predPathElements[n][levels];
+    signal input predPathIndices[n][levels];
+    signal input emptyPathElements[n][levels];
+    signal input emptyPathIndices[n][levels];
+    signal input replPathElements[n][levels];
+    signal input replPathIndices[n][levels];
+    signal input forcedId[n];
     signal input prevC1X;
     signal input prevC1Y;
     signal input prevC2X;
@@ -52,51 +68,60 @@ template BatchTransition(n, levels) {
     signal input nextC1Y;
     signal input nextC2X;
     signal input nextC2Y;
+    // Extra option ciphertexts, option 1..optionCount. Option 0 is nextC*.
+    // optionCount 0 leaves pointTag equal to the eight running coordinates.
+    signal input optionCount;
+    signal input optC1X[4];
+    signal input optC1Y[4];
+    signal input optC2X[4];
+    signal input optC2Y[4];
 
     signal activeSq[n];
     signal firstSq[n];
     signal firstContrib[n];
+    signal useReplace[n];
     signal inactiveFirst[n];
     signal stepAcc[n + 1];
     stepAcc[0] <== 0;
-    signal hourlyAcc[n + 1];
-    hourlyAcc[0] <== previousHourly;
-    signal finalAcc[n + 1];
-    finalAcc[0] <== previousFinal;
-    signal secret[n];
-    component voter[n];
-    component member[n];
-    component chainLeaf[n];
-    component gapProof[n];
-    component lowLt[n];
-    component nextZero[n];
-    component keyLt[n];
-    signal notZero[n];
-    signal strictGap[n];
-    signal gapOk[n];
-    signal fromMember[n];
-    signal fromGap[n];
-    signal selected[n];
-    signal boundDelta[n];
-    signal lowGate[n];
+    component cipherOf[n];
+    component oldOf[n];
+    component sidOf[n];
+    signal sidGate[n];
+    signal hashGate[n];
+    signal oldZeroX[n];
+    signal oldZeroY[n];
+    component gapOf[n];
     signal gapGate[n];
-    signal replHour[n];
-    signal hourTerm[n];
-    signal finalTerm[n];
-    component oldProof[n];
-    component newProof[n];
-    signal insertDelta[n];
-    signal insertedRoot[n];
-    signal keptRoot[n];
+    component oldPredLeaf[n];
+    component newPredLeaf[n];
+    component newLeaf[n];
+    component oldMember[n];
+    component newMember[n];
+    component predUp[n];
+    component emptyUp[n];
+    component replUp[n];
+    signal predGate[n];
+    signal emptyGate[n];
+    signal replGate[n];
+    signal inserted[n];
+    signal replaced[n];
+    signal stayed[n];
     signal running[n + 1];
     running[0] <== boundRoot;
+    signal linkWord[n][10];
     component tagOf[n];
     component tagFold[n];
-    signal tagAcc[n + 1];
-    tagAcc[0] <== 0;
-    signal tagNext[n];
     signal tagTake[n];
     signal tagKeep[n];
+    signal tagNext[n];
+    signal tagAcc[n + 1];
+    tagAcc[0] <== 0;
+    component idFold[n];
+    signal idTake[n];
+    signal idKeep[n];
+    signal idNext[n];
+    signal idAcc[n + 1];
+    idAcc[0] <== 0;
 
     for (var i = 0; i < n; i++) {
         activeSq[i] <== active[i] * active[i];
@@ -106,97 +131,200 @@ template BatchTransition(n, levels) {
         inactiveFirst[i] <== (1 - active[i]) * isFirst[i];
         inactiveFirst[i] === 0;
         firstContrib[i] <== active[i] * isFirst[i];
+        useReplace[i] <== active[i] * (1 - isFirst[i]);
         stepAcc[i + 1] <== stepAcc[i] + firstContrib[i];
 
-        voter[i] = Hasher();
-        voter[i].a <== nullifierSecret[i];
-        voter[i].b <== electionId;
-        secret[i] <== voter[i].out;
+        cipherOf[i] = CipherHash();
+        cipherOf[i].c1x <== c1x[i];
+        cipherOf[i].c1y <== c1y[i];
+        cipherOf[i].c2x <== c2x[i];
+        cipherOf[i].c2y <== c2y[i];
+        hashGate[i] <== active[i] * (cipherOf[i].out - ballotHash[i]);
+        hashGate[i] === 0;
 
-        member[i] = MerkleTreeInclusionProof(levels);
-        member[i].leaf <== secret[i];
-        chainLeaf[i] = Hasher();
-        chainLeaf[i].a <== gapLow[i];
-        chainLeaf[i].b <== gapNext[i];
-        gapProof[i] = MerkleTreeInclusionProof(levels);
-        gapProof[i].leaf <== chainLeaf[i].out;
-        for (var d = 0; d < levels; d++) {
-            member[i].pathElements[d] <== memberPathElements[i][d];
-            member[i].pathIndices[d] <== memberPathIndices[i][d];
-            gapProof[i].pathElements[d] <== gapPathElements[i][d];
-            gapProof[i].pathIndices[d] <== gapPathIndices[i][d];
-        }
+        oldOf[i] = CipherHash();
+        oldOf[i].c1x <== oldC1x[i];
+        oldOf[i].c1y <== oldC1y[i];
+        oldOf[i].c2x <== oldC2x[i];
+        oldOf[i].c2y <== oldC2y[i];
+        oldZeroX[i] <== firstContrib[i] * oldC1x[i];
+        oldZeroX[i] === 0;
+        oldZeroY[i] <== firstContrib[i] * oldC1y[i];
+        oldZeroY[i] === 0;
 
-        lowLt[i] = FieldLessThan();
-        lowLt[i].a <== gapLow[i];
-        lowLt[i].b <== secret[i];
-        nextZero[i] = IsZero();
-        nextZero[i].in <== gapNext[i];
-        keyLt[i] = FieldLessThan();
-        keyLt[i].a <== secret[i];
-        keyLt[i].b <== gapNext[i];
-        notZero[i] <== 1 - nextZero[i].out;
-        strictGap[i] <== notZero[i] * keyLt[i].out;
-        gapOk[i] <== nextZero[i].out + strictGap[i];
-        lowGate[i] <== firstContrib[i] * (lowLt[i].out - 1);
-        lowGate[i] === 0;
-        gapGate[i] <== firstContrib[i] * (gapOk[i] - 1);
+        sidOf[i] = Hasher();
+        sidOf[i].a <== voterKey[i];
+        sidOf[i].b <== ballotHash[i];
+        sidGate[i] <== active[i] * (sidOf[i].out - submissionId[i]);
+        sidGate[i] === 0;
+
+        gapOf[i] = KeyInGap();
+        gapOf[i].low <== predKey[i];
+        gapOf[i].key <== voterKey[i];
+        gapOf[i].next <== predNext[i];
+        gapGate[i] <== firstContrib[i] * (gapOf[i].out - 1);
         gapGate[i] === 0;
 
-        fromMember[i] <== (1 - isFirst[i]) * member[i].root;
-        fromGap[i] <== isFirst[i] * gapProof[i].root;
-        selected[i] <== fromMember[i] + fromGap[i];
-        boundDelta[i] <== active[i] * (selected[i] - boundRoot);
-        boundDelta[i] === 0;
+        oldPredLeaf[i] = ValuedLeaf();
+        oldPredLeaf[i].key <== predKey[i];
+        oldPredLeaf[i].nextKey <== predNext[i];
+        oldPredLeaf[i].cipherHash <== predCipher[i];
+        newPredLeaf[i] = ValuedLeaf();
+        newPredLeaf[i].key <== predKey[i];
+        newPredLeaf[i].nextKey <== voterKey[i];
+        newPredLeaf[i].cipherHash <== predCipher[i];
+        newLeaf[i] = ValuedLeaf();
+        newLeaf[i].key <== voterKey[i];
+        newLeaf[i].nextKey <== predNext[i];
+        newLeaf[i].cipherHash <== cipherOf[i].out;
 
-        replHour[i] <== (1 - isFirst[i]) * hourlyContrib[i];
-        replHour[i] === 0;
-        hourTerm[i] <== firstContrib[i] * hourlyContrib[i];
-        finalTerm[i] <== firstContrib[i] * finalContrib[i];
-        hourlyAcc[i + 1] <== hourlyAcc[i] + hourTerm[i];
-        finalAcc[i + 1] <== finalAcc[i] + finalTerm[i];
-
-        oldProof[i] = MerkleTreeInclusionProof(levels);
-        oldProof[i].leaf <== 0;
-        newProof[i] = MerkleTreeInclusionProof(levels);
-        newProof[i].leaf <== secret[i];
-        for (var e = 0; e < levels; e++) {
-            oldProof[i].pathElements[e] <== insertPathElements[i][e];
-            oldProof[i].pathIndices[e] <== insertPathIndices[i][e];
-            newProof[i].pathElements[e] <== insertPathElements[i][e];
-            newProof[i].pathIndices[e] <== insertPathIndices[i][e];
+        predUp[i] = MerkleUpdate(levels);
+        predUp[i].oldRoot <== predOldRoot[i];
+        predUp[i].oldLeaf <== oldPredLeaf[i].out;
+        predUp[i].newLeaf <== newPredLeaf[i].out;
+        emptyUp[i] = MerkleUpdate(levels);
+        emptyUp[i].oldRoot <== emptyOldRoot[i];
+        emptyUp[i].oldLeaf <== 0;
+        emptyUp[i].newLeaf <== newLeaf[i].out;
+        for (var d = 0; d < levels; d++) {
+            predUp[i].pathElements[d] <== predPathElements[i][d];
+            predUp[i].pathIndices[d] <== predPathIndices[i][d];
+            emptyUp[i].pathElements[d] <== emptyPathElements[i][d];
+            emptyUp[i].pathIndices[d] <== emptyPathIndices[i][d];
         }
-        insertDelta[i] <== firstContrib[i] * (oldProof[i].root - running[i]);
-        insertDelta[i] === 0;
-        insertedRoot[i] <== firstContrib[i] * newProof[i].root;
-        keptRoot[i] <== (1 - firstContrib[i]) * running[i];
-        running[i + 1] <== insertedRoot[i] + keptRoot[i];
+        predGate[i] <== firstContrib[i] * (predOldRoot[i] - running[i]);
+        predGate[i] === 0;
+        emptyGate[i] <== firstContrib[i] * (emptyOldRoot[i] - predUp[i].newRoot);
+        emptyGate[i] === 0;
 
-        tagOf[i] = Hasher();
-        tagOf[i].a <== secret[i];
-        tagOf[i].b <== electionId;
-        tagFold[i] = Hasher();
-        tagFold[i].a <== tagAcc[i];
-        tagFold[i].b <== tagOf[i].out;
-        tagTake[i] <== firstContrib[i] * tagFold[i].out;
-        tagKeep[i] <== (1 - firstContrib[i]) * tagAcc[i];
-        tagNext[i] <== tagTake[i] + tagKeep[i];
-        tagAcc[i + 1] <== tagNext[i];
+        oldMember[i] = ValuedLeaf();
+        oldMember[i].key <== voterKey[i];
+        oldMember[i].nextKey <== predNext[i];
+        oldMember[i].cipherHash <== oldOf[i].out;
+        newMember[i] = ValuedLeaf();
+        newMember[i].key <== voterKey[i];
+        newMember[i].nextKey <== predNext[i];
+        newMember[i].cipherHash <== cipherOf[i].out;
+        replUp[i] = MerkleUpdate(levels);
+        replUp[i].oldRoot <== replOldRoot[i];
+        replUp[i].oldLeaf <== oldMember[i].out;
+        replUp[i].newLeaf <== newMember[i].out;
+        for (var e = 0; e < levels; e++) {
+            replUp[i].pathElements[e] <== replPathElements[i][e];
+            replUp[i].pathIndices[e] <== replPathIndices[i][e];
+        }
+        replGate[i] <== useReplace[i] * (replOldRoot[i] - running[i]);
+        replGate[i] === 0;
+
+        inserted[i] <== firstContrib[i] * emptyUp[i].newRoot;
+        replaced[i] <== useReplace[i] * replUp[i].newRoot;
+        stayed[i] <== (1 - active[i]) * running[i];
+        running[i + 1] <== inserted[i] + replaced[i] + stayed[i];
+
+        linkWord[i][0] <== submissionId[i];
+        linkWord[i][1] <== isFirst[i];
+        linkWord[i][2] <== c1x[i];
+        linkWord[i][3] <== c1y[i];
+        linkWord[i][4] <== c2x[i];
+        linkWord[i][5] <== c2y[i];
+        linkWord[i][6] <== oldC1x[i];
+        linkWord[i][7] <== oldC1y[i];
+        linkWord[i][8] <== oldC2x[i];
+        linkWord[i][9] <== oldC2y[i];
+    }
+
+    // The link fold is done outside the ballot loop. Circom rejects assigning
+    // the same component twice, so each ballot gets its own fold components.
+    component lf0[10];
+    component lf1[10];
+    component lf2[10];
+    component lf3[10];
+    signal la0[11];
+    signal la1[11];
+    signal la2[11];
+    signal la3[11];
+    la0[0] <== 0;
+    la1[0] <== 0;
+    la2[0] <== 0;
+    la3[0] <== 0;
+    for (var w0 = 0; w0 < 10; w0++) {
+        lf0[w0] = Hasher();
+        lf0[w0].a <== la0[w0];
+        lf0[w0].b <== linkWord[0][w0];
+        la0[w0 + 1] <== lf0[w0].out;
+        lf1[w0] = Hasher();
+        lf1[w0].a <== la1[w0];
+        lf1[w0].b <== linkWord[1][w0];
+        la1[w0 + 1] <== lf1[w0].out;
+        lf2[w0] = Hasher();
+        lf2[w0].a <== la2[w0];
+        lf2[w0].b <== linkWord[2][w0];
+        la2[w0 + 1] <== lf2[w0].out;
+        lf3[w0] = Hasher();
+        lf3[w0].a <== la3[w0];
+        lf3[w0].b <== linkWord[3][w0];
+        la3[w0 + 1] <== lf3[w0].out;
+    }
+    signal linkOut[4];
+    linkOut[0] <== la0[10];
+    linkOut[1] <== la1[10];
+    linkOut[2] <== la2[10];
+    linkOut[3] <== la3[10];
+
+    component chainH[4];
+    signal chainAcc[5];
+    chainAcc[0] <== 0;
+    signal chainTake[4];
+    signal chainKeep[4];
+    for (var c = 0; c < 4; c++) {
+        chainH[c] = Hasher();
+        chainH[c].a <== chainAcc[c];
+        chainH[c].b <== linkOut[c];
+        chainTake[c] <== active[c] * chainH[c].out;
+        chainKeep[c] <== (1 - active[c]) * chainAcc[c];
+        chainAcc[c + 1] <== chainTake[c] + chainKeep[c];
+    }
+    chainAcc[4] === chainHash;
+
+    for (var t = 0; t < n; t++) {
+        tagOf[t] = Hasher();
+        tagOf[t].a <== voterKey[t];
+        tagOf[t].b <== electionId;
+        tagFold[t] = Hasher();
+        tagFold[t].a <== tagAcc[t];
+        tagFold[t].b <== tagOf[t].out;
+        tagTake[t] <== firstContrib[t] * tagFold[t].out;
+        tagKeep[t] <== (1 - firstContrib[t]) * tagAcc[t];
+        tagNext[t] <== tagTake[t] + tagKeep[t];
+        tagAcc[t + 1] <== tagNext[t];
+
+        idFold[t] = Hasher();
+        idFold[t].a <== idAcc[t];
+        idFold[t].b <== forcedId[t];
+        idTake[t] <== active[t] * idFold[t].out;
+        idKeep[t] <== (1 - active[t]) * idAcc[t];
+        idNext[t] <== idTake[t] + idKeep[t];
+        idAcc[t + 1] <== idNext[t];
     }
 
     signal step;
     step <== nextUnique - previousUnique;
     step === stepAcc[n];
-    hourlyAcc[n] === nextHourly;
-    finalAcc[n] === nextFinal;
     running[n] === ballotSetRoot;
-    tagAcc[n] === tagHash;
 
     component kindIsFinal = IsZero();
     kindIsFinal.in <== kind - 2;
     signal finalGate;
     finalGate <== kindIsFinal.out * step;
     finalGate === 0;
+
+    component kindIsSupp = IsZero();
+    kindIsSupp.in <== kind - 3;
+    signal tagFromKeys;
+    tagFromKeys <== (1 - kindIsSupp.out) * tagAcc[n];
+    signal tagFromIds;
+    tagFromIds <== kindIsSupp.out * idAcc[n];
+    tagHash === tagFromKeys + tagFromIds;
 
     var pairs = n * (n - 1) / 2;
     component diffZero[pairs];
@@ -208,7 +336,7 @@ template BatchTransition(n, levels) {
     for (var a = 0; a < n; a++) {
         for (var b = a + 1; b < n; b++) {
             diffZero[p] = IsZero();
-            diffZero[p].in <== secret[a] - secret[b];
+            diffZero[p].in <== voterKey[a] - voterKey[b];
             pairActive[p] <== active[a] * active[b];
             pairFirstA[p] <== pairActive[p] * isFirst[a];
             bothFirst[p] <== pairFirstA[p] * isFirst[b];
@@ -218,10 +346,45 @@ template BatchTransition(n, levels) {
         }
     }
 
-    component boundFold = Hasher();
-    boundFold.a <== 0;
-    boundFold.b <== boundRoot;
-    boundFold.out === boundRootHash;
+    // Fold every bound root the batch names. boundLen is 1..4.
+    // Unused tail entries are not hashed. boundList[0] is the tree we edit.
+    signal d1;
+    d1 <== boundLen - 1;
+    signal p12;
+    p12 <== d1 * (boundLen - 2);
+    signal p123;
+    p123 <== p12 * (boundLen - 3);
+    signal lenOk;
+    lenOk <== p123 * (boundLen - 4);
+    lenOk === 0;
+    signal startGate;
+    startGate <== boundList[0] - boundRoot;
+    startGate === 0;
+    component len1 = IsZero();
+    len1.in <== boundLen - 1;
+    component len3 = IsZero();
+    len3.in <== boundLen - 3;
+    component len4 = IsZero();
+    len4.in <== boundLen - 4;
+    signal useRoot[4];
+    useRoot[0] <== 1;
+    useRoot[1] <== 1 - len1.out;
+    useRoot[2] <== len3.out + len4.out;
+    useRoot[3] <== len4.out;
+    component bFold[4];
+    signal bAcc[5];
+    signal bTake[4];
+    signal bKeep[4];
+    bAcc[0] <== 0;
+    for (var r = 0; r < 4; r++) {
+        bFold[r] = Hasher();
+        bFold[r].a <== bAcc[r];
+        bFold[r].b <== boundList[r];
+        bTake[r] <== useRoot[r] * bFold[r].out;
+        bKeep[r] <== (1 - useRoot[r]) * bAcc[r];
+        bAcc[r + 1] <== bTake[r] + bKeep[r];
+    }
+    bAcc[4] === boundRootHash;
 
     signal coords[8];
     coords[0] <== prevC1X;
@@ -235,13 +398,62 @@ template BatchTransition(n, levels) {
     component pointFold[8];
     signal pointAcc[9];
     pointAcc[0] <== 0;
-    for (var c = 0; c < 8; c++) {
-        pointFold[c] = Hasher();
-        pointFold[c].a <== pointAcc[c];
-        pointFold[c].b <== coords[c];
-        pointAcc[c + 1] <== pointFold[c].out;
+    for (var q = 0; q < 8; q++) {
+        pointFold[q] = Hasher();
+        pointFold[q].a <== pointAcc[q];
+        pointFold[q].b <== coords[q];
+        pointAcc[q + 1] <== pointFold[q].out;
     }
-    pointAcc[8] === pointTag;
+    // optionCount is 0..4. Unused slots are zero and are not folded in,
+    // so a batch with no extra options keeps the eight-coordinate tag.
+    signal od;
+    od <== optionCount;
+    signal op12;
+    op12 <== od * (optionCount - 1);
+    signal op123;
+    op123 <== op12 * (optionCount - 2);
+    signal op1234;
+    op1234 <== op123 * (optionCount - 3);
+    signal opOk;
+    opOk <== op1234 * (optionCount - 4);
+    opOk === 0;
+    component oEq0 = IsZero();
+    oEq0.in <== optionCount;
+    component oEq2 = IsZero();
+    oEq2.in <== optionCount - 2;
+    component oEq3 = IsZero();
+    oEq3.in <== optionCount - 3;
+    component oEq4 = IsZero();
+    oEq4.in <== optionCount - 4;
+    signal oUse[4];
+    oUse[0] <== 1 - oEq0.out;
+    oUse[1] <== oEq2.out + oEq3.out + oEq4.out;
+    oUse[2] <== oEq3.out + oEq4.out;
+    oUse[3] <== oEq4.out;
+    signal optCoord[16];
+    for (var oi = 0; oi < 4; oi++) {
+        optCoord[oi * 4] <== optC1X[oi];
+        optCoord[oi * 4 + 1] <== optC1Y[oi];
+        optCoord[oi * 4 + 2] <== optC2X[oi];
+        optCoord[oi * 4 + 3] <== optC2Y[oi];
+    }
+    signal optZero[16];
+    component optFold[16];
+    signal optAcc[17];
+    signal optTake[16];
+    signal optKeep[16];
+    optAcc[0] <== pointAcc[8];
+    for (var oq = 0; oq < 16; oq++) {
+        optZero[oq] <== (1 - oUse[oq \ 4]) * optCoord[oq];
+        optZero[oq] === 0;
+        optFold[oq] = Hasher();
+        optFold[oq].a <== optAcc[oq];
+        optFold[oq].b <== optCoord[oq];
+        optTake[oq] <== oUse[oq \ 4] * optFold[oq].out;
+        optKeep[oq] <== (1 - oUse[oq \ 4]) * optAcc[oq];
+        optAcc[oq + 1] <== optTake[oq] + optKeep[oq];
+    }
+    optAcc[16] === pointTag;
 
     signal words[16];
     words[0] <== kind;
@@ -264,11 +476,11 @@ template BatchTransition(n, levels) {
     component hasher[16];
     signal hashAcc[17];
     hashAcc[0] <== 0;
-    for (var w = 0; w < 16; w++) {
-        hasher[w] = Hasher();
-        hasher[w].a <== hashAcc[w];
-        hasher[w].b <== words[w];
-        hashAcc[w + 1] <== hasher[w].out;
+    for (var u = 0; u < 16; u++) {
+        hasher[u] = Hasher();
+        hasher[u].a <== hashAcc[u];
+        hasher[u].b <== words[u];
+        hashAcc[u + 1] <== hasher[u].out;
     }
     hashAcc[16] === dataHash;
 }

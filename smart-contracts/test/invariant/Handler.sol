@@ -334,10 +334,7 @@ contract Handler is Deployer, Ghost {
         if (block.timestamp < cutoff) {
             vm.warp(cutoff);
         }
-        uint256 accepted = 0;
-        try inbox.acceptedBallots(electionId) returns (uint256 n) {
-            accepted = n;
-        } catch {}
+        uint256 accepted = this.liveAccepted(electionId);
         uint256[] memory counts = new uint256[](1);
         counts[0] = accepted;
         address who = tallyOpOf[electionId];

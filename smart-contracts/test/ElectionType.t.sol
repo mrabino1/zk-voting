@@ -295,13 +295,13 @@ contract ElectionTypeTest is Deployer {
         }
 
         // Turnout is the public unique count while the window is still open.
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
         assertLt(block.timestamp, IElection(el).params().cutoffTime);
 
         warpClosed(el);
         _expectVoteClosed(id, el, uint256(keccak256(abi.encodePacked("after", kind))));
         _expectBatchClosed(id, el, uint256(keccak256(abi.encodePacked("batch-after", kind))));
-        assertEq(inbox.acceptedBallots(id), 1);
+        assertEq(this.liveAccepted(id), 1);
 
         vm.prank(tallyOperator);
         vm.expectRevert(abi.encodeWithSelector(ITallyVerifier.TallyComponentsClosed.selector, id));

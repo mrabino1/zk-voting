@@ -19,33 +19,19 @@ library ChaumPedersen {
 
     bytes32 internal constant DOMAIN = keccak256("CHAUM_PEDERSEN_V1");
 
-    function verify(
-        uint256 pkX,
-        uint256 pkY,
-        uint256 c1X,
-        uint256 c1Y,
-        uint256 dX,
-        uint256 dY,
-        uint256 aX,
-        uint256 aY,
-        uint256 bX,
-        uint256 bY,
-        uint256 z,
-        uint256 electionId,
-        uint256 hourIndex,
-        address guardian
-    ) internal view returns (bool) {
-        if (!Bn128.onCurve(pkX, pkY) || !Bn128.onCurve(c1X, c1Y) || !Bn128.onCurve(dX, dY)) return false;
-        if (!Bn128.onCurve(aX, aY) || !Bn128.onCurve(bX, bY)) return false;
+    /// @dev `w` is pk, c1, d, A, B, z. Eleven words, so the caller does not pass each scalar.
+    function verify(uint256[11] memory w, uint256 electionId, uint256 hourIndex, address guardian)
+        internal
+        view
+        returns (bool)
+    {
+        if (!Bn128.onCurve(w[0], w[1]) || !Bn128.onCurve(w[2], w[3]) || !Bn128.onCurve(w[4], w[5])) return false;
+        if (!Bn128.onCurve(w[6], w[7]) || !Bn128.onCurve(w[8], w[9])) return false;
         uint256 e = uint256(
-            keccak256(
-                abi.encode(
-                    DOMAIN, electionId, hourIndex, guardian, pkX, pkY, c1X, c1Y, dX, dY, aX, aY, bX, bY
-                )
-            )
+            keccak256(abi.encode(DOMAIN, electionId, hourIndex, guardian, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]))
         ) % Bn128.R;
-        if (!_same(GX, GY, z, aX, aY, pkX, pkY, e)) return false;
-        return _same(c1X, c1Y, z, bX, bY, dX, dY, e);
+        if (!_same(GX, GY, w[10], w[6], w[7], w[0], w[1], e)) return false;
+        return _same(w[2], w[3], w[10], w[8], w[9], w[4], w[5], e);
     }
 
     function _same(
