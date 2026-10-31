@@ -5,10 +5,22 @@ pragma circom 2.1.9;
 // from this template as a sound batch proof.
 //
 // The settlement contract's sealed statement is one aggregate proof, not one
-// proof reused across chunks. Public inputs are the previous state root, the
-// new state root, the sealed data hash, the batch index, the chunk-statement
-// digest, the tally commitment, the inbox Poseidon head, the election id,
-// the blob versioned hash, and the consumed count.
+// proof reused across chunks. Public inputs, in order, are:
+//   prevStateRoot, newStateRoot, dataHash, batchIndex, chunkDigest,
+//   tallyCommitment, inboxPoseidon, electionId, blobVersionedHash,
+//   consumedCount, blobY.
+//
+// `dataHash` is not a free field. A production circuit must recompute it as
+// the same Poseidon chain `RollupSettlement.computeSealedDataHash` builds:
+// kind, electionId, batchIndex, prevStateRoot, newStateRoot, ballotSetRoot,
+// previousHourly, hourlyProduct, previousFinal, finalProduct, previousUnique,
+// nextUnique, chainHash, tagHash, boundRootHash, the eight-point fold,
+// prevConsumed, nextConsumed, prevPoseidon, nextPoseidon, chunkDigest,
+// tallyCommitment, blobVersionedHash, dataLength, blobZ, blobY, and the
+// keccak of the blob commitment and opening, each reduced mod r.
+// `blobZ` is keccak(versionedHash, nextPoseidon, chunkDigest) mod the
+// BLS12-381 scalar modulus, derived on L1. The placeholder does not
+// recompute that hash. Shipping it as a verifier would not check the tally.
 //
 // `batch_transition_lib.circom` still hashes the original sixteen words and
 // does not prove the tally or the inbox chain. That gap is intentional until
@@ -26,10 +38,10 @@ template BatchAggregatePlaceholder() {
     signal input electionId;
     signal input blobVersionedHash;
     signal input consumedCount;
+    signal input blobY;
 
-    // Bind the words so a witness cannot leave them unconstrained.
+    // No constraints. Placeholder only.
     signal acc;
     acc <== prevStateRoot + newStateRoot + dataHash + batchIndex + chunkDigest + tallyCommitment
-        + inboxPoseidon + electionId + blobVersionedHash + consumedCount;
-    acc === acc;
+        + inboxPoseidon + electionId + blobVersionedHash + consumedCount + blobY;
 }

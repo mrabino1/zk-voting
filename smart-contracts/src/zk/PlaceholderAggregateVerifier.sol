@@ -26,6 +26,12 @@ contract PlaceholderAggregateVerifier is IGroth16Verifier {
         return true;
     }
 
+    /// @notice This stand-in does not prove the tally. Settlement keeps the on-chain
+    ///         ciphertext sum until a verifier reports `true` here.
+    function verifiesTally() external pure virtual returns (bool) {
+        return false;
+    }
+
     /// @notice Commitment a test uses as `(a, b, c)` for `input`. Not a proof.
     function commitmentOf(uint256[] memory input)
         public

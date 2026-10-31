@@ -48,6 +48,9 @@ interface IRollupSettlement {
     error UnprovenBatch();
     error OptionCapOutOfBounds();
     error BlobRejected();
+    error TooManyRows();
+    error BatchGasBudgetOutOfBounds();
+    error ProofTimeoutPending();
 
     event SealedBatchPosted(
         uint256 indexed electionId,
@@ -59,6 +62,8 @@ interface IRollupSettlement {
     );
     event BatchProofVerified(uint64 indexed batchIndex, bytes32 newStateRoot);
     event MaxOptionsSet(uint8 maxOptions);
+    event BatchGasBudgetSet(uint256 budget);
+    event UnprovenRolledBack(uint64 indexed fromBatch, bytes32 stateRoot);
     event SupplementaryPosted(uint256 indexed electionId);
 
     /// @notice One hour, the same length as an hourly batch.
@@ -104,13 +109,16 @@ interface IRollupSettlement {
         bytes32 nextPoseidon;
         /// @notice Poseidon fold of each 4-row chunk statement. One aggregate proof covers all of them.
         bytes32 chunkDigest;
-        /// @notice Poseidon fold of the claimed option totals. L1 does not re-add the ciphertexts.
+        /// @notice Poseidon fold of the claimed option totals.
+        ///         L1 recomputes that sum unless the batch verifier reports `verifiesTally()`.
         uint256 tallyCommitment;
         /// @notice Versioned hash of the blob that carries the ballot bytes. Zero when there is no blob.
         bytes32 blobVersionedHash;
+        /// @notice Must equal `blobChallenge(versionedHash, nextPoseidon, chunkDigest)`.
         uint256 blobZ;
         uint256 blobY;
         /// @notice Blob payload length in bytes. Zero skips the point-evaluation precompile.
+        ///         It never skips the inbox Poseidon step. Any `rows.length > 0` is projected.
         uint256 dataLength;
         bytes blobCommitment;
         bytes blobOpeningProof;
@@ -136,7 +144,9 @@ interface IRollupSettlement {
     ///         Any other value names the previous submission, which may be replaced once.
     ///         `options` is one ciphertext per choice, index-aligned.
     ///         Acceptance already checked that each option is 0 or 1 and that the vector sums to 1.
-    ///         The aggregate proof attests the tally. L1 does not add the points.
+    ///         L1 adds the points unless the batch verifier reports `verifiesTally()`.
+    ///         A re-vote row may sit in an hourly batch; its tally effect is applied on the final batch.
+    ///         The final batch may also carry first ballots from the last partial hour.
     struct BallotRow {
         uint256 submissionId;
         uint256 c1X;
@@ -204,6 +214,66 @@ interface IRollupSettlement {
 
     function setMaxOptions(uint8 n) external;
 
+    /// @notice Hard ceiling for `batchGasBudget`. The setter reverts above this.
+    function MAX_BATCH_GAS_BUDGET() external view returns (uint256);
+
+    /// @notice Default calldata-batch gas budget. 24,000,000, well under the 200M ceiling.
+    ///         12,000,000 is a lower setting that fits a block of about 30M (7 rows).
+    function DEFAULT_BATCH_GAS_BUDGET() external view returns (uint256);
+
+    /// @notice Per-row term in `modeledBatchGas`. 250,000.
+    function GAS_PER_CALLDATA_ROW() external view returns (uint256);
+
+    /// @notice Fixed term in `modeledBatchGas`. 7,500,000.
+    function BATCH_BASE_GAS() external view returns (uint256);
+
+    /// @notice Four-row chunk term in `modeledBatchGas`. 1,200,000.
+    function GAS_PER_CHUNK() external view returns (uint256);
+
+    /// @notice Square term in `modeledBatchGas`. 5,000 gas times rows squared.
+    function GAS_PER_ROW_SQUARED() external view returns (uint256);
+
+    function batchGasBudget() external view returns (uint256);
+
+    /// @notice Modeled gas of a calldata batch of `rows` four-option ballots.
+    function modeledBatchGas(uint256 rows) external pure returns (uint256);
+
+    /// @notice Row cap for one calldata batch: the largest `rows` with
+    ///         `modeledBatchGas(rows) <= batchGasBudget`.
+    function maxRows() external view returns (uint256);
+
+    function setBatchGasBudget(uint256 budget) external;
+
+    /// @notice How long an unproven batch may sit before anyone may roll it back.
+    function PROOF_TIMEOUT() external view returns (uint256);
+
+    /// @notice Drop every unproven batch and restore the last proven state root,
+    ///         batch count, and consumed inbox head. Callable by anyone after `PROOF_TIMEOUT`.
+    function rollbackUnproven() external;
+
+    /// @notice `block.timestamp` when the final batch was proven. Zero until that proof.
+    function finalProvenAt(uint256 electionId) external view returns (uint64);
+
+    /// @notice Evaluation point bound to the blob, the inbox head, and the chunk digest.
+    function blobChallenge(bytes32 versionedHash, bytes32 nextPoseidon, bytes32 chunkDigest)
+        external
+        pure
+        returns (uint256);
+
+    /// @notice Chain head including batches that are committed and not yet proven.
+    ///         Public turnout, posted roots, and the POLL gate do not read these.
+    function committedUnique(uint256 electionId) external view returns (uint256);
+
+    function committedHourlyProduct(uint256 electionId) external view returns (bytes32);
+
+    function committedFinalProduct(uint256 electionId) external view returns (bytes32);
+
+    function committedLastHourlyRoot(uint256 electionId) external view returns (bytes32);
+
+    function committedHourly(uint256 electionId) external view returns (Ciphertext memory);
+
+    function committedFinal(uint256 electionId) external view returns (Ciphertext memory);
+
     function proofVerified(uint64 batchIndex) external view returns (bool);
 
     function nextUnproven() external view returns (uint64);
@@ -249,10 +319,7 @@ interface IRollupSettlement {
         bytes32[] calldata boundRoots,
         bytes32[] calldata firstBallotTags,
         BallotRow[] calldata rows,
-        OptionPoint[] calldata options,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c
+        OptionPoint[] calldata options
     ) external;
 
     function submitFinalBatch(
@@ -260,20 +327,14 @@ interface IRollupSettlement {
         bytes32[] calldata boundRoots,
         bytes32[] calldata firstBallotTags,
         BallotRow[] calldata rows,
-        OptionPoint[] calldata options,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c
+        OptionPoint[] calldata options
     ) external;
 
     function submitSupplementaryBatch(
         SealedParams calldata params,
         uint256[] calldata includedIds,
         BallotRow[] calldata rows,
-        OptionPoint[] calldata options,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c
+        OptionPoint[] calldata options
     ) external;
 
     event BatchSubmitted(uint64 indexed batchIndex, bytes32 newStateRoot, bytes32 dataHash, uint256 l1Block);

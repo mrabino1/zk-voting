@@ -197,4 +197,7 @@ interface IBallotInbox {
     /// @notice Spend an accepted submission inside a settled batch. Settlement only.
     ///         `cipherHash` is the ordered-vector ballot digest, and it must match the stored ballot hash.
     function consumeForSettlement(uint256 electionId, uint256 submissionId, uint256 cipherHash) external;
+
+    /// @notice Undo `consumeForSettlement` when an unproven batch is rolled back.
+    function unconsumeForSettlement(uint256 electionId, uint256 submissionId) external;
 }

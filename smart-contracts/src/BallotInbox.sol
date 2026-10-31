@@ -491,6 +491,8 @@ contract BallotInbox is IBallotInbox {
     {
         uint256 key = nullifier % SNARK_SCALAR_FIELD;
         _nullifierUsed[electionId][key] = true;
+        // Same reduction as the Poseidon chain below and as settlement's row projection.
+        ballotHash = bytes32(uint256(ballotHash) % SNARK_SCALAR_FIELD);
         _ballotHashOf[electionId][key] = ballotHash;
         _ballotHashList[electionId].push(ballotHash);
         _ballotRoot[electionId] = keccak256(abi.encodePacked(_ballotRoot[electionId], ballotHash));
@@ -670,6 +672,22 @@ contract BallotInbox is IBallotInbox {
         if ((word & mask) != 0) revert SubmissionAlreadySettled();
         _settledBits[electionId][wordIndex] = word | mask;
         unconsumedCount[electionId] -= 1;
+    }
+
+    /// @inheritdoc IBallotInbox
+    function unconsumeForSettlement(uint256 electionId, uint256 submissionId) external {
+        if (msg.sender != settlementOf[electionId] || msg.sender == address(0)) revert NotAuthorized();
+        uint256 id = submissionId % SNARK_SCALAR_FIELD;
+        uint64 seq = _accepted[electionId][id].seq;
+        if (seq == 0) revert UnknownSubmission();
+        uint256 wordIndex = uint256(seq) >> 8;
+        uint256 mask = uint256(1) << (uint256(seq) & 255);
+        uint256 word = _settledBits[electionId][wordIndex];
+        if ((word & mask) == 0) revert UnknownSubmission();
+        _settledBits[electionId][wordIndex] = word ^ mask;
+        unchecked {
+            unconsumedCount[electionId] += 1;
+        }
     }
 
     function markSealed(uint256 electionId, uint256[] calldata submissionIds) external {
