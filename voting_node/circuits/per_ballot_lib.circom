@@ -1,8 +1,9 @@
 pragma circom 2.1.9;
 
 // Per-ballot proof. The device holds nullifierSecret. The public ballot hash
-// is the ciphertext commitment from CipherHash, the same commitment the inbox
-// computes for an EG ballot. The batch circuit never receives the secret: it
+// is the ordered-vector digest, the same commitment the inbox stores for an
+// EG ballot. The three public signals are electionId, ballotHash, and boundRoot.
+// The batch circuit never receives the secret: it
 // receives voterKey, which this proof binds as Poseidon(nullifierSecret, electionId).
 // Depth is 20 in production and 4 in the test main. This file has no main.
 
@@ -83,6 +84,16 @@ template PerBallot(levels) {
     signal input oldC1y;
     signal input oldC2x;
     signal input oldC2y;
+    signal input optionN;
+    signal input optionC1x[4];
+    signal input optionC1y[4];
+    signal input optionC2x[4];
+    signal input optionC2y[4];
+    signal input oldOptionN;
+    signal input oldOptionC1x[4];
+    signal input oldOptionC1y[4];
+    signal input oldOptionC2x[4];
+    signal input oldOptionC2y[4];
     signal input pathElements[levels];
     signal input pathIndices[levels];
 
@@ -97,26 +108,43 @@ template PerBallot(levels) {
     voter.a <== nullifierSecret;
     voter.b <== electionId;
 
-    component cipher = CipherHash();
+    component cipher = BallotDigest(4);
     cipher.c1x <== c1x;
     cipher.c1y <== c1y;
     cipher.c2x <== c2x;
     cipher.c2y <== c2y;
+    cipher.n <== optionN;
+    for (var p = 0; p < 4; p++) {
+        cipher.optionC1x[p] <== optionC1x[p];
+        cipher.optionC1y[p] <== optionC1y[p];
+        cipher.optionC2x[p] <== optionC2x[p];
+        cipher.optionC2y[p] <== optionC2y[p];
+    }
     cipher.out === ballotHash;
 
-    component oldCipher = CipherHash();
+    component oldCipher = BallotDigest(4);
     oldCipher.c1x <== oldC1x;
     oldCipher.c1y <== oldC1y;
     oldCipher.c2x <== oldC2x;
     oldCipher.c2y <== oldC2y;
+    oldCipher.n <== oldOptionN;
+    for (var q = 0; q < 4; q++) {
+        oldCipher.optionC1x[q] <== oldOptionC1x[q];
+        oldCipher.optionC1y[q] <== oldOptionC1y[q];
+        oldCipher.optionC2x[q] <== oldOptionC2x[q];
+        oldCipher.optionC2y[q] <== oldOptionC2y[q];
+    }
 
-    // A first ballot has no previous ciphertext.
+    // A first ballot has no previous ciphertext and no previous options.
     signal oldGateX;
     oldGateX <== (1 - isReplacement) * oldC1x;
     oldGateX === 0;
     signal oldGateY;
     oldGateY <== (1 - isReplacement) * oldC1y;
     oldGateY === 0;
+    signal oldCountGate;
+    oldCountGate <== (1 - isReplacement) * oldOptionN;
+    oldCountGate === 0;
 
     component sid = Hasher();
     sid.a <== voter.out;

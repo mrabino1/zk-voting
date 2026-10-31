@@ -427,6 +427,7 @@ function keccakHashLeftRight(left, right) {
 
 const hashScheme = require("./hash-scheme");
 const { poseidon, poseidonHashLeftRight } = require("./poseidon");
+const ballotDigestLib = require("./ballot-digest");
 const { createMerkleHelpers } = require("./merkle");
 
 const merkle = createMerkleHelpers({
@@ -574,6 +575,11 @@ module.exports = {
   standInHashLeftRight: hashScheme.standInHashLeftRight,
   poseidon,
   poseidonHashLeftRight,
+  ciphertextHash: ballotDigestLib.ciphertextHash,
+  ballotDigest: ballotDigestLib.ballotDigest,
+  optionVectorHash: ballotDigestLib.optionVectorHash,
+  encodeEgBallot: ballotDigestLib.encodeEgBallot,
+  digestEgBallot: ballotDigestLib.digestEgBallot,
   snarkjsProofToSolidity,
   hashLeftRightField: merkle.hashLeftRightField,
   computeZeros: merkle.computeZeros,

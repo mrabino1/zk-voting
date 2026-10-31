@@ -16,7 +16,9 @@ library OneHot {
     bytes32 internal constant SUM_DOMAIN = keccak256("SUM_TO_ONE_V1");
 
     /// @dev Proof words: A0, B0, e0, z0, A1, B1, e1, z1. Twelve field elements.
-    ///      The challenge binds chain id, this settlement, the election, and the submission.
+    ///      The challenge binds chain id, this settlement, the election, the submission,
+    ///      and the option index. The primary ciphertext uses `type(uint256).max`.
+    ///      Option `j` uses `j`, so a proof built for another slot does not verify.
     function verify(
         uint256 pkX,
         uint256 pkY,
@@ -26,7 +28,8 @@ library OneHot {
         uint256 c2Y,
         uint256[12] memory proof,
         uint256 electionId,
-        uint256 submissionId
+        uint256 submissionId,
+        uint256 optionIndex
     ) internal view returns (bool) {
         if (!Bn128.validPoint(pkX, pkY) || !Bn128.validPoint(c1X, c1Y) || !Bn128.validPoint(c2X, c2Y)) {
             return false;
@@ -40,6 +43,7 @@ library OneHot {
                     address(this),
                     electionId,
                     submissionId,
+                    optionIndex,
                     pkX,
                     pkY,
                     c1X,

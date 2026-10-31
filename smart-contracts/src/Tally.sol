@@ -18,9 +18,11 @@ import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
 /// @title Tally
 /// @notice Posts a proven (or mock-verified) option-count vector after cutoff.
 /// @dev Two additive schemes (ElectionParams.tallyScheme):
-///      0 SUM_ONLY — any `counts` with sum == acceptedBallots (legacy demo).
-///        This does not reveal an individual ciphertext. It also does not
-///        prove the histogram. A real aggregate proof is scheme 1.
+///      0 SUM_ONLY — `counts` whose sum equals `closedBallotCount` (the posted
+///        unique count once a settlement is set, otherwise the acceptance
+///        counter after cutoff). The proof is a TallyPublicInputs V2 instance.
+///        This does not reveal an individual ciphertext and does not prove
+///        each histogram bucket. A real aggregate proof is scheme 1.
 ///      1 AGGREGATE — operator submits `counts` plus one `aggregateHash`
 ///        of the homomorphic product. There is no per-ballot openings array,
 ///        in calldata or in storage. Ranked ballots are not opened here;

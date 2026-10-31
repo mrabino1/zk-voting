@@ -39,7 +39,8 @@ test("per-ballot proof selects membership or non-membership at the bound root", 
   assert.match(src, /proof\.root === boundRoot/);
   assert.match(src, /MerkleTreeInclusionProof/);
   assert.match(src, /rangeGate === 0/);
-  assert.match(src, /CipherHash/);
+  assert.match(src, /BallotDigest/);
+  assert.match(read("indexed_merkle.circom"), /template CipherHash/);
   assert.match(src, /voterKey/);
   assert.match(read("per_ballot.circom"), /PerBallot\(20\)/);
   assert.match(read("mains/per_ballot_test.circom"), /PerBallot\(4\)/);
@@ -50,7 +51,7 @@ test("batch transition uses the merkle ballot set and binds products", () => {
   assert.match(src, /step === stepAcc\[n\]/);
   assert.match(src, /finalGate === 0/);
   assert.match(src, /running\[n\] === ballotSetRoot/);
-  assert.match(src, /chainAcc\[4\] === chainHash/);
+  assert.match(src, /chainAcc\[n\] === chainHash/);
   assert.match(src, /pointAcc\[8\] === pointTag/);
   assert.doesNotMatch(src, /optC1X/);
   assert.match(src, /hashAcc\[16\] === dataHash/);

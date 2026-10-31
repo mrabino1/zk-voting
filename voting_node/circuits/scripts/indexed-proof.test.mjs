@@ -63,6 +63,16 @@ function buildInput({ secret, electionId, points, isReplacement, boundRoot, gap,
     pathElements: gap.path.pathElements,
     pathIndices: gap.path.pathIndices,
     ballotHash: ballot,
+    optionN: 0n,
+    optionC1x: [0n, 0n, 0n, 0n],
+    optionC1y: [0n, 0n, 0n, 0n],
+    optionC2x: [0n, 0n, 0n, 0n],
+    optionC2y: [0n, 0n, 0n, 0n],
+    oldOptionN: 0n,
+    oldOptionC1x: [0n, 0n, 0n, 0n],
+    oldOptionC1y: [0n, 0n, 0n, 0n],
+    oldOptionC2x: [0n, 0n, 0n, 0n],
+    oldOptionC2y: [0n, 0n, 0n, 0n],
   });
 }
 

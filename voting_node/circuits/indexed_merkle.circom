@@ -43,6 +43,81 @@ template CipherHash() {
     out <== h.out;
 }
 
+// Ordered ballot digest. ct is CipherHash. The hash is Poseidon(ct(primary), n),
+// then Poseidon(acc, ct(option_i)) for each option that n includes.
+// n is 0..maxOpts. Unused option slots are forced to zero.
+// n = 0 is Poseidon(ct(primary), 0), not ct alone.
+template BallotDigest(maxOpts) {
+    signal input c1x;
+    signal input c1y;
+    signal input c2x;
+    signal input c2y;
+    signal input n;
+    signal input optionC1x[maxOpts];
+    signal input optionC1y[maxOpts];
+    signal input optionC2x[maxOpts];
+    signal input optionC2y[maxOpts];
+    signal output out;
+
+    component oneHot[maxOpts + 1];
+    signal hotSum[maxOpts + 1];
+    signal nShift[maxOpts];
+    oneHot[0] = IsZero();
+    oneHot[0].in <== n;
+    hotSum[0] <== oneHot[0].out;
+    for (var j = 1; j <= maxOpts; j++) {
+        nShift[j - 1] <== n - j;
+        oneHot[j] = IsZero();
+        oneHot[j].in <== nShift[j - 1];
+        hotSum[j] <== hotSum[j - 1] + oneHot[j].out;
+    }
+    hotSum[maxOpts] === 1;
+
+    component primary = CipherHash();
+    primary.c1x <== c1x;
+    primary.c1y <== c1y;
+    primary.c2x <== c2x;
+    primary.c2y <== c2y;
+    component head = Hasher();
+    head.a <== primary.out;
+    head.b <== n;
+
+    signal use[maxOpts];
+    component optCt[maxOpts];
+    component fold[maxOpts];
+    signal acc[maxOpts + 1];
+    signal z1x[maxOpts];
+    signal z1y[maxOpts];
+    signal z2x[maxOpts];
+    signal z2y[maxOpts];
+    signal take[maxOpts];
+    signal keep[maxOpts];
+    acc[0] <== head.out;
+    for (var k = 0; k < maxOpts; k++) {
+        use[k] <== 1 - hotSum[k];
+        z1x[k] <== (1 - use[k]) * optionC1x[k];
+        z1x[k] === 0;
+        z1y[k] <== (1 - use[k]) * optionC1y[k];
+        z1y[k] === 0;
+        z2x[k] <== (1 - use[k]) * optionC2x[k];
+        z2x[k] === 0;
+        z2y[k] <== (1 - use[k]) * optionC2y[k];
+        z2y[k] === 0;
+        optCt[k] = CipherHash();
+        optCt[k].c1x <== optionC1x[k];
+        optCt[k].c1y <== optionC1y[k];
+        optCt[k].c2x <== optionC2x[k];
+        optCt[k].c2y <== optionC2y[k];
+        fold[k] = Hasher();
+        fold[k].a <== acc[k];
+        fold[k].b <== optCt[k].out;
+        take[k] <== use[k] * fold[k].out;
+        keep[k] <== (1 - use[k]) * acc[k];
+        acc[k + 1] <== take[k] + keep[k];
+    }
+    out <== acc[maxOpts];
+}
+
 template ValuedLeaf() {
     signal input key;
     signal input nextKey;

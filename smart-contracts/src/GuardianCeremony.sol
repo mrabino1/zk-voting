@@ -20,6 +20,7 @@ contract GuardianCeremony {
     /// @notice After this, an absent dealer can be dropped if at least `k` posted.
     uint256 public constant COMPLAINT_WINDOW = 1 hours;
     bytes32 internal constant SCHNORR_DOMAIN = keccak256("GUARDIAN_SCHNORR_V1");
+    bytes32 internal constant SHARE_DOMAIN = keccak256("GUARDIAN_SHARE_V1");
 
     error ZeroAddress();
     error UnknownElection();
@@ -36,6 +37,7 @@ contract GuardianCeremony {
     error NotGuardian();
     error BadGuardianList();
     error ComplaintUnfounded();
+    error ShareSignatureInvalid();
     error ComplaintWindowOpen();
     error NotEnoughGuardians();
     error ShareNotDerived();
@@ -147,19 +149,52 @@ contract GuardianCeremony {
     }
 
     /// @notice A guardian shows that `dealerIndex` sent a share that does not open its commitments.
+    ///         The share must carry that dealer's Schnorr signature under `C_0`.
     ///         A matching share reverts. A mismatch drops that dealer. The joint key is not derived here.
-    function complain(uint256 electionId, uint8 electionType, uint8 dealerIndex, uint256 share) external {
+    function complain(
+        uint256 electionId,
+        uint8 electionType,
+        uint8 dealerIndex,
+        uint256 share,
+        uint256 rX,
+        uint256 rY,
+        uint256 z
+    ) external {
         Deal storage deal = _deal[electionId][electionType];
         if (!deal.open || deal.posted) revert CeremonyNotOpen();
         uint8 mine = _index[electionId][electionType][msg.sender];
         if (mine == 0 || _isExcluded(deal, mine)) revert NotGuardian();
         if (dealerIndex == 0 || dealerIndex > deal.n || _isExcluded(deal, dealerIndex)) revert NotGuardian();
         if (!_posted[electionId][electionType][dealerIndex]) revert NotGuardian();
+        uint256 e = shareChallenge(electionId, electionType, dealerIndex, mine, share, rX, rY);
+        if (!_schnorr(
+                _cx[electionId][electionType][dealerIndex][0],
+                _cy[electionId][electionType][dealerIndex][0],
+                rX,
+                rY,
+                z,
+                e
+            )) revert ShareSignatureInvalid();
         (uint256 ex, uint256 ey) = _eval(electionId, electionType, dealerIndex, mine, deal.k);
         (bool ok, uint256 sx, uint256 sy) = Bn128.mul(1, 2, share % Bn128.R);
         if (!ok) revert PointOffCurve();
         if (sx == ex && sy == ey) revert ComplaintUnfounded();
         _exclude(electionId, electionType, dealerIndex);
+    }
+
+    /// @notice Challenge for the dealer's signature on one share, bound to both indices.
+    function shareChallenge(
+        uint256 electionId,
+        uint8 electionType,
+        uint8 dealerIndex,
+        uint8 recipientIndex,
+        uint256 share,
+        uint256 rX,
+        uint256 rY
+    ) public pure returns (uint256) {
+        return uint256(
+            keccak256(abi.encode(SHARE_DOMAIN, electionId, electionType, dealerIndex, recipientIndex, share, rX, rY))
+        ) % Bn128.R;
     }
 
     /// @notice After the complaint window, finalize from the guardians who posted when at least `k` remain.

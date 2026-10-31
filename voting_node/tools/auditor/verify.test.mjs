@@ -16,6 +16,14 @@ describe('auditor verify', () => {
     assert.equal(result.checks.noChoiceLeak, true);
   });
 
+  test('omitted publicAcceptedBallots fails', () => {
+    const bundle = sampleBundle();
+    delete bundle.publicAcceptedBallots;
+    const result = verifyAuditorBundle(bundle);
+    assert.equal(result.ok, false);
+    assert.equal(result.checks.publicAcceptedLeq, false);
+  });
+
   test('duplicate nullifier fails', () => {
     const bundle = sampleBundle();
     bundle.disclosedBallots.push({ ...bundle.disclosedBallots[0] });

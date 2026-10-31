@@ -21,6 +21,9 @@ const {
   bytesToHex,
   functionSelector,
   encodePacked,
+  encodeEgBallot,
+  digestEgBallot,
+  ballotDigest,
 } = require("@zk-voting/proof-helpers");
 const { ZK_VOTING_CHAIN_ID } = require("@zk-voting/types");
 
@@ -728,6 +731,9 @@ module.exports = {
   nullifierUsed,
   serializePublicInputs,
   encodePacked,
+  encodeEgBallot,
+  digestEgBallot,
+  ballotDigest,
   padAddress,
   ...l1,
 };

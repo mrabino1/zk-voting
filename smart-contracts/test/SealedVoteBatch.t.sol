@@ -143,9 +143,11 @@ contract PartialMath {
         uint256 electionId;
         uint256 submissionId;
         address settlement;
+        uint256 optionIndex;
     }
 
     /// @dev CDS proof that `(r·G, bit·G + r·PK)` encrypts 0 or 1. Twelve words: A0, B0, e0, z0, A1, B1, e1, z1.
+    ///      The primary ciphertext uses option index `type(uint256).max`.
     function oneHot(
         uint256 r,
         uint256 bit,
@@ -158,8 +160,35 @@ contract PartialMath {
         uint256 submissionId,
         address settlement
     ) external view returns (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, uint256[12] memory proof) {
+        return this.oneHotAt(r, bit, pkX, pkY, a, eSim, zSim, electionId, submissionId, settlement, type(uint256).max);
+    }
+
+    function oneHotAt(
+        uint256 r,
+        uint256 bit,
+        uint256 pkX,
+        uint256 pkY,
+        uint256 a,
+        uint256 eSim,
+        uint256 zSim,
+        uint256 electionId,
+        uint256 submissionId,
+        address settlement,
+        uint256 optionIndex
+    ) external view returns (uint256 c1x, uint256 c1y, uint256 c2x, uint256 c2y, uint256[12] memory proof) {
         require(bit < 2, "bit");
-        Hot memory h = Hot(r, bit, pkX, pkY, a, eSim, zSim, 0, 0, 0, 0, electionId, submissionId, settlement);
+        Hot memory h;
+        h.r = r;
+        h.bit = bit;
+        h.pkX = pkX;
+        h.pkY = pkY;
+        h.a = a;
+        h.eSim = eSim;
+        h.zSim = zSim;
+        h.electionId = electionId;
+        h.submissionId = submissionId;
+        h.settlement = settlement;
+        h.optionIndex = optionIndex;
         (h.c1x, h.c1y) = this.mulG(r);
         (h.c2x, h.c2y) = this.encMsg(h);
         proof = this.cdsProof(h);
@@ -248,6 +277,7 @@ contract PartialMath {
                     h.settlement,
                     h.electionId,
                     h.submissionId,
+                    h.optionIndex,
                     h.pkX,
                     h.pkY,
                     h.c1x,
@@ -359,7 +389,6 @@ contract SealedVoteBatchTest is Deployer {
 
     function testFinalHourRevoteIsCarriedBySupplementary() public {
         (uint256 id, address el) = this.openLinked(2 hours);
-        submitVote(id, el, 7);
         assertEq(settlement.postedUnique(id), 0, "unique count waits for a batch");
         bytes32 hourRoot = keccak256("hour-root");
         bytes32 hourly = keccak256("hourly");
@@ -418,9 +447,9 @@ contract SealedVoteBatchTest is Deployer {
         this.hour(id, hourRoot, hourly, keccak256("f4"), 0, 0);
         uint64 cutoff = IElection(el).params().cutoffTime;
         vm.warp(cutoff + 30 minutes);
-        uint256 sid = this.forceAt(id, el, 42, hourRoot, cutoff - 1);
         bytes32 finalRoot = keccak256("chain-final");
         this.sealFinal(id, finalRoot, hourly, keccak256("f4"), 0);
+        uint256 sid = this.forceAt(id, el, 42, hourRoot, cutoff - 1);
         vm.warp(tally.tallyAllowedAt(id));
         this.expectBadChain(id, finalRoot, hourly, sid);
         this.suppOne(id, finalRoot, hourly, keccak256("f4b"), sid, false);
@@ -513,18 +542,15 @@ contract SealedVoteBatchTest is Deployer {
         this.hourSameTag(id, keccak256("r8d"), keccak256(abi.encodePacked("first", id, first)));
     }
 
-    function testOfflineDeviceLeavesTheEarlierBallot() public {
+    function testFinalBatchOmittingABallotReverts() public {
         (uint256 id, address el) = this.openLinked(2 hours);
         submitVote(id, el, 7);
         bytes32 hourly = keccak256("h9");
-        bytes32 finalRoot = keccak256("rf9");
         this.hour(id, keccak256("r9"), hourly, keccak256("f9"), 0, 0);
         warpClosed(el);
-        this.sealFinal(id, finalRoot, hourly, keccak256("f9"), 0);
-        vm.warp(tally.tallyAllowedAt(id));
-        this.suppEmpty(id, finalRoot, hourly, keccak256("f9"), sequencer);
-        assertEq(inbox.pendingForcedIn(id).length, 0);
-        assertEq(settlement.postedUnique(id), 0);
+        vm.expectRevert(IRollupSettlement.UnconsumedBallot.selector);
+        this.sealFinal(id, keccak256("rf9"), hourly, keccak256("f9"), 0);
+        assertEq(inbox.unconsumedCount(id), 1);
     }
 
     function testChallengeWindowRejectsZeroAndGatesTally() public {
@@ -657,12 +683,12 @@ contract SealedVoteBatchTest is Deployer {
     function testDecryptionCombinesKPartials() public {
         (uint256 id, address el) = this.openLinked(1 hours);
         bytes32 hourly = keccak256("hd");
-        this.hour(id, keccak256("rd"), hourly, keccak256("fd"), 0, 0);
         (uint256 c1x, uint256 c1y) = math.mulG(3);
         (uint256 c2x, uint256 c2y) = math.mulG(16);
         this.acceptEg(id, 8800, c1x, c1y, c2x, c2y);
+        this.hourCipher(id, keccak256("rd"), hourly, keccak256("fd"), 8800, c1x, c1y, c2x, c2y);
         warpClosed(el);
-        this.sealFinal(id, keccak256("rfd"), hourly, keccak256("fd"), 0);
+        this.sealFinal(id, keccak256("rfd"), hourly, keccak256("fd"), 1);
         uint8[] memory subset = new uint8[](2);
         subset[0] = 1;
         subset[1] = 2;
@@ -672,7 +698,7 @@ contract SealedVoteBatchTest is Deployer {
         vm.prank(tallyOperator);
         vm.expectPartialRevert(ITallyVerifier.SupplementaryBatchRequired.selector);
         tally.submitDecryption(id, plain, subset);
-        this.suppCipher(id, keccak256("rfd"), hourly, keccak256("fd2"), c1x, c1y, c2x, c2y);
+        this.suppEmpty(id, keccak256("rfd"), hourly, keccak256("fd2"), sequencer);
         this.postCount(id, 1);
         this.oneFinal(id, makeAddr("g1"), 6, 31, c1x, c1y);
         uint8[] memory short = new uint8[](1);
@@ -736,13 +762,10 @@ contract SealedVoteBatchTest is Deployer {
     function testDecryptionSubsetSkipsABadPartial() public {
         (uint256 id, address el) = this.openTrio(1 hours);
         bytes32 hourly = keccak256("hs");
-        this.hour(id, keccak256("rs"), hourly, keccak256("fs"), 0, 0);
-        (uint256 c1x, uint256 c1y) = math.mulG(3);
-        (uint256 c2x, uint256 c2y) = math.mulG(16);
-        this.acceptEg(id, 8800, c1x, c1y, c2x, c2y);
+        this.hourOptions(id, keccak256("rs"), hourly, keccak256("fs"), 8800);
         warpClosed(el);
-        this.sealFinal(id, keccak256("rfs"), hourly, keccak256("fs"), 0);
-        this.suppCipherOption(id, keccak256("rfs"), hourly, keccak256("fs2"), c1x, c1y, c2x, c2y, true);
+        this.sealFinal(id, keccak256("rfs"), hourly, keccak256("fs"), 1);
+        this.suppEmpty(id, keccak256("rfs"), hourly, keccak256("fs2"), sequencer);
         this.postCount(id, 1);
         IRollupSettlement.Ciphertext memory opt0 = settlement.optionCiphertext(id, 0);
         IRollupSettlement.Ciphertext memory opt1 = settlement.optionCiphertext(id, 1);
@@ -1084,12 +1107,30 @@ contract SealedVoteBatchTest is Deployer {
         vm.prank(tallyOperator);
         ceremony.openCeremony(id, ElectionType.POLL, 2, 2, gs);
         this.postDeal(id, gs[0], 2, 3, 11);
+        (uint256 rX, uint256 rY, uint256 zGood) = this.signShare(id, 1, 2, 8, 2, 21);
         vm.prank(gs[1]);
         vm.expectRevert(GuardianCeremony.ComplaintUnfounded.selector);
-        ceremony.complain(id, ElectionType.POLL, 1, 8);
+        ceremony.complain(id, ElectionType.POLL, 1, 8, rX, rY, zGood);
+        (uint256 badX, uint256 badY, uint256 badZ) = this.signShare(id, 1, 2, 9, 2, 22);
         vm.prank(gs[1]);
-        ceremony.complain(id, ElectionType.POLL, 1, 9);
+        vm.expectRevert(GuardianCeremony.ShareSignatureInvalid.selector);
+        ceremony.complain(id, ElectionType.POLL, 1, 9, badX, badY, badZ + 1);
+        vm.prank(gs[1]);
+        ceremony.complain(id, ElectionType.POLL, 1, 9, badX, badY, badZ);
         assertFalse(ceremony.keyPosted(id, ElectionType.POLL));
+    }
+
+    function testClosedBallotCountMidVoteReverts() public {
+        ElectionParams memory params = defaultParams();
+        params.electionType = ElectionType.VOTE;
+        vm.warp(Fixtures.TIME_ORIGIN);
+        (uint256 id, address el) = createElection(params);
+        vm.prank(admin);
+        inbox.setSettlement(id, address(settlement));
+        warpOpen(el);
+        assertLt(block.timestamp, uint256(IElection(el).params().cutoffTime));
+        vm.expectRevert(IBallotInbox.TurnoutNotPublished.selector);
+        inbox.closedBallotCount(id);
     }
 
     function testDropAbsentFinalizesTwoOfThree() public {
@@ -1241,7 +1282,6 @@ contract SealedVoteBatchTest is Deployer {
     function testIdentityCiphertextRejected() public {
         (uint256 id,) = this.openLinked(2 hours);
         IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
-        rows[0].isFirst = 1;
         rows[0].submissionId = 5;
         vm.expectRevert(IRollupSettlement.IdentityCiphertext.selector);
         this.postRows(id, keccak256("ident"), 0, 1, rows, new IRollupSettlement.OptionPoint[](0), 0, 0, 0, 0);
@@ -1260,6 +1300,93 @@ contract SealedVoteBatchTest is Deployer {
         vm.expectRevert(IRollupSettlement.OptionTotalMismatch.selector);
         this.threeOption(id, keccak256("opt-bad"), true);
         this.threeOption(id, keccak256("opt-ok"), false);
+    }
+
+    function testOptionSwapRevertsBallotHashMismatch() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed) = this.threeRows(id);
+        IRollupSettlement.OptionCipher memory tmp = rows[0].options[0];
+        rows[0].options[0] = rows[0].options[1];
+        rows[0].options[1] = tmp;
+        claimed[0] = this.pointOf(rows[0].options[0]);
+        claimed[1] = this.pointOf(rows[0].options[1]);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
+        this.postRows(id, keccak256("opt-swap"), 0, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+    }
+
+    function testOptionVectorReplaceRevertsBallotHashMismatch() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed) = this.threeRows(id);
+        rows[0].options = this.altThree(id, 42);
+        claimed[0] = this.pointOf(rows[0].options[0]);
+        claimed[1] = this.pointOf(rows[0].options[1]);
+        claimed[2] = this.pointOf(rows[0].options[2]);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
+        this.postRows(id, keccak256("opt-replace"), 0, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+    }
+
+    function testOptionReorderRevertsBallotHashMismatch() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed) = this.threeRows(id);
+        IRollupSettlement.OptionCipher memory first = rows[0].options[0];
+        rows[0].options[0] = rows[0].options[2];
+        rows[0].options[2] = rows[0].options[1];
+        rows[0].options[1] = first;
+        claimed[0] = this.pointOf(rows[0].options[0]);
+        claimed[1] = this.pointOf(rows[0].options[1]);
+        claimed[2] = this.pointOf(rows[0].options[2]);
+        vm.expectRevert(IBallotInbox.BallotHashMismatch.selector);
+        this.postRows(id, keccak256("opt-reorder"), 0, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+    }
+
+    function testIndexSwappedOneHotProofReverts() public {
+        (uint256 id,) = this.openLinked(2 hours);
+        (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed) = this.threeRows(id);
+        rows[0].options[0] = this.oneCipher(id, 42, 1, 1, 1);
+        vm.expectRevert(IRollupSettlement.OneHotRejected.selector);
+        this.postRows(id, keccak256("opt-index"), 0, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+    }
+
+    function testUnknownOldVectorReverts() public {
+        (uint256 id, address el) = this.openLinked(4 hours);
+        this.hourOptions(id, keccak256("old-hour"), keccak256("oh"), keccak256("of"), 4200);
+        this.acceptFresh(id, 4201);
+        warpClosed(el);
+        vm.expectRevert(IRollupSettlement.OldOptionsMismatch.selector);
+        this.finalReplace(id, keccak256("old-final"), 4201, 99999);
+    }
+
+    function testRevoteInHourOneLandsInFinal() public {
+        (uint256 id, address el) = this.openLinked(4 hours);
+        this.hourOptions(id, keccak256("re-hour"), keccak256("rh"), keccak256("rf"), 4200);
+        this.acceptRevote(id, 4201);
+        vm.warp(block.timestamp + 1 hours);
+        vm.expectRevert(IRollupSettlement.ReplacementOnHourly.selector);
+        this.hourRevote(id, keccak256("re-hour-2"));
+        assertEq(inbox.unconsumedCount(id), 1);
+        warpClosed(el);
+        vm.expectRevert(IRollupSettlement.UnconsumedBallot.selector);
+        this.sealFinal(id, keccak256("re-omit"), keccak256("rh"), keccak256("rf"), 1);
+        this.finalReplace(id, keccak256("re-final"), 4201, 4200);
+        IRollupSettlement.OptionCipher memory opt0 = this.oneCipher(id, 4201, 4, 0, 0);
+        IRollupSettlement.OptionCipher memory opt1 = this.oneCipher(id, 4201, 5, 1, 1);
+        IRollupSettlement.Ciphertext memory stored = settlement.optionCiphertext(id, 0);
+        assertEq(stored.c1X, opt0.c1X);
+        assertEq(stored.c2Y, opt0.c2Y);
+        stored = settlement.optionCiphertext(id, 1);
+        assertEq(stored.c1X, opt1.c1X);
+        assertEq(stored.c2X, opt1.c2X);
+        assertEq(settlement.postedUnique(id), 1);
+    }
+
+    function testSixtyFourRowFourOptionBatchGas() public {
+        (uint256 id,) = this.openLinked(4 hours);
+        (IRollupSettlement.BallotRow[] memory rows, IRollupSettlement.OptionPoint[] memory claimed, uint256[4] memory sum)
+            = this.buildSixtyFour(id);
+        uint256 used = this.measureRows(id, keccak256("g64"), rows, claimed, sum);
+        console2.log("option-64x4-gas", used);
+        // On-chain 0/1 checks for 64 ballots and 4 options. Measured near 3.26e9.
+        assertLt(used, 4_000_000_000);
     }
 
     function replayRow(uint256 id, uint256 proofElection, uint256 submissionId) external {
@@ -1306,13 +1433,158 @@ contract SealedVoteBatchTest is Deployer {
     {
         uint256 submissionId = 42;
         rows = new IRollupSettlement.BallotRow[](1);
-        rows[0] = this.makeAcceptedRow(id, submissionId, 7, 1);
+        rows[0] = this.buildRow(id, submissionId, 7, 1);
         rows[0].options = this.threeCiphers(id, submissionId);
         rows[0].sumProof = this.sumAt(id, submissionId, 7, 19, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+        this.acceptRow(id, rows[0]);
         claimed = new IRollupSettlement.OptionPoint[](3);
         claimed[0] = this.pointOf(rows[0].options[0]);
         claimed[1] = this.pointOf(rows[0].options[1]);
         claimed[2] = this.pointOf(rows[0].options[2]);
+    }
+
+    function altThree(uint256 id, uint256 submissionId)
+        external
+        view
+        returns (IRollupSettlement.OptionCipher[] memory vec)
+    {
+        vec = new IRollupSettlement.OptionCipher[](3);
+        vec[0] = this.oneCipher(id, submissionId, 1, 0, 0);
+        vec[1] = this.oneCipher(id, submissionId, 2, 1, 1);
+        vec[2] = this.oneCipher(id, submissionId, 4, 0, 2);
+    }
+
+    function acceptFresh(uint256 id, uint256 submissionId) external {
+        IRollupSettlement.BallotRow memory row = this.buildRow(id, submissionId, 9, 1);
+        row.options = new IRollupSettlement.OptionCipher[](2);
+        row.options[0] = this.oneCipher(id, submissionId, 4, 0, 0);
+        row.options[1] = this.oneCipher(id, submissionId, 5, 1, 1);
+        row.sumProof = this.sumAt(id, submissionId, 9, 23, row.c1X, row.c1Y, row.c2X, row.c2Y);
+        this.acceptRow(id, row);
+    }
+
+    function acceptRevote(uint256 id, uint256 submissionId) external {
+        this.acceptFresh(id, submissionId);
+    }
+
+    function hourRevote(uint256 id, bytes32 root) external {
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
+        rows[0] = this.revoteRow(id, 4201, 4200);
+        IRollupSettlement.OptionPoint[] memory claimed = new IRollupSettlement.OptionPoint[](2);
+        claimed[0] = this.pointOf(rows[0].options[0]);
+        claimed[1] = this.pointOf(rows[0].options[1]);
+        this.postRows(id, root, 1, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+    }
+
+    function finalReplace(uint256 id, bytes32 root, uint256 submissionId, uint256 oldId) external {
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
+        rows[0] = this.revoteRow(id, submissionId, oldId);
+        IRollupSettlement.OptionPoint[] memory claimed = new IRollupSettlement.OptionPoint[](2);
+        claimed[0] = this.pointOf(rows[0].options[0]);
+        claimed[1] = this.pointOf(rows[0].options[1]);
+        IRollupSettlement.Ciphertext memory prev = settlement.chainedHourly(id);
+        bytes32[] memory none = new bytes32[](0);
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 2, root, settlement.hourlyProduct(id), keccak256("re-final-p"), 1, 1, bytes32(0), sequencer),
+            none,
+            none
+        );
+        p.nextC1X = rows[0].c1X;
+        p.nextC1Y = rows[0].c1Y;
+        p.nextC2X = rows[0].c2X;
+        p.nextC2Y = rows[0].c2Y;
+        p.prevC1X = prev.c1X;
+        p.prevC1Y = prev.c1Y;
+        p.prevC2X = prev.c2X;
+        p.prevC2Y = prev.c2Y;
+        p.chainHash = settlement.chainHashOf(rows);
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_FINAL());
+        vm.prank(sequencer);
+        settlement.submitFinalBatch(p, none, none, rows, claimed, pa, pb, pc);
+    }
+
+    function revoteRow(uint256 id, uint256 submissionId, uint256 oldId)
+        external
+        view
+        returns (IRollupSettlement.BallotRow memory row)
+    {
+        row = this.buildRow(id, submissionId, 9, 1);
+        row.oldSubmissionId = oldId;
+        row.options = new IRollupSettlement.OptionCipher[](2);
+        row.options[0] = this.oneCipher(id, submissionId, 4, 0, 0);
+        row.options[1] = this.oneCipher(id, submissionId, 5, 1, 1);
+        row.sumProof = this.sumAt(id, submissionId, 9, 23, row.c1X, row.c1Y, row.c2X, row.c2Y);
+    }
+
+    function buildSixtyFour(uint256 id)
+        external
+        returns (
+            IRollupSettlement.BallotRow[] memory rows,
+            IRollupSettlement.OptionPoint[] memory claimed,
+            uint256[4] memory sum
+        )
+    {
+        rows = new IRollupSettlement.BallotRow[](64);
+        uint256[16] memory opt;
+        for (uint256 i; i < 64; ++i) {
+            (rows[i], sum, opt) = this.appendFour(id, 5000 + i, sum, opt);
+        }
+        claimed = new IRollupSettlement.OptionPoint[](4);
+        claimed[0] = IRollupSettlement.OptionPoint(opt[0], opt[1], opt[2], opt[3]);
+        claimed[1] = IRollupSettlement.OptionPoint(opt[4], opt[5], opt[6], opt[7]);
+        claimed[2] = IRollupSettlement.OptionPoint(opt[8], opt[9], opt[10], opt[11]);
+        claimed[3] = IRollupSettlement.OptionPoint(opt[12], opt[13], opt[14], opt[15]);
+    }
+
+    function appendFour(uint256 id, uint256 submissionId, uint256[4] memory sum, uint256[16] memory opt)
+        external
+        returns (IRollupSettlement.BallotRow memory row, uint256[4] memory next, uint256[16] memory optNext)
+    {
+        row = this.buildRow(id, submissionId, 15, 1);
+        row.options = new IRollupSettlement.OptionCipher[](4);
+        row.options[0] = this.oneCipher(id, submissionId, 1, 1, 0);
+        row.options[1] = this.oneCipher(id, submissionId, 2, 0, 1);
+        row.options[2] = this.oneCipher(id, submissionId, 4, 0, 2);
+        row.options[3] = this.oneCipher(id, submissionId, 8, 0, 3);
+        row.sumProof = this.sumAt(id, submissionId, 15, 29, row.c1X, row.c1Y, row.c2X, row.c2Y);
+        this.acceptRow(id, row);
+        (next[0], next[1]) = math.add(sum[0], sum[1], row.c1X, row.c1Y);
+        (next[2], next[3]) = math.add(sum[2], sum[3], row.c2X, row.c2Y);
+        optNext = opt;
+        for (uint256 j; j < 4; ++j) {
+            uint256 b = j * 4;
+            (optNext[b], optNext[b + 1]) = math.add(opt[b], opt[b + 1], row.options[j].c1X, row.options[j].c1Y);
+            (optNext[b + 2], optNext[b + 3]) =
+                math.add(opt[b + 2], opt[b + 3], row.options[j].c2X, row.options[j].c2Y);
+        }
+    }
+
+    function measureRows(
+        uint256 id,
+        bytes32 root,
+        IRollupSettlement.BallotRow[] memory rows,
+        IRollupSettlement.OptionPoint[] memory options,
+        uint256[4] memory sum
+    ) external returns (uint256 used) {
+        bytes32[] memory bound = new bytes32[](1);
+        bound[0] = this.boundWord(id);
+        bytes32[] memory tags = new bytes32[](1);
+        tags[0] = keccak256(abi.encodePacked("rows", id, root));
+        IRollupSettlement.SealedParams memory p = this.filled(
+            Job(id, 1, root, keccak256(abi.encodePacked("h", root)), keccak256("frow"), 0, 64, bytes32(0), sequencer),
+            bound,
+            tags
+        );
+        p.nextC1X = sum[0];
+        p.nextC1Y = sum[1];
+        p.nextC2X = sum[2];
+        p.nextC2Y = sum[3];
+        p.chainHash = settlement.chainHashOf(rows);
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
+        uint256 before = gasleft();
+        vm.prank(sequencer);
+        settlement.submitHourlyBatch(p, bound, tags, rows, options, pa, pb, pc);
+        used = before - gasleft();
     }
 
     function threeCiphers(uint256 id, uint256 submissionId)
@@ -1321,19 +1593,19 @@ contract SealedVoteBatchTest is Deployer {
         returns (IRollupSettlement.OptionCipher[] memory vec)
     {
         vec = new IRollupSettlement.OptionCipher[](3);
-        vec[0] = this.oneCipher(id, submissionId, 1, 1);
-        vec[1] = this.oneCipher(id, submissionId, 2, 0);
-        vec[2] = this.oneCipher(id, submissionId, 4, 0);
+        vec[0] = this.oneCipher(id, submissionId, 1, 1, 0);
+        vec[1] = this.oneCipher(id, submissionId, 2, 0, 1);
+        vec[2] = this.oneCipher(id, submissionId, 4, 0, 2);
     }
 
-    function oneCipher(uint256 id, uint256 submissionId, uint256 r, uint256 bit)
+    function oneCipher(uint256 id, uint256 submissionId, uint256 r, uint256 bit, uint256 optionIndex)
         external
         view
         returns (IRollupSettlement.OptionCipher memory o)
     {
         (uint256 pkX, uint256 pkY) = ceremony.jointKey(id, ElectionType.POLL);
         (o.c1X, o.c1Y, o.c2X, o.c2Y, o.oneHot) =
-            math.oneHot(r, bit, pkX, pkY, 11, 5, 13, id, submissionId, address(settlement));
+            math.oneHotAt(r, bit, pkX, pkY, 11, 5, 13, id, submissionId, address(settlement), optionIndex);
     }
 
     function sumAt(
@@ -1396,7 +1668,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = nu;
         p.nextC2Y = nv;
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY(), options);
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_HOURLY());
         vm.prank(sequencer);
         settlement.submitHourlyBatch(p, bound, tags, rows, options, pa, pb, pc);
     }
@@ -1480,6 +1752,16 @@ contract SealedVoteBatchTest is Deployer {
         if (bad) z += 1;
         vm.prank(guardian);
         ceremony.postGuardian(id, ElectionType.POLL, cx, cy, rX, rY, z);
+    }
+
+    function signShare(uint256 id, uint8 dealer, uint8 recipient, uint256 share, uint256 a0, uint256 nonce)
+        external
+        view
+        returns (uint256 rX, uint256 rY, uint256 z)
+    {
+        (rX, rY) = math.mulG(nonce);
+        uint256 e = ceremony.shareChallenge(id, ElectionType.POLL, dealer, recipient, share, rX, rY);
+        z = addmod(nonce, mulmod(e, a0, FIELD), FIELD);
     }
 
     function postWide(uint256 id, address guardian, uint256 a0, uint256 nonce) external {
@@ -1594,7 +1876,6 @@ contract SealedVoteBatchTest is Deployer {
         pure
         returns (IRollupSettlement.BallotRow memory row)
     {
-        row.isFirst = 1;
         row.c1X = c1x;
         row.c1Y = c1y;
         row.c2X = c2x;
@@ -1708,6 +1989,60 @@ contract SealedVoteBatchTest is Deployer {
         submitVoteWithBallot(id, factory.getElection(id), submissionId, enc);
     }
 
+    /// @dev Canonical EG blob: 130 bytes when the row has no options, otherwise n and each option.
+    function acceptRow(uint256 id, IRollupSettlement.BallotRow memory row) external {
+        bytes memory enc = abi.encodePacked(bytes2("EG"), bytes32(row.c1X), bytes32(row.c1Y), bytes32(row.c2X), bytes32(row.c2Y));
+        uint256 n = row.options.length;
+        if (n > 0) {
+            enc = abi.encodePacked(enc, bytes32(n));
+            for (uint256 i; i < n; ++i) {
+                enc = abi.encodePacked(
+                    enc,
+                    bytes32(row.options[i].c1X),
+                    bytes32(row.options[i].c1Y),
+                    bytes32(row.options[i].c2X),
+                    bytes32(row.options[i].c2Y)
+                );
+            }
+        }
+        submitVoteWithBallot(id, factory.getElection(id), row.submissionId, enc);
+    }
+
+    function hourCipher(
+        uint256 id,
+        bytes32 root,
+        bytes32 hourly,
+        bytes32 finalP,
+        uint256 submissionId,
+        uint256 c1x,
+        uint256 c1y,
+        uint256 c2x,
+        uint256 c2y
+    ) external {
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
+        rows[0] = this.buildRow(id, submissionId, 3, 1);
+        require(rows[0].c1X == c1x && rows[0].c1Y == c1y && rows[0].c2X == c2x && rows[0].c2Y == c2y, "cipher");
+        if (!inbox.nullifierUsed(id, submissionId)) this.acceptEg(id, submissionId, c1x, c1y, c2x, c2y);
+        uint256[4] memory sum;
+        sum[0] = c1x;
+        sum[1] = c1y;
+        sum[2] = c2x;
+        sum[3] = c2y;
+        this.hourPost(id, root, hourly, finalP, 0, 1, rows, sum);
+    }
+
+    function hourOptions(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP, uint256 submissionId) external {
+        IRollupSettlement.BallotRow[] memory rows = new IRollupSettlement.BallotRow[](1);
+        rows[0] = this.buildRow(id, submissionId, 3, 1);
+        rows[0].options = this.twoCiphers(id, submissionId);
+        rows[0].sumProof = this.sumAt(id, submissionId, 3, 17, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+        this.acceptRow(id, rows[0]);
+        IRollupSettlement.OptionPoint[] memory claimed = new IRollupSettlement.OptionPoint[](2);
+        claimed[0] = this.pointOf(rows[0].options[0]);
+        claimed[1] = this.pointOf(rows[0].options[1]);
+        this.postRows(id, root, 0, 1, rows, claimed, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
+    }
+
     function sealMismatch(uint256 id, bytes32 root, bytes32 hourly, bytes32 finalP) external {
         this.post(Job(id, 2, root, hourly, finalP, 1, 2, bytes32(0), sequencer), new bytes32[](0), new bytes32[](0), new uint256[](0));
     }
@@ -1789,7 +2124,8 @@ contract SealedVoteBatchTest is Deployer {
             (rows, options, nextU) = this.suppOpening(id, n, c1x, c1y, c2x, c2y, withOption);
         } else {
             rows = new IRollupSettlement.BallotRow[](0);
-            options = new IRollupSettlement.OptionPoint[](withOption ? 1 : 0);
+            // Identity at each bucket the two-count tally reads. Index 0 is option 0.
+            options = new IRollupSettlement.OptionPoint[](withOption ? 2 : 0);
             nextU = n;
         }
         IRollupSettlement.SealedParams memory p = this.filled(
@@ -1800,7 +2136,7 @@ contract SealedVoteBatchTest is Deployer {
         p.nextC2X = c2x;
         p.nextC2Y = c2y;
         p.chainHash = settlement.chainHashOf(rows);
-        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_SUPPLEMENTARY(), options);
+        p.dataHash = settlement.computeSealedDataHash(p, settlement.KIND_SUPPLEMENTARY());
         vm.prank(sequencer);
         settlement.submitSupplementaryBatch(p, new uint256[](0), rows, options, pa, pb, pc);
     }
@@ -1821,19 +2157,17 @@ contract SealedVoteBatchTest is Deployer {
         rows = new IRollupSettlement.BallotRow[](1);
         rows[0] = this.buildRow(id, submissionId, 3, 1);
         require(rows[0].c1X == c1x && rows[0].c1Y == c1y && rows[0].c2X == c2x && rows[0].c2Y == c2y, "opening");
-        if (!inbox.nullifierUsed(id, submissionId)) {
-            this.acceptEg(id, submissionId, rows[0].c1X, rows[0].c1Y, rows[0].c2X, rows[0].c2Y);
-        }
         nextU = n + 1;
-        if (!withOption) {
+        if (withOption) {
+            rows[0].options = this.twoCiphers(id, submissionId);
+            rows[0].sumProof = this.sumAt(id, submissionId, 3, 17, c1x, c1y, c2x, c2y);
+            options = new IRollupSettlement.OptionPoint[](2);
+            options[0] = this.pointOf(rows[0].options[0]);
+            options[1] = this.pointOf(rows[0].options[1]);
+        } else {
             options = new IRollupSettlement.OptionPoint[](0);
-            return (rows, options, nextU);
         }
-        rows[0].options = this.twoCiphers(id, submissionId);
-        rows[0].sumProof = this.sumAt(id, submissionId, 3, 17, c1x, c1y, c2x, c2y);
-        options = new IRollupSettlement.OptionPoint[](2);
-        options[0] = this.pointOf(rows[0].options[0]);
-        options[1] = this.pointOf(rows[0].options[1]);
+        if (!inbox.nullifierUsed(id, submissionId)) this.acceptRow(id, rows[0]);
     }
 
     function twoCiphers(uint256 id, uint256 submissionId)
@@ -1842,8 +2176,8 @@ contract SealedVoteBatchTest is Deployer {
         returns (IRollupSettlement.OptionCipher[] memory vec)
     {
         vec = new IRollupSettlement.OptionCipher[](2);
-        vec[0] = this.oneCipher(id, submissionId, 1, 1);
-        vec[1] = this.oneCipher(id, submissionId, 2, 0);
+        vec[0] = this.oneCipher(id, submissionId, 1, 1, 0);
+        vec[1] = this.oneCipher(id, submissionId, 2, 0, 1);
     }
 
     function expectBadChain(uint256 id, bytes32 root, bytes32 hourly, uint256 submissionId) external {
@@ -2069,10 +2403,20 @@ contract SealedVoteBatchTest is Deployer {
         IRollupSettlement.Ciphertext memory prev = job.kind == settlement.KIND_HOURLY()
             ? settlement.chainedHourly(job.id)
             : settlement.chainedFinal(job.id);
+        if (
+            job.kind != settlement.KIND_HOURLY() && !settlement.finalBatchPosted(job.id) && prev.c1X == 0
+                && prev.c1Y == 0 && prev.c2X == 0 && prev.c2Y == 0
+        ) {
+            prev = settlement.chainedHourly(job.id);
+        }
         p.prevC1X = prev.c1X;
         p.prevC1Y = prev.c1Y;
         p.prevC2X = prev.c2X;
         p.prevC2Y = prev.c2Y;
+        p.nextC1X = prev.c1X;
+        p.nextC1Y = prev.c1Y;
+        p.nextC2X = prev.c2X;
+        p.nextC2Y = prev.c2Y;
         p.dataHash = settlement.computeSealedDataHash(p, job.kind);
     }
 

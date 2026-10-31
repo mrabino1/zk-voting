@@ -41,6 +41,9 @@ interface IRollupSettlement {
     error IdentityCiphertext();
     error OptionTotalMismatch();
     error SumToOneRejected();
+    error ReplacementOnHourly();
+    error OldOptionsMismatch();
+    error UnconsumedBallot();
 
     event SealedBatchPosted(
         uint256 indexed electionId, uint8 kind, uint64 indexed batchIndex, bytes32 ballotSetRoot, uint256 uniqueCount
@@ -102,27 +105,26 @@ interface IRollupSettlement {
     }
 
     /// @notice One ballot in a batch. `oneHot` is the CDS proof under the joint key.
-    ///         A first ballot adds the ciphertext. A replacement subtracts `old` on the final tally only.
-    ///         `options` is one ciphertext per choice. Their sum is this row's ciphertext, each is 0 or 1,
-    ///         and `sumProof` shows that sum encrypts 1. `sumProof` is A, B, z.
+    ///         `oldSubmissionId` 0 is a first ballot and adds the ciphertext.
+    ///         Any other value names the previous submission. The contract subtracts the
+    ///         vector it stored for that submission. The previous ciphertexts are not
+    ///         fields of this row. `options` is one ciphertext per choice, index-aligned.
+    ///         Their sum is this row's ciphertext, each is 0 or 1, and `sumProof` shows
+    ///         that sum encrypts 1. `sumProof` is A, B, z.
     struct BallotRow {
         uint256 submissionId;
-        uint8 isFirst;
         uint256 c1X;
         uint256 c1Y;
         uint256 c2X;
         uint256 c2Y;
-        uint256 oldC1X;
-        uint256 oldC1Y;
-        uint256 oldC2X;
-        uint256 oldC2Y;
+        uint256 oldSubmissionId;
         uint256[12] oneHot;
         OptionCipher[] options;
-        OptionCipher[] oldOptions;
         uint256[5] sumProof;
     }
 
-    /// @notice Option ciphertext after option 0. Option 0 is the batch's next ciphertext.
+    /// @notice One choice ciphertext, index-aligned with the row vector.
+    ///         Index 0 is the first choice, the same index `optionCiphertext` reads.
     struct OptionPoint {
         uint256 c1X;
         uint256 c1Y;
@@ -171,11 +173,6 @@ interface IRollupSettlement {
     function chainedFinal(uint256 electionId) external view returns (Ciphertext memory);
 
     function computeSealedDataHash(SealedParams memory params, uint8 kind) external pure returns (bytes32);
-
-    function computeSealedDataHash(SealedParams memory params, uint8 kind, OptionPoint[] memory options)
-        external
-        pure
-        returns (bytes32);
 
     function chainHashOf(BallotRow[] memory rows) external pure returns (bytes32);
 

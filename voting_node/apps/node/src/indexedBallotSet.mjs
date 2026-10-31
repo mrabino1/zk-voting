@@ -24,8 +24,21 @@ function H(left, right) {
   return poseidonHashLeftRight(mod(left), mod(right));
 }
 
-export function cipherHash(c1x, c1y, c2x, c2y) {
+export function ciphertextHash(c1x, c1y, c2x, c2y) {
   return H(H(c1x, c1y), H(c2x, c2y));
+}
+
+/** n = 0 ordered digest. Poseidon(ct, 0), the same value the inbox stores for a 130-byte EG ballot. */
+export function cipherHash(c1x, c1y, c2x, c2y) {
+  return H(ciphertextHash(c1x, c1y, c2x, c2y), 0n);
+}
+
+export function ballotDigest(c1x, c1y, c2x, c2y, options = []) {
+  let h = H(ciphertextHash(c1x, c1y, c2x, c2y), BigInt(options.length));
+  for (const option of options) {
+    h = H(h, ciphertextHash(option[0], option[1], option[2], option[3]));
+  }
+  return h;
 }
 
 export function voterKey(secret, electionId) {

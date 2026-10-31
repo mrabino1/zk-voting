@@ -85,9 +85,12 @@ interface IBallotInbox {
 
     function nullifierUsed(uint256 electionId, uint256 nullifier) external view returns (bool);
 
-    /// @notice Public turnout. Sealed elections return the last posted unique count.
-    ///         Legacy elections revert until cutoff.
+    /// @notice Public turnout. A VOTE reverts until cutoff. A sealed POLL returns the
+    ///         last posted unique count. A legacy election reverts until cutoff.
     function closedBallotCount(uint256 electionId) external view returns (uint256);
+
+    /// @notice Accepted submissions not yet included in a settled batch.
+    function unconsumedCount(uint256 electionId) external view returns (uint256);
 
     function emptyBallotRoot(uint256 depth) external pure returns (uint256);
 
@@ -149,6 +152,6 @@ interface IBallotInbox {
     function markSealed(uint256 electionId, uint256[] calldata submissionIds) external;
 
     /// @notice Spend an accepted submission inside a settled batch. Settlement only.
-    ///         `cipherHash` is CipherHash of the row, and it must match the stored ballot hash.
+    ///         `cipherHash` is the ordered-vector ballot digest, and it must match the stored ballot hash.
     function consumeForSettlement(uint256 electionId, uint256 submissionId, uint256 cipherHash) external;
 }

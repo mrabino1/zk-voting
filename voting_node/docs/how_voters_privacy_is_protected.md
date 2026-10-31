@@ -99,7 +99,7 @@ Meant to be visible. Process, not preference.
 | **Registration** | `identityCommitment` hex (leaf). **Never** a legal name. Immediate (not hour-delayed). | `VoterRegistered` / explorer `register` |
 | **Nullifiers** | That **this** uniqueness token was spent in election E. One row per nullifier. **After the containing hour closes, the disclosure delay elapses, and the results gate is open.** A block smaller than the minimum waits. | `VoteAccepted`, `GET /api/explorer/nullifiers/:value` |
 | **Disqualification** | Commitment, election, **reason code** (e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revokes. | `DisqualificationRegistry`, explorer |
-| **Ballot hashes** | `ballotHash = keccak256(encryptedBallot)` (or the public input bind). Not the option. | Inbox, explorer vote row |
+| **Ballot hashes** | An `EG` ballot hash is the Poseidon digest of the ordered option-ciphertext vector (the primary, then each choice). Any other ciphertext is `keccak256(encryptedBallot) mod r`. Not the option. | Inbox, explorer vote row |
 | **Tallies** | Per-option **counts** after a posted tally. IRV **round transcript** (aggregates), not individual rankings. | `TallyPosted`, `/elections/:id/results` |
 | **Hourly disclosure** | `lastClosedHourAt`, `delaySeconds`, `resultsMinVotes`, `minBlockVotes`, `acceptedBallotsDisclosed`, `nextPublishAt`. Policy `hourly-polling-place-unlinkability`. Defaults: hour `3600`, delay `1800`, gate `100`, block floor `10`. | [`disclosure.mjs`](./apps/node/src/disclosure.mjs), `GET /api/explorer/disclosure` |
 | **Parameters** | Start / cutoff, `ballotSpecHash`, verifier address, `maxParticipants`. | Election record |
@@ -118,6 +118,14 @@ Choice bits are **not** in that instance. The circuit proves two things about th
 **Demo gap:** unarmed `MockVerifier` still accepts any well-shaped proof that copies those roots. It evaluates the gap only when a test arms the witness. The committed Vote(20) Groth16 key is **UNTRUSTED** (no ceremony).
 
 Civic L2 batch `dataHash` includes hashes, roots, nullifiers, reason codes, tally `countsHash` — not ballot plaintext ([`l2/README.md`](./l2/README.md)). If a client sends `choice` / `plaintext`, the sequencer strips it.
+
+A re-vote is still linkable, and these items stay visible on purpose:
+
+- `oldSubmissionId` is a field of the settlement row and of `chainHash`. A non-zero value names the previous submission. `isFirst` is not a public field; the contract treats zero as a first ballot.
+- The settled primary and option ciphertexts are stored on the settlement contract so a replacement can be checked without putting the old ciphertexts in calldata. Anyone who can read contract storage can read that vector. It is not repeated in the replacement transaction and it is not emitted in an event.
+- The sequencer that builds the batch witness sees `voterKey`. That key is not a public circuit output.
+- Applying a re-vote changes the final ciphertext totals. An observer can tie that change to the published `oldSubmissionId`.
+- `VoteAccepted` still emits the ballot hash and the submission id. The hourly unique count stays public. The node still refuses a second ballot for the same nullifier; a settlement re-vote is a different submission id.
 
 ---
 

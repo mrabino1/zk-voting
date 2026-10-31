@@ -47,6 +47,18 @@ template BatchTransition(n, levels) {
     signal input oldC1y[n];
     signal input oldC2x[n];
     signal input oldC2y[n];
+    signal input oldSubmissionId[n];
+    signal input optionCount;
+    signal input optionN[n];
+    signal input optionC1x[n][4];
+    signal input optionC1y[n][4];
+    signal input optionC2x[n][4];
+    signal input optionC2y[n][4];
+    signal input oldOptionN[n];
+    signal input oldOptionC1x[n][4];
+    signal input oldOptionC1y[n][4];
+    signal input oldOptionC2x[n][4];
+    signal input oldOptionC2y[n][4];
     signal input predKey[n];
     signal input predNext[n];
     signal input predCipher[n];
@@ -103,7 +115,16 @@ template BatchTransition(n, levels) {
     signal stayed[n];
     signal running[n + 1];
     running[0] <== boundRoot;
-    signal linkWord[n][10];
+    signal linkWord[n][6];
+    signal optGate[n];
+    signal inactiveN[n];
+    signal inactiveOldN[n];
+    signal firstOldN[n];
+    component oldSidOf[n];
+    signal oldBind[n];
+    signal firstOldSid[n];
+    signal hourReplace[n];
+    component kindHourly;
     component tagOf[n];
     component tagFold[n];
     signal tagTake[n];
@@ -117,6 +138,8 @@ template BatchTransition(n, levels) {
     signal idNext[n];
     signal idAcc[n + 1];
     idAcc[0] <== 0;
+    kindHourly = IsZero();
+    kindHourly.in <== kind - 1;
 
     for (var i = 0; i < n; i++) {
         activeSq[i] <== active[i] * active[i];
@@ -129,23 +152,55 @@ template BatchTransition(n, levels) {
         useReplace[i] <== active[i] * (1 - isFirst[i]);
         stepAcc[i + 1] <== stepAcc[i] + firstContrib[i];
 
-        cipherOf[i] = CipherHash();
+        optGate[i] <== active[i] * (optionN[i] - optionCount);
+        optGate[i] === 0;
+        inactiveN[i] <== (1 - active[i]) * optionN[i];
+        inactiveN[i] === 0;
+        inactiveOldN[i] <== (1 - active[i]) * oldOptionN[i];
+        inactiveOldN[i] === 0;
+        firstOldN[i] <== firstContrib[i] * oldOptionN[i];
+        firstOldN[i] === 0;
+        hourReplace[i] <== kindHourly.out * useReplace[i];
+        hourReplace[i] === 0;
+
+        cipherOf[i] = BallotDigest(4);
         cipherOf[i].c1x <== c1x[i];
         cipherOf[i].c1y <== c1y[i];
         cipherOf[i].c2x <== c2x[i];
         cipherOf[i].c2y <== c2y[i];
+        cipherOf[i].n <== optionN[i];
+        for (var ck = 0; ck < 4; ck++) {
+            cipherOf[i].optionC1x[ck] <== optionC1x[i][ck];
+            cipherOf[i].optionC1y[ck] <== optionC1y[i][ck];
+            cipherOf[i].optionC2x[ck] <== optionC2x[i][ck];
+            cipherOf[i].optionC2y[ck] <== optionC2y[i][ck];
+        }
         hashGate[i] <== active[i] * (cipherOf[i].out - ballotHash[i]);
         hashGate[i] === 0;
 
-        oldOf[i] = CipherHash();
+        oldOf[i] = BallotDigest(4);
         oldOf[i].c1x <== oldC1x[i];
         oldOf[i].c1y <== oldC1y[i];
         oldOf[i].c2x <== oldC2x[i];
         oldOf[i].c2y <== oldC2y[i];
+        oldOf[i].n <== oldOptionN[i];
+        for (var ok = 0; ok < 4; ok++) {
+            oldOf[i].optionC1x[ok] <== oldOptionC1x[i][ok];
+            oldOf[i].optionC1y[ok] <== oldOptionC1y[i][ok];
+            oldOf[i].optionC2x[ok] <== oldOptionC2x[i][ok];
+            oldOf[i].optionC2y[ok] <== oldOptionC2y[i][ok];
+        }
         oldZeroX[i] <== firstContrib[i] * oldC1x[i];
         oldZeroX[i] === 0;
         oldZeroY[i] <== firstContrib[i] * oldC1y[i];
         oldZeroY[i] === 0;
+        oldSidOf[i] = Hasher();
+        oldSidOf[i].a <== voterKey[i];
+        oldSidOf[i].b <== oldOf[i].out;
+        oldBind[i] <== useReplace[i] * (oldSidOf[i].out - oldSubmissionId[i]);
+        oldBind[i] === 0;
+        firstOldSid[i] <== firstContrib[i] * oldSubmissionId[i];
+        firstOldSid[i] === 0;
 
         // Leaf key is voterKey. An active row's submission id is Poseidon(voterKey, ballotHash),
         // the id the inbox accepted for this ciphertext. A different key cannot open that leaf.
@@ -219,61 +274,34 @@ template BatchTransition(n, levels) {
         running[i + 1] <== inserted[i] + replaced[i] + stayed[i];
 
         linkWord[i][0] <== submissionId[i];
-        linkWord[i][1] <== isFirst[i];
-        linkWord[i][2] <== c1x[i];
-        linkWord[i][3] <== c1y[i];
-        linkWord[i][4] <== c2x[i];
-        linkWord[i][5] <== c2y[i];
-        linkWord[i][6] <== oldC1x[i];
-        linkWord[i][7] <== oldC1y[i];
-        linkWord[i][8] <== oldC2x[i];
-        linkWord[i][9] <== oldC2y[i];
+        linkWord[i][1] <== c1x[i];
+        linkWord[i][2] <== c1y[i];
+        linkWord[i][3] <== c2x[i];
+        linkWord[i][4] <== c2y[i];
+        linkWord[i][5] <== oldSubmissionId[i];
     }
 
-    // The link fold is done outside the ballot loop. Circom rejects assigning
-    // the same component twice, so each ballot gets its own fold components.
-    component lf0[10];
-    component lf1[10];
-    component lf2[10];
-    component lf3[10];
-    signal la0[11];
-    signal la1[11];
-    signal la2[11];
-    signal la3[11];
-    la0[0] <== 0;
-    la1[0] <== 0;
-    la2[0] <== 0;
-    la3[0] <== 0;
-    for (var w0 = 0; w0 < 10; w0++) {
-        lf0[w0] = Hasher();
-        lf0[w0].a <== la0[w0];
-        lf0[w0].b <== linkWord[0][w0];
-        la0[w0 + 1] <== lf0[w0].out;
-        lf1[w0] = Hasher();
-        lf1[w0].a <== la1[w0];
-        lf1[w0].b <== linkWord[1][w0];
-        la1[w0 + 1] <== lf1[w0].out;
-        lf2[w0] = Hasher();
-        lf2[w0].a <== la2[w0];
-        lf2[w0].b <== linkWord[2][w0];
-        la2[w0 + 1] <== lf2[w0].out;
-        lf3[w0] = Hasher();
-        lf3[w0].a <== la3[w0];
-        lf3[w0].b <== linkWord[3][w0];
-        la3[w0 + 1] <== lf3[w0].out;
+    // One fold per ballot. The word count is the public link, not a fixed 4.
+    component linkFold[n][6];
+    signal linkAcc[n][7];
+    signal linkOut[n];
+    for (var row = 0; row < n; row++) {
+        linkAcc[row][0] <== 0;
+        for (var w = 0; w < 6; w++) {
+            linkFold[row][w] = Hasher();
+            linkFold[row][w].a <== linkAcc[row][w];
+            linkFold[row][w].b <== linkWord[row][w];
+            linkAcc[row][w + 1] <== linkFold[row][w].out;
+        }
+        linkOut[row] <== linkAcc[row][6];
     }
-    signal linkOut[4];
-    linkOut[0] <== la0[10];
-    linkOut[1] <== la1[10];
-    linkOut[2] <== la2[10];
-    linkOut[3] <== la3[10];
 
-    component chainH[4];
-    signal chainAcc[5];
+    component chainH[n];
+    signal chainAcc[n + 1];
     chainAcc[0] <== 0;
-    signal chainTake[4];
-    signal chainKeep[4];
-    for (var c = 0; c < 4; c++) {
+    signal chainTake[n];
+    signal chainKeep[n];
+    for (var c = 0; c < n; c++) {
         chainH[c] = Hasher();
         chainH[c].a <== chainAcc[c];
         chainH[c].b <== linkOut[c];
@@ -281,7 +309,7 @@ template BatchTransition(n, levels) {
         chainKeep[c] <== (1 - active[c]) * chainAcc[c];
         chainAcc[c + 1] <== chainTake[c] + chainKeep[c];
     }
-    chainAcc[4] === chainHash;
+    chainAcc[n] === chainHash;
 
     for (var t = 0; t < n; t++) {
         tagOf[t] = Hasher();

@@ -29,6 +29,16 @@ template VoteSealed(levels, ballotLevels) {
     signal input oldC1y;
     signal input oldC2x;
     signal input oldC2y;
+    signal input optionN;
+    signal input optionC1x[4];
+    signal input optionC1y[4];
+    signal input optionC2x[4];
+    signal input optionC2y[4];
+    signal input oldOptionN;
+    signal input oldOptionC1x[4];
+    signal input oldOptionC1y[4];
+    signal input oldOptionC2x[4];
+    signal input oldOptionC2y[4];
     signal input pathElementsBallot[ballotLevels];
     signal input pathIndicesBallot[ballotLevels];
 
@@ -88,21 +98,38 @@ template VoteSealed(levels, ballotLevels) {
     // One commitment: the public ballot hash is the ciphertext, not a separate
     // tag of the choice. The one-hot opening under the joint key is checked
     // on chain against these same points.
-    component cipher = CipherHash();
+    component cipher = BallotDigest(4);
     cipher.c1x <== c1x;
     cipher.c1y <== c1y;
     cipher.c2x <== c2x;
     cipher.c2y <== c2y;
+    cipher.n <== optionN;
+    for (var u = 0; u < 4; u++) {
+        cipher.optionC1x[u] <== optionC1x[u];
+        cipher.optionC1y[u] <== optionC1y[u];
+        cipher.optionC2x[u] <== optionC2x[u];
+        cipher.optionC2y[u] <== optionC2y[u];
+    }
     cipher.out === ballotHash;
 
-    component oldCipher = CipherHash();
+    component oldCipher = BallotDigest(4);
     oldCipher.c1x <== oldC1x;
     oldCipher.c1y <== oldC1y;
     oldCipher.c2x <== oldC2x;
     oldCipher.c2y <== oldC2y;
+    oldCipher.n <== oldOptionN;
+    for (var v = 0; v < 4; v++) {
+        oldCipher.optionC1x[v] <== oldOptionC1x[v];
+        oldCipher.optionC1y[v] <== oldOptionC1y[v];
+        oldCipher.optionC2x[v] <== oldOptionC2x[v];
+        oldCipher.optionC2y[v] <== oldOptionC2y[v];
+    }
     signal oldGate;
     oldGate <== (1 - isReplacement) * oldC1x;
     oldGate === 0;
+    signal oldCountGate;
+    oldCountGate <== (1 - isReplacement) * oldOptionN;
+    oldCountGate === 0;
 
     component set = BallotMembership(ballotLevels);
     set.voterKey <== voterId.out;

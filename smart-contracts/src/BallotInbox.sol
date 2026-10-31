@@ -3,13 +3,14 @@ pragma solidity 0.8.24;
 
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
-import {ElectionParams} from "./interfaces/ElectionParams.sol";
+import {ElectionParams, ElectionType} from "./interfaces/ElectionParams.sol";
 import {IBallotInbox} from "./interfaces/IBallotInbox.sol";
 import {IElection} from "./interfaces/IElection.sol";
 import {IElectionFactory} from "./interfaces/IElectionFactory.sol";
 import {ITallyVerifier} from "./interfaces/ITallyVerifier.sol";
 import {IVoterRegistry} from "./interfaces/IVoterRegistry.sol";
 import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
+import {BallotDigest} from "./zk/BallotDigest.sol";
 import {IndexedRoot} from "./zk/IndexedRoot.sol";
 import {PoseidonT3} from "./hasher/PoseidonT3.sol";
 
@@ -29,9 +30,11 @@ import {PoseidonT3} from "./hasher/PoseidonT3.sol";
 ///      ballot-set root. The empty root is valid only at depth 20.
 ///      Receipts list hashes only.
 ///
-///      Audit H-05: `ballotHash` (public input 3) is
-///      `uint256(keccak256(encryptedBallot)) mod r` so it is always a BN254
-///      field element. External-party vetoes and missing attestations live in
+///      Audit H-05: `ballotHash` (public input 3) is a BN254 field element.
+///      An `EG` ballot commits to the ordered option-ciphertext vector
+///      (Poseidon fold of the primary and each option, in order). Any other
+///      ciphertext is `uint256(keccak256(encryptedBallot)) mod r`.
+///      External-party vetoes and missing attestations live in
 ///      the roots the proof already binds. This contract has no argument for
 ///      an identity commitment. Audit H-03: ballots are refused while a paged
 ///      eligible-root rebuild is pending.
@@ -95,6 +98,8 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => uint256) public pendingCursor;
     /// @notice Accepted submissions already included in a settled batch. A second settle reverts.
     mapping(uint256 => mapping(uint256 => bool)) private _settledSubmission;
+    /// @notice Accepted submissions waiting for a settled batch. Appended after the settled map.
+    mapping(uint256 => uint256) public unconsumedCount;
 
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
@@ -172,10 +177,13 @@ contract BallotInbox is IBallotInbox {
     }
 
     /// @notice Turnout once it is allowed to be public.
-    ///         A sealed election returns the unique count last written by an hourly
+    ///         A VOTE reverts until cutoff, including when a settlement is set.
+    ///         A sealed POLL returns the unique count last written by an hourly
     ///         or supplementary batch. A legacy election reverts until cutoff, then
     ///         returns the private acceptance counter. There is no live getter.
     function closedBallotCount(uint256 electionId) external view returns (uint256) {
+        ElectionParams memory p = _getElection(electionId).params();
+        if (p.electionType == ElectionType.VOTE && block.timestamp < p.cutoffTime) revert TurnoutNotPublished();
         address settlement = settlementOf[electionId];
         if (settlement != address(0)) {
             (bool ok, bytes memory ret) =
@@ -183,7 +191,7 @@ contract BallotInbox is IBallotInbox {
             if (!ok || ret.length < 32) revert TurnoutNotPublished();
             return abi.decode(ret, (uint256));
         }
-        if (block.timestamp < _getElection(electionId).params().cutoffTime) revert TurnoutNotPublished();
+        if (block.timestamp < p.cutoffTime) revert TurnoutNotPublished();
         return _acceptedBallots[electionId];
     }
 
@@ -358,9 +366,10 @@ contract BallotInbox is IBallotInbox {
 
     /// @notice Field-safe ballot hash.
     /// @dev Aggregate ballots start with `AG` and a 32-byte Poseidon tag. The
-    ///      tag is the hash. An `EG` ballot carries four coordinates and hashes
-    ///      them the way `CipherHash` does. Any other ciphertext still uses
-    ///      `uint256(keccak256(ciphertext)) mod r`.
+    ///      tag is the hash. A canonical `EG` ballot is the ordered-vector digest:
+    ///      130 bytes is n = 0, and `162 + n * 128` bytes carries n in 0..4 plus
+    ///      n option ciphertexts. Any other ciphertext, including a truncated `EG`
+    ///      blob, uses `uint256(keccak256(ciphertext)) mod r`.
     function ballotHashOfCiphertext(bytes calldata encryptedBallot) public pure returns (uint256) {
         if (encryptedBallot.length >= 34 && encryptedBallot[0] == 0x41 && encryptedBallot[1] == 0x47) {
             bytes32 tag;
@@ -370,15 +379,40 @@ contract BallotInbox is IBallotInbox {
             return uint256(tag) % SNARK_SCALAR_FIELD;
         }
         if (encryptedBallot.length >= 130 && encryptedBallot[0] == 0x45 && encryptedBallot[1] == 0x47) {
-            uint256 c1x = _coord(encryptedBallot, 2);
-            uint256 c1y = _coord(encryptedBallot, 34);
-            uint256 c2x = _coord(encryptedBallot, 66);
-            uint256 c2y = _coord(encryptedBallot, 98);
-            return PoseidonT3.hashLeftRight(
-                PoseidonT3.hashLeftRight(c1x, c1y), PoseidonT3.hashLeftRight(c2x, c2y)
-            );
+            uint256 digest = _egDigest(encryptedBallot);
+            if (digest != 0 || _egCanonical(encryptedBallot)) return digest;
         }
         return uint256(keccak256(encryptedBallot)) % SNARK_SCALAR_FIELD;
+    }
+
+    /// @dev Zero means "not a canonical EG blob", unless the digest itself is zero.
+    function _egCanonical(bytes calldata blob) private pure returns (bool) {
+        if (blob.length == 130) return true;
+        if (blob.length < 162) return false;
+        uint256 n = _coord(blob, 130);
+        return n <= 4 && blob.length == 162 + n * 128;
+    }
+
+    function _egDigest(bytes calldata blob) private pure returns (uint256) {
+        uint256 c1x = _coord(blob, 2);
+        uint256 c1y = _coord(blob, 34);
+        uint256 c2x = _coord(blob, 66);
+        uint256 c2y = _coord(blob, 98);
+        if (blob.length == 130) {
+            return PoseidonT3.hashLeftRight(BallotDigest.ciphertextHash(c1x, c1y, c2x, c2y), 0);
+        }
+        if (blob.length < 162) return 0;
+        uint256 n = _coord(blob, 130);
+        if (n > 4 || blob.length != 162 + n * 128) return 0;
+        uint256 h = PoseidonT3.hashLeftRight(BallotDigest.ciphertextHash(c1x, c1y, c2x, c2y), n);
+        for (uint256 i; i < n; ++i) {
+            uint256 off = 162 + i * 128;
+            h = PoseidonT3.hashLeftRight(
+                h,
+                BallotDigest.ciphertextHash(_coord(blob, off), _coord(blob, off + 32), _coord(blob, off + 64), _coord(blob, off + 96))
+            );
+        }
+        return h;
     }
 
     function _coord(bytes calldata blob, uint256 offset) private pure returns (uint256 w) {
@@ -402,6 +436,10 @@ contract BallotInbox is IBallotInbox {
         if (settlementOf[electionId] == address(0)) {
             unchecked {
                 _acceptedBallots[electionId] += 1;
+            }
+        } else {
+            unchecked {
+                unconsumedCount[electionId] += 1;
             }
         }
         emit VoteAccepted(electionId, nullifier, ballotHash, msg.sender);
@@ -479,6 +517,7 @@ contract BallotInbox is IBallotInbox {
         if (_ballotHashOf[electionId][id] != bytes32(cipherHash)) revert BallotHashMismatch();
         if (_settledSubmission[electionId][id]) revert SubmissionAlreadySettled();
         _settledSubmission[electionId][id] = true;
+        unconsumedCount[electionId] -= 1;
     }
 
     function markSealed(uint256 electionId, uint256[] calldata submissionIds) external {
