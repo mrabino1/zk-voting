@@ -16,6 +16,10 @@
 //
 // Verification level: RECOMPUTABLE, not ZK-proven. There is no verified
 // shuffle yet, so guardians see each individual ranking (not who cast it).
+// The opened ranking carries the first-choice tag randomness r, so whoever
+// opens rankings can match each one to its on-chain ballot (nullifier, hourly
+// batch), not to an identity. r is used only for the binding check here and is
+// never published.
 
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -24,17 +28,15 @@ import { openRankingEnvelope, parseRankingEnvelope } from '../public/ranked-enve
 import { electionHasRanked, isRankedQuestion, tallyBallots, validateBallotAnswers } from './ballot.mjs';
 import { isVoteElection } from './electionType.mjs';
 import { combinePartialPoints, verifyPartial } from './guardians/threshold.mjs';
+import { SEALED_RANKED_DISCLOSURE } from '../public/sealed-ranked-disclosure.js';
 import { HttpError } from './http.mjs';
 import { ciphertextForTally } from './tallyOpen.mjs';
 
 export const RANKED_VERIFICATION =
   'recomputable, not ZK proof-verified; no verified shuffle (rankings opened per ballot by guardian threshold)';
 
-/** Shown to the admin (acknowledged at creation) and to voters on the ballot. */
-export const SEALED_RANKED_DISCLOSURE =
-  'Ranked choice on a sealed vote: until a verified shuffle exists, guardians can see each individual ranking ' +
-  '(not who cast it). The instant-runoff result is recomputable from the published rankings but is not ' +
-  'ZK-proven. A distinctive ranking pattern could be used to prove how someone voted (coercion risk).';
+/** Shown to the admin (acknowledged at creation) and to voters on the ballot. One localized source. */
+export { SEALED_RANKED_DISCLOSURE } from '../public/sealed-ranked-disclosure.js';
 
 /** Polls allow sealed rankings; sealed votes only with the opt-in setting. */
 export function sealedRankingAllowed(election) {

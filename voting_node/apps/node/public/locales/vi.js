@@ -1107,4 +1107,8 @@ export default {
     retryIn: "Bạn có thể gửi tin nhắn khác sau khoảng {minutes} phút.",
     retryIn_one: "Bạn có thể gửi tin nhắn khác sau khoảng {minutes} phút.",
   },
+  sealedRanked: {
+    disclosure:
+      "Bầu xếp hạng trong cuộc bỏ phiếu kín: cho đến khi có phép xáo trộn được kiểm chứng, người giám hộ có thể thấy từng bảng xếp hạng riêng (không thấy ai đã bỏ). Người mở các bảng xếp hạng cũng có thể khớp mỗi bảng với lá phiếu mã hóa tương ứng trên chuỗi (không khớp với danh tính cử tri). Kết quả bầu loại trực tiếp có thể tính lại từ các bảng xếp hạng đã công bố nhưng không có bằng chứng ZK. Rủi ro ép buộc: cử tri giữ lại số ngẫu nhiên của lá phiếu có thể cho người ép buộc thấy lá phiếu nào trên chuỗi là của mình và chỉ ra bảng xếp hạng của mình trong tập đã công bố; một kiểu xếp hạng khác thường cũng có thể nhận diện một lá phiếu.",
+  },
 };

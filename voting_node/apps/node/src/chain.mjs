@@ -57,7 +57,7 @@ export const ballotInboxAbi = [
       { name: 'a', type: 'uint256[2][]' },
       { name: 'b', type: 'uint256[2][2][]' },
       { name: 'c', type: 'uint256[2][]' },
-      { name: 'publicInputs', type: 'uint256[5][]' },
+      { name: 'publicInputs', type: 'uint256[][]' },
       { name: 'encryptedBallots', type: 'bytes[]' },
       { name: 'rankingHashes', type: 'bytes32[]' },
     ],
@@ -434,14 +434,29 @@ function failureKind(err) {
   return 'transport';
 }
 
-/** Ranking hashes of a batch, ascending (the inbox requires strict order). */
+/**
+ * Ranking hashes of a batch, ascending (the inbox requires strict order).
+ * Rows without a ranking are fine. A malformed or zero hash is never dropped
+ * silently: it throws BAD_RANKING_HASH so the batch stays queued and is flagged
+ * instead of landing ballots without their rankings.
+ */
 export function sortedRankingHashes(batch) {
   const out = [];
+  const bad = [];
   for (const row of batch || []) {
-    if (!row?.rankingHash) continue;
+    if (row?.rankingHash == null || row.rankingHash === '') continue;
     const h = String(row.rankingHash).toLowerCase();
-    if (!/^0x[0-9a-f]{64}$/.test(h) || /^0x0+$/.test(h)) continue;
+    if (!/^0x[0-9a-f]{64}$/.test(h) || /^0x0+$/.test(h)) {
+      bad.push(row?.nullifier != null ? String(row.nullifier) : null);
+      continue;
+    }
     out.push(h);
+  }
+  if (bad.length) {
+    const err = new Error(`BAD_RANKING_HASH: ${bad.length} malformed ranking hash(es) in batch`);
+    err.code = 'BAD_RANKING_HASH';
+    err.nullifiers = bad;
+    throw err;
   }
   out.sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : BigInt(x) > BigInt(y) ? 1 : 0));
   return out.filter((h, i) => i === 0 || h !== out[i - 1]);

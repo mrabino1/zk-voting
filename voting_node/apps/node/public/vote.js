@@ -23,11 +23,8 @@ import { obtainVotePass } from "./vote-pass.js";
 import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { freshChoiceRandomness } from "./aggregate-ballot.js";
 
-const SEALED_RANKED_DISCLOSURE =
-  "Ranked choice on a sealed vote: until a verified shuffle exists, guardians can see each individual ranking " +
-  "(not who cast it). The instant-runoff result is recomputable from the published rankings but is not " +
-  "ZK-proven. A distinctive ranking pattern could be used to prove how someone voted (coercion risk).";
 import { receiptHelpKey, t } from "./i18n.js";
+import { SEALED_RANKED_DISCLOSURE_KEY } from "./sealed-ranked-disclosure.js";
 
 function tallyEncryptionBlurb(election) {
   const ceremony = election.tallyCeremony;
@@ -440,7 +437,7 @@ export async function renderVote(main, ctx) {
       ),
       question.description ? h("p", { class: "field-hint", text: question.description }) : null,
       ranked && electionTypeNameOf(election) === "vote" && election.sealedRankedChoice === true
-        ? h("p", { class: "field-hint ranked-disclosure", role: "note", text: SEALED_RANKED_DISCLOSURE })
+        ? h("p", { class: "field-hint ranked-disclosure", role: "note", text: t(SEALED_RANKED_DISCLOSURE_KEY) })
         : null,
       ranked
         ? rankedField(question, index)

@@ -188,11 +188,15 @@ const QUESTIONS = [
   { id: 'q-seat', type: 'RANKED', prompt: 'Rank the seat', options: OPTIONS.map((id) => ({ id, label: id.toUpperCase() })) },
 ];
 
+const CAST_R = new Set();
+
 /** A bound ranked ballot: the ranking hash is folded into the AG tag. */
 async function sealedPair(pub, electionId, ranking, { firstChoice, seed = 1n, swapTo } = {}) {
   const first = firstChoice ?? ranking[0] ?? 'a';
   const index = OPTIONS.indexOf(first);
-  const r = 5000n + BigInt(seed);
+  // Distinctive tag randomness so a leak of r into any published output is detectable.
+  const r = 7n * 10n ** 40n + BigInt(seed);
+  CAST_R.add(r);
   const rk = await encryptRankingEnvelope({
     jointPublicKey: pub,
     electionId,
@@ -531,6 +535,14 @@ describe('sealed ranked-choice tally (guardian threshold)', () => {
     for (const n of nullifiers) assert.equal(published.includes(`"${n}"`), false);
     for (const id of ids) assert.equal(published.includes(id.slice(2)), false);
     assert.equal(published.includes('nullifier'), false);
+    // The tag randomness r never leaves the opener: not in the opened set, the result or the tally.
+    const everything = JSON.stringify(tally);
+    assert.ok(CAST_R.size >= stacks.length);
+    for (const r of CAST_R) {
+      assert.equal(everything.includes(r.toString()), false, 'r (decimal) published');
+      assert.equal(everything.includes(r.toString(16)), false, 'r (hex) published');
+    }
+    assert.equal(/"(first|r)"\s*:/.test(published), false);
     const lines = tally.ranked.openedRankings || [];
     assert.deepEqual([...lines].sort(), lines);
     const hashes = tally.ranked.rankingHashes || [];
@@ -582,8 +594,10 @@ describe('ranking hashes ride the ballot batches', () => {
     assert.equal(now[0][0].rankingHash, h('aa'));
   });
 
-  test('sortedRankingHashes drops bad and zero hashes; ranked gas default 24M, ceiling 200M', () => {
-    assert.deepEqual(sortedRankingHashes([{ rankingHash: h('22') }, { rankingHash: '0x12' }, { rankingHash: h('00') }, { rankingHash: h('22') }, {}]), [h('22')]);
+  test('sortedRankingHashes sorts, skips unranked rows, throws on bad or zero hashes; ranked gas default 24M, ceiling 200M', () => {
+    assert.deepEqual(sortedRankingHashes([{ rankingHash: h('22') }, { rankingHash: h('0a') }, {}]), [h('0a'), h('22')]);
+    assert.throws(() => sortedRankingHashes([{ rankingHash: h('22') }, { rankingHash: '0x12', nullifier: '5' }]), (e) => e.code === 'BAD_RANKING_HASH' && e.nullifiers[0] === '5');
+    assert.throws(() => sortedRankingHashes([{ rankingHash: h('00') }]), /BAD_RANKING_HASH/);
     assert.equal(rankedBatchGas({}), 24_000_000n);
     assert.equal(rankedBatchGas({ rankedBatchGas: '30000000' }), 30_000_000n);
     assert.equal(rankedBatchGas({ rankedBatchGas: '900000000' }), 200_000_000n);
@@ -631,5 +645,25 @@ describe('guardian CLI skips excluded and deleted envelopes', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('sealed ranked disclosure: one localized source', () => {
+  test('server, ballot and back office share the catalog text; every locale has it', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const { SEALED_RANKED_DISCLOSURE } = await import('../src/rankedTally.mjs');
+    const en = (await import('../public/locales/en.js')).default;
+    assert.equal(SEALED_RANKED_DISCLOSURE, en.sealedRanked.disclosure);
+    assert.match(SEALED_RANKED_DISCLOSURE, /match each ranking to its encrypted ballot on chain/);
+    assert.match(SEALED_RANKED_DISCLOSURE, /show a coercer which on-chain ballot is theirs/);
+    const dir = new URL('../public/locales/', import.meta.url);
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+      const cat = (await import(new URL(f, dir))).default;
+      assert.ok(cat.sealedRanked?.disclosure?.length > 80, `${f} lacks sealedRanked.disclosure`);
+    }
+    const vote = readFileSync(new URL('../public/vote.js', import.meta.url), 'utf8');
+    const office = readFileSync(new URL('../public/back-office.html', import.meta.url), 'utf8');
+    for (const src of [vote, office]) assert.equal(src.includes('verified shuffle exists'), false);
+    assert.match(vote, /t\(SEALED_RANKED_DISCLOSURE_KEY\)/);
   });
 });

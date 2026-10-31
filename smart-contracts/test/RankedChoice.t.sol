@@ -96,6 +96,16 @@ contract RankedChoiceTest is Deployer {
         assertEq(inbox.acceptedCount(id), 3);
     }
 
+    /// @dev Proxy layout guard: `_rankingRoot` and `_rankingCount` stay at slots 22 and 23,
+    ///      behind the reserved slot 21 left by the removed `_rankingHashOf`.
+    function testRankingStorageSlotsAreStable() public {
+        (uint256 id, address el, uint256[] memory ids) = _setup(2);
+        bytes32[] memory hs = _sorted(2, "s");
+        _ranked(id, el, ids, hs);
+        assertEq(vm.load(address(inbox), keccak256(abi.encode(id, uint256(22)))), inbox.rankingRoot(id));
+        assertEq(uint256(vm.load(address(inbox), keccak256(abi.encode(id, uint256(23))))), 2);
+    }
+
     function testUnsortedRankingsRevertWithTheBallots() public {
         (uint256 id, address el, uint256[] memory ids) = _setup(2);
         bytes32[] memory hs = _sorted(2, "r");
@@ -189,6 +199,8 @@ contract RankedChoiceTest is Deployer {
         inbox.submitVoteBatchRanked(id, pa, pb, pc, inputs, ballots, hs);
         uint256 used = g - gasleft();
         emit log_named_uint("submitVoteBatchRanked(64) gas", used);
-        assertLt(used, 24_000_000);
+        // Measured 17,437,911 (via-ir). About 12% headroom catches a real regression.
+        assertLt(used, 19_500_000);
+        assertGt(used, 15_000_000);
     }
 }

@@ -1114,4 +1114,8 @@ export default {
     retryIn: "You can send another message in about {minutes} minutes.",
     retryIn_one: "You can send another message in about {minutes} minute.",
   },
+  sealedRanked: {
+    disclosure:
+      "Ranked choice on a sealed vote: until a verified shuffle exists, guardians can see each individual ranking (not who cast it). Whoever opens the rankings can also match each ranking to its encrypted ballot on chain (not to the voter's identity). The instant-runoff result is recomputable from the published rankings but is not ZK-proven. Coercion risk: a voter who keeps their ballot randomness can show a coercer which on-chain ballot is theirs and point to their ranking in the published set, and a distinctive ranking pattern can identify a ballot too.",
+  },
 };

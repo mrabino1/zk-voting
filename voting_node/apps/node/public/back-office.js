@@ -2088,3 +2088,14 @@
     initTokenPolls(me);
   })();
 })();
+
+// Sealed ranked-choice disclosure: one localized source shared with the ballot and the API.
+(function fillSealedRankedDisclosure() {
+  const slot = document.getElementById("e-sealed-ranked-disclosure-text");
+  if (!slot) return;
+  Promise.all([import("/i18n.js"), import("/sealed-ranked-disclosure.js")])
+    .then(([i18n, d]) => {
+      slot.textContent = i18n.t(d.SEALED_RANKED_DISCLOSURE_KEY);
+    })
+    .catch(() => {});
+})();
