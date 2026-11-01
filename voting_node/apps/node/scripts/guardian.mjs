@@ -14,6 +14,8 @@ import {
 } from '../src/guardians/index.mjs';
 import { aggregateCiphertexts, isAggregateEnvelope, parseAggregateEnvelope } from '../src/aggregateBallot.mjs';
 import { verifyPartial } from '../src/guardians/threshold.mjs';
+import { rankingTag } from '../src/rankedTally.mjs';
+import { parseRankingEnvelope } from '../public/ranked-envelope.js';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -56,7 +58,8 @@ function usage() {
   post-partials --base URL --election ID --partials partials.json [--cookie "a=b"]
 
 roster.json is [{ "index": 1, "transportPublicKey": "0x04..." }, ...]
-envelopes.json is { "envelopes": [{ "ballotHash", "encryptedBallot" }] }
+envelopes.json is { "envelopes": [{ "ballotHash", "encryptedBallot" }], "rankings": [{ "rankingId", "rankingEnvelope" }] }
+Excluded and deleted envelopes are skipped.
 ceremony.json is the public tally-key ceremony (verificationKeys, publicKey).
 Share files contain the guardian secret. Do not upload them.
 `;
@@ -140,11 +143,14 @@ async function main() {
     }
     const share = await readJson(args.share);
     const doc = await readJson(args.envelopes);
-    const envelopes = Array.isArray(doc) ? doc : doc.envelopes;
+    // Excluded and soft-deleted envelopes are not part of the tally the node sums.
+    const envelopes = (Array.isArray(doc) ? doc : doc.envelopes).filter(
+      (env) => env && env.excluded !== true && env.is_deleted !== true,
+    );
     if (!envelopes.every((env) => isAggregateEnvelope(env.encryptedBallot))) {
       throw new Error('PER_BALLOT_OPEN_DISABLED: partials are computed on the aggregate, not on one ballot');
     }
-    const product = aggregateCiphertexts(envelopes.map((env) => env.encryptedBallot));
+    const product = aggregateCiphertexts(envelopes.map((env) => env.tallyEncryptedBallot || env.encryptedBallot));
     const partials = product.options.map((opt, j) =>
       partialDecrypt({
         shareScalar: share.shareScalar,
@@ -155,6 +161,22 @@ async function main() {
         ephemeral: opt.c1Hex,
       }),
     );
+    // Sealed ranked-choice: one partial per counted ranking, tagged with its
+    // random rankingId (never a nullifier). The node lists only live rankings.
+    const rankings = Array.isArray(doc?.rankings) ? doc.rankings : [];
+    for (const row of rankings) {
+      if (!row?.rankingId || !row?.rankingEnvelope || row.excluded === true || row.is_deleted === true) continue;
+      partials.push(
+        partialDecrypt({
+          shareScalar: share.shareScalar,
+          index: share.index,
+          electionId: args.election,
+          ballotHash: rankingTag(row.rankingId),
+          jointPublicKey: share.jointPublicKey,
+          ephemeral: parseRankingEnvelope(row.rankingEnvelope).c1Hex,
+        }),
+      );
+    }
     await writeJson(args.out, { index: share.index, partials });
     process.stdout.write(`wrote ${args.out} partials=${partials.length}\n`);
     return;

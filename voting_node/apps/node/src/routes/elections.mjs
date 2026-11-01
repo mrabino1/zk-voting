@@ -6,6 +6,8 @@ import { requireAuth, requireElectionRole, requireJurisdictionRoleFromBody, requ
 import { assertExternalClearance } from '../voteGate.mjs';
 import {
   electionHasRanked,
+  payloadsFromEnvelopes,
+  tallyBallots,
   normalizeBallotMethod,
   parseTallyCounts,
   withQuestionMethods,
@@ -33,6 +35,16 @@ import {
   sealedResultsMessage,
 } from '../electionType.mjs';
 import { acceptChoiceBlockPartials, acceptDeal, acceptPartials, enrollGuardian } from '../guardianFlow.mjs';
+import {
+  RANKED_VERIFICATION,
+  assertSealedRankingAllowed,
+  firstChoiceMatches,
+  openRankedTally,
+  rankingSetHash,
+  roundsHash,
+  sealedRankedChoiceFromCreateBody,
+  splitRankingsForGuardians,
+} from '../rankedTally.mjs';
 import { isOpensBallots, openBallots, rejectInventedCounts, withoutExcludedEnvelopes } from '../tallyOpen.mjs';
 import { publicCeremonyView } from '../tallyCrypto.mjs';
 import { buildAuditorPack } from '../auditorPack.mjs';
@@ -317,10 +329,12 @@ export function electionsRouter(deps) {
         throw new HttpError(400, err.message, { code: err.code || 'INVALID_ELECTION_TYPE' });
       }
       const questions = withQuestionMethods(questionsFromCreateBody(body), ballotMethod);
+      const sealedRankedChoice = sealedRankedChoiceFromCreateBody(body, electionType);
       const ballotSpecHash = resolveBallotSpecHash({
         title,
         questions,
         ballotSpecHash: body.ballotSpecHash,
+        sealedRankedChoice,
       });
       const jurisdiction = store.getJurisdiction(String(body.jurisdictionId || 'demo'));
       if (!jurisdiction) {
@@ -405,6 +419,7 @@ export function electionsRouter(deps) {
           tallyOperator: chainResult?.params?.tallyOperator || body.tallyOperator || '',
           verifier: chainResult?.params?.verifier || body.verifier || '',
           lateUpdateAllowed: Boolean(body.lateUpdateAllowed),
+          sealedRankedChoice,
           tallyScheme: body.tallyScheme,
           opensBallots: body.opensBallots,
           threshold: body.threshold,
@@ -631,10 +646,16 @@ export function electionsRouter(deps) {
     const cutoffTime =
       body.cutoffTime != null ? unixSeconds(body.cutoffTime, election.cutoffTime) : election.cutoffTime;
     if (!(startTime < cutoffTime)) throw new HttpError(400, 'startTime must be before cutoffTime');
+    if (body.sealedRankedChoice != null && (body.sealedRankedChoice === true) !== (election.sealedRankedChoice === true)) {
+      throw new HttpError(409, 'sealedRankedChoice is fixed at creation and bound into ballotSpecHash', {
+        code: 'SETTING_LOCKED',
+      });
+    }
     const ballotSpecHash = resolveBallotSpecHash({
       title,
       questions,
       ballotSpecHash: body.ballotSpecHash,
+      sealedRankedChoice: election.sealedRankedChoice === true,
     });
     const updated = await store.updateElectionBallot(req.params.id, {
       title,
@@ -768,11 +789,25 @@ export function electionsRouter(deps) {
       if (now < election.cutoffTime) {
         throw new HttpError(409, 'envelopes available after cutoff', { code: 'NOT_CLOSED' });
       }
-      const envelopes = store.listEnvelopes(election.id);
-      for (const env of envelopes) {
+      const listedEnvelopes = store.listEnvelopes(election.id);
+      for (const env of listedEnvelopes) {
         if ('userId' in env || 'choice' in env) {
           throw new HttpError(500, 'privacy invariant violated');
         }
+      }
+      // Flag excluded rows so guardian tooling skips them (same set the node sums).
+      const keptRows = new Set(
+        withoutExcludedEnvelopes(listedEnvelopes, store.excludedNullifiers(election.id)).envelopes,
+      );
+      const envelopes = listedEnvelopes.map((env) => (keptRows.has(env) ? env : { ...env, excluded: true }));
+      if (electionHasRanked(election)) {
+        // Rankings go in a separate list sorted by random rankingId, with no
+        // nullifier next to them. Excluded and deleted rows are dropped.
+        const live = envelopes.filter((env) => env.excluded !== true && env.is_deleted !== true);
+        const split = splitRankingsForGuardians(live);
+        const rows = splitRankingsForGuardians(envelopes).envelopes;
+        res.json({ electionId: String(election.id), envelopes: rows, rankings: split.rankings, nfp: true });
+        return;
       }
       res.json({ electionId: String(election.id), envelopes, nfp: true });
     }),
@@ -1078,6 +1113,7 @@ export function electionsRouter(deps) {
         nextPublishAt: result.nextPublishAt,
         vote: result.vote,
         receipt: result.receipt,
+        ...(result.rankingHash ? { rankingHash: result.rankingHash } : {}),
         message: ballotAcceptedMessage({ published: result.published, allowRevote: config.allowRevote === true }),
         nfp: true,
       });
@@ -1446,15 +1482,9 @@ export function electionsRouter(deps) {
         Number(election.acceptedBallots) - store.hiddenVoteCount(election.id) - store.liveExcludedCount(election.id),
       );
 
-      if (electionHasRanked(election)) {
-        throw new HttpError(
-          409,
-          'ranked tally is disabled until a verified shuffle exists; individual envelopes are not opened',
-          { code: 'RANKED_TALLY_DISABLED' },
-        );
-      }
 
       if (isOpensBallots(election)) {
+        assertSealedRankingAllowed(election);
         const bucket = store.guardianMaterial(election.id);
         const listed = store.listEnvelopes(election.id, { includeDeleted: true });
         const split = withoutExcludedEnvelopes(listed, store.excludedNullifiers(election.id));
@@ -1475,13 +1505,42 @@ export function electionsRouter(deps) {
         nums = opened.counts;
         source = 'opens_ballots';
         openedBallots = null;
+        if (electionHasRanked(election)) {
+          // Sealed ranked-choice: guardians opened each ranking envelope; IRV
+          // runs here and is recomputable from the published ranking set.
+          // Ranking hashes were already bound at cast time (AG tag) and on
+          // chain in the inbox batch (submitVoteBatchRanked).
+          irv = await openRankedTally(election, split.envelopes.filter((env) => env?.is_deleted !== true), bucket?.rankingPartials || []);
+          irv.aggregateFirstRoundMatches = firstChoiceMatches(election, nums, irv.counts);
+        }
       } else {
-        nums = parseTallyCounts(
-          req.body || {},
-          election.questions || [],
-          countedBallots,
-          election.ballotMethod,
-        );
+        if (!electionHasRanked(election)) {
+          nums = parseTallyCounts(
+            req.body || {},
+            election.questions || [],
+            countedBallots,
+            election.ballotMethod,
+          );
+        } else {
+          // Fixture / sum-only ranked elections: rankings were validated as
+          // plaintext payloads at intake, so IRV runs on them directly.
+          const listed = store.listEnvelopes(election.id);
+          const live = withoutExcludedEnvelopes(listed, store.excludedNullifiers(election.id)).envelopes;
+          const ballots = payloadsFromEnvelopes(live);
+          const ran = tallyBallots(election, ballots);
+          const rankedQuestions = ran.questions.filter((q) => q.ballotMethod === 'ranked_choice');
+          irv = {
+            ...ran,
+            rankedBallots: ballots.length,
+            invalidRankings: 0,
+            rankingSetHash: rankingSetHash(ballots),
+            roundsHash: roundsHash(rankedQuestions),
+            verification: RANKED_VERIFICATION,
+          };
+          // Counts are derived from the rankings (first-round for ranked
+          // questions), never typed in by the operator.
+          nums = ran.counts;
+        }
       }
 
       const countsHash = computeTallyHash(nums);
@@ -1494,6 +1553,25 @@ export function electionsRouter(deps) {
         guardianThreshold: election.tallyCeremony?.threshold ?? null,
       };
       if (irv?.questions?.length) extras.questions = irv.questions;
+      if (irv?.rankingSetHash) {
+        extras.ranked = {
+          rankingSetHash: irv.rankingSetHash,
+          roundsHash: irv.roundsHash,
+          rankedBallots: irv.rankedBallots,
+          invalidRankings: irv.invalidRankings,
+          swappedRankings: irv.swappedRankings ?? 0,
+          firstChoiceMismatches: irv.firstChoiceMismatches ?? 0,
+          unboundRankings: irv.unboundRankings ?? 0,
+          firstChoiceConsistent: irv.firstChoiceConsistent,
+          aggregateFirstRoundMatches: irv.aggregateFirstRoundMatches ?? null,
+          openedRankings: irv.openedRankings || null,
+          rankingHashes: irv.rankingHashes || null,
+          rankingRoot: chain?.isConfigured?.() && typeof chain.readRankingRoot === 'function'
+            ? await chain.readRankingRoot(chainElectionId(election)).catch(() => null)
+            : null,
+          verification: irv.verification,
+        };
+      }
       const tallied = await store.setTally(election.id, nums, extras);
       await explorer.append('tally', {
         electionId: String(tallied.id),
@@ -1505,6 +1583,7 @@ export function electionsRouter(deps) {
         countsHash,
         ballotMethod: tallied.tally?.ballotMethod,
         winners: (tallied.tally?.questions || []).map((q) => q.winner).filter(Boolean),
+        ...(extras.ranked ? { ranked: extras.ranked } : {}),
       });
       let l1Certification = {
         status: 'skipped',

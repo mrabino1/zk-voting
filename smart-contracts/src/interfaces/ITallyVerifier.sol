@@ -59,6 +59,8 @@ interface ITallyVerifier {
     error PlaintextMismatch();
     error NotElectionFactory();
     error KeyNotPosted();
+    error RankedBeforeTally(uint256 electionId);
+    error RankedCountTooHigh();
 
     event TallyPosted(uint256 indexed electionId, bytes32 countsHash, uint256 total);
     /// @notice Aggregate result. `aggregateHash` commits to the summed ciphertext,
@@ -72,6 +74,13 @@ interface ITallyVerifier {
     event InterimResultPosted(uint256 indexed electionId, bytes32 resultHash);
     event DisclosurePosted(uint256 indexed electionId, bytes32 disclosureHash);
     /// @notice Hash contribution to a running tally. Not a ballot and not an opening.
+    /// @notice Instant-runoff result for a sealed ranked election. `rankingSetHash` commits to
+    ///         the decrypted ranking set and `roundsHash` to the round transcript, so anyone can
+    ///         recompute IRV. Not ZK-proof verified; there is no verified shuffle yet.
+    event RankedResultPublished(
+        uint256 indexed electionId, bytes32 rankingSetHash, bytes32 roundsHash, bytes32 rankingRoot, uint256 rankedBallots
+    );
+
     event TallyComponentAdded(uint256 indexed electionId, uint256 index, bytes32 componentHash);
 
     /// @notice Factory that maps `electionId` → Election clone.
@@ -199,4 +208,14 @@ interface ITallyVerifier {
     function optionPartialPosted(uint256 electionId, uint8 option, address guardian) external view returns (bool);
 
     function finalPartialCount(uint256 electionId) external view returns (uint256);
+
+    /// @notice Publish the IRV commitments after the plurality tally. Tally operator, once.
+    function publishRankedResult(uint256 electionId, bytes32 rankingSetHash, bytes32 roundsHash, uint256 rankedBallots)
+        external;
+
+    /// @notice Posted IRV commitments, or zeros.
+    function rankedResult(uint256 electionId)
+        external
+        view
+        returns (bytes32 rankingSetHash, bytes32 roundsHash, bytes32 rankingRoot, uint256 rankedBallots, uint64 postedAt);
 }

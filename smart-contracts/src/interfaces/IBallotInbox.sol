@@ -52,6 +52,9 @@ interface IBallotInbox {
     error JointKeyMismatch();
     error UnknownSubmission();
     error SubmissionAlreadySettled();
+    error EmptyRankingCommitment();
+    error RankingCountMismatch();
+    error RankingsNotSorted();
 
     struct RelayerReceipt {
         uint256 submissionId;
@@ -65,6 +68,28 @@ interface IBallotInbox {
 
     /// @notice One batch landed. `count` is the number of ballots, not a choice total.
     event VoteBatchAccepted(uint256 indexed electionId, uint256 count, address relayer);
+
+    /// @notice One hourly batch carried sealed ranking envelope hashes.
+    /// @dev `digest` is keccak of the ascending hash list; it does not name submissions.
+    event RankingBatchCommitted(uint256 indexed electionId, bytes32 digest, uint256 count, bytes32 rankingRoot);
+
+    /// @notice `submitVoteBatch` plus the batch's ranking envelope hashes, strictly ascending.
+    ///         Binds each ranking at acceptance, in the same hourly batch, so it cannot be swapped.
+    function submitVoteBatchRanked(
+        uint256 electionId,
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots,
+        bytes32[] calldata rankingHashes
+    ) external;
+
+    /// @notice Running keccak chain over (prevRoot, batch digest, count), one link per batch.
+    function rankingRoot(uint256 electionId) external view returns (bytes32);
+
+    /// @notice Number of ranking commitments for the election.
+    function rankingCount(uint256 electionId) external view returns (uint256);
 
     function MAX_VOTE_BATCH() external view returns (uint256);
 

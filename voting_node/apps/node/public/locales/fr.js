@@ -1107,4 +1107,8 @@ export default {
     retryIn: "Vous pourrez envoyer un autre message dans environ {minutes} minutes.",
     retryIn_one: "Vous pourrez envoyer un autre message dans environ {minutes} minute.",
   },
+  sealedRanked: {
+    disclosure:
+      "Vote par classement dans un scrutin scellé : tant qu'il n'existe pas de mélange vérifié, les gardiens peuvent voir chaque classement individuel (pas qui l'a émis). Quiconque ouvre les classements peut aussi relier chaque classement à son bulletin chiffré sur la chaîne (pas à l'identité de l'électeur). Le résultat du second tour instantané peut être recalculé à partir des classements publiés, mais il n'est pas prouvé par ZK. Risque de coercition : un électeur qui conserve l'aléa de son bulletin peut montrer à quelqu'un qui le contraint quel bulletin sur la chaîne est le sien et désigner son classement dans l'ensemble publié ; un classement atypique peut aussi identifier un bulletin.",
+  },
 };

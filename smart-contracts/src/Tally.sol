@@ -26,7 +26,7 @@ import {CappedVerifierCall} from "./zk/CappedVerifierCall.sol";
 ///      1 AGGREGATE — operator submits `counts` plus one `aggregateHash`
 ///        of the homomorphic product. There is no per-ballot openings array,
 ///        in calldata or in storage. Ranked ballots are not opened here;
-///        the application refuses ranked tally until a shuffle exists.
+///        their IRV result is a separate commitment (`publishRankedResult`).
 ///        MockVerifier does not prove decryption; do not treat it as a ceremony.
 ///
 ///      Public inputs: `TallyPublicInputs` (TALLY_SOL_V2, every word reduced
@@ -100,6 +100,17 @@ contract Tally is ITallyVerifier {
     /// @dev Partials are stored per option. Option 0 is not reused for option 1.
     mapping(uint256 => mapping(uint256 => mapping(address => StoredPartial))) private _optionPartial;
     mapping(uint256 => uint256) private _finalPartialCount;
+
+    struct RankedResult {
+        bytes32 rankingSetHash;
+        bytes32 roundsHash;
+        bytes32 rankingRoot;
+        uint64 rankedBallots;
+        uint64 postedAt;
+    }
+
+    /// @dev Appended slot. Sealed ranked-choice (IRV) commitments.
+    mapping(uint256 => RankedResult) private _ranked;
 
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
@@ -275,6 +286,42 @@ contract Tally is ITallyVerifier {
         if (list.length >= MAX_TALLY_OPTIONS) revert TooManyTallyComponents();
         list.push(componentHash);
         emit TallyComponentAdded(electionId, list.length - 1, componentHash);
+    }
+
+    /// @inheritdoc ITallyVerifier
+    /// @dev Snapshots the inbox `rankingRoot`, so the published set is tied to the
+    ///      ranking envelopes committed on chain. `rankedBallots` cannot exceed the
+    ///      inbox ranking count. Rounds are recomputable, not proven in ZK.
+    function publishRankedResult(uint256 electionId, bytes32 rankingSetHash, bytes32 roundsHash, uint256 rankedBallots)
+        external
+        nonReentrant
+    {
+        _requireNotPaused();
+        if (rankingSetHash == bytes32(0) || roundsHash == bytes32(0)) revert EmptyCommitment();
+        _operatorParams(electionId);
+        if (!_tallied[electionId]) revert RankedBeforeTally(electionId);
+        if (_ranked[electionId].postedAt != 0) revert ResultAlreadyFinal(electionId);
+        IBallotInbox inbox = IBallotInbox(IElection(_factory.getElection(electionId)).inbox());
+        if (rankedBallots > inbox.rankingCount(electionId)) revert RankedCountTooHigh();
+        bytes32 root = inbox.rankingRoot(electionId);
+        _ranked[electionId] = RankedResult({
+            rankingSetHash: rankingSetHash,
+            roundsHash: roundsHash,
+            rankingRoot: root,
+            rankedBallots: uint64(rankedBallots),
+            postedAt: uint64(block.timestamp)
+        });
+        emit RankedResultPublished(electionId, rankingSetHash, roundsHash, root, rankedBallots);
+    }
+
+    /// @inheritdoc ITallyVerifier
+    function rankedResult(uint256 electionId)
+        external
+        view
+        returns (bytes32 rankingSetHash, bytes32 roundsHash, bytes32 rankingRoot, uint256 rankedBallots, uint64 postedAt)
+    {
+        RankedResult storage r = _ranked[electionId];
+        return (r.rankingSetHash, r.roundsHash, r.rankingRoot, r.rankedBallots, r.postedAt);
     }
 
     /// @inheritdoc ITallyVerifier

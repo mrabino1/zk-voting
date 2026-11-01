@@ -100,7 +100,7 @@ Meant to be visible. Process, not preference.
 | **Nullifiers** | That **this** uniqueness token was spent in election E. One row per nullifier. **Hourly from the first ballot, after the containing hour closes and the disclosure delay elapses.** A block smaller than the minimum waits. | `VoteAccepted`, `GET /api/explorer/nullifiers/:value` |
 | **Disqualification** | Commitment, election, **reason code** (e.g. `NOT_RESIDENT`), `evidenceHash`, issuer role, timestamps, revokes. | `DisqualificationRegistry`, explorer |
 | **Ballot hashes** | An `EG` ballot hash is the Poseidon digest of the ordered option-ciphertext vector (the primary, then each choice). Any other ciphertext is `keccak256(encryptedBallot) mod r`. Not the option. | Inbox, explorer vote row |
-| **Tallies** | Per-option **counts** after a posted tally. IRV **round transcript** (aggregates), not individual rankings. | `TallyPosted`, `/elections/:id/results` |
+| **Tallies** | Per-option **counts** after a posted tally. IRV **round transcript**, plus the opened ranking set in sorted order (no ids, no nullifiers, no submission order). | `TallyPosted`, `/elections/:id/results` |
 | **Hourly disclosure** | `lastClosedHourAt`, `delaySeconds`, `resultsMinVotes`, `minBlockVotes`, `acceptedBallotsDisclosed`, `nextPublishAt`. Policy `hourly-polling-place-unlinkability`. Defaults: hour `3600`, delay `1800`, gate `100`, block floor `10`. | [`disclosure.mjs`](./apps/node/src/disclosure.mjs), `GET /api/explorer/disclosure` |
 | **Parameters** | Start / cutoff, `ballotSpecHash`, verifier address, `maxParticipants`. | Election record |
 
@@ -174,7 +174,7 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 
 | Scheme | What is posted | Who can open it |
 | --- | --- | --- |
-| **`opens_ballots`** | `AG` \|\| Poseidon tag \|\| one-hot P-256 ElGamal ciphertexts under the Feldman joint public key | `t` guardians decrypt the **product** only. Per-ballot partials are refused. **NON-PRODUCTION.** |
+| **`opens_ballots`** | `AG` \|\| Poseidon tag \|\| one-hot P-256 ElGamal ciphertexts under the Feldman joint public key | `t` guardians decrypt the **product** only. Per-ballot partials on the AG ciphertext are refused (sealed rankings are a separate `RK` envelope). **NON-PRODUCTION.** |
 | **`sum_only` (legacy)** | Seed-keyed AES-GCM stand-in (`zk-voting-ballot-elgamal-standin`) when no tally pubkey | In the crypto, the **voter’s wrap seed**. The SPA does **not** also send plaintext `answers`. |
 | **EVM calldata** | `encryptedBallot` bytes on `submitVote` | Ciphertext is visible; option is not, unless someone has the opening key |
 | **Civic L2 JSON** | Vote tx is `nullifier` + `ballotHash` + roots. Ciphertext omitted from the proof batch | Sequencer may still have seen the submitted JSON |
@@ -186,7 +186,7 @@ Choice is not an on-chain plaintext field. How it is hidden **in transit** and *
 | Path | After cutoff | Invented `counts[]` that only match the **sum** |
 | --- | --- | --- |
 | **`sum_only` (default)** | Operator posts any vector with `sum(counts) == acceptedBallots` | **Accepted** (legacy demo). Operator cannot add or drop ballots; they **can** rearrange which option received them. |
-| **`opens_ballots`** | `t` guardians’ partials open the **summed** option ciphertexts. The Node stores those aggregate partials only. Ranked contests return `RANKED_TALLY_DISABLED` and are not opened. | A histogram that is not the discrete log of the product is **rejected** (`INVENTED_COUNTS`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A partial for one ballot hash fails `PER_BALLOT_PARTIAL`. |
+| **`opens_ballots`** | `t` guardians’ partials open the **summed** option ciphertexts. For plurality, the Node stores aggregate partials only. Ranked contests (polls, or sealed votes with the `sealedRankedChoice` opt-in) also store one partial per sealed ranking, keyed by a random `rankingId` (`ranking:<rankingId>`, never the nullifier), so the Node can run IRV. Trade-off: guardians see individual rankings in plaintext until a verified shuffle exists. Whoever opens the rankings can also match each ranking to its encrypted ballot on chain (not to the voter's identity), because the opened ranking carries the first-choice tag randomness `r`; `r` is never published. IRV is recomputable but not ZK-proven. A voter who keeps `r` can show a coercer their ballot and their ranking; a distinctive ranking pattern is a further coercion risk. | A histogram that is not the discrete log of the product is **rejected** (`INVENTED_COUNTS`). Fewer than `t` partials fail `THRESHOLD_NOT_MET`. A partial for one ballot hash fails `PER_BALLOT_PARTIAL`. |
 
 Counts are aggregates. There is no per-ballot openings list on the tally response or in the envelope row ([`tallyOpen.mjs`](./apps/node/src/tallyOpen.mjs)).
 

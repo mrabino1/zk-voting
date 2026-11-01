@@ -136,7 +136,7 @@ export function stripBallotPii(value) {
   const out = {};
   for (const [k, v] of Object.entries(value)) {
     if (BANNED_PRIVACY_KEYS.has(k) || isUnsafeObjectKey(k)) continue;
-    out[k] = k === 'encryptedBallot' ? v : stripBallotPii(v);
+    out[k] = k === 'encryptedBallot' || k === 'encryptedRanking' ? v : stripBallotPii(v);
   }
   return out;
 }

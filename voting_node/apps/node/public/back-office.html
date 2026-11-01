@@ -181,6 +181,19 @@
             </select>
             <span class="field-hint">Election default. YES_NO stays plurality. RANKED questions always use IRV. Created elections get a UUID public id and a short <code>/v/…</code> link; the factory <code>uint256</code> stays <code>onChainElectionId</code>.</span>
           </div>
+          <fieldset class="field" id="e-sealed-ranked">
+            <legend class="field-label">Ranked choice on a sealed vote (opt-in)</legend>
+            <label class="choice">
+              <input type="checkbox" id="e-sealed-ranked-on" name="sealedRankedChoice" />
+              <span>Allow ranked ballots on this sealed vote. Off by default. Polls do not need this.</span>
+            </label>
+            <p class="field-hint" id="e-sealed-ranked-disclosure"><span id="e-sealed-ranked-disclosure-text"></span> Voters see this notice on the ballot.</p>
+            <label class="choice">
+              <input type="checkbox" id="e-sealed-ranked-ack" name="sealedRankedDisclosureAck" disabled />
+              <span>I have read this disclosure and accept the trade-off.</span>
+            </label>
+            <span class="field-hint">The setting is bound into the ballot spec hash and cannot be changed after creation.</span>
+          </fieldset>
           <div class="grid-2">
             <div class="field">
               <label class="field-label" for="e-load">Load existing ballot</label>

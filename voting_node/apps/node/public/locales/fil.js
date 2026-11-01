@@ -1107,4 +1107,8 @@ export default {
     retryIn: "Maaari kang magpadala ng isa pang mensahe sa loob ng humigit-kumulang {minutes} minuto.",
     retryIn_one: "Maaari kang magpadala ng isa pang mensahe sa loob ng humigit-kumulang {minutes} minuto.",
   },
+  sealedRanked: {
+    disclosure:
+      "Ranked choice sa selyadong botohan: hangga't walang beripikadong shuffle, nakikita ng mga guardian ang bawat indibidwal na ranking (hindi kung sino ang bumoto). Maaari ring itugma ng nagbubukas ng mga ranking ang bawat ranking sa naka-encrypt na balota nito sa chain (hindi sa pagkakakilanlan ng botante). Maaaring kalkulahin muli ang resulta ng instant runoff mula sa mga nailathalang ranking, pero wala itong ZK proof. Panganib ng pamimilit: ang botanteng nagtatago ng randomness ng kanyang balota ay maaaring magpakita sa namimilit kung aling balota sa chain ang kanya at ituro ang kanyang ranking sa nailathalang set; maaari ring makilala ang isang balota sa kakaibang pattern ng ranking.",
+  },
 };

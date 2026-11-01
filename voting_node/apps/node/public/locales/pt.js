@@ -1107,4 +1107,8 @@ export default {
     retryIn: "Você pode enviar outra mensagem em cerca de {minutes} minutos.",
     retryIn_one: "Você pode enviar outra mensagem em cerca de {minutes} minuto.",
   },
+  sealedRanked: {
+    disclosure:
+      "Voto por classificação em uma votação selada: até existir um embaralhamento verificado, os guardiões podem ver cada classificação individual (não quem a enviou). Quem abre as classificações também pode associar cada uma à sua cédula criptografada na cadeia (não à identidade do eleitor). O resultado do segundo turno instantâneo pode ser recalculado a partir das classificações publicadas, mas não tem prova ZK. Risco de coação: um eleitor que guarda a aleatoriedade da sua cédula pode mostrar a quem o coage qual cédula na cadeia é a sua e apontar sua classificação no conjunto publicado; um padrão de classificação incomum também pode identificar uma cédula.",
+  },
 };

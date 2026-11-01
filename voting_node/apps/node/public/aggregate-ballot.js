@@ -53,8 +53,20 @@ function fieldHex(value) {
   return "0x" + (BigInt(value) % FIELD).toString(16).padStart(64, "0");
 }
 
-export function aggregateTag(choice, choiceRandomness) {
-  const tag = poseidonHashLeftRight(BigInt(choice), BigInt(choiceRandomness));
+/** Fresh private tag randomness in the scalar field (never zero). */
+export function freshChoiceRandomness() {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) + BigInt(b);
+  n %= FIELD;
+  return n === 0n ? 1n : n;
+}
+
+export function aggregateTag(choice, choiceRandomness, bindHash) {
+  let tag = poseidonHashLeftRight(BigInt(choice), BigInt(choiceRandomness));
+  // Sealed ranked-choice: the tag also commits to the ranking envelope hash,
+  // so the proven ballot hash binds the ranking at cast time.
+  if (bindHash != null && bindHash !== "") tag = poseidonHashLeftRight(tag, BigInt(bindHash) % FIELD);
   return { tag, hex: fieldHex(tag) };
 }
 
@@ -78,8 +90,9 @@ export function isAggregateEnvelope(hexOrBytes) {
  * @param {bigint|number|string} opts.choiceRandomness private tag randomness
  * @param {number} opts.nOptions
  * @param {bigint[]} [opts.scalars] test-only scalars, length nOptions
+ * @param {string} [opts.bindHash] sealed ranking envelope hash bound into the tag
  */
-export function encryptAggregateBallot({ jointPublicKey, choice, choiceRandomness, nOptions, scalars }) {
+export function encryptAggregateBallot({ jointPublicKey, choice, choiceRandomness, nOptions, scalars, bindHash }) {
   const n = Number(nOptions);
   const selected = Number(choice);
   if (!Number.isInteger(n) || n < 1 || n > 16) {
@@ -98,7 +111,7 @@ export function encryptAggregateBallot({ jointPublicKey, choice, choiceRandomnes
     const c2 = j === selected ? p256Add(shared, P256_G) : shared;
     points.push(pointToRaw(c1), pointToRaw(c2));
   }
-  const { tag, hex } = aggregateTag(selected, choiceRandomness);
+  const { tag, hex } = aggregateTag(selected, choiceRandomness, bindHash);
   const tagBytes = hexToBytes(hex);
   const header = new Uint8Array(2 + 32 + 1);
   header.set(AGGREGATE_MAGIC, 0);

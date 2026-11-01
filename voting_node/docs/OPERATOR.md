@@ -290,6 +290,15 @@ npm run l2:prover
 
 Details: [`docs/L2.md`](./L2.md).
 
+### Deploying through ZkVotingDeployer
+
+`./scripts/deploy.sh --via-deployer` deploys any target through
+`ZkVotingDeployer` (deterministic CREATE2, atomic wiring, admin handoff to
+`ADMIN`, sealed afterwards). For L1 on mainnet followed by an L2 on a new
+server, follow [L2_VPS_SETUP.md](./L2_VPS_SETUP.md); it also explains why
+mainnet cannot accept `RollupSettlement` and `BallotInbox` until the
+EIP-7954 code-size caps are live.
+
 ### Hourly L2 attic (S3 / Cloudflare R2)
 
 The sequencer wakes about every 2s. With `L2_SKIP_EMPTY_BLOCKS=1` (default) it writes a block only when there is a transaction, when the disclosure hour closes, or once per `L2_HEARTBEAT_SECONDS` (default **3600**). `L2_SKIP_EMPTY_BLOCKS=0` restores a file every tick, including empty blocks. Object storage is the **attic**, not the live L2 filesystem. A sidecar / cron job (`node l2/archive/cli.mjs archive`, Compose `archive` service, `./system_actions.sh archive`, or `npm run l2:archive`) uploads **sealed hours** older than `ARCHIVE_HOT_WINDOW_HOURS` (default **2**, aligned with the disclosure hour boundary) to a path-style S3 API:
@@ -565,8 +574,9 @@ identity commitment. The Node-side mechanics:
   tally does not open that ballot, so the token does not reveal the option.
   It can still show that the person voted.
 - The clearance entry point and per-ballot tally openings are not in the
-  client ABI. Plurality totals are an aggregate decryption. Ranked tally is
-  disabled until a verified shuffle exists.
+  client ABI. Plurality totals are an aggregate decryption. Ranked tally opens
+  each sealed ranking with `t` guardian partials and runs IRV (recomputable,
+  not ZK proof-verified; no verified shuffle).
 
 ## Secrets and production
 
@@ -575,7 +585,7 @@ identity commitment. The Node-side mechanics:
 - `RECEIPT_PDF_SECRET` (or `$DATA_DIR/receipt-pdf.secret`) is the HMAC / PDF owner-password material for locked vote-receipt PDFs **and** official outcome PDFs. It is not a voter password; readers open the PDF without one. Editing remains forbidden.
 - Contract addresses for a live election are pinned in the Node’s published election record.
 - After roll freeze, do not “fix” a tally in `zk-voting.json`. If the chain rejects a proof, the UI reports failure.
-- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. After cutoff, `t` guardians decrypt the **summed** option ciphertexts (`aggregate:<option>`), not each ballot. The guardian CLI refuses a per-ballot partial. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). The ceremony is NON-PRODUCTION. Do not use it for a binding election. Ranked tally is disabled.
+- `opens_ballots` elections run a **Feldman t-of-n** guardian ceremony (`p256-feldman-dkg-v1`). The Node stores public commitments and shares encrypted to each guardian’s transport key. It does not store a tally private key. After cutoff, `t` guardians decrypt the **summed** option ciphertexts (`aggregate:<option>`), not each ballot. The guardian CLI refuses a per-ballot partial on the AG ciphertext. See [`TALLY_GUARDIANS.md`](./TALLY_GUARDIANS.md). The ceremony is NON-PRODUCTION. Do not use it for a binding election. Ranked questions (polls, or sealed votes with the `sealedRankedChoice` opt-in) also need one `ranking:<rankingId>` partial per sealed `RK` ranking envelope, keyed by a random id; the guardian CLI emits them from the `rankings` list and skips excluded and deleted envelopes. Ranked choice on a sealed vote is an opt-in per-election setting (`sealedRankedChoice`, off by default, bound into `ballotSpecHash`; turning it on requires acknowledging a disclosure that voters also see). Polls always allow it. The voter seals the full ranking in a fixed-size `RK` envelope (one size per election) and its hash is folded into the proven AG tag, so it cannot be swapped after casting. Ranking hashes ride in the normal hourly and final `BallotInbox.submitVoteBatchRanked` batches. After cutoff, `t` guardians post `ranking:<rankingId>` partials, keyed by a random per-ballot id (never the nullifier); the opened set is published in sorted order. Trade-off: until a verified shuffle exists, guardians see each individual ranking in plaintext (not who cast it). The opened ranking carries the first-choice tag randomness `r` (needed for the cast-time first-choice check), so whoever opens the rankings (the Node, or `t` colluding guardians) can also match each ranking to its encrypted ballot on chain, and so to that ballot's nullifier and hourly batch (not to the voter's identity). `r` itself is never published in the opened set or the results. IRV is recomputable but not ZK-proven. Coercion: a voter who keeps `r` can show a coercer which on-chain ballot is theirs and then point to their ranking in the published set; a distinctive ranking pattern is a further coercion risk. Gas for ranked batches: `RANKED_BATCH_GAS` (default 24000000, capped at 200000000).
 
 ## L1 certification (tally hash on Ethereum)
 

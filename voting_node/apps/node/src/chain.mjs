@@ -50,6 +50,42 @@ export const ballotInboxAbi = [
   },
   {
     type: 'function',
+    name: 'submitVoteBatchRanked',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'electionId', type: 'uint256' },
+      { name: 'a', type: 'uint256[2][]' },
+      { name: 'b', type: 'uint256[2][2][]' },
+      { name: 'c', type: 'uint256[2][]' },
+      { name: 'publicInputs', type: 'uint256[][]' },
+      { name: 'encryptedBallots', type: 'bytes[]' },
+      { name: 'rankingHashes', type: 'bytes32[]' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'rankingCount',
+    stateMutability: 'view',
+    inputs: [{ name: 'electionId', type: 'uint256' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'rankingRoot',
+    stateMutability: 'view',
+    inputs: [{ name: 'electionId', type: 'uint256' }],
+    outputs: [{ type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'rankingCount',
+    stateMutability: 'view',
+    inputs: [{ name: 'electionId', type: 'uint256' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
+    type: 'function',
     name: 'closedBallotCount',
     stateMutability: 'view',
     inputs: [{ name: 'electionId', type: 'uint256' }],
@@ -398,6 +434,62 @@ function failureKind(err) {
   return 'transport';
 }
 
+/** True when a ranking hash is present but not a non-zero 32-byte hex value. */
+export function isBadRankingHash(value) {
+  if (value == null || value === '') return false;
+  const h = String(value).toLowerCase();
+  return !/^0x[0-9a-f]{64}$/.test(h) || /^0x0+$/.test(h);
+}
+
+function assertRankingHashOk(rankingHash) {
+  if (isBadRankingHash(rankingHash)) {
+    throw new HttpError(400, 'rankingHash must be a non-zero 32-byte hex value', { code: 'BAD_RANKING_HASH' });
+  }
+}
+
+/**
+ * Ranking hashes of a batch, ascending (the inbox requires strict order).
+ * Rows without a ranking are fine. A malformed or zero hash is never dropped
+ * silently: it throws BAD_RANKING_HASH so the batch stays queued and is flagged
+ * instead of landing ballots without their rankings.
+ */
+export function sortedRankingHashes(batch) {
+  const out = [];
+  const bad = [];
+  for (const row of batch || []) {
+    if (row?.rankingHash == null || row.rankingHash === '') continue;
+    const h = String(row.rankingHash).toLowerCase();
+    if (isBadRankingHash(h)) {
+      bad.push(row?.nullifier != null ? String(row.nullifier) : null);
+      continue;
+    }
+    out.push(h);
+  }
+  if (bad.length) {
+    const err = new Error(`BAD_RANKING_HASH: ${bad.length} malformed ranking hash(es) in batch`);
+    err.code = 'BAD_RANKING_HASH';
+    err.nullifiers = bad;
+    throw err;
+  }
+  out.sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : BigInt(x) > BigInt(y) ? 1 : 0));
+  return out.filter((h, i) => i === 0 || h !== out[i - 1]);
+}
+
+const RANKED_BATCH_GAS_DEFAULT = 24_000_000n;
+const RANKED_BATCH_GAS_CEILING = 200_000_000n;
+
+/** Gas for a ranked batch: RANKED_BATCH_GAS (default 24M), capped at 200M. */
+export function rankedBatchGas(config = {}) {
+  let gas = RANKED_BATCH_GAS_DEFAULT;
+  try {
+    if (config.rankedBatchGas != null && config.rankedBatchGas !== '') gas = BigInt(config.rankedBatchGas);
+  } catch {
+    gas = RANKED_BATCH_GAS_DEFAULT;
+  }
+  if (gas <= 0n) gas = RANKED_BATCH_GAS_DEFAULT;
+  return gas > RANKED_BATCH_GAS_CEILING ? RANKED_BATCH_GAS_CEILING : gas;
+}
+
 function rowToStored(electionKey, row) {
   return {
     electionKey,
@@ -407,6 +499,7 @@ function rowToStored(electionKey, row) {
     c: row.c.map((n) => n.toString()),
     inputs: row.inputs.map((n) => n.toString()),
     encryptedBallot: row.encryptedBallot,
+    ...(row.rankingHash ? { rankingHash: String(row.rankingHash) } : {}),
     startTime: row.startTime ?? 0,
     cutoffTime: row.cutoffTime ?? null,
     ...(Number(row.replayedAfterCutoffAt) > 0
@@ -423,6 +516,7 @@ function storedToRow(stored) {
     c: stored.c.map((n) => BigInt(n)),
     inputs: stored.inputs.map((n) => BigInt(n)),
     encryptedBallot: stored.encryptedBallot,
+    ...(stored.rankingHash ? { rankingHash: String(stored.rankingHash) } : {}),
     startTime: stored.startTime ?? 0,
     cutoffTime: stored.cutoffTime ?? null,
     ...(Number(stored.replayedAfterCutoffAt) > 0
@@ -584,19 +678,24 @@ export function createChain(config, extras = {}) {
   async function writeSubmitBatch({ inbox, electionId, batch, onHash }) {
     if (injectedBatch) return extras.writeSubmitBatch({ inbox, electionId, batch, onHash });
     let hash;
+    // Sealed ranked-choice: the batch carries its ranking hashes, sorted so
+    // calldata order does not line up with ballot (nullifier) order.
+    const rankingHashes = sortedRankingHashes(batch);
+    const args = [
+      asBigInt(electionId),
+      batch.map((row) => row.a),
+      batch.map((row) => row.b),
+      batch.map((row) => row.c),
+      batch.map((row) => row.inputs),
+      batch.map((row) => row.encryptedBallot),
+    ];
     try {
       hash = await wallet.writeContract({
         address: inbox,
         abi: ballotInboxAbi,
-        functionName: 'submitVoteBatch',
-        args: [
-          asBigInt(electionId),
-          batch.map((row) => row.a),
-          batch.map((row) => row.b),
-          batch.map((row) => row.c),
-          batch.map((row) => row.inputs),
-          batch.map((row) => row.encryptedBallot),
-        ],
+        functionName: rankingHashes.length ? 'submitVoteBatchRanked' : 'submitVoteBatch',
+        args: rankingHashes.length ? [...args, rankingHashes] : args,
+        ...(rankingHashes.length ? { gas: rankedBatchGas(config) } : {}),
       });
     } catch (err) {
       throw classifiedBatchError(err);
@@ -708,7 +807,7 @@ export function createChain(config, extras = {}) {
     }
   }
 
-  function deadLetterRow(key, row, err, at) {
+  function deadLetterRow(key, row, err, at, kind = 'chain_dead_letter') {
     const id = nullifierKey(row.nullifier);
     attempts.delete(attemptKey(key, id));
     const letter = {
@@ -725,7 +824,8 @@ export function createChain(config, extras = {}) {
     dropNullifiers(key, [row.nullifier]);
     backoffUntil.delete(revertBackoffKey(key, row.nullifier));
     splitLimit.delete(key);
-    pushAlert({ kind: 'chain_dead_letter', electionKey: key, nullifier: id, error: errorText(err), at });
+    pushAlert({ kind, electionKey: key, nullifier: id, error: errorText(err), at });
+    if (kind !== 'chain_dead_letter') letter.kind = kind;
     if (!config.quiet) {
       console.warn(`[zk-voting] isolated ballot ${id} for election ${key} moved to the dead letter: ${errorText(err)}`);
     }
@@ -843,9 +943,36 @@ export function createChain(config, extras = {}) {
    * @returns {{action: 'pending'|'transport'|'delivered'|'split'|'dead', error?: string, nullifier?: string}}
    */
   async function handleFlushError(key, batch, err, now) {
+    const at = Number(now) || Math.floor(Date.now() / 1000);
+    if (err?.code === 'BAD_RANKING_HASH') {
+      // Nothing was broadcast. Quarantine only the malformed rows (found from
+      // the batch itself, so a row without a nullifier is still caught) and let
+      // the rest of the batch, and the final batch, flush. Never retried.
+      inFlight.delete(key);
+      const listed = new Set((err.nullifiers || []).filter((n) => n != null).map((n) => String(n)));
+      const bad = batch.filter(
+        (row) => isBadRankingHash(row?.rankingHash) || (row?.nullifier != null && listed.has(nullifierKey(row.nullifier))),
+      );
+      if (!bad.length) {
+        rememberTransport(key, err, at);
+        return { action: 'transport' };
+      }
+      for (const row of bad) {
+        if (row?.nullifier == null) {
+          const queued = voteQueue.get(key) || [];
+          const left = queued.filter((q) => q !== row);
+          if (left.length) voteQueue.set(key, left);
+          else voteQueue.delete(key);
+          deadLetter.push({ electionKey: key, nullifier: null, kind: 'bad_ranking_hash', error: errorText(err), at });
+          pushAlert({ kind: 'bad_ranking_hash', electionKey: key, nullifier: null, error: errorText(err), at });
+          continue;
+        }
+        deadLetterRow(key, row, err, at, 'bad_ranking_hash');
+      }
+      return { action: 'dead', error: errorText(err), nullifier: bad[0]?.nullifier != null ? nullifierKey(bad[0].nullifier) : null };
+    }
     const kind = failureKind(err);
     const marker = inFlight.get(key);
-    const at = Number(now) || Math.floor(Date.now() / 1000);
     const flags = await spentMap(key, batch);
     if (flags.unknown) {
       if (marker?.txHash) return { action: 'pending' };
@@ -1069,7 +1196,7 @@ export function createChain(config, extras = {}) {
         });
       }
     },
-    async submitVote({ electionId, proof, publicInputs, encryptedBallot, startTime, cutoffTime, now }) {
+    async submitVote({ electionId, proof, publicInputs, encryptedBallot, rankingHash, startTime, cutoffTime, now }) {
       if (!configured) return null;
       const inbox = inboxAddress();
       if (!hasWallet || !inbox) {
@@ -1079,12 +1206,22 @@ export function createChain(config, extras = {}) {
           { code: 'CHAIN_NOT_READY' },
         );
       }
+      assertRankingHashOk(rankingHash);
       const interval = Number(config.disclosureIntervalSeconds) || 0;
       const key = String(electionId);
       const { a, b, c } = groth16Points(proof);
       const inputs = publicInputs.map((x) => asBigInt(x));
       const nullifier = inputs[2];
       if (interval <= 0) {
+        if (rankingHash) {
+          // A ranked ballot always goes through the batch path so its ranking
+          // hash is accepted in the same transaction as the ballot.
+          return writeSubmitBatch({
+            inbox,
+            electionId,
+            batch: [{ nullifier, a, b, c, inputs, encryptedBallot, rankingHash }],
+          });
+        }
         return writeSubmitVote({ inbox, electionId, a, b, c, inputs, encryptedBallot });
       }
       const queued = voteQueue.get(key) || [];
@@ -1098,6 +1235,7 @@ export function createChain(config, extras = {}) {
         c,
         inputs,
         encryptedBallot,
+        ...(rankingHash ? { rankingHash } : {}),
         startTime: startTime ?? 0,
         cutoffTime: cutoffTime ?? null,
       });
@@ -1134,7 +1272,8 @@ export function createChain(config, extras = {}) {
      * A duplicate enqueue keeps this request's row. An in-flight broadcast
      * is left alone so the caller can retry without deleting the stored ballot.
      */
-    async replaceQueuedVote({ electionId, proof, publicInputs, encryptedBallot, startTime, cutoffTime }) {
+    async replaceQueuedVote({ electionId, proof, publicInputs, encryptedBallot, rankingHash, startTime, cutoffTime }) {
+      assertRankingHashOk(rankingHash);
       const key = String(electionId);
       const { a, b, c } = groth16Points(proof);
       const inputs = (publicInputs || []).map((x) => asBigInt(x));
@@ -1153,6 +1292,7 @@ export function createChain(config, extras = {}) {
         c,
         inputs,
         encryptedBallot,
+        ...(rankingHash ? { rankingHash } : {}),
         startTime: startTime ?? 0,
         cutoffTime: cutoffTime ?? null,
       };
@@ -1351,6 +1491,18 @@ export function createChain(config, extras = {}) {
     },
     reloadVoteQueue() {
       loadQueue();
+    },
+    /** Inbox ranking root (sorted ranking hashes carried by ranked batches). */
+    async readRankingRoot(electionId) {
+      if (typeof extras.readRankingRoot === 'function') return extras.readRankingRoot(asBigInt(electionId));
+      const inbox = inboxAddress();
+      if (!configured || !publicClient || !inbox) return null;
+      return publicClient.readContract({
+        address: inbox,
+        abi: ballotInboxAbi,
+        functionName: 'rankingRoot',
+        args: [asBigInt(electionId)],
+      });
     },
     async flushVoteQueue(now) {
       if (!configured) return [];

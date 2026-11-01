@@ -225,20 +225,25 @@ export function normalizeQuestions(input) {
   });
 }
 
-export function canonicalBallotSpec({ title, questions }) {
-  return {
+export function canonicalBallotSpec({ title, questions, sealedRankedChoice }) {
+  const spec = {
     title: String(title || '').trim(),
     questions: normalizeQuestions(questions),
   };
+  // Opt-in sealed ranked-choice is part of the spec, so the setting is bound
+  // into ballotSpecHash (and the on-chain election params) at creation. Absent
+  // when off, so existing hashes do not change.
+  if (sealedRankedChoice === true) spec.sealedRankedChoice = true;
+  return spec;
 }
 
-export function hashBallotSpec({ title, questions }) {
-  const canonical = canonicalBallotSpec({ title, questions });
+export function hashBallotSpec({ title, questions, sealedRankedChoice }) {
+  const canonical = canonicalBallotSpec({ title, questions, sealedRankedChoice });
   return keccak256(stringToHex(stableStringify(canonical)));
 }
 
-export function resolveBallotSpecHash({ title, questions, ballotSpecHash }) {
-  const computed = hashBallotSpec({ title, questions });
+export function resolveBallotSpecHash({ title, questions, ballotSpecHash, sealedRankedChoice }) {
+  const computed = hashBallotSpec({ title, questions, sealedRankedChoice });
   if (ballotSpecHash) {
     const given = String(ballotSpecHash).trim().toLowerCase();
     if (given && given !== computed.toLowerCase()) {

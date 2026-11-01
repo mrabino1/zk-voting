@@ -6,6 +6,7 @@
 import { brandName } from "./brand.js";
 import { expectedCountLength, openingIndexFromAnswers } from "./tally-crypto.js";
 import { proveVote } from "./vote-proof.js";
+import { encryptRankingEnvelope } from "./ranked-envelope.js";
 import {
   collectAnswers,
   cssQuestionName,
@@ -19,8 +20,11 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
-import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
+import { freshChoiceRandomness } from "./aggregate-ballot.js";
+
 import { receiptHelpKey, t } from "./i18n.js";
+import { SEALED_RANKED_DISCLOSURE_KEY } from "./sealed-ranked-disclosure.js";
 
 function tallyEncryptionBlurb(election) {
   const ceremony = election.tallyCeremony;
@@ -92,6 +96,7 @@ export function buildVoteRequestBody({
   nullifier,
   ballotHash,
   encryptedBallot,
+  encryptedRanking,
   votePass,
   proof,
 }) {
@@ -102,6 +107,7 @@ export function buildVoteRequestBody({
     encryptedBallot,
     proof,
   };
+  if (encryptedRanking) body.encryptedRanking = encryptedRanking;
   if (votePass?.token && votePass?.signature) {
     body.votePass = { token: votePass.token, signature: votePass.signature };
   }
@@ -430,6 +436,9 @@ export async function renderVote(main, ctx) {
         h("span", { class: "aspect-prompt", text: question.prompt })
       ),
       question.description ? h("p", { class: "field-hint", text: question.description }) : null,
+      ranked && electionTypeNameOf(election) === "vote" && election.sealedRankedChoice === true
+        ? h("p", { class: "field-hint ranked-disclosure", role: "note", text: t(SEALED_RANKED_DISCLOSURE_KEY) })
+        : null,
       ranked
         ? rankedField(question, index)
         : h("p", { class: "field-hint", text: multi ? `Select up to ${question.maxSelections}.` : "Select one. Leaving this blank is an undervote." }),
@@ -770,25 +779,41 @@ export async function renderVote(main, ctx) {
     paint();
     announce("Confirm your passkey. Your choices will not appear on the receipt.");
 
-    if (questions.some((q) => isRankedQuestion(q, election.ballotMethod))) {
-      state.busy = false;
-      state.error =
-        "Ranked tally is disabled. A verified shuffle is not available, so individual rankings are not collected or opened.";
-      paint();
-      return;
-    }
+    // Sealed ranked-choice: the full ranking is encrypted to the guardian
+    // key; the one-hot ciphertext below carries the first choice only.
+    // Polls always seal rankings; a sealed vote only with the opt-in setting.
+    const isVote = electionTypeNameOf(election) === "vote";
+    const hasRanked =
+      questions.some((q) => isRankedQuestion(q, election.ballotMethod)) &&
+      (!isVote || election.sealedRankedChoice === true);
+    let sealedRanking = null;
     const choiceIndex = openingIndexFromAnswers(answers, questions);
     const tallyPubKey = election.tallyPubKey || election.tallyCeremony?.publicKey || null;
     const nOptions = expectedCountLength(questions);
 
     try {
       const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
+      // Sealed ranked-choice: encrypt the ranking first (with the first-choice
+      // index and tag randomness inside), then bind its hash into the proven
+      // AG tag, so the ranking cannot be swapped after the ballot is cast.
+      let choiceRandomness;
+      if (hasRanked) {
+        choiceRandomness = freshChoiceRandomness();
+        sealedRanking = await encryptRankingEnvelope({
+          jointPublicKey: election.tallyCeremony?.publicKey || tallyPubKey,
+          electionId: election.id,
+          answers: answers.filter((a) => Array.isArray(a.ranking)),
+          questions,
+          first: { index: choiceIndex, r: choiceRandomness.toString() },
+        });
+      }
       const auth = await wallet.authorizeBallot({
         electionId: election.id,
         chainElectionId: onChainId,
         tallyPubKey,
         choiceIndex,
         nOptions,
+        ...(sealedRanking ? { choiceRandomness, rankingHash: sealedRanking.rankingHash } : {}),
       });
       const publicInputs = mockVotePublicInputs({
         eligibleRoot: election.eligibleRoot,
@@ -819,6 +844,7 @@ export async function renderVote(main, ctx) {
       }
       const proof = await proveVote({ publicInputs, chainId });
       const body = buildVoteRequestBody({
+        encryptedRanking: sealedRanking?.rankingEnvelope,
         electionId: String(election.id),
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,

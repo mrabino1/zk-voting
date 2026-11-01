@@ -125,6 +125,12 @@ contract BallotInbox is IBallotInbox {
     mapping(uint256 => mapping(uint256 => mapping(uint8 => AcceptedCipher))) private _acceptedOpt;
     mapping(uint256 => uint64) private _acceptClock;
 
+    /// @dev Appended slots. Ranked-choice ranking envelope commitments.
+    /// @dev Reserved: was `_rankingHashOf` (#129). Kept so later slots never shift under a proxy.
+    mapping(uint256 => mapping(uint256 => bytes32)) private __deprecatedRankingHashOf;
+    mapping(uint256 => bytes32) private _rankingRoot;
+    mapping(uint256 => uint256) private _rankingCount;
+
     modifier nonReentrant() {
         if (_reentrancyLock != 0) revert ReentrantCall();
         _reentrancyLock = 1;
@@ -163,6 +169,49 @@ contract BallotInbox is IBallotInbox {
         uint256[][] calldata publicInputs,
         bytes[] calldata encryptedBallots
     ) external nonReentrant {
+        _acceptBatch(electionId, a, b, c, publicInputs, encryptedBallots);
+    }
+
+    /// @inheritdoc IBallotInbox
+    /// @dev The ranking hashes ride in the same hourly batch as the ballots. They must be
+    ///      strictly ascending, so their order carries no link to the batch's nullifiers.
+    ///      Only a per-election chain over (batch digest, count) is stored.
+    function submitVoteBatchRanked(
+        uint256 electionId,
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots,
+        bytes32[] calldata rankingHashes
+    ) external nonReentrant {
+        uint256 n = _acceptBatch(electionId, a, b, c, publicInputs, encryptedBallots);
+        uint256 m = rankingHashes.length;
+        if (m == 0 || m > n) revert RankingCountMismatch();
+        bytes32 prev;
+        for (uint256 i; i < m; ++i) {
+            bytes32 h = rankingHashes[i];
+            if (h == bytes32(0)) revert EmptyRankingCommitment();
+            if (i != 0 && uint256(h) <= uint256(prev)) revert RankingsNotSorted();
+            prev = h;
+        }
+        bytes32 digest = keccak256(abi.encodePacked(rankingHashes));
+        bytes32 root = keccak256(abi.encodePacked(_rankingRoot[electionId], digest, m));
+        _rankingRoot[electionId] = root;
+        unchecked {
+            _rankingCount[electionId] += m;
+        }
+        emit RankingBatchCommitted(electionId, digest, m, root);
+    }
+
+    function _acceptBatch(
+        uint256 electionId,
+        uint256[2][] calldata a,
+        uint256[2][2][] calldata b,
+        uint256[2][] calldata c,
+        uint256[][] calldata publicInputs,
+        bytes[] calldata encryptedBallots
+    ) internal returns (uint256) {
         _requireNotPaused();
         _requireRelayer();
         uint256 n = encryptedBallots.length;
@@ -193,6 +242,17 @@ contract BallotInbox is IBallotInbox {
         _lastBatchAt[electionId] = uint64(block.timestamp);
         // Count only. A yes/no split here would publish the batch tally.
         emit VoteBatchAccepted(electionId, n, msg.sender);
+        return n;
+    }
+
+    /// @inheritdoc IBallotInbox
+    function rankingRoot(uint256 electionId) external view returns (bytes32) {
+        return _rankingRoot[electionId];
+    }
+
+    /// @inheritdoc IBallotInbox
+    function rankingCount(uint256 electionId) external view returns (uint256) {
+        return _rankingCount[electionId];
     }
 
     /// @inheritdoc IBallotInbox
