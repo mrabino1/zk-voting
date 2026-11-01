@@ -12,7 +12,9 @@ path or query string is never echoed.
 | Script | What it does |
 | --- | --- |
 | [`start-anvil.sh`](./start-anvil.sh) | Start (or stop) a local Anvil chain and print its RPC URL |
-| [`deploy.sh`](./deploy.sh) | Run `DeployLocal`, `DeployL2`, or `DeployL1`, guard against a redeploy, write a record |
+| [`deploy.sh`](./deploy.sh) | Run `DeployLocal`, `DeployL2`, or `DeployL1`, guard against a redeploy, write a record; `--via-deployer` uses `ZkVotingDeployer`, `--verify` runs Etherscan verification |
+| [`deploy-fork-dryrun.sh`](./deploy-fork-dryrun.sh) | Mainnet-fork dry run of the L1 deploy via the deployer (`MAINNET_FORK_RPC_URL`; skipped when unset) |
+| [`l2-vps-bootstrap.sh`](./l2-vps-bootstrap.sh) | Bring up the L2 on a new server from the L1 record; see `docs/L2_VPS_SETUP.md` |
 | [`get-gas-economics.sh`](./get-gas-economics.sh) | Gas price, ETH/USD, bytecode sizes vs EIP-170/3860, deploy gas, per-call and per-election gas |
 | [`migrations-verify.sh`](./migrations-verify.sh) | Production-image boot check (unrelated to the above) |
 
@@ -70,6 +72,7 @@ keys. Never fund them on a real network.
 ```bash
 ./scripts/deploy.sh --target local                         # Anvil; unlocked dev account, no key needed
 ./scripts/deploy.sh --target local --dry-run               # simulate only
+./scripts/deploy.sh --target l1 --via-deployer --dry-run   # CREATE2 deployer, preview addresses
 DEPLOY_RPC_URL=<L2 EVM RPC> DEPLOYER_ACCOUNT=deployer ./scripts/deploy.sh --target l2
 L2_FACTORY=0x... BATCH_VERIFIER=0x... ./scripts/deploy.sh --target l1 --account deployer --dry-run
 ```

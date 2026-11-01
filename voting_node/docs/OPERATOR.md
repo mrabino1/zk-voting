@@ -290,6 +290,15 @@ npm run l2:prover
 
 Details: [`docs/L2.md`](./L2.md).
 
+### Deploying through ZkVotingDeployer
+
+`./scripts/deploy.sh --via-deployer` deploys any target through
+`ZkVotingDeployer` (deterministic CREATE2, atomic wiring, admin handoff to
+`ADMIN`, sealed afterwards). For L1 on mainnet followed by an L2 on a new
+server, follow [L2_VPS_SETUP.md](./L2_VPS_SETUP.md); it also explains why
+mainnet cannot accept `RollupSettlement` and `BallotInbox` until the
+EIP-7954 code-size caps are live.
+
 ### Hourly L2 attic (S3 / Cloudflare R2)
 
 The sequencer wakes about every 2s. With `L2_SKIP_EMPTY_BLOCKS=1` (default) it writes a block only when there is a transaction, when the disclosure hour closes, or once per `L2_HEARTBEAT_SECONDS` (default **3600**). `L2_SKIP_EMPTY_BLOCKS=0` restores a file every tick, including empty blocks. Object storage is the **attic**, not the live L2 filesystem. A sidecar / cron job (`node l2/archive/cli.mjs archive`, Compose `archive` service, `./system_actions.sh archive`, or `npm run l2:archive`) uploads **sealed hours** older than `ARCHIVE_HOT_WINDOW_HOURS` (default **2**, aligned with the disclosure hour boundary) to a path-style S3 API:
