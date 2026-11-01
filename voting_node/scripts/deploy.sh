@@ -38,10 +38,21 @@ Usage: $(basename "$0") [--target local|l2|l1] [options] [-- extra forge args]
   --force             redeploy even though addresses or a record exist
                       (sets FORCE_REDEPLOY=1; can split the chain of record)
   --yes               required to broadcast to Ethereum mainnet (chain id 1)
+  --via-deployer      deploy through ZkVotingDeployer (CREATE2, staged, admin
+                      handoff; script/DeployViaDeployer.s.sol) (DEPLOY_VIA_DEPLOYER)
+  --verify            after a broadcast, verify every contract on Etherscan
+                      (needs ETHERSCAN_API_KEY)               (VERIFY=1)
+  --code-size-limit N runtime code cap of the target chain    (ZK_VOTING_CODE_SIZE_LIMIT)
+                      default 24576 (EIP-170). --via-deployer refuses to
+                      simulate a contract above it.
   -h, --help          this help
 
 l1 also needs L2_FACTORY (or ELECTION_FACTORY_ADDRESS from the l2 run) and
 BATCH_VERIFIER, exactly as DeployL1.s.sol documents.
+
+--via-deployer reads ADMIN (final admin of every module; default: the
+signer). When ADMIN is not the signer, the admin-only follow-up calls are
+printed as ADMIN_TODO lines and saved in the record under adminTodo.
 USAGE
 }
 
@@ -56,6 +67,9 @@ DRY_RUN=0
 FORCE=0
 YES=0
 EXTRA=()
+VIA_DEPLOYER="${DEPLOY_VIA_DEPLOYER:-0}"
+VERIFY="${VERIFY:-0}"
+CODE_SIZE_LIMIT="${ZK_VOTING_CODE_SIZE_LIMIT:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,6 +81,9 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --yes) YES=1; shift ;;
+    --via-deployer) VIA_DEPLOYER=1; shift ;;
+    --verify) VERIFY=1; shift ;;
+    --code-size-limit) CODE_SIZE_LIMIT="${2:?--code-size-limit needs a value}"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
     --) shift; EXTRA=("$@"); break ;;
     *) usage >&2; die "unknown argument: $1" ;;
@@ -81,6 +98,15 @@ case "$TARGET" in
   l1) SCRIPT="DeployL1.s.sol"; CONTRACT="DeployL1" ;;
   *) die "--target must be local, l2, or l1 (got '$TARGET')" ;;
 esac
+if is_truthy "$VIA_DEPLOYER"; then
+  VIA_DEPLOYER=1
+  SCRIPT="DeployViaDeployer.s.sol"; CONTRACT="DeployViaDeployer"
+else
+  VIA_DEPLOYER=0
+fi
+if [[ -n "$CODE_SIZE_LIMIT" && ! "$CODE_SIZE_LIMIT" =~ ^[0-9]+$ ]]; then
+  die "--code-size-limit must be a number of bytes (got '$CODE_SIZE_LIMIT')"
+fi
 
 need forge "$FOUNDRY_HINT"
 need cast "$FOUNDRY_HINT"
@@ -170,6 +196,16 @@ if [[ "$FORCE" -eq 1 ]]; then
   FORGE_ENV+=(FORCE_REDEPLOY=1)
 fi
 
+if [[ "$VIA_DEPLOYER" -eq 1 ]]; then
+  FORGE_ENV+=(ZK_VOTING_DEPLOY_TARGET="$TARGET")
+  [[ "$DRY_RUN" -eq 1 ]] && FORGE_ENV+=(ZK_VOTING_DRY_RUN=1)
+  [[ "$CHAIN_ID" == "1" && "$YES" -eq 1 ]] && FORGE_ENV+=(ZK_VOTING_MAINNET_CONFIRMED=1)
+  [[ -n "$CODE_SIZE_LIMIT" ]] && FORGE_ENV+=(ZK_VOTING_CODE_SIZE_LIMIT="$CODE_SIZE_LIMIT")
+fi
+if is_truthy "$VERIFY" && [[ "$DRY_RUN" -eq 0 && -z "${ETHERSCAN_API_KEY:-}" ]]; then
+  die "--verify needs ETHERSCAN_API_KEY in the environment or .env"
+fi
+
 # --- dev / proving flags ----------------------------------------------------
 # Set these as ZK_VOTING_* (env or .env). The forge scripts read ZK_VOTING_*
 # directly; each one that is set is passed through to this forge run.
@@ -239,7 +275,12 @@ dry = dry == "1"
 
 # DeployLocal / DeployL1 / DeployL2 log NAME=value lines under "== Logs ==".
 values = {}
+admin_todo = []
 for line in open(log_file, encoding="utf-8", errors="replace"):
+    t = re.match(r"^\s+ADMIN_TODO (\S+) to=(0x[0-9a-fA-F]{40}) data=(0x[0-9a-fA-F]*)\s*$", line)
+    if t:
+        admin_todo.append({"call": t.group(1), "to": t.group(2), "data": t.group(3)})
+        continue
     m = re.match(r"^\s+([A-Z][A-Z0-9_]*)=(\S+)\s*$", line)
     if m:
         values[m.group(1)] = m.group(2)
@@ -313,6 +354,8 @@ if not dry:
         "values": other,
         "gas": {"total": total, "transactions": txs},
     }
+    if admin_todo:
+        rec["adminTodo"] = admin_todo
     os.makedirs(os.path.dirname(os.path.abspath(record)), exist_ok=True)
     with open(record, "w", encoding="utf-8") as fh:
         json.dump(rec, fh, indent=2)
@@ -325,6 +368,23 @@ keys = ["ELECTION_FACTORY_ADDRESS", "BALLOT_INBOX_ADDRESS", "VERIFIER_ADDRESS",
 for k in keys:
     if k in addresses:
         print(f"{k}={addresses[k]}")
+if admin_todo:
+    print("\nThe final admin must send these calls (multisig or the admin key):")
+    for t in admin_todo:
+        print(f"  {t['call']}: to={t['to']} data={t['data']}")
 if target == "l2" and "ELECTION_FACTORY_ADDRESS" in addresses:
     print(f"# for --target l1:\nL2_FACTORY={addresses['ELECTION_FACTORY_ADDRESS']}")
 PY
+
+# --- Etherscan verification -------------------------------------------------
+if is_truthy "$VERIFY" && [[ "$DRY_RUN" -eq 0 ]]; then
+  info ""
+  info "verifying on Etherscan (chain $CHAIN_ID)"
+  python3 "$(dirname "${BASH_SOURCE[0]}")/lib/verify_targets.py" "$BROADCAST_FILE" "$SC_DIR/out" |
+    while IFS='|' read -r addr name args; do
+      info "  $name at $addr"
+      (cd "$SC_DIR" && forge verify-contract "$addr" "$name" --chain "$CHAIN_ID" \
+        --constructor-args "$args" --watch) ||
+        warn "verification failed for $name at $addr (retry later with forge verify-contract)"
+    done
+fi
