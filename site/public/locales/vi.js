@@ -29,6 +29,9 @@ export default {
     pollVsVote: "Thăm dò và bỏ phiếu",
     selfHost: "Tự lưu trữ",
     forum: "Diễn đàn cộng đồng",
+    home: "Trang chủ {brand}",
+    logoAlt: "Biểu trưng {brand}",
+    skip: "Chuyển tới nội dung chính",
   },
   hero: {
     eyebrow: "Mã nguồn mở · Phi lợi nhuận · Tự lưu trữ được",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "thêm L2",
     batchesKeyed: "lô phiếu, mỗi lô khóa bằng",
     l1Sub: "Lớp quyết toán chung và sổ công khai lâu dài",
+    ethereum: "Tầng 1 Ethereum",
+    hashFormula: "hash(ID L2, UUID cuộc bầu)",
     l2data: "Dữ liệu L2",
     l1record: "Sổ L1",
     rebuild: "Kết quả dựng lại được từ bên nào cũng được",

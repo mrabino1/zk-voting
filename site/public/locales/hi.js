@@ -29,6 +29,9 @@ export default {
     pollVsVote: "जनमत और मतदान",
     selfHost: "स्वयं होस्ट",
     forum: "समुदाय मंच",
+    home: "{brand} मुखपृष्ठ",
+    logoAlt: "{brand} चिह्न",
+    skip: "मुख्य सामग्री पर जाएँ",
   },
   hero: {
     eyebrow: "मुक्त स्रोत · लाभ-रहित · स्वयं होस्ट योग्य",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "और L2",
     batchesKeyed: "मत-बैच, हर एक की कुंजी",
     l1Sub: "साझा निपटान परत और स्थायी सार्वजनिक अभिलेख",
+    ethereum: "एथेरियम परत 1",
+    hashFormula: "hash(L2 पहचान, चुनाव UUID)",
     l2data: "L2 आँकड़े",
     l1record: "L1 अभिलेख",
     rebuild: "नतीजे दोनों में से किसी से फिर बन सकते हैं",

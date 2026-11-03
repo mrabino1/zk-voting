@@ -28,6 +28,9 @@ export default {
     pollVsVote: "Poll vs Vote",
     selfHost: "Self-host",
     forum: "Community forum",
+    home: "{brand} home",
+    logoAlt: "{brand} logo",
+    skip: "Skip to main content",
   },
   hero: {
     eyebrow: "Open source · Not for profit · Self-hostable",
@@ -58,6 +61,8 @@ export default {
     moreL2s: "more L2s",
     batchesKeyed: "vote batches, each keyed by",
     l1Sub: "Shared settlement layer and permanent public record",
+    ethereum: "Ethereum L1",
+    hashFormula: "hash(L2 ID, election UUID)",
     l2data: "L2 data",
     l1record: "L1 record",
     rebuild: "Results can be rebuilt from either one",

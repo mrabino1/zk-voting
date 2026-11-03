@@ -29,6 +29,9 @@ export default {
     pollVsVote: "여론조사와 투표",
     selfHost: "직접 운영",
     forum: "커뮤니티 포럼",
+    home: "{brand} 홈",
+    logoAlt: "{brand} 로고",
+    skip: "본문으로 건너뛰기",
   },
   hero: {
     eyebrow: "오픈 소스 · 비영리 · 직접 운영 가능",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "더 많은 L2",
     batchesKeyed: "투표 묶음, 각각의 키는",
     l1Sub: "공유 정산 계층이자 영구 공개 기록",
+    ethereum: "이더리움 1계층",
+    hashFormula: "hash(L2 식별자, 선거 UUID)",
     l2data: "L2 자료",
     l1record: "L1 기록",
     rebuild: "결과는 어느 쪽에서든 다시 만들 수 있습니다",
