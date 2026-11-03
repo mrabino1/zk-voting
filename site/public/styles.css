@@ -110,10 +110,6 @@ footer{border-top:1px solid var(--line);padding:36px 0 28px;color:var(--muted);f
 .ballot-compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0 0 28px}
 .ballot-compare>*{min-width:0}
 .ballot-sheet{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:22px 22px 18px}
-#poll-column{box-shadow:inset 4px 0 0 var(--accent)}
-#vote-column{box-shadow:inset 4px 0 0 var(--accent2)}
-#poll-vs-vote[dir="rtl"] #poll-column{box-shadow:inset -4px 0 0 var(--accent)}
-#poll-vs-vote[dir="rtl"] #vote-column{box-shadow:inset -4px 0 0 var(--accent2)}
 .ballot-summary{margin:0 0 14px;color:var(--text);font-size:15px}
 .ballot-visual{margin:0 0 14px}
 .mini-ballot{display:block;width:100%;height:auto}
