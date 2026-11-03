@@ -29,6 +29,9 @@ export default {
     pollVsVote: "استطلاع مقابل اقتراع",
     selfHost: "استضافة ذاتية",
     forum: "منتدى المجتمع",
+    home: "الصفحة الرئيسية لـ {brand}",
+    logoAlt: "شعار {brand}",
+    skip: "انتقل إلى المحتوى الرئيسي",
   },
   hero: {
     eyebrow: "مفتوح المصدر · غير ربحي · قابل للاستضافة الذاتية",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "طبقات أخرى",
     batchesKeyed: "دفعات أصوات، كل واحدة مفتاحها",
     l1Sub: "طبقة تسوية مشتركة وسجل عام دائم",
+    ethereum: "إيثريوم الطبقة 1",
+    hashFormula: "hash(معرّف L2، UUID الانتخاب)",
     l2data: "بيانات L2",
     l1record: "سجل L1",
     rebuild: "يمكن إعادة بناء النتائج من أي منهما",

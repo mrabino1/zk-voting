@@ -1,7 +1,9 @@
 /**
  * Locale for the public landing page.
- * English is the default. The same ten languages as the Node UI are included.
- * The choice is stored in localStorage. Arabic sets the document to right-to-left.
+ * The language list matches the Node UI: English, then the ACS US home-language
+ * ranks after English. A saved choice in localStorage wins. Otherwise the first
+ * supported browser language is used. Otherwise English.
+ * Arabic is the Node UI's only right-to-left language, so it sets dir=rtl.
  */
 
 import { DEFAULT_BRAND_NAME, brandName } from "./brand.js";
@@ -30,6 +32,35 @@ export const HTML_LANG = Object.freeze({
   hi: "hi",
 });
 export const STORAGE_KEY = "site_lang";
+/** Same right-to-left set as the Node UI. */
+export const RTL_LOCALES = Object.freeze(["ar"]);
+/** Open Graph locale tags for the same list. */
+export const OG_LOCALE = Object.freeze({
+  en: "en_US",
+  es: "es_ES",
+  zh: "zh_CN",
+  fil: "fil_PH",
+  vi: "vi_VN",
+  ar: "ar_AR",
+  fr: "fr_FR",
+  ko: "ko_KR",
+  pt: "pt_BR",
+  hi: "hi_IN",
+});
+
+/** Primary language subtags from navigator.languages. Tagalog is both fil and tl. */
+const NAVIGATOR_PREFIXES = Object.freeze({
+  en: ["en"],
+  es: ["es"],
+  zh: ["zh"],
+  fil: ["fil", "tl"],
+  vi: ["vi"],
+  ar: ["ar"],
+  fr: ["fr"],
+  ko: ["ko"],
+  pt: ["pt"],
+  hi: ["hi"],
+});
 
 const CATALOGS = { en, es, zh, fil, vi, ar, fr, ko, pt, hi };
 const FLOW_LANE_SHIFT = 236;
@@ -43,7 +74,30 @@ export function isLocale(code) {
 }
 
 export function sectionDirection(locale) {
-  return locale === "ar" ? "rtl" : "ltr";
+  return RTL_LOCALES.includes(locale) ? "rtl" : "ltr";
+}
+
+/**
+ * First supported language in a navigator.languages-style list.
+ * An empty or unknown list falls back to English.
+ */
+export function matchNavigatorLocale(languages) {
+  const list = Array.isArray(languages) ? languages : [];
+  for (const tag of list) {
+    const norm = String(tag ?? "").trim().toLowerCase().replace(/_/g, "-");
+    if (!norm) continue;
+    const base = norm.split("-")[0];
+    for (const code of LOCALE_CODES) {
+      if (NAVIGATOR_PREFIXES[code].includes(base)) return code;
+    }
+  }
+  return "en";
+}
+
+/** A saved supported choice wins. Otherwise detect. Otherwise English. */
+export function initialLocale(stored, languages) {
+  if (isLocale(stored)) return stored;
+  return matchNavigatorLocale(languages);
 }
 
 /** Swap the poll and vote lanes so the poll lane leads from the right in Arabic. */
@@ -210,35 +264,69 @@ function fillElements(html, attr, render) {
   return html.replace(re, (_full, tag, attrs, key) => `<${tag}${attrs}>${render(key)}</${tag}>`);
 }
 
+function withHtmlLocale(html, locale) {
+  const code = isLocale(locale) ? locale : "en";
+  const lang = HTML_LANG[code] || "en";
+  const dir = sectionDirection(code);
+  return String(html).replace(/<html\b([^>]*)>/i, (_full, attrs) => {
+    let next = attrs;
+    if (/\blang="[^"]*"/.test(next)) next = next.replace(/\blang="[^"]*"/, `lang="${lang}"`);
+    else next = ` lang="${lang}"${next}`;
+    if (/\bdir="[^"]*"/.test(next)) next = next.replace(/\bdir="[^"]*"/, `dir="${dir}"`);
+    else next = ` dir="${dir}"${next}`;
+    return `<html${next}>`;
+  });
+}
+
+function withTranslatedAttr(html, dataAttr, attr, locale, brand) {
+  const re = new RegExp(`<([a-zA-Z0-9:-]+)(\\s[^>]*\\b${dataAttr}="([^"]+)"[^>]*)>`, "g");
+  const attrRe = new RegExp(`(^|\\s)${attr}="[^"]*"`);
+  return html.replace(re, (_full, tag, attrs, key) => {
+    const value = escapeAttr(translate(locale, key, brand));
+    const next = attrRe.test(attrs) ? attrs.replace(attrRe, `$1${attr}="${value}"`) : `${attrs} ${attr}="${value}"`;
+    return `<${tag}${next}>`;
+  });
+}
+
+function withLiteralContent(html, marker, value) {
+  const re = new RegExp(`<([a-zA-Z0-9:-]+)(\\s[^>]*\\b${marker}\\b[^>]*)>`, "g");
+  const escaped = escapeAttr(value);
+  const attrRe = /(^|\s)content="[^"]*"/;
+  return html.replace(re, (_full, tag, attrs) => {
+    const next = attrRe.test(attrs) ? attrs.replace(attrRe, `$1content="${escaped}"`) : `${attrs} content="${escaped}"`;
+    return `<${tag}${next}>`;
+  });
+}
+
 /** Replace data-i18n leaves and data-brand slots. Used by the render test. */
 export function translateMarkup(html, locale, brand = DEFAULT_BRAND_NAME) {
-  let out = fillElements(String(html), "data-i18n-html", (key) => safeHtml(translate(locale, key, brand)));
-  out = fillElements(out, "data-i18n", (key) => escapeText(translate(locale, key, brand)));
-  out = out.replace(/<([a-zA-Z0-9:-]+)(\s[^>]*\bdata-i18n-content="([^"]+)"[^>]*)>/g, (_full, tag, attrs, key) => {
-    const value = escapeAttr(translate(locale, key, brand));
-    const next = /\bcontent="/.test(attrs)
-      ? attrs.replace(/\bcontent="[^"]*"/, `content="${value}"`)
-      : `${attrs} content="${value}"`;
-    return `<${tag}${next}>`;
-  });
-  out = out.replace(/<([a-zA-Z0-9:-]+)(\s[^>]*\bdata-i18n-aria-label="([^"]+)"[^>]*)>/g, (_full, tag, attrs, key) => {
-    const value = escapeAttr(translate(locale, key, brand));
-    const next = /\baria-label="/.test(attrs)
-      ? attrs.replace(/\baria-label="[^"]*"/, `aria-label="${value}"`)
-      : `${attrs} aria-label="${value}"`;
-    return `<${tag}${next}>`;
-  });
+  const code = isLocale(locale) ? locale : "en";
+  let out = withHtmlLocale(html, code);
+  out = fillElements(out, "data-i18n-html", (key) => safeHtml(translate(code, key, brand)));
+  out = fillElements(out, "data-i18n", (key) => escapeText(translate(code, key, brand)));
+  out = withTranslatedAttr(out, "data-i18n-content", "content", code, brand);
+  out = withTranslatedAttr(out, "data-i18n-aria-label", "aria-label", code, brand);
+  out = withTranslatedAttr(out, "data-i18n-alt", "alt", code, brand);
+  out = withLiteralContent(out, "data-brand-content", brand);
+  out = withLiteralContent(out, "data-og-current", OG_LOCALE[code] || "en_US");
   return refreshWordmarkTitle(replaceDataBrand(out, brand), brand);
 }
 
 function readStored() {
   try {
-    if (typeof localStorage === "undefined") return "en";
+    if (typeof localStorage === "undefined") return null;
     const stored = localStorage.getItem(STORAGE_KEY);
-    return isLocale(stored) ? stored : "en";
+    return isLocale(stored) ? stored : null;
   } catch {
-    return "en";
+    return null;
   }
+}
+
+function browserLanguages() {
+  if (typeof navigator === "undefined") return [];
+  const list = navigator.languages;
+  if (list && typeof list.length === "number" && list.length > 0) return Array.from(list);
+  return navigator.language ? [navigator.language] : [];
 }
 
 function setTransform(el, value) {
@@ -269,6 +357,16 @@ function apply(locale) {
     const key = el.getAttribute("data-i18n-aria-label");
     if (key) el.setAttribute("aria-label", translate(code, key, brand));
   });
+  document.querySelectorAll("[data-i18n-alt]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-alt");
+    if (key) el.setAttribute("alt", translate(code, key, brand));
+  });
+  document.querySelectorAll("[data-brand-content]").forEach((el) => {
+    el.setAttribute("content", brand);
+  });
+  document.querySelectorAll("[data-og-current]").forEach((el) => {
+    el.setAttribute("content", OG_LOCALE[code] || "en_US");
+  });
   document.querySelectorAll("[data-brand]").forEach((el) => {
     paintBrandWordmark(el, brand);
   });
@@ -287,13 +385,12 @@ function apply(locale) {
     setTransform(flow.querySelector("#flow-poll-lane"), lanes.poll);
     setTransform(flow.querySelector("#flow-vote-lane"), lanes.vote);
   }
-  const select = document.getElementById("lang-switcher");
-  if (select) {
+  document.querySelectorAll("select[data-lang-switcher]").forEach((select) => {
     for (const opt of select.options) {
       opt.textContent = translate(code, `lang.${opt.value}`, brand);
     }
     select.value = code;
-  }
+  });
 }
 
 export function setLocale(code) {
@@ -310,12 +407,13 @@ export function setLocale(code) {
 function boot() {
   if (typeof document === "undefined") return;
   const start = () => {
-    const select = document.getElementById("lang-switcher");
-    if (select && select.dataset.bound !== "1") {
+    document.querySelectorAll("select[data-lang-switcher]").forEach((select) => {
+      if (select.dataset.bound === "1") return;
       select.dataset.bound = "1";
       select.addEventListener("change", () => setLocale(select.value));
-    }
-    setLocale(readStored());
+    });
+    // Detect on first visit. Persist only after an explicit choice.
+    apply(initialLocale(readStored(), browserLanguages()));
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

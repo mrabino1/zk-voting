@@ -29,6 +29,9 @@ export default {
     pollVsVote: "Encuesta y votación",
     selfHost: "Autoalojar",
     forum: "Foro de la comunidad",
+    home: "Inicio de {brand}",
+    logoAlt: "Logotipo de {brand}",
+    skip: "Saltar al contenido principal",
   },
   hero: {
     eyebrow: "Código abierto · Sin fines de lucro · Autoalojable",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "más L2",
     batchesKeyed: "lotes de votos, cada uno identificado por",
     l1Sub: "Capa de liquidación compartida y registro público permanente",
+    ethereum: "Capa 1 de Ethereum",
+    hashFormula: "hash(ID de la L2, UUID de la elección)",
     l2data: "Datos L2",
     l1record: "Registro L1",
     rebuild: "Los resultados se reconstruyen desde cualquiera",
