@@ -139,7 +139,7 @@ test('poll vs vote copy covers the same keys in all 10 locales', () => {
   assert.ok(enKeys.length >= 170);
   const html = pageHtml();
   const used = [];
-  for (const attr of ['data-i18n', 'data-i18n-html', 'data-i18n-content', 'data-i18n-aria-label']) {
+  for (const attr of ['data-i18n', 'data-i18n-html', 'data-i18n-content', 'data-i18n-aria-label', 'data-i18n-alt']) {
     used.push(...[...html.matchAll(new RegExp(`${attr}="([^"]+)"`, 'g'))].map((m) => m[1]));
   }
   assert.ok(used.length >= 160);
@@ -307,4 +307,6 @@ test('comparison stacks on a narrow screen and motion can be reduced', () => {
   assert.match(css, /\.lang-label select:focus-visible\{outline:2px solid var\(--accent2\);outline-offset:2px\}/);
   assert.match(css, /\.mini-ballot text\{direction:ltr;unicode-bidi:isolate\}/);
   assert.match(css, /\.vz-svg text\{[^}]*direction:ltr;unicode-bidi:isolate\}/);
+  assert.match(css, /html\[dir="rtl"\] \.eyebrow\{letter-spacing:0\}/);
+  assert.match(css, /html\[dir="rtl"\] \.ballot-visual\{transform:scaleX\(-1\)\}/);
 });

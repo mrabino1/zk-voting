@@ -29,6 +29,9 @@ export default {
     pollVsVote: "Sondage et scrutin",
     selfHost: "Auto-héberger",
     forum: "Forum communautaire",
+    home: "Accueil {brand}",
+    logoAlt: "Logo {brand}",
+    skip: "Aller au contenu principal",
   },
   hero: {
     eyebrow: "Ouvert · Sans but lucratif · Auto-hébergeable",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "d'autres L2",
     batchesKeyed: "lots de votes, chacun identifié par",
     l1Sub: "Couche de règlement partagée et registre public durable",
+    ethereum: "Couche 1 Ethereum",
+    hashFormula: "hash(ID de la L2, UUID de l'élection)",
     l2data: "Données L2",
     l1record: "Registre L1",
     rebuild: "Les résultats se reconstruisent depuis l'un ou l'autre",

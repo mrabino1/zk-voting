@@ -29,6 +29,9 @@ export default {
     pollVsVote: "Palatanungan at botohan",
     selfHost: "Sariling pagpapatakbo",
     forum: "Forum ng komunidad",
+    home: "Tahanan ng {brand}",
+    logoAlt: "Logo ng {brand}",
+    skip: "Lumaktaw sa pangunahing nilalaman",
   },
   hero: {
     eyebrow: "Bukas na kodigo · Hindi para kumita · Maaaring patakbuhin nang sarili",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "iba pang L2",
     batchesKeyed: "mga bungkos ng boto, bawat isa ay may susing",
     l1Sub: "Pinaghahatiang patong ng pagsasaayos at permanenteng pampublikong tala",
+    ethereum: "Ethereum na L1",
+    hashFormula: "hash(ID ng L2, UUID ng halalan)",
     l2data: "Datos ng L2",
     l1record: "Tala ng L1",
     rebuild: "Maaaring buuin muli ang resulta mula sa alinman",

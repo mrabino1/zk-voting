@@ -3,22 +3,68 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    /* html lang/dir before first paint. Same list as site/public/i18n.js.
+       Saved site_lang wins; otherwise the first supported navigator language; otherwise English.
+       Arabic is the only right-to-left language. */
+    (function () {
+      var tags = { en: "en", es: "es", zh: "zh-Hans", fil: "fil", vi: "vi", ar: "ar", fr: "fr", ko: "ko", pt: "pt-BR", hi: "hi" };
+      var prefixes = { en: ["en"], es: ["es"], zh: ["zh"], fil: ["fil", "tl"], vi: ["vi"], ar: ["ar"], fr: ["fr"], ko: ["ko"], pt: ["pt"], hi: ["hi"] };
+      function match(list) {
+        var langs = list || [];
+        for (var i = 0; i < langs.length; i++) {
+          var base = String(langs[i] || "").toLowerCase().replace(/_/g, "-").split("-")[0];
+          if (!base) continue;
+          for (var code in prefixes) {
+            if (prefixes[code].indexOf(base) !== -1) return code;
+          }
+        }
+        return "en";
+      }
+      var code = "en";
+      try {
+        var stored = window.localStorage.getItem("site_lang");
+        code = tags[stored] ? stored : match(navigator.languages || [navigator.language || "en"]);
+      } catch (err) {
+        try { code = match(navigator.languages || [navigator.language || "en"]); } catch (err2) { code = "en"; }
+      }
+      document.documentElement.lang = tags[code] || "en";
+      document.documentElement.dir = code === "ar" ? "rtl" : "ltr";
+    })();
+  </script>
   <meta name="brand-name" content="ZK-Voting">
   <title data-i18n="meta.title">ZK-Voting: private ballots, verifiable results, self-hosted</title>
   <meta name="description" data-i18n-content="meta.description" content="ZK-Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zk-voting.org/">
+  <meta property="og:site_name" data-brand-content content="ZK-Voting">
+  <meta property="og:title" data-i18n-content="meta.title" content="ZK-Voting: private ballots, verifiable results, self-hosted">
+  <meta property="og:description" data-i18n-content="meta.description" content="ZK-Voting is a not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs check eligibility and the tally without publishing anyone's choice.">
+  <meta property="og:locale" data-og-current content="en_US">
+  <meta property="og:locale:alternate" content="es_ES">
+  <meta property="og:locale:alternate" content="zh_CN">
+  <meta property="og:locale:alternate" content="fil_PH">
+  <meta property="og:locale:alternate" content="vi_VN">
+  <meta property="og:locale:alternate" content="ar_AR">
+  <meta property="og:locale:alternate" content="fr_FR">
+  <meta property="og:locale:alternate" content="ko_KR">
+  <meta property="og:locale:alternate" content="pt_BR">
+  <meta property="og:locale:alternate" content="hi_IN">
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="brand-mark.svg?v=be53df128b" type="image/svg+xml">
   <link rel="icon" href="favicon-32.png?v=ac966d961d" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=c968590ce2" sizes="180x180">
   <!-- #0d0d0f is this page's background. The app manifest uses #0e0f11, which is that page's canvas. -->
   <link rel="manifest" href="site.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=667ade6d9f">
+  <link rel="stylesheet" href="styles.css?v=599da7fc80">
 </head>
 <body>
   <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets, no embedded demo. -->
+  <a class="skip-link" href="#main" data-i18n="nav.skip">Skip to main content</a>
   <header class="nav">
     <div class="wrap nav-inner">
-      <a class="brand" href="/"><img class="logo" src="brand-mark-dark.svg?v=8f05ee7a22" alt="" width="30" height="36"><span class="wordmark" title="ZK-Voting"><span data-brand><span class="brand-zk">ZK</span><span class="brand-rest">-Voting</span></span></span></a>
+      <a class="brand" href="/" aria-label="ZK-Voting home" data-i18n-aria-label="nav.home"><img class="logo" src="brand-mark-dark.svg?v=8f05ee7a22" alt="ZK-Voting logo" data-i18n-alt="nav.logoAlt" width="30" height="36"><span class="wordmark" title="ZK-Voting"><span data-brand><span class="brand-zk">ZK</span><span class="brand-rest">-Voting</span></span></span></a>
+      <div class="nav-tools">
       <nav aria-label="Main" data-i18n-aria-label="nav.main">
         <a href="#vision" data-i18n="nav.vision">Vision</a>
         <a href="#why" data-i18n="nav.why">Why it matters</a>
@@ -28,10 +74,26 @@
         <a href="#self-host" data-i18n="nav.selfHost">Self-host</a>
         <a class="btn btn-sm" href="https://community.zk-voting.org" data-i18n="nav.forum">Community forum</a>
       </nav>
+      <label class="lang-label nav-lang">
+        <span class="visually-hidden" data-i18n="lang.label">Language</span>
+        <select id="lang-switcher" data-lang-switcher>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="zh">中文</option>
+          <option value="fil">Filipino</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="ar">العربية</option>
+          <option value="fr">Français</option>
+          <option value="ko">한국어</option>
+          <option value="pt">Português</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+      </label>
+      </div>
     </div>
   </header>
 
-  <main>
+  <main id="main" tabindex="-1">
     <section class="hero">
       <div class="wrap">
         <p class="eyebrow" data-i18n="hero.eyebrow">Open source &middot; Not for profit &middot; Self-hostable</p>
@@ -97,9 +159,9 @@
               <path class="vz-flow vz-dash-line" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5" d="M452 176V262" marker-end="url(#vz-arrow)"/>
               <rect class="vz-pill" fill="#141418" stroke="#a78bfa" stroke-width="1.5" x="100" y="196" width="320" height="46" rx="23"/>
               <text class="vz-s" fill="#e9e9ee" font-size="13" x="260" y="215" text-anchor="middle" data-i18n="vision.batchesKeyed">vote batches, each keyed by</text>
-              <text class="vz-code" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="234" text-anchor="middle">hash(L2 ID, election UUID)</text>
+              <text class="vz-code" fill="#a78bfa" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" x="260" y="234" text-anchor="middle" data-i18n="vision.hashFormula">hash(L2 ID, election UUID)</text>
               <rect class="vz-l1" fill="#231d36" stroke="#8b5cf6" stroke-width="2" x="10" y="270" width="500" height="92" rx="14"/>
-              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="306" text-anchor="middle">Ethereum L1</text>
+              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="306" text-anchor="middle" data-i18n="vision.ethereum">Ethereum L1</text>
               <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="332" text-anchor="middle" data-i18n="vision.l1Sub">Shared settlement layer and permanent public record</text>
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M140 384H380" marker-start="url(#vz-arrow)" marker-end="url(#vz-arrow)"/>
               <text class="vz-m" fill="#a1a1ad" font-size="14" x="70" y="389" text-anchor="middle" data-i18n="vision.l2data">L2 data</text>
@@ -157,7 +219,7 @@
               <path class="vz-flow" fill="none" stroke="#a78bfa" stroke-width="2" d="M357 346V384" marker-end="url(#vz-arrow2)"/>
               <text class="vz-s" fill="#e9e9ee" font-size="13" x="347" y="372" text-anchor="end" data-i18n="vision.batchWord">batch</text>
               <rect class="vz-l1" fill="#231d36" stroke="#8b5cf6" stroke-width="2" x="10" y="388" width="500" height="72" rx="14"/>
-              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="420" text-anchor="middle">Ethereum L1</text>
+              <text class="vz-h" fill="#e9e9ee" font-size="17" font-weight="700" x="260" y="420" text-anchor="middle" data-i18n="vision.ethereum">Ethereum L1</text>
               <text class="vz-m" fill="#a1a1ad" font-size="14" x="260" y="444" text-anchor="middle" data-i18n="vision.settled">root committed under hash(L2 ID, election UUID)</text>
             </svg>
             <figcaption>
@@ -212,8 +274,8 @@
         <div class="poll-vs" id="poll-vs-vote" role="region" aria-labelledby="poll-vote-title" lang="en">
           <div class="poll-vs-bar">
             <p class="eyebrow"><span data-brand>ZK-Voting</span> · <span data-i18n="pollVote.eyebrow">Poll vs Vote</span></p>
-            <label class="lang-label" for="lang-switcher"><span data-i18n="lang.label">Language</span>
-              <select id="lang-switcher">
+            <label class="lang-label"><span data-i18n="lang.label">Language</span>
+              <select data-lang-switcher>
                 <option value="en">English</option>
                 <option value="es">Español</option>
                 <option value="zh">中文</option>
@@ -420,6 +482,6 @@ curl -fsS http://127.0.0.1:3000/health</pre>
       </span>
     </div>
   </footer>
-  <script type="module" src="i18n.js?v=38df9aeaf9"></script>
+  <script type="module" src="i18n.js?v=8b6bae93ee"></script>
 </body>
 </html>

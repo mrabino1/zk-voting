@@ -29,6 +29,9 @@ export default {
     pollVsVote: "民意调查与表决",
     selfHost: "自行托管",
     forum: "社区论坛",
+    home: "{brand} 首页",
+    logoAlt: "{brand} 标志",
+    skip: "跳到主要内容",
   },
   hero: {
     eyebrow: "开源 · 非营利 · 可自行托管",
@@ -59,6 +62,8 @@ export default {
     moreL2s: "更多 L2",
     batchesKeyed: "投票批次，每一批的键是",
     l1Sub: "共享结算层和永久公共记录",
+    ethereum: "以太坊一层",
+    hashFormula: "hash(L2 标识, 选举 UUID)",
     l2data: "L2 数据",
     l1record: "L1 记录",
     rebuild: "结果可以从任意一侧重建",
