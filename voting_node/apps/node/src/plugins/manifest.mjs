@@ -39,7 +39,7 @@ export const PLUGIN_EVENTS = Object.freeze([
 ]);
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
-const SEMVER_RE = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-[0-9A-Za-z.-]{1,32})?$/;
+const SEMVER_RE = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-([0-9A-Za-z.-]{1,32}))?$/;
 const ALLOWED_EXT = new Set(['.json', '.mjs', '.js', '.css', '.md', '.txt', '.png', '.webp']);
 const BARE_FILES = new Set(['LICENSE', 'NOTICE', 'README', 'CHANGELOG']);
 
@@ -53,18 +53,80 @@ export class ManifestError extends Error {
 }
 
 export function parseSemver(v) {
+  const parts = semverParts(v);
+  return parts ? parts.nums : null;
+}
+
+function semverParts(v) {
   const m = SEMVER_RE.exec(String(v || ''));
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  if (!m) return null;
+  return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] || '' };
+}
+
+/** Numeric semver compare. A release is newer than its own prerelease. Returns -1, 0, 1, or null. */
+export function semverCmp(a, b) {
+  const pa = semverParts(a);
+  const pb = semverParts(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < 3; i += 1) {
+    if (pa.nums[i] !== pb.nums[i]) return pa.nums[i] > pb.nums[i] ? 1 : -1;
+  }
+  if (pa.pre === pb.pre) return 0;
+  if (pa.pre && !pb.pre) return -1;
+  if (!pa.pre && pb.pre) return 1;
+  const as = pa.pre.split('.');
+  const bs = pb.pre.split('.');
+  const n = Math.min(as.length, bs.length);
+  for (let i = 0; i < n; i += 1) {
+    const aNum = /^\d+$/.test(as[i]);
+    const bNum = /^\d+$/.test(bs[i]);
+    if (aNum && bNum) {
+      const d = Number(as[i]) - Number(bs[i]);
+      if (d !== 0) return d > 0 ? 1 : -1;
+    } else if (aNum !== bNum) {
+      return aNum ? -1 : 1;
+    } else if (as[i] !== bs[i]) {
+      return as[i] > bs[i] ? 1 : -1;
+    }
+  }
+  if (as.length === bs.length) return 0;
+  return as.length > bs.length ? 1 : -1;
+}
+
+export function semverGt(a, b) {
+  return semverCmp(a, b) === 1;
 }
 
 export function semverGte(a, b) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return false;
-  for (let i = 0; i < 3; i += 1) {
-    if (pa[i] !== pb[i]) return pa[i] > pb[i];
+  const c = semverCmp(a, b);
+  return c === 1 || c === 0;
+}
+
+/**
+ * Absolute http(s) URL with no credentials. Used for a plugin's update feed
+ * and for the package URL inside that feed. There is no default host.
+ * @param {unknown} raw
+ * @param {string} field
+ * @param {number} [max]
+ * @returns {URL}
+ */
+export function assertPluginHttpUrl(raw, field, max = 2000) {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > max || /[\u0000-\u0020\\]/.test(raw)) {
+    throw new ManifestError(`${field} must be an http(s) URL`, field);
   }
-  return true;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ManifestError(`${field} must be an http(s) URL`, field);
+  }
+  if (url.username || url.password) throw new ManifestError(`${field} must not include credentials`, field);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ManifestError(`${field} must be an http(s) URL`, field);
+  }
+  if (!url.hostname || url.hostname.length > 253) throw new ManifestError(`${field} must be an http(s) URL`, field);
+  url.hash = '';
+  return url;
 }
 
 function str(m, key, max, required = true) {
@@ -180,6 +242,20 @@ export function validateManifest(m, ctx = {}) {
     }
   }
 
+  // Optional update feed. Absent means this plugin is not checked. There is
+  // no built-in catalogue and no default host.
+  let updateUrl = '';
+  if (m.updateUrl != null && m.updateUrl !== '') {
+    updateUrl = assertPluginHttpUrl(m.updateUrl, 'updateUrl', 500).href;
+  }
+  let updatePublicKey = '';
+  if (m.updatePublicKey != null && m.updatePublicKey !== '') {
+    updatePublicKey = String(m.updatePublicKey).trim().replace(/^ed25519:/i, '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(updatePublicKey)) {
+      throw new ManifestError('updatePublicKey must be a 32-byte ed25519 key (64 hex characters)', 'updatePublicKey');
+    }
+  }
+
   return {
     name,
     displayName: str(m, 'displayName', 80, false) || name,
@@ -197,6 +273,8 @@ export function validateManifest(m, ctx = {}) {
     adminPages,
     menu,
     checksums,
+    updateUrl,
+    updatePublicKey,
   };
 }
 

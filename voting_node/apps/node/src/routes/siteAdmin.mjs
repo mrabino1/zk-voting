@@ -154,6 +154,7 @@ export function siteAdminRouter(deps) {
       reauthWindowSeconds: Math.round(config.pluginReauthMs / 1000),
       pluginUploadsEnabled: Boolean(config.pluginsAllowUpload),
       menu: caps.includes('access_site_admin') ? plugins.adminMenu(req.user) : [],
+      pluginUpdateCount: caps.includes('manage_plugins') ? plugins.pendingUpdateCount() : 0,
       nfp: true,
     });
   });
@@ -295,9 +296,21 @@ export function siteAdminRouter(deps) {
       permissions: Object.entries(PLUGIN_PERMISSIONS).map(([id, description]) => ({ id, description })),
       events: PLUGIN_EVENTS,
       slots: CLIENT_SLOTS,
+      updateCheckIntervalMs: config.pluginUpdateIntervalMs,
+      updateCheckActive: plugins.updateCheckActive(),
+      pluginUpdateCount: plugins.pendingUpdateCount(),
       nfp: true,
     });
   });
+
+  router.post(
+    '/plugins/check-updates',
+    cap('manage_plugins'),
+    asyncHandler(async (req, res) => {
+      const result = await plugins.checkUpdates({ actor: req.user, automatic: false });
+      res.json({ ...result, pluginUpdateCount: plugins.pendingUpdateCount(), nfp: true });
+    }),
+  );
 
   const uploadGate = (_req, _res, next) => {
     if (!config.pluginsAllowUpload) {
@@ -341,6 +354,33 @@ export function siteAdminRouter(deps) {
         });
         throw err;
       }
+    }),
+  );
+
+  router.post(
+    '/plugins/:name/update',
+    cap('manage_plugins'),
+    reauth,
+    asyncHandler(async (req, res) => {
+      const result = await plugins.applyUpdate(req.params.name, {
+        actor: req.user,
+        acceptPermissions: req.body?.acceptPermissions,
+        expectedVersion: req.body?.version ? String(req.body.version) : null,
+      });
+      res.json({ plugin: result.plugin, applied: result.applied, needsReview: result.needsReview, nfp: true });
+    }),
+  );
+
+  router.post(
+    '/plugins/:name/auto-update',
+    cap('manage_plugins'),
+    reauth,
+    asyncHandler(async (req, res) => {
+      const result = await plugins.setAutoUpdate(req.params.name, {
+        actor: req.user,
+        enabled: Boolean(req.body?.enabled),
+      });
+      res.json({ ...result, nfp: true });
     }),
   );
 

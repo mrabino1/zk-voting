@@ -28,7 +28,7 @@ export const CAPABILITY_LABELS = Object.freeze({
   manage_admins: 'Grant or remove admin and super admin',
   manage_roles: 'Change other users\u2019 global roles (below admin)',
   view_users: 'List users and their roles',
-  manage_plugins: 'Import, enable, disable and uninstall plugins',
+  manage_plugins: 'Import, update, enable, disable and uninstall plugins',
   edit_layout: 'Edit navigation, widgets, regions and theme tokens',
   manage_branding: 'Rename the product (default \u201cZK-Voting\u201d)',
   manage_elections: 'Manage elections in plugins and admin pages',

@@ -29,7 +29,7 @@ The UI only hides what you can't use. Screens live at `/site-admin`
 | `manage_admins` | grant or remove `platform_super_admin` / `platform_admin` |
 | `edit_layout` | nav, regions/widgets, visibility, order, theme tokens |
 | `manage_branding` | rename the product (default **ZK-Voting**) |
-| `manage_plugins` | install, enable, disable, uninstall plugins |
+| `manage_plugins` | install, update, enable, disable, uninstall plugins |
 | `manage_elections` | election back-office plugin pages (e.g. backoffice-notes) |
 | `view_audit` | read and verify the site-admin audit chain |
 | `moderate_content` | reserved for moderation plugins |
@@ -55,7 +55,7 @@ The UI only hides what you can't use. Screens live at `/site-admin`
 | `GET /api/site-admin/users?q=` | `view_users` |
 | `PUT /api/site-admin/users/:id/role` `{ role }` | `manage_roles` (+ `manage_admins` for admin roles) |
 | `GET/PUT /api/site-admin/layout`, `POST /layout/reset` | `edit_layout` (renames need `manage_branding`) |
-| `GET /api/site-admin/plugins`, upload/enable/disable/delete | `manage_plugins` (+ recent sign-in to install/enable/uninstall) |
+| `GET /api/site-admin/plugins`, upload/enable/disable/delete, `POST /plugins/check-updates`, `POST /plugins/:name/update`, `POST /plugins/:name/auto-update` | `manage_plugins` (+ recent sign-in to install/enable/update/uninstall and to change automatic updates) |
 | `GET /api/site-admin/audit` | `view_audit` |
 | `GET /api/layout`, `GET /api/layout/theme.css` | public (audience-filtered) |
 
