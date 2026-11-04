@@ -47,6 +47,7 @@ async function call(method, url, body, extraHeaders = {}) {
     const err = new Error(json?.error || `HTTP ${res.status}`);
     err.status = res.status;
     err.code = json?.code;
+    if (Array.isArray(json?.requested)) err.requested = json.requested;
     throw err;
   }
   return json;
@@ -402,17 +403,58 @@ async function renderPlugins() {
     } else {
       actions.push(h('button', { type: 'button', class: 'btn btn-primary', text: 'Enable…', 'aria-label': `Enable ${p.displayName}`, onclick: () => enable(p) }));
     }
+    if (p.canUpdate && p.updateAvailable?.compatible) {
+      actions.push(' ', h('button', { type: 'button', class: 'btn btn-primary', text: 'Update now', 'aria-label': `Update ${p.displayName}`, onclick: () => updateNow(p) }));
+    }
     if (p.canUninstall) {
       actions.push(' ', h('button', { type: 'button', class: 'btn btn-secondary', text: 'Uninstall', 'aria-label': `Uninstall ${p.displayName}`, onclick: () => uninstall(p) }));
     }
+    const avail = p.updateAvailable;
+    const versionBits = [
+      h('strong', { text: p.displayName }),
+      h('br'),
+      h('span', { class: 'sa-code', text: `${p.name}@${p.version}` }),
+    ];
+    if (avail) {
+      versionBits.push(
+        ' ',
+        h('span', {
+          class: 'sa-pill is-update',
+          text: avail.compatible ? 'Update available' : 'Update incompatible',
+        }),
+        h('p', { class: 'sa-hint', text: avail.compatible ? `Version ${avail.version} is available.` : `Version ${avail.version} needs app ${avail.minAppVersion} or newer.` }),
+      );
+      if (avail.changelog) versionBits.push(h('p', { class: 'sa-hint sa-changelog', text: avail.changelog }));
+      if (avail.needsReview) versionBits.push(h('p', { class: 'sa-hint', text: 'This update changes permissions. Review them with Update now. Automatic update is waiting.' }));
+    }
+    if (p.updateMode === 'notice') {
+      versionBits.push(h('p', { class: 'sa-hint', text: 'Bundled with the app. No update source is set, so this screen only lists it.' }));
+    }
+    if (p.updateCheckError) versionBits.push(h('p', { class: 'sa-hint', text: p.updateCheckError }));
+    versionBits.push(h('p', { class: 'sa-hint', text: p.description }));
+    const statusCell = [
+      h('span', { class: `sa-pill${p.enabled ? ' is-on' : ''}`, text: p.enabled ? (p.running ? 'Enabled' : 'Enabled (error)') : 'Disabled' }),
+    ];
+    if (p.canUpdate) {
+      statusCell.push(h('label', { class: 'sa-field sa-check' },
+        h('input', {
+          type: 'checkbox',
+          checked: Boolean(p.autoUpdate),
+          'aria-label': `Automatic updates for ${p.displayName}`,
+          onchange: (e) => setAuto(p, e.target),
+        }),
+        h('span', { text: 'Automatic updates' }),
+      ));
+    }
+    if (p.error) statusCell.push(h('p', { class: 'sa-hint', text: p.error }));
     return h(
       'tr',
       {},
-      h('td', {}, h('strong', { text: p.displayName }), h('br'), h('span', { class: 'sa-code', text: `${p.name}@${p.version}` }), h('p', { class: 'sa-hint', text: p.description })),
+      h('td', {}, versionBits),
       h('td', { text: p.type }),
       h('td', { text: p.source === 'repo' ? 'Repo (plugins/)' : 'Uploaded' }),
       h('td', {}, p.permissions.map((perm) => h('span', { class: 'sa-pill', text: perm }))),
-      h('td', {}, h('span', { class: `sa-pill${p.enabled ? ' is-on' : ''}`, text: p.enabled ? (p.running ? 'Enabled' : 'Enabled (error)') : 'Disabled' }), p.error ? h('p', { class: 'sa-hint', text: p.error }) : null),
+      h('td', {}, statusCell),
       h('td', {}, actions),
     );
   });
@@ -458,12 +500,104 @@ async function renderPlugins() {
       say(`Could not uninstall: ${err.message}`, true);
     }
   }
+  async function setAuto(p, input) {
+    const enabled = input.checked;
+    try {
+      const r = await call('POST', `/api/site-admin/plugins/${encodeURIComponent(p.name)}/auto-update`, { enabled });
+      if (r.applyError) say(`Automatic updates ${enabled ? 'on' : 'off'} for ${p.displayName}, but the update did not apply: ${r.applyError.message}`, true);
+      else if (r.needsReview) say(`Automatic updates are on for ${p.displayName}. This update changes permissions; use Update now to review them.`);
+      else if (r.applied) say(`${p.displayName} updated to ${r.plugin.version}.`);
+      else say(`Automatic updates ${enabled ? 'on' : 'off'} for ${p.displayName}. They stay off until you turn them on.`);
+      await refreshMe();
+      await renderPlugins();
+    } catch (err) {
+      input.checked = !enabled;
+      say(err.code === 'REAUTH_REQUIRED' ? 'Sign in again to change automatic updates (recent sign-in required).' : `Could not change automatic updates: ${err.message}`, true);
+    }
+  }
+  async function updateNow(p) {
+    const avail = p.updateAvailable;
+    if (!avail) return;
+    const ok = await confirmDialog(
+      `Update ${p.displayName}?`,
+      [
+        h('p', {}, `${p.name} ${p.version} → ${avail.version}. `, p.entrypoints?.server ? h('strong', { text: 'Includes server code that runs with full trust.' }) : 'The package is checked before it replaces the installed copy.'),
+        avail.changelog ? h('p', { class: 'sa-changelog', text: avail.changelog }) : null,
+        h('p', { class: 'sa-hint sa-code', text: `sha256 ${avail.sha256}` }),
+        h('p', { class: 'sa-hint', text: 'A failed start restores the previous version.' }),
+      ],
+      'Update now',
+    );
+    if (!ok) return;
+    await sendUpdate(p, avail.version, null);
+  }
+  async function sendUpdate(p, version, acceptPermissions) {
+    try {
+      const body = { version };
+      if (acceptPermissions) body.acceptPermissions = acceptPermissions;
+      const r = await call('POST', `/api/site-admin/plugins/${encodeURIComponent(p.name)}/update`, body);
+      say(`${p.displayName} updated to ${r.plugin.version}.`);
+      await refreshMe();
+      await renderPlugins();
+    } catch (err) {
+      if (err.code === 'PERMISSIONS_NOT_ACCEPTED') {
+        const requested = err.requested || p.permissions;
+        const details = new Map((p.permissionDetails || []).map((d) => [d.id, d.description]));
+        const lines = requested.map((id) => ({ id, description: details.get(id) || 'Requested by the new version' }));
+        const accepted = await confirmDialog(
+          `Review permissions for ${p.displayName}`,
+          [
+            h('p', { text: 'The new version asks for a different set of permissions. It will not run until you accept them.' }),
+            h('ul', { class: 'sa-perms' }, lines.map((d) => h('li', {}, h('span', { class: 'sa-code', text: d.id }), ` — ${d.description}`))),
+          ],
+          'Accept and update',
+        );
+        if (accepted) await sendUpdate(p, version, requested);
+        return;
+      }
+      say(err.code === 'REAUTH_REQUIRED' ? 'Sign in again to update plugins (recent sign-in required).' : `Update failed: ${err.message}`, true);
+      await renderPlugins();
+    }
+  }
+
+  const available = data.plugins.filter((p) => p.updateAvailable);
+  const notice = available.length
+    ? h(
+      'div',
+      { class: 'sa-warn', role: 'status' },
+      h('p', {}, h('strong', { text: 'Update available. ' }), `${available.length} plugin${available.length === 1 ? '' : 's'} can be updated.`),
+      ...available.map((p) => h('p', {}, h('strong', { text: `${p.displayName} ${p.updateAvailable.version}` }), p.updateAvailable.changelog ? h('span', { class: 'sa-changelog', text: ` — ${p.updateAvailable.changelog}` }) : null)),
+    )
+    : null;
+  const intervalHint = !data.updateCheckIntervalMs
+    ? 'Automatic checks are off (PLUGIN_UPDATE_INTERVAL_MS=0). Use Check for updates.'
+    : data.updateCheckActive
+      ? `Automatic checks run about every ${formatUpdateInterval(data.updateCheckIntervalMs)} when a plugin has an update source. Automatic installation stays off until you turn it on for that plugin.`
+      : 'No plugin has an update source, so automatic checks stay idle.';
 
   view.replaceChildren(
     h(
       'section',
       { class: 'sa-card', 'aria-labelledby': 'sa-installed-h' },
       h('h2', { id: 'sa-installed-h', text: 'Installed plugins' }),
+      notice,
+      h('p', { class: 'sa-hint', text: intervalHint }),
+      h('p', {}, h('button', {
+        type: 'button',
+        class: 'btn btn-secondary',
+        text: 'Check for updates',
+        onclick: async () => {
+          try {
+            const r = await call('POST', '/api/site-admin/plugins/check-updates', {});
+            const n = r.pluginUpdateCount ?? r.updates?.filter((u) => u.available).length ?? 0;
+            say(n ? `Update available for ${n} plugin${n === 1 ? '' : 's'}.` : 'No updates found.');
+            await refreshMe();
+            await renderPlugins();
+          } catch (err) {
+            say(`Could not check for updates: ${err.message}`, true);
+          }
+        },
+      })),
       h('div', { class: 'sa-table-wrap' }, h('table', { class: 'sa-table' },
         h('caption', { class: 'visually-hidden', text: 'Installed plugins' }),
         h('thead', {}, h('tr', {}, ['Plugin', 'Type', 'Source', 'Permissions', 'Status', 'Actions'].map((t) => h('th', { scope: 'col', text: t })))),
@@ -522,8 +656,38 @@ const VIEWS = {
   audit: { cap: 'view_audit', render: renderAudit },
 };
 
+function formatUpdateInterval(ms) {
+  const minutes = Math.max(1, Math.round(ms / 60000));
+  if (minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return `${days} day${days === 1 ? '' : 's'}`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+  }
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
+function paintPluginBadge(count) {
+  const link = document.querySelector('#sa-nav a[data-view="plugins"]');
+  if (!link) return;
+  let badge = link.querySelector('.sa-update-badge');
+  const n = Number(count) || 0;
+  if (!n) {
+    badge?.remove();
+    if (link.getAttribute('aria-label')?.startsWith('Plugins,')) link.removeAttribute('aria-label');
+    return;
+  }
+  if (!badge) badge = link.appendChild(h('span', { class: 'sa-pill is-update sa-update-badge' }));
+  badge.textContent = String(n);
+  badge.title = `${n} plugin update${n === 1 ? '' : 's'} available`;
+  link.setAttribute('aria-label', `Plugins, ${n} update${n === 1 ? '' : 's'} available`);
+}
+
 async function refreshMe() {
   me = await call('GET', '/api/site-admin/me');
+  paintPluginBadge(can('manage_plugins') ? me.pluginUpdateCount : 0);
   const nav = $('#sa-nav');
   for (const li of [...nav.querySelectorAll('li[data-plugin-menu]')]) li.remove();
   for (const a of nav.querySelectorAll('a[data-view]')) {

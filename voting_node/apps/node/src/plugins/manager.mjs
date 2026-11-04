@@ -24,9 +24,20 @@ import {
   packageChecksum,
   PLUGIN_EVENTS,
   PLUGIN_PERMISSIONS,
+  semverGt,
+  semverGte,
   sha256Hex,
   validatePackage,
 } from './manifest.mjs';
+import {
+  fetchBounded,
+  parseUpdateFeed,
+  UPDATE_FEED_MAX_BYTES,
+  UPDATE_FEED_TIMEOUT_MS,
+  UPDATE_PACKAGE_TIMEOUT_MS,
+  UpdateFeedError,
+  verifyPackageSignature,
+} from './updateFeed.mjs';
 import { readZip, stripCommonRoot, ZIP_LIMITS, ZipError } from './zip.mjs';
 
 export const PLUGIN_STORAGE_MAX_BYTES = 64 * 1024;
@@ -275,17 +286,10 @@ export async function createPluginManager({ store, config, layout }) {
       const name = p.manifest.name;
       const prev = reg[name];
       if (!prev) {
-        reg[name] = {
-          enabled: false,
-          source: p.source,
-          version: p.manifest.version,
-          checksum: p.checksum,
-          installedAt: new Date().toISOString(),
-          installedBy: p.source === 'repo' ? 'repo' : null,
-          grantedPermissions: [],
-        };
+        reg[name] = freshPluginState(p, p.source === 'repo' ? 'repo' : null);
         continue;
       }
+      if (typeof prev.autoUpdate !== 'boolean') prev.autoUpdate = false;
       if (prev.checksum !== p.checksum || prev.version !== p.manifest.version) {
         // Code changed on disk: never keep running new code under an old grant.
         const wasEnabled = prev.enabled;
@@ -295,6 +299,8 @@ export async function createPluginManager({ store, config, layout }) {
           checksum: p.checksum,
           grantedPermissions: [],
           source: p.source,
+          updateAvailable: null,
+          updateCheckError: null,
         });
         if (wasEnabled) {
           warn(name, 'files changed since it was enabled; disabled until re-approved');
@@ -326,6 +332,7 @@ export async function createPluginManager({ store, config, layout }) {
         warn(p.manifest.name, `failed to start: ${err.message}`);
       }
     }
+    armUpdateTimer();
   }
 
   function describe(p, viewer) {
@@ -346,6 +353,15 @@ export async function createPluginManager({ store, config, layout }) {
       grantedPermissions: s.grantedPermissions || [],
       permissionDetails: p.manifest.permissions.map((perm) => ({ id: perm, description: PLUGIN_PERMISSIONS[perm] })),
       canUninstall: p.source === 'upload' && Boolean(viewer && hasCapability(viewer, 'manage_plugins')),
+      // `notice`: bundled copy with no update source (listed only).
+      // `source`: manifest set updateUrl, so check / update / auto-update apply.
+      // `none`: uploaded plugin with no update source.
+      updateMode: p.manifest.updateUrl ? 'source' : p.source === 'repo' ? 'notice' : 'none',
+      canUpdate: Boolean(p.manifest.updateUrl),
+      autoUpdate: Boolean(s.autoUpdate),
+      updateAvailable: publicUpdateNotice(s.updateAvailable),
+      updateCheckedAt: s.updateCheckedAt || null,
+      updateCheckError: s.updateCheckError || null,
     };
   }
 
@@ -415,6 +431,7 @@ export async function createPluginManager({ store, config, layout }) {
     delete registry()[p.manifest.name];
     delete store.data.pluginData[p.manifest.name];
     await store.persist();
+    armUpdateTimer();
     return { name: p.manifest.name, version: p.manifest.version };
   }
 
@@ -468,16 +485,12 @@ export async function createPluginManager({ store, config, layout }) {
     const p = await loadFromDir(finalDir, 'upload');
     plugins.set(p.manifest.name, p);
     registry()[p.manifest.name] = {
-      enabled: false,
-      source: 'upload',
-      version: p.manifest.version,
-      checksum: p.checksum,
+      ...freshPluginState(p, actor?.handle || null),
       zipSha256: digest,
-      installedAt: new Date().toISOString(),
-      installedBy: actor?.handle || null,
-      grantedPermissions: [],
+      source: 'upload',
     };
     await store.persist();
+    armUpdateTimer();
     return describe(p, actor);
   }
 
@@ -557,6 +570,551 @@ export async function createPluginManager({ store, config, layout }) {
     return items;
   }
 
+  function freshPluginState(p, installedBy) {
+    return {
+      enabled: false,
+      source: p.source,
+      version: p.manifest.version,
+      checksum: p.checksum,
+      installedAt: new Date().toISOString(),
+      installedBy: installedBy || null,
+      grantedPermissions: [],
+      autoUpdate: false,
+      updateAvailable: null,
+      updateCheckedAt: null,
+      updateCheckError: null,
+    };
+  }
+
+  function publicUpdateNotice(notice) {
+    if (!notice || typeof notice !== 'object') return null;
+    return {
+      version: String(notice.version || ''),
+      changelog: String(notice.changelog || ''),
+      minAppVersion: String(notice.minAppVersion || '0.0.0'),
+      sha256: String(notice.sha256 || ''),
+      checkedAt: notice.checkedAt || null,
+      compatible: notice.compatible !== false,
+      needsReview: Boolean(notice.needsReview),
+    };
+  }
+
+  function hasUpdateSource() {
+    for (const p of plugins.values()) {
+      if (!p.invalid && p.manifest.updateUrl) return true;
+    }
+    return false;
+  }
+
+  function pendingUpdateCount() {
+    let n = 0;
+    for (const p of plugins.values()) {
+      if (p.invalid) continue;
+      if (state(p.manifest.name)?.updateAvailable) n += 1;
+    }
+    return n;
+  }
+
+  const updateLocks = new Map();
+  function withUpdateLock(name, fn) {
+    const prev = updateLocks.get(name) || Promise.resolve();
+    const run = prev.then(fn, fn);
+    updateLocks.set(
+      name,
+      run.then(
+        () => {},
+        () => {},
+      ),
+    );
+    return run;
+  }
+
+  let updateTimer = null;
+  let updateInitial = null;
+  function armUpdateTimer() {
+    if (updateTimer) clearInterval(updateTimer);
+    if (updateInitial) clearTimeout(updateInitial);
+    updateTimer = null;
+    updateInitial = null;
+    const ms = Number(config.pluginUpdateIntervalMs) || 0;
+    // Idle unless the interval is on, this process may write, and at least
+    // one plugin declared an update source. Repo copies with no source are
+    // not polled.
+    if (!ms || store.writerActive === false || !hasUpdateSource()) return;
+    const kick = () => {
+      checkUpdates({ automatic: true }).catch((err) => warn('updates', err?.message || err));
+    };
+    updateInitial = setTimeout(kick, Math.min(ms, 30_000));
+    updateTimer = setInterval(kick, ms);
+    if (typeof updateInitial.unref === 'function') updateInitial.unref();
+    if (typeof updateTimer.unref === 'function') updateTimer.unref();
+  }
+
+  function stopUpdates() {
+    if (updateTimer) clearInterval(updateTimer);
+    if (updateInitial) clearTimeout(updateInitial);
+    updateTimer = null;
+    updateInitial = null;
+  }
+
+  function refuseWithoutSource(p) {
+    if (p.manifest.updateUrl) return;
+    if (p.source === 'repo') {
+      throw new HttpError(400, 'bundled plugins are listed here only; set updateUrl in the manifest to take updates', {
+        code: 'PLUGIN_REPO_NOTICE_ONLY',
+      });
+    }
+    throw new HttpError(400, 'this plugin has no update source', { code: 'PLUGIN_NO_UPDATE_SOURCE' });
+  }
+
+  function asUpdateHttp(err) {
+    if (err instanceof HttpError) return err;
+    if (err instanceof UpdateFeedError) {
+      const status = err.code === 'UPDATE_SOURCE_UNAVAILABLE' ? 502 : err.code === 'ZIP_LIMIT' ? 413 : 400;
+      return new HttpError(status, err.message, { code: err.code });
+    }
+    if (err instanceof ZipError || err instanceof ManifestError) {
+      return new HttpError(400, err.message, { code: err.code, field: err.field || undefined });
+    }
+    const aborted = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    return new HttpError(502, aborted ? 'update source timed out' : 'update source could not be read', {
+      code: 'UPDATE_SOURCE_UNAVAILABLE',
+    });
+  }
+
+  async function auditUpdate(action, { actor, automatic = false, result = 200, before = null, after = null } = {}) {
+    await appendSiteAudit(store, {
+      actor: actor || null,
+      actorHandle: actor?.handle || (automatic ? 'system' : null),
+      area: 'plugins',
+      action,
+      result,
+      before,
+      after,
+    });
+  }
+
+  function noticeFrom(feed, { compatible, needsReview = false } = {}) {
+    return {
+      version: feed.version,
+      changelog: feed.changelog,
+      minAppVersion: feed.minAppVersion,
+      sha256: feed.sha256,
+      checkedAt: new Date().toISOString(),
+      compatible: Boolean(compatible),
+      needsReview: Boolean(needsReview),
+    };
+  }
+
+  async function readFeed(p) {
+    const buf = await fetchBounded(p.manifest.updateUrl, {
+      maxBytes: UPDATE_FEED_MAX_BYTES,
+      timeoutMs: UPDATE_FEED_TIMEOUT_MS,
+    });
+    return parseUpdateFeed(buf);
+  }
+
+  /**
+   * Replace `dir` with `files`. Returns the backup directory, which the
+   * caller deletes after the new copy has started. On failure the original
+   * directory is put back when the swap itself got that far.
+   */
+  async function swapPluginDir(dir, files) {
+    const parent = path.dirname(dir);
+    const base = path.basename(dir);
+    const staging = await fsp.mkdtemp(path.join(parent, `.staging-${base}-`));
+    try {
+      for (const [rel, data] of files) {
+        const target = path.resolve(staging, rel);
+        if (!target.startsWith(`${staging}${path.sep}`)) {
+          throw new HttpError(400, 'zip-slip rejected', { code: 'ZIP_PATH' });
+        }
+        await fsp.mkdir(path.dirname(target), { recursive: true });
+        await fsp.writeFile(target, data, { flag: 'wx', mode: 0o644 });
+      }
+      const backup = path.join(parent, `.backup-${base}-${process.pid}-${Date.now()}`);
+      await fsp.rename(dir, backup);
+      try {
+        await fsp.rename(staging, dir);
+      } catch (err) {
+        await fsp.rename(backup, dir);
+        throw err;
+      }
+      return backup;
+    } catch (err) {
+      await fsp.rm(staging, { recursive: true, force: true });
+      throw err;
+    }
+  }
+
+  async function applyUpdateInner(p, { actor = null, acceptPermissions, automatic = false, expectedVersion = null, feed = null } = {}) {
+    refuseWithoutSource(p);
+    const name = p.manifest.name;
+    const s = state(name);
+    if (!s) throw new HttpError(404, 'plugin not found', { code: 'PLUGIN_NOT_FOUND' });
+    const fromVersion = p.manifest.version;
+
+    let resolved = feed;
+    let digest = null;
+    try {
+      if (!resolved) resolved = await readFeed(p);
+      if (expectedVersion && resolved.version !== expectedVersion) {
+        if (semverGt(resolved.version, fromVersion)) {
+          const compatible = semverGte(config.appVersion, resolved.minAppVersion);
+          s.updateAvailable = noticeFrom(resolved, { compatible });
+          s.updateCheckedAt = s.updateAvailable.checkedAt;
+          s.updateCheckError = null;
+          await store.persist();
+          await auditUpdate('plugin.update_available', {
+            actor,
+            automatic,
+            after: { name, from: fromVersion, to: resolved.version, sha256: resolved.sha256 },
+          });
+        }
+        throw new HttpError(409, `the update source now offers ${resolved.version}`, {
+          code: 'PLUGIN_UPDATE_CHANGED',
+          version: resolved.version,
+        });
+      }
+      if (!semverGt(resolved.version, fromVersion)) {
+        s.updateAvailable = null;
+        s.updateCheckedAt = new Date().toISOString();
+        s.updateCheckError = null;
+        await store.persist();
+        throw new HttpError(409, 'plugin is already at this version', { code: 'PLUGIN_UP_TO_DATE' });
+      }
+      if (!semverGte(config.appVersion, resolved.minAppVersion)) {
+        throw new HttpError(409, `update needs app ${resolved.minAppVersion} or newer`, {
+          code: 'PLUGIN_APP_TOO_OLD',
+          minAppVersion: resolved.minAppVersion,
+        });
+      }
+      if (p.manifest.updatePublicKey && !resolved.signature) {
+        throw new HttpError(400, 'update feed is missing a signature', { code: 'SIGNATURE_REQUIRED' });
+      }
+    } catch (err) {
+      const http = asUpdateHttp(err);
+      if (!['PLUGIN_UP_TO_DATE', 'PLUGIN_UPDATE_CHANGED'].includes(http.extra?.code)) {
+        s.updateCheckError = http.message.slice(0, 200);
+        await store.persist().catch(() => {});
+        await auditUpdate('plugin.update_failed', {
+          actor,
+          automatic,
+          result: http.status,
+          after: { name, from: fromVersion, to: resolved?.version || null, code: http.extra?.code || null, message: http.message.slice(0, 200) },
+        });
+      }
+      throw http;
+    }
+
+    let files;
+    let manifest;
+    try {
+      const zip = await fetchBounded(resolved.packageUrl, {
+        maxBytes: config.pluginMaxZipBytes,
+        timeoutMs: UPDATE_PACKAGE_TIMEOUT_MS,
+      });
+      digest = sha256Hex(zip);
+      if (digest !== resolved.sha256) {
+        throw new HttpError(400, 'downloaded package does not match the feed sha256', { code: 'CHECKSUM_MISMATCH' });
+      }
+      if (p.manifest.updatePublicKey && !verifyPackageSignature(p.manifest.updatePublicKey, zip, resolved.signature)) {
+        throw new HttpError(400, 'package signature does not match the installed update key', { code: 'SIGNATURE_INVALID' });
+      }
+      try {
+        files = stripCommonRoot(readZip(zip));
+        manifest = validatePackage(files, { appVersion: config.appVersion });
+      } catch (err) {
+        if (err instanceof ZipError || err instanceof ManifestError) {
+          throw new HttpError(400, err.message, { code: err.code, field: err.field || undefined });
+        }
+        throw err;
+      }
+      if (manifest.name !== name) {
+        throw new HttpError(400, `package name ${manifest.name} does not match ${name}`, { code: 'PLUGIN_NAME_MISMATCH' });
+      }
+      if (manifest.version !== resolved.version || !semverGt(manifest.version, fromVersion)) {
+        throw new HttpError(400, 'package version does not match the feed', { code: 'PLUGIN_VERSION_MISMATCH' });
+      }
+    } catch (err) {
+      const http = asUpdateHttp(err);
+      await auditUpdate('plugin.update_failed', {
+        actor,
+        automatic,
+        result: http.status,
+        after: { name, from: fromVersion, to: resolved.version, code: http.extra?.code || null, message: http.message.slice(0, 200) },
+      });
+      throw http;
+    }
+
+    const requested = [...manifest.permissions].sort();
+    const granted = [...(s.grantedPermissions || [])].sort();
+    const samePerms = requested.join(',') === granted.join(',');
+    if (s.enabled && !samePerms) {
+      if (automatic) {
+        s.updateAvailable = noticeFrom(resolved, { compatible: true, needsReview: true });
+        s.updateCheckedAt = s.updateAvailable.checkedAt;
+        await store.persist();
+        return { applied: false, needsReview: true, plugin: describe(p, actor) };
+      }
+      const accepted = [...new Set((Array.isArray(acceptPermissions) ? acceptPermissions : []).map(String))].sort();
+      if (requested.join(',') !== accepted.join(',')) {
+        throw new HttpError(400, 'review and accept the updated permissions', {
+          code: 'PERMISSIONS_NOT_ACCEPTED',
+          requested,
+        });
+      }
+    }
+
+    const keepEnabled = Boolean(s.enabled);
+    const snap = {
+      enabled: Boolean(s.enabled),
+      grantedPermissions: [...(s.grantedPermissions || [])],
+      version: s.version,
+      checksum: s.checksum,
+      zipSha256: s.zipSha256 || null,
+      source: s.source,
+      updateAvailable: s.updateAvailable,
+      updateCheckError: s.updateCheckError || null,
+    };
+    const root = path.resolve(p.source === 'upload' ? config.pluginsUploadDir : config.pluginsBundledDir);
+    const dir = path.resolve(p.dir);
+    if (!dir.startsWith(`${root}${path.sep}`)) throw new HttpError(500, 'plugin path outside its directory');
+
+    deactivate(p);
+    let backup = null;
+    let swapped = false;
+    try {
+      backup = await swapPluginDir(dir, files);
+      swapped = true;
+      const next = await loadFromDir(dir, p.source);
+      plugins.set(name, next);
+      s.version = next.manifest.version;
+      s.checksum = next.checksum;
+      s.zipSha256 = digest;
+      s.source = p.source;
+      s.enabled = keepEnabled;
+      s.grantedPermissions = keepEnabled ? requested : [];
+      s.updateAvailable = null;
+      s.updateCheckError = null;
+      s.updatedAt = new Date().toISOString();
+      s.updatedBy = actor?.handle || (automatic ? 'auto' : null);
+      if (keepEnabled) await activate(next);
+      await store.persist();
+      await auditUpdate('plugin.updated', {
+        actor,
+        automatic,
+        before: { name, version: fromVersion, checksum: snap.checksum },
+        after: {
+          name,
+          version: next.manifest.version,
+          checksum: next.checksum,
+          sha256: digest,
+          automatic: Boolean(automatic),
+          enabled: keepEnabled,
+        },
+      });
+      await fsp.rm(backup, { recursive: true, force: true });
+      backup = null;
+      armUpdateTimer();
+      return { applied: true, needsReview: false, plugin: describe(next, actor) };
+    } catch (err) {
+      try {
+        const cur = plugins.get(name);
+        if (cur && !cur.invalid) deactivate(cur);
+        if (swapped && backup) {
+          await fsp.rm(dir, { recursive: true, force: true });
+          await fsp.rename(backup, dir);
+          backup = null;
+        } else if (backup && !swapped) {
+          await fsp.rm(backup, { recursive: true, force: true }).catch(() => {});
+        }
+        const restored = await loadFromDir(dir, snap.source || p.source);
+        plugins.set(name, restored);
+        Object.assign(s, snap);
+        if (snap.enabled) {
+          try {
+            await activate(restored);
+          } catch (startErr) {
+            restored.error = startErr.message;
+            s.enabled = false;
+            s.grantedPermissions = [];
+          }
+        }
+        await store.persist();
+      } catch (rollbackErr) {
+        warn(name, `rollback failed: ${rollbackErr.message}`);
+      }
+      const http = asUpdateHttp(err);
+      await auditUpdate('plugin.update_failed', {
+        actor,
+        automatic,
+        result: http.status === 500 ? 400 : http.status,
+        after: {
+          name,
+          from: fromVersion,
+          to: resolved.version,
+          code: 'PLUGIN_UPDATE_FAILED',
+          message: String(http.message || '').slice(0, 200),
+          restored: swapped,
+        },
+      });
+      throw new HttpError(400, swapped ? `update failed and the previous version was restored: ${http.message}` : http.message, {
+        code: 'PLUGIN_UPDATE_FAILED',
+      });
+    }
+  }
+
+  async function inspectUpdate(p, { actor = null, automatic = false } = {}) {
+    const name = p.manifest.name;
+    const s = state(name);
+    const fromVersion = p.manifest.version;
+    let feed;
+    try {
+      feed = await readFeed(p);
+    } catch (err) {
+      const http = asUpdateHttp(err);
+      if (s) {
+        s.updateCheckedAt = new Date().toISOString();
+        s.updateCheckError = http.message.slice(0, 200);
+        await store.persist();
+      }
+      return { name, available: false, error: http.message };
+    }
+    if (!s) return { name, available: false, error: 'plugin not found' };
+    s.updateCheckedAt = new Date().toISOString();
+    if (!semverGt(feed.version, fromVersion)) {
+      s.updateAvailable = null;
+      s.updateCheckError = null;
+      await store.persist();
+      return { name, from: fromVersion, to: feed.version, available: false, applied: false };
+    }
+    if (p.manifest.updatePublicKey && !feed.signature) {
+      s.updateAvailable = null;
+      s.updateCheckError = 'update feed is missing a signature';
+      await store.persist();
+      return { name, from: fromVersion, to: feed.version, available: false, error: s.updateCheckError };
+    }
+    const compatible = semverGte(config.appVersion, feed.minAppVersion);
+    const prev = s.updateAvailable;
+    const same = prev && prev.version === feed.version && prev.sha256 === feed.sha256;
+    s.updateAvailable = noticeFrom(feed, { compatible, needsReview: same ? Boolean(prev.needsReview) : false });
+    s.updateCheckError = null;
+    await store.persist();
+    if (!same) {
+      await auditUpdate('plugin.update_available', {
+        actor,
+        automatic,
+        after: {
+          name,
+          from: fromVersion,
+          to: feed.version,
+          sha256: feed.sha256,
+          changelog: feed.changelog.slice(0, 300),
+          compatible,
+        },
+      });
+    }
+    if (s.autoUpdate && compatible && !s.updateAvailable.needsReview) {
+      try {
+        const result = await applyUpdateInner(p, {
+          actor: actor || { handle: s.autoUpdateEnabledBy || 'auto' },
+          automatic: true,
+          feed,
+        });
+        return {
+          name,
+          from: fromVersion,
+          to: feed.version,
+          changelog: feed.changelog,
+          available: !result.applied,
+          applied: Boolean(result.applied),
+          needsReview: Boolean(result.needsReview),
+          compatible,
+          error: null,
+        };
+      } catch (err) {
+        return {
+          name,
+          from: fromVersion,
+          to: feed.version,
+          changelog: feed.changelog,
+          available: true,
+          applied: false,
+          needsReview: Boolean(state(name)?.updateAvailable?.needsReview),
+          compatible,
+          error: String(err.message || err).slice(0, 200),
+        };
+      }
+    }
+    return {
+      name,
+      from: fromVersion,
+      to: feed.version,
+      changelog: feed.changelog,
+      available: true,
+      applied: false,
+      needsReview: Boolean(s.updateAvailable?.needsReview),
+      compatible,
+      error: null,
+    };
+  }
+
+  async function checkUpdates({ actor = null, automatic = false } = {}) {
+    if (store.writerActive === false) return { checked: 0, updates: [], errors: [], skipped: 'standby' };
+    const targets = [...plugins.values()].filter((item) => !item.invalid && item.manifest.updateUrl);
+    if (!targets.length) return { checked: 0, updates: [], errors: [] };
+    const updates = [];
+    const errors = [];
+    for (const p of targets) {
+      try {
+        const row = await withUpdateLock(p.manifest.name, () => inspectUpdate(p, { actor, automatic }));
+        if (row.available || row.applied) updates.push(row);
+        if (row.error) errors.push({ name: p.manifest.name, message: row.error });
+      } catch (err) {
+        errors.push({ name: p.manifest.name, message: String(err.message || err).slice(0, 200) });
+      }
+    }
+    return { checked: targets.length, updates, errors };
+  }
+
+  async function applyUpdate(name, opts = {}) {
+    const p = get(name);
+    return withUpdateLock(p.manifest.name, () => applyUpdateInner(p, opts));
+  }
+
+  async function setAutoUpdate(name, { actor, enabled }) {
+    const p = get(name);
+    refuseWithoutSource(p);
+    const s = state(p.manifest.name);
+    const on = Boolean(enabled);
+    s.autoUpdate = on;
+    s.autoUpdateEnabledAt = on ? new Date().toISOString() : null;
+    s.autoUpdateEnabledBy = on ? actor?.handle || null : null;
+    await store.persist();
+    await auditUpdate(on ? 'plugin.auto_update_on' : 'plugin.auto_update_off', {
+      actor,
+      after: { name: p.manifest.name, version: p.manifest.version, autoUpdate: on },
+    });
+    let applied = false;
+    let needsReview = Boolean(s.updateAvailable?.needsReview);
+    let applyError = null;
+    if (on && s.updateAvailable && s.updateAvailable.compatible !== false) {
+      try {
+        const result = await applyUpdate(p.manifest.name, { actor, automatic: true });
+        applied = Boolean(result.applied);
+        needsReview = Boolean(result.needsReview);
+      } catch (err) {
+        const http = asUpdateHttp(err);
+        if (http.extra?.code !== 'PLUGIN_UP_TO_DATE') {
+          applyError = { code: http.extra?.code || 'PLUGIN_UPDATE_FAILED', message: http.message };
+        }
+      }
+    }
+    const current = plugins.get(p.manifest.name) || p;
+    return { plugin: describe(current, actor), applied, needsReview, applyError };
+  }
+
   await init();
 
   return {
@@ -566,6 +1124,12 @@ export async function createPluginManager({ store, config, layout }) {
     disable,
     uninstall,
     installZip,
+    checkUpdates,
+    applyUpdate,
+    setAutoUpdate,
+    pendingUpdateCount,
+    updateCheckActive: () => Boolean(config.pluginUpdateIntervalMs) && hasUpdateSource() && store.writerActive !== false,
+    stop: stopUpdates,
     emit,
     routeDispatcher,
     assetHandler,
