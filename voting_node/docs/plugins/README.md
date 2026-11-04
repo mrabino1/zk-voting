@@ -30,8 +30,9 @@ tally or contract paths.
 | Control | Default |
 | --- | --- |
 | Zip upload (`PLUGINS_ALLOW_UPLOAD`) | **off**. Repo-bundled plugins in `plugins/` still load (disabled) |
-| Who can install/enable/disable/uninstall | `manage_plugins` (super_admin, admin) |
-| Re-authentication | install, enable and uninstall need a sign-in within `PLUGIN_REAUTH_MS` (10 min; max 60). Otherwise `401 REAUTH_REQUIRED` |
+| Who can install/enable/disable/update/uninstall | `manage_plugins` (super_admin, admin) |
+| Re-authentication | install, enable, update, the automatic-update toggle and uninstall need a sign-in within `PLUGIN_REAUTH_MS` (10 min; max 60). Otherwise `401 REAUTH_REQUIRED` |
+| Update check (`PLUGIN_UPDATE_INTERVAL_MS`) | **12 hours** (minimum 1 minute, maximum 7 days). `0` or `off` disables the timer. The timer does not run until some installed plugin sets an update source |
 | CSRF | `x-csrf-token` required on every write |
 | State after import | **disabled**. Nothing runs until enabled |
 | Permissions | shown in the enable dialog; the request must echo the exact list (`acceptPermissions`) or it fails with `400 PERMISSIONS_NOT_ACCEPTED` |
@@ -40,7 +41,7 @@ tally or contract paths.
 | Zip-slip | absolute paths, `..`, drive letters, backslashes, NUL, empty segments, symlinks, duplicates, encryption and ZIP64 are all rejected |
 | Allowed files | `.json .mjs .js .css .md .txt .png .webp`, plus `LICENSE/NOTICE/README/CHANGELOG`. No dotfiles, no native addons, no `node_modules` |
 | Storage | 64 KiB JSON per plugin |
-| Audit | install, rejected install, enable, disable, uninstall → hash-chained site-admin audit log |
+| Audit | install, rejected install, enable, disable, uninstall, `plugin.update_available`, `plugin.updated`, `plugin.update_failed` → hash-chained site-admin audit log |
 | Assets | `/plugins-assets/<name>/…` serves only the declared client/styles files and images, with `nosniff`, and only while enabled. `plugin.json` and server files are never served |
 
 ## Layout of a plugin
@@ -75,6 +76,8 @@ The folder name must equal `name`.
 | `adminPages` | `[{ id, title, capability }]`, up to 8. The page shows at `/site-admin/plugin/<name>/<id>` to users holding `capability` |
 | `menu` | `[{ label, page }]`. `page` must name one of its `adminPages` |
 | `checksums` | optional `{ "<file>": "<sha256 hex>" }` |
+| `updateUrl` | optional absolute `http:` or `https:` URL of a JSON update feed. No userinfo, no default host. Omitted means this plugin is not checked |
+| `updatePublicKey` | optional ed25519 public key, 64 hex characters (optional `ed25519:` prefix). When set, the feed must carry a signature over the package bytes and the signature must verify before the files are replaced |
 
 ### Permissions
 
@@ -158,6 +161,31 @@ Put styles in the declared `styles` file, not in inline `<style>` tags.
    **Uninstall** removes uploaded plugins (repo-bundled ones can only be disabled).
 
 A plugin that fails validation is listed with its error and cannot be enabled.
+
+## Updates
+
+There is no built-in catalogue and no default host. A plugin is checked only when its manifest sets `updateUrl`. The node fetches that URL itself; review it the way you review the rest of the package. Repo-bundled plugins with no `updateUrl` are listed with a notice and are not replaced from this screen. Setting `updateUrl` on a bundled plugin opts that copy into the same update path as an uploaded plugin (the files under `PLUGINS_DIR` are replaced).
+
+`PLUGIN_UPDATE_INTERVAL_MS` is the gap between checks. The default is 12 hours. `0` or `off` turns the timer off. While the timer is on it still stays idle until at least one installed plugin has an update source. **Check for updates** in Site admin runs the same check immediately. Comparison is semver: a newer `major.minor.patch` is an update, and a release is newer than its own prerelease (`1.2.0` is newer than `1.2.0-beta.1`). An equal or older feed is ignored.
+
+The feed is JSON:
+
+```json
+{
+  "version": "1.2.0",
+  "packageUrl": "https://updates.example/plugins/demo-1.2.0.zip",
+  "sha256": "<hex sha256 of the zip bytes>",
+  "minAppVersion": "0.1.0",
+  "changelog": "Fixes the banner contrast.",
+  "signature": "<optional hex or base64 ed25519 signature of the zip bytes>"
+}
+```
+
+`packageUrl` is an absolute `http:` or `https:` URL with no credentials. Redirects must stay on the same host (an `http` URL may upgrade to `https` on that host). The zip is read with the same limits, zip-slip rules and `plugin.json` checks as an upload. `sha256` must equal the zip. When the installed manifest has `updatePublicKey`, `signature` is required and is verified against the zip bytes before anything is written. `minAppVersion` is checked both on the feed and on the package manifest; an older app shows the notice and refuses the install.
+
+Site admin → Plugins shows an **Update available** notice and a badge on the row with the new version and the changelog. **Update now** asks for a recent sign-in, then downloads and swaps the package. **Automatic updates** is a per-plugin toggle, **off by default**. Turning it on also needs a recent sign-in. The timer (or the next check) then installs a newer compatible package. If the plugin is enabled and the new manifest requests a different permission list, the automatic install waits and **Update now** asks you to accept the new list. A disabled plugin stays disabled.
+
+The package is validated before the installed directory is replaced. The previous directory is kept until the new copy has loaded. If the new server entrypoint fails to start, the previous directory is put back and the previous version is started again. The audit log records `plugin.update_available` when a newer feed is first seen, `plugin.updated` after a successful swap, and `plugin.update_failed` when an attempt is rejected or rolled back.
 
 ## Examples
 

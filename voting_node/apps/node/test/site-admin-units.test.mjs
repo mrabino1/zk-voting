@@ -3,6 +3,7 @@
 // plugin manifest + package validation and the defensive zip reader.
 
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, test } from 'node:test';
 
 import {
@@ -12,8 +13,10 @@ import {
   normalizeRoleInput,
   roleChangeError,
 } from '../src/capabilities.mjs';
+import { resolvePluginUpdateIntervalMs } from '../src/config.mjs';
 import { DEFAULT_PRODUCT_NAME, defaultLayout, layoutForAudience, mergeLayout, resolveBranding, safeHref, themeCss, validateLayout } from '../src/layout.mjs';
-import { ManifestError, packageChecksum, sha256Hex, validateManifest, validatePackage } from '../src/plugins/manifest.mjs';
+import { ManifestError, packageChecksum, semverCmp, semverGt, sha256Hex, validateManifest, validatePackage } from '../src/plugins/manifest.mjs';
+import { fetchBounded, parseUpdateFeed, verifyPackageSignature } from '../src/plugins/updateFeed.mjs';
 import { readZip, safeEntryPath, stripCommonRoot, writeZip, ZipError } from '../src/plugins/zip.mjs';
 
 const user = (role, extra = {}) => ({ id: `u-${role}`, handle: role, role, ...extra });
@@ -152,6 +155,35 @@ describe('plugin manifest', () => {
     const m = validateManifest(goodManifest(), { appVersion: '0.1.0' });
     assert.equal(m.name, 'demo-plugin');
     assert.equal(m.displayName, 'demo-plugin');
+    assert.equal(m.updateUrl, '');
+    assert.equal(m.updatePublicKey, '');
+  });
+  test('optional update source is a credential-free http(s) URL', () => {
+    const key = 'ab'.repeat(32);
+    const m = validateManifest(
+      { ...goodManifest(), updateUrl: 'https://updates.example/feed.json#ignored', updatePublicKey: `ed25519:${key}` },
+      { appVersion: '0.1.0' },
+    );
+    assert.equal(m.updateUrl, 'https://updates.example/feed.json');
+    assert.equal(m.updatePublicKey, key);
+    for (const updateUrl of ['ftp://updates.example/a', 'javascript:alert(1)', 'http://user:pw@updates.example/a', '/feed.json']) {
+      assert.throws(() => validateManifest({ ...goodManifest(), updateUrl }, { appVersion: '0.1.0' }), ManifestError, updateUrl);
+    }
+    assert.throws(() => validateManifest({ ...goodManifest(), updatePublicKey: 'abcd' }, { appVersion: '0.1.0' }), ManifestError);
+  });
+  test('semver update comparison is numeric and treats a release as newer than its prerelease', () => {
+    assert.equal(semverCmp('1.2.3', '1.2.3'), 0);
+    assert.equal(semverGt('1.2.4', '1.2.3'), true);
+    assert.equal(semverGt('1.3.0', '1.2.9'), true);
+    assert.equal(semverGt('2.0.0', '1.9.9'), true);
+    assert.equal(semverGt('1.10.0', '1.9.0'), true);
+    assert.equal(semverGt('1.2.3', '1.2.3'), false);
+    assert.equal(semverGt('1.0.0', '1.0.1'), false);
+    assert.equal(semverGt('1.2.0', '1.2.0-beta.1'), true);
+    assert.equal(semverGt('1.2.0-beta.2', '1.2.0-beta.1'), true);
+    assert.equal(semverGt('1.2.0-beta.10', '1.2.0-beta.2'), true);
+    assert.equal(semverGt('1.2.0-beta.1', '1.2.0'), false);
+    assert.equal(semverGt('nope', '1.0.0'), false);
   });
   for (const [label, patch] of [
     ['bad name', { name: 'Bad Name' }],
@@ -243,5 +275,63 @@ describe('zip reader', () => {
     zip[30 + 5] ^= 0xff; // flip a byte of the stored data → CRC mismatch
     assert.throws(() => readZip(zip), ZipError);
     assert.throws(() => readZip(Buffer.from('not a zip')), ZipError);
+  });
+});
+
+describe('plugin update feed', () => {
+  const feed = (extra = {}) => ({
+    version: '1.2.0',
+    packageUrl: 'https://updates.example/demo-1.2.0.zip',
+    sha256: 'ab'.repeat(32),
+    minAppVersion: '0.1.0',
+    changelog: 'Fixes contrast',
+    ...extra,
+  });
+
+  test('parses a feed and ignores a missing signature', () => {
+    const parsed = parseUpdateFeed(Buffer.from(JSON.stringify(feed())));
+    assert.equal(parsed.version, '1.2.0');
+    assert.equal(parsed.signature, null);
+    assert.equal(parsed.changelog, 'Fixes contrast');
+  });
+  test('rejects a feed that is not an object, a bad checksum, or a non-http package URL', () => {
+    assert.throws(() => parseUpdateFeed(Buffer.from('[]')), /JSON object/);
+    assert.throws(() => parseUpdateFeed(Buffer.from(JSON.stringify(feed({ sha256: 'nope' })))), /sha256/);
+    assert.throws(() => parseUpdateFeed(Buffer.from(JSON.stringify(feed({ packageUrl: 'file:///tmp/x.zip' })))), /http/);
+    assert.throws(() => parseUpdateFeed(Buffer.from(JSON.stringify(feed({ signature: 'abcd' })))), /signature/);
+  });
+  test('verifies an ed25519 signature over the package bytes', () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const hex = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
+    const body = Buffer.from('package-bytes');
+    const sig = sign(null, body, privateKey);
+    assert.equal(verifyPackageSignature(hex, body, sig.toString('hex')), true);
+    assert.equal(verifyPackageSignature(hex, body, sig.toString('base64')), true);
+    assert.equal(verifyPackageSignature(hex, Buffer.from('other'), sig.toString('hex')), false);
+    assert.equal(verifyPackageSignature('cd'.repeat(32), body, sig.toString('hex')), false);
+  });
+  test('redirects stay on the same host', async () => {
+    const fetchImpl = async () => new Response(null, { status: 302, headers: { location: 'https://other.example/pkg.zip' } });
+    await assert.rejects(
+      () => fetchBounded('https://updates.example/feed', { maxBytes: 1000, timeoutMs: 1000, fetchImpl }),
+      /same host/,
+    );
+  });
+  test('a same-host redirect is followed', async () => {
+    let n = 0;
+    const fetchImpl = async () => {
+      n += 1;
+      if (n === 1) return new Response(null, { status: 302, headers: { location: '/pkg.zip' } });
+      return new Response(Buffer.from('zip-bytes'), { status: 200 });
+    };
+    const buf = await fetchBounded('https://updates.example/feed', { maxBytes: 1000, timeoutMs: 1000, fetchImpl });
+    assert.equal(buf.toString(), 'zip-bytes');
+  });
+  test('update interval: default, off, and clamp', () => {
+    assert.equal(resolvePluginUpdateIntervalMs(undefined), 12 * 60 * 60 * 1000);
+    assert.equal(resolvePluginUpdateIntervalMs('0'), 0);
+    assert.equal(resolvePluginUpdateIntervalMs('off'), 0);
+    assert.equal(resolvePluginUpdateIntervalMs(1000), 60 * 1000);
+    assert.equal(resolvePluginUpdateIntervalMs(2 * 60 * 60 * 1000), 2 * 60 * 60 * 1000);
   });
 });

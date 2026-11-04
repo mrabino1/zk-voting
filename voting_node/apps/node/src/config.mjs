@@ -632,6 +632,26 @@ function positiveInt(value, fallback, max) {
   return Math.min(Math.floor(n), max);
 }
 
+/** Default, floor and ceiling for PLUGIN_UPDATE_INTERVAL_MS. 0 disables the timer. */
+export const PLUGIN_UPDATE_INTERVAL_DEFAULT_MS = 12 * 60 * 60 * 1000;
+export const PLUGIN_UPDATE_INTERVAL_MIN_MS = 60 * 1000;
+export const PLUGIN_UPDATE_INTERVAL_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * How often to look for plugin updates. `0` / `off` disables the timer.
+ * A positive value is clamped to 1 minute .. 7 days. The timer still does
+ * nothing until a plugin manifest sets an update source.
+ * @param {unknown} value
+ */
+export function resolvePluginUpdateIntervalMs(value) {
+  if (value === undefined || value === null || value === '') return PLUGIN_UPDATE_INTERVAL_DEFAULT_MS;
+  if (typeof value === 'string' && ['off', 'false', 'no'].includes(value.trim().toLowerCase())) return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return PLUGIN_UPDATE_INTERVAL_DEFAULT_MS;
+  if (n === 0) return 0;
+  return Math.min(PLUGIN_UPDATE_INTERVAL_MAX_MS, Math.max(PLUGIN_UPDATE_INTERVAL_MIN_MS, Math.floor(n)));
+}
+
 /**
  * Site admin: layout and plugins. Safe defaults: zip upload OFF, 1 MiB zip cap,
  * a fresh sign-in (10 min) required to install.
@@ -653,6 +673,9 @@ function applySiteAdminConfig(config, overrides) {
     pick(overrides, 'pluginReauthMs', process.env.PLUGIN_REAUTH_MS),
     10 * 60 * 1000,
     60 * 60 * 1000,
+  );
+  config.pluginUpdateIntervalMs = resolvePluginUpdateIntervalMs(
+    pick(overrides, 'pluginUpdateIntervalMs', process.env.PLUGIN_UPDATE_INTERVAL_MS),
   );
   config.layoutFile = String(
     pick(overrides, 'layoutFile', process.env.LAYOUT_FILE) || path.join(PKG_ROOT, 'site', 'layout.json'),

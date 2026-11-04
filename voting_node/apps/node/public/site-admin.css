@@ -23,6 +23,9 @@
 .sa-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
 .sa-pill { display: inline-block; padding: 0.05rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; margin: 0 0.25rem 0.25rem 0; }
 .sa-pill.is-on { font-weight: 700; border-width: 2px; }
+.sa-pill.is-update { font-weight: 700; border-width: 2px; border-color: #8a5a00; }
+.sa-update-badge { margin-left: 0.4rem; }
+.sa-changelog { white-space: pre-wrap; }
 .sa-dialog { max-width: 34rem; border: 1px solid var(--border); border-radius: var(--radius-card, 6px); background: var(--card); color: var(--fg); padding: 1.25rem; }
 .sa-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 .sa-perms { padding-left: 1.2rem; }

@@ -561,6 +561,7 @@ if (isMain) {
         console.log('node stopping');
         created.demoPurge?.stop?.();
         created.stopVoteFlush?.();
+        created.plugins?.stop?.();
         created.writer?.beginDrain();
         const force = setTimeout(() => process.exit(0), 20_000);
         if (typeof force.unref === 'function') force.unref();
