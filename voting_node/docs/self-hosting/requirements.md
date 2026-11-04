@@ -17,7 +17,7 @@ The production image boots with a 384 MB memory cap in CI. Leave headroom for th
 - Linux host with **Docker Engine 24+** and the **Compose v2** plugin (`docker compose`, not `docker-compose`).
 - Git, to clone the repository.
 - No Redis. Node application state is either JSON files on a persistent volume or Postgres via `DATABASE_URL`. See [Storage](#storage).
-- To develop without Docker: **Node.js 22** (22.23.4 or newer) and npm.
+- To develop without Docker: **Node.js 24.7** or newer and npm.
 
 ## Storage
 

@@ -48,11 +48,11 @@ Voters pay **zero**. The jurisdiction budget pays hosts, optional L1 settlement,
 | --- | --- | --- |
 | chainId | **27427** | [`l2/genesis.json`](./l2/genesis.json), [`packages/types`](./packages/types/index.js) `ZK_VOTING_CHAIN_ID` |
 | Block period | Producer wakes every **2 seconds**, 1 sequencer. Default `L2_SKIP_EMPTY_BLOCKS=1` seals only when there is a tx, when the disclosure hour closes, or once per `L2_HEARTBEAT_SECONDS` (3600) | `genesis.json` `blockTime` / `period`; [`l2/sequencer/state.mjs`](./l2/sequencer/state.mjs) `shouldProduceBlock`; [`docs/L2.md`](./docs/L2.md) |
-| Processes | Node 22 sequencer (`l2/sequencer/index.mjs`) + prover (`l2/prover/index.mjs`) | [`l2/Dockerfile`](./l2/Dockerfile), [`docker-compose.yml`](./docker-compose.yml) |
+| Processes | Node 24 sequencer (`l2/sequencer/index.mjs`) + prover (`l2/prover/index.mjs`) | [`l2/Dockerfile`](./l2/Dockerfile), [`docker-compose.yml`](./docker-compose.yml) |
 | RPC | JSON-RPC subset **:8546** | [`docs/L2.md`](./docs/L2.md) |
 | What it is | Civic **JSON** txs (`register` / `vote` / `disqualify` / `tally` / `userop`). **Not** an EVM, **not** Anvil, **not** a hosted Lighter sequencer | [`docs/L2.md`](./docs/L2.md), [`docs/OPERATOR.md`](./docs/OPERATOR.md) |
 | Compose | `restart: unless-stopped` for `node`, `l2`, `prover` | [`docker-compose.yml`](./docker-compose.yml) |
-| Images | `node:22-bookworm-slim` (Node app and L2) | [`Dockerfile`](./Dockerfile), [`l2/Dockerfile`](./l2/Dockerfile) |
+| Images | `node:24-bookworm-slim` (Node app and L2) | [`Dockerfile`](./Dockerfile), [`l2/Dockerfile`](./l2/Dockerfile) |
 | Mock proofs | `DEV_MOCK_PROOF` default **true**; prover writes `a=[1,0], b=[[1,0],[1,0]], c=[1,0]` | [`l2/README.md`](./l2/README.md), [`l2/prover/batch.mjs`](./l2/prover/batch.mjs) |
 | L1 submit | Only if `L1_RPC` + `SETTLEMENT_ADDRESS` + `PRIVATE_KEY` are **all** set; else JSON under the L2 volume | [`l2/README.md`](./l2/README.md), [`l2/prover/index.mjs`](./l2/prover/index.mjs) |
 | Batch size | `L2_BATCH_SIZE` default **4** blocks / proof | [`l2/config.json`](./l2/config.json), `.env.example` |
@@ -76,7 +76,7 @@ There is **no** CPU/RAM table in Compose or the Dockerfiles (no `deploy.resource
 
 | Workload | CPU | RAM | Why |
 | --- | --- | --- | --- |
-| Local demo / town clerk, mock proofs | 2 vCPU | 4 GB | Three Node 22 processes; JSON store in RAM; mock prover is keccak/JSON, not a GPU SNARK. |
+| Local demo / town clerk, mock proofs | 2 vCPU | 4 GB | Three Node 24 processes; JSON store in RAM; mock prover is keccak/JSON, not a GPU SNARK. |
 | County election-window, tens of thousands of voters | 4 vCPU | 8–16 GB | Same processes; `zk-voting.json` + explorer + hourly vote flush; Merkle trees keep **all leaves** in the JSON store. |
 | Always-on L2 for **months** (default skip) | 2–4 vCPU | grows with **tx** blocks, not empty ticks | Sequencer holds the blocks it has sealed. Idle is ~24 blocks/day. `L2_SKIP_EMPTY_BLOCKS=0` restores the 2s empty-block flood (§2). |
 | Real Groth16 **vote** proofs in Node (`ZK_VOTING_PROVING_PATH`) | Extra CPU at vote time | + proving keys | **In progress**, untrusted local ptau. Poseidon `Vote(4)` smoke is about **1966 non-linear** constraints. Poseidon `Vote(20)` is not benchmarked here. Ceremony is not done. |
@@ -246,7 +246,7 @@ Tally mirror is cheap even on mainnet because it is **once per election**.
 
 | Layer | What breaks first | Practical size (**estimate**) |
 | --- | --- | --- |
-| Node JSON store | Whole `zk-voting.json` pretty-printed on **every** persist; eligible tree keeps **all leaves** in that file | **Thousands–low tens of thousands** of people is the comfortable band on one Node 22 process. **~100k** is already a large pretty JSON rewrite per vote. **~1M** is the Merkle depth-20 *theory*, not a tested Node path. |
+| Node JSON store | Whole `zk-voting.json` pretty-printed on **every** persist; eligible tree keeps **all leaves** in that file | **Thousands–low tens of thousands** of people is the comfortable band on one Node 24 process. **~100k** is already a large pretty JSON rewrite per vote. **~1M** is the Merkle depth-20 *theory*, not a tested Node path. |
 | Sequencer RAM | Loads **all** historical blocks | Election-window: fine. Always-on months: RAM tracks ~1.4 KB × block count (JS objects larger). |
 | Hourly disclosure | Up to 4096 txs / 2s block once the delay, gate, and block floor allow it | **50k votes in one hour** ≈ 13 blocks ≈ **~30 s** to unseal. **1M in one hour** ≈ 244 blocks ≈ **~8 min**. Throughput is OK; the JSON store is not. |
 | Explorer | `l2-chain.json` full rewrite; public APIs on the **same** Node | Same order as voter count, not empty L2. |

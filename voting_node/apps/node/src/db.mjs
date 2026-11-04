@@ -69,6 +69,81 @@ export const MIGRATIONS = [
       ALTER TABLE zkv_rows ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
     `,
   },
+  {
+    version: 3,
+    name: 'backfill passkey COSE algorithm',
+    // Idempotent: a credential that already has a numeric coseAlg is left
+    // alone. A missing or non-numeric algorithm becomes ES256 (-7) and is
+    // marked coseAlgBackfilled so rollback can remove only that fill.
+    // The Node then replaces -7 with the algorithm inside the COSE key when
+    // the key decodes, and keeps the flag so this rollback still applies.
+    sql: `
+      UPDATE zkv_rows AS r
+      SET doc = jsonb_set(
+        r.doc,
+        '{credentials}',
+        (
+          SELECT COALESCE(jsonb_agg(migrated.c ORDER BY migrated.ord), '[]'::jsonb)
+          FROM (
+            SELECT
+              t.ord,
+              CASE
+                WHEN jsonb_typeof(t.c) = 'object'
+                 AND (
+                   NOT (t.c ? 'coseAlg')
+                   OR jsonb_typeof(t.c->'coseAlg') <> 'number'
+                 )
+                THEN t.c || jsonb_build_object('coseAlg', -7, 'coseAlgBackfilled', true)
+                ELSE t.c
+              END AS c
+            FROM jsonb_array_elements(r.doc->'credentials') WITH ORDINALITY AS t(c, ord)
+          ) AS migrated
+        )
+      )
+      WHERE r.ns = 'store'
+        AND r.collection = 'users'
+        AND jsonb_typeof(r.doc->'credentials') = 'array'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(r.doc->'credentials') AS c
+          WHERE jsonb_typeof(c) = 'object'
+            AND (
+              NOT (c ? 'coseAlg')
+              OR jsonb_typeof(c->'coseAlg') <> 'number'
+            )
+        );
+    `,
+    down: `
+      UPDATE zkv_rows AS r
+      SET doc = jsonb_set(
+        r.doc,
+        '{credentials}',
+        (
+          SELECT COALESCE(jsonb_agg(rolled.c ORDER BY rolled.ord), '[]'::jsonb)
+          FROM (
+            SELECT
+              t.ord,
+              CASE
+                WHEN jsonb_typeof(t.c) = 'object'
+                 AND t.c @> '{"coseAlgBackfilled": true}'::jsonb
+                THEN (t.c - 'coseAlg') - 'coseAlgBackfilled'
+                ELSE t.c
+              END AS c
+            FROM jsonb_array_elements(r.doc->'credentials') WITH ORDINALITY AS t(c, ord)
+          ) AS rolled
+        )
+      )
+      WHERE r.ns = 'store'
+        AND r.collection = 'users'
+        AND jsonb_typeof(r.doc->'credentials') = 'array'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(r.doc->'credentials') AS c
+          WHERE jsonb_typeof(c) = 'object'
+            AND c @> '{"coseAlgBackfilled": true}'::jsonb
+        );
+    `,
+  },
 ];
 
 const pools = new Map();
@@ -132,6 +207,49 @@ export async function closePools() {
   pools.clear();
   migrated.clear();
   await Promise.allSettled(all.map((p) => p.end()));
+}
+
+/**
+ * Undo one migration that defines `down`, and forget it in the journal.
+ * A second call is a no-op. The next `migrate()` applies it again.
+ */
+export async function rollbackMigration(config, version, { quiet = false } = {}) {
+  const target = MIGRATIONS.find((m) => m.version === version);
+  if (!target) throw new Error(`unknown migration version ${version}`);
+  if (!target.down) throw new Error(`migration ${version} has no rollback`);
+  const url = resolveDatabaseUrl(config);
+  if (!url) throw new Error('DATABASE_URL is not set');
+  const pool = getPool(config);
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock(hashtext($1))', ['zk-voting:migrations']);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS zkv_schema_migrations (
+        version     integer     PRIMARY KEY,
+        name        text        NOT NULL,
+        applied_at  timestamptz NOT NULL DEFAULT now()
+      )`);
+    const { rows } = await client.query('SELECT 1 FROM zkv_schema_migrations WHERE version = $1', [version]);
+    if (!rows.length) return { rolledBack: false, version };
+    await client.query('BEGIN');
+    try {
+      await client.query(target.down);
+      await client.query('DELETE FROM zkv_schema_migrations WHERE version = $1', [version]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    }
+    migrated.delete(url);
+    if (!quiet) console.info(`[zk-voting] postgres migration rolled back: ${version}`);
+    return { rolledBack: true, version };
+  } finally {
+    try {
+      await client.query('SELECT pg_advisory_unlock(hashtext($1))', ['zk-voting:migrations']);
+    } finally {
+      client.release();
+    }
+  }
 }
 
 /** Apply pending migrations once per URL per process. Safe to run on every boot and from several containers. */

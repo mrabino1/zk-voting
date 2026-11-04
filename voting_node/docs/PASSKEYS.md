@@ -120,7 +120,7 @@ v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) canno
 - Account “address” is still `SHA-256(seed)[0:20]` (`zk-voting-local-address`), not secp256k1/keccak.
 - UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
 - When the identity-domain PRF output is missing, the device may still wrap an account seed. It does **not** derive a vote identity from the credential id. Voting throws `IDENTITY_PRF_REQUIRED`.
-- Node HTTP still stores credential ids only; it does not see PRF output or trapdoors.
+- Node HTTP stores the credential id, the COSE public key, and that key's COSE algorithm (`coseAlg`). It does not see PRF output or trapdoors.
 
 ---
 
@@ -195,4 +195,14 @@ POST /api/persons/:id/eth-accounts/active
 
 Relying party id and origins follow the request host when that host is allowed by `VOTE_FQDN`, `WEBAUTHN_ORIGINS`, `RP_ID`, or `WEBAUTHN_HOST_SUFFIXES`. A public `RP_ID` is used only when it is the host or a parent of it. Otherwise the request hostname is the RP ID, so a rotating test host does not share passkeys with the voting hostname. An unknown `Host` does not widen the allowlist. Registration and login require user verification and a resident key. Attestation stays `none`: the server still checks the challenge, the origin, the RP ID hash, the user-presence and user-verification flags, and stores the COSE public key from the authenticator data. It does not store a public key supplied beside the attestation. See [OPERATOR.md](./OPERATOR.md) for `VOTE_FQDN` and the setup token.
 
-The Node stores credential ids and wrapped-key **ciphertexts** if the wrap-in-IndexedDB-plus-backup path is enabled. It must not store PRF output or trapdoors.
+### Passkey algorithms
+
+Registration asks the authenticator for COSE algorithms in this order: ML-DSA-44 (`-48`), ML-DSA-65 (`-49`), ES256 (`-7`), Ed25519 (`-8`), RS256 (`-257`). A device that only has ES256, Ed25519, or RS256 still registers.
+
+Each stored credential includes `coseAlg`, the algorithm number from that COSE public key. Opening an older JSON file, or applying Postgres migration 3, fills a missing value. When the stored key decodes, that algorithm is kept. When it does not, the fill is ES256 (`-7`) and `coseAlgBackfilled` is set. Credentials registered after this change store the algorithm from the verified key and are not marked backfilled. `GET /api/me/passkeys` returns `coseAlg`. It does not return the backfill flag.
+
+Both fills are idempotent. Running them again does not change an algorithm that is already stored. Rollback removes only rows marked `coseAlgBackfilled` (JSON: `rollbackPasskeyCoseAlgs` in `apps/node/src/passkeyAlgorithms.mjs`; Postgres: `rollbackMigration(config, 3)`). A second rollback does nothing. The current process applies the fill again the next time it opens the store, so roll the data back and then start the previous build.
+
+ML-DSA signatures are checked by the WebAuthn library through WebCrypto. The Node and L2 images are `node:24-bookworm-slim`, and the engines require Node.js 24.7 or newer, which implements `ML-DSA-44` and `ML-DSA-65`. On an older Node the library rejects an ML-DSA registration or login and this Node does not substitute another verifier. The error names the missing WebCrypto algorithm and the Node version that provides it. ES256, Ed25519, RS256, ML-DSA-44, and ML-DSA-65 are verified on Node.js 24.7 and newer.
+
+The Node stores credential ids, COSE public keys, and `coseAlg`. It may also store wrapped-key **ciphertexts** if the wrap-in-IndexedDB-plus-backup path is enabled. It must not store PRF output or trapdoors.

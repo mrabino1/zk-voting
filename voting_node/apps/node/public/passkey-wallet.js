@@ -777,8 +777,10 @@ function creationPublicKey(serverOptions, prfOk, evalFirst, evalSecond) {
       displayName,
     },
     pubKeyCredParams: pk.pubKeyCredParams || [
-      { type: "public-key", alg: -8 },
+      { type: "public-key", alg: -48 },
+      { type: "public-key", alg: -49 },
       { type: "public-key", alg: -7 },
+      { type: "public-key", alg: -8 },
       { type: "public-key", alg: -257 },
     ],
     authenticatorSelection: {

@@ -54,7 +54,7 @@
     "compose:ps": "docker compose ps"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24.7"
   },
   "devDependencies": {
     "snarkjs": "^0.7.6"

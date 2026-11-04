@@ -10,7 +10,7 @@ This software may be run **at cost** by a government, county clerk, union, coope
 
 ## What you are operating
 
-1. **`apps/node`** — long-lived Node 22 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/zk-voting.json`). **No SQLite.**
+1. **`apps/node`** — long-lived Node 24 process: voter / clerk / observer UI (vanilla JS in `public/`), HTTP API, optional vote relayer, JSON store (`apps/node/data/zk-voting.json`). **No SQLite.**
 2. **`smart-contracts/`** — Solidity 0.8.24, Foundry (`via_ir = true`). Factory, registries, inbox, `Tally.sol`, passkey account, L1 `RollupSettlement`.
 3. **`l2/`** — ZK-Voting **civic JSON** sequencer + prover (JSON-RPC **:8546**, chainId 27427). Settles batches to L1 when configured. Not Anvil, not a hosted Lighter sequencer; Lighter is prior art (see root README).
 4. **`circuits/`** — circom vote / tally. Foundry unit tests use `MockVerifier`. Proving path is **in progress** (`npm run circuits:status`). Local setup is untrusted until Poseidon + a ceremony exist.
@@ -185,7 +185,7 @@ The seeded super admin handle cannot be claimed through `/register` while a setu
 ## First-time machine
 
 ```bash
-# Node 22+
+# Node 24.7+
 node -v
 
 # Foundry 1.8+ (solc 0.8.24, via_ir on — foundry.toml)

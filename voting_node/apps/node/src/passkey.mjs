@@ -12,6 +12,11 @@ import {
 import { noteDemoAbuse } from './demoPurge.mjs';
 import { HttpError } from './http.mjs';
 import { assertPasskeyRoom, isClaimedPerson } from './identity.mjs';
+import {
+  PASSKEY_SUPPORTED_ALGORITHM_IDS,
+  coseAlgFromPublicKey,
+  passkeyPqcError,
+} from './passkeyAlgorithms.mjs';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -104,6 +109,7 @@ export function createPasskeyService(config, store, hooks = {}) {
         requireResidentKey: true,
         userVerification: 'required',
       },
+      supportedAlgorithmIDs: PASSKEY_SUPPORTED_ALGORITHM_IDS.slice(),
       extensions: { prf: {} },
     });
     options.extensions = { ...(options.extensions || {}), prf: {} };
@@ -135,9 +141,10 @@ export function createPasskeyService(config, store, hooks = {}) {
         expectedOrigin: pending.origins || config.origins,
         expectedRPID: pending.rpID || config.rpID,
         requireUserVerification: true,
+        supportedAlgorithmIDs: PASSKEY_SUPPORTED_ALGORITHM_IDS.slice(),
       });
     } catch (err) {
-      throw new HttpError(400, `passkey registration failed: ${err.message || err}`);
+      throw new HttpError(400, passkeyPqcError(err, 'passkey registration failed') || `passkey registration failed: ${err.message || err}`);
     }
     if (!verification.verified || !verification.registrationInfo) {
       throw new HttpError(400, 'passkey registration not verified');
@@ -174,9 +181,12 @@ export function createPasskeyService(config, store, hooks = {}) {
         });
       }
     }
+    const publicKey = b64urlFromBytes(cred.publicKey);
+    const coseAlg = coseAlgFromPublicKey(publicKey);
     store.addCredential(account.id, {
       id: b64urlFromBytes(cred.id),
-      publicKey: b64urlFromBytes(cred.publicKey),
+      publicKey,
+      ...(Number.isInteger(coseAlg) ? { coseAlg } : {}),
       counter: cred.counter || 0,
       transports: body?.response?.transports || cred.transports || [],
       deviceType: info.credentialDeviceType || null,
@@ -281,7 +291,7 @@ export function createPasskeyService(config, store, hooks = {}) {
       });
     } catch (err) {
       noteDemoAbuse(store, config, account.id, 'PASSKEY_VERIFY_FAILED');
-      throw new HttpError(400, `passkey login failed: ${err.message || err}`);
+      throw new HttpError(400, passkeyPqcError(err, 'passkey login failed') || `passkey login failed: ${err.message || err}`);
     }
     if (!verification.verified) {
       noteDemoAbuse(store, config, account.id, 'PASSKEY_VERIFY_FAILED');

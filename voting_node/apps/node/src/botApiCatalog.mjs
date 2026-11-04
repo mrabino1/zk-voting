@@ -292,7 +292,7 @@ export const BOT_OPERATIONS = [
   R('/api/me/passkeys', {
     tag: 'Identity',
     auth: true,
-    summary: 'Passkeys bound to this person. Cap is 5.',
+    summary: 'Passkeys bound to this person, including each credential COSE algorithm. Cap is 5.',
   }),
   V('DELETE', '/api/me/passkeys/:credentialId', {
     tag: 'Identity',

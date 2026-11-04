@@ -351,6 +351,7 @@ export function publicPasskey(credential, method) {
     deviceType: credential.deviceType || null,
     backedUp: Boolean(credential.backedUp),
     transports: credential.transports || [],
+    ...(Number.isInteger(credential.coseAlg) ? { coseAlg: credential.coseAlg } : {}),
   };
 }
 

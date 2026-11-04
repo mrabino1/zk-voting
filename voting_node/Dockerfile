@@ -5,14 +5,14 @@
 # Install npm **workspaces** (`@zk-voting/chain-client` and its in-tree
 # siblings). Those packages are private — they are not on the npm registry.
 
-FROM node:22-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY apps/node/package.json apps/node/package.json
 COPY packages ./packages
 RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM node:22-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /src
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

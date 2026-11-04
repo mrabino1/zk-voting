@@ -2,7 +2,7 @@
 # ZK-Voting L2 sequencer + prover. Same image, different compose command.
 # Build from the repository root so the root .dockerignore applies.
 
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 WORKDIR /l2
 ENV NODE_ENV=production \
     L2_RPC_HOST=0.0.0.0 \

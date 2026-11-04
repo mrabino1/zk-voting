@@ -6,7 +6,7 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24.7"
   },
   "scripts": {
     "start": "node src/server.mjs",
@@ -20,7 +20,8 @@
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.864.0",
     "@noble/curves": "^1.9.7",
-    "@simplewebauthn/server": "13.1.2",
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.3",
     "@zk-voting/chain-client": "0.1.0",
     "@zk-voting/proof-helpers": "file:../../packages/proof-helpers",
     "cors": "2.8.5",

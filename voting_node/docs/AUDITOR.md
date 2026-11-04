@@ -26,7 +26,7 @@ Never in a bundle: civil names, evidence files, trapdoors, option ids, `userId`,
 
 ## CLI
 
-From the repository root (Node 22):
+From the repository root (Node.js 24.7 or newer):
 
 ```bash
 # Verify a JSON file (no network, no Node DB)
