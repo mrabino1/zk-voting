@@ -124,7 +124,7 @@ Machine-readable copies:
 - `GET /api/me/emails` (key read, signed in). Email methods on this person.
 - `POST /api/me/emails/primary` (key voter, signed in). Choose the primary email. Exactly one email is primary. Body: id or email.
 - `DELETE /api/me/emails/:id` (key voter, signed in). Remove one email method.
-- `GET /api/me/passkeys` (key read, signed in). Passkeys bound to this person. Cap is 5.
+- `GET /api/me/passkeys` (key read, signed in). Passkeys bound to this person, including each credential COSE algorithm. Cap is 5.
 - `DELETE /api/me/passkeys/:credentialId` (key voter, signed in). Remove one passkey.
 - `GET /api/me/eth-accounts` (key read, signed in). Verified Ethereum addresses and which one is active.
 - `POST /api/me/eth-accounts` (key voter, signed in). Submit the signature that binds an Ethereum address. Body: address, signature.

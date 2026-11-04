@@ -41,6 +41,7 @@ import {
 } from './electionIds.mjs';
 import { DEMO_JURISDICTION_ID, canonicalJurisdictionId } from './recordIds.mjs';
 import { HttpError } from './http.mjs';
+import { migratePasskeyCoseAlgs, PASSKEY_SCHEMA_VERSION, stampCredentialAlg } from './passkeyAlgorithms.mjs';
 import {
   applyCredentialReview,
   assertCivicIdRoom,
@@ -155,7 +156,7 @@ function emptyData() {
     meta: {
       nfp: true,
       app: 'zk-voting',
-      version: 9,
+      version: PASSKEY_SCHEMA_VERSION,
       nextElectionId: 1,
       nodeId: randomUUID(),
     },
@@ -263,8 +264,8 @@ function normalizeLoadedData(parsed) {
   ensureSuperAdminCollections(data);
   ensureSiteAdminCollections(data);
   data.meta = data.meta || {};
-  data.meta.version = Math.max(Number(data.meta.version || 0), 9);
   scrubBallotLinkage(data);
+  migratePasskeyCoseAlgs(data);
   return data;
 }
 
@@ -557,12 +558,12 @@ export class Store {
       } else {
         // One-time import: tables are empty and DATA_DIR still has a JSON store.
         const legacy = await readJsonFile(filePath);
-        data = legacy ? normalizeLoadedData(legacy) : emptyData();
+        data = legacy ? normalizeLoadedData(legacy) : normalizeLoadedData(emptyData());
         imported = Boolean(legacy);
       }
     } else {
       const legacy = await readJsonFile(filePath);
-      data = legacy ? normalizeLoadedData(legacy) : emptyData();
+      data = legacy ? normalizeLoadedData(legacy) : normalizeLoadedData(emptyData());
     }
     const store = new Store(filePath, data);
     if (pgDoc) {
@@ -605,7 +606,7 @@ export class Store {
     ensureSiteAdminCollections(store.data);
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
-    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), 9);
+    store.data.meta.version = Math.max(Number(store.data.meta.version || 0), PASSKEY_SCHEMA_VERSION);
     await store.loadChainQueueFromDisk();
     if (store.writerActive) {
       if (store.pg) await store.pg.claimWriter();
@@ -1095,6 +1096,7 @@ export class Store {
       throw new HttpError(409, 'credential already registered');
     }
     assertPasskeyRoom(user);
+    stampCredentialAlg(credential);
     user.credentials.push(credential);
     this._addAuthMethodUnchecked(user, {
       type: 'passkey',
