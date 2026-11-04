@@ -13,7 +13,7 @@
     "test": "node --test test/*.test.js"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24.7"
   },
   "dependencies": {
     "@zk-voting/proof-helpers": "0.1.0",

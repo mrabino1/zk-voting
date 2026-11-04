@@ -1,7 +1,8 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // COSE algorithm preference, backfill for credentials that predate it, and
-// authentication of an existing ES256 passkey. ML-DSA is verified by the
-// WebAuthn library or rejected with the missing runtime. It is not faked.
+// authentication of an existing ES256 passkey, and ML-DSA-44 / ML-DSA-65
+// registration plus authentication. ML-DSA signatures are produced and
+// checked with WebCrypto. They are not faked and the tests are not skipped.
 
 import assert from 'node:assert/strict';
 import { createHash, createSign, generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -144,6 +145,56 @@ function authenticatorData({ rpID, credId, flags, cose }) {
   cred.copy(out, 55);
   coseBytes.copy(out, 55 + cred.length);
   return out;
+}
+
+async function mlDsaKey(algName, coseAlg) {
+  const pair = await crypto.subtle.generateKey({ name: algName }, true, ['sign', 'verify']);
+  const jwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  const pub = Buffer.from(jwk.pub, 'base64url');
+  return {
+    privateKey: pair.privateKey,
+    algName,
+    coseAlg,
+    pub,
+    publicKey: coseKey([
+      [1, 7],
+      [3, coseAlg],
+      [-1, pub],
+    ]),
+  };
+}
+
+async function signedMlDsaAssertion({ privateKey, algName, rpID, origin, challenge, credentialId, counter = 0 }) {
+  const rpIdHash = createHash('sha256').update(rpID).digest();
+  const authData = Buffer.alloc(37);
+  rpIdHash.copy(authData, 0);
+  authData[32] = 0x05;
+  authData.writeUInt32BE(counter, 33);
+  const clientDataJSON = Buffer.from(
+    JSON.stringify({
+      type: 'webauthn.get',
+      challenge,
+      origin,
+      crossOrigin: false,
+    }),
+  );
+  const signature = Buffer.from(
+    await crypto.subtle.sign(
+      algName,
+      privateKey,
+      Buffer.concat([authData, createHash('sha256').update(clientDataJSON).digest()]),
+    ),
+  );
+  return {
+    id: credentialId,
+    rawId: credentialId,
+    type: 'public-key',
+    response: {
+      clientDataJSON: clientDataJSON.toString('base64url'),
+      authenticatorData: authData.toString('base64url'),
+      signature: signature.toString('base64url'),
+    },
+  };
 }
 
 function signedAssertion({ privateKey, rpID, origin, challenge, credentialId, counter = 0 }) {
@@ -329,99 +380,120 @@ test('an existing ES256 passkey still authenticates after the algorithm backfill
   }
 });
 
-test('ML-DSA is verified by the library or rejected with the missing WebCrypto algorithm', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-cose-pqc-'));
-  tmps.push(dir);
-  const node = await boot(dir);
-  try {
-  const begin = await api(node.base, 'POST', '/api/auth/passkey/register/begin', {
-    body: { handle: 'pq-voter', acceptedTerms: true },
-  });
-  assert.equal(begin.status, 200, begin.text);
-  assert.deepEqual(
-    begin.json.pubKeyCredParams.map((param) => param.alg),
-    [-48, -49, -7, -8, -257],
-  );
+for (const [algName, coseAlg, pubBytes, sigBytes] of [
+  ['ML-DSA-44', -48, 1312, 2420],
+  ['ML-DSA-65', -49, 1952, 3309],
+]) {
+  test(`${algName} registers and authenticates`, async () => {
+    assert.equal(
+      SettingsService.runtimeSupportsPQC(),
+      true,
+      `WebCrypto ${algName} is required to run this test (Node.js ${process.version})`,
+    );
+    const key = await mlDsaKey(algName, coseAlg);
+    assert.equal(key.pub.length, pubBytes);
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zk-cose-pqc-'));
+    tmps.push(dir);
+    const node = await boot(dir);
+    const handle = `pq-${algName.toLowerCase()}`;
+    try {
+      const begin = await api(node.base, 'POST', '/api/auth/passkey/register/begin', {
+        body: { handle, acceptedTerms: true },
+      });
+      assert.equal(begin.status, 200, begin.text);
+      assert.deepEqual(
+        begin.json.pubKeyCredParams.map((param) => param.alg),
+        [-48, -49, -7, -8, -257],
+      );
 
-  const credId = randomBytes(16);
-  const cose = Buffer.from(
-    isoCBOR.encode(
-      new Map([
-        [1, 7],
-        [3, -48],
-        [-1, randomBytes(32)],
-      ]),
-    ),
-  );
-  const authData = authenticatorData({ rpID: 'localhost', credId, flags: 0x45, cose });
-  const attestationObject = isoCBOR.encode(
-    new Map([
-      ['fmt', 'none'],
-      ['attStmt', new Map()],
-      ['authData', authData],
-    ]),
-  );
-  const id = Buffer.from(credId).toString('base64url');
-  const finish = await api(node.base, 'POST', '/api/auth/passkey/register/finish', {
-    body: {
-      handle: 'pq-voter',
-      id,
-      rawId: id,
-      type: 'public-key',
-      response: {
-        clientDataJSON: Buffer.from(
-          JSON.stringify({
-            type: 'webauthn.create',
-            challenge: begin.json.challenge,
-            origin: node.base,
-            crossOrigin: false,
-          }),
-        ).toString('base64url'),
-        attestationObject: Buffer.from(attestationObject).toString('base64url'),
-        transports: ['internal'],
-      },
-    },
-  });
-
-  if (!SettingsService.runtimeSupportsPQC()) {
-    assert.equal(finish.status, 400, finish.text);
-    assert.match(finish.text, /WebCrypto\.subtle does not support use of ML-DSA-44/);
-    assert.match(finish.text, /24\.7\.0/);
-    assert.match(finish.text, new RegExp(process.version.replace(/[.]/g, '\\.')));
-    assert.match(finish.text, /No substitute verifier is used/);
-    assert.equal(node.store.getUserByHandle('pq-voter'), null);
-  } else {
-    assert.equal(finish.status, 200, finish.text);
-    assert.equal(node.store.getUserByHandle('pq-voter').credentials[0].coseAlg, -48);
-    const login = await api(node.base, 'POST', '/api/auth/passkey/login/begin', {
-      body: { handle: 'pq-voter' },
-    });
-    assert.equal(login.status, 200, login.text);
-    const forged = await api(node.base, 'POST', '/api/auth/passkey/login/finish', {
-      body: {
-        id,
-        rawId: id,
-        type: 'public-key',
-        response: {
-          clientDataJSON: Buffer.from(
-            JSON.stringify({
-              type: 'webauthn.get',
-              challenge: login.json.challenge,
-              origin: node.base,
-              crossOrigin: false,
-            }),
-          ).toString('base64url'),
-          authenticatorData: Buffer.alloc(37, 0).toString('base64url'),
-          signature: Buffer.from('00', 'hex').toString('base64url'),
+      const credId = randomBytes(16);
+      const cose = Buffer.from(key.publicKey, 'base64url');
+      const authData = authenticatorData({ rpID: 'localhost', credId, flags: 0x45, cose });
+      const attestationObject = isoCBOR.encode(
+        new Map([
+          ['fmt', 'none'],
+          ['attStmt', new Map()],
+          ['authData', authData],
+        ]),
+      );
+      const id = Buffer.from(credId).toString('base64url');
+      const finish = await api(node.base, 'POST', '/api/auth/passkey/register/finish', {
+        body: {
+          handle,
+          id,
+          rawId: id,
+          type: 'public-key',
+          response: {
+            clientDataJSON: Buffer.from(
+              JSON.stringify({
+                type: 'webauthn.create',
+                challenge: begin.json.challenge,
+                origin: node.base,
+                crossOrigin: false,
+              }),
+            ).toString('base64url'),
+            attestationObject: Buffer.from(attestationObject).toString('base64url'),
+            transports: ['internal'],
+          },
         },
-      },
-    });
-    assert.equal(forged.status, 400, forged.text);
-  }
-  } finally {
-    await node.close();
-  }
-});
+      });
+      assert.equal(finish.status, 200, finish.text);
+      const stored = node.store.getUserByHandle(handle).credentials[0];
+      assert.equal(stored.coseAlg, coseAlg);
+      assert.equal(stored.coseAlgBackfilled, undefined);
+
+      const jar = {};
+      const login = await api(node.base, 'POST', '/api/auth/passkey/login/begin', {
+        body: { handle },
+      });
+      assert.equal(login.status, 200, login.text);
+      const assertion = await signedMlDsaAssertion({
+        privateKey: key.privateKey,
+        algName,
+        rpID: 'localhost',
+        origin: node.base,
+        challenge: login.json.challenge,
+        credentialId: id,
+      });
+      assert.equal(Buffer.from(assertion.response.signature, 'base64url').length, sigBytes);
+      const authed = await api(node.base, 'POST', '/api/auth/passkey/login/finish', {
+        jar,
+        body: assertion,
+      });
+      assert.equal(authed.status, 200, authed.text);
+      assert.ok(jar['zk-voting.sid']);
+      const listed = await api(node.base, 'GET', '/api/me/passkeys', { jar });
+      assert.equal(listed.status, 200, listed.text);
+      assert.equal(listed.json.passkeys.find((row) => row.credentialId === id).coseAlg, coseAlg);
+
+      const again = await api(node.base, 'POST', '/api/auth/passkey/login/begin', {
+        body: { handle },
+      });
+      const forged = await api(node.base, 'POST', '/api/auth/passkey/login/finish', {
+        body: {
+          id,
+          rawId: id,
+          type: 'public-key',
+          response: {
+            clientDataJSON: Buffer.from(
+              JSON.stringify({
+                type: 'webauthn.get',
+                challenge: again.json.challenge,
+                origin: node.base,
+                crossOrigin: false,
+              }),
+            ).toString('base64url'),
+            authenticatorData: Buffer.alloc(37, 0).toString('base64url'),
+            signature: Buffer.alloc(sigBytes, 1).toString('base64url'),
+          },
+        },
+      });
+      assert.equal(forged.status, 400, forged.text);
+    } finally {
+      await node.close();
+    }
+  });
+}
 
 const pgUrl = process.env.TEST_DATABASE_URL || '';
 

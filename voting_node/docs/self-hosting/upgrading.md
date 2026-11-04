@@ -97,4 +97,4 @@ Update any reverse-proxy rules, scripts or bots that set these headers or env va
 
 ## Base image
 
-The Node image is built on `node:22-bookworm-slim`. Rebuild regularly (`docker compose build --pull`) so the base image picks up Node.js and Debian security updates.
+The Node image is built on `node:24-bookworm-slim`. Rebuild regularly (`docker compose build --pull`) so the base image picks up Node.js and Debian security updates.

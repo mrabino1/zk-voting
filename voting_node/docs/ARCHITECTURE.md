@@ -50,7 +50,7 @@ on 27427 is **Future**.
 | Layer | What is in the tree |
 | --- | --- |
 | Node UI | Vanilla JS + HTML/CSS in `apps/node/public/`. Express serves `public/` (and `dist/` if present). **No Vite. No React.** |
-| Node API | Express 4, Node 22, `apps/node/src/*.mjs`. Personal API keys (`Authorization: Bearer rk_…`) call the published bot catalog. |
+| Node API | Express 4, Node 24, `apps/node/src/*.mjs`. Personal API keys (`Authorization: Bearer rk_…`) call the published bot catalog. |
 | Bot docs | `GET /api` (HTML), `GET /api/openapi.json`, `GET /api/llms.txt`, repo `docs/BOT_API.md` and `llms.txt`. |
 | Node store | JSON files: `apps/node/data/zk-voting.json` and `apps/node/data/l2-chain.json` (gitignored). **No SQLite.** |
 | ZK-Voting L2 | Civic JSON sequencer + prover. JSON-RPC subset on **127.0.0.1:8546**. Tx types: `register`, `vote`, `disqualify`, `tally`, `userop`. **Does not proxy to Anvil.** |
@@ -701,7 +701,7 @@ sequencer / paymaster report a fake sponsored balance for tooling.
 
 ## Node app (`apps/node`)
 
-Long-lived Node 22 process, web UI + HTTP API, `system_actions.sh` restarts it.
+Long-lived Node 24 process, web UI + HTTP API, `system_actions.sh` restarts it.
 Officer roles (`clerk`, `registrar`, `disqualification_officer`, `tally_operator`)
 are granted per jurisdiction via `POST /api/jurisdictions/:id/roles`.
 `platform_admin` is a global override and may act in every jurisdiction.
@@ -998,7 +998,7 @@ generic EVM logs.
 ## Tooling
 
 - Solidity: Foundry 1.8+, solc 0.8.24, **`via_ir = true`** in `foundry.toml`.
-- Node: Node 22, npm workspaces.
+- Node: Node.js 24.7 or newer, npm workspaces.
 - Tests must pass with `forge test --via-ir` using MockVerifier.
 - `npm run test:proof-helpers` for hash-scheme / stand-in Merkle vectors.
 - `npm test -w apps/node` for API tests (`NODE_ENV=test node --test`).
