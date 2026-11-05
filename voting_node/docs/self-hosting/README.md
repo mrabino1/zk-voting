@@ -46,7 +46,7 @@ The same pages are served by every running Node at `/docs`, so operators can rea
 
 | Service | Image | Role |
 | --- | --- | --- |
-| `node` | built from `Dockerfile` (`node:22-bookworm-slim`) | Voter, officer, and public web app plus the JSON API. Stores its data in one JSON file on the `node-data` volume. |
+| `node` | built from `Dockerfile` (`node:24-bookworm-slim`) | Voter, officer, and public web app plus the JSON API. Stores its data in one JSON file on the `node-data` volume. |
 | `l2` | built from `l2/Dockerfile` | Civic sequencer (JSON-RPC on 8546). |
 | `prover` | same as `l2` | Batch prover. |
 | `archive` | same as `l2` | Hourly archive of sealed blocks to S3 or R2. Safe no-op when no bucket is set. |

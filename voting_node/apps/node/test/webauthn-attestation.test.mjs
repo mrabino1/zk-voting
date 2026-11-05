@@ -138,6 +138,10 @@ test('none attestation is verified and the stored key comes from authenticator d
   assert.equal(begin.json.authenticatorSelection.residentKey, 'required');
   assert.equal(begin.json.authenticatorSelection.userVerification, 'required');
   assert.equal(begin.json.rp.id, 'localhost');
+  assert.deepEqual(
+    begin.json.pubKeyCredParams.map((param) => param.alg),
+    [-48, -49, -7, -8, -257],
+  );
 
   const credId = randomBytes(16);
   const cose = coseP256();
@@ -159,6 +163,8 @@ test('none attestation is verified and the stored key comes from authenticator d
   assert.equal(ok.status, 200, ok.text);
   const admin = store.data.users.find((user) => user.role === 'platform_super_admin');
   assert.equal(admin.credentials.length, 1);
+  assert.equal(admin.credentials[0].coseAlg, -7);
+  assert.equal(admin.credentials[0].coseAlgBackfilled, undefined);
   assert.notEqual(admin.credentials[0].publicKey, 'decoy-client-supplied-key');
   const decoded = isoCBOR.decodeFirst(Buffer.from(admin.credentials[0].publicKey, 'base64url'));
   const x = decoded instanceof Map ? decoded.get(-2) : decoded[-2];

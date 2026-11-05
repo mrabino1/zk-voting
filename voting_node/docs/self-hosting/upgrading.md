@@ -41,9 +41,10 @@ Click **Redeploy** (or enable auto-deploy on the branch). The platform pulls the
 
 ## Data upgrades on boot
 
-There are no SQL migrations and nothing to run by hand.
+There are no `.sql` files and nothing to run by hand.
 
-- The Node keeps its data in one JSON file. When a new version starts, it fills in any collections or fields that the new code expects and raises the stored schema version (`meta.version`). These upgrades are additive: existing records are not rewritten or removed.
+- The Node keeps its data in one JSON file, or in Postgres when `DATABASE_URL` is set. When a new version starts, it fills in any collections or fields that the new code expects and raises the stored schema version (`meta.version`). These upgrades are additive: existing records are not rewritten or removed.
+- Passkey credentials gain `coseAlg` on that boot (JSON file and Postgres migration 3). A missing algorithm is read from the stored COSE key, or set to ES256 (`-7`) when the key does not decode. Details and rollback: [Passkeys](../PASSKEYS.md#passkey-algorithms).
 - Only the process that holds the **writer lease** saves the upgraded file. A standby process upgrades its in-memory copy and writes nothing until it becomes the writer.
 - CI fails any change that adds a `.sql` file, and boots the production image against an empty volume before merge.
 
@@ -96,4 +97,4 @@ Update any reverse-proxy rules, scripts or bots that set these headers or env va
 
 ## Base image
 
-The Node image is built on `node:22-bookworm-slim`. Rebuild regularly (`docker compose build --pull`) so the base image picks up Node.js and Debian security updates.
+The Node image is built on `node:24-bookworm-slim`. Rebuild regularly (`docker compose build --pull`) so the base image picks up Node.js and Debian security updates.

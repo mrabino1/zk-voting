@@ -17,7 +17,7 @@
  * When `viem` is installed, this package uses `viem.keccak256`.
  * `@noble/hashes/sha3` `keccak_256` is a second optional path.
  * There is a small built-in Keccak-f[1600] fallback so selectors and
- * `encodePacked` work in a bare Node 22 workspace; it is **not** an
+ * `encodePacked` work in a bare Node 24 workspace; it is **not** an
  * audited crypto library. Prefer viem in the Node app and in scripts.
  */
 

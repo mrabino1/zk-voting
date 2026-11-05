@@ -85,6 +85,10 @@ test('prepareRegistrationCeremony does not call credentials.create', async () =>
   const { calls } = installBrowser();
   const prepared = await prepareRegistrationCeremony(creationOptions);
   assert.ok(prepared.publicKey);
+  assert.deepEqual(
+    prepared.publicKey.pubKeyCredParams.map((param) => param.alg),
+    [-48, -49, -7, -8, -257],
+  );
   assert.equal(prepared.publicKey.authenticatorSelection.userVerification, 'required');
   assert.equal(prepared.publicKey.authenticatorSelection.residentKey, 'required');
   assert.deepEqual(calls, []);

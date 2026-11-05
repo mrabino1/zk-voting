@@ -6,7 +6,7 @@
 # A separate job runs an UNTRUSTED toy Groth16 phase-2 transcript
 # (published entropy). That job is not a ceremony.
 #
-# Local equivalents (from voting_node/). Need Node 22+ and Foundry (`foundryup`):
+# Local equivalents (from voting_node/). Need Node 24.7+ and Foundry (`foundryup`):
 #
 #   npm install
 #   npm run test:node          # apps/node (includes WCAG 2.2 AA axe checks; needs Chrome)
@@ -60,7 +60,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: voting_node/package-lock.json
 
@@ -132,7 +132,7 @@ jobs:
           {
             echo "## Local equivalents"
             echo
-            echo "From the repository root (Node 22+ and Foundry via \`foundryup\`). No API keys."
+            echo "From the repository root (Node 24.7+ and Foundry via \`foundryup\`). No API keys."
             echo
             echo '```bash'
             echo "npm install"
@@ -226,7 +226,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: voting_node/package-lock.json
 
@@ -265,7 +265,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Migrations (no-op — this repository has no SQL migrations)
         run: ./scripts/migrations-verify.sh migrations

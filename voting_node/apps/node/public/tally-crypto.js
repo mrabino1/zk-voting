@@ -17,7 +17,7 @@
  * is an open product decision — this file only encrypts and decrypts one
  * envelope. NON-PRODUCTION. Not a binding-election ceremony.
  *
- * Uses WebCrypto so the same module runs in Node 22 (`globalThis.crypto`) and
+ * Uses WebCrypto so the same module runs in Node 24 (`globalThis.crypto`) and
  * in the voter SPA.
  */
 

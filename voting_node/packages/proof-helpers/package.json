@@ -14,7 +14,7 @@
     "test": "node --test test/*.test.js"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24.7"
   },
   "peerDependencies": {
     "viem": ">=2.0.0"

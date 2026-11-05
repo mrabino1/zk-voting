@@ -798,7 +798,7 @@ Design, threat model, beacon, and verification: [`docs/ceremony-web.md`](./docs/
 
 ## Shared packages
 
-npm workspaces (Node 22):
+npm workspaces (Node 24.7 or newer):
 
 | Package | Role |
 | --- | --- |
@@ -1150,12 +1150,12 @@ This repository has no SQL migrations (no `.sql` files and no migration journal)
 ./scripts/migrations-verify.sh migrations      # no-op SQL search only
 ```
 
-Needs Node 22+ and Docker. The smoke listens on `127.0.0.1:18080` so it does not take the Compose port.
+Needs Node 24.7 or newer and Docker. The smoke listens on `127.0.0.1:18080` so it does not take the Compose port.
 
 ### Tooling
 
 - Solidity: Foundry 1.8+, solc 0.8.24, **via-ir on** (`foundry.toml`).
-- Node: Node 22, npm workspaces. Frontend: vanilla JS in `apps/node/public/` (no bundler).
+- Node: Node.js 24.7 or newer, npm workspaces. Frontend: vanilla JS in `apps/node/public/` (no bundler).
 - Circuits: Circom 2 (optional on the host until leaving MockVerifier). `npm run circuits:status`.
 - Tests: `forge test --via-ir` with MockVerifier; `npm test -w apps/node` for API tests; `npm run test:l2` for the civic sequencer; `npm run test:proof-helpers` for hash-scheme vectors; `npm run test:docs` for the committed election-workflow PNG.
 - Workflow diagram: `npm run docs:workflow` renders [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd) to [`docs/images/election-workflow.png`](./docs/images/election-workflow.png).
