@@ -10,7 +10,8 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 COPY apps/node/package.json apps/node/package.json
 COPY packages ./packages
-RUN npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && mkdir -p apps/node/node_modules
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /src
@@ -31,6 +32,15 @@ RUN mkdir -p /data \
     && chown node:node /data /src
 
 COPY --from=deps --chown=node:node /src/node_modules ./node_modules
+# npm ci leaves some production deps in apps/node/node_modules. Hoisting
+# them onto the root copy is the wrong fix: @noble/curves@1.9.7 cannot
+# replace the root @noble/curves@1.9.1 that viem and ox pin exactly, and
+# the app's ^1.9.7 range does not accept 1.9.1. @simplewebauthn/server
+# is installed in that same nested tree. Node resolves apps/node/src by
+# walking apps/node/node_modules before /src/node_modules, so the runner
+# has to contain the tree npm ci produced. An empty directory is copied
+# when a future lockfile hoists everything.
+COPY --from=deps --chown=node:node /src/apps/node/node_modules ./apps/node/node_modules
 COPY --from=deps --chown=node:node /src/packages ./packages
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node apps/node/package.json apps/node/package.json
@@ -45,6 +55,8 @@ COPY --chown=node:node plugins ./plugins
 COPY --chown=node:node docs/self-hosting ./docs/self-hosting
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
+# Fails the image build when a runtime import is missing from this stage.
+COPY --chown=node:node scripts/image-import-smoke.mjs ./scripts/image-import-smoke.mjs
 COPY --chown=node:node l2/lease ./l2/lease
 # Super-admin write:l2 runs the archive job (credentials blanked). That module
 # imports the sequencer state helper and the disclosure clock; nothing else.
@@ -57,6 +69,8 @@ COPY --chown=node:node l2/prover/funding.mjs ./l2/prover/funding.mjs
 
 USER node
 WORKDIR /src/apps/node
+# Same module lookup as `node src/server.mjs`. Non-zero exits fail the build.
+RUN node /src/scripts/image-import-smoke.mjs
 EXPOSE 3000
 # GET /health on PORT (default 3000). HTTP 200 is success for active and standby.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=8 \
