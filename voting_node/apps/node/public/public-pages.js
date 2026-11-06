@@ -4,6 +4,7 @@
  */
 
 import { brandName } from "./brand.js";
+import { deploymentMode } from "./deployment-mode.js";
 import { civicContestCard } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { t } from "./i18n.js";
@@ -506,7 +507,8 @@ export function renderOffice(main, ctx, bundle) {
       .filter(Boolean)
       .join(", ") || me.user.role;
 
-  const cards = [
+  const mode = deploymentMode(ctx.hostConfig);
+  const civicCards = [
     {
       href: "/back-office#clerk",
       title: "Create and manage elections",
@@ -528,40 +530,56 @@ export function renderOffice(main, ctx, bundle) {
       body: "Post counts after cutoff. opens_ballots uses Feldman t-of-n guardians (NON-PRODUCTION).",
     },
     {
+      href: "/office/site",
+      title: "Shared contracts",
+      body: "Fork the UI; pin the one ElectionFactory. Do not deploy a new factory per jurisdiction.",
+      spa: true,
+    },
+  ];
+  const erc20Cards = [
+    {
+      href: "/admin#deployment",
+      title: "ERC-20 polls",
+      body:
+        mode === "erc20"
+          ? `Create and schedule polls weighted by one token, ${ctx.hostConfig.votingToken.address}.`
+          : "POLLS_ENABLED is on, but VOTING_TOKEN_ADDRESS is not a usable ERC-20 yet. Set that one address.",
+    },
+  ];
+  const cards = [
+    ...(mode === "civic" ? civicCards : erc20Cards),
+    {
       href: "/office/pages",
       title: "Pages",
       body: "The host updates Home, About, and FAQ. Clerks publish extra pages tagged to their jurisdiction. HTML is stripped.",
       spa: true,
     },
     {
-      href: "/office/site",
-      title: "Shared contracts",
-      body: "Fork the UI; pin the one ElectionFactory. Do not deploy a new factory per jurisdiction.",
-      spa: true,
-    },
-    {
       href: "/admin",
-      title: "Jurisdictions and roles",
-      body: "Host this Node: create jurisdictions and grant clerks, registrars, DQ, and tally officers.",
+      title: mode === "civic" ? "Jurisdictions and roles" : "Jurisdictions",
+      body:
+        mode === "civic"
+          ? "Host this Node: create jurisdictions and grant clerks, registrars, DQ, and tally officers."
+          : "A jurisdiction only labels an ERC-20 poll. It is not a voter roll.",
     },
     {
       href: "/explorer",
       title: "Explorer",
-      body: "Public L2 record. Vote proofs wait for the hour to close.",
+      body: mode === "civic" ? "Public L2 record. Vote proofs wait for the hour to close." : "Public record for this Node.",
     },
   ];
+  const lede =
+    mode === "civic"
+      ? "This deployment is civic elections. There is no ERC-20. Create elections, maintain the roll, record disqualifications, post tallies, and grant jurisdiction roles."
+      : "This deployment is ERC-20 polls on one token address from the environment. There is no civic roll.";
 
   mount(main,
     h(
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "Voting admin" }),
-      h("h1", { text: "Election officials" }),
-      h(
-        "p",
-        { class: "lede" },
-        "Create elections, maintain the roll, record disqualifications, post tallies, and grant jurisdiction roles. Choice plaintext never belongs here. Public proofs still wait for the hour to close."
-      ),
+      h("h1", { text: mode === "civic" ? "Election officials" : "ERC-20 polls" }),
+      h("p", { class: "lede", text: lede }),
       h("p", { class: "session-line", text: `${me.user.handle} · ${offices}` }),
       ctx.namedHost ? null : demoBanner(h)
     ),
@@ -587,7 +605,9 @@ export function renderOffice(main, ctx, bundle) {
       "p",
       {},
       h("a", { href: "/me", "data-nav": "", text: "Registered desk" }),
-      " · officials still vote from My desk when they are on a roll."
+      mode === "civic"
+        ? " · officials still vote from My desk when they are on a roll."
+        : " · holders vote from Polls. There is no roll."
     )
   );
 }

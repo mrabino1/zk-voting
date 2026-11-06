@@ -47,11 +47,10 @@
       <header class="page-head">
         <p class="kicker">Voting admin</p>
         <h1>Host this Node</h1>
-        <p class="lede">
-          Jurisdictions are the organizations of this public-good stack. Grant clerks,
-          registrars, and disqualification officers <strong>per jurisdiction</strong>. There is no token, no paid tier,
-          and no console that takes fees. Dashboards do not show live vote ticks; public
-          proof of ballots is published once an hour.
+        <p class="lede" id="admin-lede">
+          A deployment is one or the other. ERC-20 polls use a single token address from
+          <code>VOTING_TOKEN_ADDRESS</code>. A civic deployment has no ERC-20: jurisdictions,
+          a roll, and secret ballots. This page shows which one this Node is.
         </p>
         <aside class="disclosure-banner disclosure-snapshot" id="disclosure-banner" role="note">
           <p class="disclosure-note">
@@ -81,6 +80,14 @@
         <a href="/explorer">Explorer</a>
       </nav>
 
+      <section class="panel" id="deployment" aria-labelledby="deployment-heading">
+        <header>
+          <h2 id="deployment-heading">This deployment</h2>
+        </header>
+        <p id="deployment-copy">Checking whether this Node is civic elections or ERC-20 polls…</p>
+        <div id="deployment-polls"></div>
+      </section>
+
       <section aria-labelledby="host-heading">
         <h2 id="host-heading" class="visually-hidden">Host status</h2>
         <dl class="stat-grid" id="host-stats">
@@ -99,6 +106,10 @@
           <div class="stat">
             <dt>NOT FOR PROFIT</dt>
             <dd class="plain" id="stat-nfp">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Deployment</dt>
+            <dd class="plain" id="stat-deployment">Checking…</dd>
           </div>
         </dl>
       </section>
