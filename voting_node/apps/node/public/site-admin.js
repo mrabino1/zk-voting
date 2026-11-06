@@ -182,6 +182,7 @@ async function renderLayout() {
   const productName = brandInput('sa-product-name', 'productName', 60, defaults.name);
   const shortName = brandInput('sa-short-name', 'shortName', 24, defaults.shortName);
   const tagline = brandInput('sa-tagline', 'tagline', 160, defaults.tagline);
+  const logoUrl = brandInput('sa-logo-url', 'logoUrl', 512, defaults.logoUrl || '/brand-mark.svg');
   // An empty short name follows the product name, so show what it will resolve to.
   const syncShortPlaceholder = () => {
     shortName.placeholder = productName.value.trim() || defaults.shortName;
@@ -195,11 +196,12 @@ async function renderLayout() {
     h('div', { class: 'sa-field' }, h('label', { for: 'sa-product-name', text: 'Product name' }), productName),
     h('div', { class: 'sa-field' }, h('label', { for: 'sa-short-name', text: 'Short name' }), shortName),
     h('div', { class: 'sa-field' }, h('label', { for: 'sa-tagline', text: 'Tagline' }), tagline),
+    h('div', { class: 'sa-field' }, h('label', { for: 'sa-logo-url', text: 'Header logo' }), logoUrl),
     h('p', {
       id: 'sa-product-hint',
       class: 'sa-hint',
       text: canBrand
-        ? `Leave a field empty to use the default (“${defaults.name}”). The name appears in page titles, headers, footers, emails and PDFs. Plain text only.`
+        ? `Leave a field empty to use the default (“${defaults.name}”, logo ${defaults.logoUrl || '/brand-mark.svg'}). The name appears in page titles, headers, emails and PDFs. The logo is a site path (/logo.svg) or an https URL.`
         : `Only a super admin or admin can rename the product (now “${data.effective?.branding?.productName || defaults.name}”).`,
     }),
   );
@@ -319,6 +321,7 @@ async function renderLayout() {
       productName: productName.value.trim(),
       shortName: shortName.value.trim(),
       tagline: tagline.value.trim(),
+      logoUrl: logoUrl.value.trim(),
     };
     return out;
   }

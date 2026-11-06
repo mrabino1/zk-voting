@@ -1204,11 +1204,13 @@ async function renderRoute(route) {
     );
   }
   const active = document.activeElement;
+  const tag = active && active.tagName;
+  const editing = tag && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(tag);
+  const ceremony = document.documentElement?.dataset?.webauthn === "1";
   const focusIdle =
-    !active ||
-    active === document.body ||
-    active === document.documentElement ||
-    main.contains(active);
+    !editing &&
+    !ceremony &&
+    (!active || active === document.body || active === document.documentElement || main.contains(active));
   if (focusIdle) main.focus({ preventScroll: true });
 }
 

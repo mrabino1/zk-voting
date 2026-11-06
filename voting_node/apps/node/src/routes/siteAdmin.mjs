@@ -21,6 +21,7 @@ import {
   AUDIENCES,
   BRANDING_FIELDS,
   brandingLayer,
+  DEFAULT_LOGO_URL,
   layoutForAudience,
   REGIONS,
   THEME_TOKENS,
@@ -204,7 +205,7 @@ export function siteAdminRouter(deps) {
       fileOverride: layoutService.hasFileOverride(),
       codeOverride: layoutService.hasCodeOverride(),
       // What an empty branding field falls back to (BRAND_* env or "ZK-Voting").
-      brandingDefaults: brandDefaults(),
+      brandingDefaults: { ...brandDefaults(), logoUrl: DEFAULT_LOGO_URL },
       schema: {
         regions: REGIONS,
         audiences: AUDIENCES,
@@ -229,11 +230,11 @@ export function siteAdminRouter(deps) {
       // to the env / built-in default is saved as "" (inherit), so a later
       // BRAND_NAME change still applies.
       const defaults = brandDefaults();
-      const inherit = { productName: defaults.name, shortName: defaults.shortName, tagline: defaults.tagline };
+      const inherit = { productName: defaults.name, shortName: defaults.shortName, tagline: defaults.tagline, logoUrl: DEFAULT_LOGO_URL };
       // Echoing back the current effective value (GET /api/layout) is "no change".
       const current = layoutService.effective().layout.branding;
       const nextBranding = {};
-      for (const field of Object.keys(BRANDING_FIELDS)) {
+      for (const field of [...Object.keys(BRANDING_FIELDS), 'logoUrl']) {
         const sent = raw.branding?.[field];
         let v = String(sent ?? before.branding[field] ?? '').trim();
         if (sent !== undefined && v === current[field]) v = before.branding[field] || '';
@@ -241,7 +242,7 @@ export function siteAdminRouter(deps) {
         nextBranding[field] = v;
       }
       const input = { ...raw, branding: nextBranding };
-      const brandingChanged = Object.keys(BRANDING_FIELDS).some(
+      const brandingChanged = [...Object.keys(BRANDING_FIELDS), 'logoUrl'].some(
         (field) => brandingLayer(nextBranding)[field] !== (before.branding[field] || ''),
       );
       if (brandingChanged && !hasCapability(req.user, 'manage_branding')) {

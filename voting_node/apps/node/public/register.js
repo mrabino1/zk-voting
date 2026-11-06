@@ -1080,8 +1080,6 @@ export async function renderRegister(main, ctx) {
       return;
     }
     const prepared = state.prepared;
-    state.prepared = null;
-    state.preparedKey = "";
     const election = elections.find((e) => e.id === state.selected);
     let pending;
     try {
@@ -1091,13 +1089,20 @@ export async function renderRegister(main, ctx) {
         jurisdictionId: election?.jurisdictionId || undefined,
         acceptedTerms: true,
         prepared,
+        trigger: event.submitter || event.target?.querySelector?.("[data-register-passkey]"),
       });
     } catch (err) {
+      if (err?.code !== "PASSKEY_NOT_FOCUSED") {
+        state.prepared = null;
+        state.preparedKey = "";
+      }
       state.error = wallet.webAuthnErrorMessage(err);
       paint();
       announce(state.error);
       return;
     }
+    state.prepared = null;
+    state.preparedKey = "";
     state.busy = true;
     state.error = "";
     state.info = "";

@@ -73,7 +73,7 @@ function siteStep(ctx) {
                 state.productName = e.target.value;
               },
             }),
-            h("span", { class: "field-hint", text: `Shown in the header, emails and receipts. Empty = ${site.productNameDefault} (BRAND_NAME or the default). Site admin > Layout can change it later.` })
+            h("span", { class: "field-hint", text: `Shown in the header, emails and receipts. Empty = ${site.productNameDefault} (BRAND_NAME or the default). The header logo stays the built-in mark until Site admin > Layout & appearance > Branding sets another. Site admin can change the name later too.` })
           ),
           h("div", { class: "actions" }, h("button", { class: "btn", type: "submit", disabled: state.busy, text: "Save product name" }))
         )

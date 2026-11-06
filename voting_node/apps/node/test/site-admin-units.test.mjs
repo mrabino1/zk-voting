@@ -99,6 +99,12 @@ describe('layout', () => {
     assert.equal(validateLayout({ branding: { productName: ' My Vote ' } }).branding.productName, 'My Vote');
     assert.throws(() => validateLayout({ branding: { productName: '<script>' } }));
     assert.throws(() => validateLayout({ branding: { productName: 'x'.repeat(61) } }));
+    assert.equal(validateLayout({ branding: { logoUrl: '/clients/mark.svg' } }).branding.logoUrl, '/clients/mark.svg');
+    assert.equal(validateLayout({ branding: { logoUrl: '/brand-mark.svg' } }).branding.logoUrl, '');
+    assert.equal(validateLayout({ branding: { logoUrl: 'https://cdn.example.com/mark.svg' } }).branding.logoUrl, 'https://cdn.example.com/mark.svg');
+    assert.throws(() => validateLayout({ branding: { logoUrl: 'javascript:alert(1)' } }));
+    assert.equal(resolveBranding({ logoUrl: '' }, { name: 'ZK-Voting', shortName: 'ZK-Voting', tagline: '', logoUrl: '/from-env.svg' }).logoUrl, '/from-env.svg');
+    assert.equal(resolveBranding({ logoUrl: '/saved.svg' }, { name: 'ZK-Voting', shortName: 'ZK-Voting', tagline: '', logoUrl: '/from-env.svg' }).logoUrl, '/saved.svg');
   });
   test('mergeLayout layers branding only when renamed', () => {
     const base = defaultLayout();

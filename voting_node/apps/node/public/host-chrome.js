@@ -44,7 +44,7 @@ export function paintClientHost(doc, config) {
   const link = doc.querySelector("a.brand");
   if (link && brand.href) link.setAttribute("href", brand.href);
   const mark = doc.querySelector(".brand-mark img");
-  if (mark && brand.logoUrl) mark.setAttribute("src", brand.logoUrl);
+  if (mark && brand.logoUrl && mark.dataset.brandLogo !== "layout") mark.setAttribute("src", brand.logoUrl);
   const nameEl = doc.querySelector(".brand-name");
   if (nameEl && brand.name) {
     nameEl.setAttribute("title", brand.name);
