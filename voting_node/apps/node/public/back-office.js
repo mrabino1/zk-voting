@@ -1904,7 +1904,7 @@
         section.innerHTML =
           '<header><h2 id="token-polls-heading">Token polls</h2></header>' +
           '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>' +
-          '<p class="field-hint">ERC-20 balance-weighted signal polls. Holding the token is the only credential. Tokens in staking or liquidity-pool contracts cannot vote unless that contract signs. Official results publish after close. There is no live provisional tally. Balances are read on Ethereum. No transaction is sent.</p>' +
+          '<p class="field-hint">Signal polls on Ethereum mainnet. Balance-hold reads the minimum balance through close. Delegated-snapshot reads ERC-20Votes at one finalized block and commits that list with a Poseidon root. The node never sends a transaction and never uses the civic L2 for that snapshot. Civic elections stay one person, one vote.</p>' +
           (ready
             ? '<p class="field-hint" id="poll-token-host"></p>' +
               '<div id="token-poll-create"></div>' +
@@ -1938,6 +1938,8 @@
       '<div class="field"><label class="field-label" for="p-jurisdiction">Jurisdiction</label><select id="p-jurisdiction"></select></div>' +
       '<div class="field"><label class="field-label" for="p-title">Title</label><input id="p-title" maxlength="200" /></div>' +
       '<div class="field"><label class="field-label" for="p-type">Type</label><select id="p-type"><option value="plurality">Plurality</option><option value="ranked_irv">Ranked choice (IRV)</option></select></div>' +
+      '<div class="field"><label class="field-label" for="p-weight">Weight</label><select id="p-weight"><option value="balance_hold">Minimum balance through close</option><option value="erc20_votes">Delegated votes at an Ethereum snapshot</option></select></div>' +
+      '<div class="field"><label class="field-label" for="p-snap">Snapshot block (blank uses the latest finalized block)</label><input id="p-snap" inputmode="numeric" spellcheck="false" /></div>' +
       '<div class="grid-2"><div class="field"><label class="field-label" for="p-start">Start</label><input id="p-start" type="datetime-local" /></div>' +
       '<div class="field"><label class="field-label" for="p-cutoff">Cutoff</label><input id="p-cutoff" type="datetime-local" /></div></div>' +
       '<div class="field"><label class="field-label" for="p-options">Options (one label per line, at least two). Abstain is added.</label><textarea id="p-options" rows="4">Yes\nNo</textarea></div>' +
@@ -1981,6 +1983,8 @@
           jurisdictionId: $("p-jurisdiction").value,
           title: $("p-title").value.trim(),
           pollType: $("p-type").value,
+          weightSource: $("p-weight").value,
+          snapshotBlock: $("p-snap").value.trim() || undefined,
           startTime: toUnix($("p-start").value),
           cutoffTime: toUnix($("p-cutoff").value),
           options,
@@ -2022,7 +2026,14 @@
         const title = document.createElement("h3");
         title.textContent = poll.title + " · " + poll.state;
         const meta = document.createElement("p");
-        meta.textContent = (poll.tokenSymbol || "") + " " + poll.token + " · chain " + poll.tokenChainId;
+        meta.textContent =
+          (poll.tokenSymbol || "") +
+          " " +
+          poll.token +
+          " · chain " +
+          poll.tokenChainId +
+          " · " +
+          (poll.weightSource || "balance_hold");
         article.append(title, meta);
         if (superAdmin && (poll.state === "DRAFT" || poll.state === "SCHEDULED")) {
           const schedule = document.createElement("button");

@@ -874,7 +874,15 @@ export const BOT_OPERATIONS = [
   }),
   R('/api/polls/:id/weight', {
     tag: 'Polls',
-    summary: 'Read-only token weight for an address. The Node does not move tokens.',
+    summary: 'Read-only token weight for an address. The Node does not move tokens. erc20_votes reports getPastVotes at the Ethereum snapshot.',
+  }),
+  R('/api/polls/:id/delegates', {
+    tag: 'Polls',
+    summary: 'Delegates with nonzero getPastVotes at an erc20_votes snapshot. Absent on balance-hold polls.',
+  }),
+  R('/api/polls/:id/snapshot-proof', {
+    tag: 'Polls',
+    summary: 'Poseidon membership proof that an address and its voting power are in the snapshot root. Query: address.',
   }),
   R('/api/polls/:id/typed-data', {
     tag: 'Polls',

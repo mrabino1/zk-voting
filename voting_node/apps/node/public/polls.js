@@ -61,6 +61,14 @@ function typeLabel(poll) {
   return poll?.pollType === "ranked_irv" ? t("polls.typeIrv") : t("polls.typePlurality");
 }
 
+function weightModeLabel(poll) {
+  return poll?.weightSource === "erc20_votes" ? t("polls.weightVotes") : t("polls.weightHold");
+}
+
+function votesMode(poll) {
+  return poll?.weightSource === "erc20_votes";
+}
+
 function metaList(h, ctx, poll) {
   return h(
     "ul",
@@ -68,7 +76,11 @@ function metaList(h, ctx, poll) {
     h("li", {}, `${t("polls.state")}: ${poll.state}`),
     h("li", {}, `${t("polls.token")}: ${poll.tokenSymbol || ""} ${poll.token}`),
     h("li", {}, `${t("polls.chain")}: ${poll.tokenChainId}`),
+    h("li", {}, `${t("polls.weightMode")}: ${weightModeLabel(poll)}`),
     h("li", {}, `${typeLabel(poll)}`),
+    votesMode(poll) && poll.snapshotBlock != null
+      ? h("li", {}, t("polls.snapshotLine", { block: String(poll.snapshotBlock) }))
+      : null,
     h(
       "li",
       {},
@@ -231,7 +243,7 @@ export async function renderPollsIndex(main, ctx) {
                 "article",
                 { class: "election-card" },
                 ctx.h("h2", { text: poll.title }),
-                ctx.h("p", { text: `${poll.state} · ${typeLabel(poll)} · ${poll.tokenSymbol || poll.token}` }),
+                ctx.h("p", { text: `${poll.state} · ${typeLabel(poll)} · ${weightModeLabel(poll)} · ${poll.tokenSymbol || poll.token}` }),
                 ctx.h(
                   "p",
                   {},
@@ -264,7 +276,8 @@ export async function renderPollDetail(main, ctx) {
       h("p", {}, h("a", { href: "/polls", "data-nav": "", text: t("polls.back") })),
       h("header", { class: "page-head" }, h("h1", { text: poll.title }), h("p", { class: "lede", text: t("polls.listLede") })),
       metaList(h, ctx, poll),
-      h("p", { class: "notice", text: t("polls.hold") }),
+      h("p", { class: "notice", text: votesMode(poll) ? t("polls.snapshotInactive") : t("polls.hold") }),
+      votesMode(poll) ? h("p", { class: "notice", "data-testid": "poll-zk", text: t("polls.zkNote") }) : null,
       h("p", { class: "notice", text: poll.custodyNote || t("polls.custody") }),
       h("p", { class: "notice", text: t("polls.privacy") }),
       h(
@@ -340,8 +353,10 @@ export async function renderPollVote(main, ctx) {
       const data = await ctx.api(
         `/api/polls/${encodeURIComponent(poll.id)}/weight?address=${encodeURIComponent(address)}`
       );
-      weightText = data.currentBalance != null ? weightLabel(data.currentBalance, poll) : "—";
-      weightLine.textContent = `${t("polls.provisional")}: ${weightText}`;
+      const shown = votesMode(poll) ? data.votingPower : data.currentBalance;
+      weightText = shown != null ? weightLabel(shown, poll) : "—";
+      weightLine.textContent =
+        votesMode(poll) && shown === "0" ? t("polls.noPower") : `${t("polls.provisional")}: ${weightText}`;
     } catch (err) {
       weightLine.textContent = err.message;
     }
@@ -361,7 +376,12 @@ export async function renderPollVote(main, ctx) {
       banner(h),
       h("p", {}, h("a", { href: `/polls/${encodeURIComponent(poll.id)}`, "data-nav": "", text: poll.title })),
       h("header", { class: "page-head" }, h("h1", { text: t("polls.voteLink") })),
-      h("p", { class: "notice", "data-testid": "poll-hold", text: t("polls.hold") }),
+      h("p", {
+        class: "notice",
+        "data-testid": "poll-hold",
+        text: votesMode(poll) ? t("polls.snapshotLine", { block: String(poll.snapshotBlock ?? "—") }) : t("polls.hold"),
+      }),
+      votesMode(poll) ? h("p", { class: "notice", "data-testid": "poll-zk", text: t("polls.zkNote") }) : null,
       h("p", { class: "notice", "data-testid": "poll-custody", text: poll.custodyNote || t("polls.custody") }),
       h("p", { class: "notice", "data-testid": "poll-privacy", text: t("polls.privacy") }),
       h(
@@ -383,6 +403,31 @@ export async function renderPollVote(main, ctx) {
           },
         })
       ),
+      votesMode(poll) && Number(poll.tokenChainId) === 1
+        ? h(
+            "p",
+            {},
+            h("button", {
+              type: "button",
+              class: "btn btn-secondary",
+              "data-testid": "poll-delegate",
+              text: t("polls.delegateSelf"),
+              onClick: async () => {
+                try {
+                  if (!address) address = await connectWallet();
+                  const data = `0x5c19a95c${address.slice(2).toLowerCase().padStart(64, "0")}`;
+                  const hash = await globalThis.ethereum.request({
+                    method: "eth_sendTransaction",
+                    params: [{ from: address, to: poll.token, data }],
+                  });
+                  status.replaceChildren(h("p", { text: `${t("polls.delegateNote")} ${hash}` }));
+                } catch (err) {
+                  status.replaceChildren(h("p", { class: "notice notice-error", role: "alert", text: err.message }));
+                }
+              },
+            })
+          )
+        : null,
       status,
       weightLine,
       ballotMount,

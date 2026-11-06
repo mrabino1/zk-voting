@@ -4,6 +4,8 @@
 
 import {
   createPublicClient,
+  decodeAbiParameters,
+  encodeAbiParameters,
   encodeFunctionData,
   decodeFunctionResult,
   getAddress,
@@ -12,6 +14,7 @@ import {
   http,
   keccak256,
   parseAbi,
+  parseAbiParameters,
   stringToHex,
   toHex,
 } from 'viem';
@@ -27,6 +30,19 @@ const ERC20_ABI = parseAbi([
   'function totalSupply() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
 ]);
+
+const VOTES_ABI = parseAbi([
+  'function CLOCK_MODE() view returns (string)',
+  'function delegates(address) view returns (address)',
+  'function getPastVotes(address,uint256) view returns (uint256)',
+  'event DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate)',
+  'event DelegateVotesChanged(address indexed delegate, uint256 previousBalance, uint256 newBalance)',
+]);
+
+export const DELEGATE_VOTES_CHANGED_TOPIC = keccak256(
+  stringToHex('DelegateVotesChanged(address,uint256,uint256)'),
+);
+export const DELEGATE_CHANGED_TOPIC = keccak256(stringToHex('DelegateChanged(address,address,address)'));
 
 const ERC1271_ABI = parseAbi([
   'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
@@ -82,6 +98,74 @@ export async function pagedLogs(fetchRange, fromBlock, toBlock) {
 
 function topicAddress(addr) {
   return `0x${getAddress(addr).slice(2).toLowerCase().padStart(64, '0')}`;
+}
+
+function topicToAddress(topic) {
+  return getAddress(`0x${String(topic).slice(-40)}`);
+}
+
+/**
+ * Replay DelegateVotesChanged and DelegateChanged up to the snapshot.
+ * The last power event for a delegate is the checkpoint. A later getPastVotes
+ * call must match it; a miss means the log range did not start at deployment.
+ */
+export function rowsFromVoteLogs(powerLogs, changedLogs) {
+  const events = [];
+  for (const log of powerLogs || []) {
+    if (!log.topics?.[1] || !log.data) continue;
+    const [previous, next] = decodeAbiParameters(parseAbiParameters('uint256, uint256'), log.data);
+    events.push({
+      kind: 'power',
+      block: BigInt(log.blockNumber),
+      index: Number(log.logIndex ?? log.index ?? 0),
+      delegate: topicToAddress(log.topics[1]),
+      next,
+      previous,
+    });
+  }
+  for (const log of changedLogs || []) {
+    if (!log.topics?.[1] || !log.topics?.[3]) continue;
+    events.push({
+      kind: 'delegate',
+      block: BigInt(log.blockNumber),
+      index: Number(log.logIndex ?? log.index ?? 0),
+      delegator: topicToAddress(log.topics[1]),
+      to: topicToAddress(log.topics[3]),
+    });
+  }
+  events.sort((a, b) => {
+    if (a.block !== b.block) return a.block < b.block ? -1 : 1;
+    return a.index - b.index;
+  });
+  const power = new Map();
+  const delegators = new Map();
+  const current = new Map();
+  for (const event of events) {
+    if (event.kind === 'power') {
+      power.set(event.delegate.toLowerCase(), { address: event.delegate, weight: event.next });
+      continue;
+    }
+    const who = event.delegator.toLowerCase();
+    const prev = current.get(who);
+    if (prev && delegators.get(prev)) delegators.get(prev).delete(who);
+    const dest = event.to.toLowerCase();
+    current.set(who, dest);
+    if (dest !== ZERO.toLowerCase()) {
+      if (!delegators.has(dest)) delegators.set(dest, new Set());
+      delegators.get(dest).add(who);
+    }
+  }
+  const rows = [];
+  for (const [key, row] of power) {
+    if (row.weight <= 0n) continue;
+    rows.push({
+      address: row.address,
+      weight: row.weight.toString(),
+      delegators: delegators.get(key)?.size || 0,
+    });
+  }
+  rows.sort((a, b) => (a.address.toLowerCase() < b.address.toLowerCase() ? -1 : a.address.toLowerCase() > b.address.toLowerCase() ? 1 : 0));
+  return rows;
 }
 
 async function readTokenAt(client, token, fn, args, blockNumber) {
@@ -265,6 +349,96 @@ export function createViemTokenSource({ chainId, primaryUrl, secondaryUrl }) {
         return false;
       }
     },
+    async clockMode(token) {
+      const address = getAddress(token);
+      try {
+        return await both('clock', (c) =>
+          c.readContract({ address, abi: VOTES_ABI, functionName: 'CLOCK_MODE' }),
+        );
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(400, 'token has no block-number vote checkpoints', { code: 'TOKEN_UNSUPPORTED' });
+      }
+    },
+    async getPastVotes(token, addr, blockNumber) {
+      const address = getAddress(token);
+      const who = getAddress(addr);
+      try {
+        return await both('getPastVotes', (c) =>
+          c.readContract({
+            address,
+            abi: VOTES_ABI,
+            functionName: 'getPastVotes',
+            args: [who, BigInt(blockNumber)],
+          }),
+        );
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(400, 'token has no block-number vote checkpoints', { code: 'TOKEN_UNSUPPORTED' });
+      }
+    },
+    async delegatesAt(token, addr, blockNumber) {
+      const address = getAddress(token);
+      const who = getAddress(addr);
+      return both('delegates', (c) =>
+        c.readContract({
+          address,
+          abi: VOTES_ABI,
+          functionName: 'delegates',
+          args: [who],
+          blockNumber: BigInt(blockNumber),
+        }),
+      );
+    },
+    async votingPowerAt(token, snapshotBlock, startBlock) {
+      const address = getAddress(token);
+      const from = BigInt(startBlock);
+      const to = BigInt(snapshotBlock);
+      if (to < from) return [];
+      const pull = async (client) => {
+        const power = await pagedLogs(
+          (a, b) =>
+            client.getLogs({
+              address,
+              fromBlock: a,
+              toBlock: b,
+              topics: [DELEGATE_VOTES_CHANGED_TOPIC],
+            }),
+          from,
+          to,
+        );
+        const changed = await pagedLogs(
+          (a, b) =>
+            client.getLogs({
+              address,
+              fromBlock: a,
+              toBlock: b,
+              topics: [DELEGATE_CHANGED_TOPIC],
+            }),
+          from,
+          to,
+        );
+        return rowsFromVoteLogs(power, changed);
+      };
+      const rows = await pull(primary);
+      if (secondary) {
+        assertRpcAgreement('vote-power', rows, await pull(secondary));
+      }
+      for (const row of rows) {
+        const onchain = await both('getPastVotes', (c) =>
+          c.readContract({
+            address,
+            abi: VOTES_ABI,
+            functionName: 'getPastVotes',
+            args: [getAddress(row.address), to],
+          }),
+        );
+        if (onchain !== BigInt(row.weight)) {
+          throw rpcError('RPC_DISAGREEMENT', 'vote logs do not match getPastVotes');
+        }
+      }
+      return rows;
+    },
   };
 }
 
@@ -278,27 +452,48 @@ function lower(addr) {
  * end balance does not include it.
  */
 export const ETHEREUM_MAINNET_CHAIN_ID = 1;
+/** In-memory fixture and local Anvil only. Production refuses every chain except mainnet. */
+export const LOCAL_TOKEN_CHAIN_ID = 31337;
+
+/**
+ * Token polls read Ethereum mainnet. Chain id 1 is the only production id.
+ * 31337 exists so the in-memory tests can run without a public network.
+ */
+export function tokenChainAllowed(chainId, { production = false } = {}) {
+  const n = Number(chainId);
+  if (n === ETHEREUM_MAINNET_CHAIN_ID) return true;
+  if (!production && n === LOCAL_TOKEN_CHAIN_ID) return true;
+  return false;
+}
 
 /**
  * The one ERC-20 every poll reads. Unset or invalid address fails closed.
- * Chain id defaults to Ethereum mainnet. The Node never sends a transaction.
+ * A chain id other than Ethereum mainnet fails closed in production.
+ * The Node never sends a transaction.
  */
 export function resolveVotingToken({
   address = process.env.VOTING_TOKEN_ADDRESS,
   chainId = process.env.VOTING_TOKEN_CHAIN_ID,
+  production = false,
 } = {}) {
   const raw = String(address ?? '').trim();
-  const chainText = chainId == null || String(chainId).trim() === '' ? String(ETHEREUM_MAINNET_CHAIN_ID) : String(chainId).trim();
+  const chainText =
+    chainId == null || String(chainId).trim() === '' ? String(ETHEREUM_MAINNET_CHAIN_ID) : String(chainId).trim();
   const parsed = Number(chainText);
-  const chainOk = Number.isInteger(parsed) && parsed > 0 && parsed !== 27427;
+  const parsedOk = Number.isInteger(parsed) && parsed > 0;
+  const allowed = parsedOk && tokenChainAllowed(parsed, { production });
   const addressOk = Boolean(raw) && isAddress(raw);
-  const configured = addressOk && chainOk;
+  const configured = addressOk && allowed;
   let reason = null;
-  if (!configured) reason = !raw ? 'unset' : 'invalid';
+  if (!configured) {
+    if (!raw) reason = 'unset';
+    else if (!addressOk) reason = 'invalid';
+    else reason = 'not_ethereum_l1';
+  }
   return {
     configured,
     address: addressOk ? getAddress(raw) : '',
-    chainId: chainOk ? parsed : ETHEREUM_MAINNET_CHAIN_ID,
+    chainId: allowed ? parsed : ETHEREUM_MAINNET_CHAIN_ID,
     reason,
     readOnly: true,
   };
@@ -312,11 +507,15 @@ export function createMemoryTokenChain({
 } = {}) {
   const tokenAddress = getAddress(token);
   const balances = new Map();
+  const voteBalances = new Map();
+  const delegateOf = new Map();
   let supply = 0n;
   let nextNumber = 1n;
   let nextTimestamp = 1_700_000_000n;
   const openLogs = [];
   const logs = [];
+  const openVoteEvents = [];
+  const voteEvents = [];
   const blocks = [];
   const history = new Map();
   const contracts = new Map();
@@ -329,17 +528,49 @@ export function createMemoryTokenChain({
     balances.set(lower(addr), value);
   }
 
+  function votesOf(addr) {
+    return voteBalances.get(lower(addr)) || 0n;
+  }
+
+  function setVotes(addr, value) {
+    const who = getAddress(addr);
+    const previous = votesOf(who);
+    if (value === 0n) voteBalances.delete(lower(who));
+    else voteBalances.set(lower(who), value);
+    openVoteEvents.push({
+      kind: 'power',
+      delegate: who,
+      previous,
+      next: value,
+    });
+  }
+
+  function moveVotes(from, to, amount) {
+    const n = BigInt(amount);
+    if (n === 0n || lower(from) === lower(to)) return;
+    if (from && lower(from) !== lower(ZERO)) setVotes(from, votesOf(from) - n);
+    if (to && lower(to) !== lower(ZERO)) setVotes(to, votesOf(to) + n);
+  }
+
   function mine({ timestamp, finalized = false } = {}) {
     const number = nextNumber;
     nextNumber += 1n;
     const ts = timestamp == null ? nextTimestamp : BigInt(timestamp);
     nextTimestamp = ts + 12n;
-    const snap = new Map(balances);
-    history.set(number.toString(), { balances: snap, supply });
+    history.set(number.toString(), {
+      balances: new Map(balances),
+      supply,
+      votes: new Map(voteBalances),
+      delegates: new Map(delegateOf),
+    });
     for (const log of openLogs) {
       logs.push({ ...log, block: number });
     }
     openLogs.length = 0;
+    for (const event of openVoteEvents) {
+      voteEvents.push({ ...event, block: number, index: voteEvents.length });
+    }
+    openVoteEvents.length = 0;
     const hash = keccak256(stringToHex(`zk-voting-mock-block:${number}:${ts}`));
     const block = { number, hash, timestamp: ts, finalized: Boolean(finalized) };
     blocks.push(block);
@@ -365,6 +596,7 @@ export function createMemoryTokenChain({
       setBal(to, bal(to) + n);
       supply += n;
       openLogs.push({ from: ZERO, to: getAddress(to), amount: n });
+      moveVotes(ZERO, delegateOf.get(lower(to)) || ZERO, n);
     },
     transfer(from, to, amount) {
       const n = BigInt(amount);
@@ -372,6 +604,7 @@ export function createMemoryTokenChain({
       setBal(from, bal(from) - n);
       setBal(to, bal(to) + n);
       openLogs.push({ from: getAddress(from), to: getAddress(to), amount: n });
+      moveVotes(delegateOf.get(lower(from)) || ZERO, delegateOf.get(lower(to)) || ZERO, n);
     },
     /**
      * Borrow and repay inside the open block. End-of-block balance is unchanged.
@@ -383,6 +616,26 @@ export function createMemoryTokenChain({
       const lender = getAddress('0x0000000000000000000000000000000000000f1a');
       openLogs.push({ from: lender, to: getAddress(borrower), amount: n, flash: true });
       openLogs.push({ from: getAddress(borrower), to: lender, amount: n, flash: true });
+    },
+    /**
+     * ERC20Votes delegation. address(0) undelegates. Voting power stays zero
+     * until this is called, including a delegation to the holder themselves.
+     * The change is checkpointed when the next block is mined.
+     */
+    delegate(account, to) {
+      const who = getAddress(account);
+      const dest = !to || lower(to) === lower(ZERO) ? ZERO : getAddress(to);
+      const from = delegateOf.get(lower(who)) || ZERO;
+      if (lower(from) === lower(dest)) return;
+      const balance = bal(who);
+      delegateOf.set(lower(who), dest);
+      openVoteEvents.push({
+        kind: 'delegate',
+        delegator: who,
+        from: getAddress(from),
+        to: dest,
+      });
+      moveVotes(from, dest, balance);
     },
     mine,
     finalizeThrough(number) {
@@ -452,6 +705,62 @@ export function createMemoryTokenChain({
         if (block.timestamp < target) ans = block;
       }
       return ans;
+    },
+    async clockMode() {
+      return 'mode=blocknumber&from=default';
+    },
+    async getPastVotes(addrToken, addr, blockNumber) {
+      if (getAddress(addrToken) !== tokenAddress) return 0n;
+      const snap = history.get(BigInt(blockNumber).toString());
+      if (!snap) throw new HttpError(400, 'unknown token block', { code: 'RPC_UNAVAILABLE' });
+      if (BigInt(blockNumber) >= nextNumber) {
+        throw new HttpError(400, 'snapshot block is not in the past', { code: 'CLOSE_NOT_FINAL' });
+      }
+      return snap.votes.get(lower(addr)) || 0n;
+    },
+    async delegatesAt(addrToken, addr, blockNumber) {
+      if (getAddress(addrToken) !== tokenAddress) return ZERO;
+      const snap = history.get(BigInt(blockNumber).toString());
+      if (!snap) throw new HttpError(400, 'unknown token block', { code: 'RPC_UNAVAILABLE' });
+      return snap.delegates.get(lower(addr)) || ZERO;
+    },
+    async votingPowerAt(addrToken, snapshotBlock, startBlock) {
+      if (getAddress(addrToken) !== tokenAddress) return [];
+      const from = BigInt(startBlock);
+      const to = BigInt(snapshotBlock);
+      const power = [];
+      const changed = [];
+      for (const event of voteEvents) {
+        if (event.block < from || event.block > to) continue;
+        if (event.kind === 'power') {
+          power.push({
+            blockNumber: event.block,
+            logIndex: event.index,
+            topics: [DELEGATE_VOTES_CHANGED_TOPIC, topicAddress(event.delegate)],
+            data: encodeAbiParameters(parseAbiParameters('uint256, uint256'), [event.previous, event.next]),
+          });
+        } else {
+          changed.push({
+            blockNumber: event.block,
+            logIndex: event.index,
+            topics: [
+              DELEGATE_CHANGED_TOPIC,
+              topicAddress(event.delegator),
+              topicAddress(event.from),
+              topicAddress(event.to),
+            ],
+            data: '0x',
+          });
+        }
+      }
+      const rows = rowsFromVoteLogs(power, changed);
+      for (const row of rows) {
+        const onchain = await this.getPastVotes(addrToken, row.address, to);
+        if (onchain !== BigInt(row.weight)) {
+          throw new HttpError(409, 'vote logs do not match getPastVotes', { code: 'RPC_DISAGREEMENT' });
+        }
+      }
+      return rows;
     },
     async hasCode(addr) {
       return contracts.has(lower(addr));

@@ -1,7 +1,7 @@
-# Future research: vote delegation
+# Vote delegation
 
-> **Status: not planned for implementation; open research question.**
-> Nothing in this repository implements delegation today. This page records the idea, where it could fit, and why it is risky, so that any future work starts from the same trade-offs.
+> **Status: implemented for token polls (`erc20_votes`) on Ethereum mainnet only. Civic anonymous delegation is not implemented and stays out of scope.**
+> `delegate(address)` lives on the ERC-20. This Node never sends it. Weight is `getPastVotes` at one finalized block, committed with a Poseidon root. The choice stays public. See [`POLLS.md`](../POLLS.md).
 
 ## The idea
 
@@ -13,12 +13,13 @@ MakerDAO-style delegation: a voter calls `delegate(delegate)` to lend their voti
 
 ## Where it fits: ERC-20 token polls
 
-Delegation is a natural fit for the token polls described in [`POLLS.md`](../POLLS.md):
+`erc20_votes` is that token-poll path, and only that path:
 
-- Weight is already public there and comes from tokens held, so delegation reveals nothing new.
-- Weight already depends on holding tokens through close. A delegate contract where holders lock tokens and can withdraw at any time maps cleanly onto that rule: whatever is still delegated at close is what counts.
+- Weight is public and comes from `getPastVotes` at one finalized Ethereum block, so delegation reveals nothing the snapshot does not already publish.
+- `balance_hold` is unchanged: the holder votes, and weight is the minimum balance through close.
+- The poll creator chooses the weight source. The default remains `balance_hold`.
 
-**Recommendation if it is ever built:** token polls only, off by default, and enabled per poll by the poll's creator.
+Civic elections do not gain a delegate function from this work.
 
 ## Risks for anonymous civic elections
 

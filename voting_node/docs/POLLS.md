@@ -1,10 +1,25 @@
 # Token polls (ERC-20 weighted signal)
 
-**NOT FOR PROFIT** — civic public good, not a commercial product. AGPL-3.0-or-later. ZK-Voting issues **no token**. This feature **reads** a third-party ERC-20 balance as vote weight. It does not create, sell, or wrap a token. Results are **signal only** and **non-binding**. They trigger no on-chain action.
+**NOT FOR PROFIT** — civic public good, not a commercial product. AGPL-3.0-or-later. ZK-Voting issues **no token** and does not sell one. This feature **reads** one ERC-20 on **Ethereum mainnet** (chain id 1) as vote weight. An optional `SignalVotes` contract exists for an operator who wants a dedicated token. The Node does not deploy it. Results are **signal only** and **non-binding**. They trigger no on-chain action.
 
-Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes, no poll nav entry, and the civic L2 rejects `poll_params`, `poll_vote`, and `poll_tally`.
+Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes and no poll nav entry. `balance_hold` may still post `poll_params`, `poll_vote`, and `poll_tally` on the civic L2. `erc20_votes` does not.
 
-Every poll reads one host token: `VOTING_TOKEN_ADDRESS` on `VOTING_TOKEN_CHAIN_ID` (default **1**, Ethereum mainnet). The Node only reads `balanceOf`. It does not send a transaction and it does not spend tokens. If `VOTING_TOKEN_ADDRESS` is unset or not an address, polls stay disabled and the back office shows that message. `pollParamsHash` still commits the token address and chain id that were in force when the poll was scheduled.
+Every poll reads one host token: `VOTING_TOKEN_ADDRESS`. Production accepts chain id **1** only. Any other chain id leaves polls disabled (`not_ethereum_l1`). The Node never sends a token transaction. If the address is unset or not an address, polls stay disabled and the back office shows that message. `pollParamsHash` commits the token address, the chain id, and the weight source that were in force when the poll was scheduled.
+
+## Two weight sources
+
+| `weightSource` | What counts | Credential |
+| --- | --- | --- |
+| `balance_hold` (default) | Minimum end-of-block `balanceOf` from the vote block through close | The address that holds the tokens |
+| `erc20_votes` | `getPastVotes(voter, snapshotBlock)` | Delegated voting power at one finalized Ethereum block |
+
+`erc20_votes` requires `CLOCK_MODE` to contain `mode=blocknumber`. The snapshot is the latest finalized block at schedule time, or an explicit past finalized block. Undelegated balances are zero. Delegation after the snapshot does not count. One ballot per address still holds. The turnout denominator is total supply at the snapshot (`supplyReference: "snapshot"`).
+
+The snapshot leaf is Poseidon(`address`, `weight`), sorted by address, depth 16, scheme `zk-voting.hash.poseidon-bn254-x5-t3-v1` (the civic hasher). The Node checks the inclusion path directly. There is no Groth16 ceremony for this circuit. The address, the weight, and the choice are public. This is not a secret ballot.
+
+`VOTING_TOKEN_START_BLOCK` is required for a real RPC so `DelegateChanged` and `DelegateVotesChanged` are not scanned from genesis. The replayed logs must match `getPastVotes` or the snapshot fails. The in-memory test chain does not use that setting.
+
+Delegation is `delegate(address)` on the token. The holder pays the gas in their own wallet. The Node does not send it. Signing a ballot stays an EIP-712 signature and includes `snapshotRoot` only in this mode.
 
 ## Polling, not an executive
 
@@ -24,22 +39,23 @@ Only the platform super admin creates, edits, or schedules a poll. A tally opera
 
 `finalWeight(address) ≤ balanceOf(address, closeBlock)`. Summed over distinct addresses, participation is at most the token supply at close. Moving the same tokens to a second address and voting again cannot count them twice. A flash loan that is borrowed and repaid inside one transaction does not change any end-of-block balance, so its weight is zero.
 
-Delegation and vote proxies are out of scope. The address that **holds** the tokens is the one that votes. Tokens sitting in a staking contract or a liquidity pool cannot vote unless that contract signs the ballot. The UI says so.
+`balance_hold` has no delegation. The address that **holds** the tokens is the one that votes. `erc20_votes` counts delegated power instead, and only at the snapshot. Tokens sitting in a staking contract or a liquidity pool cannot vote unless that contract delegates or signs the ballot. The UI says so.
 
 ## Privacy
 
 | | Civic election | Token poll (phase 1) |
 | --- | --- | --- |
-| Credential | Identity commitment | Token balance |
+| Credential | Identity commitment | Token balance, or delegated votes at a snapshot |
 | Choice | Hidden (receipt cannot prove it) | Public after the disclosure hour |
 | Address | Not the voter id | Public by design |
-| Weight | One person | Minimum balance held through close |
+| Weight | One person | Minimum balance held through close, or `getPastVotes` |
+| Zero knowledge | Eligibility without publishing the choice | Poseidon membership of a public `(address, weight)` leaf. Not ballot secrecy |
 
 Address-hiding weighted voting conflicts with hold-through-close, because the tally must watch that address until close. It is not offered.
 
 ## Where the token lives
 
-ZK-Voting L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Tests use an in-memory ERC-20 on a local chain id, not a public testnet and not a live RPC.
+ZK-Voting L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20, and `erc20_votes` does not post to it. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Chain id 31337 is allowed only when `NODE_ENV` is not `production`, for the in-memory fixture. Every other chain id is refused. Tests do not use a public testnet or a live RPC.
 
 ## Math
 

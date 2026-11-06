@@ -11,8 +11,10 @@ import {
   buildPollAuditorPack,
   castBallot,
   createPoll,
+  delegatesView,
   disclosedBallots,
   getPollView,
+  snapshotProofView,
   listPolls,
   pollOutcomePdf,
   resultsView,
@@ -67,6 +69,20 @@ export function pollsRouter(deps) {
     '/',
     asyncHandler(async (_req, res) => {
       res.json({ nfp: true, binding: false, polls: listPolls(deps) });
+    }),
+  );
+
+  router.get(
+    '/:id/delegates',
+    asyncHandler(async (req, res) => {
+      res.json(delegatesView(deps, req.params.id));
+    }),
+  );
+
+  router.get(
+    '/:id/snapshot-proof',
+    asyncHandler(async (req, res) => {
+      res.json(snapshotProofView(deps, req.params.id, req.query.address));
     }),
   );
 
