@@ -329,6 +329,39 @@ describe('token poll API', () => {
     assert.equal(window.status, 400);
   });
 
+  test('a poll stores gross or quadratic weight and a simple majority', async () => {
+    const fx = await startPollNode();
+    stops.push(() => fx.stop());
+    const { jar } = await login(fx.api, 'admin');
+    const base = {
+      title: 'Quadratic signal',
+      summary: 'Count the square root, then take a simple majority.',
+      body: 'Yes adopts the change.\n\nNo leaves it.',
+      tags: ['Treasury', 'Signal'],
+      discussionUrl: 'https://example.com/polls/quadratic',
+      pollType: 'plurality',
+      weighting: 'quadratic',
+      options: [A_LABEL, B_LABEL],
+      startTime: 10,
+      cutoffTime: 20,
+      jurisdictionId: 'demo',
+    };
+    const created = await fx.api('POST', '/api/polls', { jar, body: base });
+    assert.equal(created.status, 201, created.text);
+    assert.equal(created.json.poll.weighting, 'quadratic');
+    assert.equal(created.json.poll.decisionRule, 'simple_majority');
+    assert.equal(created.json.poll.summary, base.summary);
+    assert.deepEqual(created.json.poll.tags, ['Treasury', 'Signal']);
+    assert.equal(created.json.poll.discussionUrl, 'https://example.com/polls/quadratic');
+    const bad = await fx.api('POST', '/api/polls', { jar, body: { ...base, weighting: 'squared' } });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.json.code, 'INVALID_CHOICES');
+    const gross = await fx.api('POST', '/api/polls', { jar, body: { ...base, weighting: undefined, title: 'Gross signal' } });
+    assert.equal(gross.status, 201, gross.text);
+    assert.equal(gross.json.poll.weighting, 'gross');
+    assert.equal(gross.json.poll.decisionRule, 'simple_majority');
+  });
+
   test('scheduled poll params carry a monotonic sequence and postedAt', async () => {
     const fx = await startPollNode();
     stops.push(() => fx.stop());

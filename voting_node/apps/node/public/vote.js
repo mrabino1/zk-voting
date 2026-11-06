@@ -20,6 +20,7 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
+import { contestFacts, contestPanel, contestPlace, contestSplit, contestTags } from "./contests.js";
 import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { freshChoiceRandomness } from "./aggregate-ballot.js";
 
@@ -183,72 +184,57 @@ export async function renderVote(main, ctx) {
     return h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: election.jurisdiction }),
+      h("p", { class: "kicker", text: contestPlace(election) }),
       h("h1", { text: election.title }),
-      h(
-        "p",
-        { class: "cluster" },
-        h("span", { class: `status-pill ${st.className}`, text: st.label }),
-        h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
-        source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample ballot" }) : null
-      ),
-      h(
-        "ul",
-        { class: "meta-list" },
-        h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: String(election.id) })),
-        election.shortCode
-          ? h(
-              "li",
-              {},
-              h("span", { class: "lbl", text: "Short link" }),
-              h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
-            )
-          : null,
-        election.onChainElectionId
-          ? h("li", {}, h("span", { class: "lbl", text: "On-chain id" }), h("span", { text: String(election.onChainElectionId) }))
-          : null,
-        h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-        h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-        resultsAreSealed(election)
-          ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-          : null,
-        resultsAreSealed(election)
-          ? h("li", {}, h("span", { class: "field-hint", text: t("results.sealedBody") }))
-          : null,
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "Aspects" }),
-          h("span", { text: questions.length ? `${questions.length} question${questions.length === 1 ? "" : "s"} on this ballot` : "None published" })
+      contestTags(h, [
+        { text: st.label, accent: Number(election.state) === 2 },
+        { text: electionTypeLabel(election), accent: true },
+        { text: "One person, one vote" },
+        source === "sample" ? { text: "Sample ballot" } : null,
+      ]),
+      contestSplit(
+        h,
+        contestPanel(
+          h,
+          "Ballot",
+          h("p", {
+            text:
+              state.step === "receipt"
+                ? "Your ballot was accepted. The receipt below cannot prove how you voted."
+                : election.tallyPubKey
+                  ? voteCopy("vote.envelopeHelpTally")
+                  : voteCopy("vote.envelopeHelp"),
+          }),
+          resultsAreSealed(election) ? h("p", { class: "notice", text: sealedUntilLabel(election, formatTime) }) : null,
+          resultsAreSealed(election) ? h("p", { text: t("results.sealedBody") }) : null,
+          h(
+            "p",
+            {},
+            h("a", {
+              href: `/elections/${encodeURIComponent(election.id)}/info`,
+              "data-nav": "",
+              text: "Read candidate and measure information",
+            }),
+            " · ",
+            h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Results" })
+          )
         ),
-        election.ballotSpecHash
-          ? h("li", {}, h("span", { class: "lbl", text: "Ballot spec" }), h("span", { class: "hex", style: { padding: "0.2rem 0.4rem" }, text: election.ballotSpecHash }))
-          : null,
-        election.tallyPubKey
-          ? h("li", {}, h("span", { class: "lbl", text: "Tally encryption" }), h("span", { text: tallyEncryptionBlurb(election) }))
-          : null
-      ),
-      h(
-        "p",
-        {
-          text:
-            state.step === "receipt"
-              ? "Your ballot was accepted. The receipt below cannot prove how you voted."
-              : election.tallyPubKey
-                ? voteCopy("vote.envelopeHelpTally")
-                : voteCopy("vote.envelopeHelp"),
-        }
-      ),
-      h(
-        "p",
-        {},
-        h("a", {
-          href: `/elections/${encodeURIComponent(election.id)}/info`,
-          "data-nav": "",
-          text: "Read candidate and measure information (does not record a vote)",
-        }),
-        " · ",
-        h("a", { href: `/elections/${encodeURIComponent(election.id)}/results`, "data-nav": "", text: "Election results" })
+        contestPanel(
+          h,
+          "Stage",
+          contestFacts(h, [
+            { label: "Opens", value: formatTime(election.startTime) },
+            { label: "Closes", value: formatTime(election.cutoffTime) },
+            { label: "Count", value: "One person, one vote" },
+            {
+              label: "Questions",
+              value: questions.length ? String(questions.length) : "None published",
+            },
+            election.shortCode ? { label: "Short link", value: `/v/${election.shortCode}` } : null,
+            election.onChainElectionId ? { label: "On-chain id", value: String(election.onChainElectionId) } : null,
+            election.tallyPubKey ? { label: "Tally encryption", value: tallyEncryptionBlurb(election) } : null,
+          ])
+        )
       )
     );
   }

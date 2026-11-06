@@ -79,12 +79,29 @@ export function tokenPollTypedData({
   };
 }
 
+export function pollWeighting(poll) {
+  return poll?.weighting === 'quadratic' ? 'quadratic' : 'gross';
+}
+
+/** Legacy polls with no stored rule keep most-votes plurality. */
+export function pollDecisionRule(poll) {
+  const raw = poll?.decisionRule;
+  if (raw === 'simple_majority' || raw === 'plurality' || raw === 'ranked_irv') return raw;
+  return poll?.pollType === 'ranked_irv' ? 'ranked_irv' : 'plurality';
+}
+
 export function canonicalPollParams(poll) {
   return {
     title: poll.title,
+    summary: String(poll.summary || ''),
+    body: String(poll.body || ''),
+    tags: Array.isArray(poll.tags) ? poll.tags.map((tag) => String(tag)) : [],
+    discussionUrl: poll.discussionUrl || null,
     options: (poll.options || []).map((o) => ({ id: o.id, label: o.label })),
     includeAbstain: true,
     pollType: poll.pollType,
+    weighting: pollWeighting(poll),
+    decisionRule: pollDecisionRule(poll),
     token: poll.token,
     tokenChainId: Number(poll.tokenChainId),
     startTime: Number(poll.startTime),

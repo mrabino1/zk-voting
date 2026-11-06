@@ -4,6 +4,7 @@
  */
 
 import { brandName } from "./brand.js";
+import { civicContestCard } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { t } from "./i18n.js";
 import {
@@ -102,7 +103,7 @@ function publicCalendar(h, ctx, elections, source) {
   }
   return h(
     "div",
-    { class: "grid-cards", role: "list" },
+    { class: "contest-grid", role: "list" },
     source === "sample"
       ? h(
           "p",
@@ -115,48 +116,19 @@ function publicCalendar(h, ctx, elections, source) {
       : null,
     ...elections.map((election) => {
       const st = electionStateInfo(election.state);
-      return h(
-        "article",
-        { class: "election-card dash-card", role: "listitem" },
-        cardIcon(h, "ballot"),
-        h("p", { class: "kicker", text: election.jurisdiction }),
-        h("h2", { text: election.title }),
-        h(
-          "p",
-          { class: "cluster" },
-          h("span", { class: `status-pill ${st.className}`, text: st.label }),
-          h("span", { class: "status-pill status-created", text: electionTypeLabel(election) })
-        ),
-        h(
-          "ul",
-          { class: "meta-list" },
-          h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-          h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-          resultsAreSealed(election)
-            ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-            : null,
-          election.shortCode
-            ? h(
-                "li",
-                {},
-                h("span", { class: "lbl", text: "Short link" }),
-                h("a", {
-                  href: `/v/${encodeURIComponent(election.shortCode)}`,
-                  "data-nav": "",
-                  text: `/v/${election.shortCode}`,
-                })
-              )
-            : null
-        ),
-        election.description ? h("p", { text: election.description }) : null,
-        h(
-          "div",
-          { class: "cluster" },
+      return civicContestCard(h, election, {
+        formatTime,
+        state: st,
+        typeLabel: electionTypeLabel(election),
+        href: `/elections/${encodeURIComponent(election.id)}/info`,
+        sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
+        foot: Number(election.state) === 2 ? "Open · one person, one vote" : st.label,
+        actions: [
           h("a", {
             class: "btn btn-secondary",
             href: `/elections/${encodeURIComponent(election.id)}/info`,
             "data-nav": "",
-            text: "Candidate / measure info",
+            text: "Info",
           }),
           h("a", {
             class: election.state >= 4 ? "btn" : "btn btn-secondary",
@@ -171,9 +143,9 @@ function publicCalendar(h, ctx, elections, source) {
                 "data-nav": "",
                 text: "Register",
               })
-            : null
-        )
-      );
+            : null,
+        ],
+      });
     })
   );
 }

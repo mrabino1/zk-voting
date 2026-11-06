@@ -9,12 +9,14 @@ import { finalWeight } from '../../apps/node/src/holdWeight.mjs';
 import {
   SIGNAL_LABEL,
   ballotsRootOf,
+  pollDecisionRule,
+  pollWeighting,
   resultHashOf,
   tokenPollTypedData,
 } from '../../apps/node/src/pollTypedData.mjs';
 import { snapshotRootOf, verifySnapshotProof } from '../../apps/node/src/snapshotTree.mjs';
 import { createViemTokenSource } from '../../apps/node/src/tokenSource.mjs';
-import { evaluateWeightedPoll } from '../../apps/node/src/weightedTally.mjs';
+import { evaluateWeightedPoll, publicPollTally } from '../../apps/node/src/weightedTally.mjs';
 
 export const POLL_AUDITOR_SCHEMA = 'zk-voting.auditor.poll.v1';
 
@@ -36,19 +38,6 @@ function walkBanned(value, path, errors) {
   }
 }
 
-function serializeRounds(irv) {
-  if (!irv) return null;
-  return irv.rounds.map((round) => ({
-    round: round.round,
-    counts: Object.fromEntries(Object.entries(round.counts).map(([k, v]) => [k, dec(v)])),
-    continuing: dec(round.continuing),
-    exhausted: dec(round.exhausted),
-    remaining: round.remaining,
-    eliminated: round.eliminated,
-    winner: round.winner,
-    ...(round.tieBroken ? { tieBroken: true } : {}),
-  }));
-}
 
 async function checkSignature(poll, ballot) {
   if (ballot.sigKind === 'erc1271') return 'erc1271';
@@ -152,6 +141,7 @@ export async function verifyPollBundle(bundle, { offline = true, rpcUrl = '', so
       }
     }
     const supply = BigInt(poll.totalSupplyAtClose || '0');
+    const votesMode = poll.weightSource === 'erc20_votes';
     const again = evaluateWeightedPoll({
       pollType: poll.pollType,
       optionIds: (poll.options || []).map((o) => o.id),
@@ -159,30 +149,22 @@ export async function verifyPollBundle(bundle, { offline = true, rpcUrl = '', so
       quorum: poll.quorum,
       passThresholdBps: poll.passThresholdBps,
       totalSupply: supply,
+      weighting: pollWeighting(poll),
+      decisionRule: pollDecisionRule(poll),
+      decimals: Number(poll.decimals || 0),
     });
     if (drift) again.flags = [...again.flags, 'TOKEN_DRIFT'];
-    const counts = {};
-    for (const [key, value] of Object.entries(again.counts)) counts[key] = dec(value);
-    const publicResult = {
+    const publicResult = publicPollTally({
       pollId: poll.id,
       closeBlock: result.closeBlock,
-      participation: dec(again.participation),
-      withdrawnWeight: dec(withdrawn),
-      turnoutBps: dec(again.turnoutBps),
-      counts,
-      irvRounds: serializeRounds(again.irv),
-      outcome: again.outcome,
-      flags: again.flags,
-      winner: again.winner,
+      math: again,
+      withdrawnWeight: withdrawn,
       ballotsRoot: ballotsRootOf(ballots),
-      binding: false,
-      nfp: true,
-      signal: SIGNAL_LABEL,
-    };
-    if (poll.weightSource === 'erc20_votes') {
-      publicResult.snapshotRoot = poll.snapshotRoot;
-      publicResult.snapshotBlock = Number(poll.snapshotBlock);
-    }
+      weighting: pollWeighting(poll),
+      decisionRule: pollDecisionRule(poll),
+      snapshotRoot: votesMode ? poll.snapshotRoot : null,
+      snapshotBlock: votesMode ? poll.snapshotBlock : null,
+    });
     const recomputed = resultHashOf(publicResult);
     if (recomputed !== result.resultHash) errors.push('resultHash does not match recomputed tally');
     if (publicResult.outcome !== result.outcome) errors.push('outcome does not match tally');

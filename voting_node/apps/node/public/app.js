@@ -43,6 +43,7 @@ import {
 } from "./audience.js";
 import { footerMetaKey, namedVotingHost, showsDemoChrome } from "./host-chrome.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
+import { civicContestCard } from "./contests.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
 import { renderFeedback } from "./feedback.js";
@@ -590,85 +591,44 @@ function electionCard(election, me, store) {
   const vs = voterStatusForElection(election, me, store);
   const canVote = election.state === 2 && vs.key !== "disqualified" && vs.key !== "recorded";
   const canRegister = election.state <= 2 && vs.key === "not_registered";
+  const roll = `${election.participantCount} registered${
+    election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
+  }`;
   return h(
-    "article",
-    { class: "election-card", role: "listitem" },
-    h("p", { class: "kicker", text: election.jurisdiction }),
-    h("h2", { text: election.title }),
-    h(
-      "p",
-      { class: "cluster" },
-      h("span", { class: `status-pill ${st.className}`, text: st.label }),
-      h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
-      h("span", { class: `status-pill ${vs.className}`, text: vs.label })
-    ),
-    h(
-      "ul",
-      { class: "meta-list" },
-      h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-      h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-      resultsAreSealed(election)
-        ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-        : null,
-      election.shortCode
-        ? h(
-            "li",
-            {},
-            h("span", { class: "lbl", text: "Short link" }),
-            h("a", { href: `/v/${encodeURIComponent(election.shortCode)}`, "data-nav": "", text: `/v/${election.shortCode}` })
-          )
-        : null,
-      h(
-        "li",
-        {},
-        h("span", { class: "lbl", text: "Roll" }),
-        h(
-          "span",
-          {
-            text: `${election.participantCount} registered${
-              election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
-            }`,
-          }
-        )
-      ),
-      h(
-        "li",
-        {},
-        h("span", { class: "lbl", text: "Questions" }),
-        h("span", { text: String(election.questionCount || election.questions?.length || "—") })
-      )
-    ),
-    election.description ? h("p", { text: election.description }) : null,
-    aspectPreview(election, h),
-    h(
-      "div",
-      { class: "cluster" },
-      canVote
-        ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
-        : vs.key === "recorded"
-          ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
-          : election.state === 2
-            ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Open ballot" })
-            : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Election detail" }),
-      canRegister
-        ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-        : null,
-      h(
-        "a",
-        {
+    "div",
+    { class: "contest-card-wrap" },
+    civicContestCard(h, election, {
+      formatTime,
+      state: st,
+      typeLabel: `${electionTypeLabel(election)} · ${vs.label}`,
+      href: `/vote/${encodeURIComponent(election.id)}`,
+      sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
+      roll,
+      foot: canVote ? "Open · mark a ballot" : vs.label,
+      actions: [
+        canVote
+          ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
+          : vs.key === "recorded"
+            ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
+            : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: election.state === 2 ? "Open ballot" : "Election detail" }),
+        canRegister
+          ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+          : null,
+        h("a", {
           class: election.state >= 4 ? "btn" : "btn btn-secondary",
           href: `/elections/${encodeURIComponent(election.id)}/results`,
           "data-nav": "",
           text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
-        }
-      ),
-      h("a", {
-        class: "btn btn-secondary",
-        href: `/elections/${encodeURIComponent(election.id)}/info`,
-        "data-nav": "",
-        text: "Candidate / measure info",
-      })
-    )
+        }),
+        h("a", {
+          class: "btn btn-secondary",
+          href: `/elections/${encodeURIComponent(election.id)}/info`,
+          "data-nav": "",
+          text: "Info",
+        }),
+      ],
+    }),
+    aspectPreview(election, h)
   );
 }
 
@@ -676,7 +636,7 @@ function electionGrid(elections, me, store, emptyText) {
   if (!elections.length) {
     return h("div", { class: "notice" }, h("p", { text: emptyText }));
   }
-  return h("div", { class: "grid-cards", role: "list" }, ...elections.map((election) => electionCard(election, me, store)));
+  return h("div", { class: "contest-grid", role: "list" }, ...elections.map((election) => electionCard(election, me, store)));
 }
 
 function renderDesk(main, route, bundle) {
