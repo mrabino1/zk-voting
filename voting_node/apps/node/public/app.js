@@ -41,7 +41,7 @@ import {
   audienceOf,
   homeDestination,
 } from "./audience.js";
-import { footerMetaKey, namedVotingHost, paintClientHost, showsDemoChrome } from "./host-chrome.js";
+import { allowSampleRoll, footerMetaKey, namedVotingHost, paintClientHost, showsDemoChrome } from "./host-chrome.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 import { civicContestCard } from "./contests.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
@@ -480,17 +480,19 @@ function voterStatusForElection(election, me, store) {
 }
 
 export async function loadElections() {
+  const named = !allowSampleRoll(chromeHostConfig);
   try {
     const data = await api("/api/elections");
     const list = asList(data).map((row) => normalizeElection(row)).filter(Boolean);
-    if (list.length) return { elections: list, source: "api" };
+    if (list.length || named) return { elections: list, source: "api" };
   } catch {
-    /* Node API may not be serving yet; show the working sample roll. */
+    if (named) return { elections: [], source: "unavailable" };
   }
   return { elections: sampleElections(), source: "sample" };
 }
 
 export async function loadElection(id) {
+  const named = !allowSampleRoll(chromeHostConfig);
   try {
     const data = await api(`/api/elections/${encodeURIComponent(id)}`);
     const raw = data?.election || data;
@@ -499,8 +501,9 @@ export async function loadElection(id) {
       return { election: normalized, source: "api" };
     }
   } catch {
-    /* fall through */
+    if (named) return { election: null, source: "missing" };
   }
+  if (named) return { election: null, source: "missing" };
   const sample = sampleElections().find((e) => electionRefEquals(e, id));
   if (sample) return { election: sample, source: "sample" };
   return { election: null, source: "missing" };
@@ -530,8 +533,12 @@ let chromePollsEnabled = false;
 
 let chromeHostConfig;
 
+export function bindHostConfig(config) {
+  chromeHostConfig = config;
+}
+
 function applyHostChrome(config) {
-  if (config !== undefined) chromeHostConfig = config;
+  if (config !== undefined) bindHostConfig(config);
   const demo = showsDemoChrome(chromeHostConfig);
   const chip = document.getElementById("topbar-demo");
   if (chip) chip.hidden = !demo;

@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { h, fill } from '../public/app.js';
-import { footerMetaKey, namedVotingHost, showsDemoChrome } from '../public/host-chrome.js';
+import { bindHostConfig, fill, h, loadElection, loadElections } from '../public/app.js';
+import { allowSampleRoll, footerMetaKey, namedVotingHost, showsDemoChrome } from '../public/host-chrome.js';
 import { resolveClientBrand } from '../src/branding.mjs';
 import { applyClientHostHtml, renderPublicHtml, rewriteModuleSpecifiers } from '../src/publicAssets.mjs';
 import { webAuthnErrorMessage } from '../public/passkey-wallet.js';
@@ -28,10 +28,41 @@ test('VOTE_FQDN hides the Demo chrome; an unnamed host keeps it', () => {
   assert.equal(showsDemoChrome(null), false);
   assert.equal(footerMetaKey(named), 'chrome.footerMetaHost');
   assert.equal(footerMetaKey({}), 'chrome.footerMeta');
+  assert.equal(allowSampleRoll(named), false);
+  assert.equal(allowSampleRoll({ vote: { fqdn: '' } }), true);
+  assert.equal(allowSampleRoll(null), true);
   assert.doesNotMatch(
     readFileSync(join(publicDir, 'locales/en.js'), 'utf8').match(/footerMetaHost:\s*\n\s*"([^"]+)"/)[1],
     /demo/i,
   );
+});
+
+test('a named host does not fall back to the sample roll', async () => {
+  const realFetch = globalThis.fetch;
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  try {
+    bindHostConfig({ vote: { fqdn: 'vote.nuursha.com' } });
+    globalThis.fetch = async () => json({ elections: [] });
+    const empty = await loadElections();
+    assert.equal(empty.source, 'api');
+    assert.equal(empty.elections.length, 0);
+    globalThis.fetch = async () => new Response('nope', { status: 503 });
+    const down = await loadElections();
+    assert.equal(down.source, 'unavailable');
+    assert.equal(down.elections.length, 0);
+    const sampleId = await loadElection('nbrdge2k3m');
+    assert.equal(sampleId.election, null);
+    assert.equal(sampleId.source, 'missing');
+
+    bindHostConfig({ vote: { fqdn: '' } });
+    globalThis.fetch = async () => json({ elections: [] });
+    const demo = await loadElections();
+    assert.equal(demo.source, 'sample');
+    assert.ok(demo.elections.some((election) => /Northbridge/.test(election.title)));
+  } finally {
+    globalThis.fetch = realFetch;
+    bindHostConfig(null);
+  }
 });
 
 test('a named host response omits the Demo chip instead of hiding it', () => {

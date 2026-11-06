@@ -486,7 +486,7 @@ export async function renderResultsIndex(main, ctx) {
   const { elections, source } = await loadElections();
   const list =
     elections.length === 0
-      ? h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }))
+      ? h("div", { class: "notice notice-warn" }, h("p", { text: source === "unavailable" ? "The election list could not be loaded." : "No elections are published on this Node yet." }))
       : h(
           "div",
           { class: "contest-grid", role: "list" },

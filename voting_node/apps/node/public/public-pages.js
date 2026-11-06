@@ -100,7 +100,7 @@ export function homeIntro({
 function publicCalendar(h, ctx, elections, source) {
   const { formatTime, electionStateInfo } = ctx;
   if (!elections.length) {
-    return h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }));
+    return h("div", { class: "notice notice-warn" }, h("p", { text: source === "unavailable" ? "The election list could not be loaded." : "No elections are published on this Node yet." }));
   }
   return h(
     "div",
