@@ -12,6 +12,7 @@ import {
   resultHashOf,
   tokenPollTypedData,
 } from '../../apps/node/src/pollTypedData.mjs';
+import { snapshotRootOf, verifySnapshotProof } from '../../apps/node/src/snapshotTree.mjs';
 import { createViemTokenSource } from '../../apps/node/src/tokenSource.mjs';
 import { evaluateWeightedPoll } from '../../apps/node/src/weightedTally.mjs';
 
@@ -59,6 +60,8 @@ async function checkSignature(poll, ballot) {
     choiceIndexes: ballot.choiceIndexes,
     ballotSpecHash: poll.ballotSpecHash,
     issuedAt: ballot.issuedAt,
+    weightSource: poll.weightSource,
+    snapshotRoot: poll.snapshotRoot,
   });
   try {
     const ok = await verifyTypedData({ address: ballot.voter, ...typed, signature: ballot.sig });
@@ -107,10 +110,29 @@ export async function verifyPollBundle(bundle, { offline = true, rpcUrl = '', so
       const kind = await checkSignature(poll, ballot);
       if (kind !== 'eoa') errors.push(`ballot[${i}] signature does not match voter`);
     }
-    if (ballot.finalWeight != null && ballot.closeBalance != null) {
+    if (poll.weightSource === 'erc20_votes') {
+      const proof = ballot.snapshotProof;
+      const proofOk = proof && verifySnapshotProof(proof) && proof.root === poll.snapshotRoot;
+      if (ballot.status === 'counted' && !proofOk) {
+        errors.push(`ballot[${i}] snapshot proof failed`);
+      } else if (
+        proof &&
+        ballot.finalWeight != null &&
+        String(proof.weight) !== String(ballot.finalWeight) &&
+        ballot.status === 'counted'
+      ) {
+        errors.push(`ballot[${i}] snapshot weight does not match final weight`);
+      }
+    } else if (ballot.finalWeight != null && ballot.closeBalance != null) {
       if (BigInt(ballot.finalWeight) > BigInt(ballot.closeBalance)) {
         errors.push(`ballot[${i}] final weight exceeds close balance`);
       }
+    }
+  }
+  if (poll.weightSource === 'erc20_votes') {
+    if (!Array.isArray(bundle.snapshotLeaves)) errors.push('snapshot leaves required');
+    else if (snapshotRootOf(bundle.snapshotLeaves) !== poll.snapshotRoot) {
+      errors.push('snapshot root does not match the leaf list');
     }
   }
 
@@ -157,6 +179,10 @@ export async function verifyPollBundle(bundle, { offline = true, rpcUrl = '', so
       nfp: true,
       signal: SIGNAL_LABEL,
     };
+    if (poll.weightSource === 'erc20_votes') {
+      publicResult.snapshotRoot = poll.snapshotRoot;
+      publicResult.snapshotBlock = Number(poll.snapshotBlock);
+    }
     const recomputed = resultHashOf(publicResult);
     if (recomputed !== result.resultHash) errors.push('resultHash does not match recomputed tally');
     if (publicResult.outcome !== result.outcome) errors.push('outcome does not match tally');
@@ -172,20 +198,29 @@ export async function verifyPollBundle(bundle, { offline = true, rpcUrl = '', so
     else if (poll.closeBlock == null) errors.push('closeBlock required for rpc verification');
     else {
       for (const [i, ballot] of ballots.entries()) {
-        const evidence = await finalWeight({
-          source: chain,
-          token: poll.token,
-          voter: ballot.voter,
-          voteBlock: ballot.voteBlock,
-          closeBlock: poll.closeBlock,
-        });
-        if (dec(evidence.finalWeight) !== String(ballot.finalWeight)) {
-          errors.push(`ballot[${i}] final weight does not match chain`);
-        }
-        const got = evidence.touchedBlocks.map((n) => Number(n));
-        const claimed = (ballot.touchedBlocks || []).map((n) => Number(n));
-        if (JSON.stringify(got) !== JSON.stringify(claimed)) {
-          errors.push(`ballot[${i}] touched blocks do not match chain`);
+        if (poll.weightSource === 'erc20_votes') {
+          const power = await chain.getPastVotes(poll.token, ballot.voter, poll.snapshotBlock);
+          if (dec(power) !== String(ballot.finalWeight)) {
+            errors.push(`ballot[${i}] final weight does not match chain`);
+          }
+          const block = await chain.getBlock(poll.snapshotBlock);
+          if (block.hash !== poll.snapshotBlockHash) errors.push('snapshot block hash changed');
+        } else {
+          const evidence = await finalWeight({
+            source: chain,
+            token: poll.token,
+            voter: ballot.voter,
+            voteBlock: ballot.voteBlock,
+            closeBlock: poll.closeBlock,
+          });
+          if (dec(evidence.finalWeight) !== String(ballot.finalWeight)) {
+            errors.push(`ballot[${i}] final weight does not match chain`);
+          }
+          const got = evidence.touchedBlocks.map((n) => Number(n));
+          const claimed = (ballot.touchedBlocks || []).map((n) => Number(n));
+          if (JSON.stringify(got) !== JSON.stringify(claimed)) {
+            errors.push(`ballot[${i}] touched blocks do not match chain`);
+          }
         }
         if (ballot.sigKind === 'erc1271') {
           const typed = tokenPollTypedData({
@@ -196,6 +231,8 @@ export async function verifyPollBundle(bundle, { offline = true, rpcUrl = '', so
             choiceIndexes: ballot.choiceIndexes,
             ballotSpecHash: poll.ballotSpecHash,
             issuedAt: ballot.issuedAt,
+            weightSource: poll.weightSource,
+            snapshotRoot: poll.snapshotRoot,
           });
           const { hashTypedData } = await import('viem');
           const magic = await chain.isValidSignature(ballot.voter, hashTypedData(typed), ballot.sig);

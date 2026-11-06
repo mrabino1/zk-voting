@@ -577,6 +577,7 @@ export function getConfig(overrides = {}) {
       ? overrides.feedbackMaxBodyBytes
       : process.env.FEEDBACK_MAX_BODY_BYTES,
   );
+  config.production = process.env.NODE_ENV === 'production';
   config.votingToken = resolveVotingToken({
     address:
       overrides.votingTokenAddress !== undefined
@@ -586,7 +587,13 @@ export function getConfig(overrides = {}) {
       overrides.votingTokenChainId !== undefined
         ? overrides.votingTokenChainId
         : process.env.VOTING_TOKEN_CHAIN_ID,
+    production: config.production,
   });
+  config.votingTokenStartBlock = String(
+    overrides.votingTokenStartBlock !== undefined
+      ? overrides.votingTokenStartBlock
+      : process.env.VOTING_TOKEN_START_BLOCK || '0',
+  );
   config.pollsReady = Boolean(config.pollsEnabled) && config.votingToken.configured;
   config.superAdminEmail = resolveSuperAdminEmail(
     Object.prototype.hasOwnProperty.call(overrides, 'superAdminEmail')

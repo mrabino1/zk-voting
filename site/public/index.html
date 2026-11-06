@@ -69,6 +69,7 @@
         <a href="#vision" data-i18n="nav.vision">Vision</a>
         <a href="#why" data-i18n="nav.why">Why it matters</a>
         <a href="#who" data-i18n="nav.who">Who it's for</a>
+        <a href="#modes" data-i18n="nav.modes">Civic or token</a>
         <a href="#how" data-i18n="nav.how">How it works</a>
         <a href="#poll-vs-vote" data-i18n="nav.pollVsVote">Poll vs Vote</a>
         <a href="#self-host" data-i18n="nav.selfHost">Self-host</a>
@@ -263,6 +264,34 @@
           <article class="card"><h3 data-i18n="who.schoolsTitle">Schools and campuses</h3><p data-i18n="who.schoolsBody">Run student government and faculty votes with passkey sign-in and a ballot that's accessible on any device.</p></article>
           <article class="card"><h3 data-i18n="who.clubsTitle">Communities and clubs</h3><p data-i18n="who.clubsBody">Quick yes/no, single-choice or multiple-choice polls for any group that wants a private ballot and an honest show of hands. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first.</p></article>
           <article class="card"><h3 data-i18n="who.auditorsTitle">Observers and auditors</h3><p data-i18n="who.auditorsBody">Follow registrations and disqualification codes on the public explorer, and verify an outcome report once that contest is allowed to show it. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first. A vote publishes choices only at the deadline.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="modes">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="modes.eyebrow">Two ways to vote</p>
+        <h2 data-i18n="modes.title">One person, one vote — or a token signal</h2>
+        <p class="sub" data-i18n="modes.intro">A self-hosted node can run civic elections and, separately, advisory polls weighted by an ERC-20 on Ethereum mainnet. The two do not share a roll.</p>
+        <div class="ballot-compare">
+          <article class="ballot-sheet">
+            <h3 data-i18n="modes.civicName">Civic election</h3>
+            <p class="ballot-summary" data-i18n="modes.civicSummary">One person, one vote. Registration. A secret ballot.</p>
+            <ul>
+              <li data-i18n="modes.civic1">People register. The roll stores an identity commitment, not a wallet address.</li>
+              <li data-i18n="modes.civic2">A zero-knowledge proof is designed to show eligibility without publishing the choice.</li>
+              <li data-i18n="modes.civic3">Ballots are batched on the civic L2 and can be settled to Ethereum.</li>
+            </ul>
+          </article>
+          <article class="ballot-sheet">
+            <h3 data-i18n="modes.tokenName">Token signal</h3>
+            <p class="ballot-summary" data-i18n="modes.tokenSummary">Weight comes from an ERC-20 on Ethereum mainnet. No registration.</p>
+            <ul>
+              <li data-i18n="modes.token1">The operator picks the token. Holding it at the snapshot is the credential. There is no sign-up.</li>
+              <li data-i18n="modes.token2">Delegated voting power is read at one finalized Ethereum block. A Poseidon root commits that list, using the same hash as the civic proofs. The choice stays public.</li>
+              <li data-i18n="modes.token3">Signing a ballot is free. Delegating is the token transaction that costs gas. This mode does not use the civic L2. It only needs an Ethereum mainnet RPC.</li>
+            </ul>
+          </article>
         </div>
       </div>
     </section>

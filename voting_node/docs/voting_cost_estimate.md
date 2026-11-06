@@ -344,7 +344,7 @@ Bandwidth **estimate:** public JSON snapshots are KB–low MB per view. A county
 | Optional later `createPoll` / `postResult` | ~1e5 / ~8e4 gas | **Estimate.** Not in phase 1. One-off, on an EVM venue, not chain 27427. |
 | Optional `L1TallyMirror.postResult` | ~4e4–1e5 gas | **Estimate.** Phase 1 skips this. The current mirror keys a uint256 civic election id. |
 
-The host token is `VOTING_TOKEN_ADDRESS` on Ethereum mainnet (chain id 1). Reads only: no transaction and no spend. Tests use an in-memory ERC-20 on a local chain and do not spend RPC quota.
+The host token is `VOTING_TOKEN_ADDRESS` on Ethereum mainnet (chain id 1). Reads only: no transaction and no spend. `erc20_votes` also reads `getPastVotes` and delegation logs from `VOTING_TOKEN_START_BLOCK`. The holder pays gas only if they send `delegate` themselves. Tests use an in-memory ERC-20 on a local chain and do not spend RPC quota.
 
 ---
 

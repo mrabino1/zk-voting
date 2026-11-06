@@ -15,7 +15,7 @@ via_ir = true
 # transaction (about 1.46B gas). The settlement call itself stays under 200M.
 gas_limit = 2000000000
 ffi = false
-fs_permissions = [{ access = "read", path = "./" }, { access = "read", path = "../circuits/fixtures" }]
+fs_permissions = [{ access = "read", path = "./" }, { access = "read", path = "../circuits/fixtures" }, { access = "write", path = "./deployments" }]
 
 [profile.default.fuzz]
 runs = 256
