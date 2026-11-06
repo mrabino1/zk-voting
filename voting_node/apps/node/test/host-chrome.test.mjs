@@ -13,6 +13,7 @@ import { renderPublicHtml, rewriteModuleSpecifiers } from '../src/publicAssets.m
 import { webAuthnErrorMessage } from '../public/passkey-wallet.js';
 import { homeIntro } from '../public/public-pages.js';
 import { renderSetup, setupPasskeyControl } from '../public/setup.js';
+import { mountSignInPanel, passkeyLoginControl } from '../public/signin.js';
 
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../public');
 
@@ -116,6 +117,9 @@ function createNode(tag) {
       if (name === 'disabled') this.disabled = true;
       if (name === 'class') this.className = value;
     },
+    getAttribute(name) {
+      return this.attrs[name];
+    },
     addEventListener(type, fn) {
       (this.listeners[type] ||= []).push(fn);
     },
@@ -144,11 +148,14 @@ function query(node, sel) {
   for (const child of node.children || []) {
     if (!child || child.nodeType !== 1) continue;
     const classNames = String(child.className || '').split(/\s+/);
+    const attr = /^\[([^\]=]+)='([^']*)'\]$/.exec(sel);
     const matched = sel.startsWith('#')
       ? child.id === sel.slice(1)
       : sel.startsWith('.')
         ? classNames.includes(sel.slice(1))
-        : child.tagName === sel.toUpperCase();
+        : attr
+          ? String(child.attrs?.[attr[1]] ?? '') === attr[2]
+          : child.tagName === sel.toUpperCase();
     if (matched) return child;
     const nested = query(child, sel);
     if (nested) return nested;
@@ -166,6 +173,12 @@ function installDom() {
     },
     getElementById(id) {
       return query(body, `#${id}`);
+    },
+    querySelector(sel) {
+      return query(body, sel);
+    },
+    hasFocus() {
+      return true;
     },
   };
   globalThis.document = documentStub;
@@ -288,4 +301,136 @@ test('a prepared setup ceremony opens the passkey on the click', async () => {
   assert.equal(prompts.length, 1);
   assert.ok(prompts[0].publicKey);
   delete globalThis.document;
+});
+
+test('sign-in and register do not report an unready passkey prompt', () => {
+  assert.deepEqual(passkeyLoginControl({ preparing: true }), {
+    disabled: true,
+    label: 'Preparing passkey…',
+  });
+  assert.equal(passkeyLoginControl({ ready: true }).disabled, false);
+  assert.equal(passkeyLoginControl({ failed: true }).disabled, false);
+  for (const file of ['signin.js', 'register.js']) {
+    assert.doesNotMatch(readFileSync(join(publicDir, file), 'utf8'), /PASSKEY_NOT_READY/);
+  }
+});
+
+function walk(node, visit) {
+  if (!node || node.nodeType !== 1) return;
+  visit(node);
+  for (const child of node.children || []) walk(child, visit);
+}
+
+function findNode(node, pred) {
+  let found = null;
+  walk(node, (child) => {
+    if (!found && pred(child)) found = child;
+  });
+  return found;
+}
+
+test('sign-in waits for the login challenge and shows the real prepare error', async () => {
+  const { body } = installDom();
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const previousFetch = globalThis.fetch;
+  const gets = [];
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    writable: true,
+    value: {
+      PublicKeyCredential: function PublicKeyCredential() {},
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    writable: true,
+    value: {
+      credentials: {
+        create() {},
+        get(opts) {
+          gets.push(opts);
+          return new Promise(() => {});
+        },
+      },
+    },
+  });
+  const begins = [];
+  globalThis.fetch = async (url) => {
+    const path = String(url);
+    if (path.includes('/api/auth/passkey/login/begin')) {
+      let resolve;
+      const promise = new Promise((res) => {
+        resolve = res;
+      });
+      begins.push({ resolve });
+      const data = await promise;
+      const status = data.statusCode || 200;
+      return {
+        ok: status < 400,
+        status,
+        statusText: status < 400 ? 'OK' : 'Error',
+        headers: { get() { return null; } },
+        async text() {
+          return JSON.stringify(data.body ?? data);
+        },
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get() { return null; } },
+      async text() {
+        return JSON.stringify({ user: null, auth: {} });
+      },
+    };
+  };
+  try {
+    const root = createNode('div');
+    body.append(root);
+    mountSignInPanel(root);
+    let passkeyTab = null;
+    for (let i = 0; i < 20 && !passkeyTab; i += 1) {
+      await Promise.resolve();
+      passkeyTab = findNode(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Passkey');
+    }
+    assert.ok(passkeyTab);
+    fire(passkeyTab, 'click');
+    const button = () => findNode(root, (node) => node.attrs?.['data-signin'] === 'passkey');
+    const flash = () => findNode(root, (node) => String(node.className || '').split(/\s+/).includes('flash'));
+    assert.equal(begins.length, 1);
+    assert.equal(button().disabled, true);
+    assert.equal(button().textContent, 'Preparing passkey…');
+    fire(button(), 'click');
+    assert.equal(gets.length, 0);
+    assert.doesNotMatch(flash().textContent || '', /not ready/i);
+
+    begins[0].resolve({ statusCode: 500, body: { error: 'challenge store unavailable' } });
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
+    assert.equal(button().disabled, false);
+    assert.match(flash().textContent, /challenge store unavailable/);
+    assert.doesNotMatch(flash().textContent, /not ready/i);
+
+    fire(button(), 'click');
+    assert.equal(begins.length, 2);
+    assert.equal(gets.length, 0);
+    begins[1].resolve({ challenge: 'AQIDBA', rpId: 'vote.example.test' });
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
+    assert.equal(button().disabled, false);
+    assert.equal(button().textContent, 'Sign in with passkey');
+    assert.equal(flash().textContent || '', '');
+
+    fire(button(), 'click');
+    assert.equal(gets.length, 1);
+    assert.doesNotMatch(flash().textContent || '', /not ready/i);
+  } finally {
+    delete globalThis.document;
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+    else delete globalThis.window;
+    if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator);
+    globalThis.fetch = previousFetch;
+  }
 });

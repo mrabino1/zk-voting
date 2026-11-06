@@ -146,24 +146,68 @@ export async function signInWithPasskey(handle, state, prepared) {
 }
 
 const loginPrep = {
-  key: "",
+  key: null,
   prepared: null,
-  failedKey: "",
-  inflight: "",
+  failedKey: null,
+  inflight: null,
+  error: "",
 };
 
 function loginPrepKey(handle) {
   return String(handle || "").trim();
 }
 
-async function prefetchPasskeyLogin(state, { force = false } = {}) {
+/** The sign-in button stays disabled until the assertion ceremony is prepared. */
+export function passkeyLoginControl({
+  busy = false,
+  webAuthn = true,
+  ready = false,
+  preparing = false,
+  failed = false,
+} = {}) {
+  if (busy) return { disabled: true, label: "Waiting for passkey…" };
+  if (!webAuthn || (!ready && !failed)) {
+    return { disabled: true, label: preparing ? "Preparing passkey…" : "Sign in with passkey" };
+  }
+  return { disabled: false, label: "Sign in with passkey" };
+}
+
+function syncPasskeyLoginButton(state) {
+  const button = document.querySelector("[data-signin='passkey']");
+  if (!button) return;
+  const key = loginPrepKey(state.handle);
+  const control = passkeyLoginControl({
+    busy: state.busy === "passkey",
+    webAuthn: hasWebAuthn(),
+    ready: Boolean(loginPrep.prepared && loginPrep.key === key),
+    preparing: loginPrep.inflight === key,
+    failed: Boolean(loginPrep.error && loginPrep.failedKey === key),
+  });
+  button.disabled = control.disabled;
+  button.textContent = control.label;
+}
+
+async function prefetchPasskeyLogin(state, { force = false, statusEl } = {}) {
   if (!hasWebAuthn() || state.busy || state.user || state.mfa) return;
   if (state.tab && state.tab !== "passkey") return;
   const key = loginPrepKey(state.handle);
-  if (force) loginPrep.failedKey = "";
-  if (loginPrep.prepared && loginPrep.key === key) return;
-  if (loginPrep.failedKey === key || loginPrep.inflight === key) return;
+  if (force) {
+    loginPrep.failedKey = null;
+    loginPrep.error = "";
+  }
+  if (loginPrep.prepared && loginPrep.key === key) {
+    syncPasskeyLoginButton(state);
+    return;
+  }
+  // An empty handle is a real discoverable login, so the idle sentinels
+  // cannot be "" — that used to look like a failed prefetch and skip begin.
+  if (!force && (loginPrep.failedKey === key || loginPrep.inflight === key)) {
+    syncPasskeyLoginButton(state);
+    return;
+  }
   loginPrep.inflight = key;
+  syncPasskeyLoginButton(state);
+  let failed = false;
   try {
     const server = await fetchJson("/api/auth/passkey/login/begin", {
       method: "POST",
@@ -173,16 +217,22 @@ async function prefetchPasskeyLogin(state, { force = false } = {}) {
     if (loginPrepKey(state.handle) !== key || (state.tab && state.tab !== "passkey")) return;
     loginPrep.prepared = prepared;
     loginPrep.key = key;
-    loginPrep.failedKey = "";
-  } catch {
-    if (loginPrepKey(state.handle) === key) {
-      loginPrep.prepared = null;
-      loginPrep.key = "";
-      loginPrep.failedKey = key;
-    }
+    loginPrep.failedKey = null;
+    loginPrep.error = "";
+    if (statusEl) setStatus(statusEl, "", "");
+  } catch (err) {
+    if (loginPrepKey(state.handle) !== key) return;
+    loginPrep.prepared = null;
+    loginPrep.key = null;
+    loginPrep.failedKey = key;
+    loginPrep.error = webAuthnErrorMessage(err);
+    failed = true;
+    if (statusEl) setStatus(statusEl, "err", loginPrep.error);
   } finally {
-    if (loginPrep.inflight === key) loginPrep.inflight = "";
+    if (loginPrep.inflight === key) loginPrep.inflight = null;
   }
+  if (failed && statusEl && !loginPrep.error) setStatus(statusEl, "err", "That did not work.");
+  syncPasskeyLoginButton(state);
 }
 
 export async function signInWithEthereum(state) {
@@ -360,7 +410,15 @@ function renderForm(state, opts, statusEl) {
   const webauthn = hasWebAuthn();
   const busy = Boolean(state.busy);
   const tab = state.tab || "email";
-  if (tab === "passkey" && webauthn && !busy) prefetchPasskeyLogin(state);
+  if (tab === "passkey" && webauthn && !busy) prefetchPasskeyLogin(state, { statusEl });
+  const prepKey = loginPrepKey(state.handle);
+  const passkeyControl = passkeyLoginControl({
+    busy: state.busy === "passkey",
+    webAuthn: webauthn,
+    ready: Boolean(loginPrep.prepared && loginPrep.key === prepKey),
+    preparing: loginPrep.inflight === prepKey,
+    failed: Boolean(loginPrep.error && loginPrep.failedKey === prepKey),
+  });
   const tabs = [
     { id: "email", label: "Email" },
     { id: "web3", label: "Ethereum" },
@@ -640,18 +698,20 @@ function renderForm(state, opts, statusEl) {
               class: "btn",
               type: "button",
               "data-signin": "passkey",
-              disabled: busy || !webauthn,
-              text: state.busy === "passkey" ? "Waiting for passkey…" : "Sign in with passkey",
+              disabled: passkeyControl.disabled,
+              text: passkeyControl.label,
               onClick: () => {
                 const key = loginPrepKey(state.handle);
                 if (!(loginPrep.prepared && loginPrep.key === key)) {
-                  prefetchPasskeyLogin(state, { force: true });
-                  setStatus(statusEl, "err", webAuthnErrorMessage({ code: "PASSKEY_NOT_READY" }));
+                  if (loginPrep.failedKey === key && loginPrep.error) {
+                    setStatus(statusEl, "err", loginPrep.error);
+                    prefetchPasskeyLogin(state, { force: true, statusEl });
+                  }
                   return;
                 }
                 const prepared = loginPrep.prepared;
                 loginPrep.prepared = null;
-                loginPrep.key = "";
+                loginPrep.key = null;
                 let pending;
                 try {
                   pending = loginPasskey({ api: fetchJson, handle: state.handle, prepared });
@@ -681,10 +741,16 @@ function renderForm(state, opts, statusEl) {
               autocomplete: "username webauthn",
               value: state.handle || "",
               onInput: (event) => {
+                const previous = loginPrepKey(state.handle);
                 state.handle = event.target.value;
+                if (loginPrepKey(state.handle) === previous) return;
                 loginPrep.prepared = null;
-                loginPrep.key = "";
-                prefetchPasskeyLogin(state);
+                loginPrep.key = null;
+                loginPrep.failedKey = null;
+                loginPrep.error = "";
+                setStatus(statusEl, "", "");
+                prefetchPasskeyLogin(state, { statusEl });
+                syncPasskeyLoginButton(state);
               },
             })
           )

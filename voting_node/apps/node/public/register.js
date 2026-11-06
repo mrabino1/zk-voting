@@ -51,6 +51,7 @@ export async function renderRegister(main, ctx) {
     preparedKey: "",
     prepFailedKey: "",
     preparingKey: "",
+    prepError: "",
   };
 
   const signInHost = h("div", {
@@ -76,13 +77,41 @@ export async function renderRegister(main, ctx) {
     return true;
   }
 
+  function syncPasskeyCreateButton() {
+    const button = document.querySelector("[data-register-passkey]");
+    if (!button) return;
+    const key = passkeyPrepKey();
+    const ready = Boolean(state.prepared && state.preparedKey === key);
+    const failed = Boolean(state.prepError && state.prepFailedKey === key);
+    const preparing = state.preparingKey === key && !ready;
+    const label = button.getAttribute("data-label") || "Create passkey";
+    const needsTerms = !me?.user && !state.acceptedTerms;
+    if (state.busy) {
+      button.disabled = true;
+      button.textContent = "Waiting for authenticator…";
+      return;
+    }
+    button.disabled = !wallet.hasWebAuthn() || (!needsTerms && !ready && !failed);
+    button.textContent = preparing ? "Preparing passkey…" : label;
+  }
+
   async function prefetchPasskey({ force = false } = {}) {
     if (!passkeyPrefetchAllowed()) return;
     const key = passkeyPrepKey();
-    if (force) state.prepFailedKey = "";
-    if (state.prepared && state.preparedKey === key) return;
-    if (state.prepFailedKey === key || state.preparingKey === key) return;
+    if (force) {
+      state.prepFailedKey = "";
+      state.prepError = "";
+    }
+    if (state.prepared && state.preparedKey === key) {
+      syncPasskeyCreateButton();
+      return;
+    }
+    if (!force && (state.prepFailedKey === key || state.preparingKey === key)) {
+      syncPasskeyCreateButton();
+      return;
+    }
     state.preparingKey = key;
+    syncPasskeyCreateButton();
     const displayName = String(state.passkeyName || "voter").trim() || "voter";
     try {
       const server = await api("/api/auth/passkey/register/begin", {
@@ -96,15 +125,21 @@ export async function renderRegister(main, ctx) {
       state.prepared = prepared;
       state.preparedKey = key;
       state.prepFailedKey = "";
-    } catch {
-      if (passkeyPrepKey() === key) {
-        state.prepared = null;
-        state.preparedKey = "";
-        state.prepFailedKey = key;
-      }
+      state.prepError = "";
+    } catch (err) {
+      if (passkeyPrepKey() !== key) return;
+      state.prepared = null;
+      state.preparedKey = "";
+      state.prepFailedKey = key;
+      state.prepError = wallet.webAuthnErrorMessage(err);
+      state.error = state.prepError;
     } finally {
       if (state.preparingKey === key) state.preparingKey = "";
     }
+    if (passkeyPrepKey() !== key) return;
+    const typingName = document.activeElement?.id === "display-name";
+    if (typingName) syncPasskeyCreateButton();
+    else paint();
   }
 
   function paint() {
@@ -487,9 +522,13 @@ export async function renderRegister(main, ctx) {
                   autocomplete: "username webauthn",
                   value: state.passkeyName || rec?.displayName || "voter",
                   onInput: (event) => {
+                    const previous = passkeyPrepKey();
                     state.passkeyName = event.target.value;
+                    if (passkeyPrepKey() === previous) return;
                     state.prepared = null;
                     state.preparedKey = "";
+                    state.prepFailedKey = "";
+                    state.prepError = "";
                     prefetchPasskey();
                   },
                 })
@@ -502,9 +541,27 @@ export async function renderRegister(main, ctx) {
                   {
                     class: "btn",
                     type: "submit",
-                    disabled: Boolean(state.busy || !wallet.hasWebAuthn()),
+                    "data-register-passkey": "",
+                    "data-label": rec ? "Replace passkey on this device" : "Create passkey",
+                    disabled: Boolean(
+                      state.busy
+                      || !wallet.hasWebAuthn()
+                      || (
+                        (me?.user || state.acceptedTerms)
+                        && !(
+                          (state.prepared && state.preparedKey === passkeyPrepKey())
+                          || (state.prepError && state.prepFailedKey === passkeyPrepKey())
+                        )
+                      )
+                    ),
                     "aria-busy": state.busy ? "true" : "false",
-                    text: state.busy ? "Waiting for authenticator…" : rec ? "Replace passkey on this device" : "Create passkey",
+                    text: state.busy
+                      ? "Waiting for authenticator…"
+                      : state.preparingKey === passkeyPrepKey()
+                        ? "Preparing passkey…"
+                        : rec
+                          ? "Replace passkey on this device"
+                          : "Create passkey",
                   }
                 )
               )
@@ -1014,10 +1071,12 @@ export async function renderRegister(main, ctx) {
     state.passkeyName = displayName;
     const key = passkeyPrepKey();
     if (!(state.prepared && state.preparedKey === key)) {
-      state.error = wallet.webAuthnErrorMessage({ code: "PASSKEY_NOT_READY" });
-      prefetchPasskey({ force: true });
-      paint();
-      announce(state.error);
+      if (state.prepFailedKey === key && state.prepError) {
+        state.error = state.prepError;
+        announce(state.error);
+        prefetchPasskey({ force: true });
+        paint();
+      }
       return;
     }
     const prepared = state.prepared;
