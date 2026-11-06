@@ -1077,6 +1077,7 @@ async function renderRoute(route) {
       me: meHint,
       cms,
       pollsEnabled,
+      hostConfig,
       namedHost: namedVotingHost(hostConfig),
     };
 

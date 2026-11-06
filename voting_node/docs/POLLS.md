@@ -4,7 +4,7 @@
 
 Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes and no poll nav entry. `balance_hold` may still post `poll_params`, `poll_vote`, and `poll_tally` on the civic L2. `erc20_votes` does not.
 
-Every poll reads one host token: `VOTING_TOKEN_ADDRESS`. Production accepts chain id **1** only. Any other chain id leaves polls disabled (`not_ethereum_l1`). The Node never sends a token transaction. If the address is unset or not an address, polls stay disabled and the back office shows that message. `pollParamsHash` commits the token address, the chain id, and the weight source that were in force when the poll was scheduled.
+Every poll reads one host token: `VOTING_TOKEN_ADDRESS`. Production accepts chain id **1** only. Any other chain id leaves polls disabled (`not_ethereum_l1`). The Node never sends a token transaction. If the address is unset or not an address, polls stay disabled and `/admin#deployment` shows that message. Creating a poll is on that host admin page, not the civic back office. A deployment is one mode: this ERC-20, or civic elections with no ERC-20. `pollParamsHash` commits the token address, the chain id, and the weight source that were in force when the poll was scheduled.
 
 ## Two weight sources
 

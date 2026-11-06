@@ -187,13 +187,37 @@
         banner.textContent = merged.disclosure.note + (when ? " Next publish: " + when + "." : "");
       }
       renderFacts(merged);
+      await paintDeployment(config);
     } catch (err) {
       healthEl.innerHTML = '<span class="status-dot off"></span>Unreachable';
       $("stat-chain").textContent = "—";
       $("stat-factory").textContent = "—";
       $("stat-nfp").textContent = errText(err);
+      const deployment = $("stat-deployment");
+      if (deployment) deployment.textContent = "—";
     }
   }
+
+  async function paintDeployment(config) {
+    const copy = $("deployment-copy");
+    const stat = $("stat-deployment");
+    const host = $("deployment-polls");
+    try {
+      const { deploymentSummary, mountTokenPolls } = await import("/token-poll-admin.js");
+      const summary = deploymentSummary(config || {});
+      if (stat) stat.textContent = summary.title;
+      if (copy) copy.textContent = summary.body;
+      if (!host) return;
+      host.replaceChildren();
+      if (summary.mode !== "erc20") return;
+      await mountTokenPolls(host, { request, me: sessionMe, token: config.votingToken });
+    } catch (err) {
+      if (stat) stat.textContent = "—";
+      if (copy) copy.textContent = errText(err);
+    }
+  }
+
+  let sessionMe = null;
 
   async function loadMe() {
     try {
@@ -214,9 +238,11 @@
         user.role +
         (offices ? " · " + offices : "") +
         (me.unreadCount ? " · " + me.unreadCount + " unread" : "");
+      sessionMe = me;
       return me;
     } catch (err) {
       $("session-line").textContent = errText(err);
+      sessionMe = null;
       return null;
     }
   }
@@ -539,9 +565,10 @@
     });
   }
 
-  loadHealth();
-  loadMe();
-  loadJurisdictions();
-  loadUsers();
-  loadOutcomeTemplate();
+  loadMe().then(() => {
+    loadHealth();
+    loadJurisdictions();
+    loadUsers();
+    loadOutcomeTemplate();
+  });
 })();
