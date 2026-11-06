@@ -4,7 +4,9 @@
 
 Foundry package for zk-voting: an unbounded `ElectionFactory` (EIP-1167 clones), identity-commitment registries, a ZK ballot inbox, tally contract (`Tally.sol` implementing `ITallyVerifier`), passkey account abstraction with a gasless paymaster, and L1 rollup settlement for ZK-Voting L2.
 
-There is no token. There are no voter fees. The leaf in the Merkle tree is an **identity commitment**, never a wallet address. `msg.sender` on `submitVote` is the relayer. A nullifier is accepted once; a second ballot reverts `NullifierUsed`. Double voting is impossible. `acceptedBallots` counts unique voters.
+Civic elections have no token and no voter fees. The leaf in the Merkle tree is an **identity commitment**, never a wallet address. `msg.sender` on `submitVote` is the relayer. A nullifier is accepted once; a second ballot reverts `NullifierUsed`. Double voting is impossible. `acceptedBallots` counts unique voters.
+
+`src/token/SignalVotes.sol` is optional and separate. It is an ERC-20 with block-number vote checkpoints for an operator who wants a dedicated signal token on Ethereum mainnet. Civic contracts do not call it. The Node does not deploy it and does not send `delegate`. A fixed-supply token and a 1:1 wrapper are in that folder. Wrapping does not delegate.
 
 ## Layout
 
@@ -15,7 +17,8 @@ There is no token. There are no voter fees. The leaf in the Merkle tree is an **
 - `src/zk/` — `MockVerifier` (tests), `TallyPublicInputs` (versioned tally instance), structural `VoteVerifier`, `Groth16VerifierAdapter`
 - `src/hasher/` — `KeccakHasher` (unit tests), `PoseidonHasher` (vote circuit), legacy `StandInHasher`, `HashScheme` ids
 - `test/` — unit (`Tally.t.sol` covers SUM_ONLY vs OPENS_BALLOTS), fuzz (`test/fuzz`), invariant (`test/invariant`)
-- `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`, `CertifyL1` (tally hash → `L1TallyMirror`; `certify_l1.sh` no-ops if L1 env unset)
+- `src/token/` — optional `SignalVotes` (Ethereum mainnet checkpoints). Not used by civic elections
+- `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`, `CertifyL1` (tally hash → `L1TallyMirror`; `certify_l1.sh` no-ops if L1 env unset), `DeploySignalToken`
 
 ## Test
 

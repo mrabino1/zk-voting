@@ -14,6 +14,7 @@ Circom 2 circuits for ZK-Voting. The vote hasher is **Poseidon(2)** (`zk-voting.
 | [`mains/vote_smoke.circom`](./mains/vote_smoke.circom) | `Vote(4)` for the untrusted Groth16 fixture only |
 | [`vote.circom`](./vote.circom) | Eligible-set membership + disqualification-chain non-membership + nullifier + ballot bind |
 | [`tally.circom`](./tally.circom) | Published per-option counts match accepted ballots (plaintext / mock-homomorphic path) |
+| [`weight_snapshot.circom`](./weight_snapshot.circom) | Poseidon membership of `(address, getPastVotes)` in an Ethereum mainnet snapshot. Public choice. Not compiled here, and not a secret ballot |
 | [`scripts/proving-path.mjs`](./scripts/proving-path.mjs) | Compile, untrusted ptau + Groth16, export verifier, demo prove |
 | [`scripts/ceremony.mjs`](./scripts/ceremony.mjs) | Phase-2 contribute / verify / beacon / export. Not a ceremony. See [`docs/CEREMONY.md`](../docs/CEREMONY.md) |
 

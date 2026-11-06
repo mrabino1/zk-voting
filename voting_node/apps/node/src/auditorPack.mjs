@@ -72,7 +72,15 @@ export function buildAuditorPack(election, deps) {
 }
 
 /** Public token-poll bundle. Choices are included because phase 1 is public weighted. No userId. */
-export function assemblePollAuditorPack({ pollView, params, pollParamsHash, closeBlock, ballots, result }) {
+export function assemblePollAuditorPack({
+  pollView,
+  params,
+  pollParamsHash,
+  closeBlock,
+  ballots,
+  result,
+  snapshotLeaves = null,
+}) {
   return {
     schema: POLL_AUDITOR_SCHEMA,
     nfp: true,
@@ -84,6 +92,7 @@ export function assemblePollAuditorPack({ pollView, params, pollParamsHash, clos
     params,
     pollParamsHash: pollParamsHash || null,
     closeBlock: closeBlock ?? null,
+    snapshotLeaves,
     ballots,
     result: result || null,
   };

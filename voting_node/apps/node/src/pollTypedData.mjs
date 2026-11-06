@@ -24,6 +24,15 @@ export const TOKEN_POLL_TYPES = {
   ],
 };
 
+// Same ballot, plus the Poseidon snapshot root. The root binds the signature
+// to one delegated-power commitment. It is not an L2 transaction.
+export const TOKEN_POLL_VOTES_TYPES = {
+  TokenPollBallot: [
+    ...TOKEN_POLL_TYPES.TokenPollBallot,
+    { name: 'snapshotRoot', type: 'bytes32' },
+  ],
+};
+
 export function pollDomainOf(nodeId, pollId) {
   return keccak256(
     encodeAbiParameters(
@@ -41,24 +50,32 @@ export function tokenPollTypedData({
   choiceIndexes,
   ballotSpecHash,
   issuedAt,
+  weightSource,
+  snapshotRoot,
 }) {
+  const votesMode = weightSource === 'erc20_votes';
+  const message = {
+    pollDomain,
+    token,
+    voter,
+    choices: choiceIndexes.map((n) => Number(n)),
+    ballotSpecHash,
+    zkVotingChainId: ZK_VOTING_CHAIN_ID,
+    issuedAt: BigInt(issuedAt),
+  };
+  // zkVotingChainId names this software. The signature is verified against
+  // the token's Ethereum chain id in `domain.chainId`. Nothing is submitted
+  // to the civic L2 for an erc20_votes ballot.
+  if (votesMode) message.snapshotRoot = snapshotRoot;
   return {
     domain: {
       name: 'ZK-Voting Token Poll',
       version: '1',
       chainId: Number(tokenChainId),
     },
-    types: TOKEN_POLL_TYPES,
+    types: votesMode ? TOKEN_POLL_VOTES_TYPES : TOKEN_POLL_TYPES,
     primaryType: 'TokenPollBallot',
-    message: {
-      pollDomain,
-      token,
-      voter,
-      choices: choiceIndexes.map((n) => Number(n)),
-      ballotSpecHash,
-      zkVotingChainId: ZK_VOTING_CHAIN_ID,
-      issuedAt: BigInt(issuedAt),
-    },
+    message,
   };
 }
 
@@ -75,6 +92,12 @@ export function canonicalPollParams(poll) {
     quorum: poll.quorum || null,
     passThresholdBps: poll.passThresholdBps == null ? null : Number(poll.passThresholdBps),
     minBallotWeight: String(poll.minBallotWeight),
+    weightSource: poll.weightSource || 'balance_hold',
+    weightProof: poll.weightSource === 'erc20_votes' ? 'poseidon_snapshot_v1' : null,
+    snapshotBlock: poll.snapshotBlock == null ? null : Number(poll.snapshotBlock),
+    snapshotBlockHash: poll.snapshotBlockHash || null,
+    snapshotRoot: poll.snapshotRoot || null,
+    snapshotScheme: poll.snapshotScheme || null,
     privacyMode: 'public_weighted',
     jurisdictionId: String(poll.jurisdictionId),
     ballotSpecHash: poll.ballotSpecHash,
@@ -99,6 +122,9 @@ export function canonicalBallotRow(ballot) {
     finalWeight: ballot.finalWeight == null ? null : String(ballot.finalWeight),
     status: ballot.status,
     ballotDigest: ballot.ballotDigest,
+    ...(ballot.weightSource === 'erc20_votes'
+      ? { weightSource: 'erc20_votes', snapshotRoot: ballot.snapshotRoot }
+      : {}),
   };
 }
 

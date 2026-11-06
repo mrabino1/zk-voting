@@ -12,6 +12,15 @@ import { hourBucket, isDisclosed } from './disclosure.mjs';
 import { relayTokenPollBallot } from './relay.mjs';
 import { finalWeight } from './holdWeight.mjs';
 import { HttpError } from './http.mjs';
+import {
+  WEIGHT_VOTES,
+  normalizeWeightSource,
+  proofForAddress,
+  snapshotRootOf,
+  verifySnapshotProof,
+} from './snapshotTree.mjs';
+import { tokenChainAllowed } from './tokenSource.mjs';
+import { buildVoteSnapshot } from './voteSnapshot.mjs';
 import { buildDeterministicPdf } from './pdf.mjs';
 import {
   ABSTAIN_ID,
@@ -75,6 +84,13 @@ export function presentPoll(poll, now) {
     quorum: poll.quorum,
     passThresholdBps: poll.passThresholdBps,
     minBallotWeight: poll.minBallotWeight,
+    weightSource: poll.weightSource || 'balance_hold',
+    weightProof: poll.weightSource === WEIGHT_VOTES ? 'poseidon_snapshot_v1' : null,
+    snapshotBlock: poll.snapshotBlock ?? null,
+    snapshotBlockHash: poll.snapshotBlockHash ?? null,
+    snapshotRoot: poll.snapshotRoot ?? null,
+    snapshotScheme: poll.snapshotScheme ?? null,
+    snapshotLeafCount: poll.snapshotLeafCount ?? 0,
     privacyMode: 'public_weighted',
     startTime: poll.startTime,
     cutoffTime: poll.cutoffTime,
@@ -165,12 +181,22 @@ function applyParams(poll, body, config) {
   if (body.privacyMode && body.privacyMode !== 'public_weighted') {
     fail(400, 'phase 1 privacyMode is public_weighted', 'INVALID_CHOICES');
   }
+  let weightSource;
+  try {
+    weightSource = normalizeWeightSource(body.weightSource ?? poll.weightSource);
+  } catch (err) {
+    fail(400, err.message, 'INVALID_CHOICES');
+  }
+  if (body.snapshotBlock != null && body.snapshotBlock !== '') {
+    if (weightSource !== WEIGHT_VOTES) fail(400, 'snapshotBlock is only used for erc20_votes', 'INVALID_CHOICES');
+    poll.requestedSnapshotBlock = intField(body.snapshotBlock, 'snapshotBlock');
+  }
   const token = config.votingToken;
   if (!token?.configured || !isAddress(String(token.address || ''))) {
     fail(503, 'token polls are disabled until VOTING_TOKEN_ADDRESS is a valid address', 'POLLS_DISABLED');
   }
-  if (token.chainId === ZK_VOTING_L2_CHAIN_ID || !Number.isInteger(token.chainId) || token.chainId <= 0) {
-    fail(503, 'VOTING_TOKEN_CHAIN_ID is invalid', 'POLLS_DISABLED');
+  if (!tokenChainAllowed(token.chainId, { production: Boolean(config.production) })) {
+    fail(503, 'token polls read Ethereum mainnet (chain id 1) only', 'POLLS_DISABLED');
   }
   const startTime = intField(body.startTime ?? poll.startTime, 'startTime');
   const cutoffTime = intField(body.cutoffTime ?? poll.cutoffTime, 'cutoffTime');
@@ -200,6 +226,7 @@ function applyParams(poll, body, config) {
       ? poll.passThresholdBps
       : normalizeThreshold(body.passThresholdBps);
   poll.minBallotWeight = minBallotWeight;
+  poll.weightSource = weightSource;
   poll.privacyMode = 'public_weighted';
   poll.ballotSpecHash = ballotSpecFor(poll);
   return poll;
@@ -217,8 +244,59 @@ async function probe(deps, poll) {
   poll.tokenSymbol = info.symbol;
   poll.decimals = info.decimals;
   poll.supplyAtCreate = dec(info.totalSupply);
-  poll.preflightWarnings = info.warnings || [];
-  return info;
+  if (poll.weightSource === WEIGHT_VOTES) {
+    let mode;
+    try {
+      mode = await source.clockMode(poll.token);
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      fail(400, 'token has no block-number vote checkpoints', 'TOKEN_UNSUPPORTED');
+    }
+    if (!String(mode).includes('mode=blocknumber')) {
+      fail(400, 'token checkpoints must use Ethereum block numbers', 'TOKEN_UNSUPPORTED');
+    }
+    poll.clockMode = String(mode);
+    poll.preflightWarnings = [
+      'Undelegated balances have zero voting power until the holder delegates, including to themselves.',
+      'Delegation is a transaction on the token. This node never sends it. Signing a ballot does not.',
+      'Weight is fixed at a finalized Ethereum block. Later transfers do not change this poll.',
+    ];
+  } else {
+    poll.preflightWarnings = info.warnings || [];
+  }
+  return { ...info, warnings: poll.preflightWarnings };
+}
+
+async function syncSnapshot(deps, poll, { force }) {
+  if (poll.weightSource !== WEIGHT_VOTES) {
+    poll.snapshotBlock = null;
+    poll.snapshotBlockHash = null;
+    poll.snapshotRoot = null;
+    poll.snapshotScheme = null;
+    poll.snapshotDepth = null;
+    poll.snapshotLeafCount = 0;
+    poll.snapshotLeaves = null;
+    return;
+  }
+  const requested = poll.requestedSnapshotBlock == null ? null : Number(poll.requestedSnapshotBlock);
+  if (!force && poll.snapshotRoot && requested != null && requested === Number(poll.snapshotBlock)) return;
+  const source = sourceFor(deps, poll);
+  const start = BigInt(deps.config.votingTokenStartBlock || '0');
+  if (source.kind !== 'memory' && start <= 0n) {
+    fail(503, 'Set VOTING_TOKEN_START_BLOCK to the token deployment block on Ethereum mainnet', 'POLLS_DISABLED');
+  }
+  const finalized = await source.finalizedBlock();
+  if (!finalized) fail(409, 'finalized Ethereum block unavailable', 'CLOSE_NOT_FINAL');
+  let blockNumber = BigInt(finalized.number);
+  if (requested != null) {
+    if (BigInt(requested) > blockNumber) fail(400, 'snapshot block is not finalized', 'CLOSE_NOT_FINAL');
+    blockNumber = BigInt(requested);
+  }
+  const built = await buildVoteSnapshot(source, poll.token, {
+    snapshotBlock: blockNumber,
+    startBlock: start,
+  });
+  Object.assign(poll, built);
 }
 
 export async function createPoll(deps, actor, body) {
@@ -271,8 +349,9 @@ export async function updatePoll(deps, actor, id, body) {
   if (!deps.store.getJurisdiction(poll.jurisdictionId)) fail(400, 'unknown jurisdictionId', 'INVALID_CHOICES');
   await probe(deps, poll);
   if (phase === 'SCHEDULED') {
+    await syncSnapshot(deps, poll, { force: false });
     poll.pollParamsHash = hashCanonical(canonicalPollParams(poll));
-    await postL2(deps, 'poll_params', paramsTx(poll));
+    if (poll.weightSource !== WEIGHT_VOTES) await postL2(deps, 'poll_params', paramsTx(poll));
   }
   await deps.store.savePoll(poll);
   return presentPoll(poll, now);
@@ -300,10 +379,11 @@ export async function schedulePoll(deps, actor, id) {
   if (phase !== 'DRAFT' && phase !== 'SCHEDULED') fail(409, 'poll cannot be scheduled', 'POLL_NOT_OPEN');
   applyParams(poll, poll, deps.config);
   await probe(deps, poll);
+  await syncSnapshot(deps, poll, { force: poll.requestedSnapshotBlock == null || !poll.snapshotRoot });
   poll.pollParamsHash = hashCanonical(canonicalPollParams(poll));
   poll.state = 'SCHEDULED';
   await deps.store.savePoll(poll);
-  const l2 = await postL2(deps, 'poll_params', paramsTx(poll));
+  const l2 = poll.weightSource === WEIGHT_VOTES ? null : await postL2(deps, 'poll_params', paramsTx(poll));
   poll.l2ParamsTx = l2?.tx?.hash || l2?.hash || null;
   await deps.store.savePoll(poll);
   return presentPoll(poll, now);
@@ -379,7 +459,21 @@ export async function weightView(deps, id, address) {
     ? isDisclosed(ballot.acceptedAt, now, deps.config.disclosureIntervalSeconds)
     : false;
   let current = null;
-  if (phase === 'OPEN' || phase === 'SCHEDULED' || phase === 'DRAFT') {
+  let votingPower = null;
+  let delegate = null;
+  if (poll.weightSource === WEIGHT_VOTES && poll.snapshotBlock != null) {
+    try {
+      const source = sourceFor(deps, poll);
+      const power = await source.getPastVotes(poll.token, voter, poll.snapshotBlock);
+      const balance = await source.balanceAt(poll.token, voter, poll.snapshotBlock);
+      delegate = await source.delegatesAt(poll.token, voter, poll.snapshotBlock);
+      votingPower = dec(power);
+      current = dec(balance);
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      fail(503, 'token RPC unavailable', 'RPC_UNAVAILABLE');
+    }
+  } else if (phase === 'OPEN' || phase === 'SCHEDULED' || phase === 'DRAFT') {
     try {
       const source = sourceFor(deps, poll);
       const latest = await source.latestBlock();
@@ -389,6 +483,7 @@ export async function weightView(deps, id, address) {
       fail(503, 'token RPC unavailable', 'RPC_UNAVAILABLE');
     }
   }
+  const votesMode = poll.weightSource === WEIGHT_VOTES;
   return {
     nfp: true,
     binding: false,
@@ -396,7 +491,12 @@ export async function weightView(deps, id, address) {
     pollId: poll.id,
     address: voter,
     state: phase,
+    weightSource: poll.weightSource || 'balance_hold',
     currentBalance: current,
+    votingPower,
+    delegate,
+    snapshotBlock: poll.snapshotBlock ?? null,
+    snapshotRoot: poll.snapshotRoot ?? null,
     voted: Boolean(ballot),
     provisionalWeight: ballot ? ballot.provisionalWeight : null,
     finalWeight: phase === 'TALLIED' && ballot ? ballot.finalWeight : null,
@@ -404,10 +504,14 @@ export async function weightView(deps, id, address) {
     disclosed,
     choices: disclosed && ballot ? ballot.choices : null,
     reduced:
-      phase === 'TALLIED' && ballot && ballot.finalWeight != null
-        ? BigInt(ballot.finalWeight) < BigInt(ballot.provisionalWeight)
-        : false,
-    note: 'Final weight is the lowest end-of-block balance from the vote block through close. Tokens added later do not increase it.',
+      !votesMode &&
+      phase === 'TALLIED' &&
+      ballot &&
+      ballot.finalWeight != null &&
+      BigInt(ballot.finalWeight) < BigInt(ballot.provisionalWeight),
+    note: votesMode
+      ? 'Voting power is getPastVotes at the snapshot block, including tokens delegated to this address. A balance that was never delegated is zero. Later delegation does not change this poll.'
+      : 'Final weight is the lowest end-of-block balance from the vote block through close. Tokens added later do not increase it.',
   };
 }
 
@@ -453,6 +557,8 @@ export function typedDataFor(deps, id, address, choices, issuedAt) {
     choiceIndexes: indexes,
     ballotSpecHash: poll.ballotSpecHash,
     issuedAt: at,
+    weightSource: poll.weightSource,
+    snapshotRoot: poll.snapshotRoot,
   });
   return {
     nfp: true,
@@ -487,6 +593,7 @@ export async function castBallot(deps, rawBody) {
   const indexes = choiceIndexesFrom(poll, body.choices);
   const sig = String(body.sig || body.signature || '');
   if (!sig.startsWith('0x')) fail(400, 'signature required', 'BAD_SIGNATURE');
+  const votesMode = poll.weightSource === WEIGHT_VOTES;
   const typed = tokenPollTypedData({
     tokenChainId: poll.tokenChainId,
     pollDomain: poll.pollDomain,
@@ -495,6 +602,8 @@ export async function castBallot(deps, rawBody) {
     choiceIndexes: indexes,
     ballotSpecHash: poll.ballotSpecHash,
     issuedAt,
+    weightSource: poll.weightSource,
+    snapshotRoot: poll.snapshotRoot,
   });
   const source = sourceFor(deps, poll);
   let sigKind = null;
@@ -510,10 +619,32 @@ export async function castBallot(deps, rawBody) {
     if (magic) sigKind = 'erc1271';
   }
   if (!sigKind) fail(400, 'signature does not match the holding address', 'BAD_SIGNATURE');
-  const latest = await source.latestBlock();
-  const provisional = await source.balanceAt(poll.token, voter, latest.number);
   const floor = BigInt(poll.minBallotWeight || '1');
-  if (provisional === 0n || provisional < floor) fail(400, 'zero balance cannot vote', 'NO_BALANCE');
+  let provisional;
+  let voteBlock;
+  let voteBlockHash;
+  let snapshotProof = null;
+  if (votesMode) {
+    if (!poll.snapshotRoot || poll.snapshotBlock == null) fail(409, 'poll snapshot is missing', 'POLL_NOT_OPEN');
+    const snap = await source.getBlock(poll.snapshotBlock);
+    if (snap.hash !== poll.snapshotBlockHash) fail(409, 'snapshot block hash changed', 'SNAPSHOT_REORG');
+    provisional = await source.getPastVotes(poll.token, voter, poll.snapshotBlock);
+    if (provisional === 0n || provisional < floor) {
+      fail(400, 'no delegated voting power at the snapshot', 'NO_POWER');
+    }
+    snapshotProof = proofForAddress(poll.snapshotLeaves || [], voter);
+    if (!snapshotProof || BigInt(snapshotProof.weight) !== provisional || !verifySnapshotProof(snapshotProof)) {
+      fail(409, 'snapshot proof does not match the token checkpoint', 'SNAPSHOT_MISMATCH');
+    }
+    voteBlock = Number(poll.snapshotBlock);
+    voteBlockHash = poll.snapshotBlockHash;
+  } else {
+    const latest = await source.latestBlock();
+    provisional = await source.balanceAt(poll.token, voter, latest.number);
+    if (provisional === 0n || provisional < floor) fail(400, 'zero balance cannot vote', 'NO_BALANCE');
+    voteBlock = Number(latest.number);
+    voteBlockHash = latest.hash;
+  }
   const digest = hashTypedData(typed);
   const acceptedAt = now;
   const ballot = {
@@ -524,8 +655,11 @@ export async function castBallot(deps, rawBody) {
     sig,
     sigKind,
     ballotDigest: digest,
-    voteBlock: Number(latest.number),
-    voteBlockHash: latest.hash,
+    voteBlock,
+    voteBlockHash,
+    weightSource: votesMode ? WEIGHT_VOTES : 'balance_hold',
+    snapshotRoot: votesMode ? poll.snapshotRoot : null,
+    snapshotProof,
     provisionalWeight: dec(provisional),
     finalWeight: null,
     minBlock: null,
@@ -540,7 +674,9 @@ export async function castBallot(deps, rawBody) {
   };
   if (Object.prototype.hasOwnProperty.call(ballot, 'userId')) delete ballot.userId;
   await deps.store.insertPollBallot(ballot);
-  const l2 = await postL2(deps, 'poll_vote', {
+  const l2 = votesMode
+    ? null
+    : await postL2(deps, 'poll_vote', {
     pollId: poll.id,
     voter,
     voteBlock: ballot.voteBlock,
@@ -595,6 +731,9 @@ function publicBallot(ballot) {
     acceptedAt: ballot.acceptedAt,
     disclosureHour: ballot.disclosureHour,
     issuedAt: ballot.issuedAt,
+    weightSource: ballot.weightSource || null,
+    snapshotRoot: ballot.snapshotRoot || null,
+    snapshotProof: ballot.snapshotProof || null,
   };
 }
 
@@ -603,6 +742,120 @@ function canTally(user, poll, store) {
   if (user.role === 'platform_super_admin' || user.role === 'platform_admin') return true;
   if (user.role === 'tally_operator') return true;
   return store.userHasJurisdictionRole(user, ['tally_operator'], poll.jurisdictionId);
+}
+
+async function tallySnapshot(deps, actor, poll, source, now) {
+  if (!poll.snapshotRoot || poll.snapshotBlock == null) fail(409, 'poll snapshot is missing', 'POLL_NOT_OPEN');
+  const snap = await source.getBlock(poll.snapshotBlock);
+  if (snap.hash !== poll.snapshotBlockHash) fail(409, 'snapshot block hash changed', 'SNAPSHOT_REORG');
+  const close = await source.blockBeforeTimestamp(poll.cutoffTime);
+  if (!close) fail(409, 'close block is not available', 'CLOSE_NOT_FINAL');
+  const finalized = await source.finalizedBlock();
+  if (!finalized || BigInt(finalized.number) < BigInt(close.number)) {
+    fail(409, 'close block is not finalized', 'CLOSE_NOT_FINAL');
+  }
+  const rebuilt = snapshotRootOf(poll.snapshotLeaves || []);
+  if (rebuilt !== poll.snapshotRoot) fail(409, 'stored snapshot leaves do not match the root', 'SNAPSHOT_MISMATCH');
+  poll.state = 'TALLYING';
+  poll.closeBlock = Number(close.number);
+  poll.closeBlockHash = close.hash;
+  const supply = await source.totalSupplyAt(poll.token, poll.snapshotBlock);
+  poll.totalSupplyAtClose = dec(supply);
+  poll.supplyReference = 'snapshot';
+  const floor = BigInt(poll.minBallotWeight || '1');
+  const ballots = deps.store.listPollBallots(poll.id);
+  for (const ballot of ballots) {
+    const power = await source.getPastVotes(poll.token, ballot.voter, poll.snapshotBlock);
+    if (power !== BigInt(ballot.provisionalWeight)) {
+      fail(409, 'checkpoint no longer matches the accepted ballot', 'SNAPSHOT_MISMATCH');
+    }
+    const proof = ballot.snapshotProof;
+    if (!proof || !verifySnapshotProof(proof) || proof.root !== poll.snapshotRoot) {
+      fail(409, 'ballot snapshot proof failed', 'SNAPSHOT_MISMATCH');
+    }
+    ballot.finalWeight = dec(power);
+    ballot.minBlock = Number(poll.snapshotBlock);
+    ballot.touchedBlocks = [];
+    ballot.closeBalance = null;
+    ballot.consistent = true;
+    ballot.status = power < floor ? 'below_min_weight' : 'counted';
+  }
+  const counted = ballots
+    .filter((b) => b.status === 'counted')
+    .map((b) => ({ choices: b.choices, weight: BigInt(b.finalWeight) }));
+  const math = evaluateWeightedPoll({
+    pollType: poll.pollType,
+    optionIds: poll.options.map((o) => o.id),
+    ballots: counted,
+    quorum: poll.quorum,
+    passThresholdBps: poll.passThresholdBps,
+    totalSupply: supply,
+  });
+  const stored = await finishTally(deps, actor, poll, ballots, math, 0n, now);
+  return presentResult(stored, poll);
+}
+
+async function finishTally(deps, actor, poll, ballots, math, withdrawnWeight, now) {
+  const counts = {};
+  for (const [key, value] of Object.entries(math.counts)) counts[key] = dec(value);
+  const irvRounds = math.irv
+    ? math.irv.rounds.map((round) => ({
+        round: round.round,
+        counts: Object.fromEntries(Object.entries(round.counts).map(([k, v]) => [k, dec(v)])),
+        continuing: dec(round.continuing),
+        exhausted: dec(round.exhausted),
+        remaining: round.remaining,
+        eliminated: round.eliminated,
+        winner: round.winner,
+        ...(round.tieBroken ? { tieBroken: true } : {}),
+      }))
+    : null;
+  const publicResult = {
+    pollId: poll.id,
+    closeBlock: poll.closeBlock,
+    participation: dec(math.participation),
+    withdrawnWeight: dec(withdrawnWeight),
+    turnoutBps: dec(math.turnoutBps),
+    counts,
+    irvRounds,
+    outcome: math.outcome,
+    flags: math.flags,
+    winner: math.winner,
+    ballotsRoot: ballotsRootOf(ballots),
+    binding: false,
+    nfp: true,
+    signal: SIGNAL_LABEL,
+  };
+  if (poll.weightSource === WEIGHT_VOTES) {
+    publicResult.snapshotRoot = poll.snapshotRoot;
+    publicResult.snapshotBlock = Number(poll.snapshotBlock);
+  }
+  publicResult.resultHash = resultHashOf(publicResult);
+  const stored = {
+    ...publicResult,
+    tallyAt: new Date(now * 1000).toISOString(),
+    tallyBy: actor.id,
+    l1TxHash: null,
+    l1Mirror: 'skipped',
+    l1MirrorNote:
+      poll.weightSource === WEIGHT_VOTES
+        ? 'erc20_votes is checked against Ethereum mainnet. It is not submitted to the civic L2 or L1TallyMirror.'
+        : 'L1TallyMirror.postResult keys a uint256 civic election id. A token poll id is not that slot. Mirroring would change the existing mirror contract, so phase 1 skips it.',
+  };
+  poll.state = 'TALLIED';
+  poll.resultHash = stored.resultHash;
+  await deps.store.commitPollTally(poll, ballots, stored);
+  if (poll.weightSource !== WEIGHT_VOTES) {
+    await postL2(deps, 'poll_tally', {
+      pollId: poll.id,
+      closeBlock: stored.closeBlock,
+      ballotsRoot: stored.ballotsRoot,
+      resultHash: stored.resultHash,
+      participation: stored.participation,
+      outcome: stored.outcome,
+    });
+  }
+  return stored;
 }
 
 export async function tallyPoll(deps, actor, id) {
@@ -614,6 +867,7 @@ export async function tallyPoll(deps, actor, id) {
   if (phase === 'TALLIED') return presentResult(deps.store.getPollResult(poll.id), poll);
   if (phase !== 'CLOSED' && phase !== 'TALLYING') fail(409, 'poll is not closed', 'CLOSE_NOT_FINAL');
   const source = sourceFor(deps, poll);
+  if (poll.weightSource === WEIGHT_VOTES) return tallySnapshot(deps, actor, poll, source, now);
   const close = await source.blockBeforeTimestamp(poll.cutoffTime);
   if (!close) fail(409, 'close block is not available', 'CLOSE_NOT_FINAL');
   const finalized = await source.finalizedBlock();
@@ -747,6 +1001,33 @@ export function presentResult(result, poll) {
   };
 }
 
+export function delegatesView(deps, id) {
+  const poll = deps.store.getPoll(id);
+  if (!poll) fail(404, 'poll not found', 'NOT_FOUND');
+  if (poll.weightSource !== WEIGHT_VOTES) fail(404, 'this poll has no delegate snapshot', 'NOT_FOUND');
+  return {
+    nfp: true,
+    binding: false,
+    signal: SIGNAL_LABEL,
+    pollId: poll.id,
+    snapshotBlock: poll.snapshotBlock ?? null,
+    snapshotBlockHash: poll.snapshotBlockHash ?? null,
+    snapshotRoot: poll.snapshotRoot ?? null,
+    snapshotScheme: poll.snapshotScheme ?? null,
+    delegates: poll.snapshotLeaves || [],
+  };
+}
+
+export function snapshotProofView(deps, id, address) {
+  const poll = deps.store.getPoll(id);
+  if (!poll) fail(404, 'poll not found', 'NOT_FOUND');
+  if (poll.weightSource !== WEIGHT_VOTES || !poll.snapshotRoot) fail(404, 'this poll has no snapshot', 'NOT_FOUND');
+  if (!isAddress(String(address || ''))) fail(400, 'address required', 'INVALID_CHOICES');
+  const proof = proofForAddress(poll.snapshotLeaves || [], getAddress(address));
+  if (!proof) fail(404, 'address has no voting power in the snapshot', 'NO_POWER');
+  return { nfp: true, binding: false, signal: SIGNAL_LABEL, pollId: poll.id, proof };
+}
+
 export function resultsView(deps, id) {
   const poll = deps.store.getPoll(id);
   if (!poll) fail(404, 'poll not found', 'NOT_FOUND');
@@ -779,6 +1060,7 @@ export function buildPollAuditorPack(deps, id) {
     closeBlock: poll.closeBlock ?? null,
     ballots,
     result,
+    snapshotLeaves: poll.snapshotLeaves || null,
   });
 }
 
