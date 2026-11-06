@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-On the very first boot, with an empty `node-data` volume, the Node prepares itself. There is no SQL to run. The first visitor is sent to the **first-run setup screen** (`/setup`) to create the platform super admin, choose the chain id and check the rest of the setup. Run `./setup.sh` before the first boot to fill in `.env` (below).
+On the very first boot the Node prepares itself. Compose uses Postgres and creates the `zkv_*` tables. The first visitor is sent to the **first-run setup screen** (`/setup`) to create the platform super admin, choose the chain id and check the rest of the setup. Run `./setup.sh` before the first boot to fill in `.env` (below). Compose will not start until `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `DATABASE_URL` are set.
 
 ## Before the first boot: `./setup.sh`
 
@@ -12,7 +12,7 @@ From a clone, run `./setup.sh` (repository root or `voting_node/`; same as `npm 
 2. `CHAIN_ID`, or `web` to leave it for the setup screen.
 3. Entropy ceremony: yes or no, and its host (`ENTROPY_CEREMONY_URL`, stored as an `https://` origin).
 4. Setup entropy (`ZK_ENTROPY`): a closed ceremony's `zke1:ceremony:…` output (checksum-validated, typed hidden), local entropy generated now from OS randomness, keyboard timing and jitter (`zke1:local:…`), or skip.
-5. `VOTE_FQDN`, the host port (`ZK_VOTING_PORT`), `TRUST_PROXY`, `DATABASE_URL` (JSON files or Postgres, typed hidden) and `BRAND_NAME`. Empty `EXPLORER_INGEST_SECRET` and `RECEIPT_PDF_SECRET` are generated.
+5. `VOTE_FQDN`, the host port (`ZK_VOTING_PORT`), `TRUST_PROXY`, `DATABASE_URL` (Postgres URL, typed hidden, or JSON files when you are not using Compose) and `BRAND_NAME`. Empty `EXPLORER_INGEST_SECRET` and `RECEIPT_PDF_SECRET` are generated. For Compose, also set `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` in `.env` so they match that URL.
 6. L2 identity and L1 settlement: `L1_RPC`, `L1_SUBMITTER_PRIVATE_KEY` (hidden), and `L2_UUID`, `L2_SALT`, `L2_ADMIN_SECRET` minted like `npm run l2:identity -- init` when missing. It derives `L2_OPERATOR_ADDRESS` from the key and `L2_ID` from the UUID, salt and operator, then checks the submitter balance like `npm run l2:identity -- check-funding` and prints a warning when it is low or empty. See [L2 identity and settlement](../L2-IDENTITY-AND-SETTLEMENT.md).
 
 Then it asks how you run it and prints the exact next command: `docker compose up -d --build` (plus the health check), the Coolify settings ([Coolify](./coolify.md); secret values are listed by name only), or `npm run dev`.

@@ -601,6 +601,10 @@ function printLaunch(p, { deploy, next }) {
   p.say('');
   p.say(`  ${plan.commands.join(' && ')}`);
   p.say('');
+  if (deploy !== 'node' && !next.DATABASE_URL) {
+    p.say('  Compose will not start until POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and DATABASE_URL are set. There is no default password.');
+    p.say('');
+  }
   if (deploy === 'node') p.say('  (Node only runs without the bundled L2 chain; use docker compose for the full stack.)');
   p.say(`Then open ${plan.open} and finish the remaining steps in the browser.`);
 }

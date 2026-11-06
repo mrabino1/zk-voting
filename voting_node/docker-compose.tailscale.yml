@@ -36,8 +36,10 @@ services:
       HOST: "0.0.0.0"
       PORT: "3000"
       DATA_DIR: /data
-      # Postgres app state; empty keeps the JSON store in the volume above.
-      DATABASE_URL: ${DATABASE_URL:-}
+      # App state is Postgres on the db service. Compose refuses to start
+      # until the operator sets this. There is no default password.
+      # Example: postgres://USER:PASSWORD@db:5432/DB
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to postgres://USER:PASSWORD@db:5432/DB}
       CHAIN_ID: ${CHAIN_ID:-27427}
       # Setup entropy (/setup steps 3-4). ZK_ENTROPY is a secret.
       ENTROPY_CEREMONY_URL: ${ENTROPY_CEREMONY_URL:-}
@@ -101,6 +103,8 @@ services:
     volumes:
       - node-data:/data
     depends_on:
+      db:
+        condition: service_healthy
       l2:
         condition: service_healthy
     healthcheck:
@@ -315,9 +319,36 @@ services:
     networks:
       - zk-voting
 
+  # Node app state. Not published on the host. The operator sets the
+  # role, the password, and DATABASE_URL. Compose ships no password.
+  db:
+    image: postgres:16-alpine
+    container_name: zk-voting-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - zk-voting
+
 volumes:
   node-data:
   l2-data:
+  postgres-data:
   tailscale-state:
 
 networks:

@@ -29,7 +29,10 @@ Never commit `.env`, and never bake secrets into an image.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | empty | Postgres connection string (`postgres://user:pass@host:5432/db`, add `?sslmode=require` for TLS). When set, all Node app state (accounts and passkeys, sessions, elections, registrations, ballots, receipts, ceremonies metadata, site settings, plugin state, the explorer chain, the receipt PDF secret) lives in Postgres, so a container without a volume keeps its data. Tables are created on boot (`zkv_*`, idempotent migrations). Empty: JSON files in `DATA_DIR` (development fallback). The active backend is logged at startup and shown in `/health` as `db`. |
+| `POSTGRES_USER` | required by Compose | Role created by the bundled `postgres:16-alpine` service. Compose refuses to start when this is empty. |
+| `POSTGRES_PASSWORD` | required by Compose | Password for that role. Compose ships no default. The same secret, percent-encoded, goes in `DATABASE_URL`. |
+| `POSTGRES_DB` | required by Compose | Database name created on first start of the `db` service. |
+| `DATABASE_URL` | required by Compose | Postgres connection string. For the bundled server: `postgres://USER:PASSWORD@db:5432/DB`. When set, Node app state (accounts and passkeys, sessions, elections, registrations, ballots, receipts, ceremonies metadata, site settings, plugin state, the explorer chain, the receipt PDF secret) lives in Postgres. Tables are created on boot (`zkv_*`, idempotent migrations). Empty, outside Compose: JSON files in `DATA_DIR`. The active backend is logged at startup and shown in `/health` as `db`. |
 | `DATA_DIR` | `/data` in the image | JSON store when `DATABASE_URL` is empty. With Postgres it still holds large files (ceremony artifacts, plugin uploads) and the writer lease. On the first boot against an empty database, an existing `zk-voting.json`, `l2-chain.json`, and `receipt-pdf.secret` here are imported once; the files are left in place and no longer read. |
 | `PGSSLMODE` | empty | Fallback for `sslmode` when the URL has none (`require`, `verify-full`). |
 | `PG_POOL_MAX` | `5` | Postgres pool size. |

@@ -14,7 +14,16 @@ cp .env.example .env
 
 Replace `<your-org>` with the organization you forked into. `.env` is gitignored. The defaults in `.env.example` run a **local demo**: no outbound mail, passkeys on `localhost`, mock proofs on the L2.
 
-For anything public, set at least:
+Compose will not start until you set the database. There is no default password:
+
+```env
+POSTGRES_USER=zkvote
+POSTGRES_PASSWORD=<long random string>
+POSTGRES_DB=zkvote
+DATABASE_URL=postgres://zkvote:<same password>@db:5432/zkvote
+```
+
+For anything public, also set:
 
 ```env
 VOTE_FQDN=vote.example.org        # bare hostname you control, no https://
@@ -42,7 +51,7 @@ curl -fsS http://127.0.0.1:8546/health
 docker compose ps
 ```
 
-Both return JSON with `"ok": true`. `docker compose ps` should show `node` and `l2` as `healthy`. Details: [Health checks](./health-checks.md).
+Both return JSON with `"ok": true`. `docker compose ps` should show `db`, `node`, and `l2` as `healthy`. Details: [Health checks](./health-checks.md).
 
 ## 4. Open the app
 
@@ -63,7 +72,8 @@ docker compose down              # stop (volumes are kept)
 
 | Volume | Mounted at | Contains |
 | --- | --- | --- |
-| `node-data` | `/data` in `node` | `zk-voting.json` (users, elections, receipts), receipt PDF secret. |
+| `postgres-data` | `/var/lib/postgresql/data` in `db` | Accounts, elections, ballots, receipts. Dump this with `pg_dump` to move it. |
+| `node-data` | `/data` in `node` | Ceremony files, plugin uploads, and the writer lease. App state is in Postgres. |
 | `l2-data` | `/data` in `l2`, `prover`, `archive` | Sealed blocks, proofs, mempool, leases. |
 
 Back both up before every upgrade: [Backups](./backups.md).

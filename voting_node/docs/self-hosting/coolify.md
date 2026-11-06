@@ -40,6 +40,10 @@ Set at least these in **Environment Variables**:
 
 | Variable | Example | Why |
 | --- | --- | --- |
+| `POSTGRES_USER` | `zkvote` | Role for the bundled Postgres. Required. |
+| `POSTGRES_PASSWORD` | a long secret | Password for that role. Required. No default is shipped. Mark it secret. |
+| `POSTGRES_DB` | `zkvote` | Database name. Required. |
+| `DATABASE_URL` | `postgres://zkvote:…@db:5432/zkvote` | Same role, password, and database. Host name is `db`. Required. Mark it secret. |
 | `VOTE_FQDN` | `vote.example.org` | Passkeys, allowed origin, PDF links. |
 | `SUPER_ADMIN_EMAIL` | `clerk@example.org` | Where `/feedback` and the first admin's mail go. |
 | `IS_DEMO` | omit, or `false` | Set `true` only on the public demo. A missing or empty value is a real election and does not schedule the monthly soft-delete. |

@@ -2,12 +2,21 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-All state lives in two Docker volumes. There is no database server to dump.
+Node app state lives in Postgres (`postgres-data`). Ceremony files and the writer lease stay on `node-data`. The L2 chain stays on `l2-data`.
 
-| Volume | Contains | Loss means |
+| Store | Contains | Loss means |
 | --- | --- | --- |
-| `node-data` | `zk-voting.json` (people, rolls, elections, receipts, officers), `receipt-pdf.secret`, lease files | Voters and officers must start over. |
+| `postgres-data` | Accounts, rolls, elections, ballots, receipts, officers | Voters and officers must start over. Move it with `pg_dump` / `pg_restore`. |
+| `node-data` | Ceremony files, plugin uploads, writer lease | Ceremony artifacts and the lease are gone. App state remains in Postgres. |
 | `l2-data` | Sealed L2 blocks, proofs, mempool, archive state | Chain history on this host. Restorable from the S3/R2 archive if enabled. |
+
+Dump the database without copying the volume by hand:
+
+```bash
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > backups/zk-voting-$(date +%Y%m%d-%H%M%S).sql
+```
+
+Restore that dump into an empty database with `psql` before the node starts writing. Take the volume copies below from the same moment when you also need the chain and the ceremony files.
 
 Compose prefixes volume names with the project name, for example `zk-voting_node-data`. List them with `docker volume ls`.
 
@@ -16,20 +25,16 @@ Compose prefixes volume names with the project name, for example `zk-voting_node
 A consistent copy needs the writers stopped for a moment:
 
 ```bash
-docker compose stop node l2 prover archive
+docker compose stop node l2 prover archive db
 mkdir -p backups
-for v in node-data l2-data; do
+for v in postgres-data node-data l2-data; do
   docker run --rm -v zk-voting_${v}:/v:ro -v "$PWD/backups":/b alpine \
     tar -czf /b/${v}-$(date +%Y%m%d-%H%M%S).tgz -C /v .
 done
-docker compose start l2 prover archive node
+docker compose start db l2 prover archive node
 ```
 
-For a backup without downtime, copy `zk-voting.json` from the running container. It is replaced atomically on every save, so a single copy is always a complete file:
-
-```bash
-docker compose cp node:/data/zk-voting.json backups/zk-voting-$(date +%Y%m%d-%H%M%S).json
-```
+The `pg_dump` above is the copy to use when moving the app to another host. The volume archive is the copy of the files on this host.
 
 ## Where to keep backups
 
@@ -42,11 +47,11 @@ docker compose cp node:/data/zk-voting.json backups/zk-voting-$(date +%Y%m%d-%H%
 
 ```bash
 docker compose down        # keeps volumes
-docker run --rm -v zk-voting_node-data:/v -v "$PWD/backups":/b alpine \
-  sh -c 'rm -rf /v/* && tar -xzf /b/node-data-YYYYMMDD-HHMMSS.tgz -C /v'
-docker run --rm -v zk-voting_l2-data:/v -v "$PWD/backups":/b alpine \
-  sh -c 'rm -rf /v/* && tar -xzf /b/l2-data-YYYYMMDD-HHMMSS.tgz -C /v'
+for v in postgres-data node-data l2-data; do
+  docker run --rm -v zk-voting_${v}:/v -v "$PWD/backups":/b alpine \
+    sh -c "rm -rf /v/* && tar -xzf /b/${v}-YYYYMMDD-HHMMSS.tgz -C /v"
+done
 docker compose up -d
 ```
 
-Restore both volumes from the same point in time. After roll freeze, never edit `zk-voting.json` by hand to "fix" a tally.
+Restore the database and both file volumes from the same point in time. After roll freeze, do not edit a dump by hand to change a tally.

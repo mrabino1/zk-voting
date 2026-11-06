@@ -22,6 +22,19 @@ test('docker-compose.tailscale.yml uses every variable docker-compose.yml uses',
   assert.deepEqual(missing, [], `copy these into docker-compose.tailscale.yml: ${missing.join(', ')}`);
 });
 
+test('compose bundles postgres alpine and requires the operator to set credentials', () => {
+  for (const file of ['docker-compose.yml', 'docker-compose.tailscale.yml']) {
+    const text = read(file);
+    assert.match(text, /image: postgres:16-alpine/, file);
+    assert.match(text, /POSTGRES_USER: \$\{POSTGRES_USER:\?/, file);
+    assert.match(text, /POSTGRES_PASSWORD: \$\{POSTGRES_PASSWORD:\?/, file);
+    assert.match(text, /POSTGRES_DB: \$\{POSTGRES_DB:\?/, file);
+    assert.match(text, /DATABASE_URL: \$\{DATABASE_URL:\?/, file);
+    assert.match(text, /postgres-data:\/var\/lib\/postgresql\/data/, file);
+    assert.equal(text.includes('5432:5432'), false, file);
+  }
+});
+
 test('Tailscale sidecar keeps its required wiring', () => {
   const ts = read('docker-compose.tailscale.yml');
   assert.match(ts, /image: tailscale\/tailscale:stable/);

@@ -21,7 +21,7 @@ The production image boots with a 384 MB memory cap in CI. Leave headroom for th
 
 ## Storage
 
-The Node keeps its working set in memory and persists it to one backend, chosen when the process starts. Leave `DATABASE_URL` empty for the default JSON files. Set `DATABASE_URL` to use Postgres. The process logs which backend it opened, and `/health` reports it as `db.backend` (`json` or `postgres`). Names and defaults for each variable are in the [configuration reference](./configuration.md#storage).
+The Node keeps its working set in memory and persists it to one backend, chosen when the process starts. Compose uses Postgres. Leave `DATABASE_URL` empty only when you run the Node without Compose. The process logs which backend it opened, and `/health` reports it as `db.backend` (`json` or `postgres`). Names and defaults for each variable are in the [configuration reference](./configuration.md#storage).
 
 ### JSON files on a persistent volume
 
@@ -39,7 +39,18 @@ Keep the `node-data` volume, or another persistent mount on `DATA_DIR`. That dir
 
 ### Postgres via `DATABASE_URL`
 
-Set `DATABASE_URL` to a Postgres connection string (`postgres://` or `postgresql://`). Add `sslmode=require` when the server expects TLS. Use Postgres for any deployment that does not give the Node a persistent volume, so application state survives a container whose disk is discarded on redeploy. You run the database server yourself. Compose forwards `DATABASE_URL` to the `node` service; the database runs outside that file. Treat the URL as a secret: keep it out of git and out of the image.
+Compose starts `postgres:16-alpine` as the `db` service. It is on the Compose network only and is not published on the host. The file ships no password. Compose refuses to start until you set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `DATABASE_URL`. The URL uses the same role, password, and database, and the host name `db`:
+
+```env
+POSTGRES_USER=zkvote
+POSTGRES_PASSWORD=choose-a-long-password
+POSTGRES_DB=zkvote
+DATABASE_URL=postgres://zkvote:choose-a-long-password@db:5432/zkvote
+```
+
+Percent-encode the password inside `DATABASE_URL` when it contains `:` `@` `/` `?` or `#`. Add `sslmode=require` only when the server expects TLS. The bundled server does not. Treat the password and the URL as secrets: keep them out of git and out of the image.
+
+Running the Node without Compose, with `DATABASE_URL` empty, still uses the JSON files. That path is for local development. A Compose deploy uses Postgres.
 
 On boot the Node creates its tables (`zkv_*`) and applies idempotent migrations. From then on it stores the same records as rows: the store document, the explorer chain, the ballot queue, and secrets such as the receipt PDF key (`zkv_secrets`).
 
