@@ -737,7 +737,7 @@ async function runAction(state, statusEl, kind, fn) {
   if (state.busy) return;
   state.busy = kind;
   setStatus(statusEl, "", "");
-  state.repaint();
+  if (kind !== "passkey") state.repaint();
   try {
     const result = await fn();
     if (result?.skip) return;

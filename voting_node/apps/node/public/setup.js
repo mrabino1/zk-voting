@@ -297,13 +297,26 @@ export async function renderSetup(main, ctx) {
       announce?.(state.error);
       return;
     }
-    await run(async () => {
+    // Leave the form alone until the prompt finishes. Rebuilding it, or
+    // disabling the button that was just clicked, takes focus and WebKit
+    // rejects the passkey that was just approved.
+    state.busy = true;
+    state.error = "";
+    state.errorFromPrep = false;
+    try {
       const record = await pending;
       if (afterSession(record.finishResult || {})) {
         state.info = `Super admin ${handle} created. Next: choose the chain id.`;
       }
       await refresh();
-    });
+    } catch (err) {
+      state.error = wallet.webAuthnErrorMessage(err);
+      if (err?.data?.code === "SETUP_ADMIN_EXISTS") await refresh();
+    } finally {
+      state.busy = false;
+      paint();
+      if (state.error) announce?.(state.error);
+    }
   }
 
   async function onMfaEmail(event) {

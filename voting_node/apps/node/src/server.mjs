@@ -63,6 +63,7 @@ import { escapeHtml, getBranding, renderBrandedHtml, setBrandingProvider } from 
 import { createLayoutService } from './layout.mjs';
 import { createPluginManager } from './plugins/manager.mjs';
 import { canonicalPublicPath } from '../public/audience.js';
+import { assetVersion, renderPublicHtml, versionedPublicScripts } from './publicAssets.mjs';
 
 const LOADING_SHELL = `<!DOCTYPE html>
 <html lang="en">
@@ -248,7 +249,10 @@ function spaFallback(config, layoutService) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
         fs.promises.readFile(file, 'utf8').then(
-          (html) => res.send(brandHtml(html, branding)),
+          (html) => res.send(renderPublicHtml(brandHtml(html, branding), {
+            voteFqdn: config.voteFqdn,
+            assetVersion: config.assetVersion,
+          })),
           (err) => next(err),
         );
         return;
@@ -269,6 +273,7 @@ export async function createApp(overrides = {}) {
     ...configOverrides
   } = overrides;
   const config = getConfig(configOverrides);
+  config.assetVersion = assetVersion(config.publicDir);
   watchSecrets([config.setupToken]);
   announceGeneratedSetupToken(config);
   const writer = openNodeWriter(config);
@@ -474,6 +479,8 @@ export async function createApp(overrides = {}) {
   app.use(electionShortLinks(store));
   app.use(cleanHtmlUrls());
   app.use(officePageGuard());
+  app.use(versionedPublicScripts(config.distDir, config.assetVersion));
+  app.use(versionedPublicScripts(config.publicDir, config.assetVersion));
   app.use(serveStaticNoHtml(config.distDir));
   app.use(serveStaticNoHtml(config.publicDir));
   app.use(spaFallback(config, layoutService));

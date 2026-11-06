@@ -115,8 +115,63 @@ test('startRegistrationCeremony calls create synchronously while the document is
   assert.equal(yielded, false);
 });
 
+test('the focus holder stays until the passkey prompt settles', async () => {
+  installBrowser({ focused: false });
+  globalThis.window.focus = () => {};
+  const removed = [];
+  const orig = globalThis.document.createElement;
+  globalThis.document.createElement = function createElement() {
+    const el = orig();
+    el.remove = () => {
+      removed.push('remove');
+    };
+    return el;
+  };
+  let resolveCreate;
+  globalThis.navigator.credentials.create = () => new Promise((resolve) => {
+    resolveCreate = resolve;
+  });
+  const prepared = await prepareRegistrationCeremony(creationOptions);
+  const pending = startRegistrationCeremony(prepared);
+  await Promise.resolve();
+  assert.deepEqual(removed, []);
+  resolveCreate({ id: 'cred' });
+  const credential = await pending;
+  assert.equal(credential.id, 'cred');
+  assert.deepEqual(removed, ['remove']);
+});
+
+test('registerPasskey waits for the prompt before any api request', async () => {
+  installBrowser();
+  let resolveCreate;
+  const order = [];
+  globalThis.navigator.credentials.create = function create() {
+    order.push('create');
+    return new Promise((resolve) => {
+      resolveCreate = resolve;
+    });
+  };
+  const api = async (path) => {
+    order.push(`api:${path}`);
+    return { chainId: 27427 };
+  };
+  const prepared = await prepareRegistrationCeremony(creationOptions);
+  const pending = registerPasskey({
+    api,
+    prepared,
+    displayName: 'admin',
+    acceptedTerms: true,
+    strict: true,
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(order, ['create']);
+  resolveCreate({ id: 'cred', response: {} });
+  pending.catch(() => {});
+});
+
 test('registerPasskey({prepared}) calls create before any api request', async () => {
-  const { calls } = installBrowser();
+  installBrowser();
   const prepared = await prepareRegistrationCeremony(creationOptions);
   const order = [];
   const orig = globalThis.navigator.credentials.create;
@@ -136,8 +191,7 @@ test('registerPasskey({prepared}) calls create before any api request', async ()
     strict: true,
   });
   assert.equal(order[0], 'create');
-  const apiAt = order.findIndex((item) => String(item).startsWith('api:'));
-  assert.equal(apiAt > 0, true);
+  assert.equal(order.some((item) => String(item).startsWith('api:')), false);
   pending.catch(() => {});
 });
 

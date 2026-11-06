@@ -707,8 +707,11 @@ export function webAuthnErrorMessage(err) {
   if (code === "SETUP_ADMIN_EXISTS") {
     return "A super admin already exists. First-run setup is closed. Sign in instead.";
   }
-  if (name === "NotAllowedError" || /not focused|does not have focus/i.test(message)) {
+  if (/not focused|does not have focus/i.test(message)) {
     return "The browser blocked the passkey because this page was not focused. Click the page, then try again.";
+  }
+  if (name === "NotAllowedError") {
+    return "The passkey prompt was blocked or dismissed. Click this page, then try again.";
   }
   if (name === "SecurityError") {
     return "The browser blocked the passkey for this address. Open the voting site directly, then try again.";
@@ -727,18 +730,21 @@ function passkeyNotReady() {
 
 /**
  * WebKit refuses credentials.create/get when the document is not focused.
- * Call this in the same turn as the ceremony, before create/get.
+ * If the click did not leave the document focused, hold a control focused
+ * until the ceremony promise settles. Removing it earlier drops focus while
+ * the prompt is still open, and WebKit then rejects the completed passkey.
+ * @returns {() => void}
  */
-function ensureDocumentFocused() {
-  if (typeof document === "undefined" || typeof document.hasFocus !== "function") return;
-  if (document.hasFocus()) return;
+function holdDocumentFocus() {
+  if (typeof document === "undefined" || typeof document.hasFocus !== "function") return () => {};
+  if (document.hasFocus()) return () => {};
   try {
     if (typeof window !== "undefined" && typeof window.focus === "function") window.focus();
   } catch {
     /* the click handler continues */
   }
-  if (document.hasFocus()) return;
-  if (typeof document.createElement !== "function" || !document.body) return;
+  if (document.hasFocus()) return () => {};
+  if (typeof document.createElement !== "function" || !document.body) return () => {};
   const button = document.createElement("button");
   button.type = "button";
   button.tabIndex = -1;
@@ -750,9 +756,25 @@ function ensureDocumentFocused() {
   } catch {
     /* create/get still runs in this turn */
   }
-  queueMicrotask(() => {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
     button.remove?.();
-  });
+  };
+}
+
+function settleCeremony(promise, release, onValue) {
+  return Promise.resolve(promise).then(
+    (value) => {
+      release();
+      return onValue(value);
+    },
+    (err) => {
+      release();
+      throw err;
+    },
+  );
 }
 
 function creationPublicKey(serverOptions, prfOk, evalFirst, evalSecond) {
@@ -833,9 +855,15 @@ export async function prepareRegistrationCeremony(serverOptions = {}) {
  */
 export function startRegistrationCeremony(prepared) {
   if (!prepared?.publicKey) throw passkeyNotReady();
-  ensureDocumentFocused();
-  const promise = navigator.credentials.create({ publicKey: prepared.publicKey });
-  return Promise.resolve(promise).then((credential) => {
+  const release = holdDocumentFocus();
+  let promise;
+  try {
+    promise = navigator.credentials.create({ publicKey: prepared.publicKey });
+  } catch (err) {
+    release();
+    throw err;
+  }
+  return settleCeremony(promise, release, (credential) => {
     if (!credential) throw new Error("Passkey creation was cancelled.");
     credential._zkVotingPrfEvalFirst = prepared.evalFirst;
     if (prepared.evalSecond) credential._zkVotingPrfEvalSecond = prepared.evalSecond;
@@ -1210,7 +1238,13 @@ async function registerPasskeyAfterGesture(
   let server = null;
   let finishError = null;
   let finishResult = null;
-  if (!credentialPromise && typeof api === "function") {
+  // The authenticator prompt must finish before any other await. A fetch or a
+  // redraw while it is open makes WebKit drop focus and reject the passkey
+  // the person just approved.
+  let credential;
+  if (credentialPromise) {
+    credential = await credentialPromise;
+  } else if (typeof api === "function") {
     try {
       server = await api(beginPath, {
         method: "POST",
@@ -1228,14 +1262,16 @@ async function registerPasskeyAfterGesture(
       server = null;
     }
   }
-  const options = server?.publicKey
-    ? server
-    : server?.options
-      ? server.options
-      : server || {};
-  if (displayName) options.displayName = displayName;
+  if (!credential) {
+    const options = server?.publicKey
+      ? server
+      : server?.options
+        ? server.options
+        : server || {};
+    if (displayName) options.displayName = displayName;
+    credential = await createCredential(options);
+  }
   const ctx = await resolveDerivationContext({ api, chainId, jurisdictionId });
-  const credential = credentialPromise ? await credentialPromise : await createCredential(options);
   const publicRecord = await provisionFromCredential(credential, {
     displayName,
     chainId: ctx.chainId,
@@ -1328,9 +1364,15 @@ export async function prepareAssertionCeremony(serverOptions = {}) {
  */
 export function startAssertionCeremony(prepared) {
   if (!prepared?.publicKey?.challenge) throw passkeyNotReady();
-  ensureDocumentFocused();
-  const promise = navigator.credentials.get({ publicKey: prepared.publicKey });
-  return Promise.resolve(promise).then((assertion) => {
+  const release = holdDocumentFocus();
+  let promise;
+  try {
+    promise = navigator.credentials.get({ publicKey: prepared.publicKey });
+  } catch (err) {
+    release();
+    throw err;
+  }
+  return settleCeremony(promise, release, (assertion) => {
     if (!assertion) throw new Error("Passkey sign-in was cancelled.");
     return assertion;
   });

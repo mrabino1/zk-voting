@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { h, fill } from '../public/app.js';
 import { footerMetaKey, namedVotingHost, showsDemoChrome } from '../public/host-chrome.js';
+import { renderPublicHtml, rewriteModuleSpecifiers } from '../src/publicAssets.mjs';
 import { webAuthnErrorMessage } from '../public/passkey-wallet.js';
 import { homeIntro } from '../public/public-pages.js';
 import { renderSetup, setupPasskeyControl } from '../public/setup.js';
@@ -28,6 +29,19 @@ test('VOTE_FQDN hides the Demo chrome; an unnamed host keeps it', () => {
   assert.doesNotMatch(
     readFileSync(join(publicDir, 'locales/en.js'), 'utf8').match(/footerMetaHost:\s*\n\s*"([^"]+)"/)[1],
     /demo/i,
+  );
+});
+
+test('a named host response omits the Demo chip instead of hiding it', () => {
+  const html = '<span class="topbar-chip" id="topbar-demo" hidden>Demo</span><p class="footer-meta" id="footer-demo" hidden>Voting demo: <a href="/register">Register</a></p><script type="module" src="/app.js"></script>';
+  const named = renderPublicHtml(html, { voteFqdn: 'vote.nuursha.com', assetVersion: 'abc123' });
+  assert.doesNotMatch(named, /topbar-demo|footer-demo|>Demo</);
+  assert.match(named, /src="\/app\.js\?v=abc123"/);
+  const demo = renderPublicHtml(html, { assetVersion: 'abc123' });
+  assert.match(demo, /id="topbar-demo"/);
+  assert.equal(
+    rewriteModuleSpecifiers('import { renderSetup } from "./setup.js";\nimport "./i18n.js";', 'abc123'),
+    'import { renderSetup } from "./setup.js?v=abc123";\nimport "./i18n.js?v=abc123";',
   );
 });
 

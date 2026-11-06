@@ -1042,7 +1042,6 @@ export async function renderRegister(main, ctx) {
     state.busy = true;
     state.error = "";
     state.info = "";
-    paint();
     announce("Waiting for the authenticator.");
     try {
       const record = await pending;
