@@ -19,6 +19,7 @@ import {
   DEFAULT_BRAND_NAME,
   LEGACY_DEFAULT_NAMES,
   brandDefaults,
+  cleanPublicUrl,
   isSafeBrandText,
 } from './branding.mjs';
 import { HttpError } from './http.mjs';
@@ -76,12 +77,15 @@ export function defaultLayout() {
     regions: Object.fromEntries(REGIONS.map((r) => [r, []])),
     theme: { light: {}, dark: {} },
     // Empty strings mean "not renamed": the env / built-in default applies.
-    branding: { productName: '', shortName: '', tagline: '' },
+    branding: { productName: '', shortName: '', tagline: '', logoUrl: '' },
   };
 }
 
+/** Header mark until Branding sets a logo. Not stored; an empty logoUrl means this. */
+export const DEFAULT_LOGO_URL = '/brand-mark.svg';
+
 export function brandingLayer(input) {
-  const out = { productName: '', shortName: '', tagline: '' };
+  const out = { productName: '', shortName: '', tagline: '', logoUrl: '' };
   for (const [field, max] of Object.entries(BRANDING_FIELDS)) {
     const value = text(input?.[field], max, field === 'productName' ? 'product name' : field);
     if (!isSafeBrandText(value, max)) {
@@ -94,6 +98,14 @@ export function brandingLayer(input) {
   }
   // Earlier releases always saved the built-in default; treat it as "not renamed".
   if (LEGACY_DEFAULT_NAMES.includes(out.productName)) out.productName = '';
+  const logoRaw = String(input?.logoUrl ?? '').trim();
+  if (logoRaw && logoRaw !== DEFAULT_LOGO_URL) {
+    const logo = cleanPublicUrl(logoRaw);
+    if (!logo) {
+      throw new HttpError(400, 'logo URL must be a site path or an https URL', { code: 'LAYOUT_INVALID', field: 'logoUrl' });
+    }
+    out.logoUrl = logo;
+  }
   return out;
 }
 
@@ -104,6 +116,7 @@ export function resolveBranding(branding, defaults = brandDefaults()) {
     productName,
     shortName: branding?.shortName || (branding?.productName ? productName : defaults.shortName),
     tagline: branding?.tagline || defaults.tagline,
+    logoUrl: branding?.logoUrl || defaults.logoUrl || '',
   };
 }
 
@@ -254,7 +267,7 @@ export function mergeLayout(base, layer) {
   }
   if (layer.branding) {
     const next = { ...(out.branding || {}) };
-    for (const field of Object.keys(BRANDING_FIELDS)) {
+    for (const field of [...Object.keys(BRANDING_FIELDS), 'logoUrl']) {
       const v = layer.branding[field];
       if (v && !(field === 'productName' && LEGACY_DEFAULT_NAMES.includes(v))) next[field] = v;
     }
@@ -341,7 +354,10 @@ export async function createLayoutService({ store, config }) {
         console.warn(`[layout] ${label} filter rejected: ${err.message}`);
       }
     }
-    layout.branding = resolveBranding(layout.branding, brandDefaults());
+    layout.branding = resolveBranding(layout.branding, {
+      ...brandDefaults(),
+      logoUrl: config.clientBrand?.logoUrl || '',
+    });
     return { layout, sources };
   }
 

@@ -308,6 +308,13 @@ function applyBranding(layout) {
     if (!el.classList.contains('brand-name')) el.textContent = name;
   }
   for (const el of document.querySelectorAll('.brand-name')) paintBrandWordmark(el, name);
+  const logo = layout.branding?.logoUrl;
+  if (logo) {
+    for (const img of document.querySelectorAll('.brand-mark img')) {
+      img.src = logo;
+      img.dataset.brandLogo = 'layout';
+    }
+  }
 }
 
 function applyTheme() {

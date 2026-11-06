@@ -114,12 +114,25 @@ export function rewriteModuleSpecifiers(source, version) {
  * @param {string} html
  * @param {{ voteFqdn?: string, assetVersion?: string }} [opts]
  */
-export function renderPublicHtml(html, { voteFqdn = '', assetVersion: version = '', clientBrand = null } = {}) {
+/** Replace the header mark. An empty URL keeps the built-in /brand-mark.svg. */
+export function applyHeaderLogo(html, logoUrl) {
+  const src = String(logoUrl || '').trim();
+  if (!src) return String(html || '');
+  const safe = escapeAttr(src);
+  return String(html || '').replace(
+    /(<span\b[^>]*\bclass="[^"]*\bbrand-mark\b[^"]*"[^>]*>\s*<img\b[^>]*\ssrc=")[^"]+(")/gi,
+    `$1${safe}$2`,
+  );
+}
+
+export function renderPublicHtml(html, { voteFqdn = '', assetVersion: version = '', clientBrand = null, logoUrl = '' } = {}) {
   let out = String(html || '');
   if (String(voteFqdn || '').trim()) {
     out = stripNamedHostDemo(out);
     out = applyClientHostHtml(out, clientBrand?.active ? clientBrand : { active: true });
   }
+  const mark = logoUrl || (clientBrand?.active ? clientBrand.logoUrl : '');
+  if (mark) out = applyHeaderLogo(out, mark);
   if (version) out = versionHtmlAssets(out, version);
   return out;
 }

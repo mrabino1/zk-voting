@@ -348,6 +348,40 @@ test('a prepared setup ceremony opens the passkey on the click', async () => {
   delete globalThis.document;
 });
 
+test('a focus refusal leaves the setup passkey button ready for another click', async () => {
+  const { body } = installDom();
+  const main = createNode('main');
+  body.append(main);
+  const api = async (path) => {
+    if (path === '/api/setup') return { needsAdmin: true, suggestedHandle: 'nuursha-vote' };
+    if (path === '/api/setup/admin/begin') return { publicKey: { challenge: 'server' } };
+    return {};
+  };
+  const wallet = {
+    hasWebAuthn: () => true,
+    webAuthnErrorMessage,
+    prepareRegistrationCeremony: async () => ({ publicKey: { challenge: 'ready' } }),
+    registerPasskey() {
+      const err = new Error('The document is not focused.');
+      err.code = 'PASSKEY_NOT_FOCUSED';
+      throw err;
+    },
+  };
+  await renderSetup(main, { h, api, fill, wallet, announce() {}, navigate() {} });
+  const terms = query(main, '#setup-terms');
+  const form = query(main, 'FORM');
+  terms.checked = true;
+  fire(terms, 'change');
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  const button = () => document.getElementById('setup-passkey-btn');
+  assert.equal(button().disabled, false);
+  fire(form, 'submit');
+  assert.match(textOf(query(main, '.notice-error')), /not focused/i);
+  assert.equal(button().disabled, false);
+  assert.equal(button().textContent, 'Create super admin passkey');
+  delete globalThis.document;
+});
+
 test('sign-in and register do not report an unready passkey prompt', () => {
   assert.deepEqual(passkeyLoginControl({ preparing: true }), {
     disabled: true,

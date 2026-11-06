@@ -115,17 +115,20 @@ test('startRegistrationCeremony calls create synchronously while the document is
   assert.equal(yielded, false);
 });
 
-test('the focus holder stays until the passkey prompt settles', async () => {
-  installBrowser({ focused: false });
+test('an unfocused document does not open the passkey prompt', async () => {
+  const { calls } = installBrowser({ focused: false });
   globalThis.window.focus = () => {};
-  const removed = [];
-  const orig = globalThis.document.createElement;
-  globalThis.document.createElement = function createElement() {
-    const el = orig();
-    el.remove = () => {
-      removed.push('remove');
-    };
-    return el;
+  const prepared = await prepareRegistrationCeremony(creationOptions);
+  assert.throws(() => startRegistrationCeremony(prepared), /not focused/);
+  assert.deepEqual(calls, []);
+});
+
+test('a focused document does not insert a stand-in button', async () => {
+  installBrowser({ focused: true });
+  let created = 0;
+  globalThis.document.createElement = () => {
+    created += 1;
+    return { focus() {}, remove() {}, style: {}, setAttribute() {} };
   };
   let resolveCreate;
   globalThis.navigator.credentials.create = () => new Promise((resolve) => {
@@ -133,12 +136,10 @@ test('the focus holder stays until the passkey prompt settles', async () => {
   });
   const prepared = await prepareRegistrationCeremony(creationOptions);
   const pending = startRegistrationCeremony(prepared);
-  await Promise.resolve();
-  assert.deepEqual(removed, []);
+  assert.equal(created, 0);
   resolveCreate({ id: 'cred' });
   const credential = await pending;
   assert.equal(credential.id, 'cred');
-  assert.deepEqual(removed, ['remove']);
 });
 
 test('registerPasskey waits for the prompt before any api request', async () => {

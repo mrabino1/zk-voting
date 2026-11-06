@@ -254,7 +254,8 @@ export async function renderSetup(main, ctx) {
   async function createAdmin(event) {
     event.preventDefault();
     if (state.busy) return;
-    readLiveFields(event.target);
+    const form = event.target?.form || (event.target?.tagName === "FORM" ? event.target : null);
+    readLiveFields(form || event.target);
     if (!state.acceptedTerms) {
       state.error = "Accept the Terms of Use to continue.";
       state.errorFromPrep = false;
@@ -277,8 +278,11 @@ export async function renderSetup(main, ctx) {
     const handle = adminHandle();
     const extraBody = state.status?.setupTokenRequired ? { setupToken: state.setupToken } : {};
     const prepared = state.prepared;
-    state.prepared = null;
-    state.preparedKey = "";
+    const preparedKey = state.preparedKey;
+    const trigger =
+      event.submitter ||
+      (event.currentTarget?.id === "setup-passkey-btn" ? event.currentTarget : null) ||
+      document.getElementById("setup-passkey-btn");
     let pending;
     try {
       pending = wallet.registerPasskey({
@@ -290,13 +294,26 @@ export async function renderSetup(main, ctx) {
         extraBody,
         strict: true,
         prepared,
+        trigger,
       });
     } catch (err) {
+      // The browser refused before the prompt. Keep the prepared ceremony so
+      // the next click can open it, instead of disabling the button.
+      if (err?.code === "PASSKEY_NOT_FOCUSED") {
+        state.prepared = prepared;
+        state.preparedKey = preparedKey;
+      } else {
+        state.prepared = null;
+        state.preparedKey = "";
+      }
       state.error = wallet.webAuthnErrorMessage(err);
+      state.errorFromPrep = false;
       paint();
       announce?.(state.error);
       return;
     }
+    state.prepared = null;
+    state.preparedKey = "";
     // Leave the form alone until the prompt finishes. Rebuilding it, or
     // disabling the button that was just clicked, takes focus and WebKit
     // rejects the passkey that was just approved.
@@ -315,6 +332,7 @@ export async function renderSetup(main, ctx) {
     } finally {
       state.busy = false;
       paint();
+      if (state.error && state.status?.needsAdmin && !state.mfa && !state.prepared) prefetchCeremony({ force: true });
       if (state.error) announce?.(state.error);
     }
   }
@@ -464,6 +482,10 @@ export async function renderSetup(main, ctx) {
             type: "submit",
             disabled: passkeyControl().disabled,
             text: passkeyControl().label,
+            onClick: (event) => {
+              event.preventDefault();
+              createAdmin(event);
+            },
           })
         )
       )

@@ -728,50 +728,51 @@ function passkeyNotReady() {
   return err;
 }
 
+function passkeyNotFocused() {
+  const err = new Error("The document is not focused.");
+  err.name = "NotAllowedError";
+  err.code = "PASSKEY_NOT_FOCUSED";
+  return err;
+}
+
+function markCeremony(active) {
+  const root = typeof document !== "undefined" ? document.documentElement : null;
+  if (!root) return;
+  if (active) root.dataset.webauthn = "1";
+  else delete root.dataset.webauthn;
+}
+
 /**
- * WebKit refuses credentials.create/get when the document is not focused.
- * If the click did not leave the document focused, hold a control focused
- * until the ceremony promise settles. Removing it earlier drops focus while
- * the prompt is still open, and WebKit then rejects the completed passkey.
- * @returns {() => void}
+ * Chrome and WebKit reject credentials.create/get unless the page is focused.
+ * A hidden control does not count: focusing one moves focus off the button
+ * the person clicked, and the browser then reports that the page is not focused.
+ * Focus the clicked control only when the document is not already focused.
+ * @param {HTMLElement | null | undefined} trigger
  */
-function holdDocumentFocus() {
-  if (typeof document === "undefined" || typeof document.hasFocus !== "function") return () => {};
-  if (document.hasFocus()) return () => {};
+function focusCeremonyTrigger(trigger) {
+  if (typeof document === "undefined" || typeof document.hasFocus !== "function") return true;
+  if (document.hasFocus()) return true;
   try {
     if (typeof window !== "undefined" && typeof window.focus === "function") window.focus();
   } catch {
     /* the click handler continues */
   }
-  if (document.hasFocus()) return () => {};
-  if (typeof document.createElement !== "function" || !document.body) return () => {};
-  const button = document.createElement("button");
-  button.type = "button";
-  button.tabIndex = -1;
-  button.setAttribute("aria-hidden", "true");
-  button.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
-  document.body.appendChild(button);
   try {
-    button.focus();
+    if (trigger && typeof trigger.focus === "function") trigger.focus();
   } catch {
-    /* create/get still runs in this turn */
+    /* create/get still runs in this turn when the document is focused */
   }
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    button.remove?.();
-  };
+  return document.hasFocus();
 }
 
-function settleCeremony(promise, release, onValue) {
+function finishCeremony(promise, onValue) {
   return Promise.resolve(promise).then(
     (value) => {
-      release();
+      markCeremony(false);
       return onValue(value);
     },
     (err) => {
-      release();
+      markCeremony(false);
       throw err;
     },
   );
@@ -853,17 +854,18 @@ export async function prepareRegistrationCeremony(serverOptions = {}) {
  * @param {{ publicKey?: object, evalFirst?: Uint8Array, evalSecond?: Uint8Array | null }} prepared
  * @returns {Promise<PublicKeyCredential>}
  */
-export function startRegistrationCeremony(prepared) {
+export function startRegistrationCeremony(prepared, trigger) {
   if (!prepared?.publicKey) throw passkeyNotReady();
-  const release = holdDocumentFocus();
+  if (!focusCeremonyTrigger(trigger)) throw passkeyNotFocused();
+  markCeremony(true);
   let promise;
   try {
     promise = navigator.credentials.create({ publicKey: prepared.publicKey });
   } catch (err) {
-    release();
+    markCeremony(false);
     throw err;
   }
-  return settleCeremony(promise, release, (credential) => {
+  return finishCeremony(promise, (credential) => {
     if (!credential) throw new Error("Passkey creation was cancelled.");
     credential._zkVotingPrfEvalFirst = prepared.evalFirst;
     if (prepared.evalSecond) credential._zkVotingPrfEvalSecond = prepared.evalSecond;
@@ -1217,7 +1219,7 @@ async function resolveDerivationContext({ api, chainId, jurisdictionId } = {}) {
  * turn, before any await. Omit it and the begin request runs first.
  */
 export function registerPasskey(opts = {}) {
-  const credentialPromise = opts.prepared ? startRegistrationCeremony(opts.prepared) : null;
+  const credentialPromise = opts.prepared ? startRegistrationCeremony(opts.prepared, opts.trigger) : null;
   return registerPasskeyAfterGesture(opts, credentialPromise);
 }
 
@@ -1362,17 +1364,18 @@ export async function prepareAssertionCeremony(serverOptions = {}) {
  * Start navigator.credentials.get in this turn, before this function returns.
  * @param {{ publicKey?: PublicKeyCredentialRequestOptions }} prepared
  */
-export function startAssertionCeremony(prepared) {
+export function startAssertionCeremony(prepared, trigger) {
   if (!prepared?.publicKey?.challenge) throw passkeyNotReady();
-  const release = holdDocumentFocus();
+  if (!focusCeremonyTrigger(trigger)) throw passkeyNotFocused();
+  markCeremony(true);
   let promise;
   try {
     promise = navigator.credentials.get({ publicKey: prepared.publicKey });
   } catch (err) {
-    release();
+    markCeremony(false);
     throw err;
   }
-  return settleCeremony(promise, release, (assertion) => {
+  return finishCeremony(promise, (assertion) => {
     if (!assertion) throw new Error("Passkey sign-in was cancelled.");
     return assertion;
   });
@@ -1383,10 +1386,10 @@ export function startAssertionCeremony(prepared) {
  * allowCredentials when the authenticator is not resident-key capable.
  * Pass `prepared` from prepareAssertionCeremony() so get() runs in the click turn.
  */
-export function loginPasskey({ api, handle, prepared } = {}) {
+export function loginPasskey({ api, handle, prepared, trigger } = {}) {
   if (!hasWebAuthn()) throw new Error(webAuthnUnavailableMessage());
   if (typeof api !== "function") throw new Error("Passkey login needs the Node API helper.");
-  const assertionPromise = prepared ? startAssertionCeremony(prepared) : null;
+  const assertionPromise = prepared ? startAssertionCeremony(prepared, trigger) : null;
   return loginPasskeyAfterGesture({ api, handle, assertionPromise });
 }
 

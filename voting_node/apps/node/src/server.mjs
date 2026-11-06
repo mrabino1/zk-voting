@@ -232,10 +232,11 @@ function spaFallback(config, layoutService) {
   const currentBranding = () => {
     const b = layoutService.effective().layout.branding;
     const client = config.clientBrand;
+    const logoUrl = b.logoUrl || '';
     if (client?.active && client.name) {
-      return { name: client.name, shortName: client.name, tagline: b.tagline };
+      return { name: client.name, shortName: client.name, tagline: b.tagline, logoUrl };
     }
-    return { name: b.productName, shortName: b.shortName, tagline: b.tagline };
+    return { name: b.productName, shortName: b.shortName, tagline: b.tagline, logoUrl };
   };
   return function spaMiddleware(req, res, next) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
@@ -257,6 +258,7 @@ function spaFallback(config, layoutService) {
             voteFqdn: config.voteFqdn,
             assetVersion: config.assetVersion,
             clientBrand: config.clientBrand,
+            logoUrl: branding.logoUrl,
           })),
           (err) => next(err),
         );

@@ -700,7 +700,7 @@ function renderForm(state, opts, statusEl) {
               "data-signin": "passkey",
               disabled: passkeyControl.disabled,
               text: passkeyControl.label,
-              onClick: () => {
+              onClick: (event) => {
                 const key = loginPrepKey(state.handle);
                 if (!(loginPrep.prepared && loginPrep.key === key)) {
                   if (loginPrep.failedKey === key && loginPrep.error) {
@@ -710,15 +710,25 @@ function renderForm(state, opts, statusEl) {
                   return;
                 }
                 const prepared = loginPrep.prepared;
-                loginPrep.prepared = null;
-                loginPrep.key = null;
                 let pending;
                 try {
-                  pending = loginPasskey({ api: fetchJson, handle: state.handle, prepared });
+                  pending = loginPasskey({
+                    api: fetchJson,
+                    handle: state.handle,
+                    prepared,
+                    trigger: event.currentTarget,
+                  });
                 } catch (err) {
+                  if (err?.code !== "PASSKEY_NOT_FOCUSED") {
+                    loginPrep.prepared = null;
+                    loginPrep.key = null;
+                  }
                   setStatus(statusEl, "err", webAuthnErrorMessage(err));
+                  syncPasskeyLoginButton(state);
                   return;
                 }
+                loginPrep.prepared = null;
+                loginPrep.key = null;
                 runAction(state, statusEl, "passkey", () =>
                   pending.then((result) => finishOrMfa(state, result, "passkey"))
                 );
