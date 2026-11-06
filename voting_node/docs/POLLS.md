@@ -59,7 +59,18 @@ ZK-Voting L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It canno
 
 ## Math
 
-Weights are uint256 base units: `bigint` in memory, decimal strings in JSON. Plurality sums final weights per option. Weighted IRV uses the same tie breaks as civic IRV (`firstPlaceTieWinner`, `lastPlaceTieEliminated`) without changing `computeIrv`. Majority is `2 × top > continuing`, in integers. Outcome order: quorum, then no ballots, then tie, then threshold, otherwise a winner.
+Weights are uint256 base units: `bigint` in memory, decimal strings in JSON. Each poll stores `weighting`:
+
+| `weighting` | Counted weight |
+| --- | --- |
+| `gross` (default) | The final token weight, unchanged |
+| `quadratic` | The integer square root of the whole tokens (`gross / 10^decimals`), rounded down. Dust under one token counts as zero |
+
+Participation and turnout stay in gross units, so turnout is still a share of supply. `quadratic` also publishes `grossCounts` beside the counted `counts`. Abstain is recorded and is left out of the majority.
+
+A plurality poll's `decisionRule` is `simple_majority`: one option wins only when its counted weight is strictly more than half of the non-abstain counted weight (`2 × weight > nonAbstain`). A lead that is short of that is `NO_MAJORITY`. An equal top is `TIE`. Ranked-choice polls still run weighted IRV on the same counted weight. IRV tie breaks match civic IRV (`firstPlaceTieWinner`, `lastPlaceTieEliminated`) without changing `computeIrv`. Outcome order: quorum, then tie, then no majority, then no ballots, then threshold, otherwise a winner.
+
+`pollParamsHash` commits `weighting`, `decisionRule`, the summary, the body, and the tags along with the token and the weight source.
 
 `resultHash` is keccak256 of the canonical result without `resultHash`, `tallyAt`, `tallyBy`, or `l1TxHash`. `ballotsRoot` is a keccak Merkle root of canonical ballot rows sorted by voter.
 

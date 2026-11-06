@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 
 import { computeIrv } from '../src/irv.mjs';
-import { evaluateWeightedPoll, tallyWeightedPlurality } from '../src/weightedTally.mjs';
+import { evaluateWeightedPoll, integerSquareRoot, tallyWeightedPlurality } from '../src/weightedTally.mjs';
 
 describe('weighted tally', () => {
   test('plurality and IRV match hand fixtures, including values above 2^53', () => {
@@ -156,6 +156,107 @@ describe('weighted tally', () => {
     });
     assert.ok(miss.flags.includes('THRESHOLD_NOT_MET'));
     assert.equal(miss.outcome, 'THRESHOLD_NOT_MET');
+  });
+
+  test('integer square root is exact for squares and floors the rest', () => {
+    assert.equal(integerSquareRoot(0n), 0n);
+    assert.equal(integerSquareRoot(1n), 1n);
+    assert.equal(integerSquareRoot(2n), 1n);
+    assert.equal(integerSquareRoot(9n), 3n);
+    assert.equal(integerSquareRoot(10n), 3n);
+    const huge = 10n ** 40n + 17n;
+    const root = integerSquareRoot(huge);
+    assert.ok(root * root <= huge);
+    assert.ok((root + 1n) * (root + 1n) > huge);
+  });
+
+  test('quadratic counting uses the square root and keeps gross participation', () => {
+    const math = evaluateWeightedPoll({
+      pollType: 'plurality',
+      optionIds: ['yes', 'no', 'abstain'],
+      ballots: [
+        { choices: ['yes'], weight: 81n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['no'], weight: 1n },
+        { choices: ['abstain'], weight: 16n },
+      ],
+      quorum: null,
+      passThresholdBps: null,
+      totalSupply: 200n,
+      weighting: 'quadratic',
+      decisionRule: 'simple_majority',
+    });
+    assert.equal(math.participation, 81n + 10n + 16n);
+    assert.equal(math.counts.yes, 9n);
+    assert.equal(math.counts.no, 10n);
+    assert.equal(math.counts.abstain, 4n);
+    assert.equal(math.grossCounts.yes, 81n);
+    assert.equal(math.winner, 'no');
+    assert.equal(math.outcome, 'WINNER');
+
+    const scaled = evaluateWeightedPoll({
+      pollType: 'plurality',
+      optionIds: ['yes', 'no'],
+      ballots: [
+        { choices: ['yes'], weight: 81n * 10n ** 18n },
+        { choices: ['no'], weight: 100n * 10n ** 18n },
+      ],
+      quorum: null,
+      passThresholdBps: null,
+      totalSupply: 200n * 10n ** 18n,
+      weighting: 'quadratic',
+      decisionRule: 'simple_majority',
+      decimals: 18,
+    });
+    assert.equal(scaled.counts.yes, 9n);
+    assert.equal(scaled.counts.no, 10n);
+    assert.equal(scaled.grossCounts.yes, 81n * 10n ** 18n);
+    assert.equal(scaled.participation, 181n * 10n ** 18n);
+    assert.equal(scaled.winner, 'no');
+  });
+
+  test('simple majority withholds a winner who only leads', () => {
+    const base = {
+      pollType: 'plurality',
+      optionIds: ['a', 'b', 'c', 'abstain'],
+      quorum: null,
+      passThresholdBps: null,
+      totalSupply: 100n,
+      ballots: [
+        { choices: ['a'], weight: 40n },
+        { choices: ['b'], weight: 35n },
+        { choices: ['c'], weight: 25n },
+      ],
+    };
+    const strict = evaluateWeightedPoll({ ...base, decisionRule: 'simple_majority' });
+    assert.equal(strict.outcome, 'NO_MAJORITY');
+    assert.equal(strict.winner, null);
+    assert.equal(strict.leader, 'a');
+    assert.ok(strict.flags.includes('NO_MAJORITY'));
+
+    const most = evaluateWeightedPoll(base);
+    assert.equal(most.outcome, 'WINNER');
+    assert.equal(most.winner, 'a');
+
+    const clear = evaluateWeightedPoll({
+      ...base,
+      decisionRule: 'simple_majority',
+      ballots: [
+        { choices: ['a'], weight: 60n },
+        { choices: ['b'], weight: 30n },
+        { choices: ['c'], weight: 10n },
+      ],
+    });
+    assert.equal(clear.winner, 'a');
+    assert.equal(clear.outcome, 'WINNER');
   });
 
   test('weight modules do not use floating point', () => {

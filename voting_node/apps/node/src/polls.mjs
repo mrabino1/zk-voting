@@ -30,13 +30,15 @@ import {
   choicesHashOf,
   dec,
   hashCanonical,
+  pollDecisionRule,
   pollDomainOf,
+  pollWeighting,
   resultHashOf,
   tokenPollTypedData,
 } from './pollTypedData.mjs';
 import { buildPollReceipt } from './receipts.mjs';
 import { tokenPollResultsDto } from './results.mjs';
-import { evaluateWeightedPoll } from './weightedTally.mjs';
+import { evaluateWeightedPoll, publicPollTally, quadraticVotes } from './weightedTally.mjs';
 
 export const ZK_VOTING_L2_CHAIN_ID = 27427;
 const MAX_OPTIONS_DEFAULT = 32;
@@ -74,9 +76,15 @@ export function presentPoll(poll, now) {
     kind: 'token_poll',
     jurisdictionId: poll.jurisdictionId,
     title: poll.title,
+    summary: poll.summary || '',
+    body: poll.body || '',
+    tags: Array.isArray(poll.tags) ? poll.tags : [],
+    discussionUrl: poll.discussionUrl || null,
     options: poll.options,
     includeAbstain: true,
     pollType: poll.pollType,
+    weighting: pollWeighting(poll),
+    decisionRule: pollDecisionRule(poll),
     token: poll.token,
     tokenChainId: poll.tokenChainId,
     tokenSymbol: poll.tokenSymbol,
@@ -124,6 +132,58 @@ function normalizeQuorum(raw) {
     if (n < 1n || n > 10000n) fail(400, 'quorum bps must be 1..10000', 'INVALID_CHOICES');
   }
   return { mode, value };
+}
+
+const SUMMARY_MAX = 600;
+const BODY_MAX = 8000;
+const TAG_MAX = 8;
+const TAG_LEN = 40;
+
+function normalizeBlurb(raw, field, max) {
+  if (raw == null) return '';
+  const text = String(raw).replace(/\r\n/g, '\n').trim();
+  if (text.length > max) fail(400, `${field} is too long`, 'INVALID_CHOICES');
+  return text;
+}
+
+function normalizeTags(raw) {
+  if (raw == null || raw === '') return [];
+  const list = Array.isArray(raw) ? raw : String(raw).split(',');
+  if (list.length > TAG_MAX) fail(400, `at most ${TAG_MAX} tags`, 'INVALID_CHOICES');
+  const tags = [];
+  for (const item of list) {
+    const tag = String(item || '').trim().replace(/\s+/g, ' ');
+    if (!tag) continue;
+    if (tag.length > TAG_LEN) fail(400, `each tag is at most ${TAG_LEN} characters`, 'INVALID_CHOICES');
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+
+function normalizeDiscussion(raw) {
+  if (raw == null || raw === '') return null;
+  const text = String(raw).trim();
+  if (text.length > 500) fail(400, 'discussionUrl is too long', 'INVALID_CHOICES');
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    fail(400, 'discussionUrl must be an http(s) URL', 'INVALID_CHOICES');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    fail(400, 'discussionUrl must be an http(s) URL', 'INVALID_CHOICES');
+  }
+  if (url.username || url.password) fail(400, 'discussionUrl must not include a password', 'INVALID_CHOICES');
+  return url.toString();
+}
+
+function normalizeWeighting(raw) {
+  if (raw == null || raw === '') return 'gross';
+  const value = String(raw);
+  if (value !== 'gross' && value !== 'quadratic') {
+    fail(400, 'weighting must be gross or quadratic', 'INVALID_CHOICES');
+  }
+  return value;
 }
 
 function normalizeThreshold(raw) {
@@ -212,7 +272,20 @@ function applyParams(poll, body, config) {
     { allowZero: false },
   );
   poll.title = title;
+  poll.summary = normalizeBlurb(
+    body.summary === undefined ? poll.summary : body.summary,
+    'summary',
+    SUMMARY_MAX,
+  );
+  poll.body = normalizeBlurb(body.body === undefined ? poll.body : body.body, 'body', BODY_MAX);
+  poll.tags = body.tags === undefined && Array.isArray(poll.tags) ? poll.tags : normalizeTags(body.tags);
+  poll.discussionUrl =
+    body.discussionUrl === undefined && poll.discussionUrl !== undefined
+      ? poll.discussionUrl
+      : normalizeDiscussion(body.discussionUrl);
   poll.pollType = pollType;
+  poll.weighting = normalizeWeighting(body.weighting === undefined ? poll.weighting : body.weighting);
+  poll.decisionRule = pollType === 'ranked_irv' ? 'ranked_irv' : 'simple_majority';
   poll.token = getAddress(token.address);
   poll.tokenChainId = token.chainId;
   poll.startTime = startTime;
@@ -427,15 +500,41 @@ async function postL2(deps, type, payload) {
   return deps.explorer.append(type, body, { timestamp: deps.config.nowFn() });
 }
 
+function compactResult(result, poll) {
+  if (!result) return null;
+  return {
+    official: true,
+    outcome: result.outcome,
+    winner: result.winner ?? null,
+    leader: result.leader ?? null,
+    counts: result.counts,
+    grossCounts: result.grossCounts ?? null,
+    weighting: result.weighting || pollWeighting(poll),
+    decisionRule: result.decisionRule || pollDecisionRule(poll),
+    participation: result.participation,
+    turnoutBps: result.turnoutBps,
+  };
+}
+
+function attachResult(deps, poll, view, { full }) {
+  if (view.state !== 'TALLIED') return view;
+  const stored = deps.store.getPollResult(poll.id);
+  if (!stored) return view;
+  return { ...view, result: full ? presentResult(stored, poll) : compactResult(stored, poll) };
+}
+
 export function listPolls(deps) {
   const now = deps.config.nowFn();
-  return deps.store.listPolls().map((poll) => presentPoll(poll, now));
+  return deps.store
+    .listPolls()
+    .map((poll) => attachResult(deps, poll, presentPoll(poll, now), { full: false }))
+    .sort((a, b) => Number(b.startTime) - Number(a.startTime) || String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 
 export function getPollView(deps, id) {
   const poll = deps.store.getPoll(id);
   if (!poll) fail(404, 'poll not found', 'NOT_FOUND');
-  return presentPoll(poll, deps.config.nowFn());
+  return attachResult(deps, poll, presentPoll(poll, deps.config.nowFn()), { full: true });
 }
 
 function sourceFor(deps, poll) {
@@ -484,6 +583,9 @@ export async function weightView(deps, id, address) {
     }
   }
   const votesMode = poll.weightSource === WEIGHT_VOTES;
+  const gross = votesMode ? votingPower : current;
+  const counted =
+    gross == null ? null : dec(pollWeighting(poll) === 'quadratic' ? quadraticVotes(gross, poll.decimals || 0) : gross);
   return {
     nfp: true,
     binding: false,
@@ -492,8 +594,11 @@ export async function weightView(deps, id, address) {
     address: voter,
     state: phase,
     weightSource: poll.weightSource || 'balance_hold',
+    weighting: pollWeighting(poll),
+    decisionRule: pollDecisionRule(poll),
     currentBalance: current,
     votingPower,
+    countedWeight: counted,
     delegate,
     snapshotBlock: poll.snapshotBlock ?? null,
     snapshotRoot: poll.snapshotRoot ?? null,
@@ -790,46 +895,27 @@ async function tallySnapshot(deps, actor, poll, source, now) {
     quorum: poll.quorum,
     passThresholdBps: poll.passThresholdBps,
     totalSupply: supply,
+    weighting: pollWeighting(poll),
+    decisionRule: pollDecisionRule(poll),
+    decimals: Number(poll.decimals || 0),
   });
   const stored = await finishTally(deps, actor, poll, ballots, math, 0n, now);
   return presentResult(stored, poll);
 }
 
 async function finishTally(deps, actor, poll, ballots, math, withdrawnWeight, now) {
-  const counts = {};
-  for (const [key, value] of Object.entries(math.counts)) counts[key] = dec(value);
-  const irvRounds = math.irv
-    ? math.irv.rounds.map((round) => ({
-        round: round.round,
-        counts: Object.fromEntries(Object.entries(round.counts).map(([k, v]) => [k, dec(v)])),
-        continuing: dec(round.continuing),
-        exhausted: dec(round.exhausted),
-        remaining: round.remaining,
-        eliminated: round.eliminated,
-        winner: round.winner,
-        ...(round.tieBroken ? { tieBroken: true } : {}),
-      }))
-    : null;
-  const publicResult = {
+  const votesMode = poll.weightSource === WEIGHT_VOTES;
+  const publicResult = publicPollTally({
     pollId: poll.id,
     closeBlock: poll.closeBlock,
-    participation: dec(math.participation),
-    withdrawnWeight: dec(withdrawnWeight),
-    turnoutBps: dec(math.turnoutBps),
-    counts,
-    irvRounds,
-    outcome: math.outcome,
-    flags: math.flags,
-    winner: math.winner,
+    math,
+    withdrawnWeight,
     ballotsRoot: ballotsRootOf(ballots),
-    binding: false,
-    nfp: true,
-    signal: SIGNAL_LABEL,
-  };
-  if (poll.weightSource === WEIGHT_VOTES) {
-    publicResult.snapshotRoot = poll.snapshotRoot;
-    publicResult.snapshotBlock = Number(poll.snapshotBlock);
-  }
+    weighting: pollWeighting(poll),
+    decisionRule: pollDecisionRule(poll),
+    snapshotRoot: votesMode ? poll.snapshotRoot : null,
+    snapshotBlock: votesMode ? poll.snapshotBlock : null,
+  });
   publicResult.resultHash = resultHashOf(publicResult);
   const stored = {
     ...publicResult,
@@ -922,59 +1008,12 @@ export async function tallyPoll(deps, actor, id) {
     quorum: poll.quorum,
     passThresholdBps: poll.passThresholdBps,
     totalSupply: supply,
+    weighting: pollWeighting(poll),
+    decisionRule: pollDecisionRule(poll),
+    decimals: Number(poll.decimals || 0),
   });
   if (drift) math.flags = [...math.flags, 'TOKEN_DRIFT'];
-  const counts = {};
-  for (const [key, value] of Object.entries(math.counts)) counts[key] = dec(value);
-  const irvRounds = math.irv
-    ? math.irv.rounds.map((round) => ({
-        round: round.round,
-        counts: Object.fromEntries(Object.entries(round.counts).map(([k, v]) => [k, dec(v)])),
-        continuing: dec(round.continuing),
-        exhausted: dec(round.exhausted),
-        remaining: round.remaining,
-        eliminated: round.eliminated,
-        winner: round.winner,
-        ...(round.tieBroken ? { tieBroken: true } : {}),
-      }))
-    : null;
-  const publicResult = {
-    pollId: poll.id,
-    closeBlock: poll.closeBlock,
-    participation: dec(math.participation),
-    withdrawnWeight: dec(withdrawnWeight),
-    turnoutBps: dec(math.turnoutBps),
-    counts,
-    irvRounds,
-    outcome: math.outcome,
-    flags: math.flags,
-    winner: math.winner,
-    ballotsRoot: ballotsRootOf(ballots),
-    binding: false,
-    nfp: true,
-    signal: SIGNAL_LABEL,
-  };
-  publicResult.resultHash = resultHashOf(publicResult);
-  const stored = {
-    ...publicResult,
-    tallyAt: new Date(now * 1000).toISOString(),
-    tallyBy: actor.id,
-    l1TxHash: null,
-    l1Mirror: 'skipped',
-    l1MirrorNote:
-      'L1TallyMirror.postResult keys a uint256 civic election id. A token poll id is not that slot. Mirroring would change the existing mirror contract, so phase 1 skips it.',
-  };
-  poll.state = 'TALLIED';
-  poll.resultHash = stored.resultHash;
-  await deps.store.commitPollTally(poll, ballots, stored);
-  await postL2(deps, 'poll_tally', {
-    pollId: poll.id,
-    closeBlock: stored.closeBlock,
-    ballotsRoot: stored.ballotsRoot,
-    resultHash: stored.resultHash,
-    participation: stored.participation,
-    outcome: stored.outcome,
-  });
+  const stored = await finishTally(deps, actor, poll, ballots, math, withdrawnWeight, now);
   return presentResult(stored, poll);
 }
 
@@ -1074,8 +1113,11 @@ export function pollOutcomePdf(deps, id) {
     'This result triggers no on-chain action.',
     `Poll: ${poll.title}`,
     `Token: ${poll.tokenSymbol || ''} ${poll.token} chain ${poll.tokenChainId}`,
+    `Count: ${poll.weighting === 'quadratic' ? 'quadratic (integer square root of gross)' : 'gross'}`,
+    `Decision: ${poll.decisionRule || pollDecisionRule(poll)}`,
     `Outcome: ${result.outcome}`,
     `Winner: ${result.winner || 'none'}`,
+    result.leader ? `Leading option: ${result.leader}` : '',
     `Flags: ${(result.flags || []).join(', ') || 'none'}`,
     `Participation (base units): ${result.participation}`,
     `Withdrawn by transfer (base units): ${result.withdrawnWeight}`,
@@ -1086,9 +1128,15 @@ export function pollOutcomePdf(deps, id) {
   for (const [optionId, weight] of Object.entries(result.counts || {})) {
     lines.push(`Count ${optionId}: ${weight}`);
   }
+  if (result.grossCounts) {
+    for (const [optionId, weight] of Object.entries(result.grossCounts)) {
+      lines.push(`Gross ${optionId}: ${weight}`);
+    }
+  }
+  const printable = lines.filter((line) => line);
   return buildDeterministicPdf({
     title: `Token poll ${poll.title}`,
-    lines,
+    lines: printable,
     created: '2026-09-27',
   });
 }

@@ -4,6 +4,7 @@
  */
 
 import { brandName } from "./brand.js";
+import { civicContestCard } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { t } from "./i18n.js";
 import {
@@ -102,7 +103,7 @@ function publicCalendar(h, ctx, elections, source) {
   }
   return h(
     "div",
-    { class: "grid-cards", role: "list" },
+    { class: "contest-grid", role: "list" },
     source === "sample"
       ? h(
           "p",
@@ -115,48 +116,19 @@ function publicCalendar(h, ctx, elections, source) {
       : null,
     ...elections.map((election) => {
       const st = electionStateInfo(election.state);
-      return h(
-        "article",
-        { class: "election-card dash-card", role: "listitem" },
-        cardIcon(h, "ballot"),
-        h("p", { class: "kicker", text: election.jurisdiction }),
-        h("h2", { text: election.title }),
-        h(
-          "p",
-          { class: "cluster" },
-          h("span", { class: `status-pill ${st.className}`, text: st.label }),
-          h("span", { class: "status-pill status-created", text: electionTypeLabel(election) })
-        ),
-        h(
-          "ul",
-          { class: "meta-list" },
-          h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) })),
-          h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-          resultsAreSealed(election)
-            ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-            : null,
-          election.shortCode
-            ? h(
-                "li",
-                {},
-                h("span", { class: "lbl", text: "Short link" }),
-                h("a", {
-                  href: `/v/${encodeURIComponent(election.shortCode)}`,
-                  "data-nav": "",
-                  text: `/v/${election.shortCode}`,
-                })
-              )
-            : null
-        ),
-        election.description ? h("p", { text: election.description }) : null,
-        h(
-          "div",
-          { class: "cluster" },
+      return civicContestCard(h, election, {
+        formatTime,
+        state: st,
+        typeLabel: electionTypeLabel(election),
+        href: `/elections/${encodeURIComponent(election.id)}/info`,
+        sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
+        foot: Number(election.state) === 2 ? "Open · one person, one vote" : st.label,
+        actions: [
           h("a", {
             class: "btn btn-secondary",
             href: `/elections/${encodeURIComponent(election.id)}/info`,
             "data-nav": "",
-            text: "Candidate / measure info",
+            text: "Info",
           }),
           h("a", {
             class: election.state >= 4 ? "btn" : "btn btn-secondary",
@@ -171,9 +143,9 @@ function publicCalendar(h, ctx, elections, source) {
                 "data-nav": "",
                 text: "Register",
               })
-            : null
-        )
-      );
+            : null,
+        ],
+      });
     })
   );
 }
@@ -304,16 +276,18 @@ export function renderPublicHome(main, ctx, bundle) {
       }),
       publicCalendar(h, ctx, elections, source)
     ),
-    h(
-      "p",
-      { class: "field-hint" },
-      "Officials create ballots and freeze the roll from the ",
-      h("a", { href: "/office", text: "admin hub" }),
-      ". Want to know what ZK Voting is and why it matters? ",
-      h("a", { href: MAIN_SITE_URL, text: "Visit zk-voting.org" }),
-      " · ",
-      h("a", { href: COMMUNITY_URL, text: "Community forum" })
-    )
+    ctx.namedHost
+      ? null
+      : h(
+          "p",
+          { class: "field-hint" },
+          "Officials create ballots and freeze the roll from the ",
+          h("a", { href: "/office", text: "admin hub" }),
+          ". Want to know what ZK Voting is and why it matters? ",
+          h("a", { href: MAIN_SITE_URL, text: "Visit zk-voting.org" }),
+          " · ",
+          h("a", { href: COMMUNITY_URL, text: "Community forum" })
+        )
   );
 }
 
@@ -322,8 +296,14 @@ export function renderAbout(main, ctx) {
   const audience = audienceOf(ctx.me);
   const overlay = ctx.cms?.overlays?.about;
   const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
-  setTitle(overlay?.title || "About us");
-  const builtin = [
+  setTitle(overlay?.title || (ctx.namedHost ? brandName() : "About us"));
+  const builtin = ctx.namedHost
+    ? [
+        h("p", {
+          text: "Register, cast a private ballot, and check the published tally. Eligibility is public. The choice on a ballot is not.",
+        }),
+      ]
+    : [
     h("h2", { text: "Purpose" }),
     h("p", {
       text: "Democratic processes still depend on a small set of trusted operators: who is on the roll, who was turned away, whether a ballot was counted, and whether the published result matches the ballots. Paper and proprietary machines can work. They do not, by themselves, let a voter, a losing candidate, or a court verify those claims without re-trusting the same operators.",
@@ -365,8 +345,14 @@ export function renderAbout(main, ctx) {
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "About us" }),
-      h("h1", { text: replace ? overlay.title : "A civic public good, not a product" }),
-      replace
+      h("h1", {
+        text: replace
+          ? overlay.title
+          : ctx.namedHost
+            ? brandName()
+            : "A civic public good, not a product",
+      }),
+      replace || ctx.namedHost
         ? null
         : h(
             "p",

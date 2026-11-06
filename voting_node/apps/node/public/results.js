@@ -4,6 +4,7 @@
  * winners and ties. A poll may also show almost-live hourly choice sums.
  */
 
+import { civicContestCard } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { t } from "./i18n.js";
 
@@ -488,41 +489,25 @@ export async function renderResultsIndex(main, ctx) {
       ? h("div", { class: "notice notice-warn" }, h("p", { text: "No elections are published on this Node yet." }))
       : h(
           "div",
-          { class: "grid-cards", role: "list" },
+          { class: "contest-grid", role: "list" },
           ...elections.map((election) => {
             const st = electionStateInfo(election.state);
-            return h(
-              "article",
-              { class: "election-card", role: "listitem" },
-              h("p", { class: "kicker", text: election.jurisdiction }),
-              h("h2", { text: election.title }),
-              h("p", { class: "cluster" }, h("span", { class: `status-pill ${st.className}`, text: st.label })),
-              h(
-                "ul",
-                { class: "meta-list" },
-                h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) })),
-                resultsAreSealed(election)
-                  ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-                  : null
-              ),
-              h(
-                "div",
-                { class: "cluster" },
-                h(
-                  "a",
-                  {
-                    class: election.state >= 4 ? "btn" : "btn btn-secondary",
-                    href: `/elections/${encodeURIComponent(election.id)}/results`,
-                    "data-nav": "",
-                    text: resultsAreSealed(election)
-                      ? t("results.sealedStatus")
-                      : election.state >= 4
-                        ? "Final tally"
-                        : "Results status",
-                  }
-                )
-              )
-            );
+            return civicContestCard(h, election, {
+              formatTime,
+              state: st,
+              typeLabel: electionTypeLabel(election),
+              href: `/elections/${encodeURIComponent(election.id)}/results`,
+              sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
+              foot: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Final tally" : "Results status",
+              actions: [
+                h("a", {
+                  class: election.state >= 4 ? "btn" : "btn btn-secondary",
+                  href: `/elections/${encodeURIComponent(election.id)}/results`,
+                  "data-nav": "",
+                  text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Final tally" : "Results status",
+                }),
+              ],
+            });
           })
         );
 
@@ -539,6 +524,9 @@ export async function renderResultsIndex(main, ctx) {
           text: t("results.lede"),
         }
       ),
+      ctx.pollsEnabled
+        ? h("p", {}, h("a", { href: "/polls", "data-nav": "", text: "Token polls use the same board." }))
+        : null,
       source === "sample"
         ? h("div", { class: "notice notice-warn" }, h("p", { text: "Showing the built-in sample roll because /api/elections is not available." }))
         : null

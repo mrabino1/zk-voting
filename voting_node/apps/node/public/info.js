@@ -4,6 +4,7 @@
  * per candidate / measure choice (read-only). Choice is never recorded here.
  */
 
+import { contestFacts, contestPanel, contestPlace, contestSplit, contestTags } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 
 function publicOption(raw, index = 0) {
@@ -99,30 +100,37 @@ function header(h, election, formatTime, electionStateInfo, source, lede) {
   const st = electionStateInfo(election.state);
   return h(
     "div",
-    { class: "page-head" },
-    h("p", { class: "kicker", text: election.jurisdiction || election.jurisdictionId || "Jurisdiction" }),
-    h("h1", { text: election.title || "Ballot information" }),
+    { class: "contest-page" },
     h(
-      "p",
-      { class: "cluster" },
-      h("span", { class: `status-pill ${st.className}`, text: st.label }),
-      h("span", { class: "status-pill status-created", text: electionTypeLabel(election) }),
-      source === "sample" ? h("span", { class: "status-pill status-created", text: "Sample" }) : null
+      "div",
+      { class: "page-head" },
+      h("p", { class: "kicker", text: contestPlace(election) }),
+      h("h1", { text: election.title || "Ballot information" }),
+      h("p", { class: "lede", text: lede })
     ),
-    h("p", { class: "lede", text: lede }),
-    h(
-      "ul",
-      { class: "meta-list" },
-      h("li", {}, h("span", { class: "lbl", text: "Election id" }), h("span", { text: String(election.id) })),
-      election.startTime
-        ? h("li", {}, h("span", { class: "lbl", text: "Opens" }), h("span", { text: formatTime(election.startTime) }))
-        : null,
-      election.cutoffTime
-        ? h("li", {}, h("span", { class: "lbl", text: "Cutoff" }), h("span", { text: formatTime(election.cutoffTime) }))
-        : null,
-      resultsAreSealed(election)
-        ? h("li", {}, h("span", { text: sealedUntilLabel(election, formatTime) }))
-        : null
+    contestSplit(
+      h,
+      contestPanel(
+        h,
+        "About",
+        contestTags(h, [
+          { text: st.label, accent: Number(election.state) === 2 },
+          { text: electionTypeLabel(election), accent: true },
+          { text: "One person, one vote" },
+          source === "sample" ? { text: "Sample" } : null,
+        ]),
+        h("p", { text: "This page is read-only. Opening it does not record a choice." }),
+        resultsAreSealed(election) ? h("p", { class: "notice", text: sealedUntilLabel(election, formatTime) }) : null
+      ),
+      contestPanel(
+        h,
+        "Stage",
+        contestFacts(h, [
+          { label: "Opens", value: election.startTime ? formatTime(election.startTime) : "—" },
+          { label: "Closes", value: election.cutoffTime ? formatTime(election.cutoffTime) : "—" },
+          { label: "Count", value: "One person, one vote" },
+        ])
+      )
     )
   );
 }

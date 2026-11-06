@@ -121,7 +121,9 @@ export function mainNav(audience, extraNav = [], options = {}) {
   const polls = options && options.pollsEnabled ? [{ href: "/polls", label: t("polls.nav") }] : [];
   // The demo Node shows the voting flow only (register, sign in, vote,
   // receipt, tally). Informational content lives on the main site.
-  const mainSite = { href: MAIN_SITE_URL, label: t("chrome.navAbout"), spa: false };
+  // A deployed client (VOTE_FQDN) is that client's face, so the About link
+  // to zk-voting.org is omitted. The footer keeps the discreet powered-by.
+  const mainSite = options && options.clientHost ? null : { href: MAIN_SITE_URL, label: t("chrome.navAbout"), spa: false };
   if (audience === "public") {
     return [
       ...polls,
@@ -132,7 +134,7 @@ export function mainNav(audience, extraNav = [], options = {}) {
       { href: "/signin", label: t("chrome.navSignIn") },
       { href: "/register", label: t("chrome.navRegister") },
       mainSite,
-    ];
+    ].filter(Boolean);
   }
   const items = [
     { href: "/me", label: t("chrome.navDesk") },
@@ -144,9 +146,10 @@ export function mainNav(audience, extraNav = [], options = {}) {
     { href: "/receipt", label: t("chrome.navReceipt") },
     { href: "/outcomes", label: t("chrome.navOutcomes") },
     mainSite,
-  ];
+  ].filter(Boolean);
   if (audience === "officer") {
-    items.splice(items.length - 1, 0, { href: "/office", label: t("chrome.navAdmin") });
+    const aboutAt = items.findIndex((item) => item.href === MAIN_SITE_URL);
+    items.splice(aboutAt === -1 ? items.length : aboutAt, 0, { href: "/office", label: t("chrome.navAdmin") });
   }
   return items;
 }
@@ -178,9 +181,9 @@ export function navItemIsCurrent(item, currentPath, routeName) {
   return false;
 }
 
-export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [], pollsEnabled = false } = {}) {
+export function paintMainNav(nav, { audience, currentPath, routeName, spa = true, extraNav = [], pollsEnabled = false, clientHost = false } = {}) {
   if (!nav) return;
-  const items = mainNav(audience || "public", extraNav, { pollsEnabled });
+  const items = mainNav(audience || "public", extraNav, { pollsEnabled, clientHost });
   const existing = [...nav.querySelectorAll(":scope > ul > li > a")];
   const unchanged =
     existing.length === items.length &&
@@ -211,6 +214,7 @@ export function paintMainNav(nav, { audience, currentPath, routeName, spa = true
 
 export function paintBrand(brand, audience) {
   if (!brand) return;
+  if (brand.ownerDocument?.documentElement?.dataset?.clientHost === "1") return;
   brand.setAttribute("href", brandHref(audience));
 }
 

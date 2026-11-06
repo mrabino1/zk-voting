@@ -1903,7 +1903,9 @@
         const ready = Boolean(cfg.pollsReady && cfg.votingToken && cfg.votingToken.configured);
         section.innerHTML =
           '<header><h2 id="token-polls-heading">Token polls</h2></header>' +
-          '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>' +
+          (cfg.vote && cfg.vote.fqdn
+            ? ""
+            : '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>') +
           '<p class="field-hint">Signal polls on Ethereum mainnet. Balance-hold reads the minimum balance through close. Delegated-snapshot reads ERC-20Votes at one finalized block and commits that list with a Poseidon root. The node never sends a transaction and never uses the civic L2 for that snapshot. Civic elections stay one person, one vote.</p>' +
           (ready
             ? '<p class="field-hint" id="poll-token-host"></p>' +
@@ -1937,8 +1939,13 @@
       '<form id="form-token-poll" class="form-grid">' +
       '<div class="field"><label class="field-label" for="p-jurisdiction">Jurisdiction</label><select id="p-jurisdiction"></select></div>' +
       '<div class="field"><label class="field-label" for="p-title">Title</label><input id="p-title" maxlength="200" /></div>' +
-      '<div class="field"><label class="field-label" for="p-type">Type</label><select id="p-type"><option value="plurality">Plurality</option><option value="ranked_irv">Ranked choice (IRV)</option></select></div>' +
-      '<div class="field"><label class="field-label" for="p-weight">Weight</label><select id="p-weight"><option value="balance_hold">Minimum balance through close</option><option value="erc20_votes">Delegated votes at an Ethereum snapshot</option></select></div>' +
+      '<div class="field"><label class="field-label" for="p-summary">Summary</label><textarea id="p-summary" rows="2" maxlength="600"></textarea></div>' +
+      '<div class="field"><label class="field-label" for="p-body">Proposal</label><textarea id="p-body" rows="6" maxlength="8000"></textarea></div>' +
+      '<div class="field"><label class="field-label" for="p-tags">Tags, comma separated</label><input id="p-tags" maxlength="200" /></div>' +
+      '<div class="field"><label class="field-label" for="p-discussion">Discussion URL</label><input id="p-discussion" type="url" spellcheck="false" /></div>' +
+      '<div class="field"><label class="field-label" for="p-type">Ballot</label><select id="p-type"><option value="plurality">Single choice · simple majority</option><option value="ranked_irv">Ranked choice (IRV)</option></select></div>' +
+      '<div class="field"><label class="field-label" for="p-weighting">Count</label><select id="p-weighting"><option value="gross">Gross — token weight as held</option><option value="quadratic">Quadratic — square root of the gross weight</option></select><span class="field-hint">Both use the same winner rule. A single-choice poll needs a simple majority of the counted weight. Abstain is recorded and left out of that half.</span></div>' +
+      '<div class="field"><label class="field-label" for="p-weight">Credential</label><select id="p-weight"><option value="balance_hold">Minimum balance through close</option><option value="erc20_votes">Delegated votes at an Ethereum snapshot</option></select></div>' +
       '<div class="field"><label class="field-label" for="p-snap">Snapshot block (blank uses the latest finalized block)</label><input id="p-snap" inputmode="numeric" spellcheck="false" /></div>' +
       '<div class="grid-2"><div class="field"><label class="field-label" for="p-start">Start</label><input id="p-start" type="datetime-local" /></div>' +
       '<div class="field"><label class="field-label" for="p-cutoff">Cutoff</label><input id="p-cutoff" type="datetime-local" /></div></div>' +
@@ -1982,7 +1989,12 @@
         const body = {
           jurisdictionId: $("p-jurisdiction").value,
           title: $("p-title").value.trim(),
+          summary: $("p-summary").value.trim(),
+          body: $("p-body").value,
+          tags: $("p-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean),
+          discussionUrl: $("p-discussion").value.trim() || undefined,
           pollType: $("p-type").value,
+          weighting: $("p-weighting").value,
           weightSource: $("p-weight").value,
           snapshotBlock: $("p-snap").value.trim() || undefined,
           startTime: toUnix($("p-start").value),
@@ -2033,7 +2045,11 @@
           " · chain " +
           poll.tokenChainId +
           " · " +
-          (poll.weightSource || "balance_hold");
+          (poll.weightSource || "balance_hold") +
+          " · " +
+          (poll.weighting || "gross") +
+          " · " +
+          (poll.decisionRule || "simple_majority");
         article.append(title, meta);
         if (superAdmin && (poll.state === "DRAFT" || poll.state === "SCHEDULED")) {
           const schedule = document.createElement("button");

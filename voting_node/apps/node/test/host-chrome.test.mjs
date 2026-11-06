@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 import { h, fill } from '../public/app.js';
 import { footerMetaKey, namedVotingHost, showsDemoChrome } from '../public/host-chrome.js';
-import { renderPublicHtml, rewriteModuleSpecifiers } from '../src/publicAssets.mjs';
+import { resolveClientBrand } from '../src/branding.mjs';
+import { applyClientHostHtml, renderPublicHtml, rewriteModuleSpecifiers } from '../src/publicAssets.mjs';
 import { webAuthnErrorMessage } from '../public/passkey-wallet.js';
 import { homeIntro } from '../public/public-pages.js';
 import { renderSetup, setupPasskeyControl } from '../public/setup.js';
@@ -44,6 +45,50 @@ test('a named host response omits the Demo chip instead of hiding it', () => {
     rewriteModuleSpecifiers('import { renderSetup } from "./setup.js";\nimport "./i18n.js";', 'abc123'),
     'import { renderSetup } from "./setup.js?v=abc123";\nimport "./i18n.js?v=abc123";',
   );
+});
+
+test('a named host drops the civic banner and footer and can wear a client mark', () => {
+  const shell = `
+    <html lang="en">
+      <!-- NOT FOR PROFIT — civic public good. Not a commercial product. -->
+      <title data-i18n="chrome.titleHome">ZK-Voting — civic elections</title>
+      <div id="nfp-banner" class="nfp-banner nfp-ribbon">NOT FOR PROFIT — civic public good. Not a commercial product.</div>
+      <a class="brand" href="/"><span class="brand-mark"><img src="/brand-mark.svg" alt="" /></span>
+        <span class="brand-name" title="ZK-Voting">ZK-Voting</span>
+        <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
+      </a>
+      <span class="brand-sub">Site admin</span>
+      <ul><li><a href="https://zk-voting.org">About</a></li></ul>
+      <span class="office-badge">Not for profit</span>
+      <footer class="site-footer"><p class="footer-nfp">NOT FOR PROFIT</p><p>hello@zk-voting.org</p></footer>
+    </html>`;
+  const client = resolveClientBrand({
+    voteFqdn: 'vote.nersha.example',
+    env: {
+      CLIENT_BRAND_NAME: 'Nersha',
+      CLIENT_LOGO_URL: 'https://cdn.nersha.example/mark.svg',
+      CLIENT_BRAND_URL: 'https://nersha.example',
+      CLIENT_BRAND_SUBTITLE: 'City vote',
+    },
+  });
+  assert.equal(client.name, 'Nersha');
+  const named = applyClientHostHtml(shell, client);
+  assert.match(named, /data-client-host="1"/);
+  assert.doesNotMatch(named, /nfp-banner|office-badge|footer-nfp|NOT FOR PROFIT|Office of civic elections|civic elections/);
+  assert.match(named, /src="https:\/\/cdn\.nersha\.example\/mark\.svg"/);
+  assert.match(named, /href="https:\/\/nersha\.example\/"/);
+  assert.match(named, /City vote/);
+  assert.match(named, />Site admin</);
+  assert.doesNotMatch(named, /href="https:\/\/zk-voting\.org">About/);
+  assert.match(named, /powered by zk-voting\.org/);
+  assert.match(named, /class="powered-by-mark" src="\/brand-mark\.svg"/);
+  const ignored = resolveClientBrand({
+    voteFqdn: '',
+    env: { CLIENT_BRAND_NAME: 'Nersha', CLIENT_LOGO_URL: 'javascript:alert(1)' },
+  });
+  assert.equal(ignored.active, false);
+  assert.equal(applyClientHostHtml(shell, ignored), shell);
+  assert.equal(resolveClientBrand({ voteFqdn: 'vote.nersha.example', env: { CLIENT_LOGO_URL: 'javascript:alert(1)' } }).logoUrl, '');
 });
 
 test('the shell starts with the Demo chip hidden so a named host never flashes it', () => {

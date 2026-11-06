@@ -3165,6 +3165,37 @@ tbody tr:hover > td {
   color: var(--muted);
 }
 
+.site-footer-client,
+html[data-client-host="1"] .site-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.55rem 1rem;
+}
+
+.powered-by {
+  margin: 0;
+}
+
+.powered-by-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.powered-by-link:hover {
+  color: var(--fg);
+}
+
+.powered-by-mark {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+
 /* Wide layout: top bar across, sidebar on the left ------------------------ */
 
 @media (min-width: 960px) {
@@ -3359,6 +3390,338 @@ tbody tr:hover > td {
     margin: 0 !important;
     max-width: none !important;
   }
+}
+
+/* Contest board — civic elections and token polls share one layout. */
+
+.contest-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.contest-stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .contest-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.contest-stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.contest-stat .lbl,
+.contest-kicker,
+.contest-meter-label,
+.contest-id {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.contest-stat .val {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+}
+
+.contest-stat .hint {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.contest-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.contest-tabs button {
+  appearance: none;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.55rem 0.8rem;
+  min-height: var(--target);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.contest-tabs button[aria-selected="true"] {
+  color: var(--fg);
+  border-bottom-color: var(--project);
+}
+
+.contest-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 860px) {
+  .contest-grid,
+  .app-shell .contest-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.contest-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 100%;
+}
+
+.contest-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 100%;
+  padding: 1rem 1.05rem 0.95rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.contest-card h2,
+.app-shell .contest-card h2,
+.app-shell .site-main .contest-card h2 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 560;
+  text-decoration: none;
+}
+
+.contest-card h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.contest-card h2 a:hover {
+  color: var(--project-text);
+}
+
+.contest-kicker {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.contest-summary {
+  margin: 0;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.contest-summary.is-open {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  color: var(--fg);
+}
+
+.contest-facts {
+  margin: 0;
+  display: grid;
+}
+
+.contest-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.84rem;
+}
+
+.contest-facts dt {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.contest-facts dd {
+  margin: 0;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.contest-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contest-tag {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.contest-tag.is-accent {
+  border-color: color-mix(in srgb, var(--project) 55%, var(--border));
+  color: var(--project-text);
+}
+
+.contest-foot {
+  margin: 0.15rem 0 0;
+  font-size: 0.86rem;
+}
+
+.contest-actions {
+  margin-top: auto;
+}
+
+.contest-meter-block {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.contest-meter,
+.poll-bar.contest-meter {
+  height: 0.35rem;
+  background: var(--sunken);
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.contest-meter > span,
+.poll-bar.contest-meter > span {
+  background: var(--project);
+  border-radius: inherit;
+}
+
+.contest-meter-label {
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.contest-split {
+  display: grid;
+  gap: 0.85rem;
+}
+
+@media (min-width: 960px) {
+  .contest-split {
+    grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.85fr);
+    align-items: start;
+  }
+
+  .contest-side {
+    position: sticky;
+    top: 0.75rem;
+  }
+}
+
+.contest-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.05rem 1.1rem;
+}
+
+.contest-panel h2,
+.app-shell .contest-panel h2,
+.app-shell .site-main .contest-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.contest-panel h3,
+.app-shell .site-main .contest-panel h3 {
+  margin: 1rem 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.contest-copy {
+  white-space: pre-wrap;
+}
+
+.poll-options {
+  border: 0;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.poll-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0 0 0.45rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--sunken);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.poll-option:has(input:checked) {
+  border-color: var(--project);
+  background: color-mix(in srgb, var(--project) 10%, var(--card));
+}
+
+.poll-option input {
+  accent-color: var(--project);
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.contest-round {
+  margin-top: 0.8rem;
+}
+
+.app-shell .meta-list li {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0;
+}
+
+.app-shell .meta-list .lbl {
+  min-width: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 @media (prefers-contrast: more) {
