@@ -55,6 +55,8 @@ export default {
     footerNfp: "गैर-लाभकारी — {brand} एक नागरिक सार्वजनिक हित है। वाणिज्यिक उत्पाद नहीं।",
     footerMeta:
       "उत्पाद का नाम {brand}। मतदाता गैस नहीं देते। चुनाव रसीद पर कभी नहीं छपता। उत्पादन identity commitments Poseidon उपयोग करते हैं; यह Node डेमो केवल keccak256 commitment hex दिखा सकता है (trapdoor या सीड वाक्यांश कभी नहीं)।",
+    footerMetaHost:
+      "उत्पाद का नाम {brand}। मतदाता गैस नहीं देते। चुनाव रसीद पर कभी नहीं छपता। उत्पादन identity commitments Poseidon उपयोग करते हैं; यह Node केवल keccak256 commitment hex दिखा सकता है (trapdoor या सीड वाक्यांश कभी नहीं)।",
     footerOfficials: "अधिकारी:",
     footerBackOffice: "बैक ऑफिस",
     footerExplorer: "ब्लॉक एक्सप्लोरर",

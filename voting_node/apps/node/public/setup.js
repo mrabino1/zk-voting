@@ -29,6 +29,28 @@ export function setupRedirectFor(status, routeName) {
   return "/setup";
 }
 
+/**
+ * The create button stays disabled until the ceremony is prepared, so a click
+ * can open the passkey prompt in that same turn. A failed prepare leaves the
+ * button enabled so the operator can retry, and the banner shows that failure.
+ */
+export function setupPasskeyControl({
+  busy = false,
+  webAuthn = true,
+  ready = false,
+  preparing = false,
+  failed = false,
+} = {}) {
+  if (busy) return { disabled: true, label: "Waiting for passkey…" };
+  if (!webAuthn || (!ready && !failed)) {
+    return {
+      disabled: true,
+      label: preparing ? "Preparing passkey…" : "Create super admin passkey",
+    };
+  }
+  return { disabled: false, label: "Create super admin passkey" };
+}
+
 export async function renderSetup(main, ctx) {
   const { h, api, fill, navigate, announce, wallet } = ctx;
   const state = {
@@ -43,6 +65,8 @@ export async function renderSetup(main, ctx) {
     prepared: null,
     preparedKey: "",
     prepFailedKey: "",
+    prepError: "",
+    errorFromPrep: false,
     preparingKey: "",
     mfa: null,
     chainChoice: null,
@@ -68,6 +92,7 @@ export async function renderSetup(main, ctx) {
     if (state.busy) return;
     state.busy = true;
     state.error = "";
+    state.errorFromPrep = false;
     state.info = "";
     paint();
     try {
@@ -115,15 +140,63 @@ export async function renderSetup(main, ctx) {
     return true;
   }
 
+  function passkeyReady() {
+    return Boolean(state.prepared && state.preparedKey === ceremonyKey());
+  }
+
+  function passkeyFailed() {
+    return Boolean(state.prepError && state.prepFailedKey === ceremonyKey());
+  }
+
+  function passkeyControl() {
+    return setupPasskeyControl({
+      busy: state.busy,
+      webAuthn: wallet.hasWebAuthn(),
+      ready: passkeyReady(),
+      preparing: Boolean(state.preparingKey) && formReady() && !passkeyReady(),
+      failed: passkeyFailed(),
+    });
+  }
+
+  function syncPasskeyButton() {
+    const button = document.getElementById("setup-passkey-btn");
+    if (!button) return;
+    const control = passkeyControl();
+    button.disabled = control.disabled;
+    button.textContent = control.label;
+  }
+
+  function clearPrepNotice() {
+    if (!state.errorFromPrep) return;
+    state.error = "";
+    state.errorFromPrep = false;
+    root.querySelector(".notice-error")?.remove();
+  }
+
   async function prefetchCeremony({ force = false } = {}) {
-    if (!wallet.hasWebAuthn() || !formReady()) return;
+    if (!wallet.hasWebAuthn() || !formReady()) {
+      syncPasskeyButton();
+      return;
+    }
     const key = ceremonyKey();
-    if (force) state.prepFailedKey = "";
-    if (state.prepared && state.preparedKey === key) return;
-    if (state.prepFailedKey === key || state.preparingKey === key) return;
+    if (force) {
+      state.prepFailedKey = "";
+      state.prepError = "";
+    }
+    if (state.prepared && state.preparedKey === key) {
+      syncPasskeyButton();
+      return;
+    }
+    if (!force && (state.prepFailedKey === key || state.preparingKey === key)) {
+      syncPasskeyButton();
+      return;
+    }
     state.preparingKey = key;
+    syncPasskeyButton();
     const handle = adminHandle();
     const extraBody = state.status?.setupTokenRequired ? { setupToken: state.setupToken } : {};
+    let failed = false;
+    let stale = false;
     try {
       const server = await api("/api/setup/admin/begin", {
         method: "POST",
@@ -132,36 +205,73 @@ export async function renderSetup(main, ctx) {
       const options = server?.publicKey ? server : server?.options ? server.options : server || {};
       options.displayName = handle;
       const prepared = await wallet.prepareRegistrationCeremony(options);
-      if (ceremonyKey() !== key) return;
-      state.prepared = prepared;
-      state.preparedKey = key;
-      state.prepFailedKey = "";
-    } catch {
-      if (ceremonyKey() === key) {
+      if (ceremonyKey() !== key) {
+        stale = true;
+      } else {
+        state.prepared = prepared;
+        state.preparedKey = key;
+        state.prepFailedKey = "";
+        state.prepError = "";
+        clearPrepNotice();
+      }
+    } catch (err) {
+      if (ceremonyKey() !== key) {
+        stale = true;
+      } else {
         state.prepared = null;
         state.preparedKey = "";
         state.prepFailedKey = key;
+        state.prepError = wallet.webAuthnErrorMessage(err);
+        state.error = state.prepError;
+        state.errorFromPrep = true;
+        failed = true;
       }
     } finally {
       if (state.preparingKey === key) state.preparingKey = "";
     }
+    if (stale) {
+      syncPasskeyButton();
+      return;
+    }
+    if (failed) {
+      paint();
+      announce?.(state.error);
+      return;
+    }
+    syncPasskeyButton();
+  }
+
+  function readLiveFields(form) {
+    if (!form || typeof form.querySelector !== "function") return;
+    const handleInput = form.querySelector("#setup-handle");
+    const tokenInput = form.querySelector("#setup-token");
+    const termsInput = form.querySelector("#setup-terms");
+    if (handleInput) state.handle = handleInput.value;
+    if (tokenInput) state.setupToken = tokenInput.value;
+    if (termsInput) state.acceptedTerms = Boolean(termsInput.checked);
   }
 
   async function createAdmin(event) {
     event.preventDefault();
     if (state.busy) return;
+    readLiveFields(event.target);
     if (!state.acceptedTerms) {
       state.error = "Accept the Terms of Use to continue.";
+      state.errorFromPrep = false;
       paint();
       announce?.(state.error);
       return;
     }
-    const key = ceremonyKey();
-    if (!(state.prepared && state.preparedKey === key)) {
-      state.error = wallet.webAuthnErrorMessage({ code: "PASSKEY_NOT_READY" });
-      prefetchCeremony({ force: true });
-      paint();
-      announce?.(state.error);
+    if (!passkeyReady()) {
+      if (passkeyFailed()) {
+        state.error = state.prepError;
+        state.errorFromPrep = true;
+        prefetchCeremony({ force: true });
+        paint();
+        announce?.(state.error);
+      } else {
+        prefetchCeremony();
+      }
       return;
     }
     const handle = adminHandle();
@@ -235,6 +345,24 @@ export async function renderSetup(main, ctx) {
     });
   }
 
+  function onAdminField(event) {
+    const el = event.target;
+    const previous = ceremonyKey();
+    if (el?.id === "setup-handle") state.handle = el.value;
+    if (el?.id === "setup-token") state.setupToken = el.value;
+    if (el?.id === "setup-terms") state.acceptedTerms = Boolean(el.checked);
+    if (ceremonyKey() === previous) {
+      syncPasskeyButton();
+      return;
+    }
+    state.prepared = null;
+    state.preparedKey = "";
+    state.prepFailedKey = "";
+    state.prepError = "";
+    clearPrepNotice();
+    prefetchCeremony();
+  }
+
   function stepBadge(n, done) {
     return h("span", { class: `setup-step-num${done ? " is-done" : ""}`, "aria-hidden": "true", text: done ? "✓" : String(n) });
   }
@@ -274,12 +402,8 @@ export async function renderSetup(main, ctx) {
             value: state.handle || s.suggestedHandle || "admin",
             pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]{1,31}",
             required: true,
-            onInput: (e) => {
-              state.handle = e.target.value;
-              state.prepared = null;
-              state.preparedKey = "";
-              prefetchCeremony();
-            },
+            onInput: onAdminField,
+            onChange: onAdminField,
           }),
           h("span", { class: "field-hint", text: "2–32 letters, digits, dot, dash or underscore. Default comes from ADMIN_HANDLE." })
         ),
@@ -295,12 +419,8 @@ export async function renderSetup(main, ctx) {
                 autocomplete: "off",
                 required: true,
                 value: state.setupToken || "",
-                onInput: (e) => {
-                  state.setupToken = e.target.value;
-                  state.prepared = null;
-                  state.preparedKey = "";
-                  prefetchCeremony();
-                },
+                onInput: onAdminField,
+                onChange: onAdminField,
               }),
               h("span", {
                 class: "field-hint",
@@ -318,17 +438,20 @@ export async function renderSetup(main, ctx) {
             id: "setup-terms",
             type: "checkbox",
             checked: state.acceptedTerms,
-            onChange: (e) => {
-              state.acceptedTerms = Boolean(e.target.checked);
-              prefetchCeremony();
-            },
+            onChange: onAdminField,
           }),
           h("span", {}, "I agree to the ", h("a", { href: "/terms", "data-nav": "", text: "Terms of Use" }), ".")
         ),
         h(
           "div",
           { class: "actions" },
-          h("button", { class: "btn", type: "submit", disabled: state.busy || !wallet.hasWebAuthn(), text: state.busy ? "Waiting for passkey…" : "Create super admin passkey" })
+          h("button", {
+            id: "setup-passkey-btn",
+            class: "btn",
+            type: "submit",
+            disabled: passkeyControl().disabled,
+            text: passkeyControl().label,
+          })
         )
       )
     );

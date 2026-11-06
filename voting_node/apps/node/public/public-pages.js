@@ -64,6 +64,37 @@ function demoBanner(h) {
   );
 }
 
+/**
+ * Home opening. A named host (VOTE_FQDN) or a page the operator replaced
+ * is their site. The demo opening is only the unnamed built-in home.
+ */
+export function homeIntro({
+  namedHost = false,
+  replace = false,
+  overlayTitle = "",
+  siteTitle = "",
+  brand = "ZK-Voting",
+} = {}) {
+  if (replace) {
+    return { kicker: null, heading: overlayTitle || brand, lede: null, demoNote: false };
+  }
+  if (namedHost) {
+    return {
+      kicker: null,
+      heading: siteTitle || brand,
+      lede: "Register, cast a private ballot, and check the published tally.",
+      demoNote: false,
+    };
+  }
+  return {
+    kicker: "Voting demo",
+    heading: `Try a ${brand} vote`,
+    lede:
+      "This is a working demo of the voting flow: how members of a group join the roll, cast an anonymous ballot with a zero-knowledge proof, and check the tally.",
+    demoNote: true,
+  };
+}
+
 function publicCalendar(h, ctx, elections, source) {
   const { formatTime, electionStateInfo } = ctx;
   if (!elections.length) {
@@ -228,18 +259,22 @@ export function renderPublicHome(main, ctx, bundle) {
   setTitle(siteTitle || brandName());
   const openCount = elections.filter((e) => e.state === 2).length;
   const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
-  const heading = replace ? overlay.title : `Try a ${brandName()} vote`;
-  const lede =
-    "This is a working demo of the voting flow: how members of a group join the roll, cast an anonymous ballot with a zero-knowledge proof, and check the tally.";
+  const intro = homeIntro({
+    namedHost: Boolean(ctx.namedHost),
+    replace,
+    overlayTitle: overlay?.title,
+    siteTitle,
+    brand: brandName(),
+  });
   mount(main,
     h(
       "div",
       { class: "page-head" },
-      h("p", { class: "kicker", text: "Voting demo" }),
-      h("h1", { text: heading }),
-      replace ? null : h("p", { class: "lede", text: lede }),
+      intro.kicker ? h("p", { class: "kicker", text: intro.kicker }) : null,
+      h("h1", { text: intro.heading }),
+      intro.lede ? h("p", { class: "lede", text: intro.lede }) : null,
       ctaRow(h, audience || "public"),
-      demoBanner(h),
+      intro.demoNote ? demoBanner(h) : null,
       h(
         "div",
         { class: "notice", role: "status" },
@@ -313,7 +348,7 @@ export function renderAbout(main, ctx) {
       text: "The software is licensed AGPL-3.0-or-later. If you run a modified Node as a network service, you must offer the corresponding source to its users. Keep the NOT FOR PROFIT label. Do not sell the software or wrap it in a token.",
     }),
     h("h2", { text: "Honest maturity" }),
-    demoBanner(h),
+    ctx.namedHost ? null : demoBanner(h),
     h("p", {
       text: "We will not claim that a local demo is court-ready, that MockVerifier is a ceremony, or that using this repository satisfies a given elections statute. Legal adoption is a jurisdiction question. This page is about civic purpose, not a sales pitch.",
     }),
@@ -542,7 +577,7 @@ export function renderOffice(main, ctx, bundle) {
         "Create elections, maintain the roll, record disqualifications, post tallies, and grant jurisdiction roles. Choice plaintext never belongs here. Public proofs still wait for the hour to close."
       ),
       h("p", { class: "session-line", text: `${me.user.handle} · ${offices}` }),
-      demoBanner(h)
+      ctx.namedHost ? null : demoBanner(h)
     ),
     h(
       "div",

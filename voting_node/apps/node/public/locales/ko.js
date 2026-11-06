@@ -55,6 +55,8 @@ export default {
     footerNfp: "비영리 — {brand}은 시민 공공재입니다. 상업 제품이 아닙니다.",
     footerMeta:
       "제품 이름 {brand}. 유권자는 gas를 내지 않습니다. 선택은 영수증에 인쇄되지 않습니다. 프로덕션 identity commitment는 Poseidon을 사용합니다. 이 Node 데모는 keccak256 commitment hex만 표시할 수 있습니다(trapdoor나 시드 구절은 절대 아님).",
+    footerMetaHost:
+      "제품 이름 {brand}. 유권자는 gas를 내지 않습니다. 선택은 영수증에 인쇄되지 않습니다. 프로덕션 identity commitment는 Poseidon을 사용합니다. 이 Node는 keccak256 commitment hex만 표시할 수 있습니다(trapdoor나 시드 구절은 절대 아님).",
     footerOfficials: "담당자:",
     footerBackOffice: "내부 사무소",
     footerExplorer: "블록 탐색기",

@@ -2636,6 +2636,11 @@ tbody tr:hover > td {
   line-height: 1.4;
 }
 
+.topbar-chip[hidden],
+#footer-demo[hidden] {
+  display: none;
+}
+
 .topbar-sep {
   width: 1px;
   height: 1.25rem;

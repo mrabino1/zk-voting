@@ -55,6 +55,8 @@ export default {
     footerNfp: "HINDI PARA SA TUBO — Ang {brand} ay pampublikong kabutihang sibil. Hindi komersyal na produkto.",
     footerMeta:
       "Pangalan ng produkto: {brand}. Hindi nagbabayad ng gas ang mga botante. Hindi kailanman naka-print ang iyong pinili sa resibo. Gumagamit ng Poseidon ang mga identity commitment sa produksyon; maaaring magpakita lang ang demo ng Node na ito ng keccak256 commitment hex (hindi kailanman trapdoor o seed phrase).",
+    footerMetaHost:
+      "Pangalan ng produkto: {brand}. Hindi nagbabayad ng gas ang mga botante. Hindi kailanman naka-print ang iyong pinili sa resibo. Gumagamit ng Poseidon ang mga identity commitment sa produksyon; maaaring magpakita lang ang Node na ito ng keccak256 commitment hex (hindi kailanman trapdoor o seed phrase).",
     footerOfficials: "Mga opisyal:",
     footerBackOffice: "panloob na tanggapan",
     footerExplorer: "block explorer",

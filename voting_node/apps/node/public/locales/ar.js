@@ -56,6 +56,8 @@ export default {
     footerNfp: "غير ربحي — {brand} منفعة عامة مدنية. ليس منتجًا تجاريًا.",
     footerMeta:
       "اسم المنتج {brand}. الناخبون لا يدفعون الغاز. الاختيار لا يُطبع أبدًا على إيصال. identity commitments في الإنتاج تستخدم Poseidon؛ قد تعرض هذه التجربة على Node تمثيل keccak256 hex للـ commitment فقط (وليس trapdoor ولا عبارة بذر).",
+    footerMetaHost:
+      "اسم المنتج {brand}. الناخبون لا يدفعون الغاز. الاختيار لا يُطبع أبدًا على إيصال. identity commitments في الإنتاج تستخدم Poseidon؛ قد يعرض هذا الـ Node تمثيل keccak256 hex للـ commitment فقط (وليس trapdoor ولا عبارة بذر).",
     footerOfficials: "المسؤولون:",
     footerBackOffice: "المكتب الداخلي",
     footerExplorer: "مستكشف الكتل",

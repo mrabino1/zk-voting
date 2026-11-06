@@ -35,7 +35,7 @@
             <span class="brand-sub" data-i18n="chrome.brandSub">Office of civic elections</span>
           </span>
         </a>
-        <span class="topbar-chip" aria-hidden="true">Demo</span>
+        <span class="topbar-chip" id="topbar-demo" hidden>Demo</span>
         <span class="topbar-sep" aria-hidden="true"></span>
         <span class="topbar-crumb" id="topbar-crumb" aria-hidden="true">Home</span>
       </div>
@@ -66,12 +66,12 @@
       <p class="footer-nfp" data-i18n="chrome.footerNfp">
         NOT FOR PROFIT — %BRAND_NAME% is a civic public good. Not a commercial product.
       </p>
-      <p class="footer-meta" data-i18n="chrome.footerMeta">
+      <p class="footer-meta" id="footer-meta" data-i18n="chrome.footerMetaHost">
         Product name %BRAND_NAME%. Voters do not pay gas. Choice is never printed on a receipt.
-        Production identity commitments use Poseidon; this Node demo may display a keccak256
+        Production identity commitments use Poseidon; this Node may display a keccak256
         commitment hex only (never a trapdoor or seed phrase).
       </p>
-      <p class="footer-meta" lang="en">
+      <p class="footer-meta" id="footer-demo" lang="en" hidden>
         Voting demo:
         <a href="/register" data-nav>Register</a>
         ·

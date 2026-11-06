@@ -55,6 +55,8 @@ export default {
     footerNfp: "PHI LỢI NHUẬN — {brand} là hàng hóa công dân sự. Không phải sản phẩm thương mại.",
     footerMeta:
       "Tên sản phẩm {brand}. Cử tri không trả gas. Lựa chọn không bao giờ được in trên biên lai. Cam kết danh tính sản xuất dùng Poseidon; bản demo Node này có thể chỉ hiển thị hex cam kết keccak256 (không bao giờ trapdoor hay cụm từ khôi phục).",
+    footerMetaHost:
+      "Tên sản phẩm {brand}. Cử tri không trả gas. Lựa chọn không bao giờ được in trên biên lai. Cam kết danh tính sản xuất dùng Poseidon; Node này có thể chỉ hiển thị hex cam kết keccak256 (không bao giờ trapdoor hay cụm từ khôi phục).",
     footerOfficials: "Cán bộ:",
     footerBackOffice: "văn phòng nội bộ",
     footerExplorer: "trình khám phá khối",

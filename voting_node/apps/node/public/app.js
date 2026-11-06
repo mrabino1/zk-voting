@@ -41,6 +41,7 @@ import {
   audienceOf,
   homeDestination,
 } from "./audience.js";
+import { footerMetaKey, namedVotingHost, showsDemoChrome } from "./host-chrome.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
@@ -524,6 +525,23 @@ export async function loadMe() {
 let chromeMe = null;
 let chromeExtra = [];
 let chromePollsEnabled = false;
+
+let chromeHostConfig;
+
+function applyHostChrome(config) {
+  if (config !== undefined) chromeHostConfig = config;
+  const demo = showsDemoChrome(chromeHostConfig);
+  const chip = document.getElementById("topbar-demo");
+  if (chip) chip.hidden = !demo;
+  const footerDemo = document.getElementById("footer-demo");
+  if (footerDemo) footerDemo.hidden = !demo;
+  const meta = document.getElementById("footer-meta");
+  if (meta) {
+    const key = footerMetaKey(chromeHostConfig);
+    meta.setAttribute("data-i18n", key);
+    meta.textContent = t(key);
+  }
+}
 
 function updateNav(route, me, extraNav = [], pollsEnabled = false) {
   chromeMe = me;
@@ -1078,14 +1096,23 @@ async function renderRoute(route) {
     }
     const cms = await loadPublicCms(api);
     let pollsEnabled = false;
+    let hostConfig = null;
     try {
-      const cfg = await api("/api/config");
-      pollsEnabled = Boolean(cfg && cfg.pollsReady);
+      hostConfig = await api("/api/config");
+      pollsEnabled = Boolean(hostConfig && hostConfig.pollsReady);
     } catch {
       pollsEnabled = false;
     }
+    applyHostChrome(hostConfig);
     updateNav(route, meHint, cms.nav || [], pollsEnabled);
-    const context = { ...ctx(), route, me: meHint, cms, pollsEnabled };
+    const context = {
+      ...ctx(),
+      route,
+      me: meHint,
+      cms,
+      pollsEnabled,
+      namedHost: namedVotingHost(hostConfig),
+    };
 
     if (route.name === "setup") {
       setTitle("First-run setup");
@@ -1225,6 +1252,7 @@ if (typeof document !== "undefined") {
     renderRoute(currentRoute());
   });
   window.addEventListener(LOCALE_EVENT, () => {
+    applyHostChrome();
     updateNav(currentRoute(), chromeMe, chromeExtra, chromePollsEnabled);
   });
 }

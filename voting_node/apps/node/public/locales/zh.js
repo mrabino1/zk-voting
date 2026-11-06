@@ -55,6 +55,8 @@ export default {
     footerNfp: "非营利 — {brand} 是一项公民公共产品。不是商业产品。",
     footerMeta:
       "产品名称 {brand}。选民不支付 gas。选择内容绝不会印在收据上。生产环境的身份承诺使用 Poseidon；此 Node 演示可能只显示 keccak256 承诺十六进制（绝不是 trapdoor 或助记词）。",
+    footerMetaHost:
+      "产品名称 {brand}。选民不支付 gas。选择内容绝不会印在收据上。生产环境的身份承诺使用 Poseidon；此 Node 可能只显示 keccak256 承诺十六进制（绝不是 trapdoor 或助记词）。",
     footerOfficials: "官员：",
     footerBackOffice: "内部办公室",
     footerExplorer: "区块浏览器",

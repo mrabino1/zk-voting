@@ -55,6 +55,8 @@ export default {
     footerNfp: "SIN FINES DE LUCRO — {brand} es un bien público cívico. No es un producto comercial.",
     footerMeta:
       "Nombre del producto: {brand}. Los votantes no pagan gas. La elección nunca se imprime en un recibo. Los compromisos de identidad de producción usan Poseidon; esta demostración del Node puede mostrar solo un hex keccak256 del compromiso (nunca un trapdoor ni una frase semilla).",
+    footerMetaHost:
+      "Nombre del producto: {brand}. Los votantes no pagan gas. La elección nunca se imprime en un recibo. Los compromisos de identidad de producción usan Poseidon; este Node puede mostrar solo un hex keccak256 del compromiso (nunca un trapdoor ni una frase semilla).",
     footerOfficials: "Funcionarios:",
     footerBackOffice: "oficina interna",
     footerExplorer: "explorador de bloques",
