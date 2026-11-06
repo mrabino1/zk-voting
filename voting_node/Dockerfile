@@ -66,11 +66,17 @@ COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
 # L2 identity, operator auth and L1 funding helpers (state.mjs imports adminAuth).
 COPY --chown=node:node l2/adminAuth.mjs l2/identity.mjs ./l2/
 COPY --chown=node:node l2/prover/funding.mjs ./l2/prover/funding.mjs
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 USER node
 WORKDIR /src/apps/node
 # Same module lookup as `node src/server.mjs`. Non-zero exits fail the build.
 RUN node /src/scripts/image-import-smoke.mjs
+# Runtime starts as root only so a fresh named volume can be given to node.
+# docker-entrypoint.sh drops to the node user before the server.
+USER root
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 EXPOSE 3000
 # GET /health on PORT (default 3000). HTTP 200 is success for active and standby.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=8 \

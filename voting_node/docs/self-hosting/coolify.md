@@ -61,6 +61,8 @@ The Compose file already defines health checks for `node` and `l2` (a Node.js `f
 
 Do **not** require `"mode":"active"`. A new container starts in standby during a rolling update and would never pass. See [Rolling updates](./rolling-updates.md).
 
+`dependency failed to start: container l2-... is unhealthy` means the sequencer never answered `GET /health` on port 8546. The node, prover, and archive wait for that, so none of them start. Leave Coolify's own HTTP check on the **node** service (path `/health`, port 3000). Do not point it at `l2`. After a failed deploy, the l2 container log is the next place to look. A missing disclosure module or a root-owned `l2-data` volume both exit the process before `/health` exists; the image copies those modules and the entrypoint gives `/data` to the `node` user before the sequencer starts.
+
 ## 5. Deploy
 
 Click **Deploy**. Watch the build log, then open `https://vote.example.org/health`. Continue with [First launch](./first-launch.md).
