@@ -296,7 +296,11 @@ function paintBrandWordmark(el, name) {
 }
 
 function applyBranding(layout) {
-  const name = layout.branding?.productName || DEFAULT_PRODUCT_NAME;
+  const clientName =
+    document.documentElement.dataset.clientHost === '1'
+      ? document.querySelector('meta[name="brand-name"]')?.getAttribute('content')
+      : '';
+  const name = clientName || layout.branding?.productName || DEFAULT_PRODUCT_NAME;
   // The server already renders the name into each page; this keeps the chrome
   // right if the layout changes while the page is open. Header names stay
   // two-tone text. Other product-name slots stay plain text.

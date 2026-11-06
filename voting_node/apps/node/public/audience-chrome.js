@@ -18,29 +18,33 @@ async function extraNav() {
   }
 }
 
-async function pollsEnabled() {
+async function hostFlags() {
   try {
     const res = await fetch("/api/config", {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { pollsEnabled: false, clientHost: false };
     const data = await res.json();
-    return Boolean(data && data.pollsEnabled);
+    return {
+      pollsEnabled: Boolean(data && data.pollsEnabled),
+      clientHost: Boolean(String(data?.vote?.fqdn || "").trim()),
+    };
   } catch {
-    return false;
+    return { pollsEnabled: false, clientHost: false };
   }
 }
 
 async function refresh() {
-  const [state, nav, polls] = await Promise.all([loadAuthState(), extraNav(), pollsEnabled()]);
+  const [state, nav, flags] = await Promise.all([loadAuthState(), extraNav(), hostFlags()]);
   const audience = state.audience || audienceOf(state.me || { user: state.user, jurisdictionRoles: state.jurisdictionRoles });
   applyAudienceChrome(document, {
     audience,
     currentPath: window.location.pathname.replace(/\.html$/i, "") || "/",
     spa: false,
     extraNav: nav,
-    pollsEnabled: polls,
+    pollsEnabled: flags.pollsEnabled,
+    clientHost: flags.clientHost,
   });
 }
 

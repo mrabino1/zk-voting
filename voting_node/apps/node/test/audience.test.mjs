@@ -163,6 +163,11 @@ describe('audience helpers and FAQ', () => {
     assert.ok(!pub.includes('Polls'));
     const withPolls = mainNav('public', [], { pollsEnabled: true }).map((i) => i.label);
     assert.ok(withPolls.includes('Polls'));
+    const client = mainNav('public', [], { clientHost: true });
+    assert.equal(client.some((item) => item.href === 'https://zk-voting.org'), false);
+    const clientOfficer = mainNav('officer', [], { clientHost: true }).map((i) => i.label);
+    assert.ok(clientOfficer.includes('Admin'));
+    assert.equal(clientOfficer.at(-1), 'Admin');
     assert.deepEqual(pub, ['Results', 'Receipt', 'Outcomes', 'Sign in', 'Register', 'About']);
   });
 

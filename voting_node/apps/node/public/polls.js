@@ -21,6 +21,7 @@ import {
 import { t } from "./i18n.js";
 
 function banner(h) {
+  if (typeof document !== "undefined" && document.documentElement?.dataset?.clientHost === "1") return null;
   return h(
     "p",
     { class: "poll-signal", role: "note", "data-testid": "poll-signal" },

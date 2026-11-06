@@ -41,7 +41,7 @@ import {
   audienceOf,
   homeDestination,
 } from "./audience.js";
-import { footerMetaKey, namedVotingHost, showsDemoChrome } from "./host-chrome.js";
+import { footerMetaKey, namedVotingHost, paintClientHost, showsDemoChrome } from "./host-chrome.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
 import { civicContestCard } from "./contests.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
@@ -431,7 +431,8 @@ export function announce(message) {
 
 export function setTitle(page) {
   const named = page && page !== brandName();
-  document.title = named ? `${page} — ${brandName()}` : `${brandName()} — civic elections`;
+  const clientHost = typeof document !== "undefined" && document.documentElement?.dataset?.clientHost === "1";
+  document.title = named ? `${page} — ${brandName()}` : clientHost ? brandName() : `${brandName()} — civic elections`;
   // Decorative top-bar breadcrumb (aria-hidden); the document title stays the accessible source.
   const crumb = typeof document.getElementById === "function" ? document.getElementById("topbar-crumb") : null;
   if (crumb) crumb.textContent = named ? page : "Home";
@@ -537,11 +538,12 @@ function applyHostChrome(config) {
   const footerDemo = document.getElementById("footer-demo");
   if (footerDemo) footerDemo.hidden = !demo;
   const meta = document.getElementById("footer-meta");
-  if (meta) {
+  if (meta && !namedVotingHost(chromeHostConfig)) {
     const key = footerMetaKey(chromeHostConfig);
     meta.setAttribute("data-i18n", key);
     meta.textContent = t(key);
   }
+  paintClientHost(document, chromeHostConfig);
 }
 
 function updateNav(route, me, extraNav = [], pollsEnabled = false) {
@@ -555,7 +557,9 @@ function updateNav(route, me, extraNav = [], pollsEnabled = false) {
     spa: true,
     extraNav,
     pollsEnabled,
+    clientHost: namedVotingHost(chromeHostConfig),
   });
+  paintClientHost(document, chromeHostConfig);
 }
 
 function ctx() {
@@ -661,7 +665,9 @@ function renderDesk(main, route, bundle) {
       h(
         "p",
         { class: "lede" },
-        `This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. ${brandName()} is not a commercial product.`
+        document.documentElement?.dataset?.clientHost === "1"
+          ? "This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results."
+          : `This is the registered-person desk: identity status, elections you are on, ballots, receipts, and results. ${brandName()} is not a commercial product.`
       ),
       h(
         "div",

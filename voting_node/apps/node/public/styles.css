@@ -3165,6 +3165,37 @@ tbody tr:hover > td {
   color: var(--muted);
 }
 
+.site-footer-client,
+html[data-client-host="1"] .site-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.55rem 1rem;
+}
+
+.powered-by {
+  margin: 0;
+}
+
+.powered-by-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.powered-by-link:hover {
+  color: var(--fg);
+}
+
+.powered-by-mark {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+
 /* Wide layout: top bar across, sidebar on the left ------------------------ */
 
 @media (min-width: 960px) {

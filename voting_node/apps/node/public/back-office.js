@@ -1903,7 +1903,9 @@
         const ready = Boolean(cfg.pollsReady && cfg.votingToken && cfg.votingToken.configured);
         section.innerHTML =
           '<header><h2 id="token-polls-heading">Token polls</h2></header>' +
-          '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>' +
+          (cfg.vote && cfg.vote.fqdn
+            ? ""
+            : '<p class="poll-signal" role="note">Signal only · non-binding · NOT FOR PROFIT</p>') +
           '<p class="field-hint">Signal polls on Ethereum mainnet. Balance-hold reads the minimum balance through close. Delegated-snapshot reads ERC-20Votes at one finalized block and commits that list with a Poseidon root. The node never sends a transaction and never uses the civic L2 for that snapshot. Civic elections stay one person, one vote.</p>' +
           (ready
             ? '<p class="field-hint" id="poll-token-host"></p>' +

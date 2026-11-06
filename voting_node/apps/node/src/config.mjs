@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { brandName } from './branding.mjs';
+import { brandName, resolveClientBrand } from './branding.mjs';
 import {
   resolveDisclosureDelaySeconds,
   resolveDisclosureIntervalSeconds,
@@ -540,6 +540,15 @@ export function getConfig(overrides = {}) {
   }
   // `VOTE_FQDN` wins over a localhost template even when overrides spread last.
   config.voteFqdn = authority.voteFqdn;
+  config.clientBrand = resolveClientBrand({
+    voteFqdn: config.voteFqdn,
+    env: {
+      CLIENT_BRAND_NAME: overrides.clientBrandName ?? process.env.CLIENT_BRAND_NAME,
+      CLIENT_LOGO_URL: overrides.clientLogoUrl ?? process.env.CLIENT_LOGO_URL,
+      CLIENT_BRAND_URL: overrides.clientBrandUrl ?? process.env.CLIENT_BRAND_URL,
+      CLIENT_BRAND_SUBTITLE: overrides.clientBrandSubtitle ?? process.env.CLIENT_BRAND_SUBTITLE,
+    },
+  });
   config.rpID = authority.rpID;
   config.origins = authority.origins;
   config.publicBaseUrl = authority.publicBaseUrl;

@@ -231,6 +231,10 @@ function brandHtml(html, branding) {
 function spaFallback(config, layoutService) {
   const currentBranding = () => {
     const b = layoutService.effective().layout.branding;
+    const client = config.clientBrand;
+    if (client?.active && client.name) {
+      return { name: client.name, shortName: client.name, tagline: b.tagline };
+    }
     return { name: b.productName, shortName: b.shortName, tagline: b.tagline };
   };
   return function spaMiddleware(req, res, next) {
@@ -252,6 +256,7 @@ function spaFallback(config, layoutService) {
           (html) => res.send(renderPublicHtml(brandHtml(html, branding), {
             voteFqdn: config.voteFqdn,
             assetVersion: config.assetVersion,
+            clientBrand: config.clientBrand,
           })),
           (err) => next(err),
         );
@@ -364,6 +369,10 @@ export async function createApp(overrides = {}) {
   // Server modules (mail, PDFs, receipts, WebAuthn rpName) read the brand from here.
   setBrandingProvider(() => {
     const b = layoutService.effective().layout.branding;
+    const client = config.clientBrand;
+    if (client?.active && client.name) {
+      return { name: client.name, shortName: client.name, tagline: b.tagline };
+    }
     return { name: b.productName, shortName: b.shortName, tagline: b.tagline };
   });
   deps.plugins = plugins;

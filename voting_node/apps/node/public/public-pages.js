@@ -276,16 +276,18 @@ export function renderPublicHome(main, ctx, bundle) {
       }),
       publicCalendar(h, ctx, elections, source)
     ),
-    h(
-      "p",
-      { class: "field-hint" },
-      "Officials create ballots and freeze the roll from the ",
-      h("a", { href: "/office", text: "admin hub" }),
-      ". Want to know what ZK Voting is and why it matters? ",
-      h("a", { href: MAIN_SITE_URL, text: "Visit zk-voting.org" }),
-      " · ",
-      h("a", { href: COMMUNITY_URL, text: "Community forum" })
-    )
+    ctx.namedHost
+      ? null
+      : h(
+          "p",
+          { class: "field-hint" },
+          "Officials create ballots and freeze the roll from the ",
+          h("a", { href: "/office", text: "admin hub" }),
+          ". Want to know what ZK Voting is and why it matters? ",
+          h("a", { href: MAIN_SITE_URL, text: "Visit zk-voting.org" }),
+          " · ",
+          h("a", { href: COMMUNITY_URL, text: "Community forum" })
+        )
   );
 }
 
@@ -294,8 +296,14 @@ export function renderAbout(main, ctx) {
   const audience = audienceOf(ctx.me);
   const overlay = ctx.cms?.overlays?.about;
   const replace = Boolean(overlay?.replaceBuiltin && overlay.blocks?.length);
-  setTitle(overlay?.title || "About us");
-  const builtin = [
+  setTitle(overlay?.title || (ctx.namedHost ? brandName() : "About us"));
+  const builtin = ctx.namedHost
+    ? [
+        h("p", {
+          text: "Register, cast a private ballot, and check the published tally. Eligibility is public. The choice on a ballot is not.",
+        }),
+      ]
+    : [
     h("h2", { text: "Purpose" }),
     h("p", {
       text: "Democratic processes still depend on a small set of trusted operators: who is on the roll, who was turned away, whether a ballot was counted, and whether the published result matches the ballots. Paper and proprietary machines can work. They do not, by themselves, let a voter, a losing candidate, or a court verify those claims without re-trusting the same operators.",
@@ -337,8 +345,14 @@ export function renderAbout(main, ctx) {
       "div",
       { class: "page-head" },
       h("p", { class: "kicker", text: "About us" }),
-      h("h1", { text: replace ? overlay.title : "A civic public good, not a product" }),
-      replace
+      h("h1", {
+        text: replace
+          ? overlay.title
+          : ctx.namedHost
+            ? brandName()
+            : "A civic public good, not a product",
+      }),
+      replace || ctx.namedHost
         ? null
         : h(
             "p",

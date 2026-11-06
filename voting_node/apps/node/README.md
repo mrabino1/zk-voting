@@ -165,6 +165,8 @@ Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example
 
 Passkey rpName is the current product name (site admin > Branding, else `BRAND_NAME`, else **ZK-Voting**).
 
+When `VOTE_FQDN` is set, the pages are the client's site. `CLIENT_BRAND_NAME`, `CLIENT_LOGO_URL`, `CLIENT_BRAND_URL`, and `CLIENT_BRAND_SUBTITLE` replace the header mark and the "Office of civic elections" line. The civic ribbon and the ZK-Voting footer are removed; the footer is a "powered by zk-voting.org" link. Those four variables are ignored when `VOTE_FQDN` is empty, so the demo keeps the built-in branding. `CLIENT_BRAND_NAME` also wins over Site admin for the display name on that host. Logo and link are a site path or an https URL.
+
 Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **smart-card reader**, **license/passport**, and passkey. A person may bind **up to 5 emails** (exactly one primary) and **up to 5 passkeys**. Register a person first (`/register`). Manage them on `/me`. Every path completes with an email one-time code when SES MFA is on (primary inbox by default). Caps are code constants — no extra env vars. Dev login is hidden unless `auth.allowDevLogin` is true on `GET /api/config`.
 
 ---

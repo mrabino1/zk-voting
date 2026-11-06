@@ -77,6 +77,7 @@ export function configRouter(deps) {
             ? 'VOTE_FQDN is the public voting authority for this Node. Passkeys, the browser origin, and official links use this hostname.'
             : 'VOTE_FQDN is unset. This process is a local demo on localhost. A jurisdiction sets VOTE_FQDN to its voting subdomain (vote.domain.tld).',
         },
+        clientBrand: deps.config.clientBrand || { active: false, name: '', logoUrl: '', href: '', subtitle: '' },
         chainId: deps.config.chainId,
         pollsEnabled: Boolean(deps.config.pollsEnabled),
         pollsReady: Boolean(deps.config.pollsReady),

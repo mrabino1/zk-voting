@@ -17,6 +17,7 @@ export const DEFAULT_BRAND_TAGLINE = 'Private, publicly verifiable civic voting.
 export const BRAND_NAME_MAX = 60;
 export const BRAND_SHORT_NAME_MAX = 24;
 export const BRAND_TAGLINE_MAX = 160;
+export const BRAND_SUBTITLE_MAX = 80;
 
 /**
  * Names that earlier releases wrote into saved layouts / site rows as the
@@ -40,6 +41,48 @@ export function cleanBrandText(value, max) {
 export function isSafeBrandText(value, max) {
   const s = String(value ?? '').trim();
   return !s || (s.length <= max && !UNSAFE_RE.test(s));
+}
+
+/**
+ * A path on this site, or an https URL. Empty, javascript:, data:, and
+ * protocol-relative URLs are rejected. A bad value is ignored, not thrown,
+ * so a mistyped logo does not take the Node down.
+ */
+export function cleanPublicUrl(value) {
+  const s = String(value ?? '').trim();
+  if (!s || s.length > 512 || /[\s<>"']/.test(s)) return '';
+  if (/^\/(?!\/)[A-Za-z0-9\-._~!$&'()*+,;=:@%/?#]*$/.test(s)) return s;
+  if (!/^https:\/\//i.test(s)) return '';
+  try {
+    const url = new URL(s);
+    if (url.protocol !== 'https:' || url.username || url.password) return '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Face of a deployed client. Ignored unless VOTE_FQDN is set, so a demo keeps
+ * the ZK-Voting mark and "Office of civic elections".
+ *
+ * CLIENT_BRAND_NAME   header and product display name (optional)
+ * CLIENT_LOGO_URL     header mark: site path or https URL (optional)
+ * CLIENT_BRAND_URL    where the logo and name link (optional; default is /)
+ * CLIENT_BRAND_SUBTITLE  line under the name (optional; default is none)
+ */
+export function resolveClientBrand({ voteFqdn = '', env = process.env } = {}) {
+  const active = Boolean(String(voteFqdn || '').trim());
+  if (!active) {
+    return { active: false, name: '', logoUrl: '', href: '', subtitle: '' };
+  }
+  return {
+    active: true,
+    name: cleanBrandText(env.CLIENT_BRAND_NAME, BRAND_NAME_MAX),
+    logoUrl: cleanPublicUrl(env.CLIENT_LOGO_URL),
+    href: cleanPublicUrl(env.CLIENT_BRAND_URL),
+    subtitle: cleanBrandText(env.CLIENT_BRAND_SUBTITLE, BRAND_SUBTITLE_MAX),
+  };
 }
 
 /** Env / built-in defaults. */
