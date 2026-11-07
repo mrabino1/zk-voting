@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    /* html lang/dir before first paint. Same list as site/public/i18n.js. */
+    (function () {
+      var tags = { en: "en", es: "es", zh: "zh-Hans", fil: "fil", vi: "vi", ar: "ar", fr: "fr", ko: "ko", pt: "pt-BR", hi: "hi" };
+      var prefixes = { en: ["en"], es: ["es"], zh: ["zh"], fil: ["fil", "tl"], vi: ["vi"], ar: ["ar"], fr: ["fr"], ko: ["ko"], pt: ["pt"], hi: ["hi"] };
+      function match(list) {
+        var langs = list || [];
+        for (var i = 0; i < langs.length; i++) {
+          var base = String(langs[i] || "").toLowerCase().replace(/_/g, "-").split("-")[0];
+          if (!base) continue;
+          for (var code in prefixes) {
+            if (prefixes[code].indexOf(base) !== -1) return code;
+          }
+        }
+        return "en";
+      }
+      var code = "en";
+      try {
+        var stored = window.localStorage.getItem("site_lang");
+        code = tags[stored] ? stored : match(navigator.languages || [navigator.language || "en"]);
+      } catch (err) {
+        try { code = match(navigator.languages || [navigator.language || "en"]); } catch (err2) { code = "en"; }
+      }
+      document.documentElement.lang = tags[code] || "en";
+      document.documentElement.dir = code === "ar" ? "rtl" : "ltr";
+    })();
+  </script>
+  <meta name="brand-name" content="ZK-Voting">
+  <title data-i18n="faq.meta.title">FAQ · ZK-Voting</title>
+  <meta name="description" data-i18n-content="faq.meta.description" content="Questions about ZK-Voting: private ballots, polls and votes, self-hosting, and what this project does not do. There is nothing to deposit.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zk-voting.org/faq">
+  <meta property="og:site_name" data-brand-content content="ZK-Voting">
+  <meta property="og:title" data-i18n-content="faq.meta.title" content="FAQ · ZK-Voting">
+  <meta property="og:description" data-i18n-content="faq.meta.description" content="Questions about ZK-Voting: private ballots, polls and votes, self-hosting, and what this project does not do. There is nothing to deposit.">
+  <meta property="og:locale" data-og-current content="en_US">
+  <meta property="og:locale:alternate" content="es_ES">
+  <meta property="og:locale:alternate" content="zh_CN">
+  <meta property="og:locale:alternate" content="fil_PH">
+  <meta property="og:locale:alternate" content="vi_VN">
+  <meta property="og:locale:alternate" content="ar_AR">
+  <meta property="og:locale:alternate" content="fr_FR">
+  <meta property="og:locale:alternate" content="ko_KR">
+  <meta property="og:locale:alternate" content="pt_BR">
+  <meta property="og:locale:alternate" content="hi_IN">
+  <link rel="canonical" href="https://zk-voting.org/faq">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="/brand-mark.svg?v=be53df128b" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png?v=ac966d961d" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=c968590ce2" sizes="180x180">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/styles.css?v=75f16a0e4f">
+</head>
+<body>
+  <!-- NOT FOR PROFIT: civic public good, not a commercial product. No tracking, no third-party assets. -->
+  <a class="skip-link" href="#main" data-i18n="nav.skip">Skip to main content</a>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/" aria-label="ZK-Voting home" data-i18n-aria-label="nav.home"><img class="logo" src="/brand-mark-dark.svg?v=8f05ee7a22" alt="ZK-Voting logo" data-i18n-alt="nav.logoAlt" width="30" height="36"><span class="wordmark" title="ZK-Voting"><span data-brand><span class="brand-zk">ZK</span><span class="brand-rest">-Voting</span></span></span></a>
+      <div class="nav-tools">
+      <nav aria-label="Main" data-i18n-aria-label="nav.main">
+        <a href="/" data-i18n="faq.homeLink">Home</a>
+        <a href="/faq" aria-current="page" data-i18n="nav.faq">FAQ</a>
+        <a class="btn btn-sm" href="https://community.zk-voting.org" data-i18n="nav.forum">Community forum</a>
+      </nav>
+      <label class="lang-label nav-lang">
+        <span class="visually-hidden" data-i18n="lang.label">Language</span>
+        <select id="lang-switcher" data-lang-switcher>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="zh">中文</option>
+          <option value="fil">Filipino</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="ar">العربية</option>
+          <option value="fr">Français</option>
+          <option value="ko">한국어</option>
+          <option value="pt">Português</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+      </label>
+      </div>
+    </div>
+  </header>
+  <div class="docs">
+    <details class="docs-drawer" open>
+      <summary data-i18n="faq.menu">Sections</summary>
+      <nav class="docs-nav" aria-label="FAQ sections" data-i18n-aria-label="faq.navLabel">
+
+            <p class="docs-group" data-i18n="faq.group.start">Getting started</p>
+            <a href="#welcome" data-i18n="faq.welcome.nav">Welcome</a>
+            <a href="#quick-links" data-i18n="faq.quick-links.nav">Quick Links</a>
+            <a href="#glossary" data-i18n="faq.glossary.nav">Glossary</a>
+            <p class="docs-group" data-i18n="faq.group.faqs">FAQs</p>
+            <a href="#general" data-i18n="faq.general.nav">General</a>
+            <a href="#elections" data-i18n="faq.elections.nav">Elections</a>
+            <a href="#registration" data-i18n="faq.registration.nav">Registration</a>
+            <a href="#ballots" data-i18n="faq.ballots.nav">Ballots</a>
+            <a href="#polls" data-i18n="faq.polls.nav">Polls</a>
+            <a href="#votes" data-i18n="faq.votes.nav">Votes</a>
+            <a href="#results" data-i18n="faq.results.nav">Results</a>
+            <a href="#privacy" data-i18n="faq.privacy.nav">Privacy</a>
+            <a href="#officers" data-i18n="faq.officers.nav">Officers</a>
+            <a href="#dq" data-i18n="faq.dq.nav">Disqualification</a>
+            <a href="#receipts" data-i18n="faq.receipts.nav">Receipts</a>
+            <a href="#token" data-i18n="faq.token.nav">Not a token</a>
+            <a href="#community" data-i18n="faq.community.nav">Community</a>
+            <p class="docs-group" data-i18n="faq.group.info">Info</p>
+            <a href="#runs" data-i18n="faq.runs.nav">Where it runs</a>
+            <a href="#fits" data-i18n="faq.fits.nav">How it fits</a>
+            <a href="#roadmap" data-i18n="faq.roadmap.nav">Roadmap</a>
+            <a href="#builder" data-i18n="faq.builder.nav">Builder kit</a>
+            <a href="#deploy" data-i18n="faq.deploy.nav">How to deploy</a>
+      </nav>
+    </details>
+    <div class="docs-content" id="main" tabindex="-1">
+
+        <article class="docs-page" id="welcome">
+          <p class="eyebrow" data-i18n="faq.group.start">Getting started</p>
+          <h1 data-i18n="faq.welcome.title">Welcome</h1>
+          <p class="docs-lede" data-i18n="faq.welcome.lede">Notes for voters, officials, and people deciding whether to host a node. This is not a lending protocol. There is nothing to deposit.</p>
+          <p data-i18n="faq.welcome.p1">ZK-Voting is a not-for-profit, open-source way for a group to run its own elections and polls. A civic election is one person, one vote, and the choice is designed to stay unpublished. Separately, a host can run an advisory token signal on Ethereum mainnet. That signal is not a civic election: weight comes from an ERC-20 at one finalized block, there is no registration, signing is free, and the choice stays public.</p>
+          <p data-i18n="faq.welcome.p2">These pages follow the landing page. They explain how a poll differs from a vote, what is public, what is designed to stay private, and how a group hosts its own node. They are not a promise that a deploy satisfies an elections statute.</p>
+          <aside class="docs-callout">
+            <h2 data-i18n="faq.welcome.disclaimerTitle">Disclaimer</h2>
+            <p data-i18n="faq.welcome.disclaimer">This site is general information. It is not legal advice and it is not a certification. ZK-Voting is under active development. Tests use a mock verifier, and the trusted-setup ceremony has not happened. Do not use it for a binding election today. Passing a vote never auto-executes anything.</p>
+          </aside>
+          <p class="docs-pager">
+            <a class="docs-next" href="#quick-links"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.quick-links.nav">Quick Links</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="quick-links">
+          <p class="eyebrow" data-i18n="faq.group.start">Getting started</p>
+          <h1 data-i18n="faq.quick-links.title">Quick Links</h1>
+          <p class="docs-lede" data-i18n="faq.quick-links.lede">The pages and rooms that exist for this project. There is no borrow screen, no lend screen, and no place to deposit funds.</p>
+          <h2 data-i18n="faq.links.resources">Resources</h2>
+          <ul class="docs-links">
+            <li>
+              <a href="/">
+                <span data-i18n="faq.links.home">Home</span>
+                <span class="docs-url" dir="ltr">/</span>
+              </a>
+            </li>
+            <li>
+              <a href="/faq">
+                <span data-i18n="faq.links.faq">This FAQ</span>
+                <span class="docs-url" dir="ltr">/faq</span>
+              </a>
+            </li>
+            <li>
+              <a href="/#poll-vs-vote">
+                <span data-i18n="faq.links.poll">Poll vs Vote</span>
+                <span class="docs-url" dir="ltr">/#poll-vs-vote</span>
+              </a>
+            </li>
+            <li>
+              <a href="/#vision">
+                <span data-i18n="faq.links.vision">Vision</span>
+                <span class="docs-url" dir="ltr">/#vision</span>
+              </a>
+            </li>
+            <li>
+              <a href="/#self-host">
+                <span data-i18n="faq.links.host">Self-host</span>
+                <span class="docs-url" dir="ltr">/#self-host</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://community.zk-voting.org" target="_blank" rel="noopener noreferrer">
+                <span data-i18n="faq.links.forum">Community forum</span>
+                <span class="docs-url" dir="ltr">community.zk-voting.org</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://demo.zk-voting.org" target="_blank" rel="noopener noreferrer">
+                <span data-i18n="faq.links.demo">Voting demo</span>
+                <span class="docs-url" dir="ltr">demo.zk-voting.org</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer">
+                <span data-i18n="faq.links.github">Source code</span>
+                <span class="docs-url" dir="ltr">github.com/mrabino1/zk-voting</span>
+              </a>
+            </li>
+            <li>
+              <a href="mailto:hello@zk-voting.org">
+                <span data-i18n="faq.links.email">Email</span>
+                <span class="docs-url" dir="ltr">hello@zk-voting.org</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://demo.zk-voting.org/docs" target="_blank" rel="noopener noreferrer">
+                <span data-i18n="faq.links.docs">Node guides</span>
+                <span class="docs-url" dir="ltr">demo.zk-voting.org/docs</span>
+              </a>
+            </li>
+          </ul>
+          <p data-i18n="faq.quick-links.note">Markets, liquidations, reserve auctions, incentive programs, and price buckets are not part of ZK-Voting. If a page asks you to deposit or to buy a token, it is not this project.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#welcome"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.welcome.nav">Welcome</strong></a>
+            <a class="docs-next" href="#glossary"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.glossary.nav">Glossary</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="glossary">
+          <p class="eyebrow" data-i18n="faq.group.start">Getting started</p>
+          <h1 data-i18n="faq.glossary.title">Glossary</h1>
+          <p class="docs-lede" data-i18n="faq.glossary.lede">Short definitions. They match the landing page, and they leave out anything this project does not do.</p>
+          <p data-i18n="faq.glossary.note">Definitions are simplified and may not be a complete specification.</p>
+          <dl class="docs-glossary">
+            <dt id="gloss-civic" data-i18n="faq.glossary.civic.term">Civic election</dt>
+            <dd data-i18n="faq.glossary.civic.def">One person, one vote, with registration and a secret ballot.</dd>
+            <dt id="gloss-signal" data-i18n="faq.glossary.signal.term">Token signal</dt>
+            <dd data-i18n="faq.glossary.signal.def">An advisory poll weighted by an ERC-20 at one finalized Ethereum block. There is no registration, and the choice stays public. It does not use the civic L2.</dd>
+            <dt id="gloss-poll" data-i18n="faq.glossary.poll.term">Poll</dt>
+            <dd data-i18n="faq.glossary.poll.def">A civic contest that publishes per-choice counts on a delayed hourly schedule after a gate. Turnout uses that same hourly schedule.</dd>
+            <dt id="gloss-vote" data-i18n="faq.glossary.vote.term">Vote</dt>
+            <dd data-i18n="faq.glossary.vote.def">A civic contest that keeps choices sealed until the deadline. Turnout is published on a delayed hourly schedule. There are no interim per-choice counts.</dd>
+            <dt id="gloss-roll" data-i18n="faq.glossary.roll.term">Roll</dt>
+            <dd data-i18n="faq.glossary.roll.def">The eligible set for one election. It stores identity commitments, not names, wallet addresses, or document numbers.</dd>
+            <dt id="gloss-commitment" data-i18n="faq.glossary.commitment.term">Identity commitment</dt>
+            <dd data-i18n="faq.glossary.commitment.def">The value written on the roll. It is not a wallet address and not a document number.</dd>
+            <dt id="gloss-revote" data-i18n="faq.glossary.revote.term">Re-vote</dt>
+            <dd data-i18n="faq.glossary.revote.def">The operator decides at creation whether re-voting is allowed, and that setting can't be changed afterward. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</dd>
+            <dt id="gloss-gate" data-i18n="faq.glossary.gate.term">Gate</dt>
+            <dd data-i18n="faq.glossary.gate.def">For a poll, choice counts stay hidden until 100 voters have cast their first ballot, or the scheduled end arrives, whichever comes first.</dd>
+            <dt id="gloss-block" data-i18n="faq.glossary.block.term">Hourly block</dt>
+            <dd data-i18n="faq.glossary.block.def">A published slice of a poll's per-choice counts. An hour with fewer than 10 ballots merges forward until a block has at least 10. A published block is designed to stay as first published.</dd>
+            <dt id="gloss-receipt" data-i18n="faq.glossary.receipt.term">Receipt</dt>
+            <dd data-i18n="faq.glossary.receipt.def">Evidence that a ballot was accepted. It is hashes, designed so it doesn't show how you voted.</dd>
+            <dt id="gloss-guardian" data-i18n="faq.glossary.guardian.term">Guardian</dt>
+            <dd data-i18n="faq.glossary.guardian.def">One of the k-of-n parties who can decrypt a vote only as an aggregate at the deadline. The design gives the operator no key share.</dd>
+            <dt id="gloss-l2" data-i18n="faq.glossary.l2.term">Civic L2</dt>
+            <dd data-i18n="faq.glossary.l2.def">A purpose-built sequencer and prover a group runs for its own elections. It settles batches to Ethereum. It is not a general-purpose chain.</dd>
+            <dt id="gloss-uuid" data-i18n="faq.glossary.uuid.term">Election UUID</dt>
+            <dd data-i18n="faq.glossary.uuid.def">The public id of one election, unique within that L2. Ethereum keys a batch by hash of the L2 id and this UUID.</dd>
+            <dt id="gloss-mock" data-i18n="faq.glossary.mock.term">Mock verifier</dt>
+            <dd data-i18n="faq.glossary.mock.def">The stand-in used in tests for a real proof check. With it, rejection of a voter who is not pre-approved is not yet enforced.</dd>
+          </dl>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#quick-links"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.quick-links.nav">Quick Links</strong></a>
+            <a class="docs-next" href="#general"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.general.nav">General</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="general">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.general.title">General</h1>
+          <p class="docs-lede" data-i18n="faq.general.lede">What the project is, what it costs, and what it refuses to claim.</p>
+          <nav class="docs-onpage" aria-labelledby="general-onpage">
+            <p id="general-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#general-what" data-i18n="faq.general.what.q">What is ZK-Voting?</a>
+            <a href="#general-features" data-i18n="faq.general.features.q">What are the key features?</a>
+            <a href="#general-who" data-i18n="faq.general.who.q">Who is it for?</a>
+            <a href="#general-fees" data-i18n="faq.general.fees.q">What are the fees?</a>
+            <a href="#general-audit" data-i18n="faq.general.audit.q">Has it been audited?</a>
+            <a href="#general-down" data-i18n="faq.general.down.q">What if this website goes down?</a>
+            <a href="#general-admin" data-i18n="faq.general.admin.q">Does anyone control every election?</a>
+          </nav>
+          <h2 id="general-what" data-i18n="faq.general.what.q">What is ZK-Voting?</h2>
+          <p data-i18n="faq.general.what.a">A not-for-profit, open-source voting system any group can run itself. Zero-knowledge proofs are designed to show that only eligible people voted, each one once, and that the published tally matches the ballots. Tests currently use a mock verifier. Individual choices are designed not to be published.</p>
+          <h2 id="general-features" data-i18n="faq.general.features.q">What are the key features?</h2>
+          <p data-i18n="faq.general.features.a">Self-hosting, and one person, one vote on a civic election. A separate advisory token signal that is not a secret ballot. Polls with delayed hourly choice counts after a gate, and votes that stay sealed until the deadline. Public registration and disqualification codes. Receipts that are hashes. An AGPL license, no fee for voters, and no product token.</p>
+          <h2 id="general-who" data-i18n="faq.general.who.q">Who is it for?</h2>
+          <p data-i18n="faq.general.who.a">Any body that needs a roll, a ballot, and a result people can check: cities, counties, unions, cooperatives, boards, schools, clubs, and observers.</p>
+          <h2 id="general-fees" data-i18n="faq.general.fees.q">What are the fees?</h2>
+          <p data-i18n="faq.general.fees.a">Voters are not charged. There is no deposit, no origination fee, and no interest. A host pays for its own servers. On the civic L2, the operator's minimally funded Ethereum key pays to submit batches. On a token signal, signing a ballot is free. Delegating that token is the transaction that costs gas.</p>
+          <h2 id="general-audit" data-i18n="faq.general.audit.q">Has it been audited?</h2>
+          <p data-i18n="faq.general.audit.a">Not as a finished system. The code is public under AGPL-3.0-or-later. Tests use a mock verifier, the first proving path is in progress, and the trusted-setup ceremony has not happened. There is no paid bug-bounty program.</p>
+          <h2 id="general-down" data-i18n="faq.general.down.q">What if this website goes down?</h2>
+          <p data-i18n="faq.general.down.a">This website only explains the project. A group's election runs on the node that group hosts. The software is open source, so someone else can serve the same pages from the repository. A node can also stay on a private network.</p>
+          <h2 id="general-admin" data-i18n="faq.general.admin.q">Does anyone control every election?</h2>
+          <p data-i18n="faq.general.admin.a">No. Each group runs its own node and owns its roll. Officials on that node create elections, freeze the roll, record disqualifications, and post the tally. Those jobs are not a back door that publishes choices.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#glossary"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.glossary.nav">Glossary</strong></a>
+            <a class="docs-next" href="#elections"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.elections.nav">Elections</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="elections">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.elections.title">Elections</h1>
+          <p class="docs-lede" data-i18n="faq.elections.lede">A contest with a roll and a ballot. Not a liquidity pool.</p>
+          <nav class="docs-onpage" aria-labelledby="elections-onpage">
+            <p id="elections-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#elections-what" data-i18n="faq.elections.what.q">What is an election here?</a>
+            <a href="#elections-many" data-i18n="faq.elections.many.q">Can one node run many elections?</a>
+            <a href="#elections-id" data-i18n="faq.elections.id.q">How is an election identified?</a>
+            <a href="#elections-districts" data-i18n="faq.elections.districts.q">Can districts be nested?</a>
+          </nav>
+          <h2 id="elections-what" data-i18n="faq.elections.what.q">What is an election here?</h2>
+          <p data-i18n="faq.elections.what.a">A contest with a roll, a ballot, and a published result. When it is created, the operator chooses a poll or a vote, and whether re-voting is allowed. That setting can't be changed afterward.</p>
+          <h2 id="elections-many" data-i18n="faq.elections.many.q">Can one node run many elections?</h2>
+          <p data-i18n="faq.elections.many.a">Yes. One civic L2 can hold any number of elections. Anyone can run a civic L2, and there is no limit on how many exist.</p>
+          <h2 id="elections-id" data-i18n="faq.elections.id.q">How is an election identified?</h2>
+          <p data-i18n="faq.elections.id.a">By an election UUID, unique within that L2. Batches settled to Ethereum are keyed by hash of the L2 id and the election UUID, so two groups do not share a record just by reusing a name.</p>
+          <h2 id="elections-districts" data-i18n="faq.elections.districts.q">Can districts be nested?</h2>
+          <p data-i18n="faq.elections.districts.a">Yes. A city, county, or district can run elections and referendums with nested districts, measures, and articles. That structure lives on the group's roll. It is not a separate chain.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#general"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.general.nav">General</strong></a>
+            <a class="docs-next" href="#registration"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.registration.nav">Registration</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="registration">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.registration.title">Registration</h1>
+          <p class="docs-lede" data-i18n="faq.registration.lede">Joining a roll. Nothing is deposited and nothing is lent.</p>
+          <nav class="docs-onpage" aria-labelledby="registration-onpage">
+            <p id="registration-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#registration-join" data-i18n="faq.registration.join.q">How does someone join a civic election?</a>
+            <a href="#registration-stored" data-i18n="faq.registration.stored.q">What is stored on the roll?</a>
+            <a href="#registration-deposit" data-i18n="faq.registration.deposit.q">Is registration a deposit?</a>
+            <a href="#registration-token" data-i18n="faq.registration.token.q">Does a token balance put me on the roll?</a>
+          </nav>
+          <h2 id="registration-join" data-i18n="faq.registration.join.q">How does someone join a civic election?</h2>
+          <p data-i18n="faq.registration.join.a">They register with a passkey, a wallet, email, or an ID. The roll stores an identity commitment. Registering for one election does not enroll someone in every contest on the node.</p>
+          <h2 id="registration-stored" data-i18n="faq.registration.stored.q">What is stored on the roll?</h2>
+          <p data-i18n="faq.registration.stored.a">An identity commitment. Not a name, not a wallet address, and not a document number.</p>
+          <h2 id="registration-deposit" data-i18n="faq.registration.deposit.q">Is registration a deposit?</h2>
+          <p data-i18n="faq.registration.deposit.a">No. Nothing of value is locked, escrowed, or lent. There is no collateral and no price bucket.</p>
+          <h2 id="registration-token" data-i18n="faq.registration.token.q">Does a token balance put me on the roll?</h2>
+          <p data-i18n="faq.registration.token.a">Not for a civic election. A token signal is separate: holding the chosen ERC-20 at one finalized block is the credential, there is no sign-up, and the choice stays public.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#elections"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.elections.nav">Elections</strong></a>
+            <a class="docs-next" href="#ballots"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.ballots.nav">Ballots</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="ballots">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.ballots.title">Ballots</h1>
+          <p class="docs-lede" data-i18n="faq.ballots.lede">Marking a choice and proving you were allowed to mark it.</p>
+          <nav class="docs-onpage" aria-labelledby="ballots-onpage">
+            <p id="ballots-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#ballots-cast" data-i18n="faq.ballots.cast.q">How is a ballot cast?</a>
+            <a href="#ballots-change" data-i18n="faq.ballots.change.q">Can I change my vote?</a>
+            <a href="#ballots-proof" data-i18n="faq.ballots.proof.q">What does the proof show?</a>
+            <a href="#ballots-back" data-i18n="faq.ballots.back.q">What do I get back?</a>
+          </nav>
+          <h2 id="ballots-cast" data-i18n="faq.ballots.cast.q">How is a ballot cast?</h2>
+          <p data-i18n="faq.ballots.cast.a">The voter marks a choice and submits a proof designed to show they are on the frozen roll and not disqualified. Voters are not charged for that submission.</p>
+          <h2 id="ballots-change" data-i18n="faq.ballots.change.q">Can I change my vote?</h2>
+          <p data-i18n="faq.ballots.change.a">Only if the operator allowed re-voting when the election was created. The operator decides at creation whether re-voting is allowed, and that setting can't be changed afterward. If it is allowed, the last ballot before the deadline counts. If not, a second ballot is rejected.</p>
+          <h2 id="ballots-proof" data-i18n="faq.ballots.proof.q">What does the proof show?</h2>
+          <p data-i18n="faq.ballots.proof.a">That an eligible person voted, once, in the way that election allows, and that the ballot is well formed. It is designed not to show which option was marked. With the mock verifier in tests, this check is not yet enforced.</p>
+          <h2 id="ballots-back" data-i18n="faq.ballots.back.q">What do I get back?</h2>
+          <p data-i18n="faq.ballots.back.a">A receipt of hashes, designed so it doesn't show how you voted. Every ballot, including a re-vote, gets one.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#registration"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.registration.nav">Registration</strong></a>
+            <a class="docs-next" href="#polls"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.polls.nav">Polls</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="polls">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.polls.title">Polls</h1>
+          <p class="docs-lede" data-i18n="faq.polls.lede">A civic contest that can show running choice counts, on a delay, after a gate.</p>
+          <nav class="docs-onpage" aria-labelledby="polls-onpage">
+            <p id="polls-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#polls-what" data-i18n="faq.polls.what.q">What is a poll?</a>
+            <a href="#polls-when" data-i18n="faq.polls.when.q">When do choice counts appear?</a>
+            <a href="#polls-small" data-i18n="faq.polls.small.q">What if an hour is small?</a>
+            <a href="#polls-blocks" data-i18n="faq.polls.blocks.q">Do published hourly blocks change?</a>
+          </nav>
+          <h2 id="polls-what" data-i18n="faq.polls.what.q">What is a poll?</h2>
+          <p data-i18n="faq.polls.what.a">A civic contest that publishes per-choice counts on a delayed hourly schedule after a gate. Turnout is published on a delayed hourly schedule for both a poll and a vote.</p>
+          <h2 id="polls-when" data-i18n="faq.polls.when.q">When do choice counts appear?</h2>
+          <p data-i18n="faq.polls.when.a">Once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first. Each hour publishes 30 minutes after it closes.</p>
+          <h2 id="polls-small" data-i18n="faq.polls.small.q">What if an hour is small?</h2>
+          <p data-i18n="faq.polls.small.a">An hour with fewer than 10 ballots merges forward until a block has at least 10.</p>
+          <h2 id="polls-blocks" data-i18n="faq.polls.blocks.q">Do published hourly blocks change?</h2>
+          <p data-i18n="faq.polls.blocks.a">No. Published hourly blocks are designed to stay as first published. If re-voting was allowed, replacement ballots show up only in the final tally.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#ballots"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.ballots.nav">Ballots</strong></a>
+            <a class="docs-next" href="#votes"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.votes.nav">Votes</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="votes">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.votes.title">Votes</h1>
+          <p class="docs-lede" data-i18n="faq.votes.lede">A civic contest whose choices stay sealed until the deadline.</p>
+          <nav class="docs-onpage" aria-labelledby="votes-onpage">
+            <p id="votes-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#votes-what" data-i18n="faq.votes.what.q">What is a vote?</a>
+            <a href="#votes-read" data-i18n="faq.votes.read.q">When can choices be read?</a>
+            <a href="#votes-why" data-i18n="faq.votes.why.q">Why choose a vote instead of a poll?</a>
+            <a href="#votes-rank" data-i18n="faq.votes.rank.q">Can a vote be ranked choice?</a>
+          </nav>
+          <h2 id="votes-what" data-i18n="faq.votes.what.q">What is a vote?</h2>
+          <p data-i18n="faq.votes.what.a">A civic contest that keeps choices sealed until the deadline. Turnout is published on a delayed hourly schedule. There are no interim per-choice counts.</p>
+          <h2 id="votes-read" data-i18n="faq.votes.read.q">When can choices be read?</h2>
+          <p data-i18n="faq.votes.read.a">At the deadline, and only as an aggregate. Choices are encrypted to a public key posted on the L2. The matching private key is split among the guardians with Shamir secret sharing, designed so no single party, including the operator, can decrypt early. The design gives the operator no key share.</p>
+          <h2 id="votes-why" data-i18n="faq.votes.why.q">Why choose a vote instead of a poll?</h2>
+          <p data-i18n="faq.votes.why.a">When a running choice count would add pressure. Nothing a voter is given is designed to prove their choice to someone pressuring them.</p>
+          <h2 id="votes-rank" data-i18n="faq.votes.rank.q">Can a vote be ranked choice?</h2>
+          <p data-i18n="faq.votes.rank.a">Yes, as an opt-in. Ranked choice is also available in polls. In a sealed vote, guardians then see individual rankings, not identities.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#polls"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.polls.nav">Polls</strong></a>
+            <a class="docs-next" href="#results"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.results.nav">Results</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="results">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.results.title">Results</h1>
+          <p class="docs-lede" data-i18n="faq.results.lede">What is visible while a contest is open, and what is posted after the deadline.</p>
+          <nav class="docs-onpage" aria-labelledby="results-onpage">
+            <p id="results-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#results-open" data-i18n="faq.results.open.q">What is published while a contest is open?</a>
+            <a href="#results-deadline" data-i18n="faq.results.deadline.q">What happens at the deadline?</a>
+            <a href="#results-extra" data-i18n="faq.results.extra.q">What is the supplementary batch?</a>
+            <a href="#results-execute" data-i18n="faq.results.execute.q">Does the tally carry out the decision?</a>
+            <a href="#results-check" data-i18n="faq.results.check.q">How can an outsider check?</a>
+          </nav>
+          <h2 id="results-open" data-i18n="faq.results.open.q">What is published while a contest is open?</h2>
+          <p data-i18n="faq.results.open.a">Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first. A vote publishes choices only at the deadline.</p>
+          <h2 id="results-deadline" data-i18n="faq.results.deadline.q">What happens at the deadline?</h2>
+          <p data-i18n="faq.results.deadline.a">No more ballots are accepted. One final batch goes to Ethereum at the deadline. A challenge window, which must be longer than zero, comes before the final tally.</p>
+          <h2 id="results-extra" data-i18n="faq.results.extra.q">What is the supplementary batch?</h2>
+          <p data-i18n="faq.results.extra.a">After the grace period, anyone may post a missing final batch and the supplementary batch, before the final tally.</p>
+          <h2 id="results-execute" data-i18n="faq.results.execute.q">Does the tally carry out the decision?</h2>
+          <p data-i18n="faq.results.execute.a">No. Passing a vote never auto-executes anything. Outcomes are verifiable. Acting on them stays with the people.</p>
+          <h2 id="results-check" data-i18n="faq.results.check.q">How can an outsider check?</h2>
+          <p data-i18n="faq.results.check.a">Anyone can check that the published totals match the accepted ballots. An independent auditor is designed to be able to rebuild a published result without the operator's private database. Until a real aggregate verifier is in place, the tally is checked by summing ciphertexts on chain.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#votes"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.votes.nav">Votes</strong></a>
+            <a class="docs-next" href="#privacy"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.privacy.nav">Privacy</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="privacy">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.privacy.title">Privacy</h1>
+          <p class="docs-lede" data-i18n="faq.privacy.lede">The choice is the secret. The process is the public part.</p>
+          <nav class="docs-onpage" aria-labelledby="privacy-onpage">
+            <p id="privacy-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#privacy-private" data-i18n="faq.privacy.private.q">What is designed to stay private?</a>
+            <a href="#privacy-public" data-i18n="faq.privacy.public.q">What is public?</a>
+            <a href="#privacy-delay" data-i18n="faq.privacy.delay.q">Why wait to publish turnout?</a>
+            <a href="#privacy-signal" data-i18n="faq.privacy.signal.q">Is a token signal private?</a>
+          </nav>
+          <h2 id="privacy-private" data-i18n="faq.privacy.private.q">What is designed to stay private?</h2>
+          <p data-i18n="faq.privacy.private.a">The option on a civic ballot. It is designed never to be a readable field in a transaction or a database. Receipts are hashes, designed so they don't show how you voted.</p>
+          <h2 id="privacy-public" data-i18n="faq.privacy.public.q">What is public?</h2>
+          <p data-i18n="faq.privacy.public.a">Registrations and disqualification codes are public. Turnout is published on a delayed hourly schedule for both kinds. A poll also publishes per-choice counts on that schedule once 100 voters have cast their first ballot, or at the scheduled end, whichever comes first. The final tally is public too.</p>
+          <h2 id="privacy-delay" data-i18n="faq.privacy.delay.q">Why wait to publish turnout?</h2>
+          <p data-i18n="faq.privacy.delay.a">So leaving a polling place cannot be matched to a live tick. The delay is the hourly schedule. Counts are not padded.</p>
+          <h2 id="privacy-signal" data-i18n="faq.privacy.signal.q">Is a token signal private?</h2>
+          <p data-i18n="faq.privacy.signal.a">No. In a token signal the choice stays public. Secret ballots are the civic election.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#results"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.results.nav">Results</strong></a>
+            <a class="docs-next" href="#officers"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.officers.nav">Officers</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="officers">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.officers.title">Officers</h1>
+          <p class="docs-lede" data-i18n="faq.officers.lede">The group that hosts the node owns the roll. Officers have jobs, not a master key.</p>
+          <nav class="docs-onpage" aria-labelledby="officers-onpage">
+            <p id="officers-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#officers-who" data-i18n="faq.officers.who.q">Who operates a node?</a>
+            <a href="#officers-jobs" data-i18n="faq.officers.jobs.q">What do officials do?</a>
+            <a href="#officers-read" data-i18n="faq.officers.read.q">Can an officer read how people voted?</a>
+          </nav>
+          <h2 id="officers-who" data-i18n="faq.officers.who.q">Who operates a node?</h2>
+          <p data-i18n="faq.officers.who.a">The group that hosts it. They own the node, the roll, and the record. No vendor account is required to start, and there is no vendor lock-in.</p>
+          <h2 id="officers-jobs" data-i18n="faq.officers.jobs.q">What do officials do?</h2>
+          <p data-i18n="faq.officers.jobs.a">They create the election and the ballot, freeze the roll, approve registration, record a disqualification with a public reason code, and post the tally after the deadline. A host can also publish its own pages.</p>
+          <h2 id="officers-read" data-i18n="faq.officers.read.q">Can an officer read how people voted?</h2>
+          <p data-i18n="faq.officers.read.a">That is not the design. A vote's choices are encrypted to the guardian key, and the operator has no key share. A poll publishes aggregates. Officials do not get a private live feed of choices.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#privacy"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.privacy.nav">Privacy</strong></a>
+            <a class="docs-next" href="#dq"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.dq.nav">Disqualification</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="dq">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.dq.title">Disqualification</h1>
+          <p class="docs-lede" data-i18n="faq.dq.lede">Barring someone is a public, coded change. It is not a silent flag.</p>
+          <nav class="docs-onpage" aria-labelledby="dq-onpage">
+            <p id="dq-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#dq-why" data-i18n="faq.dq.why.q">Why might a registered person be barred?</a>
+            <a href="#dq-evidence" data-i18n="faq.dq.evidence.q">Where does the evidence go?</a>
+            <a href="#dq-barred" data-i18n="faq.dq.barred.q">Can a barred person vote anyway?</a>
+          </nav>
+          <h2 id="dq-why" data-i18n="faq.dq.why.q">Why might a registered person be barred?</h2>
+          <p data-i18n="faq.dq.why.a">Registered is not the same as eligible. An official can bar someone for a stated reason code, for example not of age, not resident, a duplicate, or a court order. The code is public so a purge cannot hide.</p>
+          <h2 id="dq-evidence" data-i18n="faq.dq.evidence.q">Where does the evidence go?</h2>
+          <p data-i18n="faq.dq.evidence.a">Personal evidence stays off the chain. The public record is the reason code and a hash of the evidence, so a later review can match a sealed file to what was posted.</p>
+          <h2 id="dq-barred" data-i18n="faq.dq.barred.q">Can a barred person vote anyway?</h2>
+          <p data-i18n="faq.dq.barred.a">No. The eligible set is people who are registered and not currently disqualified. The proof is designed to require membership in that set. With the mock verifier in tests, this check is not yet enforced.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#officers"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.officers.nav">Officers</strong></a>
+            <a class="docs-next" href="#receipts"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.receipts.nav">Receipts</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="receipts">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.receipts.title">Receipts</h1>
+          <p class="docs-lede" data-i18n="faq.receipts.lede">Proof that you voted. Not proof of the option you marked.</p>
+          <nav class="docs-onpage" aria-labelledby="receipts-onpage">
+            <p id="receipts-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#receipts-what" data-i18n="faq.receipts.what.q">What is on a receipt?</a>
+            <a href="#receipts-check" data-i18n="faq.receipts.check.q">How do I check that it counted?</a>
+            <a href="#receipts-pressure" data-i18n="faq.receipts.pressure.q">Can someone demand my receipt as proof of my choice?</a>
+          </nav>
+          <h2 id="receipts-what" data-i18n="faq.receipts.what.q">What is on a receipt?</h2>
+          <p data-i18n="faq.receipts.what.a">Hashes that show a ballot was accepted. Enough to look it up, not the option that was marked. If a screen says which option you chose, that is a bug.</p>
+          <h2 id="receipts-check" data-i18n="faq.receipts.check.q">How do I check that it counted?</h2>
+          <p data-i18n="faq.receipts.check.a">On the node that ran the election, open the receipt page and paste the proof, or use the file the node gave you. The check answers whether that ballot was accepted. It does not show a candidate.</p>
+          <h2 id="receipts-pressure" data-i18n="faq.receipts.pressure.q">Can someone demand my receipt as proof of my choice?</h2>
+          <p data-i18n="faq.receipts.pressure.a">A receipt is designed so it doesn't show how you voted. It cannot satisfy someone who demands proof of a choice. That refusal is intentional.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#dq"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.dq.nav">Disqualification</strong></a>
+            <a class="docs-next" href="#token"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.token.nav">Not a token</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="token">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.token.title">Not a token</h1>
+          <p class="docs-lede" data-i18n="faq.token.lede">There is no project token, no reward for voting, and nothing to deposit.</p>
+          <nav class="docs-onpage" aria-labelledby="token-onpage">
+            <p id="token-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#token-product" data-i18n="faq.token.product.q">Is there a ZK-Voting token?</a>
+            <a href="#token-signal" data-i18n="faq.token.signal.q">Then what is a token signal?</a>
+            <a href="#token-markets" data-i18n="faq.token.markets.q">Are there incentive programs or liquidity pools?</a>
+          </nav>
+          <h2 id="token-product" data-i18n="faq.token.product.q">Is there a ZK-Voting token?</h2>
+          <p data-i18n="faq.token.product.a">No. There is no product token, no paid tier, and no reward for voting. The license is AGPL-3.0-or-later. The repository is not a way to make money.</p>
+          <h2 id="token-signal" data-i18n="faq.token.signal.q">Then what is a token signal?</h2>
+          <p data-i18n="faq.token.signal.a">An optional advisory mode on Ethereum mainnet. The host picks an existing ERC-20. Weight comes from that token at one finalized block. Delegated voting power is read there. It is not a secret ballot, it does not use the civic roll, and the result does not execute anything.</p>
+          <h2 id="token-markets" data-i18n="faq.token.markets.q">Are there incentive programs or liquidity pools?</h2>
+          <p data-i18n="faq.token.markets.a">No. There is nothing to deposit, lend, borrow, liquidate, or auction. Do not send funds to anyone who announces a token sale under this name.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#receipts"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.receipts.nav">Receipts</strong></a>
+            <a class="docs-next" href="#community"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.community.nav">Community</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="community">
+          <p class="eyebrow" data-i18n="faq.group.faqs">FAQs</p>
+          <h1 data-i18n="faq.community.title">Community</h1>
+          <p class="docs-lede" data-i18n="faq.community.lede">A forum and a public repository. Not a grants round.</p>
+          <nav class="docs-onpage" aria-labelledby="community-onpage">
+            <p id="community-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#community-talk" data-i18n="faq.community.talk.q">Where do people talk?</a>
+            <a href="#community-grants" data-i18n="faq.community.grants.q">Is there a grants program?</a>
+            <a href="#community-help" data-i18n="faq.community.help.q">Can you help a group go live?</a>
+          </nav>
+          <h2 id="community-talk" data-i18n="faq.community.talk.q">Where do people talk?</h2>
+          <p data-i18n="faq.community.talk.a">On the community forum. Groups discuss real uses, running a node, and what to build next.</p>
+          <h2 id="community-grants" data-i18n="faq.community.grants.q">Is there a grants program?</h2>
+          <p data-i18n="faq.community.grants.a">No token grants and no funding vote. Contribution is the ordinary open-source kind: read the code, file an issue, or send a patch.</p>
+          <h2 id="community-help" data-i18n="faq.community.help.q">Can you help a group go live?</h2>
+          <p data-i18n="faq.community.help.a">Yes. The project is available for contracting for a local implementation. Use the email address in the site footer.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#token"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.token.nav">Not a token</strong></a>
+            <a class="docs-next" href="#runs"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.runs.nav">Where it runs</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="runs">
+          <p class="eyebrow" data-i18n="faq.group.info">Info</p>
+          <h1 data-i18n="faq.runs.title">Where it runs</h1>
+          <p class="docs-lede" data-i18n="faq.runs.lede">Civic ballots settle to Ethereum. There is no bridge between lending markets, because there are no lending markets.</p>
+          <nav class="docs-onpage" aria-labelledby="runs-onpage">
+            <p id="runs-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#runs-land" data-i18n="faq.runs.land.q">Where do civic ballots land?</a>
+            <a href="#runs-signal" data-i18n="faq.runs.signal.q">Where do token signals land?</a>
+            <a href="#runs-addresses" data-i18n="faq.runs.addresses.q">Is there one list of official contract addresses?</a>
+            <a href="#runs-rebuild" data-i18n="faq.runs.rebuild.q">Can results be rebuilt if a node disappears?</a>
+          </nav>
+          <h2 id="runs-land" data-i18n="faq.runs.land.q">Where do civic ballots land?</h2>
+          <p data-i18n="faq.runs.land.a">On the group's civic L2, a purpose-built sequencer and prover. Final batches settle to Ethereum so the record outlives any single operator. Day-to-day activity is not a general-purpose chain, and it does not bridge deposits.</p>
+          <h2 id="runs-signal" data-i18n="faq.runs.signal.q">Where do token signals land?</h2>
+          <p data-i18n="faq.runs.signal.a">On Ethereum mainnet only. That mode needs an Ethereum mainnet RPC. It does not use the civic L2.</p>
+          <h2 id="runs-addresses" data-i18n="faq.runs.addresses.q">Is there one list of official contract addresses?</h2>
+          <p data-i18n="faq.runs.addresses.a">No single global deployment is published here as a table to copy. Each group pins the contracts its own node uses. The demo node is for trying the software, not for a production election.</p>
+          <h2 id="runs-rebuild" data-i18n="faq.runs.rebuild.q">Can results be rebuilt if a node disappears?</h2>
+          <p data-i18n="faq.runs.rebuild.a">Settling to Ethereum is what makes that possible. Results are designed to be rebuilt from the L2's data or from the L1 record. An unproven root publishes nothing and can roll back after a timeout.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#community"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.community.nav">Community</strong></a>
+            <a class="docs-next" href="#fits"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.fits.nav">How it fits</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="fits">
+          <p class="eyebrow" data-i18n="faq.group.info">Info</p>
+          <h1 data-i18n="faq.fits.title">How it fits</h1>
+          <p class="docs-lede" data-i18n="faq.fits.lede">Many independent civic L2s. One shared record on Ethereum.</p>
+          <nav class="docs-onpage" aria-labelledby="fits-onpage">
+            <p id="fits-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#fits-picture" data-i18n="faq.fits.picture.q">What is the large picture?</a>
+            <a href="#fits-inside" data-i18n="faq.fits.inside.q">What happens inside one L2?</a>
+            <a href="#fits-drawing" data-i18n="faq.fits.drawing.q">Where is the diagram?</a>
+          </nav>
+          <h2 id="fits-picture" data-i18n="faq.fits.picture.q">What is the large picture?</h2>
+          <p data-i18n="faq.fits.picture.a">Anyone can run a civic L2, and there is no limit on how many exist. Each L2 can hold any number of elections. Every L2 settles its vote batches to Ethereum, keyed by hash of the L2 id and the election UUID.</p>
+          <h2 id="fits-inside" data-i18n="faq.fits.inside.q">What happens inside one L2?</h2>
+          <p data-i18n="faq.fits.inside.a">Voters at the edge vote for free. Only pre-approved voters are accepted. The sequencer batches the votes. The L2 computes the state root and the tally. L1 commits that root hourly and is designed to check a proof of the computation later, in order. Until a real aggregate verifier is in place, the tally is checked by summing ciphertexts on chain.</p>
+          <h2 id="fits-drawing" data-i18n="faq.fits.drawing.q">Where is the diagram?</h2>
+          <p data-i18n="faq.fits.drawing.a">The home page draws it: a macro view of many L2s, an L2 view of one election team, and the path a poll and a vote take to the final tally. Those figures are the protocol diagram.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#runs"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.runs.nav">Where it runs</strong></a>
+            <a class="docs-next" href="#roadmap"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.roadmap.nav">Roadmap</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="roadmap">
+          <p class="eyebrow" data-i18n="faq.group.info">Info</p>
+          <h1 data-i18n="faq.roadmap.title">Roadmap</h1>
+          <p class="docs-lede" data-i18n="faq.roadmap.lede">What is true on this development line, and what a tally will not start doing later.</p>
+          <nav class="docs-onpage" aria-labelledby="roadmap-onpage">
+            <p id="roadmap-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#roadmap-today" data-i18n="faq.roadmap.today.q">What is true today?</a>
+            <a href="#roadmap-proving" data-i18n="faq.roadmap.proving.q">What is the proving path?</a>
+            <a href="#roadmap-never" data-i18n="faq.roadmap.never.q">What will a result not do?</a>
+          </nav>
+          <h2 id="roadmap-today" data-i18n="faq.roadmap.today.q">What is true today?</h2>
+          <p data-i18n="faq.roadmap.today.a">You can read this site and try the voting demo. Tests use a mock verifier. The trusted-setup ceremony has not happened. Do not use it for a binding election today.</p>
+          <h2 id="roadmap-proving" data-i18n="faq.roadmap.proving.q">What is the proving path?</h2>
+          <p data-i18n="faq.roadmap.proving.a">A real proof check is in progress. With the mock verifier in tests, rejection of a voter who is not pre-approved is not yet enforced. Do not describe a local demo as ready for a binding election.</p>
+          <h2 id="roadmap-never" data-i18n="faq.roadmap.never.q">What will a result not do?</h2>
+          <p data-i18n="faq.roadmap.never.a">It will not auto-execute. The tally is evidence. Acting on it stays with the people. The project will also not add a product token or a fee for voters.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#fits"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.fits.nav">How it fits</strong></a>
+            <a class="docs-next" href="#builder"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.builder.nav">Builder kit</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="builder">
+          <p class="eyebrow" data-i18n="faq.group.info">Info</p>
+          <h1 data-i18n="faq.builder.title">Builder kit</h1>
+          <p class="docs-lede" data-i18n="faq.builder.lede">The repository is the starter kit. Fork it, and keep the not-for-profit label.</p>
+          <nav class="docs-onpage" aria-labelledby="builder-onpage">
+            <p id="builder-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#builder-repo" data-i18n="faq.builder.repo.q">What is in the repository?</a>
+            <a href="#builder-read" data-i18n="faq.builder.read.q">What should I read first?</a>
+            <a href="#builder-agpl" data-i18n="faq.builder.agpl.q">What does AGPL ask of a host?</a>
+          </nav>
+          <h2 id="builder-repo" data-i18n="faq.builder.repo.q">What is in the repository?</h2>
+          <p data-i18n="faq.builder.repo.a">The node, the civic L2, the contracts, and the circuits, together, under AGPL-3.0-or-later. A group is not meant to depend on a vendor's private build. Fork it and keep the not-for-profit label.</p>
+          <h2 id="builder-read" data-i18n="faq.builder.read.q">What should I read first?</h2>
+          <p data-i18n="faq.builder.read.a">The README at the root of the repository, then the self-hosting guides. Every running node serves those guides at /docs.</p>
+          <h2 id="builder-agpl" data-i18n="faq.builder.agpl.q">What does AGPL ask of a host?</h2>
+          <p data-i18n="faq.builder.agpl.a">If you run a modified node as a network service, offer the corresponding source to the people who use that service.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#roadmap"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.roadmap.nav">Roadmap</strong></a>
+            <a class="docs-next" href="#deploy"><span data-i18n="faq.pager.next">Next</span><strong data-i18n="faq.deploy.nav">How to deploy</strong></a>
+          </p>
+        </article>
+
+        <article class="docs-page" id="deploy">
+          <p class="eyebrow" data-i18n="faq.group.info">Info</p>
+          <h1 data-i18n="faq.deploy.title">How to deploy</h1>
+          <p class="docs-lede" data-i18n="faq.deploy.lede">Run the node yourself. Do not deploy a pool, a bridge, or a token sale. Those pieces are not in this software.</p>
+          <nav class="docs-onpage" aria-labelledby="deploy-onpage">
+            <p id="deploy-onpage" data-i18n="faq.onThisPage">On this page</p>
+            <a href="#deploy-start" data-i18n="faq.deploy.start.q">How do I start a node?</a>
+            <a href="#deploy-platforms" data-i18n="faq.deploy.platforms.q">Which platforms?</a>
+            <a href="#deploy-not" data-i18n="faq.deploy.not.q">What should I not deploy?</a>
+          </nav>
+          <h2 id="deploy-start" data-i18n="faq.deploy.start.q">How do I start a node?</h2>
+          <p data-i18n="faq.deploy.start.a">From a checkout, copy the example environment file, then start the stack. The node answers a health check. This website is only the explanation. It is not the node.</p>
+          <pre class="terminal" aria-label="Self-host quickstart" data-i18n-aria-label="faq.deploy.terminalLabel"><span class="dim" dir="auto" data-i18n="faq.deploy.terminalComment"># run your own node</span>
+cp .env.example .env
+docker compose up -d --build
+curl -fsS http://127.0.0.1:3000/health</pre>
+          <h2 id="deploy-platforms" data-i18n="faq.deploy.platforms.q">Which platforms?</h2>
+          <p data-i18n="faq.deploy.platforms.a">Docker Compose, Coolify, Dokploy, or CapRover. The node can stay private behind a Tailscale sidecar.</p>
+          <h2 id="deploy-not" data-i18n="faq.deploy.not.q">What should I not deploy?</h2>
+          <p data-i18n="faq.deploy.not.a">Do not deploy a lending pool, a bridge for deposits, or a token sale. This software does not include them. Pin the contracts for that group's node, and do not treat the demo as a finished ceremony.</p>
+          <p class="docs-pager">
+            <a class="docs-prev" href="#builder"><span data-i18n="faq.pager.prev">Previous</span><strong data-i18n="faq.builder.nav">Builder kit</strong></a>
+          </p>
+        </article>
+
+    </div>
+  </div>
+  <footer>
+    <div class="wrap foot-main">
+      <div class="foot-block" role="region" aria-labelledby="footer-contact-label">
+        <p class="foot-label" id="footer-contact-label" data-i18n="footer.contact">Contact</p>
+        <a class="foot-mail" href="mailto:hello@zk-voting.org">hello@zk-voting.org</a>
+      </div>
+      <div class="foot-block">
+        <p class="foot-oss"><a href="https://github.com/mrabino1/zk-voting" data-i18n="footer.oss">ZK-Voting is 100% open source and free to use.</a></p>
+      </div>
+      <div class="foot-block">
+        <p data-i18n="footer.contracting">We are available for contracting for your local implementation.</p>
+        <a class="btn btn-sm" href="mailto:hello@zk-voting.org" data-i18n="footer.email">Email us</a>
+      </div>
+    </div>
+    <div class="wrap foot">
+      <span>&copy; <span data-brand>ZK-Voting</span> <span data-i18n="footer.contributors">contributors</span> &middot; AGPL-3.0-or-later &middot; <span data-i18n="footer.nonprofit">Not for profit</span></span>
+      <span class="foot-end">
+        <span><a href="/faq" aria-current="page" data-i18n="footer.faq">FAQ</a> &middot; <a href="https://community.zk-voting.org" data-i18n="footer.forum">Community forum</a> &middot; <a href="https://demo.zk-voting.org" data-i18n="footer.demo">Voting demo</a></span>
+        <a class="gh-link" href="https://github.com/mrabino1/zk-voting" target="_blank" rel="noopener noreferrer" data-i18n-aria-label="footer.github" aria-label="ZK-Voting on GitHub">
+          <svg class="gh-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        </a>
+      </span>
+    </div>
+  </footer>
+  <script type="module" src="/i18n.js?v=b33d45c41a"></script>
+  <script type="module" src="/faq-nav.js?v=78ffc6df41"></script>
+</body>
+</html>
