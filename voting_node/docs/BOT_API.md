@@ -259,7 +259,9 @@ Machine-readable copies:
 
 - `GET /api/polls` (key read). Token polls when POLLS_ENABLED is on. Polls are signal, not binding elections. Omitted from the Node when the flag is off.
 - `GET /api/polls/:id` (key read). One token poll.
-- `GET /api/polls/:id/weight` (key read). Read-only token weight for an address. The Node does not move tokens.
+- `GET /api/polls/:id/weight` (key read). Read-only token weight for an address. The Node does not move tokens. erc20_votes reports getPastVotes at the Ethereum snapshot.
+- `GET /api/polls/:id/delegates` (key read). Delegates with nonzero getPastVotes at an erc20_votes snapshot. Absent on balance-hold polls.
+- `GET /api/polls/:id/snapshot-proof` (key read). Poseidon membership proof that an address and its voting power are in the snapshot root. Query: address.
 - `GET /api/polls/:id/typed-data` (key read). EIP-712 typed data a holder signs. Query: address, choices.
 - `POST /api/polls/:id/ballots` (key voter). Submit a signed token-poll ballot. No account on this site is required. A read-only key is refused.
 - `POST /api/polls/:id/tally` (key voter, signed in). Any signed-in person may ask the Node to tally a closed token poll. Counts come from accepted ballots.

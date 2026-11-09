@@ -1032,7 +1032,7 @@ export default {
     nav: "Polls",
     listTitle: "Polls",
     listLede:
-      "One board for every contest. A civic election is one person and one secret ballot. A token poll counts an ERC-20 weight — the gross balance, or the square root of that gross — and a simple majority of that count wins. Results do not execute anything.",
+      "One board for every contest. A civic election is one person and one secret ballot. A token poll counts an ERC-20 weight — the gross balance, or the square root of that gross — and a simple majority of that count wins. These are public weighted signals, not anonymous ballots. Results do not execute anything.",
     empty: "No polls are published.",
     emptyFilter: "Nothing in this view.",
     statOpen: "Open",
