@@ -38,7 +38,14 @@ export function contestTabs(h, { label, tabs, current, onChange }) {
 }
 
 export function contestGrid(h, cards, attrs = {}) {
-  return h("div", { class: "contest-grid", role: "list", ...attrs }, ...cards);
+  const items = (cards || []).filter((card) => card != null && card !== false);
+  const rest = { ...(attrs || {}) };
+  delete rest.role;
+  if (!items.length) return h("div", { class: "contest-grid", ...rest });
+  for (const card of items) {
+    if (card.nodeType === 1 && !card.getAttribute("role")) card.setAttribute("role", "listitem");
+  }
+  return h("div", { class: "contest-grid", role: "list", ...rest }, ...items);
 }
 
 export function contestFacts(h, rows) {

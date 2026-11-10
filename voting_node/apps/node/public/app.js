@@ -43,7 +43,7 @@ import {
 } from "./audience.js";
 import { allowSampleRoll, footerMetaKey, namedVotingHost, paintClientHost, showsDemoChrome } from "./host-chrome.js";
 import { renderAbout, renderFaq, renderOffice, renderPublicHome, renderSignIn } from "./public-pages.js";
-import { civicContestCard } from "./contests.js";
+import { civicContestCard, contestGrid } from "./contests.js";
 import { renderPollDetail, renderPollResults, renderPollVote, renderPollsIndex } from "./polls.js";
 import { renderTerms } from "./terms.js";
 import { renderFeedback } from "./feedback.js";
@@ -605,49 +605,47 @@ function electionCard(election, me, store) {
   const roll = `${election.participantCount} registered${
     election.maxParticipants ? ` / cap ${election.maxParticipants}` : " (unlimited)"
   }`;
-  return h(
-    "div",
-    { class: "contest-card-wrap" },
-    civicContestCard(h, election, {
-      formatTime,
-      state: st,
-      typeLabel: `${electionTypeLabel(election)} · ${vs.label}`,
-      href: `/vote/${encodeURIComponent(election.id)}`,
-      sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
-      roll,
-      foot: canVote ? "Open · mark a ballot" : vs.label,
-      actions: [
-        canVote
-          ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
-          : vs.key === "recorded"
-            ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
-            : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: election.state === 2 ? "Open ballot" : "Election detail" }),
-        canRegister
-          ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
-          : null,
-        h("a", {
-          class: election.state >= 4 ? "btn" : "btn btn-secondary",
-          href: `/elections/${encodeURIComponent(election.id)}/results`,
-          "data-nav": "",
-          text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
-        }),
-        h("a", {
-          class: "btn btn-secondary",
-          href: `/elections/${encodeURIComponent(election.id)}/info`,
-          "data-nav": "",
-          text: "Info",
-        }),
-      ],
-    }),
-    aspectPreview(election, h)
-  );
+  const card = civicContestCard(h, election, {
+    formatTime,
+    state: st,
+    typeLabel: `${electionTypeLabel(election)} · ${vs.label}`,
+    href: `/vote/${encodeURIComponent(election.id)}`,
+    sealedText: resultsAreSealed(election) ? sealedUntilLabel(election, formatTime) : "",
+    roll,
+    foot: canVote ? "Open · mark a ballot" : vs.label,
+    actions: [
+      canVote
+        ? h("a", { class: "btn", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "Mark ballot" })
+        : vs.key === "recorded"
+          ? h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: "View receipt" })
+          : h("a", { class: "btn btn-secondary", href: `/vote/${encodeURIComponent(election.id)}`, "data-nav": "", text: election.state === 2 ? "Open ballot" : "Election detail" }),
+      canRegister
+        ? h("a", { class: "btn btn-secondary", href: `/register?election=${encodeURIComponent(election.id)}`, "data-nav": "", text: "Register" })
+        : null,
+      h("a", {
+        class: election.state >= 4 ? "btn" : "btn btn-secondary",
+        href: `/elections/${encodeURIComponent(election.id)}/results`,
+        "data-nav": "",
+        text: resultsAreSealed(election) ? t("results.sealedStatus") : election.state >= 4 ? "Results" : "Results status",
+      }),
+      h("a", {
+        class: "btn btn-secondary",
+        href: `/elections/${encodeURIComponent(election.id)}/info`,
+        "data-nav": "",
+        text: "Info",
+      }),
+    ],
+  });
+  // The wrap owns the list item so the question preview is inside it, not a sibling of the list.
+  card.removeAttribute("role");
+  return h("div", { class: "contest-card-wrap", role: "listitem" }, card, aspectPreview(election, h));
 }
 
 function electionGrid(elections, me, store, emptyText) {
   if (!elections.length) {
     return h("div", { class: "notice" }, h("p", { text: emptyText }));
   }
-  return h("div", { class: "contest-grid", role: "list" }, ...elections.map((election) => electionCard(election, me, store)));
+  return contestGrid(h, elections.map((election) => electionCard(election, me, store)));
 }
 
 function renderDesk(main, route, bundle) {
