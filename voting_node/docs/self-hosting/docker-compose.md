@@ -8,19 +8,23 @@ This is the fastest way to run a complete zk-voting Node on one machine: the web
 
 ```bash
 git clone https://github.com/<your-org>/zk-voting.git
-cd zk-voting
-cp .env.example .env
+cd zk-voting/voting_node
+./setup.sh            # or ./setup.sh -y to take every default
 ```
 
-Replace `<your-org>` with the organization you forked into. `.env` is gitignored. The defaults in `.env.example` run a **local demo**: no outbound mail, passkeys on `localhost`, mock proofs on the L2.
+Replace `<your-org>` with the organization you forked into. `./setup.sh` writes `.env`
+(gitignored). Its defaults run a **local demo** with nothing to sign up for: a local Ethereum
+chain with ZkVotingRollup deployed for you, the bundled Postgres with a generated password, no
+outbound mail, passkeys on `localhost`.
 
-Compose will not start until you set the database. There is no default password:
+By hand instead: `cp .env.example .env`, then set the database (there is no default password):
 
 ```env
 POSTGRES_USER=zkvote
 POSTGRES_PASSWORD=<long random string>
 POSTGRES_DB=zkvote
 DATABASE_URL=postgres://zkvote:<same password>@db:5432/zkvote
+L2_BALLOT_TOKEN=<long random string>
 ```
 
 For anything public, also set:

@@ -41,6 +41,7 @@ const DEMO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const SECRET_KEYS = Object.freeze([
   'SETUP_TOKEN',
   'DATABASE_URL',
+  'POSTGRES_PASSWORD',
   'ZK_ENTROPY',
   'RECEIPT_PDF_SECRET',
   'ROLLUP_PRIVATE_KEY',
@@ -60,6 +61,9 @@ export const MANAGED_KEYS = Object.freeze([
   'ZK_VOTING_PORT',
   'TRUST_PROXY',
   'DATABASE_URL',
+  'POSTGRES_USER',
+  'POSTGRES_PASSWORD',
+  'POSTGRES_DB',
   'BRAND_NAME',
   'RECEIPT_PDF_SECRET',
   'COMPOSE_PROFILES',
@@ -384,16 +388,31 @@ export async function runSetup(opts = {}) {
       next.TRUST_PROXY = proxied ? get('TRUST_PROXY') || '1' : '';
     } else next.TRUST_PROXY = get('TRUST_PROXY');
     const hasDb = Boolean(get('DATABASE_URL'));
+    next.POSTGRES_USER = get('POSTGRES_USER');
+    next.POSTGRES_PASSWORD = get('POSTGRES_PASSWORD');
+    next.POSTGRES_DB = get('POSTGRES_DB');
     const dbPick = await choose(
       '  Database',
       hasDb
         ? [{ key: 'k', label: 'keep current Postgres URL' }, { key: 'c', label: 'change' }, { key: 'j', label: 'JSON files in the data volume' }]
-        : [{ key: 'j', label: 'JSON files in the data volume' }, { key: 'p', label: 'Postgres' }],
-      hasDb ? 'k' : 'j',
+        : [
+            { key: 'b', label: 'the Postgres bundled with Docker Compose (a password is generated)' },
+            { key: 'p', label: 'my own Postgres' },
+            { key: 'j', label: 'JSON files in the data volume (no Docker Compose)' },
+          ],
+      // A re-run keeps an earlier JSON choice; a first run defaults to the bundled Postgres.
+      hasDb ? 'k' : existed || args.deploy === 'node' ? 'j' : 'b',
     );
     if (dbPick === 'k') next.DATABASE_URL = get('DATABASE_URL');
     else if (dbPick === 'j') next.DATABASE_URL = '';
-    else {
+    else if (dbPick === 'b') {
+      // The db service in docker-compose.yml. Hex keeps the password URL-safe.
+      next.POSTGRES_USER = get('POSTGRES_USER') || 'zkvote';
+      next.POSTGRES_DB = get('POSTGRES_DB') || 'zkvote';
+      next.POSTGRES_PASSWORD = get('POSTGRES_PASSWORD') || newSecretHex(24);
+      next.DATABASE_URL = `postgres://${next.POSTGRES_USER}:${next.POSTGRES_PASSWORD}@db:5432/${next.POSTGRES_DB}`;
+      if (!get('POSTGRES_PASSWORD')) notes.push('POSTGRES_PASSWORD');
+    } else {
       next.DATABASE_URL = await ask('  Postgres URL, postgres://user:pass@host:5432/db (hidden)', '', {
         secret: true,
         validate: (v) => (/^postgres(ql)?:\/\/[^\s]+$/.test(v) ? { ok: true, value: v } : { ok: false, error: 'must start with postgres:// or postgresql://' }),
@@ -655,7 +674,12 @@ function printLaunch(p, { deploy, next }) {
   p.say(`  ${plan.commands.join(' && ')}`);
   p.say('');
   if (deploy !== 'node' && !next.DATABASE_URL) {
-    p.say('  Compose will not start until POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and DATABASE_URL are set. There is no default password.');
+    p.say('  Compose will not start until POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and DATABASE_URL are set.');
+    p.say('  Run ./setup.sh again and pick the bundled Postgres to have them generated.');
+    p.say('');
+  }
+  if (deploy === 'node' && /@db:5432\//.test(next.DATABASE_URL || '')) {
+    p.say('  DATABASE_URL points at the Compose db service, which only resolves inside Docker Compose.');
     p.say('');
   }
   if (deploy === 'node') p.say('  (Node only runs without the rollup: polls work, civic votes need docker compose or an L1.)');

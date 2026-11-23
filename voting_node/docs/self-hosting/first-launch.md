@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-On the very first boot the Node prepares itself. Compose uses Postgres and creates the `zkv_*` tables. The first visitor is sent to the **first-run setup screen** (`/setup`) to create the platform super admin, choose the chain id and check the rest of the setup. Run `./setup.sh` before the first boot to fill in `.env` (below). Compose will not start until `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `DATABASE_URL` are set.
+On the very first boot the Node prepares itself. Compose uses Postgres and creates the `zkv_*` tables. The first visitor is sent to the **first-run setup screen** (`/setup`) to create the platform super admin, choose the chain id and check the rest of the setup. Run `./setup.sh` before the first boot to fill in `.env` (below); Compose will not start without the database settings and the ballot token it writes.
 
 ## Before the first boot: `./setup.sh`
 
@@ -12,7 +12,7 @@ From a clone, run `./setup.sh` (repository root or `voting_node/`; same as `npm 
 2. `CHAIN_ID`, or `web` to leave it for the setup screen.
 3. Entropy ceremony: yes or no, and its host (`ENTROPY_CEREMONY_URL`, stored as an `https://` origin).
 4. Setup entropy (`ZK_ENTROPY`): a closed ceremony's `zke1:ceremony:…` output (checksum-validated, typed hidden), local entropy generated now from OS randomness, keyboard timing and jitter (`zke1:local:…`), or skip.
-5. `VOTE_FQDN`, the host port (`ZK_VOTING_PORT`), `TRUST_PROXY`, `DATABASE_URL` (Postgres URL, typed hidden, or JSON files when you are not using Compose) and `BRAND_NAME`. An empty `RECEIPT_PDF_SECRET` is generated. For Compose, also set `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` in `.env` so they match that URL.
+5. `VOTE_FQDN`, the host port (`ZK_VOTING_PORT`), `TRUST_PROXY`, the database (by default the Postgres bundled with Compose, with a generated password; or your own Postgres URL, typed hidden; or JSON files when you are not using Compose) and `BRAND_NAME`. An empty `RECEIPT_PDF_SECRET` is generated.
 6. Rollup: **local chain** (the default: Compose runs Anvil on chain 31337, deploys ZkVotingRollup once and uses Anvil's public test keys, which are refused on any other chain) or **an existing deployment** (`L1_RPC`, `ROLLUP_ADDRESS`, `ROLLUP_JURISDICTION_ID`, the node key `ROLLUP_PRIVATE_KEY` and the operator key `OPERATOR_PRIVATE_KEY`, both hidden; it checks both L1 balances). `L2_BALLOT_TOKEN`, the node's bearer token for the operator, is minted when missing.
 
 Then it asks how you run it and prints the exact next command: `docker compose up -d --build` (plus the health check), the Coolify settings ([Coolify](./coolify.md); secret values are listed by name only), or `npm run dev`.

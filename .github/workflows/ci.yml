@@ -1,8 +1,8 @@
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
 # Default CI for the zk-voting monorepo. No repository secrets are required:
-# Node and L2 tests are in-process, and Solidity tests use Foundry's MockVerifier
-# (no RPC fork, no Etherscan key). The main test job does not run circom.
+# Node tests are in-process, the L2 tests start their own Anvil, and the contract
+# tests use MockBatchVerifier (no RPC fork, no Etherscan key). The main test job does not run circom.
 # A separate job runs an UNTRUSTED toy Groth16 phase-2 transcript
 # (published entropy). That job is not a ceremony.
 #
@@ -10,12 +10,13 @@
 #
 #   npm install
 #   npm run test:node          # apps/node (includes WCAG 2.2 AA axe checks; needs Chrome)
-#   npm run test:packages      # @zk-voting/chain-client (L1 tally-hash; no keys)
-#   npm run test:l2            # skipped in CI if l2/test has no *.test.mjs
-#   npm run test:contracts     # forge test --via-ir
-#   npm run test:auditor       # tools/auditor
-#   npm run test:docs          # mermaid source + committed workflow PNG
-#   npm test                   # node + packages + L2 + contracts + auditor + docs
+#   npm run test:packages      # @zk-voting/chain-client, proof-helpers
+#   npm run test:l2            # L2 operator, including an end-to-end election on Anvil
+#   npm run test:contracts     # forge test (ZkVotingRollup)
+#   npm run test:auditor       # tools/auditor, including verify-rollup helpers
+#   npm run test:docs          # self-hosting docs, compose files, workflow diagram
+#   npm run test:setup         # ./setup.sh
+#   npm test                   # all of the above
 #   ./scripts/migrations-verify.sh
 #                              # no-op SQL check, production build, image boot smoke
 #
@@ -107,15 +108,8 @@ jobs:
       - name: Package tests
         run: npm run test:packages
 
-      - name: L2 tests
-        run: |
-          shopt -s nullglob
-          files=(l2/test/*.test.mjs l2/test/*.test.js)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No L2 tests present under l2/test/; skipping."
-            exit 0
-          fi
-          npm run test:l2
+      - name: L2 tests (operator; end to end on Anvil)
+        run: npm run test:l2
 
       - name: Forge tests
         run: npm run test:contracts
@@ -125,6 +119,9 @@ jobs:
 
       - name: Docs artifacts
         run: npm run test:docs
+
+      - name: Setup script tests
+        run: npm run test:setup
 
       - name: How to run locally
         if: always()
@@ -138,25 +135,38 @@ jobs:
             echo "npm install"
             echo "npm run test:node          # apps/node, including axe (needs Chrome)"
             echo "npm run test:a11y -w apps/node"
-            echo "npm run test:packages      # chain-client L1 helpers (no keys)"
-            echo "npm run test:l2            # skip if l2/test has no *.test.mjs"
-            echo "npm run test:contracts     # forge test --via-ir"
+            echo "npm run test:packages      # chain-client, proof-helpers"
+            echo "npm run test:l2            # operator; end to end on Anvil"
+            echo "npm run test:contracts     # forge test"
             echo "npm run test:auditor       # tools/auditor"
-            echo "npm run test:docs          # mermaid source + committed workflow PNG"
+            echo "npm run test:docs          # self-hosting docs, compose, workflow diagram"
+            echo "npm run test:setup         # ./setup.sh"
             echo "npm test                   # all of the above"
             echo "docker compose up -d --build"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
   compose:
-    name: docker compose
+    name: docker compose (local L1)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: voting_node/package-lock.json
+
+      # The same path a self-hoster takes: every default, which is the local L1
+      # (Anvil + ZkVotingRollup), the bundled Postgres and generated secrets.
+      - name: ./setup.sh -y
+        run: ./setup.sh -y --deploy compose
 
       - name: Validate compose file
         run: docker compose config --quiet
@@ -164,40 +174,36 @@ jobs:
       - name: Build and start
         run: docker compose up -d --build
 
-      - name: Wait for Node /health
+      - name: Wait for Node /health with the rollup connected
         run: |
           set -euo pipefail
-          for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:3000/health | grep -q '"ok":true'; then
-              echo "node healthy"
+          for i in $(seq 1 60); do
+            body="$(curl -fsS http://127.0.0.1:3000/health || true)"
+            if echo "$body" | grep -q '"ok":true' && echo "$body" | grep -q '"rollupConfigured":true'; then
+              echo "node healthy and connected: $body"
               exit 0
             fi
-            sleep 3
+            sleep 5
           done
-          echo "node did not become healthy"
+          echo "node did not become healthy with the rollup connected"
           docker compose ps
           docker compose logs
           exit 1
 
-      - name: Check L2 /health and eth_chainId
+      - name: L2 operator follows ZkVotingRollup
         run: |
           set -euo pipefail
           curl -fsS http://127.0.0.1:8546/health | tee /tmp/l2-health.json
-          grep -q '"ok":true' /tmp/l2-health.json
-          curl -fsS http://127.0.0.1:8546 \
-            -H 'content-type: application/json' \
-            -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
-            | tee /tmp/l2-chain.json
-          grep -q '0x6b23' /tmp/l2-chain.json
+          curl -fsS http://127.0.0.1:8546/v1/status | tee /tmp/l2-status.json
+          grep -q '"rollup":"0x' /tmp/l2-status.json
+          grep -q '"desertMode":false' /tmp/l2-status.json
 
-      - name: Rolling overlap stays healthy while standby
+      - name: Rolling overlap keeps the standby Node healthy
         run: |
           set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build l2-next node-next
+          docker compose -f docker-compose.yml -f docker-compose.rolling.yml up -d --no-build node-next
           for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:8546/health | grep -q '"mode":"active"' \
-              && curl -fsS http://127.0.0.1:3000/health | grep -q '"mode":"active"' \
-              && curl -fsS http://127.0.0.1:8547/health | grep -q '"mode":"standby"' \
+            if curl -fsS http://127.0.0.1:3000/health | grep -q '"mode":"active"' \
               && curl -fsS http://127.0.0.1:3001/health | grep -q '"mode":"standby"'; then
               echo "rolling overlap ok"
               exit 0
@@ -211,7 +217,7 @@ jobs:
 
       - name: Teardown
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.rolling.yml down -v
 
   ceremony-toy:
     name: untrusted toy phase-2 transcript

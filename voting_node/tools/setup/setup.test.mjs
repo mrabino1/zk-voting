@@ -241,3 +241,19 @@ test('Coolify plan names secrets without values', () => {
   assert.ok(!JSON.stringify(plan).includes('s3cret') && !JSON.stringify(plan).includes('https://x/key') && !JSON.stringify(plan).includes(NODE_KEY));
   assert.equal(describeValue('L1_RPC', 'https://h.example/v2/KEY'), 'set (h.example; full URL not shown)');
 });
+
+test('a first run with the defaults generates credentials for the bundled Postgres', async () => {
+  const dir = sandbox();
+  const r = await run(dir, [], ['-y', '--deploy', 'compose']);
+  assert.equal(r.code, 0);
+  const env = parseEnvText(readFileSync(path.join(dir, '.env'), 'utf8'));
+  assert.equal(env.get('POSTGRES_USER'), 'zkvote');
+  assert.equal(env.get('POSTGRES_DB'), 'zkvote');
+  assert.match(env.get('POSTGRES_PASSWORD'), /^[0-9a-f]{48}$/);
+  assert.equal(env.get('DATABASE_URL'), `postgres://zkvote:${env.get('POSTGRES_PASSWORD')}@db:5432/zkvote`);
+  assert.equal(r.out.includes(env.get('POSTGRES_PASSWORD')), false, 'the password is never printed');
+  assert.doesNotMatch(r.out, /Compose will not start/);
+  // Running it again keeps the same credentials.
+  const again = await run(dir, [], ['-y', '--deploy', 'compose']);
+  assert.deepEqual(again.changed, []);
+});
