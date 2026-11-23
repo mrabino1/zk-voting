@@ -11,6 +11,7 @@ import {
   STATE_NAMES,
   electionChainMode,
   presentElection,
+  rollFixed,
 } from './electionState.mjs';
 import { buildAuditorPack } from './auditorPack.mjs';
 import { sealedResultsBody, voteResultsSealed } from './electionType.mjs';
@@ -98,11 +99,11 @@ export function verifyChainStatus(election, deps, now, state, phase) {
     check('createdNotFrozen', !election.rollFrozen, 'Created elections must not be frozen');
     check('createdNotTallied', !election.tally, 'Created elections have no tally');
   } else if (state === 1) {
-    check('rollFrozen', election.rollFrozen === true, 'RollFrozen requires freeze');
+    check('rollFrozen', rollFixed(election), 'RollFrozen requires a fixed roll (node freeze or L1)');
     check('beforeStart', now < start, 'RollFrozen requires now < startTime');
     check('frozenNotTallied', !election.tally, 'RollFrozen elections have no tally');
   } else if (state === 2) {
-    check('openFrozen', election.rollFrozen === true, 'Open requires a frozen roll');
+    check('openFrozen', rollFixed(election), 'Open requires a fixed roll (node freeze or L1)');
     check('inWindow', now >= start && now < cutoff, 'Open requires now in [startTime, cutoffTime)');
     check('openNotTallied', !election.tally, 'Open elections have no tally');
   } else if (state === 3) {

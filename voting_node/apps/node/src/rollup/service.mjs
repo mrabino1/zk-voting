@@ -46,6 +46,7 @@ export class RollupService {
     this.config = config;
     this.now = nowFn;
     this.log = log;
+    this.inFlight = new Set();
   }
 
   get enabled() {
@@ -257,18 +258,40 @@ export class RollupService {
     if (ballot.nullifier == null || !Array.isArray(ballot.ciphertexts) || !ballot.proof) {
       throw new HttpError(400, 'nullifier, ciphertexts and proof are required', { code: 'BAD_BALLOT' });
     }
-    const receipt = await this.client
-      .submitBallot({
-        electionId: r.electionId,
-        nullifier: ballot.nullifier,
-        ciphertexts: ballot.ciphertexts,
-        proof: ballot.proof,
-        eligibility: ballot.eligibility ?? { kind: 'node-vote-pass' },
-      })
-      .catch(asHttp);
-    r.receipts[String(BigInt(ballot.nullifier))] = { commitment: receipt.commitment, at: this.now() };
-    await this.store.persist();
-    return receipt;
+    // One ballot per nullifier: nothing proves yet that the sender owns it, and the
+    // operator would replace the earlier vector. Reserved before the await so two
+    // concurrent submissions cannot both pass.
+    let key;
+    try {
+      key = `${r.electionId}:${BigInt(ballot.nullifier)}`;
+    } catch {
+      throw new HttpError(400, 'nullifier must be an integer', { code: 'BAD_BALLOT' });
+    }
+    const receiptKey = String(BigInt(ballot.nullifier));
+    const used = () => new HttpError(409, 'a ballot under this nullifier was already cast', { code: 'NULLIFIER_USED' });
+    if (this.inFlight.has(key)) throw used();
+    this.inFlight.add(key);
+    try {
+      if (r.receipts[receiptKey]) {
+        // Only a ballot the batch rejected may be cast again under the same nullifier.
+        const earlier = await this.client.receipt(r.electionId, ballot.nullifier).catch(asHttp);
+        if (earlier?.status !== 'rejected') throw used();
+      }
+      const receipt = await this.client
+        .submitBallot({
+          electionId: r.electionId,
+          nullifier: ballot.nullifier,
+          ciphertexts: ballot.ciphertexts,
+          proof: ballot.proof,
+          eligibility: ballot.eligibility ?? { kind: 'node-vote-pass' },
+        })
+        .catch(asHttp);
+      r.receipts[receiptKey] = { commitment: receipt.commitment, at: this.now() };
+      await this.store.persist();
+      return receipt;
+    } finally {
+      this.inFlight.delete(key);
+    }
   }
 
   async receipt(electionId, nullifier) {

@@ -699,8 +699,6 @@ export default {
     clerkTitle: "Thư ký bầu cử",
     clerkHint:
       "Tạo cuộc bầu cử, rồi đóng băng danh sách trước khi mở bỏ phiếu. <code>maxParticipants = 0</code> nghĩa là không giới hạn. Chọn đa số tương đối (mặc định) hoặc xếp hạng (IRV).",
-    chainNote:
-      "Nếu Node này đã đặt <code>CHAIN_RPC</code>, Tạo cuộc bầu cử cũng gọi <code>ElectionFactory.createElection</code> và lưu id uint256 trên chuỗi cạnh UUID. Lỗi nhà máy hiện ở đây và không lưu cục bộ. Không có <code>CHAIN_RPC</code> thì biểu mẫu này chỉ ghi <code>zk-voting.json</code> (demo) và vẫn đúc <code>onChainElectionId</code> demo cho mạch.",
     jurisdiction: "Khu vực tài phán",
     titleField: "Tiêu đề",
     metadataUri: "URI siêu dữ liệu",
@@ -799,7 +797,6 @@ export default {
     proofJson: "JSON bằng chứng",
     postCounts: "Đăng số phiếu",
     computeIrv: "Tính IRV từ phiếu",
-    certifyL1: "Chứng nhận hash trên L1",
     results: "Kết quả",
     viewExplorer: "Xem trong trình khám phá",
     noticesTitle: "Thông báo",

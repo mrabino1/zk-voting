@@ -1387,6 +1387,30 @@ export async function authorizeBallot({
   }
 }
 
+/**
+ * Civic vote on the rollup: unlock the identity secrets under the identity PRF domain and
+ * return only the nullifier Poseidon(nullifierSecret, l1ElectionId), as a decimal string.
+ * The ballot itself is encrypted by ballot-crypto.js and needs no secret. The return value
+ * has no account address, credential id, trapdoor or nullifier secret.
+ */
+export async function rollupNullifier(l1ElectionId) {
+  if (l1ElectionId == null || !/^\d+$/.test(String(l1ElectionId))) {
+    throw new Error("rollupNullifier needs the L1 election id (an integer).");
+  }
+  const { seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
+  try {
+    if (!identity?.nullifierSecret) {
+      throw new Error("IDENTITY_PRF_REQUIRED. Refusing to vote without an identity-domain PRF output.");
+    }
+    const nullifier = BigInt(electionNullifierHex(identity.nullifierSecret, String(l1ElectionId))).toString();
+    return { nullifier, identityCommitment: identity.commitment };
+  } finally {
+    zeroFill(seed);
+    zeroFill(identity?.trapdoor);
+    zeroFill(identity?.nullifierSecret);
+  }
+}
+
 export async function resetWallet() {
   await idbClear();
 }

@@ -7,6 +7,8 @@
 import { civicContestCard } from "./contests.js";
 import { electionTypeLabel, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { t } from "./i18n.js";
+import { renderRollupResults } from "./rollup-results.js";
+import { isRollupVote } from "./rollup-vote.js";
 
 function percent(share) {
   if (share == null || !Number.isFinite(Number(share))) return "—";
@@ -243,6 +245,11 @@ export async function renderResults(main, ctx) {
   }
 
   const election = payload;
+  // A civic vote on the rollup has no node tally: its result is the L1 record.
+  if (isRollupVote(election)) {
+    await renderRollupResults(main, ctx, { ...election, id: election.id || election.electionId || electionId });
+    return;
+  }
   const results = payload.results || {};
   const st = electionStateInfo(election.state);
   const sealed = resultsAreSealed(election) || resultsAreSealed(results);

@@ -699,8 +699,6 @@ export default {
     clerkTitle: "Escrivão eleitoral",
     clerkHint:
       "Crie uma eleição e depois congele a lista antes de a votação abrir. <code>maxParticipants = 0</code> significa ilimitado. Escolha pluralidade (padrão) ou voto ranqueado (IRV).",
-    chainNote:
-      "Se este Node tiver <code>CHAIN_RPC</code> definido, Criar eleição também chama <code>ElectionFactory.createElection</code> e guarda o id uint256 on-chain ao lado do UUID. Falhas da fábrica aparecem aqui e nada é salvo localmente. Sem <code>CHAIN_RPC</code> este formulário só escreve <code>zk-voting.json</code> (demo) e ainda cunha um <code>onChainElectionId</code> de demo para o circuito.",
     jurisdiction: "Jurisdição",
     titleField: "Título",
     metadataUri: "URI de metadados",
@@ -799,7 +797,6 @@ export default {
     proofJson: "JSON da prova",
     postCounts: "Publicar contagens",
     computeIrv: "Calcular IRV a partir das cédulas",
-    certifyL1: "Certificar hash em L1",
     results: "Resultados",
     viewExplorer: "Ver no explorador",
     noticesTitle: "Notificações",

@@ -360,9 +360,9 @@ export function getConfig(overrides = {}) {
     overrides.disclosureMinBlockVotes ?? process.env.DISCLOSURE_MIN_BLOCK_VOTES,
     { isTest },
   );
-  // A later ballot under the same nullifier replaces the earlier one: in the node's
-  // count for a poll, and on the rollup for a civic vote (ROLLUP.md: the operator
-  // subtracts the old vector). Off by default.
+  // Polls: a later ballot under the same nullifier replaces the earlier one in the
+  // node's count. Off by default. Civic votes on the rollup refuse a second ballot
+  // until the eligibility proof binds a nullifier to its voter (routes/elections.mjs).
   const allowRevote = envFlag(
     Object.prototype.hasOwnProperty.call(overrides, 'allowRevote')
       ? overrides.allowRevote

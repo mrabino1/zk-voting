@@ -94,6 +94,7 @@
         <a href="#person">Person identity</a>
         <a href="#disqualify">Disqualification</a>
         <a href="#tally">Tally</a>
+        <a href="#rollup">Civic vote on L1</a>
         <a href="#notices">Notifications</a>
       </nav>
 
@@ -104,11 +105,9 @@
         </header>
         <p class="field-hint">Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited. Choose plurality (default) or ranked choice (IRV).</p>
         <p class="field-hint" id="chain-election-note">
-          If this Node has <code>CHAIN_RPC</code> set, Create election also calls
-          <code>ElectionFactory.createElection</code> and stores the on-chain uint256 id next to the UUID.
-          Factory failures are shown here and nothing is saved locally. Without
-          <code>CHAIN_RPC</code> this form writes <code>zk-voting.json</code> only (demo) and still mints a
-          demo <code>onChainElectionId</code> for the circuit.
+          Polls run on this Node. A civic vote is created here as a draft and then published to
+          ZkVotingRollup on L1 from <a href="#rollup">Civic vote on L1</a>; its roll is held on L1, so it
+          does not need the freeze below.
         </p>
         <form id="form-election" class="form-grid">
           <div class="field">
@@ -549,7 +548,7 @@
           <h2 id="tally-heading">Tally operator</h2>
           <span class="pill" id="role-tally">tally_operator</span>
         </header>
-        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, guardians enroll, publish Feldman deals, and after cutoff submit partial decryptions. t of n must verify before the Node opens envelopes. Invented partitions are rejected. Homomorphic vs mixnet aggregation is not decided. NON-PRODUCTION. If <code>L1_RPC</code>, <code>L1_TALLY_MIRROR_ADDRESS</code>, and <code>L1_PUBLISHER_PRIVATE_KEY</code> are set, the Node also copies <code>keccak256(abi.encodePacked(counts))</code> to <code>L1TallyMirror</code>. Unset L1 env is a no-op.</p>
+        <p class="field-hint">Post per-question plurality counts after cutoff. Each question is tallied on its own options — do not sum every contest into one vector that must equal accepted ballots. Ranked-choice questions are computed with IRV from accepted ranking envelopes (leave the plurality vector blank on an all-ranked ballot). On <code>opens_ballots</code> elections, guardians enroll, publish Feldman deals, and after cutoff submit partial decryptions. t of n must verify before the Node opens envelopes. Invented partitions are rejected. Homomorphic vs mixnet aggregation is not decided. NON-PRODUCTION. This panel tallies polls on this Node. A civic vote on the rollup is never tallied here: see <a href="#rollup">Civic vote on L1</a>.</p>
         <div id="guardian-status" class="field-hint">Choose an election to see the guardian ceremony.</div>
         <form id="form-guardian-enroll" class="form-grid">
           <div class="grid-2">
@@ -609,12 +608,69 @@
           <div class="actions">
             <button class="btn" type="submit">Post counts</button>
             <button class="btn btn-secondary" type="button" id="btn-irv">Compute IRV from ballots</button>
-            <button class="btn btn-secondary" type="button" id="btn-certify-l1">Certify hash on L1</button>
             <a class="btn btn-secondary" id="link-results" href="/elections">Results</a>
             <a class="btn btn-secondary" id="link-explorer" href="/explorer">View in explorer</a>
           </div>
           <div class="flash" id="flash-tally" role="status"></div>
         </form>
+      </section>
+
+      <section class="panel" id="rollup" aria-labelledby="rollup-heading">
+        <header>
+          <h2 id="rollup-heading">Civic vote on L1</h2>
+          <span class="pill">clerk · tally_operator</span>
+        </header>
+        <p class="field-hint">
+          A civic vote runs on ZkVotingRollup, the one L1 contract. Steps: prepare (threshold and
+          anonymity floor) → enroll guardians by their identity key → publish to L1 → guardians commit
+          (<code>npm run guardian:rollup -- commit</code>, then <code>receive</code>) → finalize the key →
+          the roll syncs to L1 until the start → voting → close after the cutoff → guardians post
+          decryption shares (<code>npm run guardian:rollup -- decrypt</code>) → finalize. Only the final
+          sum is ever decrypted, and L1 checks the totals. The node runs close and finalize on its own
+          as well. Guardian secrets never reach this page or the node.
+        </p>
+        <div class="field">
+          <label class="field-label" for="ru-election">Election</label>
+          <select id="ru-election"></select>
+        </div>
+        <div id="ru-status" class="rollup-status" aria-live="polite"><p class="field-hint">Choose a civic vote.</p></div>
+        <form id="form-ru-prepare" class="form-grid">
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="ru-threshold">Guardians needed to decrypt (k)</label>
+              <input id="ru-threshold" type="number" min="1" max="16" placeholder="majority" />
+              <span class="field-hint">Empty = a majority of the enrolled guardians.</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="ru-min-ballots">Anonymity floor (ballots)</label>
+              <input id="ru-min-ballots" type="number" min="1" value="5" />
+              <span class="field-hint">Fewer ballots than this and the result is Withheld: no totals.</span>
+            </div>
+          </div>
+          <div class="actions"><button class="btn btn-secondary" type="submit">Save settings</button></div>
+        </form>
+        <form id="form-ru-guardian" class="form-grid">
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="ru-g-label">Guardian</label>
+              <input id="ru-g-label" type="text" placeholder="League of Voters" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="ru-g-key">Identity key</label>
+              <input id="ru-g-key" type="text" spellcheck="false" placeholder='["x", "y"] from guardian:rollup init' />
+            </div>
+          </div>
+          <div class="actions"><button class="btn btn-secondary" type="submit">Enroll guardian</button></div>
+        </form>
+        <div class="actions" id="ru-actions">
+          <button class="btn" type="button" data-ru-action="publish">Publish to L1</button>
+          <button class="btn btn-secondary" type="button" data-ru-action="finalize-key">Finalize key</button>
+          <button class="btn btn-secondary" type="button" data-ru-action="roll/sync">Sync roll</button>
+          <button class="btn btn-secondary" type="button" data-ru-action="close">Close</button>
+          <button class="btn btn-secondary" type="button" data-ru-action="finalize">Finalize result</button>
+          <button class="btn btn-secondary" type="button" id="ru-refresh">Refresh</button>
+        </div>
+        <div class="flash" id="flash-rollup" role="status"></div>
       </section>
 
       <section class="panel" id="notices" aria-labelledby="notices-heading">

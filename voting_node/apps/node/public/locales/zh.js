@@ -700,8 +700,6 @@ export default {
     clerkTitle: "选举事务官",
     clerkHint:
       "创建选举，然后在投票开始前冻结名册。<code>maxParticipants = 0</code> 表示不限人数。选择相对多数（默认）或排序选择（IRV）。",
-    chainNote:
-      "如果此 Node 设置了 <code>CHAIN_RPC</code>，创建选举还会调用 <code>ElectionFactory.createElection</code>，并将链上 uint256 id 与 UUID 一起存储。工厂失败会显示在此，且不会在本地保存。没有 <code>CHAIN_RPC</code> 时，此表单只写入 <code>zk-voting.json</code>（演示），仍会为电路铸造演示 <code>onChainElectionId</code>。",
     jurisdiction: "管辖区",
     titleField: "标题",
     metadataUri: "元数据 URI",
@@ -800,7 +798,6 @@ export default {
     proofJson: "证明 JSON",
     postCounts: "公布计数",
     computeIrv: "从选票计算 IRV",
-    certifyL1: "在 L1 上核证哈希",
     results: "结果",
     viewExplorer: "在浏览器中查看",
     noticesTitle: "通知",

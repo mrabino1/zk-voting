@@ -699,8 +699,6 @@ export default {
     clerkTitle: "चुनाव क्लर्क",
     clerkHint:
       "चुनाव बनाएँ, फिर मतदान खुलने से पहले सूची जमा करें। <code>maxParticipants = 0</code> का अर्थ असीमित। बहुलता (डिफ़ॉल्ट) या क्रमबद्ध विकल्प (IRV) चुनें।",
-    chainNote:
-      "यदि इस Node पर <code>CHAIN_RPC</code> सेट है, चुनाव बनाएँ <code>ElectionFactory.createElection</code> भी कॉल करता है और UUID के साथ श्रृंखला uint256 id संग्रहीत करता है। फ़ैक्टरी विफलताएँ यहाँ दिखाई जाती हैं और कुछ स्थानीय रूप से नहीं सहेजा जाता। बिना <code>CHAIN_RPC</code> यह फ़ॉर्म केवल <code>zk-voting.json</code> लिखता है (डेमो) और सर्किट के लिए अभी भी डेमो <code>onChainElectionId</code> बनाता है।",
     jurisdiction: "क्षेत्र",
     titleField: "शीर्षक",
     metadataUri: "Metadata URI",
@@ -799,7 +797,6 @@ export default {
     proofJson: "प्रमाण JSON",
     postCounts: "संख्या पोस्ट करें",
     computeIrv: "मतपत्रों से IRV गणना करें",
-    certifyL1: "L1 पर हैश प्रमाणित करें",
     results: "परिणाम",
     viewExplorer: "एक्सप्लोरर में देखें",
     noticesTitle: "सूचनाएँ",

@@ -16,11 +16,19 @@ import {
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
+/**
+ * The roll is fixed: frozen on the node, or, for a civic vote published to the rollup,
+ * held on L1 (which takes new voters only until startTime). The node freeze is not used then.
+ */
+export function rollFixed(election) {
+  return Boolean(election?.rollFrozen) || Boolean(election?.rollup?.electionId);
+}
+
 export function electionState(election, now = Math.floor(Date.now() / 1000)) {
   if (election.tally) return 4;
   if (now >= election.cutoffTime) return 3;
-  if (now >= election.startTime && election.rollFrozen) return 2;
-  if (election.rollFrozen) return 1;
+  if (now >= election.startTime && rollFixed(election)) return 2;
+  if (rollFixed(election)) return 1;
   return 0;
 }
 

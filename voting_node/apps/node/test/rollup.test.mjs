@@ -148,6 +148,33 @@ describe('rollup service rules (fake L1/L2)', () => {
     for (const [c1] of ballot.ciphertexts) assert.ok(!stored.includes(c1[0].toString()), 'no ciphertext stored');
     assert.deepEqual(Object.keys(e.rollup.receipts), ['123']);
   });
+
+  test('a second ballot under a nullifier is refused, also when both arrive at once', async () => {
+    const store = new MemStore();
+    const client = fakeClient();
+    let release;
+    const gate = new Promise((r) => (release = r));
+    const submit = client.submitBallot;
+    client.submitBallot = async (b) => {
+      await gate;
+      return submit(b);
+    };
+    const svc = new RollupService({ store, client, config: {} });
+    store.add(vote({ rollup: { electionId: 7, guardians: [], synced: { commitments: [], disqualified: [] }, receipts: {}, mailbox: [] } }));
+    const ctx = bc.contextOf({ chainId: 31337, rollup: client.address });
+    const ballot = () => bc.toJSONSafe({ nullifier: 55n, ...bc.encryptBallot({ ctx, electionId: 7, jointKey: bc.mulBase(5n), optionCount: 3, choice: 0 }) });
+    const first = svc.castBallot('e1', ballot());
+    await assert.rejects(svc.castBallot('e1', ballot()), (err) => err.extra?.code === 'NULLIFIER_USED' || err.code === 'NULLIFIER_USED');
+    release();
+    await first;
+    client.receipt = async () => ({ status: 'pending' });
+    await assert.rejects(svc.castBallot('e1', ballot()), /already cast/);
+    assert.equal(client.calls.filter((c) => c[0] === 'submitBallot').length, 1);
+    // A ballot the batch rejected may be cast again.
+    client.receipt = async () => ({ status: 'rejected', reason: 'not on the roll' });
+    await svc.castBallot('e1', ballot());
+    assert.equal(client.calls.filter((c) => c[0] === 'submitBallot').length, 2);
+  });
 });
 
 // ------------------------------------------------------------------ integration

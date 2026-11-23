@@ -699,8 +699,6 @@ export default {
     clerkTitle: "선거 서기",
     clerkHint:
       "선거를 만든 뒤 투표가 열리기 전에 명부를 동결하세요. <code>maxParticipants = 0</code>은 무제한입니다. 상대다수(기본) 또는 순위 선택(IRV)을 고르세요.",
-    chainNote:
-      "이 Node에 <code>CHAIN_RPC</code>가 있으면 선거 만들기가 <code>ElectionFactory.createElection</code>도 호출하고 온체인 uint256 id를 UUID 옆에 저장합니다. 팩토리 실패는 여기에 표시되며 로컬에 저장되지 않습니다. <code>CHAIN_RPC</code>가 없으면 이 양식은 <code>zk-voting.json</code>만 쓰고(데모) 회로용 데모 <code>onChainElectionId</code>를 여전히 만듭니다.",
     jurisdiction: "관할",
     titleField: "제목",
     metadataUri: "메타데이터 URI",
@@ -799,7 +797,6 @@ export default {
     proofJson: "증명 JSON",
     postCounts: "수 게시",
     computeIrv: "투표용지에서 IRV 계산",
-    certifyL1: "L1에서 해시 인증",
     results: "결과",
     viewExplorer: "탐색기에서 보기",
     noticesTitle: "알림",

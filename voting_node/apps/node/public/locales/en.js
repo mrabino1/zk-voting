@@ -701,8 +701,6 @@ export default {
     clerkTitle: "Election clerk",
     clerkHint:
       "Create an election, then freeze the roll before polls open. <code>maxParticipants = 0</code> means unlimited. Choose plurality (default) or ranked choice (IRV).",
-    chainNote:
-      "If this Node has <code>CHAIN_RPC</code> set, Create election also calls <code>ElectionFactory.createElection</code> and stores the on-chain uint256 id next to the UUID. Factory failures are shown here and nothing is saved locally. Without <code>CHAIN_RPC</code> this form writes <code>zk-voting.json</code> only (demo) and still mints a demo <code>onChainElectionId</code> for the circuit.",
     jurisdiction: "Jurisdiction",
     titleField: "Title",
     metadataUri: "Metadata URI",
@@ -804,7 +802,6 @@ export default {
     proofJson: "Proof JSON",
     postCounts: "Post counts",
     computeIrv: "Compute IRV from ballots",
-    certifyL1: "Certify hash on L1",
     results: "Results",
     viewExplorer: "View in explorer",
     noticesTitle: "Notifications",

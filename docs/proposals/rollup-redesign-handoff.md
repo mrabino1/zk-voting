@@ -77,7 +77,45 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
      Anvil (deploys, then skips on re-run); `rollup/main.mjs` and `server.mjs` booted with the
      compose environment against that Anvil; `scripts/image-import-smoke.mjs` passes.
 
+6. **Browser** (phase 3):
+   - `public/rollup-vote.js` + the rollup branch in `vote.js`: ballot context → the wallet's
+     `rollupNullifier(l1ElectionId)` (only the nullifier leaves the wallet) → `encryptBallot` in the
+     browser → `POST /vote` with the vote pass and no cookies → a rollup receipt with "Check status"
+     (pending → committed → settled, or rejected). A blank ballot is refused, never counted for
+     option 0.
+   - `public/rollup-results.js`: the results page of a rollup vote reads `/rollup` (L1): status,
+     guardian progress, certified totals, Withheld below the floor, Halted. Turnout only once closed.
+   - Back office: a "Civic vote on L1" panel (settings, enroll guardian by identity key, publish,
+     finalize key, sync roll, close, finalize). The dead "Certify hash on L1" button is gone.
+   - Outcomes, admin and copy (cms, faq, public pages) name the rollup, not the old factory.
+     `office.chainNote` / `office.certifyL1` were removed from every locale.
+   - Server rules found while wiring it:
+     - `POST /vote-pass` for a rollup vote needs a signed-in voter whose linked commitment is on the roll,
+       one pass each. Before, anyone could mint passes, and the operator accepts any ballot with a pass.
+     - A rollup ballot needs a pass (no signed-in PIN shortcut).
+     - One ballot per nullifier (`NULLIFIER_USED`), checked in `castBallot` and reserved against races.
+       Nothing yet proves the sender owns a nullifier and nullifiers are public in pubdata, so a
+       "revote" could overwrite another voter's ballot. Civic revoting is therefore off until the
+       eligibility proof exists. A ballot the batch rejected may be cast again.
+     - On a node connected to the rollup, an unpublished civic vote takes no pass and no ballot
+       (`VOTE_NOT_ON_L1`).
+     - A vote published to L1 counts as roll-fixed (`rollFixed`); the node freeze is not needed.
+     - Fixed: `renderReceipt` threw on a sealed vote (`formatTime` was not passed in).
+   - **Not verified in a browser** (no Chrome here). The modules load in Node, the encryption is
+     checked against `verifyBallot`, and the HTTP gate is tested with a fake L1/L2 client.
+
+## Decision needed (ask the user)
+
+- Vote-pass issuance is remembered in memory only (`votePass.claimIssue`). After a node restart a
+  voter on the roll can get a second pass and cast a second ballot under another nullifier.
+  Persisting "voter X got a pass for election E" closes that, and does not link the pass to the
+  ballot (it is blind), but it records who took part, like a paper poll book. The real fix is the
+  eligibility proof in the batch circuit.
+
 ## Follow-ups found during the node cleanup
+
+- The `office` section of `public/locales/*.js` is mostly unused (the back office is static English
+  HTML). Prune it with the UI/UX cleanup.
 
 - The L2 operator has no writer lease, so it cannot run in an overlap like the node. Update it by
   recreating the container (the node answers 503 meanwhile, and the voter retries).
@@ -101,16 +139,8 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
 
 1. ~~Node cleanup~~ (done).
 2. ~~Docker Compose, setup and deploy tooling~~ (done, see item 5 above).
-3. **Next:** Browser:
-   - `public/vote.js` rollup branch: `GET /rollup/ballot-context`, `encryptBallot`, nullifier
-     `Poseidon(nullifierSecret, l1ElectionId)` via `passkey-wallet.js`, `POST /vote` with a vote
-     pass, then poll the receipt.
-   - Results page reads `/rollup` (status, certified totals, Withheld).
-   - Back office gets a Rollup panel: enroll guardians, publish, finalize key, close, finalize.
-   - Still showing old chain fields: `admin.js` (addresses table), `back-office.js`
-     (`createTxHash` / `onChainElectionAddress` after create), `outcomes.js` (factory, tx, election
-     address), and other ElectionFactory/BallotInbox copy in `public/`.
-4. UI/UX cleanup that was requested: CSS tokens and consolidation of `styles.css` (3.9k lines),
+3. ~~Browser~~ (done, see item 6 above).
+4. **Next:** UI/UX cleanup that was requested: CSS tokens and consolidation of `styles.css` (3.9k lines),
    the voter flow, the admin/back office, and the contract-facing pages (explorer shows rollup
    batches from L2 `/v1/batches`).
 5. Docs: README, `voting_node/docs/*` (ARCHITECTURE, L2, OPERATOR, TALLY_GUARDIANS), root README.

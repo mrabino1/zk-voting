@@ -701,8 +701,6 @@ export default {
     clerkTitle: "Funcionario electoral",
     clerkHint:
       "Cree una elección y luego congele el padrón antes de abrir las urnas. <code>maxParticipants = 0</code> significa ilimitado. Elija pluralidad (predeterminado) o voto preferencial (IRV).",
-    chainNote:
-      "Si este Node tiene <code>CHAIN_RPC</code>, Crear elección también llama a <code>ElectionFactory.createElection</code> y guarda el id uint256 en cadena junto al UUID. Los fallos de la fábrica se muestran aquí y no se guarda nada en local. Sin <code>CHAIN_RPC</code> este formulario escribe solo <code>zk-voting.json</code> (demostración) y aún acuña un <code>onChainElectionId</code> de demostración para el circuito.",
     jurisdiction: "Jurisdicción",
     titleField: "Título",
     metadataUri: "URI de metadatos",
@@ -803,7 +801,6 @@ export default {
     proofJson: "JSON de la prueba",
     postCounts: "Publicar conteos",
     computeIrv: "Calcular IRV a partir de las boletas",
-    certifyL1: "Certificar hash en L1",
     results: "Resultados",
     viewExplorer: "Ver en el explorador",
     noticesTitle: "Notificaciones",

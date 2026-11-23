@@ -62,12 +62,12 @@ function verifyPill(ok, h) {
 }
 
 function chainPill(mode, h) {
-  const onchain = mode === "onchain";
+  const rollup = mode === "rollup";
   return h(
     "span",
     {
-      class: `status-pill ${onchain ? "status-tallied" : "status-created"}`,
-      text: onchain ? "On chain" : "Demo chain",
+      class: `status-pill ${rollup ? "status-tallied" : "status-created"}`,
+      text: rollup ? "Civic vote on L1" : "On this Node",
     }
   );
 }
@@ -128,7 +128,7 @@ function phaseColumn(phase, rows, ctx) {
 export async function renderOutcomesIndex(main, ctx) {
   const { h, api, fill, setTitle } = ctx;
   setTitle("Election outcomes");
-  let payload = { phases: { before: [], during: [], after: [] }, counts: { total: 0 }, chain: {} };
+  let payload = { phases: { before: [], during: [], after: [] }, counts: { total: 0 }, rollup: {} };
   let error = "";
   try {
     payload = await api("/api/outcomes");
@@ -145,14 +145,14 @@ export async function renderOutcomesIndex(main, ctx) {
       h("h1", { text: "Election outcomes" }),
       h("p", {
         class: "lede",
-        text: "Every contest on this Node, grouped by chain status: before voting, during voting, and after voting. Each card runs the public auditor pack plus freeze-root and L1 checks. This is not the receipt portal and it is not unofficial horse-race totals.",
+        text: "Every contest on this Node, grouped by status: before voting, during voting, and after voting. Each card runs the public auditor pack and the freeze-root checks. This is not the receipt portal and it is not unofficial horse-race totals.",
       }),
       h(
         "p",
         { class: "field-hint" },
-        `Chain ${payload.chain?.configured ? "RPC configured" : "demo (JSON store)"}${
-          payload.chain?.l1Configured ? " · L1 certification on" : " · L1 unset"
-        }. ${payload.counts?.total || 0} election${payload.counts?.total === 1 ? "" : "s"}.`
+        `${payload.rollup?.configured ? "Civic votes settle on L1 (ZkVotingRollup)" : "Rollup not connected: civic votes cannot be published yet"}. ${
+          payload.counts?.total || 0
+        } election${payload.counts?.total === 1 ? "" : "s"}.`
       )
     ),
     error ? h("div", { class: "notice notice-error", role: "alert" }, h("p", { text: error })) : null,
@@ -380,43 +380,23 @@ export async function renderOutcomesDetail(main, ctx) {
     h(
       "section",
       { "aria-labelledby": "chain-heading" },
-      h("h2", { id: "chain-heading", text: "Chain status" }),
+      h("h2", { id: "chain-heading", text: "Settlement" }),
       h(
         "ul",
         { class: "meta-list" },
-        h("li", {}, h("span", { class: "lbl", text: "Mode" }), h("span", { text: chain.mode || "—" })),
-        h("li", {}, h("span", { class: "lbl", text: "Chain id" }), h("span", { text: String(chain.chainId ?? "—") })),
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "Factory" }),
-          h("span", { class: "hex", title: chain.factoryAddress || "", text: hexShort(chain.factoryAddress) })
-        ),
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "Create tx" }),
-          h("span", { class: "hex", title: chain.createTxHash || "", text: hexShort(chain.createTxHash) })
-        ),
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "Election contract" }),
-          h("span", { class: "hex", title: chain.onChainElectionAddress || "", text: hexShort(chain.onChainElectionAddress) })
-        ),
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "On-chain id" }),
-          h("span", { text: chain.onChainElectionId != null ? String(chain.onChainElectionId) : "—" })
-        ),
-        h("li", {}, h("span", { class: "lbl", text: "L1 status" }), h("span", { text: chain.l1Status || "n/a" })),
-        h(
-          "li",
-          {},
-          h("span", { class: "lbl", text: "L1 hash" }),
-          h("span", { class: "hex", title: chain.l1ResultHash || "", text: hexShort(chain.l1ResultHash) })
-        )
+        h("li", {}, h("span", { class: "lbl", text: "Runs on" }), h("span", { text: chain.mode === "rollup" ? "ZkVotingRollup on L1" : "this Node" })),
+        chain.rollup
+          ? h("li", {}, h("span", { class: "lbl", text: "L1 election" }), h("span", { text: String(chain.rollup.electionId) }))
+          : null,
+        chain.rollup
+          ? h(
+              "li",
+              {},
+              h("span", { class: "lbl", text: "Rollup contract" }),
+              h("span", { class: "hex", title: chain.rollup.address || "", text: hexShort(chain.rollup.address) })
+            )
+          : null,
+        chain.rollup ? h("li", {}, h("span", { class: "lbl", text: "L1 chain id" }), h("span", { text: String(chain.rollup.chainId ?? "—") })) : null
       )
     ),
     h(

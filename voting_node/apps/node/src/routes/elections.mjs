@@ -28,6 +28,7 @@ import { tallyAllowedAt } from '../supplementaryBatch.mjs';
 import { uuidParam } from '../recordIds.mjs';
 import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
 import {
+  ELECTION_TYPE_VOTE,
   electionTypeOf,
   normalizeElectionType,
   sealedResultsBody,
@@ -115,6 +116,15 @@ export function electionsRouter(deps) {
   const router = Router();
   router.param('id', uuidParam('id'));
   router.param('requestId', uuidParam('requestId'));
+
+  // On a node connected to the rollup, a civic vote takes ballots only once it is on L1.
+  // It is never counted on the node instead. (A node without the rollup keeps the demo path.)
+  function assertCivicVoteOnL1(election) {
+    if (!rollup?.enabled || electionTypeOf(election) !== ELECTION_TYPE_VOTE) return;
+    if (!election.rollup?.electionId) {
+      throw new HttpError(409, 'this civic vote is not published to L1 yet', { code: 'VOTE_NOT_ON_L1' });
+    }
+  }
 
   router.get(
     '/',
@@ -715,6 +725,7 @@ export function electionsRouter(deps) {
       if (election.votingPaused) {
         throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
       }
+      assertCivicVoteOnL1(election);
       const body = req.body || {};
       if (body.blinded == null || body.blinded === '') {
         throw new HttpError(400, 'blinded vote pass required', { code: 'VOTE_PASS_BAD' });
@@ -730,6 +741,18 @@ export function electionsRouter(deps) {
         }
         await assertExternalClearance(store, election.id, rawCommitment, { now: config.nowFn() });
         commitmentSubject = `c:${String(rawCommitment)}`;
+      }
+      if (isRollupElection(election)) {
+        // A civic vote's ballot reaches the L2 operator with no eligibility proof yet
+        // (the batch circuit is not built), so the pass is the gate: only a signed-in
+        // voter whose registered commitment is on the roll, and one pass each. The pass
+        // stays blind, so the ballot still cannot be tied to this request.
+        if (!req.user) throw new HttpError(401, 'sign in to get a vote pass', { code: 'SIGN_IN_REQUIRED' });
+        const link = store.findLink(election.id, req.user.id);
+        if (!link || !store.isEligible(election.id, link.identityCommitment)) {
+          throw new HttpError(403, 'you are not on the roll for this vote', { code: 'NOT_ON_ROLL' });
+        }
+        commitmentSubject = commitmentSubject || `u:${req.user.id}`;
       }
       if (req.user && pin) {
         pin.assertVoteAllowed(req.user, body.pinToken);
@@ -757,6 +780,7 @@ export function electionsRouter(deps) {
       if (electionForGate?.votingPaused) {
         throw new HttpError(409, 'election paused', { code: 'ELECTION_PAUSED' });
       }
+      if (electionForGate) assertCivicVoteOnL1(electionForGate);
       const rawBody = req.body || {};
       let spentPassHash = null;
       if (rawBody.votePass && electionForGate) {
@@ -764,7 +788,7 @@ export function electionsRouter(deps) {
         // A spent pass may replace a stored ballot only while re-vote is on.
         // The pass stays an unlinked hash: any already-spent pass qualifies,
         // and nothing records which pass belongs to this nullifier.
-        const storedBallot = config.allowRevote === true
+        const storedBallot = config.allowRevote === true && !isRollupElection(electionForGate)
           ? store.findVote(electionForGate.id, bodyNullifier(rawBody))
           : null;
         if (store.votePassSpent(electionForGate.id, spentPassHash) && !storedBallot) {
@@ -783,12 +807,15 @@ export function electionsRouter(deps) {
       if (isRollupElection(electionForGate)) {
         // Civic vote on the rollup: the encrypted vector goes to the L2 operator.
         // This node keeps the receipt only, never the ciphertexts.
-        if (!spentPassHash && !(req.user && pin)) {
+        // The pass is the only eligibility gate until the batch circuit proves roll
+        // membership, so it is required here (no signed-in PIN shortcut).
+        if (!spentPassHash) {
           throw new HttpError(403, 'a vote pass is required', { code: 'VOTE_PASS_REQUIRED' });
         }
-        const nullifierKey = String(rawBody.nullifier ?? '');
-        const isRevote = Boolean(electionForGate.rollup.receipts?.[nullifierKey]);
-        if (spentPassHash && store.votePassSpent(electionForGate.id, spentPassHash) && !(isRevote && config.allowRevote === true)) {
+        // A second ballot under a nullifier is refused in castBallot (NULLIFIER_USED):
+        // nullifiers are public in batch pubdata and nothing yet proves the sender owns
+        // one, so a replacement could overwrite another voter's ballot.
+        if (store.votePassSpent(electionForGate.id, spentPassHash)) {
           throw new HttpError(409, 'vote pass already used', { code: 'VOTE_PASS_SPENT' });
         }
         const receipt = await rollup.castBallot(electionForGate.id, rawBody);

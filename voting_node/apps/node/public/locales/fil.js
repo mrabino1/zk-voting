@@ -699,8 +699,6 @@ export default {
     clerkTitle: "Election clerk",
     clerkHint:
       "Gumawa ng halalan, pagkatapos ay i-freeze ang talaan bago magbukas ang botohan. Ang <code>maxParticipants = 0</code> ay walang limitasyon. Pumili ng plurality (default) o ranked choice (IRV).",
-    chainNote:
-      "Kung naka-set ang <code>CHAIN_RPC</code> sa Node na ito, tumatawag din ang Create election sa <code>ElectionFactory.createElection</code> at iniimbak ang on-chain uint256 id sa tabi ng UUID. Ipinapakita rito ang mga pagkabigo ng factory at walang nase-save sa lokal. Kung walang <code>CHAIN_RPC</code>, nagsusulat lang ang form na ito sa <code>zk-voting.json</code> (demo) at gumagawa pa rin ng demo <code>onChainElectionId</code> para sa circuit.",
     jurisdiction: "Hurisdiksyon",
     titleField: "Pamagat",
     metadataUri: "Metadata URI",
@@ -799,7 +797,6 @@ export default {
     proofJson: "Proof JSON",
     postCounts: "I-post ang counts",
     computeIrv: "Kuwentahin ang IRV mula sa mga balota",
-    certifyL1: "Sertipikahin ang hash sa L1",
     results: "Mga resulta",
     viewExplorer: "Tingnan sa explorer",
     noticesTitle: "Mga abiso",

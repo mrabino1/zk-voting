@@ -216,7 +216,7 @@ export async function renderOfficePages(main, ctx, bundle) {
       h(
         "p",
         { class: "lede" },
-        "Fork this Node for your jurisdiction. Keep the one shared ElectionFactory. The host edits About, FAQ, and home copy. Clerks publish pages tagged to their own jurisdiction — publish when ready."
+        "Fork this Node for your jurisdiction. Civic votes settle on the one shared rollup contract. The host edits About, FAQ, and home copy. Clerks publish pages tagged to their own jurisdiction — publish when ready."
       )
     ),
     cmsSubnav(h, "pages"),

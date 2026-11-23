@@ -700,8 +700,6 @@ export default {
     clerkTitle: "كاتب الانتخابات",
     clerkHint:
       "أنشئ انتخابات ثم جمّد القائمة قبل فتح الصناديق. <code>maxParticipants = 0</code> يعني غير محدود. اختر التعددية (الافتراضي) أو الاختيار المرتّب (IRV).",
-    chainNote:
-      "إذا كان لهذا Node <code>CHAIN_RPC</code>، فإن إنشاء الانتخابات يستدعي أيضًا <code>ElectionFactory.createElection</code> ويخزّن معرّف uint256 على السلسلة بجانب UUID. تُعرض إخفاقات المصنع هنا ولا يُحفظ شيء محليًا. بدون <code>CHAIN_RPC</code> يكتب هذا النموذج <code>zk-voting.json</code> فقط (تجربة) وما زال يُصدر <code>onChainElectionId</code> تجريبيًا للدائرة.",
     jurisdiction: "الولاية",
     titleField: "العنوان",
     metadataUri: "URI للبيانات الوصفية",
@@ -800,7 +798,6 @@ export default {
     proofJson: "JSON للبرهان",
     postCounts: "نشر الأعداد",
     computeIrv: "حساب IRV من الأوراق",
-    certifyL1: "اعتماد التجزئة على L1",
     results: "النتائج",
     viewExplorer: "العرض في المستكشف",
     noticesTitle: "الإشعارات",

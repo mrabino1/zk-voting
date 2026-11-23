@@ -322,7 +322,7 @@ export function renderAbout(main, ctx) {
     }),
     h("h2", { text: "Jurisdictions" }),
     h("p", {
-      text: "A jurisdiction is any body that needs a roll, a ballot, and a binding result: government, county, nation, union, board, cooperative. Nested districts are a registry concern. The same machinery is not limited to national general elections. Fork this Node to run your clerk desk; pin the one shared ElectionFactory instead of deploying a new contract.",
+      text: "A jurisdiction is any body that needs a roll, a ballot, and a binding result: government, county, nation, union, board, cooperative. Nested districts are a registry concern. The same machinery is not limited to national general elections. Fork this Node to run your clerk desk; civic votes settle on the one shared rollup contract, so no city deploys its own.",
     }),
     h("h2", { text: "License (AGPL)" }),
     h("p", {
@@ -531,8 +531,8 @@ export function renderOffice(main, ctx, bundle) {
     },
     {
       href: "/office/site",
-      title: "Shared contracts",
-      body: "Fork the UI; pin the one ElectionFactory. Do not deploy a new factory per jurisdiction.",
+      title: "Site",
+      body: "Site title and tagline. Every jurisdiction settles civic votes on the one shared rollup contract.",
       spa: true,
     },
   ];
