@@ -19,7 +19,7 @@ import { copyText, rememberProof } from "./receipt.js";
 import { renderPinPad, STANDARD_PAD } from "./pin-pad.js";
 import { verifyVotePin } from "./identity-methods.js";
 import { obtainVotePass } from "./vote-pass.js";
-import { contestFacts, contestPanel, contestPlace, contestSplit, contestTags } from "./contests.js";
+import { contestFacts, contestPanel, contestPhaseStrip, contestPlace, contestSplit, contestTags } from "./contests.js";
 import { electionTypeLabel, electionTypeNameOf, resultsAreSealed, sealedUntilLabel } from "./election-type-ui.js";
 import { freshChoiceRandomness } from "./aggregate-ballot.js";
 import {
@@ -200,6 +200,7 @@ export async function renderVote(main, ctx) {
         { text: "One person, one vote" },
         source === "sample" ? { text: "Sample ballot" } : null,
       ]),
+      contestPhaseStrip(h, election),
       contestSplit(
         h,
         contestPanel(

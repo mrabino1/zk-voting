@@ -4,6 +4,36 @@
  * The layout does not assume a token, a roll, or a wallet.
  */
 
+import { electionTypeNameOf } from "./election-type-ui.js";
+
+const POLL_PHASES = ["Registration", "Voting", "Counting", "Results"];
+
+/**
+ * The lifecycle as a phase strip: Draft (a civic vote not yet on L1), Registration, Voting,
+ * Counting, Results. Node states: 0 created, 1 roll frozen, 2 open, 3 closed, 4 tallied.
+ */
+export function contestPhases(election) {
+  const civic = electionTypeNameOf(election) === "vote";
+  const onL1 = election?.chainMode === "rollup" && election?.rollupElectionId != null;
+  const state = Number(election?.state);
+  const idx = state >= 4 ? 3 : state === 3 ? 2 : state === 2 ? 1 : 0;
+  if (civic && !onL1) {
+    return [{ label: "Draft", state: "current" }, ...POLL_PHASES.map((label) => ({ label, state: "todo" }))];
+  }
+  const phases = POLL_PHASES.map((label, i) => ({ label, state: i < idx ? "done" : i === idx ? "current" : "todo" }));
+  return civic ? [{ label: "Draft", state: "done" }, ...phases] : phases;
+}
+
+export function contestPhaseStrip(h, election) {
+  return h(
+    "ol",
+    { class: "phase-steps", "aria-label": "Stage" },
+    ...contestPhases(election).map((p) =>
+      h("li", { class: `phase-step is-${p.state}`, ...(p.state === "current" ? { "aria-current": "step" } : {}), text: p.label })
+    )
+  );
+}
+
 export function contestStats(h, stats) {
   return h(
     "div",
@@ -102,6 +132,7 @@ export function contestCard(h, spec) {
       spec.idLabel ? h("span", { text: spec.idLabel }) : null
     ),
     h("h2", {}, h("a", { href: spec.href, "data-nav": "", text: spec.title })),
+    spec.phases || null,
     spec.summary ? h("p", { class: "contest-summary", text: spec.summary }) : null,
     contestTags(h, spec.tags),
     contestFacts(h, spec.facts),
@@ -145,7 +176,7 @@ export function contestPlace(election) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
   if (raw && !uuid.test(raw)) return raw;
   if (id && !uuid.test(id)) return id;
-  return "Civic election";
+  return electionTypeNameOf(election) === "vote" ? "Civic vote" : "Poll";
 }
 
 export function civicContestCard(h, election, { formatTime, state, typeLabel, href, actions, foot, sealedText, roll }) {
@@ -153,6 +184,7 @@ export function civicContestCard(h, election, { formatTime, state, typeLabel, hr
   return contestCard(h, {
     href,
     kicker: contestPlace(election),
+    phases: contestPhaseStrip(h, election),
     idLabel: election.shortCode ? `/v/${election.shortCode}` : shortContestId(election.id),
     title: election.title,
     summary: election.description || "",

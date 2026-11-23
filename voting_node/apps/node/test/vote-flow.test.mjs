@@ -101,8 +101,11 @@ describe('ballot page', () => {
     });
     const text = texts(tree).join('\n');
     assert.match(text, /Civic vote, settled on Ethereum/);
-    const current = find(tree, (n) => n.attrs?.['aria-current'] === 'step');
+    const steps = find(tree, (n) => n.attrs?.class === 'vote-steps')[0];
+    const current = find(steps, (n) => n.attrs?.['aria-current'] === 'step');
     assert.equal(current.length, 1);
+    const phases = find(tree, (n) => n.attrs?.class === 'phase-steps')[0];
+    assert.deepEqual(find(phases, (n) => n.attrs?.['aria-current'] === 'step').map((n) => n.attrs.text), ['Voting']);
     assert.equal(current[0].attrs.text, 'Mark your ballot');
     const checklist = find(tree, (n) => String(n.attrs?.class || '').includes('vote-blockers'));
     assert.equal(checklist.length, 1);
@@ -132,5 +135,22 @@ describe('ballot page', () => {
     });
     const submit = find(tree, (n) => n.tag === 'button' && n.attrs.type === 'submit')[0];
     assert.equal(submit.attrs.disabled, true);
+  });
+});
+
+describe('contest phases', async () => {
+  const { contestPhases } = await import('../public/contests.js');
+  const current = (e) => contestPhases(e).find((p) => p.state === 'current')?.label;
+  test('a civic vote is a draft until it is on L1, then follows the node state', () => {
+    assert.equal(current({ electionType: 1, electionTypeName: 'vote', state: 2 }), 'Draft');
+    const onL1 = { electionTypeName: 'vote', chainMode: 'rollup', rollupElectionId: '4' };
+    assert.equal(current({ ...onL1, state: 0 }), 'Registration');
+    assert.equal(current({ ...onL1, state: 2 }), 'Voting');
+    assert.equal(current({ ...onL1, state: 3 }), 'Counting');
+    assert.equal(current({ ...onL1, state: 4 }), 'Results');
+    assert.deepEqual(contestPhases({ ...onL1, state: 3 }).map((p) => p.state), ['done', 'done', 'done', 'current', 'todo']);
+  });
+  test('a poll has no draft phase', () => {
+    assert.deepEqual(contestPhases({ electionTypeName: 'poll', state: 2 }).map((p) => p.label), ['Registration', 'Voting', 'Counting', 'Results']);
   });
 });

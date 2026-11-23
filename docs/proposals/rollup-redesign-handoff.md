@@ -193,8 +193,14 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
 - Browser check (done): Chrome for Testing in a session scratchpad (see Environment). All a11y and
   landing-language tests pass (63); the ballot page and back office were screenshotted and three
   small defects fixed.
-- **Resume at:** "Other follow-ups" below, and the rest of directive 2 (phase nav, home page
-  cards) with the reference site open in a browser.
+- Voting UI, second pass (directive 2): a lifecycle phase strip (`contestPhaseStrip`,
+  `contestPhases` in `public/contests.js`: Draft → Registration → Voting → Counting → Results; no
+  Draft for polls) on every contest card and in the ballot header. Card kickers say "Civic vote" or
+  "Poll" when there is no jurisdiction name. The home page's limits note, "how a vote works" steps
+  and the FAQ now describe the rollup (no paymaster, sequencer or inbox). Rendered and checked in
+  Chrome; a11y suite passes.
+- **Resume at:** "Other follow-ups" below. For directive 2, compare against grants.ajnafi.com in
+  a browser (its look could not be fetched) and adjust tokens.
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 

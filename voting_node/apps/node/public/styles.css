@@ -4019,3 +4019,31 @@ html[data-client-host="1"] .site-footer {
 .ballot-page .toolbar {
   margin-top: 1.25rem;
 }
+
+/* Lifecycle phase strip on contest cards (contests.js contestPhaseStrip). */
+.phase-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.phase-step {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-bubble);
+  padding: 0.1rem 0.6rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.phase-step.is-done {
+  color: var(--fg);
+}
+
+.phase-step.is-current {
+  border-color: var(--focus);
+  color: var(--fg);
+  font-weight: 700;
+}
