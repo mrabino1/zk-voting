@@ -60,7 +60,6 @@ const SECRET_FLAGS = [
   ['sesEndpoint', 'sesEndpointSet'],
   ['sesConfigurationSet', 'sesConfigurationSetSet'],
   ['credentialProviderSecret', 'credentialProviderSecretSet'],
-  ['explorerIngestSecret', 'explorerIngestSecretSet'],
   ['receiptPdfSecret', 'receiptPdfSecretSet'],
   ['superAdminApiPepper', 'superAdminApiPepperSet'],
   ['superAdminEmail', 'superAdminEmailSet'],

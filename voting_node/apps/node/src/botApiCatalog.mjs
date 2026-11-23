@@ -881,10 +881,9 @@ export const BOT_OPERATIONS = [
     tag: 'Explorer',
     summary: 'Explorer view of one election.',
   }),
-  O('POST', '/api/explorer/ingest', {
+  R('/api/explorer/rollup', {
     tag: 'Explorer',
-    summary:
-      `Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.`,
+    summary: 'Rollup batches from the L2 operator: number, state root, operations, and the L1 commit and execute transactions. No live ballot count.',
   }),
 
   R('/api/polls', {

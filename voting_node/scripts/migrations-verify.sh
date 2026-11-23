@@ -168,7 +168,6 @@ cmd_smoke() {
       -e ALLOW_DEV_LOGIN= \
       -e CREDENTIAL_PROVIDER_SECRET= \
       -e RECEIPT_PDF_SECRET= \
-      -e EXPLORER_INGEST_SECRET= \
       "$IMAGE"
   }
 

@@ -73,6 +73,16 @@ ballot, because the pass is blind, but it would record who took part, like a pap
 real fix is the eligibility proof in the batch circuit. Options: persist it now, or leave the gap
 and document it.
 
+## Phase 4 progress log (newest last; update with every commit)
+
+- Explorer: `GET /api/explorer/rollup` (batches and status from the L2 operator, minus the live
+  `pendingBallots`), with an explorer view at `/explorer#/rollup` and a "Rollup batches" button. Removed
+  `POST /api/explorer/ingest`, `EXPLORER_INGEST_SECRET` (config, compose, `.env.example`, setup,
+  diagnostics, migrations-verify) and the ingest tests in `election-ids.test.mjs`. Left in place:
+  `Explorer.ingest()` and its block-import internals in `src/explorer.mjs`, still used by
+  `explorer-ingest.test.mjs` and `rolling-handover.test.mjs`. Nothing calls it over HTTP now; remove
+  it with those tests later.
+
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
 None of it is started. Suggested order:
@@ -87,10 +97,7 @@ None of it is started. Suggested order:
 3. **Back office** (`public/back-office.html` + `back-office.js`, a static English IIFE page).
    Merge the old `opens_ballots` P-256 guardian forms (node-side polls) and the new "Civic vote on
    L1" panel into one clear flow. Hide the poll-only tally tools for votes.
-4. **Explorer** (`public/explorer.js`, `src/routes/explorer.mjs`). Show rollup batches from the L2
-   `/v1/batches` and `/v1/status` (through the node, e.g. `rollup.client.l2Batches()`). Remove the
-   dead `POST /api/explorer/ingest` and `EXPLORER_INGEST_SECRET` (compose, `.env.example`, setup,
-   diagnostics).
+4. ~~Explorer~~ (done, see the progress log).
 5. **Locales.** The `office` section of `public/locales/*.js` is mostly unused (no `data-i18n`
    points at it). Prune it in every locale together, because `test/i18n.test.mjs` requires the
    same keys in all of them.

@@ -260,7 +260,7 @@ Machine-readable copies:
 - `GET /api/explorer/nullifiers/:value` (key read). Whether a nullifier was accepted. The nullifier does not reveal the choice or the person.
 - `GET /api/explorer/search` (key read). Search blocks, transactions, and elections.
 - `GET /api/explorer/elections/:id` (key read). Explorer view of one election.
-- `POST /api/explorer/ingest` (key officer). Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.
+- `GET /api/explorer/rollup` (key read). Rollup batches from the L2 operator: number, state root, operations, and the L1 commit and execute transactions. No live ballot count.
 ### Polls
 
 - `GET /api/polls` (key read). Token polls when POLLS_ENABLED is on. Polls are signal, not binding elections. Omitted from the Node when the flag is off.

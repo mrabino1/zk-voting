@@ -79,6 +79,8 @@ const fakeClient = {
     return { status: 'pending', commitment: '99' };
   },
   receipt: async () => ({ status: 'pending' }),
+  l2Status: async () => ({ rollup: '0xaa', chainId: 31337, lastBatch: 2, pendingBallots: 9, desertMode: false }),
+  l2Batches: async () => ({ batches: [{ batchNumber: 2, ops: { ballots: 3 }, stateRoot: '1', txs: { commit: '0xc' }, executed: true }] }),
 };
 
 function ballot(nullifier) {
@@ -194,5 +196,14 @@ describe('vote pass gate for a civic vote on the rollup', () => {
     assert.equal(overwrite.status, 409, overwrite.text);
     assert.equal(overwrite.json.code, 'NULLIFIER_USED');
     assert.equal(submitted.length, 1);
+  });
+
+  test('the explorer lists rollup batches without the live pending-ballot count', async () => {
+    const res = await api('GET', '/api/explorer/rollup');
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.configured, true);
+    assert.equal(res.json.batches[0].batchNumber, 2);
+    assert.equal(res.json.status.lastBatch, 2);
+    assert.equal('pendingBallots' in res.json.status, false);
   });
 });

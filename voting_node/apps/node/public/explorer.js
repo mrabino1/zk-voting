@@ -295,6 +295,7 @@
     if (head === "nullifier" && parts[1]) return { kind: "nullifier", id: parts.slice(1).join("/") };
     if (head === "election" && parts[1]) return { kind: "election", id: parts[1] };
     if (head === "search") return { kind: "search", q: parts.slice(1).join("/") };
+    if (head === "rollup") return { kind: "rollup" };
     if (/^\d+$/.test(parts[0]) || /^0x[0-9a-fA-F]+$/.test(parts[0])) {
       if (/^0x[0-9a-fA-F]{1,16}$/.test(parts[0]) && parts[0].length <= 18) {
         return { kind: "block", id: String(qty(parts[0])) };
@@ -837,6 +838,57 @@
     location.hash = "#/nullifier/" + encodeURIComponent(query);
   }
 
+  /** Batches the L2 operator settled on ZkVotingRollup. Ballots appear only as counts per batch. */
+  async function loadRollupBatches() {
+    crumbs([{ label: "Rollup batches" }]);
+    let data;
+    try {
+      data = await request("/api/explorer/rollup?limit=50");
+    } catch (err) {
+      $("view").innerHTML = `<section class="panel"><p class="empty">${esc(errText(err))}</p></section>`;
+      return;
+    }
+    if (!data.configured) {
+      $("view").innerHTML =
+        '<section class="panel"><p class="empty">This Node is not connected to the rollup. Civic votes settle on L1 only once it is.</p></section>';
+      return;
+    }
+    const st = data.status || {};
+    const opsText = (ops) =>
+      Object.entries(ops || {})
+        .filter(([, n]) => Number(n) > 0)
+        .map(([k, n]) => `${esc(k)} ${esc(n)}`)
+        .join(" · ") || "—";
+    const txLink = (hash) => (hash ? `<span class="hash" title="${esc(hash)}">${esc(shortHex(hash, 10, 6))}</span>${copyBtn(hash)}` : "—");
+    const rows = (data.batches || [])
+      .map(
+        (b) => `<tr>
+          <td class="block-num">${esc(b.batchNumber)}</td>
+          <td>${opsText(b.ops)}</td>
+          <td class="hash-cell hash" title="${esc(b.stateRoot || "")}">${esc(shortHex(b.stateRoot, 12, 8))}</td>
+          <td>${txLink(b.txs && b.txs.commit)}</td>
+          <td>${txLink(b.txs && b.txs.execute)}</td>
+          <td>${b.executed ? "settled" : "committed"}</td>
+        </tr>`
+      )
+      .join("");
+    $("view").innerHTML = `<section class="panel">
+      <header><h2>Rollup batches</h2><span class="field-hint">ZkVotingRollup ${esc(shortHex(st.rollup || "", 10, 6))} · chain ${esc(st.chainId ?? "—")} · last batch ${esc(st.lastBatch ?? "—")}${
+        st.desertMode ? " · DESERT MODE" : ""
+      }</span></header>
+      <p class="field-hint">Each batch carries ballots only as nullifiers and hiding commitments. Nothing here shows a choice or a running sum: the guardians decrypt only the final sum after the cutoff.</p>
+      ${data.error ? `<p class="flash err">${esc(data.error)}</p>` : ""}
+      ${
+        rows
+          ? `<div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Batch</th><th>Operations</th><th>State root</th><th>L1 commit</th><th>L1 execute</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`
+          : '<p class="empty">No batches yet.</p>'
+      }
+    </section>`;
+  }
+
   async function render() {
     clearFlash();
     const route = parseRoute();
@@ -849,6 +901,7 @@
     if (route.kind === "nullifier") return loadNullifier(route.id);
     if (route.kind === "election") return loadElection(route.id);
     if (route.kind === "search") return runSearch(route.q);
+    if (route.kind === "rollup") return loadRollupBatches();
   }
 
   $("form-search").addEventListener("submit", (event) => {
