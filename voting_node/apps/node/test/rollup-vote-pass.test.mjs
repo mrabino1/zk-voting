@@ -211,6 +211,21 @@ describe('vote pass gate for a civic vote on the rollup', () => {
     await assert.rejects(() => restarted.votePass.claimIssue(id, `u:${user.id}`), (err) => err.extra?.code === 'VOTE_PASS_ALREADY_ISSUED');
   });
 
+  test('the outcomes monitor runs the L1 audit for a civic vote, and an unreachable L1 is reported, not fatal', async () => {
+    const saved = created.config.rollup;
+    created.config.rollup = { l1Rpc: 'http://127.0.0.1:9', address: '0x00000000000000000000000000000000000000aa', fromBlock: '0' };
+    try {
+      const res = await api('GET', `/api/outcomes/${id}`);
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.verification.l1.ok, null);
+      assert.match(res.json.verification.l1.error, /L1 audit unavailable/);
+      assert.equal(res.json.links.rollup, `/api/elections/${encodeURIComponent(id)}/rollup`);
+      assert.equal('l1' in res.json.links, false);
+    } finally {
+      created.config.rollup = saved;
+    }
+  });
+
   test('the explorer lists rollup batches without the live pending-ballot count', async () => {
     const res = await api('GET', '/api/explorer/rollup');
     assert.equal(res.status, 200, res.text);

@@ -27,6 +27,10 @@ It re-derives what the contract checked (`tools/auditor/rollup.mjs`):
 | `result.sum`, `result.hash` | The certified counts add up to the ballot count, and `keccak256(abi.encode(chainid, rollup, electionId, counts))` matches. |
 | `result.shares` | Every k-subset of the guardians who posted decryption shares (up to 64 subsets) opens the final encrypted sum to the certified counts. |
 
+The Node's public outcomes monitor (`/outcomes/:id`, `GET /api/outcomes/:id` → `verification.l1`) runs
+the same checks against L1 for every civic vote (cached once the vote is finished), so observers
+see them without installing anything. Set `ROLLUP_DEPLOY_BLOCK` on a public chain.
+
 Exit status `0` when every check passes, `2` when one fails. Before the vote closes it reports the
 ballots so far and skips the result checks. Nothing it reads can reveal a choice: it sees the final
 sum and the shares of it, never a ballot.

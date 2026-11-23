@@ -216,7 +216,7 @@ function linksFor(election, { tallied } = {}) {
     artifacts: `/api/elections/${enc}/artifacts`,
     explorer: `/explorer#/election/${enc}`,
     results: tallied ? `/elections/${enc}/results` : null,
-    l1: `/api/elections/${enc}/l1`,
+    rollup: election.rollup?.electionId ? `/api/elections/${enc}/rollup` : null,
     receipt: '/receipt',
     vote: `/vote/${enc}`,
     officialReport: `/api/outcomes/reports/${enc}`,

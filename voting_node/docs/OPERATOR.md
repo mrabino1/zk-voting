@@ -300,7 +300,7 @@ Node route `/explorer`. **Rollup batches** (`/explorer#/rollup`, `GET /api/explo
 
 ### Outcomes monitor
 
-Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. The final tally appears only after it is posted. This is not `/receipt` and not `/elections/:id/results`.
+Public SPA `/outcomes` (alias `/monitor`) plus `GET /api/outcomes` and `GET /api/outcomes/:id`. For a civic vote the detail also runs the L1 audit (`verification.l1`, the same checks as `verify-rollup`); an unreachable L1 is reported, not treated as a failure. Every election is grouped **before / during / after** voting from chain and election state (`Created`/`RollFrozen`, `Open`, `Closed`/`Tallied`). The Node runs the public auditor pack (`tools/auditor` / `GET /api/elections/:id/artifacts`) plus freeze-root and L1 hash checks. During voting the page shows disclosed turnout only — never unofficial option counts. The final tally appears only after it is posted. This is not `/receipt` and not `/elections/:id/results`.
 
 ### Passkeys
 

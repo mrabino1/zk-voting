@@ -48,6 +48,15 @@ function checkEntries(verification) {
   for (const [name, ok] of Object.entries(chain)) {
     rows.push({ group: "Chain status", name, ok: Boolean(ok), result: ok ? "Pass" : "Fail" });
   }
+  // Civic votes: the same checks as `verify-rollup`, read from L1.
+  const l1 = verification?.l1;
+  if (l1?.checks) {
+    for (const [name, ok] of Object.entries(l1.checks)) {
+      rows.push({ group: "L1 audit", name, ok: Boolean(ok), result: ok ? "Pass" : "Fail" });
+    }
+  } else if (l1?.error) {
+    rows.push({ group: "L1 audit", name: "unavailable", ok: true, result: l1.error });
+  }
   return rows;
 }
 

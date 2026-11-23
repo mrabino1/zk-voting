@@ -55,6 +55,8 @@ COPY --chown=node:node plugins ./plugins
 COPY --chown=node:node docs/self-hosting ./docs/self-hosting
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
+COPY --chown=node:node tools/auditor/rollup.mjs ./tools/auditor/rollup.mjs
+COPY --chown=node:node l2/rollup/pubdata.mjs ./l2/rollup/pubdata.mjs
 # Fails the image build when a runtime import is missing from this stage.
 COPY --chown=node:node scripts/image-import-smoke.mjs ./scripts/image-import-smoke.mjs
 # The writer lease (src/writerMode.mjs) is the only module the node takes from l2/.

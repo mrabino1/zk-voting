@@ -322,6 +322,9 @@ export function resolveRollupConfig(env = process.env) {
     jurisdictionId: env.ROLLUP_JURISDICTION_ID || deployment?.jurisdictionId || '',
     l2Url: env.L2_URL || 'http://l2:8546',
     l2Token: env.L2_BALLOT_TOKEN || '',
+    // First L1 block to scan for rollup events (the outcomes monitor's L1 audit). Some RPCs
+    // refuse a log query from block 0.
+    fromBlock: /^\d+$/.test(String(env.ROLLUP_DEPLOY_BLOCK || '').trim()) ? String(env.ROLLUP_DEPLOY_BLOCK).trim() : '0',
   };
   assertKeyAllowedOnChain(cfg.privateKey, cfg.chainId, 'ROLLUP_PRIVATE_KEY');
   return cfg;

@@ -91,6 +91,7 @@ Civic votes settle on ZkVotingRollup, one L1 contract shared by every jurisdicti
 | `ROLLUP_JURISDICTION_ID` | empty | Your jurisdiction (bytes32) on the rollup. Empty = from the deployment file. |
 | `ROLLUP_PRIVATE_KEY` | Anvil key 2 | **Secret.** The node account, your jurisdiction's clerk on L1: publishes, closes and finalizes civic votes. Needs a little ETH; voters never pay. |
 | `ROLLUP_TICK_SECONDS` | `15` | How often the node syncs rolls, closes after the cutoff and finalizes. |
+| `ROLLUP_DEPLOY_BLOCK` | empty (0) | First L1 block of the deployment; where the outcomes monitor's L1 audit starts reading events. Set it on a public chain: many RPCs refuse a log query from block 0. |
 | `L2_URL` | `http://l2:8546` | Where the node reaches the operator. |
 | `OPERATOR_PRIVATE_KEY` | Anvil key 1 | **Secret.** The L2 operator, registered with `setOperator`; pays L1 gas for batches. |
 | `L2_BATCH_SECONDS` | `10` | How often the operator seals a batch. |

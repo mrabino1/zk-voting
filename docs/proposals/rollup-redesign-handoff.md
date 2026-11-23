@@ -238,6 +238,9 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   from L1 alone (ballots decoded from executed batches' pubdata, joint key, floor, result hash,
   every k-subset of guardian shares). Exercised at the end of `l2/rollup/test/end-to-end.test.mjs`,
   including a falsified count and a missing ballot. `export-chain` (old contracts) removed.
+  The outcomes monitor runs the same audit for civic votes (`src/rollup/audit.mjs`, cached;
+  `ROLLUP_DEPLOY_BLOCK` sets the first block scanned). The image copies `tools/auditor/rollup.mjs`
+  and `l2/rollup/pubdata.mjs` for it.
 - **Terms of Use.** `apps/node/legal/terms.md` still mentions a paymaster and an L1 tally mirror.
   Editing it changes the Terms hash and re-prompts every user, so it was left for the user.
 - **Batch interval.** Decide a public-chain default for `L2_BATCH_SECONDS` (see the gas finding).
