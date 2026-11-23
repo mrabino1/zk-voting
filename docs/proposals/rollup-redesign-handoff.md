@@ -169,8 +169,14 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   `authorizeBallot({ localElectionId })`. `renameLocalElectionIds` in `store.mjs` moves stored
   records on load; `createElection` still accepts `onChainElectionId`. The locale key
   `elections.onChainId` ("On-chain id") was left alone.
-- **Resume at:** the voting UI redesign (directive 2), then phase 5 docs written for self-hosters
-  (directive 1).
+- Voting UI, first pass (directive 2): voter-page tokens `--radius-voter-card`, `--radius-bubble`,
+  `--radius-option` in `:root`, and a scoped block at the end of `styles.css` that rounds the
+  ballot's question cards, option bubbles, step pills, buttons and the election cards. The contest
+  tags were already pills. Radius and spacing only, no colour change, so the contrast checks are
+  unaffected. Still to do for directive 2, and best done with a browser and the reference site
+  side by side: the election lifecycle phase nav on the election and results pages, the
+  single-column card list on the home page, and moving long explanations behind disclosures.
+- **Resume at:** phase 5 docs written for self-hosters (directive 1), then "Other follow-ups".
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
