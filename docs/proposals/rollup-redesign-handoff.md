@@ -1,167 +1,161 @@
-# Rollup redesign — handoff (2026-11-23)
+# Rollup redesign — handoff (updated 2026-11-23, end of phase 3)
 
 Branch: `rollup-redesign` (cut from `test/unstable` at `7945ab6`). Design: `smart-contracts/docs/ROLLUP.md`.
+The working tree is clean at the commit after `028c44e`, which only updates this file.
 
-Goal from the user: replicate the lighter.xyz model. Ethereum L1 settles and enforces the rules
-with **one L1 contract for the world**. An L2 operator proves batches. The ballot outcome is
-never reverse-calculable, and L1 only decrypts and enforces the **final sum**. Full top-to-bottom
-redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
+## Resume here
 
-- Civic VOTEs run on the rollup: sum-only, final-only, k-of-n guardians, anonymity floor.
+1. Read "Goal and decisions", then "Next: phase 4", then "Decision needed".
+2. Set up the environment ("Environment" at the end) and run the tests to confirm the baseline:
+   node 792 pass (only the Chrome-dependent `a11y` and `landing-lang` tests fail, as before);
+   `test:packages`, `test:l2` (21), `test:auditor`, `test:docs`, `test:setup`, and `forge test` (99)
+   all pass.
+3. Ask the user the open decision below before touching vote-pass code.
+
+## Goal and decisions
+
+The user asked to replicate the lighter.xyz model. Ethereum L1 settles and enforces the rules
+with **one L1 contract for the world** (`ZkVotingRollup`), and an L2 operator proves batches. The
+ballot outcome is never reverse-calculable: L1 decrypts and enforces only the **final sum**. A full
+top-to-bottom redesign (contracts, node, UI/UX) is authorized, ABI and storage breakage included.
+
+- Civic VOTEs run on the rollup: sum-only, final-only, k-of-n guardians, anonymity floor (Withheld).
 - Informal POLLs keep IRV and interim disclosure blocks, off-chain in the node, labelled as weaker privacy.
+  ERC-20 token polls stay.
 
-## Done (committed)
+## Commits on the branch
 
-1. `4b5257a`, `a215eec`: **contracts**. `ZkVotingRollup` (jurisdictions, elections, Feldman DKG
-   with guardian Baby Jubjub identity keys, priority queue, commit/verify/execute/revert, desert
-   mode plus `desertClose`, threshold decryption with `finalizeResult`). Libraries: Guardians, Ops,
-   StateTree, BabyJub, PoseidonT3. Verifiers: Groth16 (one input), Desert, Mock. All old contracts
-   are removed. `forge test`: 99 passing.
-2. `1f7ad25`: **L2 operator** in `voting_node/l2/rollup/` (state machine, pubdata, batches, operator,
-   HTTP API, `main.mjs`). Shared crypto lives in `apps/node/public/ballot-crypto.js`, with keccak in
-   `public/keccak.js`. `chain-client` now ships the rollup ABIs. `npm run test:l2`: 22 passing,
-   including the end-to-end run on Anvil. `smart-contracts/test/CrossLanguage.t.sol` settles a
-   JS-generated election.
-3. Contract view `decryptionShares` was added after that commit (it is in the WIP commit below).
+| Commit | Phase | What |
+| --- | --- | --- |
+| `4b5257a`, `a215eec` | contracts | `ZkVotingRollup` (jurisdictions, elections, Feldman DKG with Baby Jubjub guardian identity keys, priority queue, commit/verify/execute/revert, desert mode and `desertClose`, threshold decryption, `finalizeResult`). Libraries Guardians, Ops, StateTree, BabyJub, PoseidonT3. Verifiers Groth16 (one input), Desert, Mock. Old contracts removed. |
+| `1f7ad25` | L2 operator | `voting_node/l2/rollup/` (state, pubdata, batches, operator, HTTP API, `main.mjs`). Shared crypto in `apps/node/public/ballot-crypto.js`. `CrossLanguage.t.sol` settles a JS-generated election. |
+| `8905286` | node (WIP) | Rollup client, service and routes (`/api/elections/:id/rollup`), the rollup branch of `POST /vote`, `scripts/rollup-guardian.mjs`, the `decryptionShares` view. |
+| `e64ef27` | 1. node cleanup | Old chain, L1 mirror, `/api/l2/*`, site contract pins, factory-scoped ids and old config keys removed. Setup step 6 is "Rollup connection" (`GET /api/setup/rollup`). |
+| `af34959` | 2. deploy and ops | Docker Compose with the `local-l1` profile (`l1` Anvil + one-shot `l1-deploy`), `ROLLUP_DEPLOYMENT_FILE`, Anvil-key guard off 31337, L1 chain-id check, `./setup.sh` step 6, `scripts/deploy.sh --target local\|public`, `tools/deploy`. Old L2 identity system removed. |
+| `028c44e` | 3. browser | `public/rollup-vote.js` (encrypt in the browser, cast with a pass, follow the receipt), `public/rollup-results.js` (results from L1), back-office "Civic vote on L1" panel, copy updated, vote-pass and nullifier rules (below). |
 
-4. **Node integration** (WIP commit `8905286`, then the node cleanup commit after it):
-   - `src/rollup/client.mjs`, `src/rollup/service.mjs`, `src/routes/rollup.mjs` (mounted at
-     `/api/elections/:id/rollup`), the rollup branch in `POST /:id/vote`, and
-     `scripts/rollup-guardian.mjs`.
-   - The old chain is gone: `chain.mjs`, `l1Certify.mjs`, `l2Identity.mjs`, `routes/l2Results.mjs`
-     (`/api/l2/*`), the L2-open, dead-letter, L1-mirror and archive routes, and their tests.
-   - Config: `CHAIN_RPC`, the factory, inbox, verifier, relayer, mirror and publisher keys,
-     `L2_CIVIC_RPC`, `ARCHIVE_ENABLED` and the `ALLOW_REVOTE` chain refusal (TODO #113) are removed.
-     `ALLOW_REVOTE` works with the rollup configured: it governs both polls and civic votes
-     (the rollup subtracts the replaced vector).
-   - Site contract pins are removed. `/api/site` and `/api/office/site` show `rollup` read-only
-     (from `ROLLUP_ADDRESS`); `PATCH /api/office/site` with `contracts` answers 400
-     `CONTRACTS_FROM_ENV`. `/api/config` has `rollup`, not `contracts`.
-   - Public election ids are UUID v5 of (node, jurisdiction, local sequence). Factory scoping,
-     `certificationId`, `publicIdHash` and `l1IdentityOf` are gone. The election DTO has
-     `chainMode` (`node` | `rollup`) and `rollupElectionId`.
-   - Setup step 6 is "Rollup connection": `GET /api/setup/rollup` (super admin) shows the contract,
-     L1 chain, node account, its L1 balance (low/empty warning) and whether the L2 answers.
-   - `createApp({ rollupService })` injects a service; `createApp({ rollup })` is config.
-   - Auditor packs carry `rollup { address, chainId, electionId }` instead of `contracts`.
-   - `docs/BOT_API.md` and `llms.txt` are regenerated from `botApiCatalog.mjs`.
-   - Tests: node 777 pass (only the Chrome-dependent a11y and landing-lang tests fail, as before);
-     packages, `test:l2` (22), auditor, docs, setup and `forge test` (99) all pass.
+## How a civic vote works now (for orientation)
 
-5. **Deployment and operations** (phase 2):
-   - `docker-compose.yml` (and the tailscale copy): `node`, `l2` (`node rollup/main.mjs`), `db`,
-     and under the `local-l1` profile `l1` (Anvil 31337, foundry image pinned by digest, state on
-     `l1-data`) plus `l1-deploy`. That one-shot runs `DeployLocal.s.sol` from `../smart-contracts`
-     unless the recorded rollup already has code, and writes `/deployments/local.json` to the
-     `l1-deployment` volume. The `prover` and `archive` services are gone.
-   - Accounts: Anvil 0 is the governor, 1 the L2 operator (`OPERATOR`), 2 the node clerk (`CLERK`).
-     `DeployLocal.s.sol` takes `OPERATOR` and `CLERK`. The node integration test uses the same split.
-   - `ROLLUP_DEPLOYMENT_FILE` fills `ROLLUP_ADDRESS`, `L1_CHAIN_ID` and `ROLLUP_JURISDICTION_ID` in
-     the node (`resolveRollupConfig`) and the operator (`chain-client` `readDeployment`).
-   - Public Anvil dev keys are refused off chain 31337 (`chain-client` `assertKeyAllowedOnChain`)
-     in the node, the operator and `./setup.sh`. The node client also checks that `L1_RPC` serves
-     the configured chain before any L1 call (`L1_CHAIN_MISMATCH`).
-   - `.env.example` defaults to the local stack (`COMPOSE_PROFILES=local-l1`). `./setup.sh` step 6
-     offers a local L1 or an existing deployment (RPC, address, jurisdiction, node and operator
-     keys, balance check of both) and mints `L2_BALLOT_TOKEN`.
-   - `scripts/deploy.sh --target local|public` wraps `DeployLocal.s.sol` / `Deploy.s.sol` with the
-     deploy-once guard. `npm run deploy:l1 -- --check|--verify` does the same check in JS.
-     `deploy-fork-dryrun.sh` and `l2-vps-bootstrap.sh` are removed, along with the old L2 identity
-     system (`l2/identity.mjs`, `funding.mjs`, `adminAuth.mjs`, `bin/`, `npm run l2:identity`,
-     `npm run certify:l1`, `docs/L2-IDENTITY-AND-SETTLEMENT.md`).
-   - The node image no longer copies the deleted `l2/archive`, `l2/sequencer` and `l2/prover`
-     files (its COPY lines were broken). `docker-compose.rolling.yml` drops `l2-next`.
-   - Fixed: a promoted standby node now starts the rollup tick.
-   - **Not verified with Docker** (none on this host): the images were not built and compose was
-     not run. Checked instead: the compose YAML parses; the `l1-deploy` script was run on a host
-     Anvil (deploys, then skips on re-run); `rollup/main.mjs` and `server.mjs` booted with the
-     compose environment against that Anvil; `scripts/image-import-smoke.mjs` passes.
+- **Draft and publish.** A clerk creates a VOTE draft on the node. In the back office, under "Civic
+  vote on L1", they set k and `minBallots`, enroll guardians by identity key
+  (`npm run guardian:rollup -- init`), and click Publish (L1 `createElection`).
+- **Key ceremony.** Guardians run `guardian:rollup commit` and then `receive`. Someone clicks
+  "Finalize key". The node tick (`ROLLUP_TICK_SECONDS`) syncs the roll to L1 until `startTime`.
+- **Voting.** A voter on the roll gets one blind vote pass (`POST /vote-pass`, signed in, PIN). The
+  browser gets the nullifier `Poseidon(nullifierSecret, l1ElectionId)` from the passkey wallet,
+  encrypts the ballot (`encryptBallot`), and sends `POST /vote` without cookies. The node relays the
+  ballot to the operator (`POST /v1/ballots`, bearer `L2_BALLOT_TOKEN`) and keeps only a receipt.
+- **Close and finalize.** After the cutoff the node tick closes the vote. Guardians run
+  `guardian:rollup decrypt`. Finalize computes the totals from the L1 sum and shares, and L1 checks
+  them. The results page reads `/rollup`.
+- **Accounts on local compose.** Anvil 0 is the governor, 1 the L2 operator, and 2 the node clerk.
+  All are public keys, refused off chain 31337.
 
-6. **Browser** (phase 3):
-   - `public/rollup-vote.js` + the rollup branch in `vote.js`: ballot context → the wallet's
-     `rollupNullifier(l1ElectionId)` (only the nullifier leaves the wallet) → `encryptBallot` in the
-     browser → `POST /vote` with the vote pass and no cookies → a rollup receipt with "Check status"
-     (pending → committed → settled, or rejected). A blank ballot is refused, never counted for
-     option 0.
-   - `public/rollup-results.js`: the results page of a rollup vote reads `/rollup` (L1): status,
-     guardian progress, certified totals, Withheld below the floor, Halted. Turnout only once closed.
-   - Back office: a "Civic vote on L1" panel (settings, enroll guardian by identity key, publish,
-     finalize key, sync roll, close, finalize). The dead "Certify hash on L1" button is gone.
-   - Outcomes, admin and copy (cms, faq, public pages) name the rollup, not the old factory.
-     `office.chainNote` / `office.certifyL1` were removed from every locale.
-   - Server rules found while wiring it:
-     - `POST /vote-pass` for a rollup vote needs a signed-in voter whose linked commitment is on the roll,
-       one pass each. Before, anyone could mint passes, and the operator accepts any ballot with a pass.
-     - A rollup ballot needs a pass (no signed-in PIN shortcut).
-     - One ballot per nullifier (`NULLIFIER_USED`), checked in `castBallot` and reserved against races.
-       Nothing yet proves the sender owns a nullifier and nullifiers are public in pubdata, so a
-       "revote" could overwrite another voter's ballot. Civic revoting is therefore off until the
-       eligibility proof exists. A ballot the batch rejected may be cast again.
-     - On a node connected to the rollup, an unpublished civic vote takes no pass and no ballot
-       (`VOTE_NOT_ON_L1`).
-     - A vote published to L1 counts as roll-fixed (`rollFixed`); the node freeze is not needed.
-     - Fixed: `renderReceipt` threw on a sealed vote (`formatTime` was not passed in).
-   - **Not verified in a browser** (no Chrome here). The modules load in Node, the encryption is
-     checked against `verifyBallot`, and the HTTP gate is tested with a fake L1/L2 client.
+Server rules added in phase 3 (`src/routes/elections.mjs`, `src/rollup/service.mjs`):
+
+- `POST /vote-pass` for a rollup vote requires a signed-in user whose linked commitment
+  (`store.findLink`) is eligible, and issues one pass each (`claimIssue`, key `u:<userId>`).
+- A rollup ballot requires a pass; there is no signed-in PIN shortcut.
+- One ballot per nullifier (`NULLIFIER_USED`), reserved in `castBallot` against concurrent
+  requests. A ballot the operator rejected may be cast again. **Civic revoting is off**: nothing
+  proves the sender owns a nullifier, and nullifiers are public in pubdata, so a revote could
+  overwrite another voter's ballot. `ALLOW_REVOTE` affects polls only for now.
+- On a node connected to the rollup, an unpublished civic vote takes no pass and no ballot
+  (`VOTE_NOT_ON_L1`).
+- A vote on L1 counts as roll-fixed (`rollFixed` in `electionState.mjs`); the node freeze is not used.
 
 ## Decision needed (ask the user)
 
-- Vote-pass issuance is remembered in memory only (`votePass.claimIssue`). After a node restart a
-  voter on the roll can get a second pass and cast a second ballot under another nullifier.
-  Persisting "voter X got a pass for election E" closes that, and does not link the pass to the
-  ballot (it is blind), but it records who took part, like a paper poll book. The real fix is the
-  eligibility proof in the batch circuit.
+Vote-pass issuance is remembered in memory only (`votePass.claimIssue`). After a node restart, a
+voter on the roll can get a second pass and cast a second ballot under another nullifier.
+Persisting "voter X got a pass for election E" closes that gap. It would not link the pass to the
+ballot, because the pass is blind, but it would record who took part, like a paper poll book. The
+real fix is the eligibility proof in the batch circuit. Options: persist it now, or leave the gap
+and document it.
 
-## Follow-ups found during the node cleanup
+## Next: phase 4 (UI/UX cleanup, requested by the user)
 
-- The `office` section of `public/locales/*.js` is mostly unused (the back office is static English
-  HTML). Prune it with the UI/UX cleanup.
+None of it is started. Suggested order:
 
-- The L2 operator has no writer lease, so it cannot run in an overlap like the node. Update it by
-  recreating the container (the node answers 503 meanwhile, and the voter retries).
-- `scripts/get-gas-economics.sh` and `scripts/lib/gas_economics.py` still model the old contracts.
-  Write a cost model for the rollup (createElection, guardian calls, commit/execute per batch).
-- The explorer `/api/explorer/ingest` route and `EXPLORER_INGEST_SECRET` are dead (nothing pushes
-  blocks). Remove them with the explorer rewrite in phase 4.
-- `l1-deploy` compiles the contracts on each fresh deploy and needs network once, for solc.
+1. **CSS.** `apps/node/public/styles.css` is about 3.9k lines. Introduce tokens (colours, spacing,
+   type, radius) as custom properties with dark mode, then consolidate duplicated component
+   rules. `office.css` is shared by site-admin and the back office. The rollup modules use existing
+   classes: `panel`, `meta-list`, `notice`, `status-pill`, `results-table`, `receipt`.
+2. **Voter flow** (`public/vote.js`, about 1.2k lines; `register.js`). The rollup path sits in
+   `submitRollupBallot` / `renderRollupReceipt`. Simplify the steps (passkey → PIN → ballot →
+   receipt) and make it clear which path a ballot takes (civic vote on L1 or poll on the node).
+3. **Back office** (`public/back-office.html` + `back-office.js`, a static English IIFE page).
+   Merge the old `opens_ballots` P-256 guardian forms (node-side polls) and the new "Civic vote on
+   L1" panel into one clear flow. Hide the poll-only tally tools for votes.
+4. **Explorer** (`public/explorer.js`, `src/routes/explorer.mjs`). Show rollup batches from the L2
+   `/v1/batches` and `/v1/status` (through the node, e.g. `rollup.client.l2Batches()`). Remove the
+   dead `POST /api/explorer/ingest` and `EXPLORER_INGEST_SECRET` (compose, `.env.example`, setup,
+   diagnostics).
+5. **Locales.** The `office` section of `public/locales/*.js` is mostly unused (no `data-i18n`
+   points at it). Prune it in every locale together, because `test/i18n.test.mjs` requires the
+   same keys in all of them.
+6. **`onChainElectionId`.** This is a historical name for the node's local sequence (the poll
+   proof's electionId). Rename it across `src`, `public` and the tests.
 
-- `store.mjs` still carries the old chain vote queue and exclusion machinery, now unreachable:
-  `chainVoteDeadLetter` / `chainVoteSupplementary`, `exclusionApprovals`, `excludedBallots` with
-  `releasePending`, and the `pendingReleases` check in `POST /:id/tally` and diagnostics. Remove it
-  together with the remaining revote-flag tests that exercise it. Decide whether polls keep
-  `TALLY_CHALLENGE_SECONDS` (`supplementaryBatch.mjs`).
-- `onChainElectionId` is a historical name for the node's local sequence (the poll proof's
-  electionId). Rename it with the browser work in phase 3.
-- `tools/auditor/export.mjs` and `cli.mjs` still read the old ElectionFactory over RPC. Rewrite
-  them for ZkVotingRollup.
+## Phase 5: docs
 
-## Remaining phases
+These still describe the old stack: root `README.md`, `voting_node/README.md`, `docs/OPERATOR.md`,
+`docs/ARCHITECTURE.md`, `docs/L2.md`, `docs/L2_VPS_SETUP.md`, `docs/ROLLING_UPDATES.md`,
+`docs/OPERATIONS-L2-LIFECYCLE.md`, `docs/TALLY_GUARDIANS*`, `docs/THREAT_MODEL.md`
+(certificationId), `docs/self-hosting/*` (`first-launch.md` links the deleted
+`L2-IDENTITY-AND-SETTLEMENT.md`), `docs/voting_cost_estimate.md`, `scripts/README.md`, and
+`implementation.md`. `docs/BOT_API.md` and `llms.txt` are generated from
+`apps/node/src/botApiCatalog.mjs`, and `test/api-keys.test.mjs` checks them.
 
-1. ~~Node cleanup~~ (done).
-2. ~~Docker Compose, setup and deploy tooling~~ (done, see item 5 above).
-3. ~~Browser~~ (done, see item 6 above).
-4. **Next:** UI/UX cleanup that was requested: CSS tokens and consolidation of `styles.css` (3.9k lines),
-   the voter flow, the admin/back office, and the contract-facing pages (explorer shows rollup
-   batches from L2 `/v1/batches`).
-5. Docs: README, `voting_node/docs/*` (ARCHITECTURE, L2, OPERATOR, TALLY_GUARDIANS), root README.
-   Still describing the old stack: `voting_node/README.md`, `docs/OPERATOR.md`, `docs/ROLLING_UPDATES.md`,
-   `docs/OPERATIONS-L2-LIFECYCLE.md`, `docs/L2.md`, `docs/L2_VPS_SETUP.md`, `docs/self-hosting/*`
-   (`first-launch.md` links the deleted L2 identity doc), `docs/voting_cost_estimate.md`,
-   `scripts/README.md`, `implementation.md`.
+## Other follow-ups
+
+- **Store.** `store.mjs` still carries the old chain vote queue and exclusion machinery, which
+  nothing reaches any more: `chainVoteDeadLetter` / `chainVoteSupplementary`,
+  `exclusionApprovals`, `excludedBallots.releasePending`, and the `pendingReleases` check in
+  `POST /:id/tally` and diagnostics. Remove it with the remaining revote-flag tests that use it.
+  Decide whether polls keep `TALLY_CHALLENGE_SECONDS` (`supplementaryBatch.mjs`).
+- **Auditor tools.** `tools/auditor/export.mjs` and `cli.mjs` read the old ElectionFactory over RPC.
+  Rewrite them for ZkVotingRollup.
+- **Gas economics.** `scripts/get-gas-economics.sh` and `scripts/lib/gas_economics.py` model the
+  old contracts (the script prints a warning). Write a rollup cost model.
+- **Operator updates.** The L2 operator has no writer lease, so there is no overlap update for it.
+  Recreate the container instead; the node answers 503 while it is down, and voters retry.
+- **`l1-deploy` network.** It compiles the contracts on each fresh deploy, so it needs network once,
+  to fetch solc.
 
 ## Known gaps (tell the user, do not hide)
 
-- The batch validity circuit is specified but not built. It needs recursion for the voters'
-  ballot proofs (Lighter uses Plonky2). Until it exists, only `MockBatchVerifier` is used, on
-  chain 31337.
-- Voter eligibility (roll membership in zero knowledge) still relies on the node's vote pass.
-  The ballot 0/1 and sum-to-one proofs are real and checked by the operator.
+- **No batch circuit.** The batch validity circuit is specified but not built. It needs recursion
+  for the voters' ballot proofs (Lighter uses Plonky2). Until it exists, only `MockBatchVerifier`
+  works, and only on chain 31337. The operator refuses to start against a real verifier, and the
+  operator accepts ballots without eligibility proofs only with `ZK_VOTING_ALLOW_MOCK_PROOFS=1` on 31337.
+- **Eligibility.** Roll membership is not proven in zero knowledge; the node's vote pass gates
+  ballots (see "Decision needed"). The ballot 0/1 and sum-to-one proofs are real, and the operator
+  checks them.
+- **Not run.** Docker Compose was never run (no Docker on this host), and the browser pages were
+  never rendered (no Chrome). What was checked instead: the compose YAML parses; the `l1-deploy`
+  script ran against a host Anvil; `rollup/main.mjs` and `server.mjs` booted with the compose
+  environment; `scripts/image-import-smoke.mjs` passes; the page modules load in Node; the browser
+  ballot verifies with `verifyBallot`.
+- **Next real-machine step.** On a machine with Docker, run
+  `cd voting_node && ./setup.sh && docker compose up -d --build`, then cast a civic vote end to end
+  in a browser.
 
-## Environment notes
+## Environment
 
-- The host has no Node.js and no Docker access. Node 24 lives in the session scratchpad. To
-  reinstall it:
-  `curl https://nodejs.org/dist/v24.11.1/node-v24.11.1-linux-x64.tar.xz`, verify it against
-  `SHASUMS256.txt`, then run `npm ci` in `voting_node`.
-- Foundry is at `~/.foundry/bin`. The L2 and node integration tests start Anvil themselves.
-- Chrome is missing, so the a11y and landing-language browser tests fail (they did before this work too).
+- **Node.js.** The host has no Node.js. Node 24 was unpacked in an earlier session's scratchpad
+  (`/tmp/claude-1000/-home-mr-src-zk-voting/536cab08-…/scratchpad/tools/node-v24.11.1-linux-x64`), which may be
+  gone. To reinstall, get `https://nodejs.org/dist/v24.11.1/node-v24.11.1-linux-x64.tar.xz`, verify it
+  against `SHASUMS256.txt`, put its `bin` on `PATH`, and run `npm ci` in `voting_node` if
+  `node_modules` is missing.
+- **Foundry** is at `~/.foundry/bin` (forge 1.10.0). The L2 and node integration tests start Anvil
+  themselves.
+- **Running the tests:**
+  - node: `cd voting_node/apps/node && NODE_ENV=test ZK_VOTING_USE_MOCK_VERIFIER=1 ZK_VOTING_ALLOW_MOCK_PROOFS=1 node --test test/*.test.mjs`
+  - the rest, from `voting_node`: `npm run -s test:packages | test:l2 | test:auditor | test:docs | test:setup`
+  - contracts: `cd smart-contracts && forge test`
+- **Linter.** The repo has none. eslint 9.15 with `no-undef` caught the helpers the rewrite had
+  dropped. It was installed in a session scratchpad (`npm i eslint@9.15.0 globals@15.12.0`, flat
+  config with `no-undef` and `no-unused-vars`, Node and browser globals); reinstall it if needed.
+  Known warnings that predate this work: `qr.mjs` `inTiming`, and some unused test locals.
+- **Chrome** is missing, so the a11y and landing-language browser tests fail. They failed before this work too.
