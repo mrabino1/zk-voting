@@ -84,7 +84,8 @@ published here, in a signed release, and on [zk-voting.org](https://zk-voting.or
 Read these before you plan a real election:
 
 - **No batch validity circuit yet.** The circuit that proves each batch (and, recursively, each
-  voter's ballot proof) is specified but not built. Until it is, the rollup settles only against
+  voter's ballot proof) is specified but not built; the design and options are in
+  [`docs/proposals/batch-validity-circuit.md`](./docs/proposals/batch-validity-circuit.md). Until it is, the rollup settles only against
   `MockBatchVerifier`, which exists only on the local chain (31337). The operator refuses to start
   against a real verifier, so a public-chain civic vote is not possible yet.
 - **Eligibility is gated by the Node, not proven.** Roll membership is not proven in zero

@@ -58,7 +58,7 @@ Election status on L1: `KeyGen → Scheduled → Closing → Closed → Finalize
 All hashes are Poseidon(2) over BN254 (`PoseidonT3.hashLeftRight`, circomlib compatible).
 `fold(x0, …, xn) = H(…H(H(x0, x1), x2)…, xn)`.
 
-- `stateRoot` is the root of a sparse Merkle tree of depth `ELECTION_TREE_DEPTH = 16`. Its key is
+- `stateRoot` is the root of a sparse Merkle tree of depth `ELECTION_TREE_DEPTH = 32`. Its key is
   `electionId` (bit `i` of the id picks the side at level `i`, leaf first). The empty leaf is 0.
 - An election leaf is
   `fold(configHash, eligibleRoot, nullifierRoot, accumulatorHash, ballotCount, status)`, where
@@ -127,7 +127,9 @@ when its proof is valid and the election is still open. A CLOSE response equals 
 accumulator and count, and marks the leaf closed. **Status:** the contracts, the L2 state machine
 (`voting_node/l2/rollup/`) and the pubdata format are implemented. The batch validity circuit is
 specified here and in `voting_node/l2/rollup/README.md`, but not built. Verifying the voters'
-Groth16 ballot proofs inside the batch needs a recursion-capable prover (Lighter uses Plonky2).
+Groth16 ballot proofs inside the batch needs a recursion-capable prover (Lighter uses Plonky2);
+see [`docs/proposals/batch-validity-circuit.md`](../../docs/proposals/batch-validity-circuit.md) for the options and a
+recommended path.
 Until that circuit and its ceremony exist, deployments run with `MockBatchVerifier`, which
 the contract accepts only on chain id 31337.
 

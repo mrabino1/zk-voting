@@ -205,7 +205,15 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   on the ballot page (`contestPhaseStrip(h, e, { tabs: true })`). Wrapped in
   `@media (prefers-contrast: no-preference)` so high-contrast mode keeps borders. Not done: Ajna's
   header-only navigation (no left sidebar); that is an app-shell change for every page.
-- **Resume at:** "Other follow-ups" below.
+- Batch validity circuit: design and options in
+  [`batch-validity-circuit.md`](./batch-validity-circuit.md). Recommendation: Noir/UltraHonk with
+  recursive voter proofs (BN254-native, no per-circuit ceremony). Prototyping needs `nargo`/`bb`;
+  installing an unverified binary was refused by the session's safety check, so it waits for the
+  user. Also fixed: `ROLLUP.md` gave `ELECTION_TREE_DEPTH = 16`; the code uses 32.
+- CI (`.github/workflows/ci.yml`, still manual-only): the compose job runs `./setup.sh -y` and checks
+  the rollup stack; `test:setup` added. Setup now generates credentials for the bundled Postgres.
+- **Resume at:** "Other follow-ups" below, or step 1 of the batch-circuit plan once the toolchain
+  is approved.
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
