@@ -1,46 +1,78 @@
 # smart-contracts
 
-**NOT FOR PROFIT** — civic public good. Not a commercial product.
+**NOT FOR PROFIT**: civic public good, not a commercial product. AGPL-3.0-or-later.
 
-Foundry package for zk-voting: an unbounded `ElectionFactory` (EIP-1167 clones), identity-commitment registries, a ZK ballot inbox, tally contract (`Tally.sol` implementing `ITallyVerifier`), passkey account abstraction with a gasless paymaster, and L1 rollup settlement for ZK-Voting L2.
+ZK-Voting settles on Ethereum through **one contract for the world**, `ZkVotingRollup`. It
+follows the Lighter / zkSync Lite rollup pattern:
 
-Civic elections have no token and no voter fees. The leaf in the Merkle tree is an **identity commitment**, never a wallet address. `msg.sender` on `submitVote` is the relayer. A nullifier is accepted once; a second ballot reverts `NullifierUsed`. Double voting is impossible. `acceptedBallots` counts unique voters.
+- L1 holds the rules: jurisdictions, elections, guardian keys, the priority queue, the batch
+  chain and the certified results.
+- An L2 operator orders the work and proves every batch. Ballots never touch L1, unless a voter
+  chooses to force one in.
+- The outcome is enforced only as a sum. L1 accepts a single threshold decryption of the
+  final per-option totals, and only when turnout reaches the election's anonymity floor.
 
-`src/token/SignalVotes.sol` is optional and separate. It is an ERC-20 with block-number vote checkpoints for an operator who wants a dedicated signal token on Ethereum mainnet. Civic contracts do not call it. The Node does not deploy it and does not send `delegate`. A fixed-supply token and a 1:1 wrapper are in that folder. Wrapping does not delegate.
+The full design, with the pubdata format and the trust model, is in [`docs/ROLLUP.md`](docs/ROLLUP.md).
 
 ## Layout
 
-- `src/ElectionFactory.sol` — unlimited elections, start + cutoff, `maxParticipants == 0` unlimited roll
-- `src/VoterRegistry.sol` / `PersonRegistry.sol` / `DisqualificationRegistry.sol` / `BallotInbox.sol` / `Tally.sol` (`ITallyVerifier`)
-- `src/account/` — passkey AA + `ZkVotingPaymaster`
-- `src/l2/` — `RollupSettlement`, mailbox, L1 tally mirror
-- `src/zk/` — `MockVerifier` (tests), `TallyPublicInputs` (versioned tally instance), structural `VoteVerifier`, `Groth16VerifierAdapter`
-- `src/hasher/` — `KeccakHasher` (unit tests), `PoseidonHasher` (vote circuit), legacy `StandInHasher`, `HashScheme` ids
-- `test/` — unit (`Tally.t.sol` covers SUM_ONLY vs OPENS_BALLOTS), fuzz (`test/fuzz`), invariant (`test/invariant`)
-- `src/token/` — optional `SignalVotes` (Ethereum mainnet checkpoints). Not used by civic elections
-- `script/` — `DeployLocal`, `DeployL1`, `DeployL2`, `CreateElection`, `CertifyL1` (tally hash → `L1TallyMirror`; `certify_l1.sh` no-ops if L1 env unset), `DeploySignalToken`
+| Path | What it is |
+| --- | --- |
+| `src/ZkVotingRollup.sol` | The L1 contract: governance, elections, key ceremony, priority queue, batches, desert mode, results |
+| `src/interfaces/IZkVotingRollup.sol` | Types, events, errors |
+| `src/libraries/Guardians.sol` | k-of-n Feldman DKG and Chaum-Pedersen threshold decryption (linked library) |
+| `src/libraries/Ops.sol` | L2 operation types and pubdata layout |
+| `src/libraries/StateTree.sol` | L2 state commitments (Poseidon election tree and leaf) |
+| `src/libraries/BabyJub.sol`, `PoseidonT3.sol` | Curve and hash shared with the circuits |
+| `src/verifiers/Groth16Verifier.sol` | Batch validity verifier, verifying key fixed at deploy |
+| `src/verifiers/DesertVerifier.sol` | Stateless check of an election leaf for desert mode |
+| `src/verifiers/MockBatchVerifier.sol` | Accept-all verifier, refused outside chain 31337 |
+| `src/token/` | Optional ERC-20 signal token for token polls. Not used by civic elections |
+| `test/` | Unit, end-to-end (real DKG, ElGamal and decryption) and fuzz tests |
+| `script/` | `DeployLocal` (Anvil), `Deploy` (public chain, needs the batch verifying key), `DeploySignalToken` |
 
-## Test
+## Election lifecycle on L1
 
-```bash
-forge test --via-ir
-```
+1. A governor creates a jurisdiction. Its admin appoints clerks.
+2. A clerk calls `createElection`, naming the registrar, officer, guardians, threshold, window,
+   option count and anonymity floor.
+3. Guardians call `commitGuardian`, then anyone calls `finalizeKey` (with `complainShare`,
+   `openShareDispute`, `revealShare` and `expireShareDispute` for misbehaving dealers). That queues
+   `CREATE_ELECTION` for the L2.
+4. The registrar calls `registerVoters` and the officer calls `disqualify`, until `startTime`.
+5. Voters send ballots to the operator. `forceBallot` is the censorship escape.
+6. After `cutoffTime`, anyone calls `closeElection`. The operator's batch carries the final
+   accumulator back to L1.
+7. Guardians call `postDecryptionShares`, then anyone calls `finalizeResult(counts, guardians)`.
 
-Unit tests use `MockVerifier`. `UntrustedGroth16Test` verifies a real untrusted Vote(4) proof (not accept-all). Non-mock deploy:
+The operator calls `commitBatch` and `revertBatches`. Anyone calls `verifyBatch`,
+`executeBatches` and, once a queued request is older than `PRIORITY_EXPIRATION`,
+`activateDesertMode` and `desertClose`.
 
-```bash
-ZK_VOTING_PROVING_PATH=1 forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
-```
-
-## Gas economics
-
-Live gas price and ETH/USD ($10,000 when no price feed answers), compiled bytecode versus today's EIP-170 / EIP-3860 caps and the Glamsterdam EIP-7954 caps (65,536 and 131,072 bytes), one-time L1 deploy gas, and poll-versus-vote cost across ballot counts and open hours:
+## Build and test
 
 ```bash
 forge build
-L1_RPC=<your Ethereum JSON-RPC> ../voting_node/scripts/get-gas-economics.sh --measure
+forge test              # 96 tests
+make gas                # L1 cost of each step
+make deploy-local       # Anvil, mock verifier; writes deployments/local.json
 ```
 
-`./script/get-gas-economics.sh` forwards to that script. Options, environment variables, and sample output: [`../voting_node/scripts/README.md`](../voting_node/scripts/README.md).
+Approximate L1 gas from the test suite:
 
-Solidity 0.8.24. License AGPL-3.0-or-later. See `/NOT_FOR_PROFIT.md`.
+| Step | Gas |
+| --- | --- |
+| `createElection` | ~380k |
+| `commitGuardian` | ~1.1M per guardian |
+| `registerVoters` | ~60k + ~4k per voter |
+| `commitBatch` | ~100k + pubdata calldata |
+| `verifyBatch` | ~230k with Groth16 |
+| `postDecryptionShares` | ~3.6M per guardian (3 options) |
+| `finalizeResult` | ~1.3M (3 options, 2 of 3) |
+
+## Status
+
+The contracts, the L2 state machine and the pubdata format are implemented and tested
+together. The batch validity circuit is specified in `docs/ROLLUP.md` but not built yet.
+Until that circuit and its trusted setup exist, the rollup runs only on a local chain with
+`MockBatchVerifier`.

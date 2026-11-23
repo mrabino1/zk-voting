@@ -33,9 +33,8 @@ contract DeploySignalToken is Script {
         vm.startBroadcast(pk);
         address deployed;
         if (wrapper) {
-            SignalVotesWrapper wrapped = new SignalVotesWrapper(
-                tokenName, tokenSymbol, ISignalUnderlying(vm.envAddress("UNDERLYING_TOKEN"))
-            );
+            SignalVotesWrapper wrapped =
+                new SignalVotesWrapper(tokenName, tokenSymbol, ISignalUnderlying(vm.envAddress("UNDERLYING_TOKEN")));
             deployed = address(wrapped);
         } else {
             SignalVotesToken token = new SignalVotesToken(
