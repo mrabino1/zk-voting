@@ -7,19 +7,23 @@ import {BabyJub} from "./BabyJub.sol";
 
 /// @title Guardians
 /// @notice k-of-n Feldman key ceremony and threshold decryption on Baby Jubjub.
-/// @dev Linked as an external library. Its storage is the rollup's, since it runs by
-///      delegatecall, and so `address(this)` in every challenge is the rollup.
+/// @dev Linked as an external library. It runs by delegatecall, so its storage is the rollup's
+///      and `address(this)` in every challenge is the rollup.
 ///
-///      Guardian `i` (1-based) deals a polynomial `f_i` of degree `k − 1` and posts
-///      `C_{i,t} = a_{i,t} · G` with a Schnorr proof of `a_{i,0}`. It sends the share
-///      `f_i(j)` to guardian `j` off chain, signed under `C_{i,0}`. A recipient can show a
-///      signed bad share (`complain`) or demand that the dealer reveal one (`openDispute`).
-///      A dealer who cheats or stays silent is excluded. The joint key is
-///      `Σ C_{i,0}` over dealers who committed and were not excluded. Guardian `j`'s public
-///      share is `PK_j = Σ_i Σ_t j^t · C_{i,t}`.
+///      A guardian is a Baby Jubjub identity key `ID_i`, not an L1 account. Every guardian
+///      action is either signed under that key or self-proving, so any relayer may submit it
+///      and pay the gas, and none can forge it.
 ///
-///      Decryption: each guardian posts `D_{j,o} = s_j · c1_o` per option with a
-///      Chaum-Pedersen proof. For `k` guardians, `c2_o − Σ λ_j D_{j,o} = m_o · G`.
+///      Guardian `i` (1-based) deals a polynomial `f_i` of degree `k − 1`, posts
+///      `C_{i,t} = a_{i,t} · G` with a proof of knowledge of `a_{i,0}`, and signs the set
+///      under `ID_i`. It sends the share `f_i(j)` to guardian `j` off chain, signed under
+///      `C_{i,0}`. A signed bad share excludes the dealer (`complain`). A recipient with no
+///      share signs a dispute, and the dealer must reveal a share that opens the commitments
+///      before `REVEAL_WINDOW` ends, or be excluded. The joint key is `Σ C_{i,0}` over dealers
+///      in good standing. Guardian `j`'s public share is `PK_j = Σ_i Σ_t j^t · C_{i,t}`.
+///
+///      Decryption: guardian `j` posts `D_{j,o} = s_j · c1_o` per option with a Chaum-Pedersen
+///      proof against `PK_j`. For any `k` guardians, `c2_o − Σ λ_j D_{j,o} = m_o · G`.
 library Guardians {
     uint8 internal constant MIN_GUARDIANS = 1;
     uint8 internal constant MAX_GUARDIANS = 16;
@@ -31,9 +35,17 @@ library Guardians {
     /// @notice After this, the ceremony may finish without the guardians who never committed.
     uint256 internal constant KEYGEN_TIMEOUT = 1 days;
 
-    bytes32 internal constant SCHNORR_DOMAIN = keccak256("zk-voting.guardian.schnorr.v1");
+    bytes32 internal constant POK_DOMAIN = keccak256("zk-voting.guardian.pok.v1");
+    bytes32 internal constant AUTH_DOMAIN = keccak256("zk-voting.guardian.auth.v1");
     bytes32 internal constant SHARE_DOMAIN = keccak256("zk-voting.guardian.share.v1");
     bytes32 internal constant DECRYPT_DOMAIN = keccak256("zk-voting.guardian.decrypt.v1");
+
+    /// @notice Schnorr signature or proof: `z · G = R + e · key`.
+    struct Schnorr {
+        uint256 rX;
+        uint256 rY;
+        uint256 z;
+    }
 
     struct Dispute {
         uint8 recipient;
@@ -52,8 +64,7 @@ library Guardians {
         uint32 disputed;
         /// @dev Bit `i` set: guardian `i` posted decryption shares.
         uint32 sharesPosted;
-        mapping(uint8 => address) member;
-        mapping(address => uint8) indexOf;
+        mapping(uint8 => uint256[2]) identity;
         mapping(uint8 => uint256[]) cx;
         mapping(uint8 => uint256[]) cy;
         mapping(uint8 => Dispute) dispute;
@@ -78,7 +89,9 @@ library Guardians {
     error BadCommitments();
     error BadPoint();
     error BadSchnorr();
+    error BadSignature();
     error ComplaintUnfounded();
+    error ShareDoesNotOpen();
     error DisputeOpen();
     error NoDispute();
     error TooEarly();
@@ -89,88 +102,85 @@ library Guardians {
 
     // ------------------------------------------------------------ ceremony
 
-    function open(Committee storage c, address[] calldata members, uint8 k) internal {
-        uint256 n = members.length;
+    function open(Committee storage c, uint256[2][] calldata identities, uint8 k) internal {
+        uint256 n = identities.length;
         if (n < MIN_GUARDIANS || n > MAX_GUARDIANS || k == 0 || k > n) revert BadCommittee();
         for (uint256 i; i < n; ++i) {
-            address who = members[i];
-            if (who == address(0) || c.indexOf[who] != 0) revert BadCommittee();
-            uint8 index = uint8(i + 1);
-            c.member[index] = who;
-            c.indexOf[who] = index;
+            uint256[2] calldata id = identities[i];
+            if (!BabyJub.onCurve(id[0], id[1]) || BabyJub.isIdentity(id[0], id[1])) revert BadCommittee();
+            for (uint256 j; j < i; ++j) {
+                if (identities[j][0] == id[0] && identities[j][1] == id[1]) revert BadCommittee();
+            }
+            c.identity[uint8(i + 1)] = id;
         }
         c.n = uint8(n);
         c.k = k;
         c.openedAt = uint64(block.timestamp);
     }
 
-    /// @notice Post `C_0 … C_{k−1}` and a Schnorr proof `z·G = R + e·C_0`.
+    /// @notice Post `C_0 … C_{k−1}` with a proof of knowledge of `a_0`, signed by guardian `index`.
     function commit(
         Committee storage c,
         uint32 electionId,
-        address sender,
+        uint8 index,
         uint256[] calldata cx,
         uint256[] calldata cy,
-        uint256 rX,
-        uint256 rY,
-        uint256 z
-    ) external returns (uint8 index) {
-        index = _liveMember(c, sender);
+        Schnorr calldata pok,
+        Schnorr calldata auth
+    ) external {
+        _requireLive(c, index);
         if (c.cx[index].length != 0) revert AlreadyCommitted();
         if (cx.length != c.k || cy.length != c.k) revert BadCommitments();
         for (uint256 t; t < cx.length; ++t) {
             if (!BabyJub.inSubgroup(cx[t], cy[t])) revert BadPoint();
         }
-        uint256 e = schnorrChallenge(electionId, index, cx, cy, rX, rY);
-        if (!_schnorr(cx[0], cy[0], rX, rY, z, e)) revert BadSchnorr();
+        if (!_schnorr(cx[0], cy[0], pok, pokChallenge(electionId, index, cx, cy, pok.rX, pok.rY))) revert BadSchnorr();
+        _requireSigned(c, electionId, index, keccak256(abi.encode("commit", cx, cy)), auth);
         c.cx[index] = cx;
         c.cy[index] = cy;
         c.committed += 1;
         c.lastCommitAt = uint64(block.timestamp);
     }
 
-    /// @notice A recipient shows a share signed by `dealer` that does not open its commitments.
-    ///         The dealer is excluded.
+    /// @notice Anyone shows a share that `dealer` signed for `recipient` and that does not open
+    ///         the dealer's commitments. The dealer is excluded.
     function complain(
         Committee storage c,
         uint32 electionId,
-        address sender,
         uint8 dealer,
+        uint8 recipient,
         uint256 share,
-        uint256 rX,
-        uint256 rY,
-        uint256 z
+        Schnorr calldata dealerSig
     ) external {
-        uint8 me = _liveMember(c, sender);
+        _requireLive(c, recipient);
         _requireCommittedDealer(c, dealer);
-        uint256 e = shareChallenge(electionId, dealer, me, share, rX, rY);
-        if (!_schnorr(c.cx[dealer][0], c.cy[dealer][0], rX, rY, z, e)) revert BadSchnorr();
-        if (_opens(c, dealer, me, share)) revert ComplaintUnfounded();
+        uint256 e = shareChallenge(electionId, dealer, recipient, share, dealerSig.rX, dealerSig.rY);
+        if (!_schnorr(c.cx[dealer][0], c.cy[dealer][0], dealerSig, e)) revert BadSchnorr();
+        if (_opens(c, dealer, recipient, share)) revert ComplaintUnfounded();
         _exclude(c, dealer);
     }
 
-    /// @notice A recipient who got no share, or an unsigned one, makes the dealer reveal it.
-    function openDispute(Committee storage c, address sender, uint8 dealer) external returns (uint8 me) {
-        me = _liveMember(c, sender);
+    /// @notice A recipient with no valid share, signing under its identity key, makes the dealer
+    ///         reveal the share. Unsigned disputes would let anyone force every share public.
+    function openDispute(Committee storage c, uint32 electionId, uint8 dealer, uint8 recipient, Schnorr calldata auth)
+        external
+    {
+        _requireLive(c, recipient);
         _requireCommittedDealer(c, dealer);
+        _requireSigned(c, electionId, recipient, keccak256(abi.encode("dispute", dealer)), auth);
         uint32 bit = uint32(1) << dealer;
         if (c.disputed & bit != 0) revert DisputeOpen();
         c.disputed |= bit;
-        c.dispute[dealer] = Dispute({recipient: me, openedAt: uint64(block.timestamp)});
+        c.dispute[dealer] = Dispute({recipient: recipient, openedAt: uint64(block.timestamp)});
     }
 
-    /// @notice The dealer reveals the disputed share. Returns true when it fails to open the
-    ///         commitments and the dealer was excluded.
-    function revealShare(Committee storage c, address sender, uint256 share)
-        external
-        returns (uint8 dealer, bool excluded)
-    {
-        dealer = _liveMember(c, sender);
+    /// @notice Reveal the disputed share. Only a share that opens the commitments is accepted,
+    ///         so anyone may relay it.
+    function revealShare(Committee storage c, uint8 dealer, uint256 share) external {
         uint32 bit = uint32(1) << dealer;
-        if (c.disputed & bit == 0) revert NoDispute();
+        if (dealer == 0 || dealer > c.n || c.disputed & bit == 0) revert NoDispute();
+        if (!_opens(c, dealer, c.dispute[dealer].recipient, share)) revert ShareDoesNotOpen();
         c.disputed &= ~bit;
-        excluded = !_opens(c, dealer, c.dispute[dealer].recipient, share);
-        if (excluded) _exclude(c, dealer);
     }
 
     /// @notice Exclude a dealer who did not reveal in time.
@@ -203,15 +213,15 @@ library Guardians {
 
     /// @notice Verify and store one guardian's shares for every option of the final accumulator.
     ///         `c1` holds `(x, y)` per option.
+    ///         Self-proving, so anyone may relay it.
     function postShares(
         Committee storage c,
         uint32 electionId,
-        address sender,
+        uint8 index,
         uint256[2][] memory c1,
         Share[] calldata shares
-    ) external returns (uint8 index) {
-        index = c.indexOf[sender];
-        if (index == 0 || c.excluded & (uint32(1) << index) != 0) revert NotMember();
+    ) external {
+        _requireLive(c, index);
         if (c.sharesPosted & (uint32(1) << index) != 0) revert SharesAlreadyPosted();
         if (shares.length != c1.length) revert BadShares();
         (uint256 pkX, uint256 pkY) = publicShare(c, index);
@@ -278,7 +288,7 @@ library Guardians {
 
     // ---------------------------------------------------------- challenges
 
-    function schnorrChallenge(
+    function pokChallenge(
         uint32 electionId,
         uint8 index,
         uint256[] calldata cx,
@@ -287,7 +297,18 @@ library Guardians {
         uint256 rY
     ) public view returns (uint256) {
         return uint256(
-            keccak256(abi.encode(SCHNORR_DOMAIN, block.chainid, address(this), electionId, index, cx, cy, rX, rY))
+            keccak256(abi.encode(POK_DOMAIN, block.chainid, address(this), electionId, index, cx, cy, rX, rY))
+        ) % BabyJub.ORDER;
+    }
+
+    /// @notice Challenge for a signature by guardian `index`'s identity key over `message`.
+    function authChallenge(uint32 electionId, uint8 index, bytes32 message, uint256 rX, uint256 rY)
+        public
+        view
+        returns (uint256)
+    {
+        return uint256(
+            keccak256(abi.encode(AUTH_DOMAIN, block.chainid, address(this), electionId, index, message, rX, rY))
         ) % BabyJub.ORDER;
     }
 
@@ -350,16 +371,22 @@ library Guardians {
         return lx == rx && ly == ry;
     }
 
-    function _schnorr(uint256 c0x, uint256 c0y, uint256 rX, uint256 rY, uint256 z, uint256 e)
-        private
-        pure
-        returns (bool)
-    {
-        if (!BabyJub.onCurve(rX, rY)) return false;
-        (uint256 lx, uint256 ly) = BabyJub.mulBase(z);
-        (uint256 ex, uint256 ey) = BabyJub.mul(c0x, c0y, e);
-        (uint256 rx, uint256 ry) = BabyJub.add(rX, rY, ex, ey);
+    function _schnorr(uint256 keyX, uint256 keyY, Schnorr calldata sig, uint256 e) private pure returns (bool) {
+        if (!BabyJub.onCurve(sig.rX, sig.rY)) return false;
+        (uint256 lx, uint256 ly) = BabyJub.mulBase(sig.z);
+        (uint256 ex, uint256 ey) = BabyJub.mul(keyX, keyY, e);
+        (uint256 rx, uint256 ry) = BabyJub.add(sig.rX, sig.rY, ex, ey);
         return lx == rx && ly == ry;
+    }
+
+    function _requireSigned(Committee storage c, uint32 electionId, uint8 index, bytes32 message, Schnorr calldata sig)
+        private
+        view
+    {
+        uint256[2] storage id = c.identity[index];
+        if (!_schnorr(id[0], id[1], sig, authChallenge(electionId, index, message, sig.rX, sig.rY))) {
+            revert BadSignature();
+        }
     }
 
     /// @dev `share · G == Σ_t at^t · C_{dealer,t}`.
@@ -382,9 +409,8 @@ library Guardians {
         }
     }
 
-    function _liveMember(Committee storage c, address who) private view returns (uint8 index) {
-        index = c.indexOf[who];
-        if (index == 0 || c.excluded & (uint32(1) << index) != 0) revert NotMember();
+    function _requireLive(Committee storage c, uint8 index) private view {
+        if (index == 0 || index > c.n || c.excluded & (uint32(1) << index) != 0) revert NotMember();
     }
 
     function _requireCommittedDealer(Committee storage c, uint8 dealer) private view {

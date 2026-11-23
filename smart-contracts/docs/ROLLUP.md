@@ -32,7 +32,7 @@ orders and proves the work.
 | Clerk | L1 | Creates an election for their jurisdiction and names its registrar, officer and guardians. |
 | Registrar | L1 | Adds identity commitments to the roll before `startTime`. |
 | Officer | L1 | Disqualifies a commitment before `startTime`, with a public reason code. |
-| Guardian | L1 | Runs the k-of-n Feldman DKG and posts one decryption share per option after close. |
+| Guardian | L1 (relayed) | Holds a Baby Jubjub identity key, not an L1 account. Runs the k-of-n Feldman DKG and posts one decryption share per option after close. Each call is signed under the identity key or proves itself, so any relayer (usually the node) can send it, and none can forge it. |
 | Operator | L1 + L2 | Orders L2 operations, commits batches and reverts unexecuted ones. |
 | Anyone | L1 | Verifies and executes proven batches, forces a ballot in, closes an election after cutoff, activates desert mode, finalizes a result. |
 | Voter | L2 (or L1) | Sends an encrypted ballot with a ballot proof to the operator, or forces it in through L1. |
@@ -40,8 +40,8 @@ orders and proves the work.
 ## L1 lifecycle of an election
 
 ```
-createElection ──► guardians post Feldman commitments ──► finalizeKey
-     (clerk)            (complaints / reveals / drops)        │
+createElection ──► guardians post signed Feldman commitments ──► finalizeKey
+     (clerk)            (complaints / disputes / reveals)           │
                                                               ▼
                                          priority op CREATE_ELECTION (carries the joint key)
 registerVoters / disqualify (until startTime)  ──► priority ops REGISTER / DISQUALIFY

@@ -39,7 +39,8 @@ interface IZkVotingRollup {
         uint32 minBallots;
         address registrar;
         address officer;
-        address[] guardians;
+        /// @notice Guardian identity keys on Baby Jubjub, in index order (index = position + 1).
+        uint256[2][] guardians;
         uint8 threshold;
         /// @notice Hash of the ballot text the voters see (question, options, language).
         bytes32 ballotSpecHash;
@@ -202,7 +203,7 @@ interface IZkVotingRollup {
         uint256[] calldata siblings
     ) external;
 
-    function postDecryptionShares(uint32 electionId, Guardians.Share[] calldata shares) external;
+    function postDecryptionShares(uint32 electionId, uint8 guardianIndex, Guardians.Share[] calldata shares) external;
 
     function finalizeResult(uint32 electionId, uint256[] calldata counts, uint8[] calldata guardianIndexes) external;
 

@@ -95,15 +95,13 @@ contract ResultsTest is RollupTest {
         vm.expectRevert(abi.encodeWithSelector(IZkVotingRollup.WrongStatus.selector, IZkVotingRollup.Status.Finalized));
         rollup.finalizeResult(id, _expected(), _subset(1, 2));
         vm.expectRevert(abi.encodeWithSelector(IZkVotingRollup.WrongStatus.selector, IZkVotingRollup.Status.Finalized));
-        vm.prank(guardianAccounts[2]);
-        rollup.postDecryptionShares(id, new Guardians.Share[](0));
+        rollup.postDecryptionShares(id, 3, new Guardians.Share[](0));
     }
 
     function test_SharesBeforeCloseAreRefused() public {
         uint32 id = scheduledElection();
         vm.expectRevert(abi.encodeWithSelector(IZkVotingRollup.WrongStatus.selector, IZkVotingRollup.Status.Scheduled));
-        vm.prank(guardianAccounts[0]);
-        rollup.postDecryptionShares(id, new Guardians.Share[](0));
+        rollup.postDecryptionShares(id, 1, new Guardians.Share[](0));
     }
 
     function test_TurnoutBelowTheFloorIsWithheldForever() public {
@@ -115,8 +113,7 @@ contract ResultsTest is RollupTest {
         assertEq(e.ballotCount, 2);
 
         vm.expectRevert(abi.encodeWithSelector(IZkVotingRollup.WrongStatus.selector, IZkVotingRollup.Status.Withheld));
-        vm.prank(guardianAccounts[0]);
-        rollup.postDecryptionShares(id, new Guardians.Share[](0));
+        rollup.postDecryptionShares(id, 1, new Guardians.Share[](0));
         uint256[] memory counts = new uint256[](3);
         (counts[0], counts[1]) = (1, 1);
         vm.expectRevert(abi.encodeWithSelector(IZkVotingRollup.WrongStatus.selector, IZkVotingRollup.Status.Withheld));
@@ -128,16 +125,14 @@ contract ResultsTest is RollupTest {
         Guardians.Share[] memory shares = decryptionShares(id, 1);
         shares[1].z = addmod(shares[1].z, 1, ORDER);
         vm.expectRevert(Guardians.BadShares.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.postDecryptionShares(id, shares);
+        rollup.postDecryptionShares(id, 1, shares);
     }
 
     function test_SharesCannotBeReplayedForAnotherGuardian() public {
         uint32 id = runElection(_votes());
         Guardians.Share[] memory shares = decryptionShares(id, 1);
         vm.expectRevert(Guardians.BadShares.selector);
-        vm.prank(guardianAccounts[1]);
-        rollup.postDecryptionShares(id, shares);
+        rollup.postDecryptionShares(id, 2, shares);
     }
 
     function test_SharesArePostedOnce() public {
@@ -145,15 +140,16 @@ contract ResultsTest is RollupTest {
         postShares(id, 1);
         Guardians.Share[] memory shares = decryptionShares(id, 1);
         vm.expectRevert(Guardians.SharesAlreadyPosted.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.postDecryptionShares(id, shares);
+        rollup.postDecryptionShares(id, 1, shares);
     }
 
-    function test_StrangerCannotPostShares() public {
+    function test_UnknownGuardianIndexCannotPostShares() public {
         uint32 id = runElection(_votes());
         Guardians.Share[] memory shares = decryptionShares(id, 1);
         vm.expectRevert(Guardians.NotMember.selector);
-        rollup.postDecryptionShares(id, shares);
+        rollup.postDecryptionShares(id, 4, shares);
+        vm.expectRevert(Guardians.NotMember.selector);
+        rollup.postDecryptionShares(id, 0, shares);
     }
 
     function test_ZeroTurnoutElectionWithFloorOneIsWithheld() public {

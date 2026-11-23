@@ -29,7 +29,10 @@ abstract contract RollupTest is Test {
     address internal clerk = makeAddr("clerk");
     address internal registrar = makeAddr("registrar");
     address internal officer = makeAddr("officer");
-    address[] internal guardianAccounts;
+    /// @dev Guardian identity keys (index = position + 1). Secrets are `identitySecret(i)`.
+    uint256[2][] internal guardianKeys;
+    /// @dev Relays guardian calls; any account may.
+    address internal relayer = makeAddr("relayer");
 
     /// @dev Latest committed batch, as the operator tracks it.
     IZkVotingRollup.StoredBatchInfo internal lastBatch;
@@ -63,8 +66,9 @@ abstract contract RollupTest is Test {
         vm.prank(jurisdictionAdmin);
         rollup.setClerk(JURISDICTION, clerk, true);
 
-        for (uint256 i; i < 3; ++i) {
-            guardianAccounts.push(makeAddr(string.concat("guardian", vm.toString(i + 1))));
+        for (uint8 i = 1; i <= 3; ++i) {
+            (uint256 x, uint256 y) = BabyJub.mulBase(identitySecret(i));
+            guardianKeys.push([x, y]);
         }
     }
 
@@ -78,7 +82,7 @@ abstract contract RollupTest is Test {
         c.minBallots = 3;
         c.registrar = registrar;
         c.officer = officer;
-        c.guardians = guardianAccounts;
+        c.guardians = guardianKeys;
         c.threshold = 2;
         c.ballotSpecHash = keccak256("Which park gets the new playground?");
         c.metadataURI = "ipfs://ballot";
@@ -120,19 +124,42 @@ abstract contract RollupTest is Test {
         }
     }
 
+    function identitySecret(uint8 i) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode("identity", i))) % ORDER;
+    }
+
+    /// @dev Guardian `i`'s identity-key signature over `message`.
+    function sign(uint32 id, uint8 i, bytes32 message) internal view returns (Guardians.Schnorr memory sig) {
+        uint256 nonce = uint256(keccak256(abi.encode("auth", id, i, message))) % ORDER;
+        (sig.rX, sig.rY) = BabyJub.mulBase(nonce);
+        uint256 e = uint256(
+            keccak256(abi.encode(Guardians.AUTH_DOMAIN, block.chainid, address(rollup), id, i, message, sig.rX, sig.rY))
+        ) % ORDER;
+        sig.z = addmod(nonce, mulmod(e, identitySecret(i), ORDER), ORDER);
+    }
+
+    function pokOf(uint32 id, uint8 i, uint256[] memory cx, uint256[] memory cy)
+        internal
+        view
+        returns (Guardians.Schnorr memory pok)
+    {
+        uint256 nonce = uint256(keccak256(abi.encode("pok", i))) % ORDER;
+        (pok.rX, pok.rY) = BabyJub.mulBase(nonce);
+        uint256 e = uint256(
+            keccak256(abi.encode(Guardians.POK_DOMAIN, block.chainid, address(rollup), id, i, cx, cy, pok.rX, pok.rY))
+        ) % ORDER;
+        pok.z = addmod(nonce, mulmod(e, coeff(i, 0), ORDER), ORDER);
+    }
+
     function commitGuardian(uint32 id, uint8 i) internal {
         uint256 k = info(id).threshold;
         (uint256[] memory cx, uint256[] memory cy) = commitments(i, k);
-        uint256 nonce = uint256(keccak256(abi.encode("schnorr", i))) % ORDER;
-        (uint256 rX, uint256 rY) = BabyJub.mulBase(nonce);
-        uint256 e = schnorrChallenge(id, i, cx, cy, rX, rY);
-        uint256 z = addmod(nonce, mulmod(e, coeff(i, 0), ORDER), ORDER);
-        vm.prank(guardianAccounts[i - 1]);
-        rollup.commitGuardian(id, cx, cy, rX, rY, z);
+        vm.prank(relayer);
+        rollup.commitGuardian(id, i, cx, cy, pokOf(id, i, cx, cy), sign(id, i, keccak256(abi.encode("commit", cx, cy))));
     }
 
     function commitAllGuardians(uint32 id) internal {
-        for (uint8 i = 1; i <= guardianAccounts.length; ++i) {
+        for (uint8 i = 1; i <= guardianKeys.length; ++i) {
             commitGuardian(id, i);
         }
     }
@@ -149,20 +176,10 @@ abstract contract RollupTest is Test {
     /// @dev Guardian `j`'s secret share, summed over dealers that are in good standing.
     function secretShare(uint32 id, uint8 j) internal view returns (uint256 s) {
         uint256 k = info(id).threshold;
-        for (uint8 i = 1; i <= guardianAccounts.length; ++i) {
-            (, bool committed, bool excluded,) = rollup.guardian(id, i);
+        for (uint8 i = 1; i <= guardianKeys.length; ++i) {
+            (,, bool committed, bool excluded,) = rollup.guardian(id, i);
             if (committed && !excluded) s = addmod(s, dealtShare(i, j, k), ORDER);
         }
-    }
-
-    function schnorrChallenge(uint32 id, uint8 index, uint256[] memory cx, uint256[] memory cy, uint256 rX, uint256 rY)
-        internal
-        view
-        returns (uint256)
-    {
-        return uint256(
-            keccak256(abi.encode(Guardians.SCHNORR_DOMAIN, block.chainid, address(rollup), id, index, cx, cy, rX, rY))
-        ) % ORDER;
     }
 
     function shareChallenge(uint32 id, uint8 dealer, uint8 recipient, uint256 share, uint256 rX, uint256 rY)
@@ -177,16 +194,16 @@ abstract contract RollupTest is Test {
         ) % ORDER;
     }
 
-    /// @dev Dealer's Schnorr signature on one share, as sent off chain.
+    /// @dev Dealer's Schnorr signature on one share (under `C_0`), as sent off chain.
     function signShare(uint32 id, uint8 dealer, uint8 recipient, uint256 share)
         internal
         view
-        returns (uint256 rX, uint256 rY, uint256 z)
+        returns (Guardians.Schnorr memory sig)
     {
         uint256 nonce = uint256(keccak256(abi.encode("share-sig", dealer, recipient, share))) % ORDER;
-        (rX, rY) = BabyJub.mulBase(nonce);
-        uint256 e = shareChallenge(id, dealer, recipient, share, rX, rY);
-        z = addmod(nonce, mulmod(e, coeff(dealer, 0), ORDER), ORDER);
+        (sig.rX, sig.rY) = BabyJub.mulBase(nonce);
+        uint256 e = shareChallenge(id, dealer, recipient, share, sig.rX, sig.rY);
+        sig.z = addmod(nonce, mulmod(e, coeff(dealer, 0), ORDER), ORDER);
     }
 
     function decryptionShares(uint32 id, uint8 j) internal view returns (Guardians.Share[] memory shares) {
@@ -224,8 +241,8 @@ abstract contract RollupTest is Test {
 
     function postShares(uint32 id, uint8 j) internal {
         Guardians.Share[] memory shares = decryptionShares(id, j);
-        vm.prank(guardianAccounts[j - 1]);
-        rollup.postDecryptionShares(id, shares);
+        vm.prank(relayer);
+        rollup.postDecryptionShares(id, j, shares);
     }
 
     // -------------------------------------------------------------------- voters

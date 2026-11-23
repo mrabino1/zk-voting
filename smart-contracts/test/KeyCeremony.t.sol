@@ -18,7 +18,9 @@ contract KeyCeremonyTest is RollupTest {
         assertEq(e.clerk, clerk);
         assertEq(e.guardianCount, 3);
         assertEq(e.threshold, 2);
-        assertEq(rollup.guardianIndex(id, guardianAccounts[1]), 2);
+        (uint256 kx, uint256 ky,,,) = rollup.guardian(id, 2);
+        assertEq(kx, guardianKeys[1][0]);
+        assertEq(ky, guardianKeys[1][1]);
         assertEq(rollup.totalPriorityRequests(), 0, "nothing reaches the L2 before the key is final");
     }
 
@@ -53,6 +55,12 @@ contract KeyCeremonyTest is RollupTest {
 
         c = defaultConfig();
         c.guardians[2] = c.guardians[0];
+        vm.expectRevert(Guardians.BadCommittee.selector);
+        vm.prank(clerk);
+        rollup.createElection(c);
+
+        c = defaultConfig();
+        c.guardians[1] = [uint256(0), 1];
         vm.expectRevert(Guardians.BadCommittee.selector);
         vm.prank(clerk);
         rollup.createElection(c);
@@ -105,50 +113,61 @@ contract KeyCeremonyTest is RollupTest {
         assertEq(uint8(info(id).status), uint8(IZkVotingRollup.Status.Scheduled), "timeout drops the absent guardian");
     }
 
-    function test_CommitRejectsABadSchnorrProof() public {
+    function test_CommitRejectsABadProofOfKnowledge() public {
         uint32 id = createElection();
         (uint256[] memory cx, uint256[] memory cy) = commitments(1, 2);
-        (uint256 rX, uint256 rY) = BabyJub.mulBase(7);
+        Guardians.Schnorr memory pok = pokOf(id, 1, cx, cy);
+        pok.z = addmod(pok.z, 1, ORDER);
         vm.expectRevert(Guardians.BadSchnorr.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.commitGuardian(id, cx, cy, rX, rY, 123);
+        rollup.commitGuardian(id, 1, cx, cy, pok, sign(id, 1, keccak256(abi.encode("commit", cx, cy))));
+    }
+
+    function test_CommitMustBeSignedByThatGuardian() public {
+        uint32 id = createElection();
+        (uint256[] memory cx, uint256[] memory cy) = commitments(1, 2);
+        Guardians.Schnorr memory pok = pokOf(id, 1, cx, cy);
+        // Guardian 2 signs a commitment for slot 1: a relayer cannot take over a slot.
+        vm.expectRevert(Guardians.BadSignature.selector);
+        rollup.commitGuardian(id, 1, cx, cy, pok, sign(id, 2, keccak256(abi.encode("commit", cx, cy))));
+        // A signature over other commitments does not transfer.
+        (uint256[] memory ox, uint256[] memory oy) = commitments(3, 2);
+        vm.expectRevert(Guardians.BadSignature.selector);
+        rollup.commitGuardian(id, 1, cx, cy, pok, sign(id, 1, keccak256(abi.encode("commit", ox, oy))));
     }
 
     function test_CommitRejectsWrongDegreeAndOffCurvePoints() public {
         uint32 id = createElection();
+        Guardians.Schnorr memory none;
         (uint256[] memory cx, uint256[] memory cy) = commitments(1, 3);
         vm.expectRevert(Guardians.BadCommitments.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.commitGuardian(id, cx, cy, 0, 1, 0);
+        rollup.commitGuardian(id, 1, cx, cy, none, none);
 
         (cx, cy) = commitments(1, 2);
         cy[1] = cy[1] + 1;
         vm.expectRevert(Guardians.BadPoint.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.commitGuardian(id, cx, cy, 0, 1, 0);
+        rollup.commitGuardian(id, 1, cx, cy, none, none);
     }
 
-    function test_CommitOnceAndOnlyMembers() public {
+    function test_CommitOnceAndOnlyKnownIndexes() public {
         uint32 id = createElection();
         commitGuardian(id, 1);
         (uint256[] memory cx, uint256[] memory cy) = commitments(1, 2);
+        Guardians.Schnorr memory none;
         vm.expectRevert(Guardians.AlreadyCommitted.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.commitGuardian(id, cx, cy, 0, 1, 0);
-
+        rollup.commitGuardian(id, 1, cx, cy, none, none);
         vm.expectRevert(Guardians.NotMember.selector);
-        rollup.commitGuardian(id, cx, cy, 0, 1, 0);
+        rollup.commitGuardian(id, 4, cx, cy, none, none);
+        vm.expectRevert(Guardians.NotMember.selector);
+        rollup.commitGuardian(id, 0, cx, cy, none, none);
     }
 
     function test_SignedBadShareExcludesTheDealer() public {
         uint32 id = createElection();
         commitAllGuardians(id);
         uint256 bad = dealtShare(2, 1, 2) + 1;
-        (uint256 rX, uint256 rY, uint256 z) = signShare(id, 2, 1, bad);
-        vm.prank(guardianAccounts[0]);
-        rollup.complainShare(id, 2, bad, rX, rY, z);
+        rollup.complainShare(id, 2, 1, bad, signShare(id, 2, 1, bad));
 
-        (, bool committed, bool excluded,) = rollup.guardian(id, 2);
+        (,, bool committed, bool excluded,) = rollup.guardian(id, 2);
         assertTrue(committed);
         assertTrue(excluded);
 
@@ -163,60 +182,54 @@ contract KeyCeremonyTest is RollupTest {
         uint32 id = createElection();
         commitAllGuardians(id);
         uint256 good = dealtShare(2, 1, 2);
-        (uint256 rX, uint256 rY, uint256 z) = signShare(id, 2, 1, good);
         vm.expectRevert(Guardians.ComplaintUnfounded.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.complainShare(id, 2, good, rX, rY, z);
+        rollup.complainShare(id, 2, 1, good, signShare(id, 2, 1, good));
     }
 
-    function test_ComplaintNeedsTheDealersSignature() public {
+    function test_ComplaintNeedsTheDealersSignatureForThatRecipient() public {
         uint32 id = createElection();
         commitAllGuardians(id);
         uint256 bad = 42;
-        (uint256 rX, uint256 rY, uint256 z) = signShare(id, 3, 1, bad);
         vm.expectRevert(Guardians.BadSchnorr.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.complainShare(id, 2, bad, rX, rY, z);
+        rollup.complainShare(id, 2, 1, bad, signShare(id, 3, 1, bad));
+        vm.expectRevert(Guardians.BadSchnorr.selector);
+        rollup.complainShare(id, 2, 1, bad, signShare(id, 2, 3, bad));
+    }
+
+    function test_DisputeMustBeSignedByTheRecipient() public {
+        uint32 id = createElection();
+        commitAllGuardians(id);
+        vm.expectRevert(Guardians.BadSignature.selector);
+        rollup.openShareDispute(id, 3, 1, sign(id, 2, keccak256(abi.encode("dispute", uint8(3)))));
     }
 
     function test_DisputeRevealedCorrectlyKeepsTheDealer() public {
         uint32 id = createElection();
         commitAllGuardians(id);
-        vm.prank(guardianAccounts[0]);
-        rollup.openShareDispute(id, 3);
+        rollup.openShareDispute(id, 3, 1, sign(id, 1, keccak256(abi.encode("dispute", uint8(3)))));
 
         vm.warp(block.timestamp + Guardians.COMPLAINT_WINDOW);
         vm.expectRevert(Guardians.DisputeOpen.selector);
         rollup.finalizeKey(id);
 
-        vm.prank(guardianAccounts[2]);
-        rollup.revealShare(id, dealtShare(3, 1, 2));
-        (,, bool excluded,) = rollup.guardian(id, 3);
+        vm.expectRevert(Guardians.ShareDoesNotOpen.selector);
+        rollup.revealShare(id, 3, 5);
+
+        rollup.revealShare(id, 3, dealtShare(3, 1, 2));
+        (,,, bool excluded,) = rollup.guardian(id, 3);
         assertFalse(excluded);
         rollup.finalizeKey(id);
-    }
-
-    function test_DisputeRevealedWrongExcludesTheDealer() public {
-        uint32 id = createElection();
-        commitAllGuardians(id);
-        vm.prank(guardianAccounts[0]);
-        rollup.openShareDispute(id, 3);
-        vm.prank(guardianAccounts[2]);
-        rollup.revealShare(id, 5);
-        (,, bool excluded,) = rollup.guardian(id, 3);
-        assertTrue(excluded);
     }
 
     function test_SilentDealerIsExcludedAfterTheRevealWindow() public {
         uint32 id = createElection();
         commitAllGuardians(id);
-        vm.prank(guardianAccounts[0]);
-        rollup.openShareDispute(id, 3);
+        rollup.openShareDispute(id, 3, 1, sign(id, 1, keccak256(abi.encode("dispute", uint8(3)))));
         vm.expectRevert(Guardians.TooEarly.selector);
         rollup.expireShareDispute(id, 3);
         vm.warp(block.timestamp + Guardians.REVEAL_WINDOW);
         rollup.expireShareDispute(id, 3);
-        (,, bool excluded,) = rollup.guardian(id, 3);
+        (,,, bool excluded,) = rollup.guardian(id, 3);
         assertTrue(excluded);
         vm.expectRevert(Guardians.NoDispute.selector);
         rollup.expireShareDispute(id, 3);
@@ -226,9 +239,9 @@ contract KeyCeremonyTest is RollupTest {
         uint32 id = createElection();
         vm.warp(info(id).startTime);
         (uint256[] memory cx, uint256[] memory cy) = commitments(1, 2);
+        Guardians.Schnorr memory none;
         vm.expectRevert(IZkVotingRollup.TooLate.selector);
-        vm.prank(guardianAccounts[0]);
-        rollup.commitGuardian(id, cx, cy, 0, 1, 0);
+        rollup.commitGuardian(id, 1, cx, cy, none, none);
         vm.expectRevert(IZkVotingRollup.TooLate.selector);
         rollup.finalizeKey(id);
     }

@@ -210,36 +210,45 @@ contract ZkVotingRollup is IZkVotingRollup {
 
     // ---------------------------------------------------------- key ceremony
 
+    /// @notice Guardian ceremony calls carry the guardian's own signature or are self-proving, so
+    ///         any relayer may send them. See `Guardians`.
     function commitGuardian(
         uint32 electionId,
+        uint8 index,
         uint256[] calldata cx,
         uint256[] calldata cy,
-        uint256 rX,
-        uint256 rY,
-        uint256 z
+        Guardians.Schnorr calldata pok,
+        Guardians.Schnorr calldata auth
     ) external {
         _keyGen(electionId);
-        uint8 index = Guardians.commit(_committees[electionId], electionId, msg.sender, cx, cy, rX, rY, z);
+        Guardians.commit(_committees[electionId], electionId, index, cx, cy, pok, auth);
         emit GuardianCommitted(electionId, index);
     }
 
-    function complainShare(uint32 electionId, uint8 dealer, uint256 share, uint256 rX, uint256 rY, uint256 z) external {
+    function complainShare(
+        uint32 electionId,
+        uint8 dealer,
+        uint8 recipient,
+        uint256 share,
+        Guardians.Schnorr calldata dealerSig
+    ) external {
         _keyGen(electionId);
-        Guardians.complain(_committees[electionId], electionId, msg.sender, dealer, share, rX, rY, z);
+        Guardians.complain(_committees[electionId], electionId, dealer, recipient, share, dealerSig);
         emit DealerExcluded(electionId, dealer);
     }
 
-    function openShareDispute(uint32 electionId, uint8 dealer) external {
+    function openShareDispute(uint32 electionId, uint8 dealer, uint8 recipient, Guardians.Schnorr calldata auth)
+        external
+    {
         _keyGen(electionId);
-        uint8 recipient = Guardians.openDispute(_committees[electionId], msg.sender, dealer);
+        Guardians.openDispute(_committees[electionId], electionId, dealer, recipient, auth);
         emit ShareDisputeOpened(electionId, dealer, recipient);
     }
 
-    function revealShare(uint32 electionId, uint256 share) external {
+    function revealShare(uint32 electionId, uint8 dealer, uint256 share) external {
         _keyGen(electionId);
-        (uint8 dealer, bool excluded) = Guardians.revealShare(_committees[electionId], msg.sender, share);
-        if (excluded) emit DealerExcluded(electionId, dealer);
-        else emit ShareDisputeClosed(electionId, dealer);
+        Guardians.revealShare(_committees[electionId], dealer, share);
+        emit ShareDisputeClosed(electionId, dealer);
     }
 
     function expireShareDispute(uint32 electionId, uint8 dealer) external {
@@ -457,7 +466,8 @@ contract ZkVotingRollup is IZkVotingRollup {
     // ==================================================================== results
 
     /// @inheritdoc IZkVotingRollup
-    function postDecryptionShares(uint32 electionId, Guardians.Share[] calldata shares) external {
+    /// @dev Self-proving (Chaum-Pedersen against `PK_index`), so any relayer may send it.
+    function postDecryptionShares(uint32 electionId, uint8 guardianIndex, Guardians.Share[] calldata shares) external {
         ElectionInfo storage e = _election(electionId);
         if (e.status != Status.Closed) revert WrongStatus(e.status);
         uint256[4][] storage acc = _accumulators[electionId];
@@ -465,8 +475,8 @@ contract ZkVotingRollup is IZkVotingRollup {
         for (uint256 o; o < acc.length; ++o) {
             c1[o] = [acc[o][0], acc[o][1]];
         }
-        uint8 index = Guardians.postShares(_committees[electionId], electionId, msg.sender, c1, shares);
-        emit DecryptionSharesPosted(electionId, index);
+        Guardians.postShares(_committees[electionId], electionId, guardianIndex, c1, shares);
+        emit DecryptionSharesPosted(electionId, guardianIndex);
     }
 
     /// @inheritdoc IZkVotingRollup
@@ -521,15 +531,12 @@ contract ZkVotingRollup is IZkVotingRollup {
     function guardian(uint32 electionId, uint8 index)
         external
         view
-        returns (address account, bool committed, bool excluded, bool sharesPosted)
+        returns (uint256 keyX, uint256 keyY, bool committed, bool excluded, bool sharesPosted)
     {
         Guardians.Committee storage c = _committees[electionId];
         uint32 bit = uint32(1) << index;
-        return (c.member[index], c.cx[index].length != 0, c.excluded & bit != 0, c.sharesPosted & bit != 0);
-    }
-
-    function guardianIndex(uint32 electionId, address account) external view returns (uint8) {
-        return _committees[electionId].indexOf[account];
+        uint256[2] storage id = c.identity[index];
+        return (id[0], id[1], c.cx[index].length != 0, c.excluded & bit != 0, c.sharesPosted & bit != 0);
     }
 
     function guardianCommitments(uint32 electionId, uint8 index)
