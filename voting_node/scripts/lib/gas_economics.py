@@ -3,11 +3,14 @@
 
 NOT FOR PROFIT — civic public good, not a commercial product.
 
-Inputs come from environment variables set by the bash wrapper (GE_*), so
-nothing here names a host, a chain, or a price source.
+Prices one civic vote on ZkVotingRollup (smart-contracts/docs/ROLLUP.md). Every
+transaction in the model is an Ethereum L1 transaction; polls run on the Node
+and cost no gas. Inputs come from environment variables set by the bash wrapper
+(GE_*), so nothing here names a host, a chain, or a price source.
 """
 import glob
 import json
+import math
 import os
 import re
 import sys
@@ -17,39 +20,49 @@ EIP3860 = 49152         # pre-Glamsterdam initcode cap
 EIP7954_RUNTIME = 65536 # Glamsterdam EIP-7954 runtime cap
 EIP7954_INIT = 131072   # Glamsterdam EIP-7954 initcode cap
 TIGHT = 0.90
-# One hourly settlement per open hour, then the final batch and one supplementary batch.
-TAIL_BATCHES = 2
-# The prover posts one submitBatch per this many sealed L2 blocks (L2_BATCH_SIZE).
-SEQUENCER_BATCH_BLOCKS = 4
-# Producer period when the mempool stays full (genesis block time).
-BLOCK_PERIOD_SECONDS = 2
 # Quoted when no L1 node answered. 1 gwei and 30 gwei are that figure divided by 10 and times 3.
 REF_GWEI = 10.0
 
-# Contracts that settle on L1 (Ethereum). Everything else is the election
-# stack, which runs on the civic L2 (or any EVM chain it is deployed to).
-L1_CONTRACTS = {"RollupSettlement", "L1TallyMirror", "ZkVotingMailbox"}
+# Intrinsic cost of every L1 transaction; forge's gas report leaves it out.
+TX_BASE = 21000
+# The operator seals a batch every L2_BATCH_SECONDS when there is work, with at most
+# this many ballots (voting_node/l2/rollup/operator.mjs).
+MAX_BALLOTS_PER_BATCH = 256
+BATCH_SECONDS = 10
+# A BALLOT op in pubdata: type (1) + election id (4) + nullifier (32) + commitment (32).
+BALLOT_PUBDATA_BYTES = 69
+CALLDATA_GAS_PER_BYTE = 16
+# Enqueueing a voter on the roll (registerVoters): measured 346,611 gas for 70
+# commitments in test/PriorityQueue.t.sol, plus 32 bytes of calldata each.
+REGISTER_GAS_PER_VOTER = 4950 + 32 * CALLDATA_GAS_PER_BYTE
+# The forge tests run elections with 3 options, 3 guardians and k = 2. Decryption
+# shares and result checks scale with the option count.
+MEASURED_OPTIONS = 3
 
-# The calls that make up one election, in lifecycle order.
+# Not part of the rollup deployment: a test-only verifier, and the optional
+# signal-poll token (script/DeploySignalToken.s.sol).
+TEST_ONLY = {"MockBatchVerifier"}
+OPTIONAL = {"SignalVotesToken", "SignalVotesWrapper"}
+
+# The calls of one civic vote, in lifecycle order: (contract, function, when).
 KEY_OPS = [
-    ("L2", "JurisdictionRegistry", "createJurisdiction", "once per jurisdiction"),
-    ("L2", "ElectionFactory", "createElection", "once per election"),
-    ("L2", "PasskeyAccountFactory", "createAccount", "once per voter account"),
-    ("L2", "VoterRegistry", "register", "per voter"),
-    ("L2", "BallotInbox", "submitVote", "per ballot (reverts once disclosure interval is set)"),
-    ("L2", "BallotInbox", "submitVoteBatch", "per inbox batch (at most 64 ballots)"),
-    ("L2", "BallotInbox", "submitVoteWithClearance", "per ballot (clearance path)"),
-    ("L2", "Tally", "submitTally", "once per election"),
-    ("L2", "Tally", "submitOpenedTally", "once per election (opened)"),
-    ("L2", "Tally", "postInterimResult", "POLL, per published hour"),
-    ("L2", "Tally", "disclose", "POLL, per published hour"),
-    ("L2", "Tally", "submitDecryption", "VOTE, once after cutoff"),
-    ("L1", "RollupSettlement", "submitBatch", "per settled batch"),
-    ("L1", "RollupSettlement", "submitHourlyBatch", "per open hour"),
-    ("L1", "RollupSettlement", "submitFinalBatch", "once, at cutoff"),
-    ("L1", "RollupSettlement", "submitSupplementaryBatch", "once, at tally time"),
-    ("L1", "L1TallyMirror", "postResult", "once per election (legacy slot)"),
-    ("L1", "L1TallyMirror", "postCertifiedResult", "once per election (certified)"),
+    ("ZkVotingRollup", "setOperator", "governor, once per operator"),
+    ("ZkVotingRollup", "createJurisdiction", "governor, once per jurisdiction"),
+    ("ZkVotingRollup", "setClerk", "jurisdiction admin, once per clerk"),
+    ("ZkVotingRollup", "createElection", "clerk (the Node), once per election"),
+    ("ZkVotingRollup", "commitGuardian", "once per guardian (relayed by the Node)"),
+    ("ZkVotingRollup", "finalizeKey", "once per election"),
+    ("ZkVotingRollup", "registerVoters", "per roll sync (grows with the voters sent)"),
+    ("ZkVotingRollup", "disqualify", "per disqualification"),
+    ("ZkVotingRollup", "commitBatch", "operator, per batch"),
+    ("ZkVotingRollup", "verifyBatch", "per batch (mock verifier in tests)"),
+    ("ZkVotingRollup", "executeBatches", "per batch"),
+    ("ZkVotingRollup", "forceBallot", "only when the operator refuses a ballot"),
+    ("ZkVotingRollup", "closeElection", "once, after the cutoff"),
+    ("ZkVotingRollup", "postDecryptionShares", "once per guardian, k needed"),
+    ("ZkVotingRollup", "finalizeResult", "once per election"),
+    ("ZkVotingRollup", "activateDesertMode", "only if the operator ignores the queue"),
+    ("ZkVotingRollup", "desertClose", "desert mode only, per open election"),
 ]
 
 
@@ -192,19 +205,6 @@ def whole(name, default=None):
     return int(v)
 
 
-def l1_batch_count(hours):
-    """Hourly settlement, the final batch, and one supplementary batch."""
-    return hours + TAIL_BATCHES
-
-
-def busy_sequencer_batches(hours):
-    """L1 submitBatch calls if a block is sealed every period and posted in groups of 4."""
-    if hours <= 0:
-        return 0
-    blocks = hours * 3600 // BLOCK_PERIOD_SECONDS
-    return (blocks + SEQUENCER_BATCH_BLOCKS - 1) // SEQUENCER_BATCH_BLOCKS
-
-
 def call_median(ops, contract, fn):
     st = ops.get((contract, fn))
     if not st or st.get("median") is None:
@@ -268,89 +268,82 @@ def _line(label, gas, gwei, usd):
     print(f"  {label:<52} {fmt_int(gas):>14} gas   {fmt_eth(eth):>12} ETH   {fmt_usd(dollars):>12}")
 
 
-def print_scenarios(ops, voters, ballots, hours, batches, groth16, l1_gwei, l2_gwei, usd, total_l1_gas):
-    del l2_gwei  # the civic L2 has no gas token; this section prices Ethereum only
-    gwei, scale = quote_gwei(l1_gwei)
-    batch_label, batch_gas = first_median(ops, (
-        ("RollupSettlement", "submitBatch"),
-        ("RollupSettlement", "submitHourlyBatch"),
-    ))
-    cert_label, cert_gas = first_median(ops, (
-        ("L1TallyMirror", "postCertifiedResult"),
-        ("L1TallyMirror", "postResult"),
-    ))
+def batch_range(ballots, hours):
+    """Fewest batches (full ones) and most (one ballot each, as often as the operator seals)."""
+    if ballots <= 0:
+        return 0, 0
+    low = math.ceil(ballots / MAX_BALLOTS_PER_BATCH)
+    high = max(low, min(ballots, hours * 3600 // BATCH_SECONDS))
+    return low, high
 
-    rule("L1 bill: one-time deploy, then one settlement per hour")
-    print("Your L2 runs on your own VPS. Registration, ballots, the tally, a poll's hourly")
-    print("disclosure, and a vote's decryption are not Ethereum transactions. That gas costs")
-    print("$0. A poll and a vote post the same L1 transactions. How many ballots were cast")
-    print("does not change the count. How many hours voting stays open does.")
+
+def print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, threshold, options, gwei_live, usd, deploy_gas):
+    gwei, scale = quote_gwei(gwei_live)
+    need = {
+        "create": call_median(ops, "ZkVotingRollup", "createElection"),
+        "commitGuardian": call_median(ops, "ZkVotingRollup", "commitGuardian"),
+        "finalizeKey": call_median(ops, "ZkVotingRollup", "finalizeKey"),
+        "commit": call_median(ops, "ZkVotingRollup", "commitBatch"),
+        "verify": call_median(ops, "ZkVotingRollup", "verifyBatch"),
+        "execute": call_median(ops, "ZkVotingRollup", "executeBatches"),
+        "close": call_median(ops, "ZkVotingRollup", "closeElection"),
+        "shares": call_median(ops, "ZkVotingRollup", "postDecryptionShares"),
+        "finalize": call_median(ops, "ZkVotingRollup", "finalizeResult"),
+    }
+
+    rule("L1 bill for one civic vote")
+    print("Every line is an Ethereum transaction. Voters pay nothing: the Node account pays for")
+    print("publish, roll sync, guardian relays, close and finalize; the operator pays for batches.")
+    print("Polls run on the Node and cost no gas.")
     print(f"ETH/USD is {fmt_usd(usd)}." + (f" {scale}" if scale else f" L1 gas is {gwei:.3f} gwei."))
-    print("Voters pay nothing. Batch posting is the sequencer, prover, or admin.")
+    print(f"Election: {voters:,} voters on the roll, {ballots:,} ballots, open {hours:,} hour(s),")
+    print(f"{options} options, {guardians} guardians, k = {threshold}. Each call adds {TX_BASE:,} gas of intrinsic cost.")
 
     rule("Once, for the whole system")
-    print("Deploy RollupSettlement, L1TallyMirror, and ZkVotingMailbox once. Every later")
-    print("election posts into those contracts. It does not deploy them again.")
-    _line("one-time L1 deploy", total_l1_gas, gwei, usd)
+    print("ZkVotingRollup and its verifiers deploy once per chain and serve every jurisdiction.")
+    _line("one-time deploy (rollup + verifiers)", deploy_gas, gwei, usd)
 
-    settlements = batches
-    rule(f"During one election: {hours:,} hour(s) open, {ballots:,} ballots")
-    print(f"One L1 settlement for each open hour, then one final batch and one supplementary")
-    print(f"batch ({TAIL_BATCHES} after the hours). Then one certification. "
-          f"{hours:,} hour(s) → {settlements:,} settlements + 1 certification "
-          f"= {settlements + 1:,} Ethereum transactions.")
-    print(f"{ballots:,} ballots share those settlements. They do not add a transaction each.")
-    if batch_gas is None or cert_gas is None:
-        print("Settlement gas was not measured. Add --measure to price the transactions. The counts above stand.")
+    missing = [k for k, v in need.items() if v is None]
+    if missing:
+        print()
+        print("Per-call gas was not measured (" + ", ".join(missing) + "). Add --measure to price an election.")
+        return
+
+    opt_scale = options / MEASURED_OPTIONS
+    setup = need["create"] + TX_BASE + guardians * (need["commitGuardian"] + TX_BASE) + need["finalizeKey"] + TX_BASE
+    roll = voters * REGISTER_GAS_PER_VOTER + TX_BASE
+    per_batch = need["commit"] + need["verify"] + need["execute"] + 3 * TX_BASE + groth16
+    ballot_data = ballots * BALLOT_PUBDATA_BYTES * CALLDATA_GAS_PER_BYTE
+    close = need["close"] + TX_BASE + per_batch  # the CLOSE request rides one more batch
+    result = threshold * (need["shares"] * opt_scale + TX_BASE) + need["finalize"] * opt_scale + TX_BASE
+
+    if batches is not None:
+        low = high = batches
     else:
-        _line(f"{settlements:,} × {batch_label}", settlements * batch_gas, gwei, usd)
-        _line(f"1 × {cert_label}", cert_gas, gwei, usd)
-        mock_total = settlements * batch_gas + cert_gas
-        _line("election total, mock proof", mock_total, gwei, usd)
-        print(f"Each settlement is priced at the measured median of {batch_label}.")
-        print("The final and supplementary batches were not measured on their own, so they use that median.")
-        print("The forge tests use a mock verifier, so this total does not include a real proof.")
-        if groth16:
-            proof_gas = settlements * groth16
-            _line(f"real proof allowance, {groth16:,} gas × {settlements:,} settlements", proof_gas, gwei, usd)
-            _line("election total with that allowance", mock_total + proof_gas, gwei, usd)
-            print("The allowance is once per L1 settlement, not once per ballot. Pass --groth16-gas 0 to hide it.")
+        low, high = batch_range(ballots, hours)
 
-    rule("Same L1 bill at other lengths (poll and vote match)")
-    print(f"{'hours':>6}  {'settlements':>12}  {'plus cert':>9}  {'L1 txs':>8}  {'mock proof':>14}  {'with real proof':>16}")
-    windows = [1, 12, 24, 72]
-    if hours not in windows:
-        windows.append(hours)
-    for window in sorted(windows):
-        n = l1_batch_count(window) if window != hours else settlements
-        # Keep the highlighted window on the operator's --batches override.
-        txs = n + 1
-        if batch_gas is None or cert_gas is None:
-            mock_usd, real_usd = "—", "—"
-        else:
-            mock_gas = n * batch_gas + cert_gas
-            mock_usd = fmt_usd(cost(mock_gas, gwei, usd)[1])
-            real_usd = fmt_usd(cost(mock_gas + n * groth16, gwei, usd)[1]) if groth16 else "hidden"
-        mark = "  this election" if window == hours else ""
-        print(f"{window:>6}  {n:>12,}  {1:>9}  {txs:>8,}  {mock_usd:>14}  {real_usd:>16}{mark}")
-    print("A 1-hour poll and a 1-hour vote are the same row. A longer window adds one")
-    print("settlement per extra hour. More ballots do not add a row and do not add a column.")
+    rule("One election")
+    _line("publish and key ceremony", setup, gwei, usd)
+    _line(f"roll: {voters:,} voters enqueued", roll, gwei, usd)
+    _line(f"ballot pubdata: {ballots:,} × {BALLOT_PUBDATA_BYTES} bytes", ballot_data, gwei, usd)
+    if low == high:
+        _line(f"batches: {low:,} × commit + verify + execute", low * per_batch, gwei, usd)
+    else:
+        _line(f"batches, fewest: {low:,} full batches", low * per_batch, gwei, usd)
+        _line(f"batches, most: {high:,} (one every {BATCH_SECONDS}s)", high * per_batch, gwei, usd)
+    _line("close (plus the batch that carries it)", close, gwei, usd)
+    _line(f"decrypt the sum: {threshold} guardians' shares + finalize", result, gwei, usd)
+    fixed = setup + roll + ballot_data + close + result
+    _line("election total, fewest batches", fixed + low * per_batch, gwei, usd)
+    if high != low:
+        _line("election total, most batches", fixed + high * per_batch, gwei, usd)
 
-    busy = busy_sequencer_batches(hours)
-    rule("If the prover posts every 4 blocks instead of once per hour")
-    print(f"The VPS prover sends RollupSettlement.submitBatch once per {SEQUENCER_BATCH_BLOCKS} sealed")
-    print(f"L2 blocks, and only when L1_RPC, the settlement address, and a key are all set.")
-    print(f"Left unset, this bill is $0 and the proofs stay on the VPS.")
-    print(f"If the chain seals a block every {BLOCK_PERIOD_SECONDS}s for all {hours:,} hour(s), that is")
-    print(f"{busy:,} L1 transactions (one every {SEQUENCER_BATCH_BLOCKS * BLOCK_PERIOD_SECONDS}s), "
-          f"not the {settlements:,} hourly settlements above.")
-    if batch_gas is not None and busy:
-        busy_gas = busy * batch_gas
-        _line(f"{busy:,} × {batch_label} (no certification)", busy_gas, gwei, usd)
-        if groth16:
-            _line(f"plus {groth16:,} gas × {busy:,} real proofs", busy * groth16, gwei, usd)
-            _line("busy-prover total with that allowance", busy_gas + busy * groth16, gwei, usd)
-        print("That schedule does not batch the hour. It is the cost of posting as fast as the chain moves.")
+    print()
+    print(f"Batch cost includes {groth16:,} gas for a real batch proof (--groth16-gas; the tests use a")
+    print("mock verifier and the batch circuit is not built, so that figure is an allowance).")
+    print(f"Decryption shares and the result check were measured at {MEASURED_OPTIONS} options and are scaled")
+    print("linearly to the option count. Registration is the enqueue cost only; the operator then")
+    print("carries those requests in batches already counted above.")
 
 
 def main():
@@ -358,28 +351,30 @@ def main():
     sc_dir = env("GE_SC_DIR")
     l1_gwei = fnum("GE_L1_GWEI")
     l1_base = fnum("GE_L1_BASEFEE_GWEI")
-    l2_gwei = fnum("GE_L2_GWEI")
     usd = fnum("GE_ETH_USD")
     voters = whole("GE_VOTERS", 1000)
     ballots = whole("GE_BALLOTS", voters)
     hours = whole("GE_HOURS", 12)
-    batches = whole("GE_BATCHES", l1_batch_count(hours))
+    batches = whole("GE_BATCHES", None)
     groth16 = whole("GE_GROTH16_EXTRA_GAS", 0)
+    guardians = whole("GE_GUARDIANS", 3)
+    threshold = whole("GE_THRESHOLD", (guardians // 2) + 1)
+    options = whole("GE_OPTIONS", 2)
+    if not 1 <= threshold <= guardians:
+        sys.exit("error: THRESHOLD must be between 1 and GUARDIANS")
+    if options < 2:
+        sys.exit("error: OPTIONS must be at least 2")
     ops_filter = env("GE_OPS_FILTER")
     status = 0
 
-    print("zk-voting gas economics")
-    print("=======================")
+    print("zk-voting gas economics (ZkVotingRollup)")
+    print("========================================")
     print(f"L1 node:     {env('GE_L1_DESC', 'n/a')}")
     if l1_gwei is not None:
         extra = f" (base fee {l1_base:.3f} gwei)" if l1_base is not None else ""
         print(f"L1 gas:      {l1_gwei:.3f} gwei{extra}  [{env('GE_L1_GAS_SRC')}]")
     else:
-        print(f"L1 gas:      n/a (L1 dollars below use {REF_GWEI:g} gwei)")
-    if env("GE_L2_DESC"):
-        print(f"L2 node:     {env('GE_L2_DESC')}")
-    if l2_gwei is not None:
-        print(f"L2 gas:      {l2_gwei:.3f} gwei  [{env('GE_L2_GAS_SRC')}]")
+        print(f"L1 gas:      n/a (dollars below use {REF_GWEI:g} gwei)")
     print(f"ETH/USD:     {fmt_usd(usd) if usd is not None else 'n/a'}  [{env('GE_PRICE_SRC', 'none')}]")
 
     # Sizes ------------------------------------------------------------------
@@ -405,10 +400,10 @@ def main():
            f"{'init B':>9} {'%3860':>6} {'%128Ki':>6}  {'deploy gas':>12} {'L1 ETH':>10} {'L1 USD':>10}  flag")
     print(hdr)
     flagged = []
-    total_gas = {"L1": 0, "L2": 0}
-    for name in sorted(arts, key=lambda n: (n not in L1_CONTRACTS, n)):
+    total_gas = 0
+    for name in sorted(arts):
         a = arts[name]
-        layer = "L1" if name in L1_CONTRACTS else "L2"
+        layer = "test" if name in TEST_ONLY else "token" if name in OPTIONAL else "L1"
         p170 = a["runtime"] / EIP170
         p64 = a["runtime"] / EIP7954_RUNTIME
         p3860 = a["init"] / EIP3860
@@ -422,7 +417,8 @@ def main():
             gas, mark = rec_gas[name], ""
         else:
             gas, mark = estimate_deploy_gas(a["init"], a["runtime"]), "~"
-        total_gas[layer] += gas
+        if layer == "L1":
+            total_gas += gas
         eth, dollars = cost(gas, l1_gwei, usd)
         print(f"{name:<26} {layer:<5} {a['runtime']:>10,} {p170:>6.1%} {p64:>6.1%} "
               f"{a['init']:>9,} {p3860:>6.1%} {p128:>6.1%}  "
@@ -442,13 +438,9 @@ def main():
                   "and fits EIP-7954. Deployable once Glamsterdam is active.")
         else:
             print(f"WARNING: {n} is TIGHT (>= {TIGHT:.0%} of the Glamsterdam cap)")
-    for layer in ("L1", "L2"):
-        eth, dollars = cost(total_gas[layer], l1_gwei, usd)
-        print(f"Sum of {layer} rows: {fmt_int(total_gas[layer])} gas = {fmt_eth(eth)} ETH {fmt_usd(dollars)} at L1 gas price"
-              + (" (includes alternatives, e.g. both verifiers and hashers)" if layer == "L2" else ""))
-    print("L1 rows are one deployment of the shared settlement, mirror, and mailbox.")
-    print("Later elections post batches to those contracts. They do not deploy them again.")
-    print("The L2 sum is the shared election stack, also once, not once per election.")
+    eth, dollars = cost(total_gas, l1_gwei, usd)
+    print(f"Sum of L1 rows: {fmt_int(total_gas)} gas = {fmt_eth(eth)} ETH {fmt_usd(dollars)}. "
+          "Deployed once per chain and shared by every jurisdiction. Test-only and token rows are left out.")
     if rec and (rec.get("gas") or {}).get("total"):
         g = rec["gas"]
         eth, dollars = cost(g["total"], l1_gwei, usd)
@@ -462,23 +454,18 @@ def main():
         if not ops:
             print("\nwarning: forge gas report was empty or unreadable", file=sys.stderr)
     if ops:
-        l2_price = l2_gwei if l2_gwei is not None else l1_gwei
-        l2_label = "L2 gas price" if l2_gwei is not None else "L1 gas price (no L2 price given)"
-        rule("Per-call gas (forge test --gas-report, median; tests use MockVerifier)")
-        print(f"{'layer':<5} {'contract.function':<52} {'median':>10} {'max':>10} {'calls':>6} {'ETH':>10} {'USD':>10}  when")
-        for layer, c, f, when in KEY_OPS:
+        rule("Per-call gas (forge test --gas-report, median, without the 21,000 intrinsic gas)")
+        print(f"{'contract.function':<44} {'median':>10} {'max':>10} {'calls':>6} {'ETH':>10} {'USD':>10}  when")
+        for c, f, when in KEY_OPS:
             st = ops.get((c, f))
             if st is None:
                 continue
-            gwei = l1_gwei if layer == "L1" else l2_price
-            eth, dollars = cost(st.get("median"), gwei, usd)
-            print(f"{layer:<5} {c + '.' + f:<52} {fmt_int(st.get('median')):>10} {fmt_int(st.get('max')):>10} "
+            eth, dollars = cost(st.get("median"), l1_gwei, usd)
+            print(f"{c + '.' + f:<44} {fmt_int(st.get('median')):>10} {fmt_int(st.get('max')):>10} "
                   f"{st.get('calls', 0):>6} {fmt_eth(eth):>10} {fmt_usd(dollars):>10}  {when}")
-        missing = [f"{c}.{f}" for _, c, f, _ in KEY_OPS if (c, f) not in ops]
+        missing = [f"{c}.{f}" for c, f, _ in KEY_OPS if (c, f) not in ops]
         if missing:
             print("not exercised by the selected tests: " + ", ".join(missing))
-        print(f"L1 rows priced at L1 gas price; L2 rows at {l2_label}.")
-        print("L2 calls are not an Ethereum bill when the election runs on your own L2. The L1 section below is the bill.")
         if ops_filter:
             rx = re.compile(ops_filter)
             rule(f"All measured functions matching /{ops_filter}/")
@@ -486,7 +473,7 @@ def main():
                 if rx.search(f"{c}.{f}"):
                     print(f"{c + '.' + f:<52} median {fmt_int(st.get('median')):>10}  max {fmt_int(st.get('max')):>10}  calls {st.get('calls', 0)}")
 
-    print_scenarios(ops, voters, ballots, hours, batches, groth16, l1_gwei, l2_gwei, usd, total_gas["L1"])
+    print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, threshold, options, l1_gwei, usd, total_gas)
     return status
 
 
