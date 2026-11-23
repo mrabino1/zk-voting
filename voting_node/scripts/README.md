@@ -119,10 +119,11 @@ L1_RPC=<node> ./scripts/get-gas-economics.sh --measure --voters 10000 --ballots 
 | `VOTERS` | `--voters` | 1000 voters on the roll |
 | `BALLOTS` | `--ballots` | = voters |
 | `HOURS` | `--hours` | 12 open hours |
-| `BATCHES` | `--batches` | unset: shows the range from full 256-ballot batches to one every 10 s |
+| `BATCHES` | `--batches` | unset: shows the range from full 256-ballot batches to one per max wait |
 | `GUARDIANS` / `THRESHOLD` | `--guardians` / `--threshold` | 3 / a majority |
 | `OPTIONS` | `--options` | 2 |
 | `GROTH16_EXTRA_GAS` | `--groth16-gas` | 250000 per batch, an allowance for the real batch proof |
+| `MAX_WAIT` | `--max-wait` | 600, the operator's `L2_BATCH_MAX_WAIT_SECONDS` |
 | `GAS_MATCH_CONTRACT` | `--match-contract` | all tests except fuzz |
 | | `--ops-filter RE` | also list every measured function matching `RE` |
 

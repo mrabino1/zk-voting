@@ -37,7 +37,8 @@ Gas measurements:
   --ballots N          ballots cast                          (BALLOTS, default = voters)
   --hours N            open hours of the voting window       (HOURS, default 12)
   --batches N          fix the batch count                   (BATCHES; default: show the
-                       range from full 256-ballot batches to one every 10 seconds)
+                       range from full 256-ballot batches to one per max wait)
+  --max-wait N         operator's L2_BATCH_MAX_WAIT_SECONDS  (MAX_WAIT, default 600)
   --guardians N        guardians                             (GUARDIANS, default 3)
   --threshold K        guardians needed to decrypt           (THRESHOLD, default a majority)
   --options N          options on the ballot                 (OPTIONS, default 2)
@@ -76,6 +77,7 @@ GROTH16="${GROTH16_EXTRA_GAS:-250000}"
 GUARDIANS="${GUARDIANS:-3}"
 THRESHOLD="${THRESHOLD:-}"
 OPTIONS="${OPTIONS:-2}"
+MAX_WAIT="${MAX_WAIT:-600}"
 RECORD="${DEPLOYMENTS_FILE:-}"
 OUT_DIR="${OUT_DIR:-$SC_DIR/out}"
 
@@ -96,6 +98,7 @@ while [[ $# -gt 0 ]]; do
     --guardians) GUARDIANS="${2:?$1 needs a value}"; shift 2 ;;
     --threshold) THRESHOLD="${2:?$1 needs a value}"; shift 2 ;;
     --options) OPTIONS="${2:?$1 needs a value}"; shift 2 ;;
+    --max-wait) MAX_WAIT="${2:?$1 needs a value}"; shift 2 ;;
     --groth16-gas) GROTH16="${2:?$1 needs a value}"; shift 2 ;;
     --record) RECORD="${2:?$1 needs a value}"; shift 2 ;;
     --out-dir) OUT_DIR="${2:?$1 needs a value}"; shift 2 ;;
@@ -105,7 +108,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for n in VOTERS HOURS GROTH16 GUARDIANS OPTIONS; do
+for n in VOTERS HOURS GROTH16 GUARDIANS OPTIONS MAX_WAIT; do
   [[ "${!n}" =~ ^[0-9]+$ ]] || { printf 'error: %s must be a whole number (got %s)\n' "$n" "${!n}" >&2; exit 2; }
 done
 for n in BALLOTS BATCHES THRESHOLD; do
@@ -247,5 +250,5 @@ GE_SC_DIR="$SC_DIR" GE_OUT_DIR="$OUT_DIR" \
   GE_RECORD="$RECORD" GE_RECORD_DESC="$RECORD_DESC" GE_GAS_REPORT="$GAS_REPORT" \
   GE_VOTERS="$VOTERS" GE_BALLOTS="$BALLOTS" GE_HOURS="$HOURS" GE_BATCHES="$BATCHES" \
   GE_GROTH16_EXTRA_GAS="$GROTH16" GE_OPS_FILTER="$OPS_FILTER" \
-  GE_GUARDIANS="$GUARDIANS" GE_THRESHOLD="$THRESHOLD" GE_OPTIONS="$OPTIONS" \
+  GE_GUARDIANS="$GUARDIANS" GE_THRESHOLD="$THRESHOLD" GE_OPTIONS="$OPTIONS" GE_MAX_WAIT="$MAX_WAIT" \
   python3 -B "$(dirname "${BASH_SOURCE[0]}")/lib/gas_economics.py"

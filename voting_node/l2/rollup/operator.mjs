@@ -14,6 +14,8 @@ import { RollupState } from './state.mjs';
 const MOCK_PROOF = [1n, 0n, 0n, 0n, 0n, 0n, 0n, 0n];
 const MAX_BALLOTS_PER_BATCH = 256;
 const MAX_REQUESTS_PER_BATCH = 64;
+/** Seconds before an election's cutoff by which its held ballots are always sealed. */
+const CUTOFF_MARGIN_SECONDS = 120;
 
 export class Operator {
   /**
@@ -27,8 +29,12 @@ export class Operator {
    * @param {boolean} [opts.allowMockProofs]
    * @param {(batch) => Promise<bigint[]>} [opts.prove] batch prover. Defaults to the mock
    *        proof, which only a mock L1 verifier accepts.
+   * @param {number} [opts.batchMaxWaitSeconds] how long ballots may wait for a fuller batch.
+   *        0 seals every tick. A batch is also sealed when it is full, when a priority request
+   *        is waiting, and in time for every waiting ballot's cutoff.
    */
-  constructor({ l1, dataDir, chainId, checkEligibility, allowMockProofs = false, prove, log = () => {} }) {
+  constructor({ l1, dataDir, chainId, checkEligibility, allowMockProofs = false, prove, batchMaxWaitSeconds = 0, log = () => {} }) {
+    this.batchMaxWaitSeconds = Math.max(0, Number(batchMaxWaitSeconds) || 0);
     this.l1 = l1;
     this.dataDir = dataDir;
     this.ctx = bc.contextOf({ chainId, rollup: l1.address });
@@ -132,10 +138,28 @@ export class Operator {
       const requests = this._nextRequests();
       const ballots = [...this.mempool.values()].slice(0, MAX_BALLOTS_PER_BATCH);
       if (!requests.length && !ballots.length) return null;
+      if (!requests.length && !this.ballotsDue(ballots)) return null;
       return await this._settle(requests, ballots);
     } finally {
       this.busy = false;
     }
+  }
+
+  /**
+   * Whether waiting ballots should be sealed now rather than wait for a fuller batch. Each
+   * batch costs L1 gas, so on a public chain ballots wait up to `batchMaxWaitSeconds`; they
+   * never wait past the point where a batch could miss an election's cutoff.
+   */
+  ballotsDue(ballots, nowMs = Date.now()) {
+    if (!this.batchMaxWaitSeconds || ballots.length >= MAX_BALLOTS_PER_BATCH) return true;
+    const l1Now = this.estimatedL1Time();
+    for (const b of ballots) {
+      const receivedAt = this.receipts.get(`${b.electionId}:${b.nullifier}`)?.receivedAt ?? 0;
+      if (nowMs - receivedAt >= this.batchMaxWaitSeconds * 1000) return true;
+      const e = this.state.election(b.electionId);
+      if (e && Number(e.cutoffTime) - l1Now <= this.batchMaxWaitSeconds + CUTOFF_MARGIN_SECONDS) return true;
+    }
+    return false;
   }
 
   _nextRequests() {

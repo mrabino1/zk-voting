@@ -150,6 +150,8 @@ services:
       OPERATOR_PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY:?Set OPERATOR_PRIVATE_KEY}
       L2_BALLOT_TOKEN: ${L2_BALLOT_TOKEN:?Set L2_BALLOT_TOKEN (./setup.sh mints one)}
       L2_BATCH_SECONDS: ${L2_BATCH_SECONDS:-10}
+      # Empty = 0 on chain 31337, 600 elsewhere. Each batch costs L1 gas.
+      L2_BATCH_MAX_WAIT_SECONDS: ${L2_BATCH_MAX_WAIT_SECONDS:-}
       # Chain 31337 only: accept ballots without a zero-knowledge eligibility proof
       # (the node's vote pass still gates them). The operator refuses it elsewhere.
       ZK_VOTING_ALLOW_MOCK_PROOFS: ${ZK_VOTING_ALLOW_MOCK_PROOFS:-}

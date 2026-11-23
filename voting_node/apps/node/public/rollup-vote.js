@@ -73,7 +73,7 @@ export function describeRollupReceipt(r) {
   if (!r) return "The operator has no record of this ballot yet.";
   switch (r.status) {
     case "pending":
-      return "Received by the operator. It goes into the next batch on L1.";
+      return "Received by the operator. It goes into the next batch on L1; batches are grouped to save gas, so this can take up to about ten minutes, and always happens before the vote closes.";
     case "committed":
       return `In batch ${r.batchNumber}, committed to L1${r.l1Tx ? ` (transaction ${short(r.l1Tx)})` : ""}. Awaiting execution.`;
     case "executed":

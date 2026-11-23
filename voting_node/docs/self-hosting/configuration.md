@@ -94,7 +94,8 @@ Civic votes settle on ZkVotingRollup, one L1 contract shared by every jurisdicti
 | `ROLLUP_DEPLOY_BLOCK` | empty (0) | First L1 block of the deployment; where the outcomes monitor's L1 audit starts reading events. Set it on a public chain: many RPCs refuse a log query from block 0. |
 | `L2_URL` | `http://l2:8546` | Where the node reaches the operator. |
 | `OPERATOR_PRIVATE_KEY` | Anvil key 1 | **Secret.** The L2 operator, registered with `setOperator`; pays L1 gas for batches. |
-| `L2_BATCH_SECONDS` | `10` | How often the operator seals a batch. |
+| `L2_BATCH_SECONDS` | `10` | How often the operator checks for work. |
+| `L2_BATCH_MAX_WAIT_SECONDS` | 0 on chain 31337, 600 elsewhere | How long ballots may wait for a fuller batch. Each batch costs L1 gas; a full batch (256 ballots), a waiting roll change or close, or an approaching cutoff seals at once. |
 | `L2_RPC_PORT`, `L2_RPC_BIND` | `8546`, `127.0.0.1` | Host port and interface for the operator. Its reads (`/v1/status`, `/v1/batches`) are public; the ballot API needs `L2_BALLOT_TOKEN`. |
 | `L1_RPC_PORT` | `8545` | Host loopback port of the local chain. |
 | `ZK_VOTING_ALLOW_MOCK_PROOFS` | `1` on the local stack | Chain 31337 only: the operator accepts ballots without a zero-knowledge eligibility proof (the node's vote pass still gates them). Refused on any other chain. |

@@ -268,16 +268,17 @@ def _line(label, gas, gwei, usd):
     print(f"  {label:<52} {fmt_int(gas):>14} gas   {fmt_eth(eth):>12} ETH   {fmt_usd(dollars):>12}")
 
 
-def batch_range(ballots, hours):
-    """Fewest batches (full ones) and most (one ballot each, as often as the operator seals)."""
+def batch_range(ballots, hours, max_wait=600):
+    """Fewest batches (full ones) and most (ballots trickling in: one batch per max wait)."""
     if ballots <= 0:
         return 0, 0
     low = math.ceil(ballots / MAX_BALLOTS_PER_BATCH)
-    high = max(low, min(ballots, hours * 3600 // BATCH_SECONDS))
+    every = max(BATCH_SECONDS, max_wait)
+    high = max(low, min(ballots, hours * 3600 // every))
     return low, high
 
 
-def print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, threshold, options, gwei_live, usd, deploy_gas):
+def print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, threshold, options, gwei_live, usd, deploy_gas, max_wait=600):
     gwei, scale = quote_gwei(gwei_live)
     need = {
         "create": call_median(ops, "ZkVotingRollup", "createElection"),
@@ -320,7 +321,7 @@ def print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, th
     if batches is not None:
         low = high = batches
     else:
-        low, high = batch_range(ballots, hours)
+        low, high = batch_range(ballots, hours, max_wait)
 
     rule("One election")
     _line("publish and key ceremony", setup, gwei, usd)
@@ -330,7 +331,7 @@ def print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, th
         _line(f"batches: {low:,} × commit + verify + execute", low * per_batch, gwei, usd)
     else:
         _line(f"batches, fewest: {low:,} full batches", low * per_batch, gwei, usd)
-        _line(f"batches, most: {high:,} (one every {BATCH_SECONDS}s)", high * per_batch, gwei, usd)
+        _line(f"batches, most: {high:,} (one per {max(BATCH_SECONDS, max_wait)}s wait)", high * per_batch, gwei, usd)
     _line("close (plus the batch that carries it)", close, gwei, usd)
     _line(f"decrypt the sum: {threshold} guardians' shares + finalize", result, gwei, usd)
     fixed = setup + roll + ballot_data + close + result
@@ -360,6 +361,7 @@ def main():
     guardians = whole("GE_GUARDIANS", 3)
     threshold = whole("GE_THRESHOLD", (guardians // 2) + 1)
     options = whole("GE_OPTIONS", 2)
+    max_wait = whole("GE_MAX_WAIT", 600)
     if not 1 <= threshold <= guardians:
         sys.exit("error: THRESHOLD must be between 1 and GUARDIANS")
     if options < 2:
@@ -473,7 +475,7 @@ def main():
                 if rx.search(f"{c}.{f}"):
                     print(f"{c + '.' + f:<52} median {fmt_int(st.get('median')):>10}  max {fmt_int(st.get('max')):>10}  calls {st.get('calls', 0)}")
 
-    print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, threshold, options, l1_gwei, usd, total_gas)
+    print_scenarios(ops, voters, ballots, hours, batches, groth16, guardians, threshold, options, l1_gwei, usd, total_gas, max_wait)
     return status
 
 

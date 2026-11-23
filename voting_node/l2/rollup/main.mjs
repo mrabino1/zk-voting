@@ -11,7 +11,9 @@
 //   OPERATOR_PRIVATE_KEY       an operator registered with setOperator
 //   L2_DATA_DIR                private operator state (default ./data)
 //   L2_RPC_HOST / L2_RPC_PORT  API bind (default 127.0.0.1:8546)
-//   L2_BATCH_SECONDS           batch interval (default 10)
+//   L2_BATCH_SECONDS           how often the operator checks for work (default 10)
+//   L2_BATCH_MAX_WAIT_SECONDS  how long ballots may wait for a fuller batch (default 0 on
+//                              chain 31337, 600 elsewhere); each batch costs L1 gas
 //   L2_BALLOT_TOKEN            bearer token the node uses to submit ballots
 //   ZK_VOTING_ALLOW_MOCK_PROOFS=1  accept ballots without an eligibility proof (local only)
 
@@ -60,6 +62,12 @@ const operator = await new Operator({
   chainId,
   dataDir: env.L2_DATA_DIR || './data',
   allowMockProofs,
+  batchMaxWaitSeconds:
+    env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
+      ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
+      : chainId === 31337
+        ? 0
+        : 600,
   log: (...a) => console.log(new Date().toISOString(), ...a),
 }).init();
 

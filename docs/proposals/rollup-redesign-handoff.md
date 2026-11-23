@@ -249,7 +249,10 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   and `l2/rollup/pubdata.mjs` for it.
 - **Terms of Use.** `apps/node/legal/terms.md` still mentions a paymaster and an L1 tally mirror.
   Editing it changes the Terms hash and re-prompts every user, so it was left for the user.
-- **Batch interval.** Decide a public-chain default for `L2_BATCH_SECONDS` (see the gas finding).
+- **Batch interval (done).** The operator now holds ballots up to `L2_BATCH_MAX_WAIT_SECONDS`
+  (0 on chain 31337, 600 elsewhere) and seals at once for a full batch, a waiting priority request,
+  or an approaching cutoff (`Operator.ballotsDue`, `l2/rollup/test/batching.test.mjs`). Worst case
+  for the modelled 12-hour vote drops from ~2.3 B to ~38 M gas of batches.
 - **Operator updates.** The L2 operator has no writer lease, so there is no overlap update for it.
   Recreate the container instead; the node answers 503 while it is down, and voters retry.
 - **`l1-deploy` network.** It compiles the contracts on each fresh deploy, so it needs network once,

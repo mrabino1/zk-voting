@@ -82,11 +82,11 @@ What drives the bill:
 
 - **The roll.** Enqueueing each voter costs about 5,500 gas; it is the largest line for any
   realistic roll. It is paid once per election.
-- **How the operator batches.** The operator seals a batch every `L2_BATCH_SECONDS` (default
-  **10**) whenever a ballot is waiting. If ballots trickle in one at a time, a 12-hour vote can
-  reach 4,320 batches: about **2.3 billion gas (~$13,600 at 2 gwei)** instead of 12.6 million.
-  On a public chain, set `L2_BATCH_SECONDS` to minutes, not seconds; the cost is that a voter's
-  receipt reaches "committed" later.
+- **How the operator batches.** Ballots wait up to `L2_BATCH_MAX_WAIT_SECONDS` (default **600**
+  off the local chain) for a fuller batch; a full batch, a waiting roll change or close, or an
+  approaching cutoff seals at once. With the default, a 12-hour vote has at most 72 ballot batches
+  (~38 M gas), instead of the 4,320 (~2.3 billion gas, ~$13,600 at 2 gwei) that sealing every
+  10 seconds could reach. The cost is that a receipt reaches "committed" up to 10 minutes later.
 - **Guardians and options.** Each guardian's commitment costs ~1.5 M gas and each decryption share
   ~1.2 M gas per option.
 - **Ballots** themselves are cheap: ~1,100 gas of pubdata each.
