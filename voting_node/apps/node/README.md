@@ -4,9 +4,9 @@
 
 This package is the long-lived Node process for **ZK-Voting**
 (product name ZK-Voting by default): JSON HTTP API, WebAuthn passkeys, email / Web3 /
-smart-card / license-passport person identity with AWS SES email MFA, a gasless
-vote relayer, an L2 block-explorer backend, and a
-static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
+smart-card / license-passport person identity with AWS SES email MFA, the
+rollup client for civic votes (`src/rollup/`), the poll engine, an explorer, and
+a static host for **vanilla JS** pages in `public/`. There is no Vite and no React.
 
 There is no token. There is no paid tier. Do not commercialize this software.
 See `/NOT_FOR_PROFIT.md` at the repo root.
@@ -22,11 +22,12 @@ See `/NOT_FOR_PROFIT.md` at the repo root.
 | Users + roles | `voter` / `observer` / `platform_admin` / `platform_super_admin` are global. `clerk`, `registrar`, `disqualification_officer`, `tally_operator`, and `election_staff` are granted **per jurisdiction**. `platform_super_admin` and `platform_admin` are global overrides. The seeded host is `platform_super_admin`. |
 | Host menu | repo-root `system_actions.sh` |
 
-Canonical election truth is the chain when `CHAIN_RPC` is set. Local JSON under
-`apps/node/data/` is the demo / operator cache (gitignored). Native addons such
-as `better-sqlite3` are **not** used.
+A **civic vote**'s truth is ZkVotingRollup on L1: the Node publishes it, syncs
+its roll, relays guardian messages and ballots to the L2 operator, and keeps only
+a receipt per ballot (never the ciphertexts). A **poll**'s truth is this Node.
+State lives in Postgres (`DATABASE_URL`) or JSON under `DATA_DIR`.
 
-Privacy: a vote is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
+Privacy (polls): a poll ballot is stored as `{ nullifier, ballotHash, electionId, relayer: "node", acceptedAt }`.
 One ballot per nullifier. A second ballot is rejected unless re-vote is enabled.
 When it is on, the replacement is counted only in the final tally, a published
 poll block keeps the original ballot, and `acceptedBallots` does not increase.
@@ -56,7 +57,7 @@ ballot never subscribes anyone.
 
 ## Run
 
-Node **22+**. From this directory:
+Node **24.7+**. From this directory:
 
 ```bash
 npm install
@@ -76,26 +77,24 @@ npm test -w apps/node
 ./system_actions.sh restart   # pm2 / systemd / compose when configured
 ```
 
-Docker Compose from the **repository root** (not this directory):
+Docker Compose from `voting_node/` (not this directory):
 
 ```bash
 docker compose up -d --build
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-`GET /health` returns `{ ok: true, app: "zk-voting", nfp: true, chainId }`.
+`GET /health` returns `{ ok: true, app, nfp: true, chainId, mode }` (`mode` is `active` or `standby`).
 
 The process serves `public/` (and `dist/` if someone drops files there). Unknown GET routes that are
 not `/api/*` or `/health` fall back to `index.html` (or a “UI is loading” shell).
 `GET /v/:shortCode` and `GET /e/:shortCode` 302 to `/vote/<uuid>` when the code
 resolves.
 
-New elections mint a UUID v5 canonical `id` (bound to factory, on-chain id, and
-jurisdiction) plus a 10-character `shortCode`.
-`GET /api/elections/:id` accepts UUID, short code, or `localElectionId`.
-On-chain / circuit `electionId` stays the factory `uint256`, stored as
-`localElectionId` on the Node record. L1 proof slots use
-`(factory, localElectionId, jurisdictionId)`, not the public UUID.
+New elections get a UUID `id` plus a 10-character `shortCode`.
+`GET /api/elections/:id` accepts UUID, short code, or `localElectionId` (the
+Node's numeric sequence, used as the poll proof's electionId). A civic vote also
+carries `rollupElectionId`, its id on L1, once published.
 
 Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/feedback`, `/receipt`, `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
@@ -113,38 +112,33 @@ Empty optional fields are omitted so older elections without metadata keep worki
 
 Ranked-choice (`RANKED` / election `ballotMethod: ranked_choice`) is instant-runoff
 on this Node. `POST /api/elections/:id/tally` with an empty body computes IRV from
-accepted ranking envelopes and stores a winner plus round transcript. Mixed
-ballots still post a plurality-only `counts` vector for L1 certification.
+accepted ranking envelopes and stores a winner plus round transcript. Polls only; a civic vote is one question with one choice.
 
 ---
 
 ## Environment
 
-Forked jurisdiction Nodes copy the repo-root [`.env.example`](../../.env.example) to `.env`, set `VOTE_FQDN` to the voting subdomain (`vote.domain.tld`), and **pin the one shared factory**. Env wins over `/office/site`. Do not deploy a new `ElectionFactory` per city. Root README: [Intentional forking](../../README.md#intentional-forking) and [Voting subdomain](../../README.md#voting-subdomain).
+Every variable, including the rollup ones (`L1_RPC`, `ROLLUP_ADDRESS`,
+`ROLLUP_DEPLOYMENT_FILE`, `ROLLUP_JURISDICTION_ID`, `ROLLUP_PRIVATE_KEY`,
+`ROLLUP_TICK_SECONDS`, `L2_URL`, `L2_BALLOT_TOKEN`), is described in the
+[configuration reference](../../docs/self-hosting/configuration.md). Forks: see
+[Forking and staying current](../../docs/self-hosting/forking.md). The table below
+covers what matters when running this package directly.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP listen port |
 | `HOST` | `0.0.0.0` | Listen address (`0.0.0.0` for Docker / Compose) |
-| `CHAIN_ID` | `27427` | ZK-Voting L2 chain id (health + explorer) |
-| `CHAIN_RPC` | _empty_ | If set, clerk `POST /api/elections` calls `ElectionFactory.createElection` and `POST /api/elections/:id/vote` calls `BallotInbox.submitVote` via viem. Unset = JSON-only demo. |
-| `ELECTION_FACTORY_ADDRESS` | _empty_ | Shared factory for every forked Node (`FACTORY` alias). Env wins over `/office/site`. Required when `CHAIN_RPC` is set unless the site pin is set. |
-| `VERIFIER_ADDRESS` | _empty_ | Groth16 / MockVerifier address (`VERIFIER` alias). Required for on-chain create |
-| `BALLOT_INBOX_ADDRESS` | _empty_ | Required when `CHAIN_RPC` is set for vote relay |
-| `RELAYER_PRIVATE_KEY` | _empty_ | Relayer key for factory create and on-chain submit |
-| `L1_RPC` | _empty_ | Ethereum JSON-RPC for `L1TallyMirror.postCertifiedResult`. Unset → tally still works (no-op certify) |
-| `L1_TALLY_MIRROR_ADDRESS` | _empty_ | Required with `L1_RPC` and `L1_PUBLISHER_PRIVATE_KEY` to post |
-| `L1_PUBLISHER_PRIVATE_KEY` | _empty_ | Mirror admin or `setPublisher` key. Not the L2 prover `PRIVATE_KEY`. Never a mainnet key in CI |
-| `L1_SETTLEMENT_ADDRESS` | _empty_ | Optional `RollupSettlement` to attach `stateRoot()` |
-| `L1_CHAIN_ID` | RPC | Optional override |
+| `CHAIN_ID` | `27427` | The node's own chain id (poll signatures, wallets) |
+| `L1_RPC`, `ROLLUP_ADDRESS` | _empty_ | Connect civic votes to ZkVotingRollup. Unset = civic votes stay drafts (`VOTE_NOT_ON_L1`); polls still work. |
 | `VOTE_FQDN` | _empty_ | Public voting hostname this jurisdiction creates, e.g. `vote.domain.tld`. Bare FQDN (no scheme, port, or path). It is the voting authority: when set, `RP_ID` becomes this host unless `RP_ID` is already a different public hostname, `https://<VOTE_FQDN>` is always an accepted origin, and `PUBLIC_BASE_URL` defaults to that `https://` origin. Empty = local demo. |
 | `RP_ID` | `localhost`, or `VOTE_FQDN` when that is set | WebAuthn rpID. `localhost` does not override `VOTE_FQDN`. |
 | `WEBAUTHN_ORIGINS` | localhost:PORT and :5173 | Comma-separated expected origins. `:5173` is a leftover default (no Vite server in this tree). `https://$VOTE_FQDN` is prepended when `VOTE_FQDN` is set. |
 | `CORS_ALLOWED_ORIGINS` | empty | Comma-separated extra origins allowed to make **credentialed** cross-origin requests. `WEBAUTHN_ORIGINS` and `PUBLIC_BASE_URL` are always trusted. Other origins still get CORS for public reads, without cookies. |
 | `ADMIN_HANDLE` | `admin` | Seeded `platform_super_admin` when the store has none. Does not create a second super admin |
 | `SUPER_ADMIN_EMAIL` | _empty_ | Contact email for that person. Empty leaves `contactEmail` as stored. Invalid refuses to start. Read at process start (not a build arg). The active writer applies it on every boot; standby does not write |
-| `DATA_DIR` | `apps/node/data` | JSON store + `l2-chain.json` |
-| `L2_CHAIN_FILE` | `$DATA_DIR/l2-chain.json` | Shared with the sequencer when it writes the same file |
+| `DATABASE_URL` | _empty_ | Postgres. Empty = JSON store under `DATA_DIR` |
+| `DATA_DIR` | `apps/node/data` | JSON store, ceremony files, plugin uploads, writer lease |
 | `ALLOW_DEV_LOGIN` | off (`1` in tests) | `POST /api/auth/dev-login` for local/dev only |
 | `ALLOW_SMART_CARD_MOCK` | off (`1` in tests) | Self-service smart-card `{ mock: true }` (kiosk demo). Production uses registrar attest |
 | `ALLOW_CIVIC_ID_MOCK` | off (`1` in tests) | Self-service driver’s license / passport bind `{ mock: true }` |
@@ -173,133 +167,34 @@ Sign-in UX: `/`, `/admin`, and `/back-office` share **email**, **Ethereum**, **s
 
 ## HTTP
 
+The public API is documented at `/api` on every Node (HTML, `/api/openapi.json`,
+`/api/llms.txt`), generated from `src/botApiCatalog.mjs`; the same text is in
+[`docs/BOT_API.md`](../../docs/BOT_API.md).
+
+Civic-vote routes, under `/api/elections/:id/rollup`:
+
 ```
-GET  /health
-GET  /terms                         (SPA Terms of Use; hashes from GET /api/terms)
-GET  /feedback                      (SPA feedback form)
-GET  /api/feedback                  (categories, terms hashes, inboxConfigured)
-POST /api/feedback                  (SES to platform super admin; 1 per IP per hour)
-GET  /terms.pdf                     (deterministic PDF; X-Pdf-SHA256 header)
-GET  /v/:shortCode                  (302 → /vote/<uuid>)
-GET  /e/:shortCode                  (302 → /vote/<uuid>)
-GET  /api/elections
-POST /api/elections                 (clerk of that jurisdiction / platform_admin)
-PATCH /api/elections/:id            (clerk of that jurisdiction; ballot metadata until roll freeze)
-GET  /api/elections/:id             (UUID, shortCode, or localElectionId)
-GET  /api/elections/:id/results     (public final tally plurality/IRV; empty before tally)
-GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
-GET  /api/elections/:id/ballots
-GET  /api/elections/:id/info        (public option metadata; no clerk-only fields)
-GET  /api/elections/:id/info/:questionId/:optionId
-POST /api/elections/:id/register    (voter: pending civil review; officer of that jurisdiction: insert now)
-GET  /api/elections/:id/registration-requests
-POST /api/elections/:id/registration-requests/:requestId/approve
-POST /api/elections/:id/registration-requests/:requestId/deny
-POST /api/elections/:id/vote        (relays proof; signed-in ballots need a vote PIN token)
-POST /api/elections/:id/disqualify  (disqualification officer of that jurisdiction)
-POST /api/elections/:id/tally       (tally operator of that jurisdiction; plurality/IRV and/or opens_ballots; attempts L1 certify if env set)
-GET  /api/elections/:id/tally-key   (public Feldman ceremony; no shares, no private key)
-POST /api/elections/:id/guardians   (tally operator; enroll a guardian transport key)
-POST /api/elections/:id/guardians/deals   (tally operator; Feldman commitments + encrypted shares)
-GET  /api/elections/:id/guardians/:index/inbox   (encrypted shares for that guardian)
-POST /api/elections/:id/guardians/partials   (tally operator; after cutoff; proved partial decryptions)
-POST /api/elections/:id/certify-l1  (tally operator of that jurisdiction; retry L1 identity post; no-op if env unset)
-GET  /api/elections/:id/l1
-GET  /api/elections/:id/artifacts   (public auditor pack; no private DB)
-POST /api/jurisdictions/:id/roles   (platform_admin; grant clerk/registrar/dq/tally on that jurisdiction)
-DELETE /api/jurisdictions/:id/roles (platform_admin; revoke a scoped officer grant)
-GET  /api/me
-GET  /api/me/identity
-GET  /api/me/emails
-POST /api/me/emails/primary
-DELETE /api/me/emails/:id
-GET  /api/me/passkeys
-DELETE /api/me/passkeys/:credentialId
-GET  /api/identity/methods
-POST /api/identity/email/start
-POST /api/identity/web3/challenge
-POST /api/identity/web3/verify
-POST /api/identity/smart-card/challenge
-POST /api/identity/smart-card/verify
-POST /api/identity/civic-id/verify
-POST /api/me/eth-accounts
-POST /api/me/eth-accounts/active
-GET  /api/me/credentials
-GET  /api/office/credentials
-POST /api/me/pin/keypad
-POST /api/me/pin
-POST /api/me/pin/verify
-POST /api/me/pin/forgot
-POST /api/pin/forgot
-POST /api/persons/:id/methods/:methodId/review
-POST /api/persons/:id/methods/:methodId/revoke
-POST /api/integrations/credentials/status
-POST /api/persons/:id/person-key     (registrar / platform_admin)
-POST /api/persons/:id/methods
-POST /api/persons/:id/eth-accounts
-POST /api/persons/:id/eth-accounts/active
-POST /api/auth/email/start
-POST /api/auth/passkey/register/begin
-POST /api/auth/passkey/register/finish
-POST /api/auth/passkey/login/begin
-POST /api/auth/passkey/login/finish
-POST /api/auth/web3/challenge
-POST /api/auth/web3/login
-POST /api/auth/smart-card/challenge
-POST /api/auth/smart-card/login
-POST /api/auth/civic-id/login
-POST /api/auth/mfa/email
-POST /api/auth/mfa/resend
-POST /api/auth/mfa/verify
-GET  /api/auth/mfa/status
-POST /api/auth/logout
-POST /api/auth/dev-login            (ALLOW_DEV_LOGIN / tests only)
-GET  /api/explorer/blocks
-GET  /api/explorer/blocks/:n
-GET  /api/explorer/txs/:hash
-GET  /api/explorer/disclosure         (last closed hour, disclosed ballots, countdown)
-POST /api/explorer/ingest
-GET  /api/config
-GET  /api/terms                     (public: pdfSha256, markdownSha256, hashOf=pdf-bytes)
-GET  /api/terms.pdf
-POST /api/terms/view                (signed-in: one view record per session+hash)
-POST /api/terms/accept              (signed-in; `{ acceptedTerms: true }`; emails PDF via SES)
-GET  /api/receipts/metrics          (disclosed turnout hours; never by candidate)
-POST /api/receipts/verify           (paste proof and/or drop PDF; pdfUnmodified)
-POST /api/receipts/email            (holder token; SES body + locked PDF)
-POST /api/receipts/pdf              (holder token; encrypted PDF, X-Pdf-Protected: true)
-GET  /api/outcomes                  (public monitor: every election before/during/after)
-GET  /api/outcomes/:id              (auditor + chain verification; final tally only after tally)
-GET  /api/outcomes/reports
-GET  /api/outcomes/reports/:id
-GET  /api/outcomes/reports/:id/pdf
-POST /api/outcomes/verify           (drop official PDF or report id; pdfUnmodified)
-GET  /api/me/outcome-subscriptions
-PUT  /api/me/outcome-subscriptions/:electionId
-POST /api/me/outcome-subscriptions
-GET  /api/admin/outcome-report-template
-PATCH /api/admin/outcome-report-template
-POST /api/admin/outcome-report-template/preview
+GET  /                         status on L1 and the Node's view (public)
+GET  /ballot-context           L1 election id, chain, rollup address, joint key, options (public)
+GET  /receipts/:nullifier      pending → committed → executed (public)
+POST /prepare                  clerk: k and minBallots
+POST /guardians                clerk: enroll a guardian identity key
+POST /publish                  clerk: createElection on L1
+POST /guardians/:index/commit  relay a guardian's signed Feldman commitment
+POST /mailbox, GET /mailbox/:index    encrypted guardian shares
+POST /disputes/:action         key-ceremony complaints and reveals
+POST /finalize-key             fix the joint key on L1
+POST /roll/sync                send roll changes through the priority queue
+POST /close                    after the cutoff
+POST /guardians/:index/shares  relay a guardian's decryption shares
+POST /finalize                 finalizeResult on L1
 ```
 
-Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md` (64 hex, stored as `user.termsHash`). Markdown SHA-256 is published next to it. New-person register requires `acceptedTerms: true`. Acceptances live in `zk-voting.json` → `termsAcceptances[]` (who, when, version, both hashes, whether the PDF was emailed). The same SES From address as MFA sends the PDF as a raw MIME attachment (`SESv2` Simple cannot attach). Without `SES_FROM_ADDRESS` + `AWS_REGION`, tests and local demos **capture** the message in-process (same as MFA).
+A civic ballot is `POST /api/elections/:id/vote` with a vote pass and no cookies;
+the pass comes from `POST /api/elections/:id/vote-pass` (signed in, on the roll,
+PIN, one per voter, recorded in the poll book).
 
-Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
-reason codes, CORS open for local tools (any origin can read the API, but
-only trusted origins get credentialed, cookie-carrying CORS; see `CORS_ALLOWED_ORIGINS`).
-
-Without `CHAIN_RPC`, creating an election writes the local JSON store (UUID public id + minted short code + a demo `localElectionId` for the circuit). Votes that pass the election window, nullifier check, and bound open-window roots are accepted in that store so the explorer and SPA can run a demo. The vote POST does not carry `identityCommitment`. Those accepts still wait for hourly public disclosure unless the interval is `0`. Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified, matching the on-chain eligible root. Freeze snapshots the roots used for the open window. The circuit proves membership in that root and non-membership in the disqualification chain. An unarmed MockVerifier still does not check the witness. The demo passkey leaf is Poseidon.
-
-When `CHAIN_RPC` is set, `POST /api/elections` must also succeed on
-`ElectionFactory` (same params as `smart-contracts/script/CreateElection.s.sol`).
-The Node keeps a UUID public id and stores `localElectionId` /
-`onChainElectionAddress` / `createTxHash` on the election record. A factory
-revert returns **502/503** to the clerk and does **not** write `zk-voting.json`.
-
-Without `L1_RPC` + `L1_TALLY_MIRROR_ADDRESS` + `L1_PUBLISHER_PRIVATE_KEY`,
-`POST /tally` still records counts. `l1Certification.status` is `skipped`.
-Operator details: [`docs/OPERATOR.md`](../../docs/OPERATOR.md). `npm run certify:l1`
-from the repo root is the same no-op unless those vars are set.
+Terms fingerprint: **SHA-256 of the exact PDF bytes** generated from `legal/terms.md`. New-person register requires `acceptedTerms: true`. With `SES_FROM_ADDRESS` + `AWS_REGION` the Terms PDF is mailed on accept; without them, tests and local demos capture the message in-process.
 
 ---
 
@@ -334,8 +229,7 @@ one it finds.
 ## Data
 
 ```
-apps/node/data/zk-voting.json    users, elections, votes, envelopes, termsAcceptances (gitignored)
-apps/node/data/l2-chain.json    append-only blocks/txs for /explorer
+apps/node/data/zk-voting.json    the store when DATABASE_URL is empty (gitignored)
 apps/node/legal/terms.md        canonical Terms of Use (PDF + hashes derived at boot)
 ```
 
