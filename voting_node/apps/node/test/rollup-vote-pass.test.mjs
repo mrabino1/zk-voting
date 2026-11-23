@@ -12,6 +12,7 @@ import { after, before, describe, test } from 'node:test';
 import * as bc from '../public/ballot-crypto.js';
 import { blindVotePass, unblindVotePass } from '../public/vote-pass.js';
 import { createApp } from '../src/server.mjs';
+import { votePassIssueKey } from '../src/votePass.mjs';
 
 let tmp;
 let created;
@@ -196,6 +197,18 @@ describe('vote pass gate for a civic vote on the rollup', () => {
     assert.equal(overwrite.status, 409, overwrite.text);
     assert.equal(overwrite.json.code, 'NULLIFIER_USED');
     assert.equal(submitted.length, 1);
+  });
+
+  test('the poll book survives a restart: no second pass, and it holds no raw user id', async () => {
+    const restarted = await createApp({ dataDir: tmp, allowDevLogin: true, adminHandle: 'admin', quiet: true, port: 0, disclosureIntervalSeconds: 0 });
+    const user = restarted.store.getUserByHandle('voter-on-roll');
+    const book = restarted.store.data.votePassIssued[String(id)];
+    assert.ok(Array.isArray(book) && book.length === 2, 'both voters who took a pass are in the poll book');
+    assert.equal(JSON.stringify(book).includes(user.id), false);
+    assert.equal(restarted.store.votePassIssued(id, votePassIssueKey(id, `u:${user.id}`)), true);
+    // A fresh vote-pass service on the restarted store refuses the voter.
+    assert.throws(() => restarted.votePass.assertNotIssued(id, `u:${user.id}`), (err) => err.extra?.code === 'VOTE_PASS_ALREADY_ISSUED');
+    await assert.rejects(() => restarted.votePass.claimIssue(id, `u:${user.id}`), (err) => err.extra?.code === 'VOTE_PASS_ALREADY_ISSUED');
   });
 
   test('the explorer lists rollup batches without the live pending-ballot count', async () => {

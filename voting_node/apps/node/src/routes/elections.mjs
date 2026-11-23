@@ -112,7 +112,7 @@ async function revokeHandler(req, store, explorer) {
 
 export function electionsRouter(deps) {
   const { store, explorer, config, pin, rollup } = deps;
-  const votePass = deps.votePass || createVotePassService(config);
+  const votePass = deps.votePass || createVotePassService(config, { store });
   const router = Router();
   router.param('id', uuidParam('id'));
   router.param('requestId', uuidParam('requestId'));
@@ -757,9 +757,11 @@ export function electionsRouter(deps) {
       if (req.user && pin) {
         pin.assertVoteAllowed(req.user, body.pinToken);
       }
+      votePass.assertNotIssued(election.id, commitmentSubject);
       const blindSignature = await votePass.signBlinded(body.blinded);
-      // One pass per cleared commitment per process (in memory only).
-      votePass.claimIssue(election.id, commitmentSubject);
+      // One pass per cleared commitment or voter, recorded in the store's poll book
+      // before the signature leaves, so a restart cannot issue a second pass.
+      await votePass.claimIssue(election.id, commitmentSubject);
       res.status(201).json({
         ok: true,
         nfp: true,

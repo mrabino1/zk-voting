@@ -209,6 +209,9 @@ function emptyData() {
     // electionId -> sorted hashes of spent vote passes. An unlinked set:
     // a hash is never stored on, or keyed by, a nullifier or a ballot.
     votePassSpent: {},
+    // electionId -> sorted hashes of the voters who took a vote pass (a poll book).
+    // It says who took part, never which pass or ballot is theirs: the pass is blind.
+    votePassIssued: {},
     runtime: {},
   };
 }
@@ -243,6 +246,7 @@ export function scrubBallotLinkage(data) {
   if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
     data.votePassSpent = {};
   }
+  if (!plainObject(data.votePassIssued)) data.votePassIssued = {};
   if (dropPassToBallotLinks(data)) markPassLinksDirty(data);
   const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
   for (const r of data.receipts || []) {
@@ -320,6 +324,7 @@ export const BALLOT_TIMING_COLLECTIONS = [
   'receipts',
   'envelopes',
   'votePassSpent',
+  'votePassIssued',
   'elections',
 ];
 
@@ -2812,6 +2817,36 @@ export class Store {
   async spendVotePass(electionId, passHash) {
     this._rememberSpentPass(electionId, passHash);
     await this.persist();
+  }
+
+  /** Whether this poll-book key (see votePass.issueKey) already took a pass in the election. */
+  votePassIssued(electionId, issueKey) {
+    const list = this.data.votePassIssued?.[String(electionId)];
+    return Array.isArray(list) && list.includes(String(issueKey).toLowerCase());
+  }
+
+  /**
+   * Record that a voter took a vote pass, so a restart cannot issue a second one.
+   * The check and the write happen before any await, so concurrent requests
+   * cannot both pass. The entry is rolled back when the save fails.
+   */
+  async recordVotePassIssue(electionId, issueKey) {
+    const hash = String(issueKey || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error('vote pass issue key must be a sha256 hex digest');
+    const key = String(electionId);
+    if (!plainObject(this.data.votePassIssued)) this.data.votePassIssued = {};
+    const list = Array.isArray(this.data.votePassIssued[key]) ? this.data.votePassIssued[key] : [];
+    if (list.includes(hash)) return false;
+    list.push(hash);
+    list.sort();
+    this.data.votePassIssued[key] = list;
+    try {
+      await this.persist();
+    } catch (err) {
+      this.data.votePassIssued[key] = (this.data.votePassIssued[key] || []).filter((item) => item !== hash);
+      throw err;
+    }
+    return true;
   }
 
   /** Add a pass hash to the election's unlinked spent set. Not stored on a ballot. */

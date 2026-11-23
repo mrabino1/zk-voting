@@ -513,6 +513,11 @@ identity commitment. The Node-side mechanics:
   Those tags tie a pass to a nullifier. Purge them. Current data keeps spent
   passes only as an unlinked hash list (`votePassSpent`), and load deletes
   leftover tags and `spentPassHash` fields.
+- **Poll book.** `votePassIssued` holds, per election, sorted hashes of the
+  voters who took a vote pass, so a restart cannot issue a second pass. It
+  records who took part, never which pass or ballot is theirs (the pass is
+  blind). Deleting it reopens the double-pass gap until the batch circuit
+  proves eligibility.
 - **No identity on the ballot request.** `sanitizeVoteBody` strips
   `identityCommitment`, `userId`, `pinToken`, `userOpHash`, `address`,
   `credentialId` and choice keys. The API-key "last used" stamp is not touched
@@ -521,7 +526,7 @@ identity commitment. The Node-side mechanics:
 - **No timing or order join.** `acceptedAt` is floored to the disclosure
   interval (hourly by default). Ballot rows are inserted at a random position.
   The Postgres `updated_at` column is floored to the hour for `votes`,
-  `receipts`, `envelopes`, `votePassSpent` and `elections`. The Node's own access log skips
+  `receipts`, `envelopes`, `votePassSpent`, `votePassIssued` and `elections`. The Node's own access log skips
   `POST /api/elections/:id/vote` entirely: no line, no timestamp.
 - **No subscription on vote.** Casting never creates an outcome-PDF
   subscription; it is opt-in on `/me`. Legacy `vote-default` rows are relabelled

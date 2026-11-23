@@ -10,7 +10,6 @@ The working tree is clean at the commit after `028c44e`, which only updates this
    node 792 pass (only the Chrome-dependent `a11y` and `landing-lang` tests fail, as before);
    `test:packages`, `test:l2` (21), `test:auditor`, `test:docs`, `test:setup`, and `forge test` (99)
    all pass.
-3. Ask the user the open decision below before touching vote-pass code.
 
 ## Goal and decisions
 
@@ -64,14 +63,13 @@ Server rules added in phase 3 (`src/routes/elections.mjs`, `src/rollup/service.m
   (`VOTE_NOT_ON_L1`).
 - A vote on L1 counts as roll-fixed (`rollFixed` in `electionState.mjs`); the node freeze is not used.
 
-## Decision needed (ask the user)
+## Decision taken: vote-pass poll book
 
-Vote-pass issuance is remembered in memory only (`votePass.claimIssue`). After a node restart, a
-voter on the roll can get a second pass and cast a second ballot under another nullifier.
-Persisting "voter X got a pass for election E" closes that gap. It would not link the pass to the
-ballot, because the pass is blind, but it would record who took part, like a paper poll book. The
-real fix is the eligibility proof in the batch circuit. Options: persist it now, or leave the gap
-and document it.
+The user chose to persist vote-pass issuance (2026-11-23). The store keeps `votePassIssued`:
+per election, sorted sha256 hashes of `u:<userId>` / `c:<commitment>` (`votePassIssueKey`), no
+timestamps, hour-coarse in Postgres. `POST /vote-pass` checks it before signing and records it
+before returning the signature, so a restart cannot issue a second pass. It records who took a
+pass, never which pass. The real fix is still the eligibility proof in the batch circuit.
 
 ## Phase 4 progress log (newest last; update with every commit)
 
@@ -156,7 +154,7 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   works, and only on chain 31337. The operator refuses to start against a real verifier, and the
   operator accepts ballots without eligibility proofs only with `ZK_VOTING_ALLOW_MOCK_PROOFS=1` on 31337.
 - **Eligibility.** Roll membership is not proven in zero knowledge; the node's vote pass gates
-  ballots (see "Decision needed"). The ballot 0/1 and sum-to-one proofs are real, and the operator
+  ballots, with a persisted poll book (see "Decision taken"). The ballot 0/1 and sum-to-one proofs are real, and the operator
   checks them.
 - **Not run.** Docker Compose was never run (no Docker on this host), and the browser pages were
   never rendered (no Chrome). What was checked instead: the compose YAML parses; the `l1-deploy`

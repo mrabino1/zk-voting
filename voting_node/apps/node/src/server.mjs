@@ -331,7 +331,7 @@ export async function createApp(overrides = {}) {
   const terms = configOverrides.terms || createTermsService({ store, mailer, config });
   const mfa = createMfaService({ config, store, mailer, terms });
   const pin = createPinService({ store, config });
-  const votePass = createVotePassService(config);
+  const votePass = createVotePassService(config, { store });
   const rollup =
     rollupOverride ||
     new RollupService({

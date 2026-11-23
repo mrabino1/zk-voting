@@ -204,7 +204,7 @@ describe('postgres app state', { skip: url ? false : 'TEST_DATABASE_URL unset' }
     const { rows } = await client.query(
       `SELECT collection, (updated_at = date_trunc('hour', updated_at)) AS coarse
          FROM zkv_rows WHERE collection = ANY($1::text[])`,
-      [['votes', 'receipts', 'envelopes', 'votePassSpent']],
+      [['votes', 'receipts', 'envelopes', 'votePassSpent', 'votePassIssued']],
     );
     assert.ok(rows.some((r) => r.collection === 'votes'), 'vote row persisted');
     for (const r of rows) assert.equal(r.coarse, true, `${r.collection} updated_at is hour-truncated`);
