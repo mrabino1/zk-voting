@@ -4,6 +4,10 @@
 # gas, and (with --measure) per-call gas for a poll and a vote.
 # NOT FOR PROFIT — civic public good, not a commercial product.
 #
+# OUT OF DATE: the call table (lib/gas_economics.py) still models the pre-rollup
+# contracts (ElectionFactory, BallotInbox, RollupSettlement). ZkVotingRollup's
+# calls show as unmeasured until the cost model is rewritten for the rollup.
+#
 # The L1 node is L1_RPC (env, .env, or --l1-rpc). The price source is
 # PRICE_API_URL. When no feed answers, ETH/USD falls back to 10000.
 set -euo pipefail

@@ -188,8 +188,8 @@ describe('choice block planner', () => {
     assert.equal(closed.publish[0].hourEnd, H2);
   });
 
-  test('allowRevote is a poll setting and is accepted with a rollup configured', () => {
-    // A civic vote's revote is native to the rollup (ROLLUP.md); the flag only governs polls.
+  test('allowRevote is accepted with a rollup configured', () => {
+    // The rollup replaces a ballot under the same nullifier (ROLLUP.md), so no chain refusal remains.
     const rollup = { l1Rpc: 'http://127.0.0.1:8545', address: `0x${'11'.repeat(20)}`, chainId: 31337 };
     assert.equal(getConfig({ allowRevote: true, rollup }).allowRevote, true);
     assert.equal(getConfig({ allowRevote: false, rollup }).allowRevote, false);

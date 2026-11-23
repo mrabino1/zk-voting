@@ -44,6 +44,9 @@ authenticated voters.
 
 ## Run
 
+Docker Compose runs all of this (`docker compose up -d --build` in `voting_node/`, with the
+`local-l1` profile that `.env.example` turns on). By hand:
+
 ```bash
 # L1: Anvil and the rollup with the mock batch verifier
 anvil &
@@ -59,12 +62,14 @@ npm run l2:operator
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `L1_RPC`, `L1_CHAIN_ID` | required, RPC's id | L1 endpoint |
-| `ROLLUP_ADDRESS` | required | `ZkVotingRollup` |
-| `OPERATOR_PRIVATE_KEY` | required | An account the governor added with `setOperator` |
+| `ROLLUP_ADDRESS` | required unless the record below names it | `ZkVotingRollup` |
+| `ROLLUP_DEPLOYMENT_FILE` | unset | A deployment record (`deployments/local.json`); fills `ROLLUP_ADDRESS` |
+| `OPERATOR_PRIVATE_KEY` | required | An account the governor added with `setOperator`. An Anvil dev key is refused off chain 31337 |
 | `L2_DATA_DIR` | `./data` | Private operator state (`rollup-operator.json`, mode 0600) |
 | `L2_RPC_HOST`, `L2_RPC_PORT` | `127.0.0.1`, `8546` | API bind |
 | `L2_BATCH_SECONDS` | `10` | Batch interval |
 | `L2_BALLOT_TOKEN` | unset | Bearer token for `POST /v1/ballots` |
+| `ZK_VOTING_ALLOW_MOCK_PROOFS` | unset | `1`: accept ballots without an eligibility proof (chain 31337 only) |
 
 ## Test
 

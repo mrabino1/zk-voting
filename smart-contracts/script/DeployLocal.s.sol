@@ -10,8 +10,10 @@ import {DesertVerifier} from "../src/verifiers/DesertVerifier.sol";
 import {MockBatchVerifier} from "../src/verifiers/MockBatchVerifier.sol";
 
 /// @notice Local Anvil deploy (chain id 31337 only): the rollup with the mock batch verifier,
-///         the deployer as governor and operator, and one sample jurisdiction whose admin and
-///         clerk are the deployer. Writes `deployments/local.json`.
+///         the deployer as governor, and one sample jurisdiction whose admin is the deployer.
+///         OPERATOR (the L2 operator) and CLERK (the node account) default to the deployer;
+///         Docker Compose gives each its own Anvil account so their nonces never collide.
+///         Writes `deployments/local.json`.
 ///
 ///         forge script script/DeployLocal.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 contract DeployLocal is Script {
@@ -23,14 +25,16 @@ contract DeployLocal is Script {
             vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
         address deployer = vm.addr(key);
         bytes32 jurisdictionId = vm.envOr("JURISDICTION_ID", keccak256("local"));
+        address operator = vm.envOr("OPERATOR", deployer);
+        address clerk = vm.envOr("CLERK", deployer);
 
         vm.startBroadcast(key);
         DesertVerifier desert = new DesertVerifier();
         MockBatchVerifier mock = new MockBatchVerifier();
         rollup = new ZkVotingRollup(deployer, mock, desert);
-        rollup.setOperator(deployer, true);
+        rollup.setOperator(operator, true);
         rollup.createJurisdiction(jurisdictionId, deployer, "Local");
-        rollup.setClerk(jurisdictionId, deployer, true);
+        rollup.setClerk(jurisdictionId, clerk, true);
         vm.stopBroadcast();
 
         string memory json = "deployment";
@@ -38,6 +42,8 @@ contract DeployLocal is Script {
         vm.serializeAddress(json, "batchVerifier", address(mock));
         vm.serializeAddress(json, "desertVerifier", address(desert));
         vm.serializeBytes32(json, "jurisdictionId", jurisdictionId);
+        vm.serializeAddress(json, "operator", operator);
+        vm.serializeAddress(json, "clerk", clerk);
         string memory out = vm.serializeAddress(json, "rollup", address(rollup));
         vm.writeJson(out, "deployments/local.json");
         console2.log("ZkVotingRollup", address(rollup));

@@ -9,8 +9,13 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CONTRACTS = path.resolve(here, '../../../../../smart-contracts');
-/** Anvil's first dev key: governor, operator, clerk, registrar and officer in these tests. */
+/** Anvil's first dev key: the governor, and by default also operator and clerk. */
 export const DEV_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+/** Anvil accounts 1 and 2: the operator and node clerk in the Docker Compose layout. */
+export const OPERATOR_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+export const OPERATOR_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+export const CLERK_KEY = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a';
+export const CLERK_ADDRESS = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 
 function foundryBin(name) {
   for (const p of [process.env[`${name.toUpperCase()}_BIN`], path.join(os.homedir(), '.foundry/bin', name), name]) {
@@ -66,11 +71,17 @@ export async function startAnvil() {
   };
 }
 
-export function deployLocal(rpcUrl) {
+/** @param {{ operator?: string, clerk?: string }} [roles] addresses; default the deployer */
+export function deployLocal(rpcUrl, roles = {}) {
+  const env = { ...process.env, PRIVATE_KEY: DEV_KEY };
+  delete env.OPERATOR;
+  delete env.CLERK;
+  if (roles.operator) env.OPERATOR = roles.operator;
+  if (roles.clerk) env.CLERK = roles.clerk;
   execFileSync(
     foundryBin('forge'),
     ['script', 'script/DeployLocal.s.sol', '--rpc-url', rpcUrl, '--broadcast', '--slow'],
-    { cwd: CONTRACTS, stdio: 'ignore', env: { ...process.env, PRIVATE_KEY: DEV_KEY } },
+    { cwd: CONTRACTS, stdio: 'ignore', env },
   );
   const file = path.join(CONTRACTS, 'deployments/local.json');
   if (!existsSync(file)) throw new Error('DeployLocal did not write deployments/local.json');

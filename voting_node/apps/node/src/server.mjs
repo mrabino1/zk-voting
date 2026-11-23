@@ -518,11 +518,15 @@ export async function startServer(overrides = {}) {
     );
   }
   const demoPurge = registerDemoPurgeSchedule({ config, store: created.store });
-  if (created.rollup?.enabled && created.config.writerActive !== false) {
+  // Only the active writer sends L1 transactions; a standby arms this when it is promoted.
+  let rollupTimer = null;
+  const armRollupTick = () => {
+    if (rollupTimer || !created.rollup?.enabled || created.config.writerActive === false) return;
     const seconds = Math.max(5, Number(process.env.ROLLUP_TICK_SECONDS || 15));
-    const rollupTimer = setInterval(() => created.rollup.tick(), seconds * 1000);
+    rollupTimer = setInterval(() => created.rollup.tick(), seconds * 1000);
     if (typeof rollupTimer.unref === 'function') rollupTimer.unref();
-  }
+  };
+  armRollupTick();
   if (created.writer?.enabled && !created.writer.active) {
     const timer = setInterval(async () => {
       if (!created.writer.tryPromote()) return;
@@ -536,6 +540,7 @@ export async function startServer(overrides = {}) {
         created.store.writerActive = true;
         created.explorer.writerActive = true;
         created.config.writerActive = true;
+        armRollupTick();
         await created.store.adoptSuperAdminEmail(created.config);
         if (typeof created.plugins?.onPromoted === 'function') await created.plugins.onPromoted();
         console.log(`node writer active epoch=${created.writer.epoch()}`);

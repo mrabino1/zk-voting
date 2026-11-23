@@ -10,12 +10,17 @@ import { fileURLToPath } from 'node:url';
 
 import { makeEntropyString } from '../../apps/node/public/vendor/zk-entropy.js';
 import { ADDED_MARKER, formatEnvValue, parseEnvText, updateEnvText } from './envfile.mjs';
-import { SECRET_KEYS, describeValue, launchPlan, normalizeFqdn, runSetup } from './setup.mjs';
+import { LOCAL_ROLLUP, SECRET_KEYS, describeValue, launchPlan, normalizeFqdn, runSetup } from './setup.mjs';
 
 const DEMO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-// Anvil's well-known test account #1 (public test key, never funded on a real chain).
-const TEST_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
-const TEST_ADDR = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
+// Throwaway keys for an "existing deployment" answer (not Anvil's public ones).
+const NODE_KEY = `0x${'11'.repeat(32)}`;
+const OPERATOR_KEY = `0x${'22'.repeat(32)}`;
+const NODE_ADDR = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';
+const ROLLUP = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
+const JURISDICTION = `0x${'ab'.repeat(32)}`;
+// Anvil's public test key #1: refused for an existing deployment.
+const ANVIL_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
 
 function sandbox() {
   const dir = mkdtempSync(path.join(tmpdir(), 'zkv-setup-'));
@@ -36,10 +41,16 @@ async function run(dir, lines, argv = [], extra = {}) {
   return { ...res, out };
 }
 
-function fakeL1({ balanceWei, gasPriceWei }) {
+function fakeL1({ balanceWei, gasPriceWei, chainId = 11155111, code = '0x6080' }) {
   return async (_url, init) => {
     const { method } = JSON.parse(init.body);
-    const result = method === 'eth_getBalance' ? `0x${BigInt(balanceWei).toString(16)}` : `0x${BigInt(gasPriceWei).toString(16)}`;
+    const hex = (n) => `0x${BigInt(n).toString(16)}`;
+    const result = {
+      eth_chainId: hex(chainId),
+      eth_getCode: code,
+      eth_gasPrice: hex(gasPriceWei),
+      eth_getBalance: hex(balanceWei),
+    }[method];
     return { json: async () => ({ jsonrpc: '2.0', id: 1, result }) };
   };
 }
@@ -56,9 +67,14 @@ const BASE_ANSWERS = [
   'y', // proxy
   'j', // json store
   'My City', // brand
-  'https://eth-mainnet.example.invalid/v2/PROVIDERKEY123', // L1 RPC with an embedded key
-  'e', // enter submitter key
-  TEST_KEY,
+  'e', // an existing rollup deployment
+  'https://eth-sepolia.example.invalid/v2/PROVIDERKEY123', // L1 RPC with an embedded key
+  ROLLUP,
+  JURISDICTION,
+  'e', // enter the node key
+  NODE_KEY,
+  'e', // enter the operator key
+  OPERATOR_KEY,
   'c', // compose
 ];
 
@@ -103,19 +119,21 @@ test('first run writes .env (mode 600) with every answer and never prints a secr
   assert.equal(env.get('TRUST_PROXY'), '1');
   assert.equal(env.get('DATABASE_URL'), '');
   assert.equal(env.get('BRAND_NAME'), 'My City');
-  assert.match(env.get('EXPLORER_INGEST_SECRET'), /^[0-9a-f]{64}$/);
   assert.match(env.get('RECEIPT_PDF_SECRET'), /^[0-9a-f]{64}$/);
-  assert.equal(env.get('L1_SUBMITTER_PRIVATE_KEY'), TEST_KEY);
-  assert.match(env.get('L2_UUID'), /^[0-9a-f-]{36}$/);
-  assert.match(env.get('L2_SALT'), /^0x[0-9a-f]{64}$/);
-  assert.match(env.get('L2_ADMIN_SECRET'), /^[0-9a-f]{64}$/);
-  assert.equal(env.get('L2_OPERATOR_ADDRESS'), TEST_ADDR);
-  assert.match(env.get('L2_ID'), /^0x[0-9a-f]{64}$/);
+  assert.equal(env.get('COMPOSE_PROFILES'), '');
+  assert.equal(env.get('ROLLUP_DEPLOYMENT_FILE'), '');
+  assert.equal(env.get('ZK_VOTING_ALLOW_MOCK_PROOFS'), '');
+  assert.equal(env.get('L1_CHAIN_ID'), '11155111');
+  assert.equal(env.get('ROLLUP_ADDRESS'), ROLLUP);
+  assert.equal(env.get('ROLLUP_JURISDICTION_ID'), JURISDICTION);
+  assert.equal(env.get('ROLLUP_PRIVATE_KEY'), NODE_KEY);
+  assert.equal(env.get('OPERATOR_PRIVATE_KEY'), OPERATOR_KEY);
+  assert.match(env.get('L2_BALLOT_TOKEN'), /^[0-9a-f]{64}$/);
   // Secrets and the provider key in the RPC URL never reach the terminal.
   for (const k of SECRET_KEYS) if (env.get(k)) assert.ok(!r.out.includes(env.get(k)), `${k} leaked`);
   assert.ok(!r.out.includes('PROVIDERKEY123'), 'L1_RPC path leaked');
-  assert.match(r.out, /L2_ID 0x[0-9a-f]{64}/);
-  assert.match(r.out, /Funding: L1 submitter funded/);
+  assert.match(r.out, /L1 chain id 11155111/);
+  assert.match(r.out, new RegExp(`Node account ${NODE_ADDR}: 1\\.000000 ETH`));
   assert.match(r.out, /cd voting_node && docker compose up -d --build/);
   assert.match(r.out, /https:\/\/vote\.example\.org\/setup/);
 });
@@ -131,16 +149,26 @@ test('re-running with --defaults changes nothing (idempotent)', async () => {
   assert.equal(readFileSync(path.join(dir, '.env'), 'utf8'), before);
 });
 
-test('--defaults on a fresh clone generates secrets and identity, skips entropy', async () => {
+test('--defaults on a fresh clone picks the local L1, generates secrets, skips entropy', async () => {
   const dir = sandbox();
   const r = await run(dir, [], ['-y', '--deploy', 'node']);
   const env = parseEnvText(readFileSync(path.join(dir, '.env'), 'utf8'));
   assert.ok(env.get('SETUP_TOKEN'));
   assert.equal(env.get('ZK_ENTROPY'), '');
-  assert.ok(env.get('L2_UUID') && env.get('L2_SALT') && env.get('L2_ADMIN_SECRET'));
-  assert.equal(env.get('L2_ID'), '');
-  assert.match(r.out, /Funding not checked/);
-  assert.match(r.out, /npm run dev/);
+  for (const [k, v] of Object.entries(LOCAL_ROLLUP)) assert.equal(env.get(k), v, k);
+  assert.match(env.get('L2_BALLOT_TOKEN'), /^[0-9a-f]{64}$/);
+  assert.match(r.out, /PUBLIC dev keys/);
+  assert.match(r.out, /L1_RPC= npm run dev/);
+});
+
+test('an existing deployment refuses an Anvil test key', async () => {
+  const dir = sandbox();
+  const answers = [...BASE_ANSWERS];
+  answers.splice(answers.indexOf(NODE_KEY), 1, ANVIL_KEY, NODE_KEY);
+  const r = await run(dir, answers, [], { fetchImpl: fakeL1({ balanceWei: 10n ** 18n, gasPriceWei: 10n ** 9n }) });
+  assert.equal(r.code, 0);
+  assert.match(r.out, /public Anvil test key/);
+  assert.equal(parseEnvText(readFileSync(path.join(dir, '.env'), 'utf8')).get('ROLLUP_PRIVATE_KEY'), NODE_KEY);
 });
 
 test('closed ceremony: rejects a bad and a local string, accepts the ceremony output', async () => {
@@ -158,12 +186,12 @@ test('closed ceremony: rejects a bad and a local string, accepts the ceremony ou
   assert.ok(!r.out.includes(good));
 });
 
-test('low submitter balance prints a warning', async () => {
+test('a low balance prints a warning, and a missing contract is flagged', async () => {
   const dir = sandbox();
-  // 250000 gas * 1 gwei = 0.00025 ETH per batch; 0.001 ETH covers 4 of 20.
-  const r = await run(dir, BASE_ANSWERS, [], { fetchImpl: fakeL1({ balanceWei: 10n ** 15n, gasPriceWei: 10n ** 9n }) });
-  assert.match(r.out, /WARNING \(low\): L1 submitter balance is low/);
-  assert.match(r.out, new RegExp(`Top up ${TEST_ADDR}`));
+  // 300000 gas * 1 gwei = 0.0003 ETH per L1 call; 0.001 ETH covers 3 of 20.
+  const r = await run(dir, BASE_ANSWERS, [], { fetchImpl: fakeL1({ balanceWei: 10n ** 15n, gasPriceWei: 10n ** 9n, code: '0x' }) });
+  assert.match(r.out, new RegExp(`WARNING \\(low\\): Node account ${NODE_ADDR} has 0\\.001000 ETH, about 3 L1 calls`));
+  assert.match(r.out, new RegExp(`WARNING: no contract at ${ROLLUP}`));
 });
 
 test('input that ends early writes nothing', async () => {
@@ -203,9 +231,13 @@ test('an existing IS_DEMO is normalised and a missing one stays missing', async 
 });
 
 test('Coolify plan names secrets without values', () => {
-  const plan = launchPlan({ deploy: 'coolify', next: { VOTE_FQDN: 'vote.example.org', SETUP_TOKEN: 's3cret', L1_RPC: 'https://x/key', L2_ID: '0xabc', CHAIN_ID: '27427' } });
+  const plan = launchPlan({
+    deploy: 'coolify',
+    next: { VOTE_FQDN: 'vote.example.org', SETUP_TOKEN: 's3cret', L1_RPC: 'https://x/key', ROLLUP_ADDRESS: ROLLUP, ROLLUP_PRIVATE_KEY: NODE_KEY, CHAIN_ID: '27427' },
+  });
   assert.ok(plan.coolify.includes('Base Directory: /voting_node'));
-  assert.ok(plan.envSecret.includes('SETUP_TOKEN') && plan.envSecret.includes('L1_RPC'));
-  assert.ok(!JSON.stringify(plan).includes('s3cret') && !JSON.stringify(plan).includes('https://x/key'));
+  assert.ok(plan.envSecret.includes('SETUP_TOKEN') && plan.envSecret.includes('L1_RPC') && plan.envSecret.includes('ROLLUP_PRIVATE_KEY'));
+  assert.ok(plan.envPlain.includes(`ROLLUP_ADDRESS=${ROLLUP}`));
+  assert.ok(!JSON.stringify(plan).includes('s3cret') && !JSON.stringify(plan).includes('https://x/key') && !JSON.stringify(plan).includes(NODE_KEY));
   assert.equal(describeValue('L1_RPC', 'https://h.example/v2/KEY'), 'set (h.example; full URL not shown)');
 });

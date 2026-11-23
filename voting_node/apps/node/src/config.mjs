@@ -1,6 +1,7 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -304,6 +305,28 @@ export function resolveRequestWebAuthn(config, req = {}) {
   };
 }
 
+const { assertKeyAllowedOnChain, readDeployment } = createRequire(import.meta.url)('@zk-voting/chain-client');
+
+/**
+ * The node's rollup connection. Explicit env wins; ROLLUP_DEPLOYMENT_FILE (the record
+ * DeployLocal.s.sol writes, shared by Docker Compose) fills the address, chain and
+ * jurisdiction when they are unset. A public Anvil dev key is refused off chain 31337.
+ */
+export function resolveRollupConfig(env = process.env) {
+  const deployment = readDeployment(String(env.ROLLUP_DEPLOYMENT_FILE || '').trim());
+  const cfg = {
+    l1Rpc: env.L1_RPC || env.L1_RPC_URL || '',
+    chainId: Number(env.L1_CHAIN_ID || deployment?.chainId || 31337),
+    address: env.ROLLUP_ADDRESS || deployment?.rollup || '',
+    privateKey: env.ROLLUP_PRIVATE_KEY || '',
+    jurisdictionId: env.ROLLUP_JURISDICTION_ID || deployment?.jurisdictionId || '',
+    l2Url: env.L2_URL || 'http://l2:8546',
+    l2Token: env.L2_BALLOT_TOKEN || '',
+  };
+  assertKeyAllowedOnChain(cfg.privateKey, cfg.chainId, 'ROLLUP_PRIVATE_KEY');
+  return cfg;
+}
+
 /**
  * @param {Record<string, unknown>} [overrides]
  */
@@ -337,8 +360,9 @@ export function getConfig(overrides = {}) {
     overrides.disclosureMinBlockVotes ?? process.env.DISCLOSURE_MIN_BLOCK_VOTES,
     { isTest },
   );
-  // Polls only: a later ballot replaces the earlier one in the node's count.
-  // Civic votes always allow it on the rollup (ROLLUP.md, revote subtracts the old vector).
+  // A later ballot under the same nullifier replaces the earlier one: in the node's
+  // count for a poll, and on the rollup for a civic vote (ROLLUP.md: the operator
+  // subtracts the old vector). Off by default.
   const allowRevote = envFlag(
     Object.prototype.hasOwnProperty.call(overrides, 'allowRevote')
       ? overrides.allowRevote
@@ -399,17 +423,7 @@ export function getConfig(overrides = {}) {
     adminHandle: process.env.ADMIN_HANDLE || 'admin',
     // ZkVotingRollup (smart-contracts/docs/ROLLUP.md). Civic votes run there; polls stay here.
     // NODE_ENV=test connects only when a test passes `overrides.rollup`.
-    rollup: overrides.rollup ?? (isTest
-      ? null
-      : {
-          l1Rpc: process.env.L1_RPC || process.env.L1_RPC_URL || '',
-          chainId: Number(process.env.L1_CHAIN_ID || 31337),
-          address: process.env.ROLLUP_ADDRESS || '',
-          privateKey: process.env.ROLLUP_PRIVATE_KEY || '',
-          jurisdictionId: process.env.ROLLUP_JURISDICTION_ID || '',
-          l2Url: process.env.L2_URL || 'http://l2:8546',
-          l2Token: process.env.L2_BALLOT_TOKEN || '',
-        }),
+    rollup: overrides.rollup ?? (isTest ? null : resolveRollupConfig(process.env)),
     dataDir: process.env.DATA_DIR || path.join(PKG_ROOT, 'data'),
     // Postgres app state. Unset → JSON files in dataDir (dev fallback). The
     // test suite stays on JSON unless TEST_DATABASE_URL points at a scratch DB.

@@ -2,7 +2,6 @@
 // Read-only diagnostic projections. Counts and metadata only.
 
 import fs from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
 
 import { brandName } from '../branding.mjs';
@@ -13,6 +12,7 @@ import { countPasskeys, emailHint } from '../identity.mjs';
 
 const require = createRequire(import.meta.url);
 const nodePkg = require('../../package.json');
+const { readDeployment } = require('@zk-voting/chain-client');
 const startedAt = Date.now();
 
 function count(list) {
@@ -250,19 +250,14 @@ export function l2Diag(deps) {
   };
 }
 
-function deploymentRecord(config) {
-  const file = process.env.DEPLOYMENTS_FILE
-    ? path.resolve(process.env.DEPLOYMENTS_FILE)
-    : path.join(config.dataDir, 'deployments.json');
+function deploymentRecord() {
+  const file = String(process.env.ROLLUP_DEPLOYMENT_FILE || '').trim();
+  if (!file) return { file: null, present: false, rollup: null, chainId: null };
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return {
-      present: true,
-      deployed: Boolean(parsed?.deployed),
-      chainId: parsed?.chainId ?? null,
-    };
-  } catch {
-    return { present: false, deployed: false, chainId: null };
+    const record = readDeployment(file);
+    return { file, present: Boolean(record), rollup: record?.rollup || null, chainId: record?.chainId ?? null };
+  } catch (err) {
+    return { file, present: false, rollup: null, chainId: null, error: err.message };
   }
 }
 
@@ -285,7 +280,7 @@ export function l1Diag(deps) {
       l2Url: config.rollup?.l2Url || null,
     },
     elections: rollup,
-    deployment: deploymentRecord(config),
+    deployment: deploymentRecord(),
   };
 }
 

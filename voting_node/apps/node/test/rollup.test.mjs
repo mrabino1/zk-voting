@@ -3,6 +3,7 @@
 // L1/L2 client, then the real thing — node service, L2 operator, Anvil L1 — when Foundry is installed.
 
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { after, before, describe, test } from 'node:test';
 
 import * as bc from '../public/ballot-crypto.js';
@@ -154,6 +155,36 @@ describe('rollup service rules (fake L1/L2)', () => {
 const anvilHelpers = await import('../../../l2/rollup/test/helpers/anvil.mjs');
 const skip = anvilHelpers.foundryAvailable() ? false : process.env.CI === 'true' ? false : 'Foundry not installed';
 
+describe('rollup client chain guard', () => {
+  test('an L1_RPC on another chain is refused before any read or write', async () => {
+    let calls = 0;
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        calls += 1;
+        const { id, method } = JSON.parse(body);
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ jsonrpc: '2.0', id, ...(method === 'eth_chainId' ? { result: '0x7a69' } : { error: { code: -32601, message: 'unexpected' } }) }));
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    try {
+      const client = createRollupClient({
+        l1Rpc: `http://127.0.0.1:${server.address().port}`,
+        chainId: 1,
+        address: `0x${'11'.repeat(20)}`,
+        privateKey: `0x${'22'.repeat(32)}`,
+      });
+      await assert.rejects(client.election(1), (err) => err.code === 'L1_CHAIN_MISMATCH' && /serves chain 31337/.test(err.message));
+      await assert.rejects(client.closeElection(1), (err) => err.code === 'L1_CHAIN_MISMATCH');
+      assert.equal(calls, 1, 'the chain id is asked once, and nothing else is sent');
+    } finally {
+      server.close();
+    }
+  });
+});
+
 describe('civic vote through node, L2 operator and L1', { skip }, () => {
   let anvil;
   let server;
@@ -167,8 +198,11 @@ describe('civic vote through node, L2 operator and L1', { skip }, () => {
     const { Operator } = await import('../../../l2/rollup/operator.mjs');
     const { createApi } = await import('../../../l2/rollup/server.mjs');
     anvil = await anvilHelpers.startAnvil();
-    deployment = anvilHelpers.deployLocal(anvil.rpcUrl);
-    const l1 = createL1({ rpcUrl: anvil.rpcUrl, chainId: 31337, rollup: deployment.rollup, privateKey: anvilHelpers.DEV_KEY });
+    // The Docker Compose layout: governor, operator and node clerk are three accounts.
+    deployment = anvilHelpers.deployLocal(anvil.rpcUrl, { operator: anvilHelpers.OPERATOR_ADDRESS, clerk: anvilHelpers.CLERK_ADDRESS });
+    assert.equal(deployment.operator, anvilHelpers.OPERATOR_ADDRESS);
+    assert.equal(deployment.clerk, anvilHelpers.CLERK_ADDRESS);
+    const l1 = createL1({ rpcUrl: anvil.rpcUrl, chainId: 31337, rollup: deployment.rollup, privateKey: anvilHelpers.OPERATOR_KEY });
     op = await new Operator({ l1, chainId: 31337, allowMockProofs: true }).init();
     server = createApi(op, { ballotToken: 'node-token' });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -180,7 +214,7 @@ describe('civic vote through node, L2 operator and L1', { skip }, () => {
         l1Rpc: anvil.rpcUrl,
         chainId: 31337,
         address: deployment.rollup,
-        privateKey: anvilHelpers.DEV_KEY,
+        privateKey: anvilHelpers.CLERK_KEY,
         jurisdictionId: deployment.jurisdictionId,
         l2Url: `http://127.0.0.1:${server.address().port}`,
         l2Token: 'node-token',

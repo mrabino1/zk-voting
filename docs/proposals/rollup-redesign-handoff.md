@@ -32,7 +32,8 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
      (`/api/l2/*`), the L2-open, dead-letter, L1-mirror and archive routes, and their tests.
    - Config: `CHAIN_RPC`, the factory, inbox, verifier, relayer, mirror and publisher keys,
      `L2_CIVIC_RPC`, `ARCHIVE_ENABLED` and the `ALLOW_REVOTE` chain refusal (TODO #113) are removed.
-     `ALLOW_REVOTE` now governs polls only; civic votes revote natively on the rollup.
+     `ALLOW_REVOTE` works with the rollup configured: it governs both polls and civic votes
+     (the rollup subtracts the replaced vector).
    - Site contract pins are removed. `/api/site` and `/api/office/site` show `rollup` read-only
      (from `ROLLUP_ADDRESS`); `PATCH /api/office/site` with `contracts` answers 400
      `CONTRACTS_FROM_ENV`. `/api/config` has `rollup`, not `contracts`.
@@ -47,7 +48,44 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
    - Tests: node 777 pass (only the Chrome-dependent a11y and landing-lang tests fail, as before);
      packages, `test:l2` (22), auditor, docs, setup and `forge test` (99) all pass.
 
+5. **Deployment and operations** (phase 2):
+   - `docker-compose.yml` (and the tailscale copy): `node`, `l2` (`node rollup/main.mjs`), `db`,
+     and under the `local-l1` profile `l1` (Anvil 31337, foundry image pinned by digest, state on
+     `l1-data`) plus `l1-deploy`. That one-shot runs `DeployLocal.s.sol` from `../smart-contracts`
+     unless the recorded rollup already has code, and writes `/deployments/local.json` to the
+     `l1-deployment` volume. The `prover` and `archive` services are gone.
+   - Accounts: Anvil 0 is the governor, 1 the L2 operator (`OPERATOR`), 2 the node clerk (`CLERK`).
+     `DeployLocal.s.sol` takes `OPERATOR` and `CLERK`. The node integration test uses the same split.
+   - `ROLLUP_DEPLOYMENT_FILE` fills `ROLLUP_ADDRESS`, `L1_CHAIN_ID` and `ROLLUP_JURISDICTION_ID` in
+     the node (`resolveRollupConfig`) and the operator (`chain-client` `readDeployment`).
+   - Public Anvil dev keys are refused off chain 31337 (`chain-client` `assertKeyAllowedOnChain`)
+     in the node, the operator and `./setup.sh`. The node client also checks that `L1_RPC` serves
+     the configured chain before any L1 call (`L1_CHAIN_MISMATCH`).
+   - `.env.example` defaults to the local stack (`COMPOSE_PROFILES=local-l1`). `./setup.sh` step 6
+     offers a local L1 or an existing deployment (RPC, address, jurisdiction, node and operator
+     keys, balance check of both) and mints `L2_BALLOT_TOKEN`.
+   - `scripts/deploy.sh --target local|public` wraps `DeployLocal.s.sol` / `Deploy.s.sol` with the
+     deploy-once guard. `npm run deploy:l1 -- --check|--verify` does the same check in JS.
+     `deploy-fork-dryrun.sh` and `l2-vps-bootstrap.sh` are removed, along with the old L2 identity
+     system (`l2/identity.mjs`, `funding.mjs`, `adminAuth.mjs`, `bin/`, `npm run l2:identity`,
+     `npm run certify:l1`, `docs/L2-IDENTITY-AND-SETTLEMENT.md`).
+   - The node image no longer copies the deleted `l2/archive`, `l2/sequencer` and `l2/prover`
+     files (its COPY lines were broken). `docker-compose.rolling.yml` drops `l2-next`.
+   - Fixed: a promoted standby node now starts the rollup tick.
+   - **Not verified with Docker** (none on this host): the images were not built and compose was
+     not run. Checked instead: the compose YAML parses; the `l1-deploy` script was run on a host
+     Anvil (deploys, then skips on re-run); `rollup/main.mjs` and `server.mjs` booted with the
+     compose environment against that Anvil; `scripts/image-import-smoke.mjs` passes.
+
 ## Follow-ups found during the node cleanup
+
+- The L2 operator has no writer lease, so it cannot run in an overlap like the node. Update it by
+  recreating the container (the node answers 503 meanwhile, and the voter retries).
+- `scripts/get-gas-economics.sh` and `scripts/lib/gas_economics.py` still model the old contracts.
+  Write a cost model for the rollup (createElection, guardian calls, commit/execute per batch).
+- The explorer `/api/explorer/ingest` route and `EXPLORER_INGEST_SECRET` are dead (nothing pushes
+  blocks). Remove them with the explorer rewrite in phase 4.
+- `l1-deploy` compiles the contracts on each fresh deploy and needs network once, for solc.
 
 - `store.mjs` still carries the old chain vote queue and exclusion machinery, now unreachable:
   `chainVoteDeadLetter` / `chainVoteSupplementary`, `exclusionApprovals`, `excludedBallots` with
@@ -61,16 +99,9 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
 
 ## Remaining phases
 
-1. ~~Node cleanup~~ (done). The old keys still remain in `.env.example`, `tools/setup/setup.mjs`,
-   the compose files, `scripts/` and `system_actions/`. Remove them in phase 2, which rewrites
-   those files anyway, along with the old L2 identity system: `l2/identity.mjs`, `funding.mjs`,
-   `adminAuth.mjs`, `lease/`, `bin/l2-identity.mjs`, the `l2:identity` and `certify:l1` npm scripts,
-   and `docs/L2-IDENTITY-AND-SETTLEMENT.md`.
-2. **Next:** Docker Compose: an `l1` service (Anvil, foundry image) and a one-shot `forge script DeployLocal`.
-   The `l2` service becomes `node rollup/main.mjs`. Remove the `prover` service. Node env:
-   `L1_RPC`, `ROLLUP_ADDRESS`, `ROLLUP_PRIVATE_KEY`, `ROLLUP_JURISDICTION_ID`, `L2_URL`,
-   `L2_BALLOT_TOKEN`. Rewrite `tools/deploy/` for the new contract.
-3. Browser:
+1. ~~Node cleanup~~ (done).
+2. ~~Docker Compose, setup and deploy tooling~~ (done, see item 5 above).
+3. **Next:** Browser:
    - `public/vote.js` rollup branch: `GET /rollup/ballot-context`, `encryptBallot`, nullifier
      `Poseidon(nullifierSecret, l1ElectionId)` via `passkey-wallet.js`, `POST /vote` with a vote
      pass, then poll the receipt.
@@ -83,6 +114,10 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
    the voter flow, the admin/back office, and the contract-facing pages (explorer shows rollup
    batches from L2 `/v1/batches`).
 5. Docs: README, `voting_node/docs/*` (ARCHITECTURE, L2, OPERATOR, TALLY_GUARDIANS), root README.
+   Still describing the old stack: `voting_node/README.md`, `docs/OPERATOR.md`, `docs/ROLLING_UPDATES.md`,
+   `docs/OPERATIONS-L2-LIFECYCLE.md`, `docs/L2.md`, `docs/L2_VPS_SETUP.md`, `docs/self-hosting/*`
+   (`first-launch.md` links the deleted L2 identity doc), `docs/voting_cost_estimate.md`,
+   `scripts/README.md`, `implementation.md`.
 
 ## Known gaps (tell the user, do not hide)
 

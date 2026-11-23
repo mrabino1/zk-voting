@@ -58,10 +58,37 @@ export function createRollupClient(cfg, { fetchImpl = globalThis.fetch } = {}) {
   const account = cfg.privateKey ? privateKeyToAccount(cfg.privateKey) : null;
   const wallet = account ? createWalletClient({ chain, transport, account }) : null;
   const address = getAddress(cfg.address);
-  const read = (functionName, args = []) => pub.readContract({ address, abi: ABI, functionName, args });
+  // The chain id signs transactions and binds every ballot, so the RPC must serve that chain.
+  // Checked once; a failed RPC call is retried on the next use, a mismatch is not.
+  let chainChecked = null;
+  async function onExpectedChain() {
+    if (!chainChecked) {
+      chainChecked = pub.getChainId().then(
+        (actual) => {
+          if (actual !== Number(cfg.chainId)) {
+            throw new RollupError(`L1_RPC serves chain ${actual}, but the node is configured for ${cfg.chainId} (L1_CHAIN_ID)`, {
+              status: 503,
+              code: 'L1_CHAIN_MISMATCH',
+            });
+          }
+        },
+        (err) => {
+          chainChecked = null;
+          throw new RollupError(`L1 unreachable: ${err?.shortMessage || err?.message || 'error'}`, { status: 503, code: 'L1_UNREACHABLE' });
+        },
+      );
+    }
+    return chainChecked;
+  }
+
+  const read = async (functionName, args = []) => {
+    await onExpectedChain();
+    return pub.readContract({ address, abi: ABI, functionName, args });
+  };
 
   async function send(functionName, args) {
     if (!wallet) throw new RollupError('the node has no L1 key (ROLLUP_PRIVATE_KEY)', { status: 503, code: 'NO_L1_KEY' });
+    await onExpectedChain();
     let request;
     try {
       ({ request } = await pub.simulateContract({ address, abi: ABI, functionName, args, account }));
