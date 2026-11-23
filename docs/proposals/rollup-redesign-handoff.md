@@ -24,40 +24,49 @@ redesign (contracts, node, UI/UX) is authorized. Decisions taken with the user:
    JS-generated election.
 3. Contract view `decryptionShares` was added after that commit (it is in the WIP commit below).
 
-## In progress (WIP commit, node tests failing)
+4. **Node integration** (WIP commit `8905286`, then the node cleanup commit after it):
+   - `src/rollup/client.mjs`, `src/rollup/service.mjs`, `src/routes/rollup.mjs` (mounted at
+     `/api/elections/:id/rollup`), the rollup branch in `POST /:id/vote`, and
+     `scripts/rollup-guardian.mjs`.
+   - The old chain is gone: `chain.mjs`, `l1Certify.mjs`, `l2Identity.mjs`, `routes/l2Results.mjs`
+     (`/api/l2/*`), the L2-open, dead-letter, L1-mirror and archive routes, and their tests.
+   - Config: `CHAIN_RPC`, the factory, inbox, verifier, relayer, mirror and publisher keys,
+     `L2_CIVIC_RPC`, `ARCHIVE_ENABLED` and the `ALLOW_REVOTE` chain refusal (TODO #113) are removed.
+     `ALLOW_REVOTE` now governs polls only; civic votes revote natively on the rollup.
+   - Site contract pins are removed. `/api/site` and `/api/office/site` show `rollup` read-only
+     (from `ROLLUP_ADDRESS`); `PATCH /api/office/site` with `contracts` answers 400
+     `CONTRACTS_FROM_ENV`. `/api/config` has `rollup`, not `contracts`.
+   - Public election ids are UUID v5 of (node, jurisdiction, local sequence). Factory scoping,
+     `certificationId`, `publicIdHash` and `l1IdentityOf` are gone. The election DTO has
+     `chainMode` (`node` | `rollup`) and `rollupElectionId`.
+   - Setup step 6 is "Rollup connection": `GET /api/setup/rollup` (super admin) shows the contract,
+     L1 chain, node account, its L1 balance (low/empty warning) and whether the L2 answers.
+   - `createApp({ rollupService })` injects a service; `createApp({ rollup })` is config.
+   - Auditor packs carry `rollup { address, chainId, electionId }` instead of `contracts`.
+   - `docs/BOT_API.md` and `llms.txt` are regenerated from `botApiCatalog.mjs`.
+   - Tests: node 777 pass (only the Chrome-dependent a11y and landing-lang tests fail, as before);
+     packages, `test:l2` (22), auditor, docs, setup and `forge test` (99) all pass.
 
-Node integration in `voting_node/apps/node`:
+## Follow-ups found during the node cleanup
 
-- New code, done and passing in `test/rollup.test.mjs`, including the integration through node,
-  operator and Anvil:
-  - `src/rollup/client.mjs` and `src/rollup/service.mjs`
-  - `src/routes/rollup.mjs`, mounted at `/api/elections/:id/rollup`
-  - the rollup branch in `POST /:id/vote`
-  - `scripts/rollup-guardian.mjs`
-- The old chain is removed:
-  - deleted: `src/chain.mjs`, `src/l1Certify.mjs`, `scripts/certify-l1.mjs`
-  - stripped out: L2-open, dead-letter, L1-mirror and archive routes, and the chain paths in
-    `relay.mjs`, health, outcomes and diagnostics
-  - `electionIds.mjs` now has the id helpers inlined
-
-**Next step:** `npm run test:node` fails 105 tests. Most of them are 500s on `POST /api/elections`.
-That handler (in `src/routes/elections.mjs`) was rewritten as node-only, so run
-`node --test test/api.test.mjs` and read the server stack. The likely cause is a leftover reference
-in the create handler, such as `fingerprint`, `requestedOnChainId` or `store.createElection` params.
-`store.createElection` still mints the public id from `onChainElectionId` and `factoryAddress`;
-check `store.mjs` around line 1603. After that:
-
-- Delete or rewrite these tests that target removed modules:
-  - `chain-batch`, `elections-chain`, `inbox-abi-artifact`, `l1-certify`
-  - the chain parts of `ballot-secrecy`, `election-type`, `ranked-sealed` and `revote-flag`
-- Fix the remaining assertions: `/api/config` fields (`chain` became `rollup`), outcome checks
-  (`l1*` became `rollupModeConsistent`), and API docs.
+- `store.mjs` still carries the old chain vote queue and exclusion machinery, now unreachable:
+  `chainVoteDeadLetter` / `chainVoteSupplementary`, `exclusionApprovals`, `excludedBallots` with
+  `releasePending`, and the `pendingReleases` check in `POST /:id/tally` and diagnostics. Remove it
+  together with the remaining revote-flag tests that exercise it. Decide whether polls keep
+  `TALLY_CHALLENGE_SECONDS` (`supplementaryBatch.mjs`).
+- `onChainElectionId` is a historical name for the node's local sequence (the poll proof's
+  electionId). Rename it with the browser work in phase 3.
+- `tools/auditor/export.mjs` and `cli.mjs` still read the old ElectionFactory over RPC. Rewrite
+  them for ZkVotingRollup.
 
 ## Remaining phases
 
-1. Finish the node cleanup above. Remove the old config keys (`CHAIN_RPC`, factory/inbox/mirror
-   addresses) from `config.mjs`, `.env.example`, setup and docs.
-2. Docker Compose: an `l1` service (Anvil, foundry image) and a one-shot `forge script DeployLocal`.
+1. ~~Node cleanup~~ (done). The old keys still remain in `.env.example`, `tools/setup/setup.mjs`,
+   the compose files, `scripts/` and `system_actions/`. Remove them in phase 2, which rewrites
+   those files anyway, along with the old L2 identity system: `l2/identity.mjs`, `funding.mjs`,
+   `adminAuth.mjs`, `lease/`, `bin/l2-identity.mjs`, the `l2:identity` and `certify:l1` npm scripts,
+   and `docs/L2-IDENTITY-AND-SETTLEMENT.md`.
+2. **Next:** Docker Compose: an `l1` service (Anvil, foundry image) and a one-shot `forge script DeployLocal`.
    The `l2` service becomes `node rollup/main.mjs`. Remove the `prover` service. Node env:
    `L1_RPC`, `ROLLUP_ADDRESS`, `ROLLUP_PRIVATE_KEY`, `ROLLUP_JURISDICTION_ID`, `L2_URL`,
    `L2_BALLOT_TOKEN`. Rewrite `tools/deploy/` for the new contract.
@@ -67,6 +76,9 @@ check `store.mjs` around line 1603. After that:
      pass, then poll the receipt.
    - Results page reads `/rollup` (status, certified totals, Withheld).
    - Back office gets a Rollup panel: enroll guardians, publish, finalize key, close, finalize.
+   - Still showing old chain fields: `admin.js` (addresses table), `back-office.js`
+     (`createTxHash` / `onChainElectionAddress` after create), `outcomes.js` (factory, tx, election
+     address), and other ElectionFactory/BallotInbox copy in `public/`.
 4. UI/UX cleanup that was requested: CSS tokens and consolidation of `styles.css` (3.9k lines),
    the voter flow, the admin/back office, and the contract-facing pages (explorer shows rollup
    batches from L2 `/v1/batches`).

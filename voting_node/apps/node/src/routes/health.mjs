@@ -8,7 +8,7 @@ import { publicDisclosureView } from '../disclosure.mjs';
 import { AUTH_METHOD_TYPES, identityCaps } from '../identity.mjs';
 import { PIN_MAX_LEN, PIN_MIN_LEN } from '../pin.mjs';
 import { credentialProviderPublic } from '../credentials.mjs';
-import { SHARED_DEPLOYMENT_NOTE, mergePublicContracts } from '../cms.mjs';
+import { SHARED_DEPLOYMENT_NOTE } from '../cms.mjs';
 import { listAggregators } from '../guardians/aggregate.mjs';
 import { pingDatabase } from '../db.mjs';
 
@@ -21,7 +21,6 @@ export function healthRouter(deps) {
     const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
       ? deps.store.publishedAcceptedBallotsAll(now, deps.config)
       : undefined;
-    const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
     const mode = deps.writer?.mode?.() || 'active';
     res.set('x-zk-voting-mode', mode);
     // Postgres configured but unreachable: report it (503) so the
@@ -58,8 +57,7 @@ export function configRouter(deps) {
     '/config',
     asyncHandler(async (_req, res) => {
       const now = deps.config.nowFn();
-      const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
-      res.json({
+        res.json({
         nfp: true,
         app: 'zk-voting',
         product: brandName(),
@@ -96,7 +94,6 @@ export function configRouter(deps) {
             ? 'Civic votes settle on ZkVotingRollup, the one L1 contract. Results are decrypted only as the final sum and certified on L1. Polls stay on this node.'
             : 'No rollup connection (ROLLUP_ADDRESS, L1_RPC). Polls work; civic votes cannot be published until the node is connected.',
         },
-        contracts,
         allowRevote: deps.config.allowRevote === true,
         coercion: {
           policy: 'one-ballot-per-nullifier',

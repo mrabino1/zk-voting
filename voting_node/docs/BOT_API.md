@@ -39,7 +39,7 @@ WebAuthn ceremonies need a WebAuthn client. Email and Ethereum sign-in can be co
 
 Path parameters named `id`, `partyId`, `requestId`, `methodId`, and `electionId` are UUIDs. A sequential integer is rejected with `400` and `code` `ID_NOT_UUID`. Counting `1`, `2`, `3` would reveal how many people, contests, keys, or other records exist.
 
-The on-chain election id is a circuit uint256 inside the election object. It is not a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.
+The numeric `onChainElectionId` (the poll circuit’s uint256) and a civic vote’s `rollupElectionId` on L1 are fields inside the election object. Neither is a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.
 
 These path values are not record counts: `questionId` and `optionId` are ballot labels, `guardians/:index` is a ceremony slot, `/api/mail/templates/:id` is a template name, and `/api/pages/:slug` is a public page slug. A new jurisdiction is assigned a UUID.
 
@@ -143,20 +143,16 @@ Machine-readable copies:
 
 - `GET /api/elections` (key read). Published elections. Counts follow the hourly disclosure rule.
 - `POST /api/elections` (key officer, signed in). Clerk creates an election in a jurisdiction they already serve. Body: title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable.
-- `POST /api/elections/:id/l2-open` (key officer, signed in). Retry the sequencer open for one election. Idempotent: an open election is not opened again.
-- `POST /api/elections/:id/chain-dead-letter/replay` (key officer, signed in). Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row. Body: nullifier (optional).
-- `POST /api/elections/:id/chain-dead-letter/exclude` (tally_operator, signed in). Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted. Body: nullifier, reason.
 - `GET /api/elections/:id` (key read). One election. When the caller is signed in, includes that person’s registration status. Choice is never included.
 - `PATCH /api/elections/:id` (key officer, signed in). Clerk edits the ballot before the roll is frozen.
 - `PUT /api/elections/:id` (key officer, signed in). Same edit as PATCH.
-- `DELETE /api/elections/:id` (key officer, signed in). Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction. Body: confirmTitle.
+- `DELETE /api/elections/:id` (key officer, signed in). Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or publication on the rollup. Body: confirmTitle.
 - `GET /api/elections/:id/info` (key read). Voter-facing questions, options, and supporting info.
 - `GET /api/elections/:id/info/:questionId/:optionId` (key read). One option and its external links.
 - `GET /api/elections/:id/results` (key read). Plurality or IRV results from the final tally. Empty of option counts before tally. A poll may include almost-live hourly choice sums after the results gate. A vote stays empty of those sums. Excluded ballots are not counted.
 - `GET /api/elections/:id/summary` (key read). Short public status: state, window, disclosed ballot count, links.
 - `GET /api/elections/:id/ballots` (key read). Disclosed ballot proofs for closed hours. Choice is not a field.
 - `GET /api/elections/:id/artifacts` (key read). Auditor pack: roots, counts, and public checks. No Node private database.
-- `GET /api/elections/:id/l1` (key read). L1 certification status for the tally, when a tally exists.
 - `GET /api/elections/:id/tally-key` (key read). Public tally ceremony view. The Node does not return a tally private key.
 - `GET /api/elections/:id/staff` (key read, signed in). Election staff list. Caller must already be staff for that election.
 - `POST /api/elections/:id/staff` (key officer, signed in). Platform admin approves election staff. Body: handle or userId.
@@ -178,7 +174,17 @@ Machine-readable copies:
 - `POST /api/elections/:id/guardians/partials` (key officer, signed in). Tally operator submits partial decryptions of the full aggregate after cutoff.
 - `POST /api/elections/:id/choice-blocks/partials` (key officer, signed in). Tally operator submits partial decryptions for one published poll hour block. A vote has no block. The response is the guardian index and the block id. Body: blockId, index, partials tagged for that block aggregate.
 - `POST /api/elections/:id/tally` (key officer, signed in). Tally operator posts the tally after cutoff. Invented counts that do not match opened ballots are rejected for opens-ballots.
-- `POST /api/elections/:id/certify-l1` (key officer, signed in). Tally operator asks the Node to mirror the tally to L1 when L1 env is set.
+### Rollup
+
+- `GET /api/elections/:id/rollup` (key read). A civic vote on ZkVotingRollup: L1 status, guardians and their commitments, the final sum once closed, and the certified totals.
+- `GET /api/elections/:id/rollup/ballot-context` (key read). What a browser needs to encrypt a ballot: L1 election id, chain id, rollup address, joint key, options.
+- `GET /api/elections/:id/rollup/receipts/:nullifier` (key read). Where a ballot is: pending, committed or settled on L1 (batch number and transaction), or rejected.
+- `POST /api/elections/:id/rollup/guardians` (tally_operator, signed in). Enroll a guardian by Baby Jubjub identity key before the vote is published. Body: label, identityKey [x, y].
+- `POST /api/elections/:id/rollup/publish` (clerk, signed in). Create the vote on L1 (createElection) with its guardians, threshold, window and anonymity floor.
+- `POST /api/elections/:id/rollup/guardians/:index/commit` (tally_operator, signed in). Relay a guardian-signed Feldman commitment to L1. The node cannot forge it.
+- `POST /api/elections/:id/rollup/finalize-key` (tally_operator, signed in). Fix the joint key on L1 and send the roll.
+- `POST /api/elections/:id/rollup/guardians/:index/shares` (tally_operator, signed in). Relay a guardian's Chaum-Pedersen decryption shares for the final sum. Body: shares.
+- `POST /api/elections/:id/rollup/finalize` (key officer, signed in). Compute the totals from public L1 data and have L1 check and certify them.
 ### External parties
 
 - `GET /api/elections/:id/parties` (key read). External eligibility parties for an election. Endpoint URLs are included only for staff.

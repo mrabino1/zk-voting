@@ -10,7 +10,6 @@ import { after, before, describe, test } from 'node:test';
 import { keccak256, toHex } from 'viem';
 
 import { createApp } from '../src/server.mjs';
-import { planDisclosureBatch } from '../src/chain.mjs';
 import { getConfig } from '../src/config.mjs';
 import { mockVoteProofAllowed } from '../src/voteProof.mjs';
 import { buildVoteRequestBody } from '../public/vote.js';
@@ -98,40 +97,6 @@ describe('ballot secrecy regressions', () => {
       if (prevAllow === undefined) delete process.env.ZK_VOTING_ALLOW_MOCK_PROOFS;
       else process.env.ZK_VOTING_ALLOW_MOCK_PROOFS = prevAllow;
     }
-  });
-
-  test('disclosure batch waits, then sorts by nullifier', () => {
-    const pending = [
-      { nullifier: 30n },
-      { nullifier: 2n },
-      { nullifier: 10n },
-    ];
-    const early = planDisclosureBatch({
-      pending,
-      interval: 3600,
-      now: 100,
-      startTime: 0,
-      lastBatchAt: 0,
-    });
-    assert.equal(early.action, 'wait');
-    assert.equal(early.batch.length, 0);
-    const due = planDisclosureBatch({
-      pending,
-      interval: 3600,
-      now: 3600,
-      startTime: 0,
-      lastBatchAt: 0,
-    });
-    assert.equal(due.action, 'batch');
-    assert.deepEqual(due.batch.map((row) => row.nullifier), [2n, 10n, 30n]);
-    const immediate = planDisclosureBatch({
-      pending,
-      interval: 0,
-      now: 1,
-      startTime: 0,
-      lastBatchAt: 0,
-    });
-    assert.equal(immediate.action, 'immediate');
   });
 
   test('a non-dev chain rejects proof.accept', async () => {

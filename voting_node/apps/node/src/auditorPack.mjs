@@ -36,14 +36,10 @@ export function buildAuditorPack(election, deps) {
     electionTypeName: dto.electionTypeName,
     resultsSealed: sealed,
     ...(seal || {}),
-    contracts: {
-      factory: deps.config.electionFactoryAddress || null,
-      ballotInbox: deps.config.ballotInboxAddress || election.inbox || null,
-      verifier: election.verifier || null,
-      voterRegistry: election.voterRegistry || null,
-      disqualificationRegistry: election.disqualificationRegistry || null,
-      tallyVerifier: election.tallyVerifier || null,
-      election: election.contractAddress || null,
+    rollup: {
+      address: deps.rollup?.client?.address || null,
+      chainId: deps.rollup?.client?.chainId || null,
+      electionId: election.rollup?.electionId != null ? String(election.rollup.electionId) : null,
     },
     roots: {
       eligibleRoot: election.eligibleRoot,

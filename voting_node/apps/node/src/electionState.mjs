@@ -113,11 +113,8 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
     lateUpdateAllowed: election.lateUpdateAllowed,
     sealedRankedChoice: election.sealedRankedChoice === true,
     onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
-    onChainElectionAddress: election.onChainElectionAddress || null,
-    factoryAddress: election.factoryAddress || null,
-    createTxHash: election.createTxHash || null,
-    chainId: election.chainId ?? null,
     chainMode: electionChainMode(election),
+    rollupElectionId: election.rollup?.electionId != null ? String(election.rollup.electionId) : null,
     rollFrozen: election.rollFrozen,
     frozenAt: election.frozenAt,
     frozenEligibleRoot: election.frozenEligibleRoot || null,
@@ -155,7 +152,6 @@ export async function publishDue(deps) {
   const interval = settings.intervalSeconds;
   const standby = deps.writer && deps.writer.enabled !== false && !deps.writer.acceptingWrites();
   if (!standby && deps.explorer?.disclose) await deps.explorer.disclose(now, interval);
-  // Chain batches run on the writer timer (startVoteFlushTimer), not on a read.
   const view = deps.explorer?.publicDisclosure
     ? deps.explorer.publicDisclosure(now, interval)
     : publicDisclosureView(now, interval, {

@@ -59,7 +59,6 @@ import {
   isAuthMethodType,
   normalizeEmail,
   normalizeEthAddress,
-  normalizeFingerprint,
   personEmailMethods,
   publicIdentity,
   sameEmail,
@@ -76,7 +75,6 @@ import {
   normalizeSlug,
   normalizeStatus,
   pageSlugForKind,
-  sanitizeAddress,
   sanitizeBlocks,
   sanitizeText,
 } from './cms.mjs';
@@ -217,39 +215,6 @@ function emptyData() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
-}
-
-/** Keep a successful L1 post if a later retry fails or is AlreadyPosted. */
-export function mergeTallyL1(prev, next) {
-  if (!next || typeof next !== 'object') return prev || next;
-  if (!prev || typeof prev !== 'object') return next;
-  const prevOnChain = prev.posted || prev.alreadyPosted;
-  if (prevOnChain && next.status === 'failed') {
-    return { ...prev, lastError: next.error || null };
-  }
-  if (
-    next.alreadyPosted ||
-    next.status === 'already_posted' ||
-    next.status === 'already_posted_mismatch'
-  ) {
-    return {
-      ...next,
-      txHash: next.txHash || prev.txHash || null,
-      chainId: next.chainId || prev.chainId || null,
-      mirror: next.mirror || prev.mirror || null,
-      settlement: next.settlement || prev.settlement || null,
-      certificationId: next.certificationId || prev.certificationId || null,
-      factory: next.factory || prev.factory || null,
-      jurisdictionId: next.jurisdictionId || prev.jurisdictionId || null,
-      publicIdHash: next.publicIdHash || prev.publicIdHash || null,
-      publicId: next.publicId || prev.publicId || null,
-      electionAddress: next.electionAddress || prev.electionAddress || null,
-      ballotSpecHash: next.ballotSpecHash || prev.ballotSpecHash || null,
-      hashMismatch: Boolean(next.hashMismatch),
-      requestedHash: next.requestedHash || prev.requestedHash || null,
-    };
-  }
-  return next;
 }
 
 /** Fill defaults and repair collection shapes on a loaded document. */
@@ -1604,26 +1569,14 @@ export class Store {
     // Never honor a client-supplied public id (copied UUID / squatting).
     const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
     const scope = {
-      factoryAddress: params.factoryAddress || null,
       onChainElectionId,
       jurisdictionId: params.jurisdictionId,
-      chainId: params.chainId,
       nodeId: this.nodeId(),
     };
     const id = mintScopedPublicId(scope);
     const existing = this.getElection(id);
     if (existing) {
-      const sameIdentity =
-        String(existing.onChainElectionId) === String(onChainElectionId) &&
-        String(existing.jurisdictionId) === String(params.jurisdictionId) &&
-        String(existing.factoryAddress || '') === String(params.factoryAddress || '');
-      throw new HttpError(
-        409,
-        sameIdentity
-          ? 'election already exists for this factory, jurisdiction, and on-chain id'
-          : 'election public id collision',
-        { code: 'ELECTION_ID_COLLISION' },
-      );
+      throw new HttpError(409, 'election public id collision', { code: 'ELECTION_ID_COLLISION' });
     }
     const shortCode = this._uniqueShortCode();
     const tree = emptyTree(params.treeDepth);
@@ -1714,10 +1667,6 @@ export class Store {
       tallyPubKeyX,
       tallyPubKeyY,
       tallyCeremony,
-      onChainElectionAddress: params.onChainElectionAddress || null,
-      factoryAddress: params.factoryAddress || null,
-      createTxHash: params.createTxHash || null,
-      chainId: params.chainId != null ? Number(params.chainId) : null,
       rollFrozen: false,
       frozenAt: null,
       frozenEligibleRoot: null,
@@ -1811,8 +1760,8 @@ export class Store {
     if (election.tally) {
       throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
     }
-    if (election.createTxHash || election.onChainElectionAddress) {
-      throw new HttpError(409, 'election was created on chain and cannot be deleted here', {
+    if (election.rollup?.electionId) {
+      throw new HttpError(409, 'election is published on the rollup and cannot be deleted here', {
         code: 'ON_CHAIN',
       });
     }
@@ -3514,7 +3463,6 @@ export class Store {
       aggregation: extras.aggregation || null,
       guardianThreshold: extras.guardianThreshold ?? null,
       countsHash: extras.countsHash || null,
-      l1: extras.l1 || null,
       ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
     const excluded = publicExclusion(election);
@@ -3523,17 +3471,6 @@ export class Store {
       election.tally.questions = extras.questions;
     }
     if (extras.ranked && typeof extras.ranked === 'object') election.tally.ranked = { ...extras.ranked };
-    await this.persist();
-    return election;
-  }
-
-  async setTallyL1(id, l1) {
-    const election = this.requireElection(id);
-    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
-    election.tally.l1 = mergeTallyL1(election.tally.l1, l1);
-    if (l1?.resultHash && !election.tally.countsHash) {
-      election.tally.countsHash = l1.resultHash;
-    }
     await this.persist();
     return election;
   }
@@ -3698,7 +3635,7 @@ export class Store {
   getSite() {
     if (!this.data.site) this.data.site = defaultSite();
     this.data.site = { ...defaultSite(), ...this.data.site };
-    this.data.site.contracts = { ...defaultSite().contracts, ...(this.data.site.contracts || {}) };
+    delete this.data.site.contracts;
     this.data.site.sharedDeployment = true;
     this.data.site.nfp = true;
     return this.data.site;
@@ -3712,16 +3649,6 @@ export class Store {
       site.title = title && title !== brandName() && !LEGACY_DEFAULT_NAMES.includes(title) ? title : '';
     }
     if (patch.tagline != null) site.tagline = sanitizeText(patch.tagline, 400);
-    if (patch.contracts && typeof patch.contracts === 'object') {
-      for (const key of ['factory', 'ballotInbox', 'verifier']) {
-        if (patch.contracts[key] == null) continue;
-        const addr = sanitizeAddress(patch.contracts[key]);
-        if (patch.contracts[key] !== '' && addr === null) {
-          throw new HttpError(400, `invalid ${key} address`);
-        }
-        site.contracts[key] = addr || '';
-      }
-    }
     site.sharedDeployment = true;
     site.updatedAt = new Date().toISOString();
     if (actor?.id) site.updatedBy = actor.id;

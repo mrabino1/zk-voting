@@ -62,10 +62,6 @@ const SECRET_FLAGS = [
   ['credentialProviderSecret', 'credentialProviderSecretSet'],
   ['explorerIngestSecret', 'explorerIngestSecretSet'],
   ['receiptPdfSecret', 'receiptPdfSecretSet'],
-  ['relayerPrivateKey', 'relayerPrivateKeySet'],
-  ['l1PublisherPrivateKey', 'l1PublisherPrivateKeySet'],
-  ['l1Rpc', 'l1RpcSet'],
-  ['chainRpc', 'chainRpcSet'],
   ['superAdminApiPepper', 'superAdminApiPepperSet'],
   ['superAdminEmail', 'superAdminEmailSet'],
   ['mailWebhookUrl', 'mailWebhookUrlSet'],
@@ -272,7 +268,8 @@ function deploymentRecord(config) {
 
 export function l1Diag(deps) {
   const config = deps.config || {};
-  const rollup = { published: 0, finalized: 0 };
+  // Status lives on L1; read it per election from GET /api/elections/:id/rollup.
+  const rollup = { published: 0 };
   for (const election of deps.store?.data?.elections || []) {
     if (election?.rollup?.electionId) rollup.published += 1;
   }

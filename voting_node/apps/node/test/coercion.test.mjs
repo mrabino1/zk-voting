@@ -75,8 +75,15 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
       quiet: true,
       port: 0,
       disclosureIntervalSeconds: 0,
-      electionFactoryAddress: '0x1111111111111111111111111111111111111111',
-      ballotInboxAddress: '0x2222222222222222222222222222222222222222',
+      rollup: {
+        l1Rpc: 'http://127.0.0.1:9',
+        chainId: 31337,
+        address: '0x1111111111111111111111111111111111111111',
+        privateKey: `0x${'5a'.repeat(32)}`,
+        jurisdictionId: '',
+        l2Url: 'http://127.0.0.1:9',
+        l2Token: 'l2-token-secret-value',
+      },
     });
     app = created.app;
     store = created.store;
@@ -208,11 +215,13 @@ describe('one-ballot-per-nullifier and auditor pack', () => {
     assert.equal(verified.ok, true, verified.errors.join('; '));
   });
 
-  test('GET /api/config publishes coercion policy and addresses, not keys', async () => {
-    const { json } = await api('GET', '/api/config');
+  test('GET /api/config publishes coercion policy and the rollup address, not keys', async () => {
+    const { json, text } = await api('GET', '/api/config');
     assert.equal(json.coercion.receiptsProveChoice, false);
     assert.equal(json.coercion.policy, 'one-ballot-per-nullifier');
-    assert.equal(json.addresses.factory, '0x1111111111111111111111111111111111111111');
-    assert.equal(json.relayerPrivateKey, undefined);
+    assert.equal(json.rollup.address, '0x1111111111111111111111111111111111111111');
+    assert.equal(json.rollup.chainId, 31337);
+    assert.equal(text.includes('5a'.repeat(32)), false, 'node key leaked');
+    assert.equal(text.includes('l2-token-secret-value'), false, 'L2 token leaked');
   });
 });

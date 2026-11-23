@@ -30,8 +30,8 @@ export const FAQ_ENTRIES = [
     topic: "who-runs",
     q: "Do we deploy a new smart contract when we fork this Node?",
     a: [
-      "No. Fork the Node UI for your jurisdiction’s clerk desk and public pages. Pin the one shared ElectionFactory, BallotInbox, and verifier on Site & contracts (or with ELECTION_FACTORY_ADDRESS). Do not run a new factory deploy for each city.",
-      "The Node host (platform_admin) updates About, FAQ, home copy, and the site title. Clerks publish extra pages tagged to their own jurisdiction. A clerk of one body on a shared Node cannot rewrite the public record for every body. The chain addresses stay the shared deployment. This line is still a demo: MockVerifier, unwired Poseidon, no production ceremony.",
+      "No. Fork the Node UI for your jurisdiction’s clerk desk and public pages. Every jurisdiction settles civic votes on the one ZkVotingRollup contract on L1; the host sets its address with ROLLUP_ADDRESS. Do not deploy a new contract for each city.",
+      "The Node host (platform_admin) updates About, FAQ, home copy, and the site title. Clerks publish extra pages tagged to their own jurisdiction. A clerk of one body on a shared Node cannot rewrite the public record for every body. The rollup contract stays the shared deployment. This is still a demo: the batch validity circuit is not built, so only a mock batch verifier runs, on a local test chain.",
     ],
   },
   {

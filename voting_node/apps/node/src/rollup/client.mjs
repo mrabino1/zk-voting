@@ -103,6 +103,13 @@ export function createRollupClient(cfg, { fetchImpl = globalThis.fetch } = {}) {
     jurisdictionId: cfg.jurisdictionId,
 
     // ------------------------------------------------------------ L1 reads
+    /** The node account's L1 balance and the current gas price, both in wei. */
+    async accountBalance() {
+      if (!account) return null;
+      const [balanceWei, gasPriceWei] = await Promise.all([pub.getBalance({ address: account.address }), pub.getGasPrice()]);
+      return { balanceWei, gasPriceWei };
+    },
+
     async election(id) {
       try {
         return decodeElectionInfo(await read('election', [id]));

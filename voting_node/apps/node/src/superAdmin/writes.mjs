@@ -223,7 +223,6 @@ export async function writeRevokeSessions(deps, handle, { dryRun }) {
     deps.store.data.sessions = deps.store.data.sessions.filter((row) => row.userId !== user.id);
     await deps.store.persist();
   }
-  const after = { handle: user.handle, sessionCount: dryRun ? 0 : matching.length === 0 ? 0 : 0 };
   return {
     status: 200,
     body: {

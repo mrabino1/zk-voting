@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 
-import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from '../src/config.mjs';
+import { getConfig } from '../src/config.mjs';
 import {
   DEFAULT_LOCALE,
   HTML_LANG,
@@ -193,10 +193,6 @@ describe('website i18n', () => {
     assert.equal(getConfig({}).allowRevote, false);
     assert.equal(receiptHelpKey(getConfig({}).allowRevote), 'vote.receiptHelp');
     assert.equal(receiptHelpKey(getConfig({ allowRevote: true }).allowRevote), 'vote.receiptHelpRevote');
-    assert.throws(
-      () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
-      new RegExp(ALLOW_REVOTE_CHAIN_CONFIGURED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
-    );
     const dicts = catalogs();
     for (const code of SUPPORTED_LOCALES) {
       resetLocaleForTests(code);

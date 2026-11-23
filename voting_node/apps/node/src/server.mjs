@@ -21,7 +21,6 @@ import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { openNodeWriter, standbyGuard } from './writerMode.mjs';
 import { createPasskeyService } from './passkey.mjs';
-import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
 import { createMfaService } from './mfa.mjs';
 import { installChainIdAccessor } from './setup.mjs';
@@ -50,7 +49,6 @@ import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
 import { outcomesRouter } from './routes/outcomes.mjs';
-import { l2ResultsRouter } from './routes/l2Results.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { feedbackRouter } from './routes/feedback.mjs';
@@ -273,7 +271,7 @@ function spaFallback(config, layoutService) {
 export async function createApp(overrides = {}) {
   const {
     passkeyHooks,
-    rollup: rollupOverride,
+    rollupService: rollupOverride,
     tokenRegistry: tokenRegistryOverride,
     ...configOverrides
   } = overrides;
@@ -301,11 +299,9 @@ export async function createApp(overrides = {}) {
       /* ignore a corrupt runtime level */
     }
   }
-  if (typeof runtime.archiveEnabled === 'boolean') config.archiveEnabled = runtime.archiveEnabled;
   installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper, config.setupToken]);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
   if (store.data.__passLinksDirty && store.writerActive !== false) await store.persist();
-  applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   explorer.writerActive = writer.active;
   explorer.disclosurePolicy = () => ({
@@ -449,7 +445,6 @@ export async function createApp(overrides = {}) {
   app.use('/api', receiptsRouter(deps));
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
-  app.use('/api', l2ResultsRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', botDocsRouter());
   app.use('/api/site-admin', siteAdminRouter(deps));
@@ -556,10 +551,6 @@ export async function startServer(overrides = {}) {
     server,
     port,
     demoPurge,
-    stopVoteFlush() {
-      voteFlush?.stop();
-      voteFlush = null;
-    },
   };
 }
 
@@ -573,7 +564,6 @@ if (isMain) {
         stopping = true;
         console.log('node stopping');
         created.demoPurge?.stop?.();
-        created.stopVoteFlush?.();
         created.plugins?.stop?.();
         created.writer?.beginDrain();
         const force = setTimeout(() => process.exit(0), 20_000);

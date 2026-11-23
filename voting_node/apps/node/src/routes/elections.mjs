@@ -26,7 +26,7 @@ import { reasonName } from '../reasonCodes.mjs';
 import { relayVote } from '../relay.mjs';
 import { tallyAllowedAt } from '../supplementaryBatch.mjs';
 import { uuidParam } from '../recordIds.mjs';
-import { electionDisclosurePolicy, EXCLUSION_REASON_CODE, publicExclusion, publicVoteRecord } from '../store.mjs';
+import { electionDisclosurePolicy, publicVoteRecord } from '../store.mjs';
 import {
   electionTypeOf,
   normalizeElectionType,
@@ -55,12 +55,58 @@ import { isRollupElection } from '../rollup/service.mjs';
 import { publicUser } from '../roles.mjs';
 import { deliverRolePromotion } from '../promotionMail.mjs';
 
-function sameNullifier(left, right) {
-  try {
-    return BigInt(left).toString() === BigInt(right).toString();
-  } catch {
-    return String(left) === String(right);
+const RECEIPT_TAIL = 'Download the receipt or paste it at /receipt — it cannot prove how you voted.';
+const REVOTE_SENTENCE = 'A later ballot before the deadline updates the final tally only. A published block keeps the first ballot.';
+const ONCE_SENTENCE = 'You may vote only once; a second ballot for this nullifier is rejected.';
+
+function ballotAcceptedMessage({ published, allowRevote }) {
+  const base = published
+    ? 'Ballot accepted. Choice is not stored in the clear.'
+    : 'Ballot accepted for relay. Public proof is published after this hour closes so a person leaving a voting office cannot be matched to a live jurisdiction tick. Choice is not stored in the clear.';
+  return `${base} ${allowRevote ? REVOTE_SENTENCE : ONCE_SENTENCE} ${RECEIPT_TAIL}`;
+}
+
+function bodyNullifier(body) {
+  const inputs = body?.publicInputs;
+  if (inputs && typeof inputs === 'object' && !Array.isArray(inputs) && inputs.nullifier != null) {
+    return inputs.nullifier;
   }
+  return body?.nullifier;
+}
+
+function unixSeconds(value, fallback) {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.floor(value);
+  const s = String(value).trim();
+  if (/^\d+$/.test(s)) return Number(s);
+  const ms = Date.parse(s);
+  if (Number.isNaN(ms)) throw new HttpError(400, 'invalid timestamp');
+  return Math.floor(ms / 1000);
+}
+
+function questionsFromCreateBody(body) {
+  return normalizeQuestions(body?.questions ?? body?.aspects ?? body?.ballot?.questions);
+}
+
+async function revokeHandler(req, store, explorer) {
+  const { identityCommitment, evidenceHash } = req.body || {};
+  if (identityCommitment == null || identityCommitment === '') {
+    throw new HttpError(400, 'identityCommitment required');
+  }
+  const { election, record } = await store.revokeDisqualification(req.params.id, {
+    identityCommitment,
+    evidenceHash,
+    issuer: req.user.handle,
+  });
+  await explorer.append('revoke', {
+    electionId: String(election.id),
+    identityCommitment: record.identityCommitment,
+    evidenceHash: record.revokeEvidenceHash,
+    eligibleRoot: election.eligibleRoot,
+    disqualificationRoot: election.disqualificationRoot,
+    eligibleCount: election.eligibleCount,
+  });
+  return election;
 }
 
 export function electionsRouter(deps) {

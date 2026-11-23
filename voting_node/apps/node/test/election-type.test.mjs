@@ -9,9 +9,6 @@ import { after, before, describe, test } from 'node:test';
 
 import { createApp } from '../src/server.mjs';
 import { planPublicBlocks } from '../src/disclosure.mjs';
-import { PASS_ELECTION_TYPE_ON_CHAIN } from '../src/electionType.mjs';
-import { electionOpenCivic } from '../src/l2Identity.mjs';
-import { electionFactoryAbi, factoryElectionParams, planDisclosureBatch } from '../src/chain.mjs';
 import { electionsDiag, storeDiag } from '../src/superAdmin/diagnostics.mjs';
 
 const HOUR = 3600;
@@ -53,7 +50,6 @@ async function startApp(clock, extra) {
     disclosureDelaySeconds: 0,
     resultsMinVotes: 2,
     disclosureMinBlockVotes: 1,
-    l2CivicRpc: '',
     nowFn: () => clock.t,
     ...extra,
   });
@@ -593,50 +589,6 @@ describe('live diagnostics count a sealed vote', () => {
   });
 });
 
-describe('on-chain create carries electionType as the last factory component', () => {
-  test('electionType is the last ElectionParams component and is attached', () => {
-    assert.equal(PASS_ELECTION_TYPE_ON_CHAIN, true);
-    const components = electionFactoryAbi.find((item) => item.name === 'createElection').inputs[0].components;
-    assert.equal(components.at(-1).name, 'electionType');
-    const tuple = factoryElectionParams(
-      {
-        title: 'T',
-        metadataURI: '',
-        startTime: 1,
-        cutoffTime: 2,
-        maxParticipants: 0,
-        treeDepth: 16,
-        ballotSpecHash: `0x${'11'.repeat(32)}`,
-        clerk: `0x${'22'.repeat(20)}`,
-        registrar: `0x${'22'.repeat(20)}`,
-        disqualificationOfficer: `0x${'22'.repeat(20)}`,
-        tallyOperator: `0x${'22'.repeat(20)}`,
-        verifier: `0x${'33'.repeat(20)}`,
-        questionCount: 1,
-        jurisdictionId: `0x${'44'.repeat(32)}`,
-        tallyPubKeyX: `0x${'00'.repeat(32)}`,
-        tallyPubKeyY: `0x${'00'.repeat(32)}`,
-        tallyScheme: 0,
-      },
-      1,
-    );
-    assert.equal(tuple.electionType, 1);
-  });
-
-  test('the sequencer open carries type and cutoff', () => {
-    const civic = electionOpenCivic(
-      { l2Uuid: '11111111-1111-4111-8111-111111111111' },
-      {
-        electionUuid: '22222222-2222-4222-8222-222222222222',
-        electionType: 'vote',
-        cutoffTime: 1_700_000_000,
-      },
-    );
-    assert.equal(civic.electionType, 1);
-    assert.equal(civic.cutoffTime, 1_700_000_000);
-  });
-});
-
 describe('hourly blocks are not held for a sealed vote', () => {
   test('planPublicBlocks publishes ballot rows for a sealed vote and a poll', () => {
     const items = [
@@ -663,32 +615,9 @@ describe('hourly blocks are not held for a sealed vote', () => {
   });
 });
 
-function mockChain() {
-  const calls = [];
-  const creates = [];
-  let nextId = 100;
-  return {
-    calls,
-    creates,
-    configured: true,
-    isConfigured: () => true,
-    isReady: () => true,
-    async createElection(input) {
-      nextId += 1;
-      creates.push(input);
-      return { onChainElectionId: String(nextId), chainId: 27427, params: {} };
-    },
-    async submitVote(args) {
-      calls.push(args);
-      return { hash: `0x${'ab'.repeat(32)}` };
-    },
-  };
-}
-
-describe('vote turnout is visible and every ballot is submitted', () => {
+describe('vote turnout is visible and every ballot is stored', () => {
   let app;
   const clock = { t: HOUR_START + 12 * 60 };
-  const chain = mockChain();
   const roles = [
     { name: 'anonymous', jar: null },
     { name: 'voter', handle: 'voter-diag', role: 'voter' },
@@ -700,13 +629,13 @@ describe('vote turnout is visible and every ballot is submitted', () => {
   ];
 
   before(async () => {
-    app = await startApp(clock, { chain });
+    app = await startApp(clock);
   });
   after(async () => {
     await app.stop();
   });
 
-  test('store and l2 count the vote, and the relayer submits it', async () => {
+  test('store and l2 count the vote', async () => {
     const poll = await openElection(app.api, app.adminJar, clock, 'Counter poll');
     const vote = await openElection(app.api, app.adminJar, clock, 'Counter vote', 1);
     const pollCast = await cast(app.api, poll.id, 81);
@@ -716,7 +645,6 @@ describe('vote turnout is visible and every ballot is submitted', () => {
     assert.equal(beforeStore.status, 200, beforeStore.text);
     assert.equal(beforeL2.status, 200, beforeL2.text);
     const receiptBefore = beforeStore.json.counts.receiptCount;
-    const sealedBefore = beforeL2.json.explorer.sealedCount;
     const voteBefore = beforeStore.json.counts.voteCount;
 
     for (let n = 0; n < 4; n += 1) {
@@ -760,10 +688,6 @@ describe('vote turnout is visible and every ballot is submitted', () => {
       assert.equal(storeDiag(app.store, clock.t).counts.receiptCount, receiptBefore + 4);
     }
 
-    assert.equal(chain.calls.length, 5);
-    const submittedIds = chain.calls.map((row) => String(row.electionId));
-    assert.equal(submittedIds.filter((id) => id === String(poll.created.onChainElectionId)).length, 1);
-    assert.equal(submittedIds.filter((id) => id === String(vote.created.onChainElectionId)).length, 4);
     assert.equal(app.store.data.heldChainBallots, undefined);
 
     clock.t = HOUR_START + HOUR + 30;
@@ -774,124 +698,12 @@ describe('vote turnout is visible and every ballot is submitted', () => {
     assertNoChoice(mid.text, 'after the hour');
     const afterStore = await app.api('GET', '/api/_sa/v1/store', { jar: app.adminJar });
     assert.equal(afterStore.json.counts.receiptCount, receiptBefore + 4);
-    assert.equal(chain.calls.length, 5);
 
     const opened = await app.api('GET', `/api/elections/${vote.id}/ballots`, { jar: app.adminJar });
     assert.equal(opened.status, 200, opened.text);
     assert.equal(opened.json.resultsSealed, true);
     assert.equal(opened.json.tally ?? null, null);
     assertNoChoice(opened.text, 'sealed ballots');
-  });
-});
-
-describe('sequencer open is idempotent', () => {
-  const clock = { t: HOUR_START + 15 * 60 };
-
-  test('a failed open is retried on the same election', async () => {
-    let attempts = 0;
-    const chain = mockChain();
-    const app = await startApp(clock, {
-      chain,
-      l2CivicRpc: 'http://127.0.0.1:9',
-      openElectionOnL2: async (_cfg, fields) => {
-        attempts += 1;
-        assert.equal(typeof fields.electionUuid, 'string');
-        if (attempts === 1) throw new Error('sequencer down');
-        return '0xopen';
-      },
-    });
-    try {
-      const body = electionBody(clock, 'Retry vote', 'vote');
-      const first = await app.api('POST', '/api/elections', { jar: app.adminJar, body });
-      assert.equal(first.status, 502, first.text);
-      assert.equal(first.json.code, 'L2_OPEN_FAILED');
-      assert.equal(first.json.electionId, app.store.data.elections[0].id);
-      assert.equal(app.store.data.elections.length, 1);
-      assert.equal(chain.creates.length, 1);
-      assert.equal(app.store.data.elections[0].l2OpenStatus, 'pending');
-      const second = await app.api('POST', '/api/elections', { jar: app.adminJar, body });
-      assert.equal(second.status, 201, second.text);
-      assert.equal(second.json.l2Open, 'open');
-      assert.equal(second.json.id, app.store.data.elections[0].id);
-      assert.equal(app.store.data.elections.length, 1);
-      assert.equal(chain.creates.length, 1);
-      assert.equal(attempts, 2);
-      assert.equal(app.store.data.elections[0].l2OpenStatus, 'open');
-    } finally {
-      await app.stop();
-    }
-  });
-
-  test('an unset sequencer rpc is flagged and does not open', async () => {
-    let called = false;
-    const warnings = [];
-    const orig = console.warn;
-    console.warn = (...args) => warnings.push(args.join(' '));
-    const app = await startApp(clock, {
-      quiet: false,
-      l2CivicRpc: '',
-      openElectionOnL2: async () => {
-        called = true;
-      },
-    });
-    try {
-      const created = await app.api('POST', '/api/elections', {
-        jar: app.adminJar,
-        body: electionBody(clock, 'No sequencer', 'vote'),
-      });
-      assert.equal(created.status, 201, created.text);
-      assert.equal(created.json.l2Open, 'unconfigured');
-      assert.equal(called, false);
-      assert.equal(app.store.requireElection(created.json.id).l2OpenStatus, 'unconfigured');
-      assert.match(warnings.join('\n'), /L2_CIVIC_RPC is unset/);
-    } finally {
-      console.warn = orig;
-      await app.stop();
-    }
-  });
-
-  test('a pending open is hidden, refuses ballots, and retries by id', async () => {
-    let attempts = 0;
-    const chain = mockChain();
-    const app = await startApp(clock, {
-      chain,
-      l2CivicRpc: 'http://127.0.0.1:9',
-      openElectionOnL2: async () => {
-        attempts += 1;
-        if (attempts === 1) throw new Error('sequencer down');
-        return '0xopen';
-      },
-    });
-    try {
-      const body = electionBody(clock, 'Hidden pending', 'vote');
-      const first = await app.api('POST', '/api/elections', { jar: app.adminJar, body });
-      assert.equal(first.status, 502, first.text);
-      const id = first.json.electionId;
-      const listed = await app.api('GET', '/api/elections');
-      assert.equal(listed.status, 200, listed.text);
-      assert.equal(listed.json.elections.some((row) => String(row.id) === String(id)), false);
-      const hidden = await app.api('GET', `/api/elections/${id}`);
-      assert.equal(hidden.status, 409, hidden.text);
-      assert.equal(hidden.json.code, 'L2_OPEN_PENDING');
-      const voted = await app.api('POST', `/api/elections/${id}/vote`, {
-        body: { nullifier: '1', ballotHash: '2', proof: { accept: true } },
-      });
-      assert.equal(voted.status, 409, voted.text);
-      assert.equal(voted.json.code, 'L2_OPEN_PENDING');
-      const opened = await app.api('POST', `/api/elections/${id}/l2-open`, { jar: app.adminJar });
-      assert.equal(opened.status, 200, opened.text);
-      assert.equal(opened.json.l2Open, 'open');
-      assert.equal(chain.creates.length, 1);
-      const again = await app.api('POST', `/api/elections/${id}/l2-open`, { jar: app.adminJar });
-      assert.equal(again.status, 200, again.text);
-      assert.equal(again.json.l2Open, 'open');
-      assert.equal(attempts, 2);
-      assert.equal(chain.creates.length, 1);
-      const visible = await app.api('GET', `/api/elections/${id}`);
-      assert.equal(visible.status, 200, visible.text);
-    } finally {
-      await app.stop();
-    }
   });
 });
 
@@ -930,39 +742,5 @@ describe('poll turnout before the choice gate', () => {
     } finally {
       await app.stop();
     }
-  });
-});
-
-describe('the deadline flushes one final chain batch', () => {
-  test('planDisclosureBatch waits, then submits the remainder at cutoff', () => {
-    const pending = [{ nullifier: 3n, cutoffTime: 5000 }, { nullifier: 1n, cutoffTime: 5000 }];
-    const early = planDisclosureBatch({
-      pending,
-      interval: 3600,
-      now: 1000,
-      startTime: 0,
-      lastBatchAt: 0,
-      cutoffTime: 5000,
-    });
-    assert.equal(early.action, 'wait');
-    const due = planDisclosureBatch({
-      pending,
-      interval: 3600,
-      now: 3600,
-      startTime: 0,
-      lastBatchAt: 0,
-      cutoffTime: 9000,
-    });
-    assert.equal(due.action, 'batch');
-    const finalBatch = planDisclosureBatch({
-      pending,
-      interval: 3600,
-      now: 5000,
-      startTime: 0,
-      lastBatchAt: 0,
-      cutoffTime: 5000,
-    });
-    assert.equal(finalBatch.action, 'final');
-    assert.deepEqual(finalBatch.batch.map((row) => row.nullifier), [1n, 3n]);
   });
 });

@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Public election-outcomes monitor. Separate from /elections results and
-// /receipt. Phases follow chain / election state: before, during, after.
+// /receipt. Phases follow election state: before, during, after.
 // Verification reuses the auditor pack. During never publishes unofficial
 // option counts.
 
@@ -10,7 +10,6 @@ import { publicIdFields, publicIdMatchesScope } from './electionIds.mjs';
 import {
   STATE_NAMES,
   electionChainMode,
-  electionState,
   presentElection,
 } from './electionState.mjs';
 import { buildAuditorPack } from './auditorPack.mjs';
@@ -137,18 +136,15 @@ export function verifyChainStatus(election, deps, now, state, phase) {
     checks.frozenDisqualificationRoot = true;
   }
 
-  const pinned = String(deps.config?.electionFactoryAddress || '').trim();
   const scope = {
-    factoryAddress: election.factoryAddress || pinned || null,
     onChainElectionId: election.onChainElectionId,
     jurisdictionId: election.jurisdictionId,
-    chainId: election.chainId ?? deps.config?.chainId,
     nodeId: deps.store?.data?.meta?.nodeId || '',
   };
   check(
     'publicIdMatchesScope',
     publicIdMatchesScope(election.id, scope),
-    'public UUID must be bound to factory, on-chain id, and jurisdiction (a copied UUID fails)',
+    'public UUID must be bound to this Node, its jurisdiction, and its local id (a copied UUID fails)',
   );
 
   return { ok: errors.length === 0, errors, checks };
@@ -250,7 +246,7 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
     state,
     stateName: dto.stateName || STATE_NAMES[state],
     chainMode: dto.chainMode,
-    chainId: dto.chainId,
+    rollupElectionId: dto.rollupElectionId,
     startTime: election.startTime,
     cutoffTime: election.cutoffTime,
     rollFrozen: Boolean(election.rollFrozen),
@@ -372,10 +368,10 @@ export function presentOutcomesIndex(deps, opts = {}) {
     product: brandName(),
     portal: '/outcomes',
     now,
-    chain: {
-      configured: Boolean(deps.chain?.isConfigured?.()),
-      l1Configured: Boolean(deps.l1?.isConfigured?.()),
-      chainId: deps.config.chainId,
+    rollup: {
+      configured: Boolean(deps.rollup?.enabled),
+      address: deps.rollup?.client?.address || null,
+      chainId: deps.rollup?.client?.chainId || null,
     },
     disclosure: deps.explorer?.publicDisclosure
       ? deps.explorer.publicDisclosure(now, deps.config.disclosureIntervalSeconds)
