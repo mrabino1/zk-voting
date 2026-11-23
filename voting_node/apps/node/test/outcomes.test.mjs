@@ -137,7 +137,7 @@ describe('outcome phase helpers', () => {
       eligibleRoot: '0x02',
       frozenDisqualificationRoot: '0xaa',
       disqualificationRoot: '0xaa',
-      onChainElectionId: '1',
+      localElectionId: '1',
     };
     const state = electionState(election, NOW);
     assert.equal(state, 2);
@@ -150,7 +150,7 @@ describe('outcome phase helpers', () => {
   test('copied UUID from another jurisdiction fails publicIdMatchesScope', () => {
     const honest = mintScopedPublicId({
       nodeId: 'node-a',
-      onChainElectionId: '1',
+      localElectionId: '1',
       jurisdictionId: 'north',
     });
     const election = {
@@ -163,7 +163,7 @@ describe('outcome phase helpers', () => {
       eligibleRoot: '0x01',
       frozenDisqualificationRoot: '0xaa',
       disqualificationRoot: '0xaa',
-      onChainElectionId: '1',
+      localElectionId: '1',
       jurisdictionId: 'south',
     };
     const deps = { config: { chainId: 27427 }, store: { data: { meta: { nodeId: 'node-a' } } } };

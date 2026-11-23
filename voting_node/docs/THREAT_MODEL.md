@@ -68,7 +68,7 @@ That last row is why publisher keys are election-critical.
 | --- | --- |
 | Client `id` / `uuid` squat | Node ignores them; mints UUID v5 from factory + uint256 + jurisdiction |
 | Client `factoryAddress` | Ignored; only chain create or the env pin is stored |
-| Client `onChainElectionId` | Ignored; demo allocates locally; on-chain ids come from the factory |
+| Client `localElectionId` | Ignored; demo allocates locally; on-chain ids come from the factory |
 | Self-declared clerk of another body | `ElectionFactory` + `JurisdictionRegistry.isClerk` (registry **must** be wired; `DeployL2` / `_deployElectionStack` now do that) |
 | Officer (registrar / tally) creating elections | `isClerk` is the clerks mapping, not `officers` |
 | Rotated clerk keeps create rights | `setClerk` clears the previous address from `clerks` |

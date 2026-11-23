@@ -37,7 +37,7 @@ import {
   electionMatchesRef,
   mintScopedPublicId,
   mintShortCode,
-  parseOnChainElectionId,
+  parseLocalElectionId,
 } from './electionIds.mjs';
 import { DEMO_JURISDICTION_ID, canonicalJurisdictionId } from './recordIds.mjs';
 import { HttpError } from './http.mjs';
@@ -229,12 +229,31 @@ function normalizeLoadedData(parsed) {
   data.site = { ...defaultSite(), ...(data.site || {}) };
   data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
   delete data.heldChainBallots;
+  renameLocalElectionIds(data);
   ensureSuperAdminCollections(data);
   ensureSiteAdminCollections(data);
   data.meta = data.meta || {};
   scrubBallotLinkage(data);
   migratePasskeyCoseAlgs(data);
   return data;
+}
+
+/**
+ * The node's local election sequence (the poll proof's electionId) was stored as
+ * `onChainElectionId`, a name left from the old per-election contracts. Move it to
+ * `localElectionId` on load. Returns true when a record changed.
+ */
+export function renameLocalElectionIds(data) {
+  let changed = false;
+  for (const election of data.elections || []) {
+    if (!election || typeof election !== 'object' || !('onChainElectionId' in election)) continue;
+    if (election.localElectionId == null || election.localElectionId === '') {
+      election.localElectionId = election.onChainElectionId;
+    }
+    delete election.onChainElectionId;
+    changed = true;
+  }
+  return changed;
 }
 
 /**
@@ -776,10 +795,10 @@ export class Store {
     throw new HttpError(500, 'could not mint election short code');
   }
 
-  _allocateOnChainElectionId(requested) {
+  _allocateLocalElectionId(requested) {
     let value;
     try {
-      value = parseOnChainElectionId(requested);
+      value = parseLocalElectionId(requested);
     } catch (err) {
       throw new HttpError(err.status || 400, err.message);
     }
@@ -787,8 +806,8 @@ export class Store {
       value = String(this.data.meta.nextElectionId || 1);
       this.data.meta.nextElectionId = Number(this.data.meta.nextElectionId || 1) + 1;
     } else {
-      const taken = this.data.elections.some((e) => String(e.onChainElectionId) === value);
-      if (taken) throw new HttpError(409, 'onChainElectionId taken');
+      const taken = this.data.elections.some((e) => String(e.localElectionId) === value);
+      if (taken) throw new HttpError(409, 'localElectionId taken');
       try {
         const n = BigInt(value);
         const next = BigInt(this.data.meta.nextElectionId || 1);
@@ -803,7 +822,7 @@ export class Store {
   }
 
   /**
-   * Backfill shortCode / onChainElectionId on elections created before UUID
+   * Backfill shortCode / localElectionId on elections created before UUID
    * public ids. Existing non-UUID ids are kept so old bookmarks still resolve.
    */
   ensureElectionPublicIds() {
@@ -814,9 +833,9 @@ export class Store {
       if (!election.shortCode) {
         election.shortCode = this._uniqueShortCode();
       }
-      if (election.onChainElectionId == null || election.onChainElectionId === '') {
+      if (election.localElectionId == null || election.localElectionId === '') {
         if (/^\d+$/.test(String(election.id))) {
-          election.onChainElectionId = String(election.id);
+          election.localElectionId = String(election.id);
           try {
             const n = BigInt(election.id);
             const next = BigInt(this.data.meta.nextElectionId || 1);
@@ -827,17 +846,17 @@ export class Store {
             /* ignore */
           }
         } else {
-          election.onChainElectionId = this._allocateOnChainElectionId(null);
+          election.localElectionId = this._allocateLocalElectionId(null);
         }
       }
     }
   }
 
-  getElectionByOnChainId(onChainId) {
+  getElectionByLocalId(onChainId) {
     if (onChainId == null || onChainId === '') return null;
     const key = String(onChainId);
     return (
-      this.data.elections.find((e) => e.onChainElectionId != null && String(e.onChainElectionId) === key) ||
+      this.data.elections.find((e) => e.localElectionId != null && String(e.localElectionId) === key) ||
       null
     );
   }
@@ -1569,9 +1588,10 @@ export class Store {
 
   async createElection(params) {
     // Never honor a client-supplied public id (copied UUID / squatting).
-    const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
+    // `onChainElectionId` is the field's old name; API clients written against it still work.
+    const localElectionId = this._allocateLocalElectionId(params.localElectionId ?? params.onChainElectionId);
     const scope = {
-      onChainElectionId,
+      localElectionId,
       jurisdictionId: params.jurisdictionId,
       nodeId: this.nodeId(),
     };
@@ -1642,7 +1662,7 @@ export class Store {
     const election = {
       id,
       shortCode,
-      onChainElectionId,
+      localElectionId,
       publicIdScheme: 'uuid-v5-jurisdiction',
       aliases: [],
       title: params.title,

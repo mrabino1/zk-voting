@@ -39,7 +39,7 @@ WebAuthn ceremonies need a WebAuthn client. Email and Ethereum sign-in can be co
 
 Path parameters named `id`, `partyId`, `requestId`, `methodId`, and `electionId` are UUIDs. A sequential integer is rejected with `400` and `code` `ID_NOT_UUID`. Counting `1`, `2`, `3` would reveal how many people, contests, keys, or other records exist.
 
-The numeric `onChainElectionId` (the poll circuit’s uint256) and a civic vote’s `rollupElectionId` on L1 are fields inside the election object. Neither is a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.
+The numeric `localElectionId` (the poll circuit’s uint256) and a civic vote’s `rollupElectionId` on L1 are fields inside the election object. Neither is a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.
 
 These path values are not record counts: `questionId` and `optionId` are ballot labels, `guardians/:index` is a ceremony slot, `/api/mail/templates/:id` is a template name, and `/api/pages/:slug` is a public page slug. A new jurisdiction is assigned a UUID.
 

@@ -78,7 +78,7 @@ How it maps here:
   a11y test) and restyle through tokens, so forks can re-theme (directive 1).
 - Back-office pages are out of scope for the bubble look; clarity there is enough.
 
-Not done yet. Start it after the `onChainElectionId` rename, before or alongside phase 5. Chrome
+Not done yet. It is the next task, before or alongside phase 5. Chrome
 is missing on this host, so render and screenshot on a machine with a browser.
 
 ## How a civic vote works now (for orientation)
@@ -163,8 +163,14 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   predates this branch). Not rendered in a browser.
 - Full node suite after these commits: 797 pass; only the Chrome-dependent a11y and landing-lang
   tests fail.
-- **Resume at:** the `onChainElectionId` rename (item 6), then the voting UI redesign (directive 2),
-  then phase 5 docs written for self-hosters (directive 1).
+- Rename: `onChainElectionId` is now `localElectionId` (the node's local sequence, the poll proof's
+  electionId) in `src`, `public`, tests, `packages/types` and the docs that named it. Helpers:
+  `localElectionIdOf`, `getElectionByLocalId`, `_allocateLocalElectionId`, wallet
+  `authorizeBallot({ localElectionId })`. `renameLocalElectionIds` in `store.mjs` moves stored
+  records on load; `createElection` still accepts `onChainElectionId`. The locale key
+  `elections.onChainId` ("On-chain id") was left alone.
+- **Resume at:** the voting UI redesign (directive 2), then phase 5 docs written for self-hosters
+  (directive 1).
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
@@ -184,8 +190,7 @@ None of it is started. Suggested order:
 5. ~~Locales~~ (done). The `office` section of `public/locales/*.js` is mostly unused (no `data-i18n`
    points at it). Prune it in every locale together, because `test/i18n.test.mjs` requires the
    same keys in all of them.
-6. **`onChainElectionId`.** This is a historical name for the node's local sequence (the poll
-   proof's electionId). Rename it across `src`, `public` and the tests.
+6. ~~`onChainElectionId` rename~~ (done: `localElectionId`, see the progress log).
 
 ## Phase 5: docs
 

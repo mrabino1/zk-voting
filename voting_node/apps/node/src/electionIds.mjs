@@ -2,7 +2,7 @@
 // Public election ids are UUID v5 bound to (node, jurisdiction, local sequence),
 // so a UUID copied from another Node or jurisdiction does not verify.
 // UUID v4 remains as a random helper and for legacy records.
-// The local sequence is stored as `onChainElectionId` (historical name). It is
+// The local sequence is stored as `localElectionId` (historical name). It is
 // the numeric electionId in the node's poll proofs. A civic vote's L1 id is
 // separate: `election.rollup.electionId`, assigned by ZkVotingRollup on publish.
 
@@ -80,7 +80,7 @@ function jurisdictionBytes32(id) {
  * and kept so ids already issued still verify.
  */
 export function scopedPublicIdName(scope = {}) {
-  const electionId = String(scope.onChainElectionId ?? '').trim();
+  const electionId = String(scope.localElectionId ?? '').trim();
   const jurisdiction = jurisdictionBytes32(scope.jurisdictionId);
   const nodeId = String(scope.nodeId || '').trim().toLowerCase();
   return `demo:${nodeId}:${jurisdiction}:${electionId}`;
@@ -127,9 +127,9 @@ export function isShortCodeShape(value) {
  * @param {object} election
  * @returns {string}
  */
-export function chainElectionId(election) {
-  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== '') {
-    return String(election.onChainElectionId);
+export function localElectionIdOf(election) {
+  if (election?.localElectionId != null && String(election.localElectionId) !== '') {
+    return String(election.localElectionId);
   }
   return String(election?.id ?? '');
 }
@@ -147,8 +147,8 @@ export function refsOf(election) {
   if (election.code) refs.add(String(election.code));
   if (election.publicId) refs.add(String(election.publicId));
   if (election.shortCode) refs.add(String(election.shortCode));
-  if (election.onChainElectionId != null && election.onChainElectionId !== '') {
-    refs.add(String(election.onChainElectionId));
+  if (election.localElectionId != null && election.localElectionId !== '') {
+    refs.add(String(election.localElectionId));
   }
   for (const alias of election.aliases || []) {
     if (alias != null && alias !== '') refs.add(String(alias));
@@ -161,24 +161,24 @@ export function electionMatchesRef(election, ref) {
   return refsOf(election).has(String(ref));
 }
 
-export function parseOnChainElectionId(value) {
+export function parseLocalElectionId(value) {
   if (value == null || value === '') return null;
   const s = String(value).trim();
   if (!/^\d+$/.test(s)) {
-    const err = new Error('onChainElectionId must be a decimal uint256');
+    const err = new Error('localElectionId must be a decimal uint256');
     err.status = 400;
     throw err;
   }
   try {
     const n = BigInt(s);
     if (n < 0n || n >= 1n << 256n) {
-      const err = new Error('onChainElectionId out of uint256 range');
+      const err = new Error('localElectionId out of uint256 range');
       err.status = 400;
       throw err;
     }
   } catch (err) {
     if (err.status) throw err;
-    const wrapped = new Error('onChainElectionId out of uint256 range');
+    const wrapped = new Error('localElectionId out of uint256 range');
     wrapped.status = 400;
     throw wrapped;
   }
@@ -189,11 +189,11 @@ export function publicIdFields(election) {
   if (!election) return {};
   const id = String(election.id);
   const shortCode = election.shortCode || null;
-  const onChainElectionId = election.onChainElectionId != null ? String(election.onChainElectionId) : null;
+  const localElectionId = election.localElectionId != null ? String(election.localElectionId) : null;
   return {
     id,
     shortCode,
-    onChainElectionId,
+    localElectionId,
     publicIdScheme: election.publicIdScheme || (uuidVersion(id) === 5 ? 'uuid-v5-jurisdiction' : null),
     links: {
       vote: `/vote/${encodeURIComponent(id)}`,

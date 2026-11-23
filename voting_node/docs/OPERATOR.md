@@ -264,7 +264,7 @@ Clerk **Create election** in `/back-office` is `POST /api/elections`.
 
 Required when the chain is configured: `CHAIN_RPC`, `ELECTION_FACTORY_ADDRESS` (or `FACTORY`), `RELAYER_PRIVATE_KEY`, `VERIFIER_ADDRESS` (or `VERIFIER` from `DeployLocal`). Officer roles (clerk / registrar / disqualification / tally) default to the relayer address, matching `CreateElection.s.sol` using `msg.sender`, unless the POST body or `CLERK_ADDRESS` / `REGISTRAR_ADDRESS` / … is set.
 
-The Node public election id is a UUID v5 bound to factory + on-chain id + jurisdiction (legacy v4 still resolves). The on-chain `electionId` is a uint256 stored as `onChainElectionId` (plus `onChainElectionAddress` / `createTxHash` when the factory ran). They can differ: `DeployLocal` already creates on-chain election `#1`. Demo mode still mints a local uint256 so Groth16 public inputs stay numeric. A copied UUID from another jurisdiction does not share the L1 slot.
+The Node public election id is a UUID v5 bound to factory + on-chain id + jurisdiction (legacy v4 still resolves). The on-chain `electionId` is a uint256 stored as `localElectionId` (plus `onChainElectionAddress` / `createTxHash` when the factory ran). They can differ: `DeployLocal` already creates on-chain election `#1`. Demo mode still mints a local uint256 so Groth16 public inputs stay numeric. A copied UUID from another jurisdiction does not share the L1 slot.
 
 Operators can still create with Foundry instead of the clerk UI:
 
@@ -594,7 +594,7 @@ identity commitment. The Node-side mechanics:
 
 ## L1 certification (tally hash on Ethereum)
 
-After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encode(counts))`, the same `countsHash` as `Tally.TallyPosted` — to the Ethereum L1 tally mirror. The L1 slot is `(factory, onChainElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
+After the Node tally (`POST /api/elections/:id/tally`), copy the **tally hash** — `keccak256(abi.encode(counts))`, the same `countsHash` as `Tally.TallyPosted` — to the Ethereum L1 tally mirror. The L1 slot is `(factory, localElectionId, jurisdictionId)`, not the public UUID, so two bodies cannot collide by copying an id. Individual ballots are not posted. Prefer a **testnet** (Sepolia) or local Anvil until a jurisdiction pins addresses on `master`. Pin `setL2Factory` to the shared ElectionFactory (legacy `postResult` then reverts `UseIdentityPost`) and grant `setJurisdictionPublisher` per body. The Node refuses to certify without that factory pin.
 
 `RollupSettlement` is the batch-root contract. When `L1_SETTLEMENT_ADDRESS` is set, the Node/script reads `stateRoot()` and attaches it as `l2StateRoot`. That is optional court context, not a substitute for the tally hash.
 

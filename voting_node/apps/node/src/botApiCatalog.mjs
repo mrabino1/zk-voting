@@ -1223,7 +1223,7 @@ function guideBody() {
   );
   lines.push('');
   lines.push(
-    'The numeric `onChainElectionId` (the poll circuit’s uint256) and a civic vote’s `rollupElectionId` on L1 are fields inside the election object. Neither is a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.',
+    'The numeric `localElectionId` (the poll circuit’s uint256) and a civic vote’s `rollupElectionId` on L1 are fields inside the election object. Neither is a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.',
   );
   lines.push('');
   lines.push(
@@ -1429,7 +1429,7 @@ export function renderBotHtml() {
 X-Api-Key: rk_…</code></pre>
       <p>The secret starts with <code>rk_</code>. It is shown once, with a copy button, and cannot be shown again. The Node stores only a SHA-256 hash. The email does not contain the API key.</p>
       <h2 id="ids-heading">Identifiers</h2>
-      <p>Path parameters named <code>id</code>, <code>partyId</code>, <code>requestId</code>, <code>methodId</code>, and <code>electionId</code> are UUIDs. A sequential integer is rejected with <code>400</code> and <code>ID_NOT_UUID</code>, so the path does not reveal how many people or records exist. The numeric <code>onChainElectionId</code> and <code>rollupElectionId</code> stay inside the election object. Short links <code>/v/{code}</code> and <code>/e/{code}</code> redirect to <code>/vote/{uuid}</code> and are not accepted as <code>/api/elections/:id</code>.</p>
+      <p>Path parameters named <code>id</code>, <code>partyId</code>, <code>requestId</code>, <code>methodId</code>, and <code>electionId</code> are UUIDs. A sequential integer is rejected with <code>400</code> and <code>ID_NOT_UUID</code>, so the path does not reveal how many people or records exist. The numeric <code>localElectionId</code> and <code>rollupElectionId</code> stay inside the election object. Short links <code>/v/{code}</code> and <code>/e/{code}</code> redirect to <code>/vote/{uuid}</code> and are not accepted as <code>/api/elections/:id</code>.</p>
       <p>Ballot labels (<code>questionId</code>, <code>optionId</code>), guardian slots (<code>:index</code>), mail template names, and page slugs are not record counts. A new jurisdiction is assigned a UUID.</p>
       <pre><code>curl -sS \\
   -H "Authorization: Bearer $ZK_VOTING_API_KEY" \\

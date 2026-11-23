@@ -138,7 +138,7 @@ export function verifyChainStatus(election, deps, now, state, phase) {
   }
 
   const scope = {
-    onChainElectionId: election.onChainElectionId,
+    localElectionId: election.localElectionId,
     jurisdictionId: election.jurisdictionId,
     nodeId: deps.store?.data?.meta?.nodeId || '',
   };

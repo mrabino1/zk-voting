@@ -1319,13 +1319,13 @@ export async function signUserOp(hash) {
 
 /**
  * Unlock identity secrets under the identity PRF domain and compute the
- * circuit nullifier Poseidon(nullifierSecret, chainElectionId). A plurality
+ * circuit nullifier Poseidon(nullifierSecret, localElectionId). A plurality
  * choice is sealed as an AG aggregate envelope. The return value has no
  * account address, credential id, or userOp hash.
  */
 export async function authorizeBallot({
   electionId,
-  chainElectionId,
+  localElectionId,
   ballotBytes,
   tallyPubKey,
   choiceIndex,
@@ -1340,7 +1340,7 @@ export async function authorizeBallot({
     if (!identity?.nullifierSecret) {
       throw new Error("IDENTITY_PRF_REQUIRED. Refusing to vote without an identity-domain PRF output.");
     }
-    const idForNullifier = chainElectionId ?? electionId;
+    const idForNullifier = localElectionId ?? electionId;
     let nullifier = null;
     if (idForNullifier != null && !String(idForNullifier).includes("-")) {
       nullifier = electionNullifierHex(nullifierSecret, idForNullifier);

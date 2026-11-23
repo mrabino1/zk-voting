@@ -960,7 +960,7 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
-    const chain = pick(row, ["onChainElectionId"]);
+    const chain = pick(row, ["localElectionId"]);
     const short = pick(row, ["shortCode"]);
     const id = electionIdOf(row);
     const ref = short ? short : String(id).slice(0, 8);

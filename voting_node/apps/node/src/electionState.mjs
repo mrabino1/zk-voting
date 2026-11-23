@@ -120,7 +120,7 @@ export function publicElection(election, now = Math.floor(Date.now() / 1000), di
       : null,
     lateUpdateAllowed: election.lateUpdateAllowed,
     sealedRankedChoice: election.sealedRankedChoice === true,
-    onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
+    localElectionId: election.localElectionId != null ? String(election.localElectionId) : null,
     chainMode: electionChainMode(election),
     rollupElectionId: election.rollup?.electionId != null ? String(election.rollup.electionId) : null,
     rollFrozen: election.rollFrozen,

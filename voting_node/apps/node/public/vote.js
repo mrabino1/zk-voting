@@ -137,7 +137,7 @@ export async function renderVote(main, ctx) {
     formatTime,
     electionStateInfo,
     electionId,
-    chainElectionId,
+    localElectionIdOf,
     SAMPLE_QUESTIONS: sampleQs,
   } = ctx;
 
@@ -865,7 +865,7 @@ export async function renderVote(main, ctx) {
     const nOptions = expectedCountLength(questions);
 
     try {
-      const onChainId = chainElectionId ? chainElectionId(election) : String(election.onChainElectionId ?? election.id);
+      const localId = localElectionIdOf ? localElectionIdOf(election) : String(election.localElectionId ?? election.id);
       // Sealed ranked-choice: encrypt the ranking first (with the first-choice
       // index and tag randomness inside), then bind its hash into the proven
       // AG tag, so the ranking cannot be swapped after the ballot is cast.
@@ -882,7 +882,7 @@ export async function renderVote(main, ctx) {
       }
       const auth = await wallet.authorizeBallot({
         electionId: election.id,
-        chainElectionId: onChainId,
+        localElectionId: localId,
         tallyPubKey,
         choiceIndex,
         nOptions,
@@ -893,7 +893,7 @@ export async function renderVote(main, ctx) {
         disqRoot: election.disqualificationRoot,
         nullifier: auth.nullifier,
         ballotHash: auth.ballotHash,
-        electionId: onChainId,
+        electionId: localId,
       });
       // Blind-signed, one-per-voter pass. The issuance request does not send
       // the identity commitment. The ballot request below does not send the

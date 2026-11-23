@@ -92,10 +92,10 @@ resolves.
 
 New elections mint a UUID v5 canonical `id` (bound to factory, on-chain id, and
 jurisdiction) plus a 10-character `shortCode`.
-`GET /api/elections/:id` accepts UUID, short code, or `onChainElectionId`.
+`GET /api/elections/:id` accepts UUID, short code, or `localElectionId`.
 On-chain / circuit `electionId` stays the factory `uint256`, stored as
-`onChainElectionId` on the Node record. L1 proof slots use
-`(factory, onChainElectionId, jurisdictionId)`, not the public UUID.
+`localElectionId` on the Node record. L1 proof slots use
+`(factory, localElectionId, jurisdictionId)`, not the public UUID.
 
 Voter client routes in `public/router.js`: `/`, `/about`, `/faq`, `/terms`, `/feedback`, `/receipt`, `/outcomes`, `/outcomes/verify`, `/outcomes/:id`, `/p/:slug`, `/register`, `/vote/:id`,
 `/v/:shortCode`, `/e/:shortCode`, `/elections/:id/results`,
@@ -185,7 +185,7 @@ GET  /e/:shortCode                  (302 → /vote/<uuid>)
 GET  /api/elections
 POST /api/elections                 (clerk of that jurisdiction / platform_admin)
 PATCH /api/elections/:id            (clerk of that jurisdiction; ballot metadata until roll freeze)
-GET  /api/elections/:id             (UUID, shortCode, or onChainElectionId)
+GET  /api/elections/:id             (UUID, shortCode, or localElectionId)
 GET  /api/elections/:id/results     (public final tally plurality/IRV; empty before tally)
 GET  /api/elections/:id/summary     (public: last closed hour, disclosed turnout, countdown)
 GET  /api/elections/:id/ballots
@@ -288,11 +288,11 @@ Also: freeze roll, envelopes (tally operator; ciphertext only), jurisdictions,
 reason codes, CORS open for local tools (any origin can read the API, but
 only trusted origins get credentialed, cookie-carrying CORS; see `CORS_ALLOWED_ORIGINS`).
 
-Without `CHAIN_RPC`, creating an election writes the local JSON store (UUID public id + minted short code + a demo `onChainElectionId` for the circuit). Votes that pass the election window, nullifier check, and bound open-window roots are accepted in that store so the explorer and SPA can run a demo. The vote POST does not carry `identityCommitment`. Those accepts still wait for hourly public disclosure unless the interval is `0`. Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified, matching the on-chain eligible root. Freeze snapshots the roots used for the open window. The circuit proves membership in that root and non-membership in the disqualification chain. An unarmed MockVerifier still does not check the witness. The demo passkey leaf is Poseidon.
+Without `CHAIN_RPC`, creating an election writes the local JSON store (UUID public id + minted short code + a demo `localElectionId` for the circuit). Votes that pass the election window, nullifier check, and bound open-window roots are accepted in that store so the explorer and SPA can run a demo. The vote POST does not carry `identityCommitment`. Those accepts still wait for hourly public disclosure unless the interval is `0`. Disqualify/revoke rebuild `eligibleRoot` as registered ∩ ¬currently-disqualified, matching the on-chain eligible root. Freeze snapshots the roots used for the open window. The circuit proves membership in that root and non-membership in the disqualification chain. An unarmed MockVerifier still does not check the witness. The demo passkey leaf is Poseidon.
 
 When `CHAIN_RPC` is set, `POST /api/elections` must also succeed on
 `ElectionFactory` (same params as `smart-contracts/script/CreateElection.s.sol`).
-The Node keeps a UUID public id and stores `onChainElectionId` /
+The Node keeps a UUID public id and stores `localElectionId` /
 `onChainElectionAddress` / `createTxHash` on the election record. A factory
 revert returns **502/503** to the clerk and does **not** write `zk-voting.json`.
 

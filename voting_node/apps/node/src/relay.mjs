@@ -14,7 +14,7 @@ import proofHelpers from '@zk-voting/proof-helpers';
 
 import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
-import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
+import { localElectionIdOf, electionMatchesRef } from './electionIds.mjs';
 import { toBytes32, ZERO } from './merkle.mjs';
 import { electionState } from './electionState.mjs';
 import { isAggregateEnvelope, parseAggregateEnvelope } from './aggregateBallot.mjs';
@@ -302,7 +302,7 @@ export async function relayVote({ store, explorer, electionId, body, now, interv
       );
     }
   }
-  const onChainId = chainElectionId(election);
+  const onChainId = localElectionIdOf(election);
 
   const bound = assertBoundRoots(election, parsed, store);
   const publicInputs = asInputList({

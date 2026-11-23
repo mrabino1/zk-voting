@@ -303,7 +303,7 @@ input or `BallotInbox.submitVote`.
 | --- | --- | --- |
 | `id` | Node API, SPA `/vote/:id`, clerk links | UUID v5 bound to factory + on-chain id + jurisdiction (legacy records may be v4) |
 | `shortCode` | `/v/:shortCode`, `/e/:shortCode`, optional API `:id` | 10 url-safe chars, unique per Node |
-| `onChainElectionId` | `ElectionFactory`, registries, BallotInbox, Groth16 `electionId` | `uint256`, factory `++electionCount` |
+| `localElectionId` | `ElectionFactory`, registries, BallotInbox, Groth16 `electionId` | `uint256`, factory `++electionCount` |
 | `certificationId` | L1 `L1TallyMirror` slot | `keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId))` |
 
 A public UUID is an alias, not the proof of identity. Two jurisdictions
@@ -319,8 +319,8 @@ a copied id fails `publicIdMatchesScope`.
 `GET/POST /api/elections/:id` accepts UUID, short code, or the decimal
 on-chain id (and any leftover non-UUID fixture ids). Short HTTP routes
 302 to `/vote/<uuid>`. New elections mint a scoped UUID v5 plus a short
-code; the Node stores `onChainElectionId` as the mapping. Client-supplied
-`id` / `uuid` / `factoryAddress` / `onChainElectionId` bodies are ignored.
+code; the Node stores `localElectionId` as the mapping. Client-supplied
+`id` / `uuid` / `factoryAddress` / `localElectionId` bodies are ignored.
 Local demos allocate a sequential integer so proofs still have a uint256
 when the factory is not invoked, and bind the UUID to `nodeId` + jurisdiction
 so two demo forks do not collide. On-chain ids come only from

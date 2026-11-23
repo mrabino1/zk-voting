@@ -11,14 +11,14 @@ import {
   SHORT_CODE_LENGTH,
   UUID_V4_RE,
   UUID_V5_RE,
-  chainElectionId,
+  localElectionIdOf,
   electionMatchesRef,
   isShortCodeShape,
   isUuid,
   mintScopedPublicId,
   mintShortCode,
   mintUuid,
-  parseOnChainElectionId,
+  parseLocalElectionId,
   publicIdMatchesScope,
   refsOf,
   uuidVersion,
@@ -130,16 +130,16 @@ describe('election UUID + short code', () => {
   });
 
   test('scoped public ids bind UUID v5 to node + jurisdiction; a copy fails', () => {
-    const north = mintScopedPublicId({ nodeId: 'node-a', onChainElectionId: '1', jurisdictionId: 'north' });
-    const south = mintScopedPublicId({ nodeId: 'node-a', onChainElectionId: '1', jurisdictionId: 'south' });
+    const north = mintScopedPublicId({ nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'north' });
+    const south = mintScopedPublicId({ nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'south' });
     assert.match(north, UUID_V5_RE);
     assert.match(south, UUID_V5_RE);
     assert.notEqual(north, south);
     assert.equal(uuidVersion(north), 5);
-    assert.equal(publicIdMatchesScope(north, { nodeId: 'node-a', onChainElectionId: '1', jurisdictionId: 'north' }), true);
-    assert.equal(publicIdMatchesScope(north, { nodeId: 'node-a', onChainElectionId: '1', jurisdictionId: 'south' }), false);
-    const demoA = mintScopedPublicId({ nodeId: 'node-a', jurisdictionId: 'demo', onChainElectionId: '1' });
-    const demoB = mintScopedPublicId({ nodeId: 'node-b', jurisdictionId: 'demo', onChainElectionId: '1' });
+    assert.equal(publicIdMatchesScope(north, { nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'north' }), true);
+    assert.equal(publicIdMatchesScope(north, { nodeId: 'node-a', localElectionId: '1', jurisdictionId: 'south' }), false);
+    const demoA = mintScopedPublicId({ nodeId: 'node-a', jurisdictionId: 'demo', localElectionId: '1' });
+    const demoB = mintScopedPublicId({ nodeId: 'node-b', jurisdictionId: 'demo', localElectionId: '1' });
     assert.notEqual(demoA, demoB);
   });
 
@@ -147,17 +147,17 @@ describe('election UUID + short code', () => {
     const election = {
       id: '3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01',
       shortCode: 'nbrdge2k3m',
-      onChainElectionId: '1',
+      localElectionId: '1',
       aliases: ['1'],
     };
     assert.equal(electionMatchesRef(election, election.id), true);
     assert.equal(electionMatchesRef(election, 'nbrdge2k3m'), true);
     assert.equal(electionMatchesRef(election, '1'), true);
     assert.equal(electionMatchesRef(election, 'missing'), false);
-    assert.equal(chainElectionId(election), '1');
+    assert.equal(localElectionIdOf(election), '1');
     assert.ok(refsOf(election).has(election.id));
-    assert.equal(parseOnChainElectionId('42'), '42');
-    assert.equal(parseOnChainElectionId(null), null);
+    assert.equal(parseLocalElectionId('42'), '42');
+    assert.equal(parseLocalElectionId(null), null);
   });
 
   test('SPA router treats /vote/:id, /v/:code, and /e/:code as the same page', () => {
@@ -190,7 +190,7 @@ describe('election UUID + short code', () => {
     assert.equal(json.id, json.election.id);
     assert.equal(isShortCodeShape(json.shortCode), true);
     assert.equal(json.election.shortCode, json.shortCode);
-    assert.match(String(json.election.onChainElectionId), /^\d+$/);
+    assert.match(String(json.election.localElectionId), /^\d+$/);
     assert.equal(json.election.links.vote, `/vote/${json.election.id}`);
     assert.equal(json.election.links.short, `/v/${json.shortCode}`);
     assert.match(json.election.id, UUID_V5_RE);
@@ -198,7 +198,7 @@ describe('election UUID + short code', () => {
 
     const byUuid = await api('GET', `/api/elections/${json.election.id}`);
     const byShort = await api('GET', `/api/elections/${json.shortCode}`);
-    const byChain = await api('GET', `/api/elections/${json.election.onChainElectionId}`);
+    const byChain = await api('GET', `/api/elections/${json.election.localElectionId}`);
     assert.equal(byUuid.status, 200);
     assert.equal(byUuid.json.id, json.election.id);
     assert.equal(byShort.status, 400);
@@ -267,7 +267,7 @@ describe('election UUID + short code', () => {
         proof: { accept: true },
         publicInputs: {
           nullifier: '8',
-          electionId: created.json.election.onChainElectionId,
+          electionId: created.json.election.localElectionId,
         },
         identityCommitment: '0xabc1',
         encryptedBallot: '0xcd',
@@ -323,11 +323,11 @@ describe('election UUID + short code', () => {
     assert.notEqual(a.json.election.id, stolen);
     assert.notEqual(b.json.election.id, stolen);
     assert.notEqual(a.json.election.id, b.json.election.id);
-    assert.notEqual(a.json.election.onChainElectionId, b.json.election.onChainElectionId);
+    assert.notEqual(a.json.election.localElectionId, b.json.election.localElectionId);
     assert.equal(a.json.election.factoryAddress, undefined);
   });
 
-  test('client-supplied onChainElectionId is ignored', async () => {
+  test('client-supplied localElectionId is ignored', async () => {
     const created = await api('POST', '/api/elections', {
       jar: adminJar,
       body: {
@@ -335,18 +335,18 @@ describe('election UUID + short code', () => {
         startTime: nowSec() - 30,
         cutoffTime: nowSec() + 3600,
         treeDepth: 16,
-        onChainElectionId: '999999',
+        localElectionId: '999999',
         questions: [{ type: 'YES_NO', prompt: '?' }],
       },
     });
     assert.equal(created.status, 201, created.json?.error);
-    assert.notEqual(String(created.json.election.onChainElectionId), '999999');
+    assert.notEqual(String(created.json.election.localElectionId), '999999');
   });
 
   test('legacy UUID v4 ids still match their scope', () => {
     const v4 = mintUuid();
     assert.equal(uuidVersion(v4), 4);
-    assert.equal(publicIdMatchesScope(v4, { jurisdictionId: 'demo', onChainElectionId: '1' }), true);
+    assert.equal(publicIdMatchesScope(v4, { jurisdictionId: 'demo', localElectionId: '1' }), true);
   });
 
   test('legacy non-UUID election ids still resolve after short-code backfill', () => {
@@ -385,7 +385,17 @@ describe('election UUID + short code', () => {
     assert.ok(legacy);
     assert.equal(String(legacy.id), '7');
     assert.equal(isShortCodeShape(legacy.shortCode), true);
-    assert.equal(legacy.onChainElectionId, '7');
+    assert.equal(legacy.localElectionId, '7');
     assert.equal(store.getElection(legacy.shortCode).id, 7);
+  });
+});
+
+describe('localElectionId rename', () => {
+  test('a stored onChainElectionId moves to localElectionId on load', async () => {
+    const { renameLocalElectionIds } = await import('../src/store.mjs');
+    const data = { elections: [{ id: 'a', onChainElectionId: '7' }, { id: 'b', localElectionId: '8' }, { id: 'c', onChainElectionId: '9', localElectionId: '10' }] };
+    assert.equal(renameLocalElectionIds(data), true);
+    assert.deepEqual(data.elections, [{ id: 'a', localElectionId: '7' }, { id: 'b', localElectionId: '8' }, { id: 'c', localElectionId: '10' }]);
+    assert.equal(renameLocalElectionIds(data), false);
   });
 });

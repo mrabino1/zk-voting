@@ -708,7 +708,7 @@ The Node side is the human product: a long-lived Node process, a web frontend, a
 | `/api` | Public bot API documentation (HTML, OpenAPI at `/api/openapi.json`, LLM text at `/api/llms.txt`) |
 | `/me` | Profile, including personal API keys (create, copy once, revoke) |
 
-Public election ids are UUID v5 bound to the shared factory, the factory uint256, and the jurisdiction (legacy records may be v4). On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `onChainElectionId`. L1 certification keys by `(factory, electionId, jurisdictionId)`, not by the UUID.
+Public election ids are UUID v5 bound to the shared factory, the factory uint256, and the jurisdiction (legacy records may be v4). On-chain `electionId` remains the factory `uint256`; the Node stores that mapping as `localElectionId`. L1 certification keys by `(factory, electionId, jurisdictionId)`, not by the UUID.
 
 Every page footer: **NOT FOR PROFIT**. There is **no Vite** and **no React** in this tree.
 

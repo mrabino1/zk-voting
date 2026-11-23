@@ -220,7 +220,7 @@ describe('ZK-Voting Node API', () => {
     assert.equal(json.election.rollFrozen, false);
     assert.ok(json.election.ballotSpecHash);
     assert.equal(json.election.chainMode, 'node');
-    assert.match(String(json.election.onChainElectionId), /^\d+$/);
+    assert.match(String(json.election.localElectionId), /^\d+$/);
     assert.equal(json.election.rollupElectionId, null);
   });
 
