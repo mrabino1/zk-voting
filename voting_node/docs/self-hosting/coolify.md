@@ -34,7 +34,7 @@ Coolify's proxy publishes the site. The `ports:` entries in `docker-compose.yml`
 
 ## 3. Environment
 
-Shortcut: on any machine with a clone, run `./setup.sh --deploy coolify`. It asks the setup questions (super admin, chain id, ceremony, entropy, hostname, database, L2 identity and L1 submitter) and prints the Coolify settings: the plain variables with their values, and the secret ones (`SETUP_TOKEN`, `ZK_ENTROPY`, `DATABASE_URL`, `EXPLORER_INGEST_SECRET`, `RECEIPT_PDF_SECRET`, `L1_SUBMITTER_PRIVATE_KEY`, `L2_SALT`, `L2_ADMIN_SECRET`, `L1_RPC`) by name only. Copy each secret value from the `voting_node/.env` it wrote and mark it secret in Coolify.
+Shortcut: on any machine with a clone, run `./setup.sh --deploy coolify`. It asks the setup questions (super admin, chain id, ceremony, entropy, hostname, database, rollup) and prints the Coolify settings: the plain variables with their values, and the secret ones (`SETUP_TOKEN`, `ZK_ENTROPY`, `DATABASE_URL`, `RECEIPT_PDF_SECRET`, `ROLLUP_PRIVATE_KEY`, `OPERATOR_PRIVATE_KEY`, `L2_BALLOT_TOKEN`, `L1_RPC`) by name only. Copy each secret value from the `voting_node/.env` it wrote and mark it secret in Coolify.
 
 Set at least these in **Environment Variables**:
 
@@ -47,11 +47,11 @@ Set at least these in **Environment Variables**:
 | `VOTE_FQDN` | `vote.example.org` | Passkeys, allowed origin, PDF links. |
 | `SUPER_ADMIN_EMAIL` | `clerk@example.org` | Where `/feedback` and the first admin's mail go. |
 | `IS_DEMO` | omit, or `false` | Set `true` only on the public demo. A missing or empty value is a real election and does not schedule the monthly soft-delete. |
-| `EXPLORER_INGEST_SECRET` | 64 hex chars | Required in production for L2 → explorer ingest. |
+| `L2_BALLOT_TOKEN` | 64 hex chars | Node → operator ballot token. Required. Mark it secret. |
 | `RECEIPT_PDF_SECRET` | 64 hex chars | Stable key for locked receipt and outcome PDFs. |
 | `SES_FROM_ADDRESS`, `AWS_REGION` | `vote@example.org`, `us-east-1` | Email MFA. Leave empty for a demo. |
 
-Coolify can generate secrets for you: in your fork, use a magic variable such as `${SERVICE_HEX_32_INGEST}` as the default for `EXPLORER_INGEST_SECRET`. Full list: [Configuration reference](./configuration.md).
+Coolify can generate secrets for you: in your fork, use a magic variable such as `${SERVICE_HEX_32_BALLOT}` as the default for `L2_BALLOT_TOKEN`. Full list: [Configuration reference](./configuration.md).
 
 ## 4. Health checks
 
@@ -65,7 +65,7 @@ The Compose file already defines health checks for `node` and `l2` (a Node.js `f
 
 Do **not** require `"mode":"active"`. A new container starts in standby during a rolling update and would never pass. See [Rolling updates](./rolling-updates.md).
 
-`dependency failed to start: container l2-... is unhealthy` means the sequencer never answered `GET /health` on port 8546. The node, prover, and archive wait for that, so none of them start. Leave Coolify's own HTTP check on the **node** service (path `/health`, port 3000). Do not point it at `l2`. After a failed deploy, the l2 container log is the next place to look. A missing disclosure module or a root-owned `l2-data` volume both exit the process before `/health` exists; the image copies those modules and the entrypoint gives `/data` to the `node` user before the sequencer starts.
+`dependency failed to start: container l2-... is unhealthy` means the rollup operator never answered `GET /health` on port 8546. The node waits for it, so it does not start either. Leave Coolify's own HTTP check on the **node** service (path `/health`, port 3000). Do not point it at `l2`. After a failed deploy, the l2 container log is the next place to look. Common causes: a missing `OPERATOR_PRIVATE_KEY` or `L2_BALLOT_TOKEN`, an L1 RPC on the wrong chain, or a test key on a public chain (all refused at start).
 
 ## 5. Deploy
 

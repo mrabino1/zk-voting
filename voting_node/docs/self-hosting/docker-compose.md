@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-This is the fastest way to run a complete zk-voting Node (web app, API, civic L2, prover, archive) on one machine.
+This is the fastest way to run a complete zk-voting Node on one machine: the web app and API, the rollup operator, Postgres, and (by default) a local Ethereum chain with ZkVotingRollup deployed on it. No paid service and no public chain are needed.
 
 ## 1. Clone and configure
 
@@ -29,7 +29,6 @@ For anything public, also set:
 VOTE_FQDN=vote.example.org        # bare hostname you control, no https://
 SUPER_ADMIN_EMAIL=clerk@example.org
 # Leave IS_DEMO unset for a real election. IS_DEMO=true only on the public demo.
-EXPLORER_INGEST_SECRET=<long random string>
 RECEIPT_PDF_SECRET=<long random string>
 ```
 
@@ -66,7 +65,7 @@ docker compose down              # stop (volumes are kept)
 ./system_actions.sh status       # host helper: status, logs, health
 ```
 
-`docker compose down -v` **deletes the volumes** and every vote, roll, and block on this host. Do not run it on a real election host.
+`docker compose down -v` **deletes the volumes** and every vote, roll and batch on this host, including the local chain. Do not run it on a real election host.
 
 ## Data
 
@@ -74,9 +73,10 @@ docker compose down              # stop (volumes are kept)
 | --- | --- | --- |
 | `postgres-data` | `/var/lib/postgresql/data` in `db` | Accounts, elections, ballots, receipts. Dump this with `pg_dump` to move it. |
 | `node-data` | `/data` in `node` | Ceremony files, plugin uploads, and the writer lease. App state is in Postgres. |
-| `l2-data` | `/data` in `l2`, `prover`, `archive` | Sealed blocks, proofs, mempool, leases. |
+| `l2-data` | `/data` in `l2` | The operator's state (`rollup-operator.json`): the rollup state tree, ballots not yet in a batch, receipts, batch history. |
+| `l1-data`, `l1-deployment` | `l1`, `l1-deploy` (profile `local-l1`) | The local chain's state and the deployment record. Not used on a public chain. |
 
-Back both up before every upgrade: [Backups](./backups.md).
+Back them up before every upgrade: [Backups](./backups.md).
 
 ## Variants
 
