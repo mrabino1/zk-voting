@@ -216,6 +216,10 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   the rollup stack; `test:setup` added. Setup now generates credentials for the bundled Postgres.
 - **Resume at:** "Other follow-ups" below, or step 1 of the batch-circuit plan once the toolchain
   is approved.
+- **Next planned (not started):** a full-stack test without Docker: Anvil + `deploy.sh --target
+  local` + the operator + the Node as real processes, driving one civic vote through the Node API
+  (publish, `guardian:rollup` commit/receive/decrypt, roll sync, vote passes and ballots with
+  `evm_increaseTime`, close, finalize), then `verify-rollup` and the outcomes L1 audit.
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
