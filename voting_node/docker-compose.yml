@@ -24,6 +24,8 @@ services:
     image: zk-voting-node:${ZK_VOTING_IMAGE_TAG:-local}
     container_name: zk-voting-node
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
     init: true
     stop_grace_period: 30s
     ports:
@@ -127,6 +129,8 @@ services:
     image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
     container_name: zk-voting-l2
     restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1.0
     init: true
     stop_grace_period: 30s
     command: ["node", "sequencer/index.mjs"]
@@ -181,6 +185,8 @@ services:
     image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
     container_name: zk-voting-prover
     restart: unless-stopped
+    mem_limit: 4g
+    cpus: 2.0
     init: true
     stop_grace_period: 30s
     command: ["node", "prover/index.mjs"]
@@ -233,6 +239,8 @@ services:
     image: zk-voting-l2:${ZK_VOTING_IMAGE_TAG:-local}
     container_name: zk-voting-archive
     restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1.0
     init: true
     stop_grace_period: 30s
     command: ["node", "archive/cli.mjs", "daemon"]
@@ -273,6 +281,8 @@ services:
     image: postgres:16-alpine
     container_name: zk-voting-db
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
