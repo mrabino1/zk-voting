@@ -1,4 +1,4 @@
-# Rollup redesign — handoff (updated 2026-11-23, phase 4 in progress)
+# Rollup redesign — handoff (updated 2026-11-23, phases 4 and 5 done)
 
 Branch: `rollup-redesign` (cut from `test/unstable` at `7945ab6`). Design: `smart-contracts/docs/ROLLUP.md`.
 The working tree is clean at the commit after `028c44e`, which only updates this file.
@@ -7,9 +7,8 @@ The working tree is clean at the commit after `028c44e`, which only updates this
 
 1. Read "Goal and decisions", then "Next: phase 4", then "Decision needed".
 2. Set up the environment ("Environment" at the end) and run the tests to confirm the baseline:
-   node 792 pass (only the Chrome-dependent `a11y` and `landing-lang` tests fail, as before);
-   `test:packages`, `test:l2` (21), `test:auditor`, `test:docs`, `test:setup`, and `forge test` (99)
-   all pass.
+   node 861 pass with `CHROME_PATH` set (without Chrome only `a11y` and `landing-lang` fail);
+   `test:packages`, `test:l2` (21), `test:auditor`, `test:docs`, `test:setup`, and `forge test` (99) all pass.
 
 ## Goal and decisions
 
@@ -176,7 +175,26 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   unaffected. Still to do for directive 2, and best done with a browser and the reference site
   side by side: the election lifecycle phase nav on the election and results pages, the
   single-column card list on the home page, and moving long explanations behind disclosures.
-- **Resume at:** phase 5 docs written for self-hosters (directive 1), then "Other follow-ups".
+- Phase 5 docs (done): both READMEs rewritten (civic vote vs poll, known limits, forking);
+  `self-hosting/*` describe the rollup stack (local L1 by default) and drop the removed services
+  and variables; new `self-hosting/forking.md`; `OPERATOR.md`, `L2.md`, `L2_VPS_SETUP.md` (now
+  "deploying ZkVotingRollup to a public chain"), `ROLLING_UPDATES.md`, `ARCHITECTURE.md`,
+  `THREAT_MODEL.md`, `how_voters_privacy_is_protected.md`, `PASSKEYS.md`, `POLLS.md`,
+  `BLOCK_EXPLORER.md`, `AUDITOR.md` (marked out of date for civic votes), `LOAD_TEST.md` (scoped
+  to polls), `circuits/README.md`, `CONTRIBUTING.md`, `implementation.md`. Deleted
+  `OPERATIONS-L2-LIFECYCLE.md`. The two old contract proposals are marked superseded. The
+  workflow diagram is redrawn for the civic flow and re-rendered.
+- Gas economics (done): `scripts/lib/gas_economics.py` models one civic vote on ZkVotingRollup
+  from `forge test --gas-report`; `docs/voting_cost_estimate.md` has the numbers. Findings: the
+  roll costs ~5,500 gas per voter (the biggest line); the operator's default
+  `L2_BATCH_SECONDS=10` can cost ~180× more than full batches when ballots trickle in, so a
+  public deployment should batch every few minutes. Not changed in code: it is a latency/cost
+  call for the user.
+- Browser check (done): Chrome for Testing in a session scratchpad (see Environment). All a11y and
+  landing-language tests pass (63); the ballot page and back office were screenshotted and three
+  small defects fixed.
+- **Resume at:** "Other follow-ups" below, and the rest of directive 2 (phase nav, home page
+  cards) with the reference site open in a browser.
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
@@ -217,8 +235,10 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   Decide whether polls keep `TALLY_CHALLENGE_SECONDS` (`supplementaryBatch.mjs`).
 - **Auditor tools.** `tools/auditor/export.mjs` and `cli.mjs` read the old ElectionFactory over RPC.
   Rewrite them for ZkVotingRollup.
-- **Gas economics.** `scripts/get-gas-economics.sh` and `scripts/lib/gas_economics.py` model the
-  old contracts (the script prints a warning). Write a rollup cost model.
+- **Terms of Use.** `apps/node/legal/terms.md` still mentions a paymaster and an L1 tally mirror.
+  Editing it changes the Terms hash and re-prompts every user, so it was left for the user.
+- **Batch interval.** Decide a public-chain default for `L2_BATCH_SECONDS` (see the gas finding).
+- **`Explorer.ingest()`** and its tests (`explorer-ingest`, `rolling-handover`) can go.
 - **Operator updates.** The L2 operator has no writer lease, so there is no overlap update for it.
   Recreate the container instead; the node answers 503 while it is down, and voters retry.
 - **`l1-deploy` network.** It compiles the contracts on each fresh deploy, so it needs network once,
@@ -259,4 +279,8 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   dropped. It was installed in a session scratchpad (`npm i eslint@9.15.0 globals@15.12.0`, flat
   config with `no-undef` and `no-unused-vars`, Node and browser globals); reinstall it if needed.
   Known warnings that predate this work: `qr.mjs` `inTiming`, and some unused test locals.
-- **Chrome** is missing, so the a11y and landing-language browser tests fail. They failed before this work too.
+- **Chrome** is not installed on the host. Chrome for Testing 158 was fetched into a session
+  scratchpad with `node node_modules/@puppeteer/browsers/lib/cjs/main-cli.js install chrome@stable
+  --path <dir>` (no extra system libraries needed). Set `CHROME_PATH` (tests) or
+  `PUPPETEER_EXECUTABLE_PATH` (`npm run docs:workflow`) to its `chrome-linux64/chrome`. With it the
+  full node suite passes (861/861).
