@@ -859,15 +859,15 @@ export const BOT_OPERATIONS = [
   }),
   R('/api/explorer/blocks', {
     tag: 'Explorer',
-    summary: 'Civic L2 blocks.',
+    summary: 'Poll explorer blocks.',
   }),
   R('/api/explorer/blocks/:n', {
     tag: 'Explorer',
-    summary: 'One civic L2 block.',
+    summary: 'One poll explorer block.',
   }),
   R('/api/explorer/txs/:hash', {
     tag: 'Explorer',
-    summary: 'One civic L2 transaction. Ballot plaintext is not a field.',
+    summary: 'One poll explorer row. Ballot plaintext is not a field.',
   }),
   R('/api/explorer/nullifiers/:value', {
     tag: 'Explorer',
@@ -939,7 +939,7 @@ export const BOT_OPERATIONS = [
   R('/api/mail/templates', {
     tag: 'Mail',
     auth: true,
-    summary: 'Platform admin lists operator mail templates stored on the Node. Mail is never written to civic L2.',
+    summary: 'Platform admin lists operator mail templates stored on the Node. Mail is never written on chain.',
   }),
   R('/api/mail/templates/:id', {
     tag: 'Mail',

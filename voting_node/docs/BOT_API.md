@@ -254,9 +254,9 @@ Machine-readable copies:
 ### Explorer
 
 - `GET /api/explorer/disclosure` (key read). Hourly disclosure window the explorer uses.
-- `GET /api/explorer/blocks` (key read). Civic L2 blocks.
-- `GET /api/explorer/blocks/:n` (key read). One civic L2 block.
-- `GET /api/explorer/txs/:hash` (key read). One civic L2 transaction. Ballot plaintext is not a field.
+- `GET /api/explorer/blocks` (key read). Poll explorer blocks.
+- `GET /api/explorer/blocks/:n` (key read). One poll explorer block.
+- `GET /api/explorer/txs/:hash` (key read). One poll explorer row. Ballot plaintext is not a field.
 - `GET /api/explorer/nullifiers/:value` (key read). Whether a nullifier was accepted. The nullifier does not reveal the choice or the person.
 - `GET /api/explorer/search` (key read). Search blocks, transactions, and elections.
 - `GET /api/explorer/elections/:id` (key read). Explorer view of one election.
@@ -277,7 +277,7 @@ Machine-readable copies:
 - `GET /api/polls/:id/outcome.pdf` (key read). Token poll outcome PDF.
 ### Mail
 
-- `GET /api/mail/templates` (key read, signed in). Platform admin lists operator mail templates stored on the Node. Mail is never written to civic L2.
+- `GET /api/mail/templates` (key read, signed in). Platform admin lists operator mail templates stored on the Node. Mail is never written on chain.
 - `GET /api/mail/templates/:id` (key read, signed in). Platform admin previews one operator mail template, including api_key.created.
 - `GET /api/mail/outbox` (key read, signed in). Platform admin lists queued operator mail. Bodies stay on the detail route.
 - `GET /api/mail/outbox/:id` (key read, signed in). Platform admin reads one outbox message, including text and HTML.

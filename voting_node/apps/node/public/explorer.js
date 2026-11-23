@@ -473,7 +473,7 @@
     const page = rows.slice(0, LIMIT);
     if (!page.length) {
       $("view").innerHTML =
-        '<section class="panel"><p class="empty">No blocks yet. The sequencer has not produced a public batch.</p></section>';
+        '<section class="panel"><p class="empty">No poll blocks yet. Poll ballots appear here after their disclosure hour.</p></section>';
       return;
     }
     const oldest = page[page.length - 1]?.number;

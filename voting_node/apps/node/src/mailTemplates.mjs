@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Role-promotion mail is a Node operator notice. It is never a vote receipt
-// and must never be written onto civic L2 transactions.
+// and must never be written on chain.
 
 import { brandName } from './branding.mjs';
 import { ROLE_LABELS } from './roles.mjs';
