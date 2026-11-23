@@ -199,8 +199,13 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   "Poll" when there is no jurisdiction name. The home page's limits note, "how a vote works" steps
   and the FAQ now describe the rollup (no paymaster, sequencer or inbox). Rendered and checked in
   Chrome; a11y suite passes.
-- **Resume at:** "Other follow-ups" below. For directive 2, compare against grants.ajnafi.com in
-  a browser (its look could not be fetched) and adjust tokens.
+- Voting UI, third pass (directive 2): grants.ajnafi.com rendered in headless Chrome. Adopted its
+  layout language in our own tokens (no Ajna colours or fonts): borderless 1.5rem cards, uppercase
+  tracked section labels, filled pill buttons, and the lifecycle as an underlined uppercase tab row
+  on the ballot page (`contestPhaseStrip(h, e, { tabs: true })`). Wrapped in
+  `@media (prefers-contrast: no-preference)` so high-contrast mode keeps borders. Not done: Ajna's
+  header-only navigation (no left sidebar); that is an app-shell change for every page.
+- **Resume at:** "Other follow-ups" below.
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 

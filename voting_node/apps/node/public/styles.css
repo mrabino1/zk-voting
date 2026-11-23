@@ -4047,3 +4047,74 @@ html[data-client-host="1"] .site-footer {
   color: var(--fg);
   font-weight: 700;
 }
+
+/* Voter pages, second pass: large borderless cards, uppercase section labels, filled pill
+   buttons, and the election lifecycle as an underlined tab row (the layout language of
+   grants.ajnafi.com, in this theme's own tokens). High-contrast mode keeps its borders. */
+:root {
+  --radius-voter-card: 1.5rem;
+  --voter-card-surface: var(--card);
+  --voter-label-tracking: 0.08em;
+}
+
+@media (prefers-contrast: no-preference) {
+  .ballot-page .question,
+  .ballot-page .contest-panel,
+  .ballot-page .receipt,
+  .contest-card.election-card {
+    border: 0;
+    background: var(--voter-card-surface);
+    padding: 1.4rem 1.5rem;
+  }
+
+  .ballot-page .contest-panel > h2,
+  .contest-card .contest-kicker,
+  .ballot-page .ballot > h2 {
+    text-transform: uppercase;
+    letter-spacing: var(--voter-label-tracking);
+    font-weight: 800;
+  }
+
+  .ballot-page .btn,
+  .contest-card .btn {
+    padding: 0.55rem 1.15rem;
+    font-weight: 700;
+  }
+
+  .ballot-page .btn-secondary,
+  .contest-card .btn-secondary {
+    border-color: transparent;
+    background: var(--card-hover);
+  }
+
+  .ballot-page .choice {
+    border-color: transparent;
+    background: var(--card-hover);
+  }
+
+  .ballot-page .choice:has(input:checked) {
+    border-color: var(--focus);
+  }
+}
+
+.phase-tabs {
+  gap: 1.5rem;
+  margin: 1rem 0 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.phase-tabs .phase-step {
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 0.6rem;
+  margin-bottom: -1px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.phase-tabs .phase-step.is-current {
+  color: var(--org);
+  border-bottom: 2px solid var(--org);
+}

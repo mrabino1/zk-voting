@@ -104,7 +104,7 @@ describe('ballot page', () => {
     const steps = find(tree, (n) => n.attrs?.class === 'vote-steps')[0];
     const current = find(steps, (n) => n.attrs?.['aria-current'] === 'step');
     assert.equal(current.length, 1);
-    const phases = find(tree, (n) => n.attrs?.class === 'phase-steps')[0];
+    const phases = find(tree, (n) => String(n.attrs?.class || '').startsWith('phase-steps'))[0];
     assert.deepEqual(find(phases, (n) => n.attrs?.['aria-current'] === 'step').map((n) => n.attrs.text), ['Voting']);
     assert.equal(current[0].attrs.text, 'Mark your ballot');
     const checklist = find(tree, (n) => String(n.attrs?.class || '').includes('vote-blockers'));

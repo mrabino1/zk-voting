@@ -24,10 +24,11 @@ export function contestPhases(election) {
   return civic ? [{ label: "Draft", state: "done" }, ...phases] : phases;
 }
 
-export function contestPhaseStrip(h, election) {
+/** `tabs: true` draws the strip as a page-level tab row (ballot page) instead of pills. */
+export function contestPhaseStrip(h, election, { tabs = false } = {}) {
   return h(
     "ol",
-    { class: "phase-steps", "aria-label": "Stage" },
+    { class: tabs ? "phase-steps phase-tabs" : "phase-steps", "aria-label": "Stage" },
     ...contestPhases(election).map((p) =>
       h("li", { class: `phase-step is-${p.state}`, ...(p.state === "current" ? { "aria-current": "step" } : {}), text: p.label })
     )

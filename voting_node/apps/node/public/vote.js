@@ -200,7 +200,7 @@ export async function renderVote(main, ctx) {
         { text: "One person, one vote" },
         source === "sample" ? { text: "Sample ballot" } : null,
       ]),
-      contestPhaseStrip(h, election),
+      contestPhaseStrip(h, election, { tabs: true }),
       contestSplit(
         h,
         contestPanel(
