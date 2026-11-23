@@ -2,7 +2,7 @@
 // Public election ids are UUID v5 bound to (node, jurisdiction, local sequence),
 // so a UUID copied from another Node or jurisdiction does not verify.
 // UUID v4 remains as a random helper and for legacy records.
-// The local sequence is stored as `localElectionId` (historical name). It is
+// The local sequence is stored as `localElectionId`. It is
 // the numeric electionId in the node's poll proofs. A civic vote's L1 id is
 // separate: `election.rollup.electionId`, assigned by ZkVotingRollup on publish.
 

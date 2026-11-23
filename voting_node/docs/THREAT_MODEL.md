@@ -1,149 +1,86 @@
-# Threat model — election identity and L1 certification
+# Threat model
 
 **NOT FOR PROFIT** — civic public good. Not a commercial product.
 
-Anything that lets people run a binding vote will be attacked. ZK-Voting does
-not treat a public UUID as a security boundary. This file is the adversarial
-map for **who can occupy an L1 result slot**, impersonate a jurisdiction, or
-confuse the public record. Crypto gaps (MockVerifier, Poseidon, ceremony)
-are labeled elsewhere; they are **not** an identity defense.
-
-Implemented on `test/unstable`. If this disagrees with the contracts, the
-contracts win.
+Anything that lets people run a binding vote will be attacked. This file maps what an adversary
+can and cannot do to a **civic vote on ZkVotingRollup**, to the **Node** that fronts it, and to
+**token polls**. Design of the rollup: [`smart-contracts/docs/ROLLUP.md`](../../smart-contracts/docs/ROLLUP.md).
+If this file disagrees with the contracts, the contracts win.
 
 ---
 
 ## What an authoritarian adversary wants
 
-1. **Overwrite** an honest final tally on Ethereum (courts look here).
-2. **Mimic** an honest contest (same UUID, same uint256, same jurisdiction
-   name) so media and voters cite the fake.
-3. **Front-run** L1 so `AlreadyPosted` freezes a lie.
-4. **Confuse** explorers, CMS pages, and unofficial dashboards without
-   touching L1 (cheap, high impact).
-5. **Capture keys** (factory admin, L1 publisher, Node `platform_admin`)
-   rather than break keccak.
-
-Defense in depth: different ids on different layers, fail closed when a
-pin is missing, first L1 writer wins **and that is treated as a key-custody
-problem**, not a UUID problem.
-
-When re-vote is on, any already-spent valid pass can authorize a replacement.
-That does not tie the pass to a ballot. The stored ballot must exist, and the
-submitted proof must verify. The proof binds the nullifier, so a spent pass
-cannot invent a ballot for a voter who has not already voted.
+1. **Change a result**: a different count on L1, or a result for a contest that never happened.
+2. **Learn how someone voted**, or let a coercer check.
+3. **Stop a vote** (censor ballots, stall the operator, keep the result from being finalized).
+4. **Change the roll quietly**: drop voters, add ghosts, disqualify without a public record.
+5. **Confuse the public record** without touching L1: fake pages, look-alike contracts, a rogue Node.
+6. **Capture keys** (governor, jurisdiction admin, clerk, operator, Node admin, guardians).
 
 ---
 
-## Canonical L1 identity
+## Civic votes on the rollup
 
-```
-certificationId = keccak256(abi.encode(
-  keccak256("zk-voting.election.identity.v1"),
-  factory,          // shared ElectionFactory
-  electionId,       // factory uint256
-  jurisdictionId    // Election.params, not a client string
-))
-```
+### Closed by the contract
 
-`publicIdHash` is an attribute (ASCII-lowercased UUID). It never keys the
-slot. `publicIdCollision` is detection, not exclusion.
-
-| Attacker action | Honest L1 slot |
+| Attack | Control |
 | --- | --- |
-| Copy UUID | Different `(factory, electionId, jurisdictionId)` → different slot |
-| Same uint256 on a rogue factory | `WrongFactory` when the mirror is pinned |
-| Same factory id, other jurisdiction | Different `jurisdictionId` in the key; on-chain `JurisdictionMismatch` when the factory is readable |
-| First writer of the honest triple | **Occupies the slot.** `AlreadyPosted` then protects the lie. |
+| Operator invents or alters a result | L1 decrypts only the final accumulator; `finalizeResult` checks every total against k guardians' Chaum-Pedersen shares and that totals sum to the ballot count. |
+| Operator adds, drops or edits a roll entry | Roll changes enter only through the L1 priority queue from the jurisdiction's registrar and officer; each batch must prove it applied them. |
+| Operator censors a ballot | The voter can `forceBallot` through L1; the operator must include priority requests. |
+| Operator stops serving the queue | After 3 days anyone calls `activateDesertMode()`; closed elections finish, open ones can be `desertClose`d from the last proven state. |
+| Ballot that votes twice or for two options | Each option ciphertext carries a 0/1 proof and the vector a sum-to-one proof; one ballot per nullifier. |
+| Partial or interim decryption | There is no entry point for it. Pubdata holds a nullifier and a hiding commitment, never a decryptable ciphertext. |
+| Tiny electorate de-anonymized by the sum | Below `minBallots` the result is **Withheld** and never decrypted. |
+| Governor rewrites an election | The governor manages operators and jurisdictions only; it cannot touch an election, roll, ballot or result. |
+| Clerk of one body creates an election for another | `createElection` checks `isClerk[jurisdictionId]`. |
+| Roll change after the start | Registrations and disqualifications are refused after `startTime`. |
+| Forged guardian message relayed by the Node | Guardian messages are signed under their Baby Jubjub identity key or prove themselves. |
 
-That last row is why publisher keys are election-critical.
+### Residual (the operator and officials must keep these in mind)
+
+| Risk | Why it remains | Mitigation |
+| --- | --- | --- |
+| **No batch validity circuit yet** | Only `MockBatchVerifier` exists, on chain 31337 | No public-chain civic vote until the circuit and its ceremony exist. The operator refuses a real verifier. |
+| **Eligibility not proven** | Roll membership is not yet proven in zero knowledge | The Node gates ballots with one blind vote pass per voter on the roll and persists a poll book; a hostile Node operator could still issue extra passes. |
+| k colluding guardians + the operator | The operator sees ciphertexts; with the key it could decrypt them | Choose guardians from independent bodies; k high enough. The honest-threshold assumption of every encrypted-ballot system. |
+| Fewer than k guardians show up | The result cannot be decrypted | Pick n > k; guardians keep their key files backed up. |
+| Turnout timing | Batch pubdata shows how many ballots each batch carried | Public by design; no choice leaks. Voters who worry can cast later or from another network. |
+| Desert mode on an open election | The accumulator is never public, so an open election may stay `Halted` | Secrecy chosen over liveness, on purpose. |
+| Captured clerk key | It can create elections and name officers for its jurisdiction | The jurisdiction admin rotates clerks with `setClerk`; keep the Node key funded but small. |
+| Captured governor | Can add a hostile operator (it still cannot forge a valid batch) or create look-alike jurisdictions | Multisig with two-step handover. |
+| Look-alike contract | Anyone can deploy a copy | Check the address against the root README on `master`, a signed release and zk-voting.org. |
+| Civic revoting off | Nothing yet proves the sender owns a nullifier | A revote could overwrite another voter's ballot, so it is refused (`NULLIFIER_USED`). |
 
 ---
 
-## Attack tree (identity / L1)
+## The Node
 
-### Closed or fail-closed on this line
-
-| Vector | Control |
+| Attack | Control |
 | --- | --- |
-| Client `id` / `uuid` squat | Node ignores them; mints UUID v5 from factory + uint256 + jurisdiction |
-| Client `factoryAddress` | Ignored; only chain create or the env pin is stored |
-| Client `localElectionId` | Ignored; demo allocates locally; on-chain ids come from the factory |
-| Self-declared clerk of another body | `ElectionFactory` + `JurisdictionRegistry.isClerk` (registry **must** be wired; `DeployL2` / `_deployElectionStack` now do that) |
-| Officer (registrar / tally) creating elections | `isClerk` is the clerks mapping, not `officers` |
-| Rotated clerk keeps create rights | `setClerk` clears the previous address from `clerks` |
-| Global L1 publisher certifies every body | After `setL2Factory`, `_canPost` ignores `publishers[]`; need jurisdiction publisher, tally operator (readable factory), or admin |
-| Unpin / swap the factory pin | `setL2Factory` reverts `FactoryAlreadyPinned` (or `ZeroAddress`); first non-zero pin wins |
-| Legacy `postResult(uint256)` collision | Reverts `UseIdentityPost` when factory is pinned; `DeployL1` requires `L2_FACTORY` |
-| Node L1 post without factory | Failed closed; no uint256 fallback |
-| Copied v5 UUID on outcomes | `publicIdMatchesScope` recomputes v5 |
-| Legacy v4 UUID with a factory pin | `publicIdMatchesScope` fails closed |
-| Mixed-case UUID attribute | Solidity and JS `publicIdHash` lowercase ASCII |
-| `AlreadyPosted` bookkeeping lies | Re-read `resultHashOfIdentity` before and after the write; mismatch → `already_posted_mismatch` |
-| Unauthenticated explorer ingest | `EXPLORER_INGEST_SECRET` required outside tests |
-| Captured clerk rewrites About / FAQ / home | Unscoped CMS pages and site title are `platform_admin` only; clerks publish jurisdiction-tagged pages |
-| `ALLOW_DEV_LOGIN` on a public host | Ignored when `NODE_ENV=production`; route 404s |
-| Public officer roster for phishing | Unauthenticated `/api/jurisdictions` returns names only; `/roles` requires a signed-in officer |
+| Link a ballot to a person | The ballot request has no cookie, session or commitment; the vote pass is blind; spent passes and the poll book are unlinked hash sets with coarse timestamps; the vote route is not access-logged. See [`OPERATOR.md`](./OPERATOR.md#ballot-unlinkability). |
+| Second pass after a restart | The poll book (`votePassIssued`) persists who took a pass. |
+| Client-chosen ids | `id`, `uuid` and `localElectionId` in a create request are ignored; UUID v5 binds Node, jurisdiction and local sequence. |
+| Ambiguous `/elections/:ref` | 409 `ELECTION_ID_COLLISION` rather than the first match. |
+| Captured clerk rewrites About / FAQ / home | Unscoped CMS pages and the site title are `platform_admin` only. |
+| `ALLOW_DEV_LOGIN` on a public host | Ignored when `NODE_ENV=production`. |
+| Officer roster for phishing | Public `/api/jurisdictions` returns names only. |
+| Anvil test keys on a public chain | Refused at start off chain 31337 (node and operator). |
+| Mock proofs on a public chain | `ZK_VOTING_ALLOW_MOCK_PROOFS` is refused off chain 31337. |
 
-### Residual (must stay in the operator’s head)
-
-| Vector | Why it remains | Operator duty |
-| --- | --- | --- |
-| Compromised **mirror admin** | Break-glass `_canPost` | Multisig / cold admin; do not use admin as the daily publisher |
-| Compromised **jurisdiction publisher** or **tallyOperator** | They are allowed to write that body’s slot | Per-body keys; rotate; pin factory so they cannot pick another factory |
-| First L1 writer wins | Mirror is a court copy, not a challenge game | Certify only after local tally; monitor `hashMismatch` |
-| Factory **admin** / `PLATFORM_ADMIN_ROLE` | Bootstrap still bypasses clerk ACL | Narrow who holds factory admin; registry still required for everyone else |
-| Unreadable L2 factory on L1 | No `JurisdictionMismatch` check (L2 address has no code on L1) | Always pin; grant only `setJurisdictionPublisher` per body — never a global publisher |
-| Hostile **Node operator** editing JSON | Forked hosts are trusted for their own UI | `/outcomes` checks internal consistency; courts use L1 + auditor pack |
-| BallotInbox / Groth16 still `uint256` | Per-factory storage | Proofs are not portable across factories |
-| Compromised **Node `platform_admin`** | Host can rewrite About / FAQ and grant clerks | One Node per jurisdiction when possible; treat host keys as election-critical |
-| Explorer ingest secret leak | Ingest can poison the public L2 log (not L1) | Treat the secret like a publisher key; never run production with `NODE_ENV=test` |
-| MockVerifier / stand-in hasher | Documented non-production | Do not run a binding election on `test/unstable` crypto |
+Residual: a hostile Node operator can lie to its own visitors (pages, receipts it shows) and can
+issue extra vote passes while eligibility is not proven. It cannot change a certified civic result
+on L1. Courts and observers read L1.
 
 ---
 
-## Authoritarian playbook (identity / L1 / public record)
+## Polls
 
-Assume a well-resourced adversary that wants the **appearance** of a stolen
-election without breaking keccak. They will mix cheap confusion with rare
-overwrite. The design treats those as different failures.
-
-| Play | Goal | Why it fails or degrades |
-| --- | --- | --- |
-| Copy the honest UUID into a rogue contest | Media cites the fake | L1 slot is not the UUID; outcomes `publicIdMatchesScope` fails; `publicIdCollision` flags the copy |
-| Deploy a private factory with the same uint256 | “We certified election 1 too” | Pinned mirror `WrongFactory`; Node ignores client `factoryAddress` |
-| Self-declare as clerk of the honest body | Mint an election that *looks* official on-chain | Registry `isClerk`; officers cannot create; rotated clerks lose create |
-| Steal one global L1 publisher | Overwrite every jurisdiction | After pin, global `publishers[]` is ignored; per-body keys |
-| Unpin the factory after compromise | Revive that global key | Pin is one-way (`FactoryAlreadyPinned`) |
-| Front-run L1 with a lie | Freeze `AlreadyPosted` on a false hash | First writer wins **by design**; operators monitor `hashMismatch` / `already_posted_mismatch` |
-| Unauthenticated explorer ingest | Dashboards show fake turnout | Shared secret; unset secret refuses ingest outside tests |
-| Captured clerk on a shared Node | Rewrite About / FAQ as if the host endorsed it | Unscoped pages and site title are host-only |
-| Enable `ALLOW_DEV_LOGIN` on the public host | Instant `platform_admin` | `NODE_ENV=production` ignores it |
-| Scrape `/api/jurisdictions` for clerk handles | Targeted phishing of the official desk | Public list is names only; roster is officer-auth |
-| Ambiguous `/elections/1` | Serve the wrong contest | 409 `ELECTION_ID_COLLISION` rather than the first match |
-| DoS the Node or explorer | Hide the honest UI | Courts read L1 + auditor pack; L2 ingest failure does not halt sequencing |
-| Capture factory admin or mirror admin | Bootstrap elections / break-glass post | Residual. Multisig those keys; they are not “just devops” |
-
-Trust that **scales**: many jurisdictions share one factory and one L1
-mirror; each forks its Node. A hostile Node can lie to its visitors. It
-cannot occupy another body’s certification slot.
-
----
-
-## Scaling and trust
-
-- **Many jurisdictions, one factory.** That is the pin. Fork the Node, not the factory. UUID v5 and L1 slots both include that address.
-- **Many Nodes, one L1 mirror.** Confusion on a rogue Node does not move the honest slot. Pin `ELECTION_FACTORY_ADDRESS` on every honest Node.
-- **Availability.** Ambiguous refs return 409 rather than the wrong election. Explorer ingest failure does not halt L2.
-- **Detection.** `publicIdCollision`, outcomes `publicIdMatchesScope` / `l1FactoryMatchesPinned` / `already_posted_mismatch`. Detection is not prevention for a stolen publisher key.
-
----
-
-## Verification (this branch)
-
-Foundry: `ElectionIdentity.t.sol` (copied UUID, two factories, clerk spoof, officer cannot create, rotated clerk, pinned factory rejects rogue factory / global publisher / legacy uint256 / unpin). Node + chain-client: ignored client ids, v5 scope, ingest secret, AlreadyPosted re-read / hash mismatch, unscoped CMS host-only.
-
-Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (identifiers), [`OPERATOR.md`](./OPERATOR.md) (pins and publishers).
+Polls are counted on the Node; a hostile Node operator can affect a poll in ways it cannot affect a
+civic vote. `opens_ballots` polls need t-of-n guardians to open ballots (**NON-PRODUCTION** P-256
+Feldman). Sealed ranked choice exposes individual rankings (not identities) to the guardians who
+open them ([`POLLS.md`](./POLLS.md)). Polls are labelled as weaker privacy in the app.
 
 ---
 
@@ -160,7 +97,7 @@ Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (identifiers), [`OPERATOR.md`](.
 | Sybil | Not relevant. Splitting tokens across addresses does not raise total weight. The UI leads with weight. |
 | Whale dominance | Inherent to token weighting. Stated as signal only. |
 | Forged ballot | EIP-712 or ERC-1271 signature from the holding address. |
-| Signature replay | Domain binds `pollDomain`, token, `ballotSpecHash`, and ZK-Voting chain id 27427. One ballot per address. |
+| Signature replay | Domain binds `pollDomain`, token, `ballotSpecHash`, and the Node's chain id (`CHAIN_ID`, 27427 by default). One ballot per address. |
 | Deanonymization | Public mode is public on purpose. Address-hiding is not offered. |
 | Lying RPC | Auditor re-derives weights on an independent RPC. Block hashes are pinned. A second archive RPC, if set, must agree. |
 | Reorgs | Tally waits until the close block is finalized and re-checks hashes. |
