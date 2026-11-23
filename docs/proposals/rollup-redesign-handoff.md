@@ -1,4 +1,4 @@
-# Rollup redesign — handoff (updated 2026-11-23, end of phase 3)
+# Rollup redesign — handoff (updated 2026-11-23, phase 4 in progress)
 
 Branch: `rollup-redesign` (cut from `test/unstable` at `7945ab6`). Design: `smart-contracts/docs/ROLLUP.md`.
 The working tree is clean at the commit after `028c44e`, which only updates this file.
@@ -32,6 +32,54 @@ top-to-bottom redesign (contracts, node, UI/UX) is authorized, ABI and storage b
 | `e64ef27` | 1. node cleanup | Old chain, L1 mirror, `/api/l2/*`, site contract pins, factory-scoped ids and old config keys removed. Setup step 6 is "Rollup connection" (`GET /api/setup/rollup`). |
 | `af34959` | 2. deploy and ops | Docker Compose with the `local-l1` profile (`l1` Anvil + one-shot `l1-deploy`), `ROLLUP_DEPLOYMENT_FILE`, Anvil-key guard off 31337, L1 chain-id check, `./setup.sh` step 6, `scripts/deploy.sh --target local\|public`, `tools/deploy`. Old L2 identity system removed. |
 | `028c44e` | 3. browser | `public/rollup-vote.js` (encrypt in the browser, cast with a pass, follow the receipt), `public/rollup-results.js` (results from L1), back-office "Civic vote on L1" panel, copy updated, vote-pass and nullifier rules (below). |
+
+## Standing directives from the user (2026-11-23, apply to all remaining work)
+
+### 1. A public good that people fork and run themselves (think Discourse)
+
+The project is a civic public good. Assume a town clerk, a co-op or a volunteer will clone it,
+run it on a laptop or a small VPS, and run their own fork for years. Architect for that:
+
+- **One command to a working local install.** `./setup.sh` then `docker compose up` must give a
+  usable node with a local L1 (the `local-l1` profile) and no paid services. Every external service
+  (SES, Postgres, a public RPC, S3) is optional, with a local default that works.
+- **No hidden coupling to us.** No hard-coded hostnames, brand names, analytics, keys or contract
+  addresses for "our" deployment. Branding, site name, locales and the rollup deployment come from
+  config or the deployment file (`ROLLUP_DEPLOYMENT_FILE`). A fork changes config, not code.
+- **Forks stay upgradable.** Keep customisation in config, the CMS, the plugin hooks
+  (`src/plugins`) and theme tokens (CSS custom properties), so a fork can merge upstream without
+  conflicts. Store migrations run on boot and keep old data loadable (as `normalizeLoadedData` does).
+- **Docs for the operator who is not us.** Phase 5 docs are written for a self-hoster: install,
+  upgrade, backup and restore, rotating keys, running guardians, going from local Anvil to a public
+  chain. `docs/self-hosting/*` is the entry point.
+- **Honest defaults.** Mock proofs and Anvil keys stay refused off chain 31337. A fresh fork must
+  never look production-ready when it isn't (see "Known gaps").
+
+### 2. Voting UI: simple and clean, tracking grants.ajnafi.com
+
+Redesign the voter-facing pages (home/elections list, ballot, receipt, results) to track the
+layout and "bubble" (rounded pill/card) UI of https://grants.ajnafi.com, and above all its
+simplicity. What could be read from the site (it renders client-side, so only its structure came
+through a fetch): a top bar with logo, a few tabs, a chain indicator and one primary action; a
+**side nav that walks the phases of a cycle** (Overview → Screening → Funding → Finalize →
+Execute, plus Previous Cycles); and plain tables for past cycles. Colours, pill shapes, spacing and
+the voting controls were **not** visible. Look at the site in a real browser before styling.
+
+How it maps here:
+- An election's lifecycle as the phase nav: Draft → Key ceremony → Voting → Counting → Result
+  (civic vote), or Open → Closed → Tallied (poll). The current phase is highlighted, as
+  `voteSteps` already does on the ballot page.
+- Elections as rounded cards with pill badges (status, civic vote / poll, time left, ballots cast
+  where public), in a single column; no dense panels on voter pages.
+- The ballot: one question per card, large rounded option "bubbles" (radio/checkbox styled as
+  pills), one primary button. Explanations go behind a "How this is counted" disclosure, not walls
+  of text.
+- Keep the token system in `styles.css` (`:root` custom properties, light/dark, WCAG 2.2 AA, the
+  a11y test) and restyle through tokens, so forks can re-theme (directive 1).
+- Back-office pages are out of scope for the bubble look; clarity there is enough.
+
+Not done yet. Start it after the `onChainElectionId` rename, before or alongside phase 5. Chrome
+is missing on this host, so render and screenshot on a machine with a browser.
 
 ## How a civic vote works now (for orientation)
 
@@ -105,6 +153,18 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   be sent to a closed election after a confirm dialog; the button is disabled. Both submit paths
   share `acceptReceipt`. CSS: `.vote-steps`, `.vote-path-*`, `.vote-blockers` at the end of
   `styles.css`, tokens only. Not rendered in a browser.
+- Back office: the "Tally operator" and "Civic vote on L1" panels are one panel, "Guardians and
+  tally" (`#tally`), with one election picker (`t-election`). Picking a civic vote shows the L1
+  steps and controls (`#tally-civic`); picking a poll shows the poll tally, with the
+  `opens_ballots` P-256 guardian forms folded into a disclosure (`#tally-poll`). `ru-election` is
+  gone; `showTallyMode` in `back-office.js` switches on the election kind. The freeze-roll picker
+  lists polls only. An empty `<span id="rollup">` keeps old `#rollup` links working. Found, not
+  fixed: `renderAspectEditor` writes to `#questions-editor`, which the page does not have (it
+  predates this branch). Not rendered in a browser.
+- Full node suite after these commits: 797 pass; only the Chrome-dependent a11y and landing-lang
+  tests fail.
+- **Resume at:** the `onChainElectionId` rename (item 6), then the voting UI redesign (directive 2),
+  then phase 5 docs written for self-hosters (directive 1).
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 

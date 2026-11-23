@@ -510,3 +510,23 @@ textarea.builder-body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Back office "Guardians and tally": one picker, civic (L1) or poll tools. */
+.tally-mode {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.office-steps {
+  padding-inline-start: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.office-steps > li {
+  margin-bottom: 0.3rem;
+}
+
+.poll-guardians {
+  margin-bottom: 1rem;
+}

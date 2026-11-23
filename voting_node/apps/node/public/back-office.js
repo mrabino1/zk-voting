@@ -1097,20 +1097,43 @@
     $("link-explorer").href = "/explorer#/election/" + encodeURIComponent(id);
   }
 
+  /** electionId -> "civic" | "poll", from the last election list. Picks the tally tools. */
+  const electionKinds = new Map();
+
+  function isCivicVoteRow(row) {
+    return row.electionTypeName === "vote" || Number(row.electionType) === 1;
+  }
+
+  /** Show the civic (L1) or the poll tools for the election picked under "Guardians and tally". */
+  async function showTallyMode() {
+    const id = $("t-election").value;
+    const kind = id ? electionKinds.get(String(id)) || "poll" : null;
+    $("tally-civic").hidden = kind !== "civic";
+    $("tally-poll").hidden = kind !== "poll";
+    $("tally-none").hidden = Boolean(kind);
+    $("t-election-kind").textContent =
+      kind === "civic"
+        ? "Civic vote: counted on L1, final sum only."
+        : kind === "poll"
+          ? "Poll: counted on this Node."
+          : "";
+    if (kind === "civic") await loadRollup();
+    else if (kind === "poll") await loadTallyElection(id);
+  }
+
   async function loadElections() {
     try {
       const data = await request("/api/elections");
       const rows = asList(data, ["elections", "items"]);
-      const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election"), $("rr-election")];
+      const selects = [$("r-election"), $("d-election"), $("t-election"), $("rr-election")];
       for (const sel of selects) {
         if (sel) fillSelect(sel, rows, electionIdOf, electionLabel);
       }
-      // Only civic votes run on the rollup; polls stay on this Node.
-      const votes = rows.filter((row) => row.electionTypeName === "vote" || Number(row.electionType) === 1);
-      if ($("ru-election")) {
-        fillSelect($("ru-election"), votes, electionIdOf, electionLabel);
-        await loadRollup();
-      }
+      // Civic votes run on the rollup and their roll is held on L1; only polls freeze here.
+      electionKinds.clear();
+      for (const row of rows) electionKinds.set(String(electionIdOf(row)), isCivicVoteRow(row) ? "civic" : "poll");
+      if ($("f-election")) fillSelect($("f-election"), rows.filter((row) => !isCivicVoteRow(row)), electionIdOf, electionLabel);
+      await showTallyMode();
       const loader = $("e-load");
       if (loader) {
         const current = loader.value;
@@ -1125,7 +1148,7 @@
       await loadRegistrationRequests();
       await loadCredentials();
     } catch (err) {
-      for (const id of ["f-election", "r-election", "d-election", "t-election", "rr-election", "ru-election"]) {
+      for (const id of ["f-election", "r-election", "d-election", "t-election", "rr-election"]) {
         if ($(id)) $(id).innerHTML = `<option value="">${esc(errText(err))}</option>`;
       }
     }
@@ -1812,7 +1835,7 @@
   }
 
   async function loadRollup() {
-    const id = $("ru-election") && $("ru-election").value;
+    const id = electionKinds.get(String($("t-election").value)) === "civic" ? $("t-election").value : "";
     const host = $("ru-status");
     if (!host) return;
     if (!id) {
@@ -1830,7 +1853,7 @@
   }
 
   async function rollupPost(path, body, okText) {
-    const id = $("ru-election").value;
+    const id = electionKinds.get(String($("t-election").value)) === "civic" ? $("t-election").value : "";
     if (!id) {
       flash($("flash-rollup"), "err", "Choose a civic vote first.");
       return;
@@ -1852,8 +1875,7 @@
     finalize: "Totals certified on L1.",
   };
 
-  if ($("ru-election")) {
-    $("ru-election").addEventListener("change", loadRollup);
+  if ($("ru-actions")) {
     $("ru-refresh").addEventListener("click", loadRollup);
     $("ru-actions").addEventListener("click", (event) => {
       const btn = event.target.closest("[data-ru-action]");
@@ -1881,9 +1903,8 @@
   }
 
   $("t-election").addEventListener("change", () => {
-    const id = $("t-election").value;
-    wireExplorerLinks(id);
-    loadTallyElection(id);
+    wireExplorerLinks($("t-election").value);
+    showTallyMode();
   });
 
   $("btn-refresh-notices").addEventListener("click", async () => {
@@ -2005,7 +2026,6 @@
   (async function init() {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
-    if ($("t-election").value) await loadTallyElection($("t-election").value);
     noteErc20Deployment();
   })();
 })();
