@@ -232,10 +232,18 @@ async function renderLayout() {
   const hidden = h('textarea', { id: 'sa-nav-hidden', rows: '3' });
   hidden.value = (draft.nav.hidden || []).join('\n');
   const managed = h('input', { type: 'checkbox', id: 'sa-nav-managed', checked: Boolean(draft.nav.managed) });
+  const placement = h(
+    'select',
+    { id: 'sa-nav-placement' },
+    h('option', { value: 'top', text: 'Top bar (default)' }),
+    h('option', { value: 'sidebar', text: 'Left sidebar' }),
+  );
+  placement.value = draft.nav.placement === 'sidebar' ? 'sidebar' : 'top';
   const nav = h(
     'section',
     { class: 'sa-card', 'aria-labelledby': 'sa-nav-h' },
     h('h2', { id: 'sa-nav-h', text: 'Navigation' }),
+    h('div', { class: 'sa-field' }, h('label', { for: 'sa-nav-placement', text: 'Navigation on wide screens' }), placement),
     h('div', { class: 'sa-field sa-check' }, managed, h('label', { for: 'sa-nav-managed', text: 'Replace the built-in menu with these items' })),
     h('div', { class: 'sa-table-wrap' }, h('table', { class: 'sa-table' }, h('caption', { class: 'visually-hidden', text: 'Extra navigation items' }), h('thead', {}, h('tr', {}, ['Label', 'Link', 'Audience', 'Visible', 'Order'].map((t) => h('th', { scope: 'col', text: t })))), navBody)),
     h('div', { class: 'sa-actions' }, h('button', { type: 'button', class: 'btn btn-secondary', text: 'Add item', onclick: () => { draft.nav.items.push({ id: `item-${Date.now().toString(36)}`, label: 'New link', href: '/', audience: 'all', visible: true }); navRows(); } })),
@@ -313,6 +321,7 @@ async function renderLayout() {
   function collect() {
     const out = structuredClone(draft);
     out.nav.managed = managed.checked;
+    out.nav.placement = placement.value;
     out.nav.hidden = hidden.value.split('\n').map((s) => s.trim()).filter(Boolean);
     out.nav.items = out.nav.items.map((it, i) => ({ ...it, order: i + 1 }));
     out.theme = { light: {}, dark: {} };
