@@ -1097,8 +1097,7 @@ export function electionsRouter(deps) {
         if (electionHasRanked(election)) {
           // Sealed ranked-choice: guardians opened each ranking envelope; IRV
           // runs here and is recomputable from the published ranking set.
-          // Ranking hashes were already bound at cast time (AG tag) and on
-          // chain in the inbox batch (submitVoteBatchRanked).
+          // Ranking hashes were already bound at cast time (AG tag).
           irv = await openRankedTally(election, split.envelopes.filter((env) => env?.is_deleted !== true), bucket?.rankingPartials || []);
           irv.aggregateFirstRoundMatches = firstChoiceMatches(election, nums, irv.counts);
         }

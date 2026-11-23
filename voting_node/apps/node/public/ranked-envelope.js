@@ -15,8 +15,7 @@
  * The plaintext is padded to ONE fixed size per election (rankingPadBytes,
  * derived from the ballot's questions and option count), so every envelope in
  * an election has the same length. `rankingHash` = SHA-256(envelope bytes).
- * The voter binds it into the proven AG ballot tag at cast time, and the
- * relayer carries it (sorted) in BallotInbox.submitVoteBatchRanked.
+ * The voter binds it into the proven AG ballot tag at cast time.
  *
  * The plaintext also carries the AG first choice and its tag randomness, so
  * the tally can check per ballot that tag == Poseidon(Poseidon(choice, r), rankingHash).

@@ -3,9 +3,8 @@
 //
 // Each sealed ranked ballot carries an "RK" ranking envelope next to its
 // one-hot first-choice AG ciphertext. The AG tag (the proven ballot hash)
-// commits to the ranking envelope hash, so the ranking is bound at cast time;
-// the relayer also carries the sorted ranking hashes in the hourly inbox batch
-// (BallotInbox.submitVoteBatchRanked). After the deadline, guardians post a
+// commits to the ranking envelope hash, so the ranking is bound at cast time.
+// After the deadline, guardians post a
 // threshold partial on each envelope's C1, tagged `ranking:<rankingId>` where
 // rankingId is random per ballot and is not derived from the nullifier. The
 // node opens each ranking, runs IRV, and publishes the rounds plus the opened
