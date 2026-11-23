@@ -234,8 +234,10 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
   could clear it any more). `dropRetiredChainState` deletes those keys from stored data on load.
   Kept: the `excludedBallots` readers, for older records. Still open: whether polls keep
   `TALLY_CHALLENGE_SECONDS`.
-- **Auditor tools.** `tools/auditor/export.mjs` and `cli.mjs` read the old ElectionFactory over RPC.
-  Rewrite them for ZkVotingRollup.
+- **Auditor (done).** `tools/auditor/rollup.mjs` + `cli.mjs verify-rollup`: a civic vote audited
+  from L1 alone (ballots decoded from executed batches' pubdata, joint key, floor, result hash,
+  every k-subset of guardian shares). Exercised at the end of `l2/rollup/test/end-to-end.test.mjs`,
+  including a falsified count and a missing ballot. `export-chain` (old contracts) removed.
 - **Terms of Use.** `apps/node/legal/terms.md` still mentions a paymaster and an L1 tally mirror.
   Editing it changes the Terms hash and re-prompts every user, so it was left for the user.
 - **Batch interval.** Decide a public-chain default for `L2_BATCH_SECONDS` (see the gas finding).

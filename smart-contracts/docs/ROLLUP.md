@@ -152,7 +152,7 @@ with no such proof stays `Halted`. Nobody can produce a result for it.
    `log_G(PK_g) = log_{c1_i}(D_{g,i})`. `PK_g` is derived on L1 from the posted Feldman commitments.
 4. `finalizeResult(counts, subset)`, anyone. For a set of `k` guardians, it checks
    `c2_i − Σ λ_g·D_{g,i} = counts_i·G` for every option, and that `Σ counts_i = ballotCount`. It stores
-   the counts and `resultHash = keccak256(abi.encode(electionId, counts))`.
+   the counts and `resultHash = keccak256(abi.encode(block.chainid, address(this), electionId, counts))`.
 
 There is no other decryption entry point. There are no interim results, hourly partials or
 per-batch ciphertexts. L1 never stores an individual ballot outside the voluntary forced path.

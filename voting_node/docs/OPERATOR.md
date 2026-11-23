@@ -215,9 +215,13 @@ Poll circuits (optional tools): `npm run circuits:status`. See [`circuits/HASH_S
 
 ### Independent auditor (no Node private DB)
 
-The auditor CLI (`tools/auditor`) still reads the **old** contracts over RPC and has not been
-rewritten for ZkVotingRollup. Until it is, verify a civic result from the rollup's events
-(`ResultFinalized`, the guardians' shares) and `GET /api/elections/:id/rollup`. Docs:
+```bash
+node tools/auditor/cli.mjs verify-rollup --rpc "$L1_RPC" --rollup "$ROLLUP_ADDRESS" --election 4
+npm run test:auditor
+```
+
+`verify-rollup` checks a civic vote from L1 alone (ballots in pubdata, joint key, floor, the result
+against every k-subset of guardian shares). Polls use `export-node` / `verify`. Docs:
 [`AUDITOR.md`](./AUDITOR.md).
 
 ### Node

@@ -5,7 +5,8 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { exportFromChain, exportFromNode } from './export.mjs';
+import { exportFromNode } from './export.mjs';
+import { auditRollupElection } from './rollup.mjs';
 import { verifyAuditorBundle, AUDITOR_SCHEMA } from './verify.mjs';
 import { verifyPollBundle, POLL_AUDITOR_SCHEMA } from './verifyPoll.mjs';
 
@@ -14,11 +15,13 @@ function usage() {
 
 Verify a public election without the Node private database.
 
-Usage:
+Civic votes (ZkVotingRollup on L1; needs only an Ethereum RPC):
+  node tools/auditor/cli.mjs verify-rollup --rpc URL --rollup 0x… --election N [--from-block B]
+
+Polls (public packs from a Node, or a saved file):
   node tools/auditor/cli.mjs verify --file bundle.json
-  node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election 1 [--out bundle.json]
-  node tools/auditor/cli.mjs export-chain --rpc http://127.0.0.1:8545 --factory 0x… --election 1 [--out bundle.json]
-  node tools/auditor/cli.mjs verify-node --base http://127.0.0.1:3000 --election 1
+  node tools/auditor/cli.mjs export-node --base http://127.0.0.1:3000 --election <id> [--out bundle.json]
+  node tools/auditor/cli.mjs verify-node --base http://127.0.0.1:3000 --election <id>
   node tools/auditor/cli.mjs fixture
 
 Schema: ${AUDITOR_SCHEMA}
@@ -147,20 +150,17 @@ async function main(argv) {
     return printResult(verifyAuditorBundle(bundle), bundle);
   }
 
-  if (cmd === 'export-chain') {
-    const rpcUrl = arg('--rpc', argv) || process.env.ZK_VOTING_RPC_URL || 'http://127.0.0.1:8545';
-    const factory = arg('--factory', argv) || process.env.ELECTION_FACTORY_ADDRESS;
+  if (cmd === 'verify-rollup') {
+    const rpc = arg('--rpc', argv) || process.env.L1_RPC;
+    const rollup = arg('--rollup', argv) || process.env.ROLLUP_ADDRESS;
     const election = arg('--election', argv) || arg('--id', argv);
-    if (!factory || !election) {
-      process.stderr.write('export-chain requires --factory 0x… and --election <id>\n');
+    if (!rpc || !rollup || election == null) {
+      process.stderr.write('verify-rollup requires --rpc URL (or L1_RPC), --rollup 0x… (or ROLLUP_ADDRESS) and --election N\n');
       return 1;
     }
-    const bundle = await exportFromChain({ rpcUrl, factory, electionId: election });
-    const out = arg('--out', argv);
-    const text = `${JSON.stringify(bundle, null, 2)}\n`;
-    if (out) await writeFile(out, text);
-    else process.stdout.write(text);
-    return 0;
+    const result = await auditRollupElection({ rpc, rollup, electionId: Number(election), fromBlock: BigInt(arg('--from-block', argv, '0')) });
+    process.stdout.write(`${JSON.stringify(result, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2)}\n`);
+    return result.ok ? 0 : 2;
   }
 
   process.stderr.write(usage());

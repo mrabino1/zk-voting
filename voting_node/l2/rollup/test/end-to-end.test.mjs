@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
 import * as bc from '../../../apps/node/public/ballot-crypto.js';
+import { auditRollupElection, checkRollupElection, readRollupElection } from '../../../tools/auditor/rollup.mjs';
 import { createL1 } from '../l1.mjs';
 import { Operator } from '../operator.mjs';
 import { DEV_KEY, deployLocal, foundryAvailable, startAnvil } from './helpers/anvil.mjs';
@@ -133,4 +134,16 @@ test('an election runs end to end and only its sum is decrypted', { skip, timeou
   await l1.send('finalizeResult', [electionId, totals, subset]);
   const [counts] = await l1.read('result', [electionId]);
   assert.deepEqual(counts, totals);
+
+  // The independent auditor reaches the same result from L1 alone.
+  const audit = await auditRollupElection({ rpc: anvil.rpcUrl, rollup: l1.address, electionId });
+  assert.equal(audit.ok, true, JSON.stringify(audit.errors));
+  assert.equal(audit.summary.ballotsInPubdata, 5);
+  assert.equal(audit.summary.replacedBallots, 1);
+  assert.deepEqual(audit.summary.counts, ['0', '2', '3']);
+  assert.ok(audit.checks.find((c) => c.name === 'result.shares').ok);
+  // A lie about the counts, or a missing ballot, is caught.
+  const data = await readRollupElection({ rpc: anvil.rpcUrl, rollup: l1.address, electionId });
+  assert.equal(checkRollupElection({ ...data, counts: [1n, 1n, 3n] }).ok, false);
+  assert.equal(checkRollupElection({ ...data, info: { ...data.info, ballotCount: 6 } }).ok, false);
 });

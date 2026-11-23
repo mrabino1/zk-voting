@@ -134,7 +134,7 @@ Polls: [`docs/POLLS.md`](./docs/POLLS.md).
 | Docker Compose | One command to a full local stack (Node, operator, Postgres, Anvil, deploy). |
 | Accessibility | WCAG 2.2 AA axe checks on the main shells ([`docs/ACCESSIBILITY.md`](./docs/ACCESSIBILITY.md)). |
 | Bot API | Public `/api` docs, OpenAPI and `llms.txt`; personal API keys on `/me` ([`docs/BOT_API.md`](./docs/BOT_API.md)). |
-| Independent auditor | `tools/auditor` still reads the **old** contracts; a rollup version is pending ([`docs/AUDITOR.md`](./docs/AUDITOR.md)). |
+| Independent auditor | `tools/auditor verify-rollup` re-checks a civic vote from L1 alone: ballots in batch pubdata, joint key, floor, and the result against every k-subset of guardian shares ([`docs/AUDITOR.md`](./docs/AUDITOR.md)). |
 
 Also know:
 
@@ -389,7 +389,7 @@ Guide: [Community forum](./docs/self-hosting/discourse.md).
   [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd).
 
 Still ahead of a binding civic election: the batch validity circuit (with eligibility proofs),
-a public ZkVotingRollup deployment, a rollup auditor, and a production review of the guardian
+a public ZkVotingRollup deployment, and a production review of the guardian
 ceremony. Do not treat `MockBatchVerifier`, untrusted local keys or the poll guardian tally as
 production cryptography.
 
