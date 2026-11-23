@@ -26,7 +26,7 @@ export default {
       "非营利 — 公民公共产品。不是商业产品。无代币。无广告。",
     brandHome: "{brand} 首页",
     brandSub: "公民选举办公室",
-    brandSubExplorer: "L2 区块浏览器",
+    brandSubExplorer: "区块浏览器",
     navVoter: "选民",
     navPrimary: "主导航",
     navElections: "选举",

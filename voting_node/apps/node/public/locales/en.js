@@ -26,7 +26,7 @@ export default {
       "NOT FOR PROFIT — civic public good. Not a commercial product. No token. No ads.",
     brandHome: "{brand} home",
     brandSub: "Office of civic elections",
-    brandSubExplorer: "L2 block explorer",
+    brandSubExplorer: "Block explorer",
     navVoter: "Voter",
     navPrimary: "Primary",
     navElections: "Elections",

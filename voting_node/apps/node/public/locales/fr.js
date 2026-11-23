@@ -26,7 +26,7 @@ export default {
       "SANS BUT LUCRATIF — bien public civique. Pas un produit commercial. Pas de token. Pas de publicité.",
     brandHome: "Accueil {brand}",
     brandSub: "Bureau des élections civiques",
-    brandSubExplorer: "Explorateur de blocs L2",
+    brandSubExplorer: "Explorateur de blocs",
     navVoter: "Électeur",
     navPrimary: "Principal",
     navElections: "Élections",

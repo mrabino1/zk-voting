@@ -27,7 +27,7 @@ export default {
       "غير ربحي — منفعة عامة مدنية. ليس منتجًا تجاريًا. لا رمز. لا إعلانات.",
     brandHome: "صفحة {brand} الرئيسية",
     brandSub: "مكتب الانتخابات المدنية",
-    brandSubExplorer: "مستكشف كتل L2",
+    brandSubExplorer: "مستكشف الكتل",
     navVoter: "الناخب",
     navPrimary: "رئيسي",
     navElections: "الانتخابات",

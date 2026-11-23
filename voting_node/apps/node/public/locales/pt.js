@@ -26,7 +26,7 @@ export default {
       "SEM FINS LUCRATIVOS — bem público cívico. Não é um produto comercial. Sem token. Sem anúncios.",
     brandHome: "Início da {brand}",
     brandSub: "Escritório de eleições cívicas",
-    brandSubExplorer: "Explorador de blocos L2",
+    brandSubExplorer: "Explorador de blocos",
     navVoter: "Eleitor",
     navPrimary: "Principal",
     navElections: "Eleições",

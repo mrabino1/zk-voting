@@ -38,6 +38,7 @@ export const BRANDING_FIELDS = Object.freeze({
 });
 export const REGIONS = Object.freeze(['banner', 'header', 'sidebar', 'home', 'footer']);
 export const AUDIENCES = Object.freeze(['all', 'signed_in', 'signed_out', 'officer', 'admin']);
+export const NAV_PLACEMENTS = Object.freeze(['top', 'sidebar']);
 export const WIDGET_TYPES = Object.freeze(['notice', 'links', 'plugin']);
 
 /** Theme tokens a layout may set. Keys map to existing CSS custom properties in styles.css. */
@@ -73,6 +74,8 @@ export function defaultLayout() {
       managed: false,
       items: [],
       hidden: [],
+      // Where the navigation sits on wide screens: a top bar (the default) or a left sidebar.
+      placement: 'top',
     },
     regions: Object.fromEntries(REGIONS.map((r) => [r, []])),
     theme: { light: {}, dark: {} },
@@ -228,6 +231,12 @@ export function validateLayout(input) {
   const items = Array.isArray(nav.items) ? nav.items : [];
   if (items.length > MAX_NAV) throw new HttpError(400, 'too many nav items', { code: 'LAYOUT_INVALID' });
   base.nav.managed = Boolean(nav.managed);
+  if (nav.placement != null && !NAV_PLACEMENTS.includes(nav.placement)) {
+    throw new HttpError(400, `nav placement must be ${NAV_PLACEMENTS.join(' or ')}`, { code: 'LAYOUT_INVALID' });
+  }
+  // Unset means "inherit" from the layer below (defaults: top); see mergeLayout.
+  if (nav.placement) base.nav.placement = nav.placement;
+  else delete base.nav.placement;
   base.nav.items = items.map((item, i) => ({
     id: id(item?.id || `nav-${i + 1}`, 'nav id'),
     label: text(item?.label, 60, 'nav label') || `Item ${i + 1}`,
@@ -257,7 +266,11 @@ export function validateLayout(input) {
 export function mergeLayout(base, layer) {
   if (!layer) return base;
   const out = structuredClone(base);
-  if (layer.nav) out.nav = structuredClone(layer.nav);
+  if (layer.nav) {
+    const placement = layer.nav.placement || out.nav.placement;
+    out.nav = structuredClone(layer.nav);
+    out.nav.placement = placement;
+  }
   if (layer.regions) {
     for (const region of REGIONS) {
       if (Array.isArray(layer.regions[region]) && layer.regions[region].length) {

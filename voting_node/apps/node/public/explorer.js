@@ -1,4 +1,4 @@
-/* ZK-Voting L2 explorer — blocks, txs, search. Vote txs: nullifier + ballotHash only. */
+/* ZK-Voting explorer — poll blocks, txs, search, and rollup batches. Vote txs: nullifier + ballotHash only. */
 (function () {
   "use strict";
 

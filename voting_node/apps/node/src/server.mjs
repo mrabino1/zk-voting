@@ -226,6 +226,12 @@ function brandHtml(html, branding) {
   return out;
 }
 
+/** `<html data-nav="top|sidebar">`, set before the page paints so the shell never jumps. */
+function withNavPlacement(html, placement) {
+  if (/<html\b[^>]*\bdata-nav=/i.test(html)) return html;
+  return html.replace(/<html\b/i, `<html data-nav="${placement === 'sidebar' ? 'sidebar' : 'top'}"`);
+}
+
 function spaFallback(config, layoutService) {
   const currentBranding = () => {
     const b = layoutService.effective().layout.branding;
@@ -247,12 +253,18 @@ function spaFallback(config, layoutService) {
     } catch {
       branding = getBranding();
     }
+    let placement = 'top';
+    try {
+      placement = layoutService.effective().layout.nav?.placement || 'top';
+    } catch {
+      /* keep the default */
+    }
     for (const file of htmlCandidate(config, req.path)) {
       if (fs.existsSync(file)) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
         fs.promises.readFile(file, 'utf8').then(
-          (html) => res.send(renderPublicHtml(brandHtml(html, branding), {
+          (html) => res.send(renderPublicHtml(withNavPlacement(brandHtml(html, branding), placement), {
             voteFqdn: config.voteFqdn,
             assetVersion: config.assetVersion,
             clientBrand: config.clientBrand,

@@ -26,7 +26,7 @@ export default {
       "비영리 — 시민 공공재. 상업 제품이 아닙니다. 토큰 없음. 광고 없음.",
     brandHome: "{brand} 홈",
     brandSub: "시민 선거 사무소",
-    brandSubExplorer: "L2 블록 탐색기",
+    brandSubExplorer: "블록 탐색기",
     navVoter: "유권자",
     navPrimary: "기본",
     navElections: "선거",

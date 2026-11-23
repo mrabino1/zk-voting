@@ -26,7 +26,7 @@ export default {
       "PHI LỢI NHUẬN — hàng hóa công dân sự. Không phải sản phẩm thương mại. Không token. Không quảng cáo.",
     brandHome: "Trang chủ {brand}",
     brandSub: "Văn phòng bầu cử dân sự",
-    brandSubExplorer: "Trình khám phá khối L2",
+    brandSubExplorer: "Trình khám phá khối",
     navVoter: "Cử tri",
     navPrimary: "Chính",
     navElections: "Bầu cử",

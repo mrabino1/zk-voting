@@ -29,7 +29,7 @@ A fork that edits core files gets merge conflicts on every release. Put your cha
 | Name, tagline, logo, office subtitle | `BRAND_NAME`, `BRAND_SHORT_NAME`, `BRAND_TAGLINE`, `CLIENT_*` in `.env`, or Site admin > Appearance > Branding |
 | Colours, radius, spacing | The CSS custom properties in `:root` of `apps/node/public/styles.css` (light and dark). Override them in a stylesheet you add, not by editing rules. |
 | Home page and public text | The CMS at `/office/site` |
-| Page layout | `LAYOUT_FILE` / `LAYOUT_OVERRIDE_MODULE` |
+| Page layout | `LAYOUT_FILE` / `LAYOUT_OVERRIDE_MODULE`; `nav.placement` is `top` (default) or `sidebar` |
 | New behaviour | A plugin (`plugins/`, managed from Site admin; see `plugins/announcement-banner` for a small example) |
 | Languages | `apps/node/public/locales/*.js` (every locale must carry the same keys; `test/i18n.test.mjs` checks) |
 

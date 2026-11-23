@@ -203,8 +203,10 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
   layout language in our own tokens (no Ajna colours or fonts): borderless 1.5rem cards, uppercase
   tracked section labels, filled pill buttons, and the lifecycle as an underlined uppercase tab row
   on the ballot page (`contestPhaseStrip(h, e, { tabs: true })`). Wrapped in
-  `@media (prefers-contrast: no-preference)` so high-contrast mode keeps borders. Not done: Ajna's
-  header-only navigation (no left sidebar); that is an app-shell change for every page.
+  `@media (prefers-contrast: no-preference)` so high-contrast mode keeps borders. Navigation is now a
+  top bar by default (layout `nav.placement`: `top` | `sidebar`, stamped on `<html data-nav>` by
+  the server so the shell never jumps; a layer without a placement inherits the one below).
+  Explorer copy no longer says "L2 · chain 27427".
 - Batch validity circuit: design and options in
   [`batch-validity-circuit.md`](./batch-validity-circuit.md). Recommendation: Noir/UltraHonk with
   recursive voter proofs (BN254-native, no per-circuit ceremony). Prototyping needs `nargo`/`bb`;

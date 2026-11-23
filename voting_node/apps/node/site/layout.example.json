@@ -2,6 +2,7 @@
   "branding": { "productName": "zk-voting" },
   "nav": {
     "managed": false,
+    "placement": "top",
     "items": [{ "id": "help", "label": "Help", "href": "/faq", "audience": "all" }],
     "hidden": []
   },

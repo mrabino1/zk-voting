@@ -26,7 +26,7 @@ export default {
       "HINDI PARA SA TUBO — pampublikong kabutihang sibil. Hindi komersyal na produkto. Walang token. Walang ad.",
     brandHome: "Home ng {brand}",
     brandSub: "Tanggapan ng mga sibil na halalan",
-    brandSubExplorer: "L2 block explorer",
+    brandSubExplorer: "Block explorer",
     navVoter: "Botante",
     navPrimary: "Pangunahin",
     navElections: "Mga halalan",

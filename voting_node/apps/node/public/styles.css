@@ -4118,3 +4118,66 @@ html[data-client-host="1"] .site-footer {
   color: var(--org);
   border-bottom: 2px solid var(--org);
 }
+
+/* Top navigation (layout nav.placement = "top", the default): on wide screens the header is a
+   bar across the top and the page is one centred column, as in grants.ajnafi.com. The sidebar
+   grid above applies when the layout sets nav.placement = "sidebar". */
+@media (min-width: 960px) {
+  html[data-nav="top"] body {
+    display: block;
+  }
+
+  html[data-nav="top"] .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--canvas);
+  }
+
+  html[data-nav="top"] .header-inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 76rem;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 0.6rem 3rem;
+    gap: 1.5rem;
+  }
+
+  html[data-nav="top"] .nav-main ul {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1rem;
+  }
+
+  html[data-nav="top"] .nav-main a {
+    width: auto;
+  }
+
+  html[data-nav="top"] .nav-section-label {
+    display: none;
+  }
+
+  html[data-nav="top"] .nav-main li:has(> a[href^="http"]) {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  html[data-nav="top"] .site-main {
+    max-width: 76rem;
+    margin-inline: auto;
+  }
+
+  html[data-nav="top"] .site-footer {
+    max-width: var(--page);
+    margin-inline: auto;
+  }
+}

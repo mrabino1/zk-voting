@@ -26,7 +26,7 @@ export default {
       "गैर-लाभकारी — नागरिक सार्वजनिक हित। वाणिज्यिक उत्पाद नहीं। कोई टोकन नहीं। कोई विज्ञापन नहीं।",
     brandHome: "{brand} होम",
     brandSub: "नागरिक चुनाव कार्यालय",
-    brandSubExplorer: "L2 ब्लॉक एक्सप्लोरर",
+    brandSubExplorer: "ब्लॉक एक्सप्लोरर",
     navVoter: "मतदाता",
     navPrimary: "मुख्य",
     navElections: "चुनाव",

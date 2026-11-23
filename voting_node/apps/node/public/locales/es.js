@@ -26,7 +26,7 @@ export default {
       "SIN FINES DE LUCRO — bien público cívico. No es un producto comercial. Sin token. Sin anuncios.",
     brandHome: "Inicio de {brand}",
     brandSub: "Oficina de elecciones cívicas",
-    brandSubExplorer: "Explorador de bloques L2",
+    brandSubExplorer: "Explorador de bloques",
     navVoter: "Votante",
     navPrimary: "Principal",
     navElections: "Elecciones",
