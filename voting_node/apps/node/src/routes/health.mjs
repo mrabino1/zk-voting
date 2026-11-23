@@ -194,7 +194,7 @@ export function configRouter(deps) {
         },
         mail: {
           webhookConfigured: Boolean(deps.config.mailWebhookUrl),
-          note: 'Role-promotion mail is queued on the Node. It is never written to civic L2 transactions.',
+          note: 'Role-promotion mail is queued on the Node. It is never written on chain.',
         },
         auth: {
           allowDevLogin: Boolean(deps.config.allowDevLogin),
