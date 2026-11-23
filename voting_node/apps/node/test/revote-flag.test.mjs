@@ -15,7 +15,7 @@ import { partialDecrypt } from '../src/guardians/threshold.mjs';
 import { HttpError } from '../src/http.mjs';
 import { createApp } from '../src/server.mjs';
 import { electionsDiag } from '../src/superAdmin/diagnostics.mjs';
-import { dropPassToBallotLinks, EXCLUSION_APPROVAL_TTL_SECONDS, Store } from '../src/store.mjs';
+import { dropPassToBallotLinks } from '../src/store.mjs';
 import {
   DEFAULT_TALLY_CHALLENGE_SECONDS,
   MIN_TALLY_CHALLENGE_SECONDS,
@@ -681,64 +681,6 @@ describe('ALLOW_REVOTE', () => {
       assert.equal(again.json.code, 'VOTE_PASS_SPENT');
     } finally {
       await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
-      await rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  test('an exclusion approval expires after 24 hours and shows the first reason', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'exclude-approval-'));
-    try {
-      const store = await Store.open({ dataDir: tmp, databaseUrl: '', quiet: true });
-      const id = '11111111-1111-4111-8111-111111111111';
-      store.data.elections.push({ id });
-      const nullifier = '0x' + 'ab'.repeat(32);
-      const at = 1_700_000_000;
-      const pending = await store.noteExclusionApproval(id, {
-        nullifier,
-        userId: 'operator-a',
-        reason: 'sealed batch reverted',
-        at,
-      });
-      assert.equal(pending.status, 'pending');
-      assert.equal(pending.reason, 'sealed batch reverted');
-      assert.equal(pending.reasonCode, 'excluded');
-      await assert.rejects(
-        () =>
-          store.noteExclusionApproval(id, {
-            nullifier,
-            userId: 'operator-a',
-            reason: 'again',
-            at: at + EXCLUSION_APPROVAL_TTL_SECONDS - 1,
-          }),
-        (err) => err instanceof HttpError && err.extra?.code === 'SAME_OPERATOR',
-      );
-      const expired = await store.noteExclusionApproval(id, {
-        nullifier,
-        userId: 'operator-a',
-        reason: 'fresh after a day',
-        at: at + EXCLUSION_APPROVAL_TTL_SECONDS,
-      });
-      assert.equal(expired.status, 'pending');
-      assert.equal(expired.reason, 'fresh after a day');
-      store.requireElection(id).exclusionApprovals[0].reasonCode = 'other';
-      const rebound = await store.noteExclusionApproval(id, {
-        nullifier,
-        userId: 'operator-b',
-        reason: 'tied to the public code',
-        at: at + EXCLUSION_APPROVAL_TTL_SECONDS + 5,
-      });
-      assert.equal(rebound.status, 'pending');
-      assert.equal(rebound.reasonCode, 'excluded');
-      const shown = await store.noteExclusionApproval(id, {
-        nullifier,
-        userId: 'operator-c',
-        reason: 'second note',
-        at: at + EXCLUSION_APPROVAL_TTL_SECONDS + 10,
-      });
-      assert.equal(shown.status, 'ready');
-      assert.equal(shown.reason, 'tied to the public code');
-      assert.equal(shown.reasonCode, 'excluded');
-    } finally {
       await rm(tmp, { recursive: true, force: true });
     }
   });

@@ -83,6 +83,16 @@ and document it.
   `explorer-ingest.test.mjs` and `rolling-handover.test.mjs`. Nothing calls it over HTTP now; remove
   it with those tests later.
 
+- Store: removed the uncalled chain-ballot and exclusion writers (`chainBallotPayload`,
+  `markChainBallotQueued`, `dropChainBallotPayloads`, `noteExclusionApproval`,
+  `recordBallotExclusion`, `setExclusionReleasePending`, `EXCLUSION_APPROVAL_TTL_SECONDS`) and their
+  test. Still there:
+  - the chain-vote-queue persistence (`chainVote*` collections, `applyChainVoteQueue`,
+    `loadChainQueueFromDisk`, `saveChainVoteQueue`, `queuePath` sidecar, both JSON and Postgres);
+  - `listPublicElections` filtering `l2OpenStatus`;
+  - the exclusion read helpers (`excludedNullifiers`, `liveExcludedCount`, `publicExclusion`),
+    which old records may still use.
+
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
 None of it is started. Suggested order:
