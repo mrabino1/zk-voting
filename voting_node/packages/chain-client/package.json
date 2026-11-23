@@ -2,22 +2,19 @@
   "name": "@zk-voting/chain-client",
   "version": "0.1.0",
   "private": true,
-  "description": "NOT FOR PROFIT — ElectionFactory / BallotInbox / L1TallyMirror client (viem or JSON-RPC eth_call).",
+  "description": "NOT FOR PROFIT \u2014 ABIs and helpers for the ZkVotingRollup L1 contract.",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./abi/*": "./abi/*"
   },
   "scripts": {
     "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=24.7"
-  },
-  "dependencies": {
-    "@zk-voting/proof-helpers": "0.1.0",
-    "@zk-voting/types": "0.1.0"
   },
   "peerDependencies": {
     "viem": ">=2.0.0"

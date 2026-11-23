@@ -21,7 +21,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-import { keccak256Hex, ZERO_HASH } from './sequencer/state.mjs';
+import { keccak256Hex } from '../apps/node/public/keccak.js';
+
+const ZERO_HASH = `0x${'0'.repeat(64)}`;
 
 const enc = new TextEncoder();
 

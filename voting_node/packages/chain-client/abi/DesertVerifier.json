@@ -1,0 +1,91 @@
+[
+  {
+    "type": "function",
+    "name": "emptyStateRoot",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "verifyElection",
+    "inputs": [
+      {
+        "name": "stateRoot",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "electionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "leaf",
+        "type": "tuple",
+        "internalType": "struct StateTree.ElectionLeaf",
+        "components": [
+          {
+            "name": "configHash",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "eligibleRoot",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "nullifierRoot",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "accumulatorHash",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "ballotCount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "status",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      },
+      {
+        "name": "accumulator",
+        "type": "uint256[4][]",
+        "internalType": "uint256[4][]"
+      },
+      {
+        "name": "siblings",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "error",
+    "name": "BadProofLength",
+    "inputs": []
+  }
+]

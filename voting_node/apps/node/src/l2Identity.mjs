@@ -10,8 +10,8 @@
 import { computeElectionKey, isUuid, resolveIdentity, resolveOperatorAddress } from '../../../l2/identity.mjs';
 import { normalizeElectionType } from './electionType.mjs';
 import { signAdminCivic } from '../../../l2/adminAuth.mjs';
-import { checkSubmitterFunding } from '../../../l2/prover/funding.mjs';
-import { keccak256Hex } from '../../../l2/sequencer/state.mjs';
+import { checkSubmitterFunding } from '../../../l2/funding.mjs';
+import { keccak256Hex } from '../public/keccak.js';
 
 /** Placeholder until the canonical mainnet addresses are published (README). */
 export const L1_ADDRESSES_TBD = 'l1-addresses-tbd';

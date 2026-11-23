@@ -31,7 +31,7 @@ import { normalizeCeremonyUrl, parseEntropyString } from '../../apps/node/src/en
 import { ADMIN_HANDLE_RE, CHAIN_ID_PRESETS, DEFAULT_CHAIN_ID, parseChainId } from '../../apps/node/src/setup.mjs';
 import { EntropyPool } from '../../apps/node/public/vendor/zk-entropy.js';
 import { isUuid, mintAdminSecret, mintSalt, mintUuid, resolveIdentity, resolveOperatorAddress } from '../../l2/identity.mjs';
-import { checkSubmitterFunding } from '../../l2/prover/funding.mjs';
+import { checkSubmitterFunding } from '../../l2/funding.mjs';
 import { parseEnvText, updateEnvText } from './envfile.mjs';
 
 const DEMO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

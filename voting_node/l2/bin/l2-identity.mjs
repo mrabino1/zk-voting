@@ -18,7 +18,7 @@ import {
   resolveIdentityAsync,
   resolveOperatorAddress,
 } from '../identity.mjs';
-import { checkSubmitterFunding } from '../prover/funding.mjs';
+import { checkSubmitterFunding } from '../funding.mjs';
 
 const [cmd, arg] = process.argv.slice(2);
 
