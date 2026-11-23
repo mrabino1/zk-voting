@@ -93,6 +93,15 @@ and document it.
   - the exclusion read helpers (`excludedNullifiers`, `liveExcludedCount`, `publicExclusion`),
     which old records may still use.
 
+- Locales: the `office` section of every `public/locales/*.js` is pruned to the 6 keys that
+  `back-office.html` uses (`electionType`, `typeLocked`, `typePoll`, `typePollHelp`, `typeVote`,
+  `typeVoteHelp`). `i18n.test.mjs` passes. Full node suite not re-run after this commit; run it first.
+- CSS: `styles.css` already uses tokens (544 `var(--…)`). The "duplicate selectors" are mostly
+  media-query and high-contrast overrides. Do not consolidate without a browser to compare
+  before and after.
+- **Resume at:** run the full node suite, then the voter-flow and back-office simplification
+  (items 2–3 below), the `onChainElectionId` rename (item 6), then phase 5 docs.
+
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 
 None of it is started. Suggested order:
@@ -108,7 +117,7 @@ None of it is started. Suggested order:
    Merge the old `opens_ballots` P-256 guardian forms (node-side polls) and the new "Civic vote on
    L1" panel into one clear flow. Hide the poll-only tally tools for votes.
 4. ~~Explorer~~ (done, see the progress log).
-5. **Locales.** The `office` section of `public/locales/*.js` is mostly unused (no `data-i18n`
+5. ~~Locales~~ (done). The `office` section of `public/locales/*.js` is mostly unused (no `data-i18n`
    points at it). Prune it in every locale together, because `test/i18n.test.mjs` requires the
    same keys in all of them.
 6. **`onChainElectionId`.** This is a historical name for the node's local sequence (the poll
