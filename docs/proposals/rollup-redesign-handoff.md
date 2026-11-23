@@ -97,8 +97,14 @@ pass, never which pass. The real fix is still the eligibility proof in the batch
 - CSS: `styles.css` already uses tokens (544 `var(--…)`). The "duplicate selectors" are mostly
   media-query and high-contrast overrides. Do not consolidate without a browser to compare
   before and after.
-- **Resume at:** run the full node suite, then the voter-flow and back-office simplification
-  (items 2–3 below), the `onChainElectionId` rename (item 6), then phase 5 docs.
+- Vote-pass poll book (`f2b27c6`): see "Decision taken".
+- Voter flow: `public/vote-flow.js` (`ballotPath`, `voteSteps`, `voteBlockers`, tested in
+  `test/vote-flow.test.mjs`). The ballot page shows a step bar (mark → PIN → passkey → receipt),
+  one "how this ballot is counted" notice (civic vote on L1, poll on this node, sample), and one
+  "Before you can cast" checklist instead of three separate warnings. A live ballot can no longer
+  be sent to a closed election after a confirm dialog; the button is disabled. Both submit paths
+  share `acceptReceipt`. CSS: `.vote-steps`, `.vote-path-*`, `.vote-blockers` at the end of
+  `styles.css`, tokens only. Not rendered in a browser.
 
 ## Next: phase 4 (UI/UX cleanup, requested by the user)
 

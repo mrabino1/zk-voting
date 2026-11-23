@@ -3912,3 +3912,64 @@ html[data-client-host="1"] .site-footer {
   color: #3e5166;
   opacity: 1;
 }
+
+/* Ballot page: the voter's steps and the path the ballot takes (vote-flow.js). */
+.vote-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  counter-reset: vote-step;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.vote-step {
+  counter-increment: vote-step;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.vote-step::before {
+  content: counter(vote-step);
+  font-weight: 700;
+}
+
+.vote-step.is-done::before {
+  content: "✓";
+  color: var(--ok);
+}
+
+.vote-step.is-current {
+  border-color: var(--focus);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.vote-path {
+  margin-bottom: 1rem;
+}
+
+.vote-path-civic {
+  border-inline-start: 3px solid var(--ok);
+}
+
+.vote-path-poll {
+  border-inline-start: 3px solid var(--warn);
+}
+
+.vote-blockers h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+
+.vote-blockers ol {
+  margin: 0 0 0.5rem;
+  padding-inline-start: 1.25rem;
+}
