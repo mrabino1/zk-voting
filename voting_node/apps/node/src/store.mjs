@@ -169,22 +169,6 @@ function emptyData() {
     votes: [],
     receipts: [],
     envelopes: [],
-    // Ballots waiting for the next BallotInbox batch. Proof points only.
-    // The JSON backend's live copy is chain-vote-queue.json; these fields are
-    // the copy a full persist writes, and the postgres collections.
-    chainVoteQueue: [],
-    chainVoteBatchAt: {},
-    chainVoteInFlight: {},
-    chainVoteDeadLetter: [],
-    chainVoteAttempts: {},
-    chainVoteBackoff: {},
-    chainVoteSplit: {},
-    chainVoteAlerts: [],
-    chainVoteTransportStrikes: {},
-    // Dead letters offered to the supplementary batch and not yet mined.
-    chainVoteSupplementary: [],
-    // Proof payload for a crash between accept and the queue write. Not a public row.
-    chainBallotPayloads: [],
     notifications: [],
     tallyGuardians: [],
     pages: [],
@@ -228,7 +212,7 @@ function normalizeLoadedData(parsed) {
   }
   data.site = { ...defaultSite(), ...(data.site || {}) };
   data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
-  delete data.heldChainBallots;
+  dropRetiredChainState(data);
   renameLocalElectionIds(data);
   ensureSuperAdminCollections(data);
   ensureSiteAdminCollections(data);
@@ -236,6 +220,43 @@ function normalizeLoadedData(parsed) {
   scrubBallotLinkage(data);
   migratePasskeyCoseAlgs(data);
   return data;
+}
+
+/** Keys the old per-election contracts used (ballot queue, inbox payloads, sequencer opens). */
+const RETIRED_STORE_KEYS = [
+  'heldChainBallots',
+  'chainVoteQueue',
+  'chainVoteBatchAt',
+  'chainVoteInFlight',
+  'chainVoteDeadLetter',
+  'chainVoteAttempts',
+  'chainVoteBackoff',
+  'chainVoteSplit',
+  'chainVoteAlerts',
+  'chainVoteTransportStrikes',
+  'chainVoteSupplementary',
+  'chainBallotPayloads',
+];
+
+/** Drop state nothing reads since the rollup redesign. Returns true when something went. */
+export function dropRetiredChainState(data) {
+  let changed = false;
+  for (const key of RETIRED_STORE_KEYS) {
+    if (key in data) {
+      delete data[key];
+      changed = true;
+    }
+  }
+  for (const election of data.elections || []) {
+    if (!election || typeof election !== 'object') continue;
+    for (const key of ['l2OpenStatus', 'l2OpenFingerprint']) {
+      if (key in election) {
+        delete election[key];
+        changed = true;
+      }
+    }
+  }
+  return changed;
 }
 
 /**
@@ -314,8 +335,6 @@ const ARRAY_COLLECTIONS = [
   'votes',
   'receipts',
   'envelopes',
-  'chainBallotPayloads',
-  'chainVoteAlerts',
   'notifications',
   'tallyGuardians',
   'pages',
@@ -360,65 +379,6 @@ function plainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Queue document. Rows are proof points; the chain layer owns the meaning. */
-export function normalizeChainVoteQueue(doc) {
-  const src = doc && typeof doc === 'object' ? doc : {};
-  const batchAt = {};
-  if (plainObject(src.batchAt)) {
-    for (const [id, at] of Object.entries(src.batchAt)) batchAt[id] = Number(at) || 0;
-  }
-  const inFlight = {};
-  if (plainObject(src.inFlight)) {
-    for (const [id, marker] of Object.entries(src.inFlight)) {
-      if (!plainObject(marker)) continue;
-      inFlight[id] = {
-        txHash: marker.txHash ? String(marker.txHash) : null,
-        nullifiers: Array.isArray(marker.nullifiers) ? marker.nullifiers.map((n) => String(n)) : [],
-        sentAt: Number(marker.sentAt) || 0,
-      };
-    }
-  }
-  const attempts = {};
-  if (plainObject(src.attempts)) {
-    for (const [id, n] of Object.entries(src.attempts)) {
-      const num = Number(n);
-      if (Number.isFinite(num) && num > 0) attempts[id] = Math.floor(num);
-    }
-  }
-  const backoffUntil = {};
-  if (plainObject(src.backoffUntil)) {
-    for (const [id, at] of Object.entries(src.backoffUntil)) {
-      const num = Number(at);
-      if (Number.isFinite(num) && num > 0) backoffUntil[id] = Math.floor(num);
-    }
-  }
-  const splitLimit = {};
-  if (plainObject(src.splitLimit)) {
-    for (const [id, n] of Object.entries(src.splitLimit)) {
-      const num = Number(n);
-      if (Number.isFinite(num) && num > 0) splitLimit[id] = Math.floor(num);
-    }
-  }
-  const transportStrikes = {};
-  if (plainObject(src.transportStrikes)) {
-    for (const [id, n] of Object.entries(src.transportStrikes)) {
-      const num = Number(n);
-      if (Number.isFinite(num) && num > 0) transportStrikes[id] = Math.floor(num);
-    }
-  }
-  return {
-    rows: Array.isArray(src.rows) ? src.rows : [],
-    batchAt,
-    inFlight,
-    deadLetter: Array.isArray(src.deadLetter) ? src.deadLetter.filter((item) => plainObject(item)) : [],
-    attempts,
-    backoffUntil,
-    splitLimit,
-    transportStrikes,
-    alerts: Array.isArray(src.alerts) ? src.alerts.filter((item) => plainObject(item)).slice(-20) : [],
-    supplementary: Array.isArray(src.supplementary) ? src.supplementary.filter((item) => plainObject(item)) : [],
-  };
-}
 
 function markPassLinksDirty(data) {
   Object.defineProperty(data, '__passLinksDirty', {
@@ -440,7 +400,7 @@ export function dropPassToBallotLinks(data) {
     delete data.votePassTags;
     dirty = true;
   }
-  for (const key of ['votes', 'receipts', 'envelopes', 'chainBallotPayloads']) {
+  for (const key of ['votes', 'receipts', 'envelopes']) {
     for (const row of data[key] || []) {
       if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'spentPassHash')) {
         delete row.spentPassHash;
@@ -501,29 +461,12 @@ export function publicExclusion(election) {
   };
 }
 
-function chainVoteQueueFromData(data) {
-  return normalizeChainVoteQueue({
-    rows: data?.chainVoteQueue,
-    batchAt: data?.chainVoteBatchAt,
-    inFlight: data?.chainVoteInFlight,
-    deadLetter: data?.chainVoteDeadLetter,
-    attempts: data?.chainVoteAttempts,
-    backoffUntil: data?.chainVoteBackoff,
-    splitLimit: data?.chainVoteSplit,
-    transportStrikes: data?.chainVoteTransportStrikes,
-    alerts: data?.chainVoteAlerts,
-    supplementary: data?.chainVoteSupplementary,
-  });
-}
 
 export class Store {
   constructor(filePath, data) {
     this.filePath = filePath;
-    this.queuePath = path.join(path.dirname(filePath), 'chain-vote-queue.json');
     this.data = data;
     this._write = Promise.resolve();
-    this._queueWrite = Promise.resolve();
-    this._chainQueue = chainVoteQueueFromData(data);
     /** 'json' (DATA_DIR file, dev fallback) or 'postgres' (DATABASE_URL). */
     this.backend = 'json';
     this.pg = null;
@@ -593,7 +536,6 @@ export class Store {
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), PASSKEY_SCHEMA_VERSION);
-    await store.loadChainQueueFromDisk();
     if (store.writerActive) {
       if (store.pg) await store.pg.claimWriter();
       await store.persist();
@@ -643,7 +585,6 @@ export class Store {
     this.data = data;
     this.ensureJurisdictionIds();
     this.rebuildAllEligibility();
-    await this.loadChainQueueFromDisk();
   }
 
   async persist() {
@@ -865,89 +806,13 @@ export class Store {
     return this.data.elections.slice();
   }
 
-  /** Public lists omit a row whose sequencer open has not finished. */
   listPublicElections() {
-    return this.listElections().filter((row) => row && !isSoftDeleted(row) && row.l2OpenStatus !== 'pending');
+    return this.listElections().filter((row) => row && !isSoftDeleted(row));
   }
 
-  applyChainVoteQueue(doc) {
-    const next = normalizeChainVoteQueue(doc);
-    this._chainQueue = next;
-    this.data.chainVoteQueue = next.rows;
-    this.data.chainVoteBatchAt = next.batchAt;
-    this.data.chainVoteInFlight = next.inFlight;
-    this.data.chainVoteDeadLetter = next.deadLetter;
-    this.data.chainVoteAttempts = next.attempts;
-    this.data.chainVoteBackoff = next.backoffUntil;
-    this.data.chainVoteSplit = next.splitLimit;
-    this.data.chainVoteAlerts = next.alerts;
-    this.data.chainVoteTransportStrikes = next.transportStrikes;
-    this.data.chainVoteSupplementary = next.supplementary;
-    return next;
-  }
 
-  /**
-   * JSON: chain-vote-queue.json wins over the embedded copy so a crash between
-   * a ballot and the next full persist still has the queue. Postgres keeps the
-   * queue in its own collections; the sidecar is not read there.
-   */
-  async loadChainQueueFromDisk() {
-    if (!this.pg) {
-      const sidecar = await readJsonFile(this.queuePath);
-      if (sidecar && typeof sidecar === 'object') {
-        this.applyChainVoteQueue(sidecar);
-        return this._chainQueue;
-      }
-    }
-    this.applyChainVoteQueue(chainVoteQueueFromData(this.data));
-    return this._chainQueue;
-  }
 
-  loadChainVoteQueue() {
-    return this._chainQueue || chainVoteQueueFromData(this.data);
-  }
 
-  /**
-   * Persist the ballot queue only. The JSON backend rewrites chain-vote-queue.json.
-   * Postgres writes the queue collections. Neither path rewrites the whole store.
-   */
-  async saveChainVoteQueue(doc) {
-    this.refuseIfStandby();
-    const next = this.applyChainVoteQueue(doc);
-    if (this.pg) {
-      await this.pg.saveCollections({
-        chainVoteQueue: next.rows,
-        chainVoteBatchAt: next.batchAt,
-        chainVoteInFlight: next.inFlight,
-        chainVoteDeadLetter: next.deadLetter,
-        chainVoteAttempts: next.attempts,
-        chainVoteBackoff: next.backoffUntil,
-        chainVoteSplit: next.splitLimit,
-        chainVoteAlerts: next.alerts,
-        chainVoteTransportStrikes: next.transportStrikes,
-        chainVoteSupplementary: next.supplementary,
-      });
-      return;
-    }
-    this._queueWrite = this._queueWrite.then(async () => {
-      const tmp = `${this.queuePath}.${process.pid}.tmp`;
-      const handle = await fs.open(tmp, 'w');
-      try {
-        await handle.writeFile(JSON.stringify(next));
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      await fs.rename(tmp, this.queuePath);
-      const dir = await fs.open(path.dirname(this.queuePath), 'r');
-      try {
-        await dir.sync();
-      } finally {
-        await dir.close();
-      }
-    });
-    return this._queueWrite;
-  }
 
   getUser(id) {
     const user = this.data.users.find((u) => u.id === id && !isSoftDeleted(u)) || null;
@@ -1704,38 +1569,13 @@ export class Store {
       createdBy: params.createdBy || null,
       createdAt: new Date().toISOString(),
       staff: [],
-      l2OpenStatus:
-        params.l2OpenStatus === 'pending' || params.l2OpenStatus === 'open'
-          ? params.l2OpenStatus
-          : 'unconfigured',
-      l2OpenFingerprint: params.l2OpenFingerprint || null,
     };
     this.data.elections.push(election);
     await this.persist();
     return election;
   }
 
-  /** A create whose sequencer open failed. A matching retry reuses this row. */
-  findPendingL2Open(fingerprint) {
-    const want = String(fingerprint || '');
-    if (!want) return null;
-    return (
-      (this.data.elections || []).find(
-        (row) =>
-          row &&
-          !isSoftDeleted(row) &&
-          row.l2OpenStatus === 'pending' &&
-          String(row.l2OpenFingerprint || '') === want,
-      ) || null
-    );
-  }
 
-  async setL2OpenStatus(id, status) {
-    const election = this.requireElection(id);
-    election.l2OpenStatus = status;
-    await this.persist();
-    return election;
-  }
 
   /**
    * Update ballot title / questions / metadata URI before the roll is frozen.
@@ -2591,9 +2431,6 @@ export class Store {
       relayer: vote.relayer || 'node',
       acceptedAt,
     };
-    if (vote.chainPayload && typeof vote.chainPayload === 'object') {
-      this.upsertChainBallotPayload(record.electionId, record.nullifier, vote.chainPayload);
-    }
     // Each collection gets its own random insert position, so array order (and
     // the zkv_rows `pos` column) is not arrival order and the three rows of
     // one ballot do not share an index. No userOpHash, no email fields.
@@ -2736,9 +2573,6 @@ export class Store {
         env.tallyRankingId = newRankingId();
       }
     }
-    if (vote.chainPayload && typeof vote.chainPayload === 'object') {
-      this.upsertChainBallotPayload(electionId, nullifier, vote.chainPayload);
-    }
     if (vote.receiptTokenHash) {
       let pdfSha256 = null;
       if (vote.pdfSha256) {
@@ -2791,9 +2625,6 @@ export class Store {
       const list = this.data.votePassSpent?.[electionKey];
       if (Array.isArray(list)) this.data.votePassSpent[electionKey] = list.filter((item) => item !== hash);
     }
-    this.data.chainBallotPayloads = (this.data.chainBallotPayloads || []).filter(
-      (row) => !row || String(row.electionId) !== electionKey || toBytes32(row.nullifier) !== key,
-    );
     const election = this.getElection(electionId);
     if (election) election.acceptedBallots = Math.max(0, Number(election.acceptedBallots || 0) - removed);
     // resultsGateOpenedAt stays set. Dropping acceptedBallots must not close the gate.
@@ -2801,24 +2632,6 @@ export class Store {
     return true;
   }
 
-  upsertChainBallotPayload(electionId, nullifier, payload) {
-    if (!Array.isArray(this.data.chainBallotPayloads)) this.data.chainBallotPayloads = [];
-    const electionKey = String(electionId);
-    const id = toBytes32(nullifier);
-    let row = this.data.chainBallotPayloads.find(
-      (item) => item && String(item.electionId) === electionKey && toBytes32(item.nullifier) === id,
-    );
-    if (!row) {
-      row = { electionId: electionKey, nullifier: id };
-      insertAtRandom(this.data.chainBallotPayloads, row);
-    }
-    row.proof = payload.proof;
-    row.publicInputs = payload.publicInputs;
-    row.encryptedBallot = payload.encryptedBallot;
-    row.startTime = payload.startTime ?? 0;
-    row.cutoffTime = payload.cutoffTime ?? null;
-    return row;
-  }
 
 
 

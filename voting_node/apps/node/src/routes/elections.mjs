@@ -1052,15 +1052,6 @@ export function electionsRouter(deps) {
       if (now < tallyAllowedAt(election, config.tallyChallengeSeconds)) {
         throw new HttpError(400, 'election still open', { code: 'NOT_CLOSED', state });
       }
-      const pendingReleases = (store.requireElection(election.id).excludedBallots || []).filter(
-        (row) => row && row.releasePending === true,
-      ).length;
-      if (pendingReleases) {
-        throw new HttpError(409, 'an excluded ballot is still waiting to leave the hold list', {
-          code: 'EXCLUSION_RELEASE_PENDING',
-          pending: pendingReleases,
-        });
-      }
       let nums;
       let source = 'sum_only';
       let openedBallots = null;

@@ -1,11 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Append-only L2 log. Vote proofs stay sealed until the hour that contained them
+// Append-only explorer log (polls and Node events). Vote proofs stay sealed until the hour that contained them
 // has closed, the disclosure delay has elapsed, and the block meets the floor.
 // Turnout follows that clock from the first ballot. Choice rows stay on their
 // own rule. Ready rows land in one disclosure block (disclosure-clock
 // timestamp, ordered by nullifier). Payloads never include a voter choice or a passkey user id.
 
-import { createHash, randomInt } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -14,75 +14,18 @@ import { keccak256, stringToHex } from 'viem';
 import {
   publicDisclosureView,
   hourBucket,
-  isDelayedPublicType,
   isDisclosed,
   planPublicBlocks,
 } from './disclosure.mjs';
 import { PgDocument, migrate, recordImport, usingPostgres } from './db.mjs';
 
-const CHOICE_FIELD_KEYS = new Set([
-  'counts',
-  'countshash',
-  'resulthash',
-  'winners',
-  'winner',
-  'openedballots',
-  'choice',
-  'plaintext',
-  'ranking',
-  'rankingpayload',
-]);
-
-function isChoiceDisclosure(type, payload) {
-  const name = String(type || '').toLowerCase();
-  if (name === 'tally' || name === 'l1_certify') return true;
-  if (!payload || typeof payload !== 'object') return false;
-  return Object.keys(payload).some((key) => CHOICE_FIELD_KEYS.has(String(key).toLowerCase()));
-}
-
-function withoutChoiceFields(payload) {
-  if (!payload || typeof payload !== 'object') return payload;
-  const out = {};
-  for (const [key, value] of Object.entries(payload)) {
-    if (CHOICE_FIELD_KEYS.has(String(key).toLowerCase())) continue;
-    out[key] = value;
-  }
-  return out;
-}
-
-/** Vote rows follow the same hourly import as a poll. An unknown election fails closed. */
 function pollIdOf(payload) {
   if (!payload || typeof payload !== 'object') return '';
   const id = payload.pollId ?? payload.electionId;
   return id != null ? String(id) : '';
 }
 
-function voteImportBlocked(explorer, payload) {
-  const policy = explorer.disclosurePolicySnapshot();
-  const id = pollIdOf(payload);
-  const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
-  return ctx.known === false;
-}
 
-/**
- * Choice rows stay out of the explorer until the block timestamp is at the
- * deadline. The node clock is not the seal: a late node must not drop a
- * block the chain already released. Unknown elections fail closed.
- */
-function choiceRowBlocked(explorer, type, payload, at) {
-  if (!isChoiceDisclosure(type, payload)) return false;
-  const policy = explorer.disclosurePolicySnapshot();
-  const id = pollIdOf(payload);
-  const ctx = typeof policy.electionContext === 'function' ? policy.electionContext(id) || {} : {};
-  if (ctx.known === false) return true;
-  if (ctx.vote === true) {
-    const end = Number(ctx.endTime);
-    const when = Number(at);
-    if (!Number.isFinite(end) || !Number.isFinite(when)) return true;
-    return when < end;
-  }
-  return Boolean(ctx.resultsSealed);
-}
 
 function emptyChain(chainId) {
   return {
@@ -94,10 +37,6 @@ function emptyChain(chainId) {
     txs: {},
     sealed: [],
     sealedPolls: [],
-    seenBlockHashes: [],
-    ingestedTxHashes: [],
-    ingestedTxByBlock: {},
-    ingestedOutcomeKeys: [],
     // Not part of a block hash. Maps an earlier poll row hash to the later one.
     supersededBy: {},
     // Not part of a block hash. Source L2 height, sequence, or postedAt per tx.
@@ -183,24 +122,12 @@ function compareSource(a, b) {
   return null;
 }
 
-function sharesSequence(a, b) {
-  return a?.sequence != null && b?.sequence != null && a.sequence === b.sequence;
-}
 
 /** True only when next is strictly newer. An unknown order never replaces a latest row. */
 function pollCandidateWins(next, prev) {
   const cmp = compareSource(next.order, prev.order);
   if (cmp == null) return false;
   return cmp > 0;
-}
-
-/** Stable id for a row that arrived without a transaction hash. */
-function ingestKey(type, payload, blockHash, index) {
-  const listed = payload && payload.hash != null ? String(payload.hash).trim().toLowerCase() : '';
-  if (listed && listed !== 'undefined') return listed;
-  const block = blockHash ? String(blockHash).toLowerCase() : '';
-  const tail = block && index != null ? `${index}|${stable(payload)}` : stable(payload);
-  return createHash('sha256').update(`${type}|${block}|${tail}`).digest('hex');
 }
 
 function votePayload(payload) {
@@ -234,12 +161,11 @@ function normalizeChain(chain, chainId) {
   chain.txs = chain.txs || {};
   chain.sealed = Array.isArray(chain.sealed) ? chain.sealed : [];
   chain.sealedPolls = Array.isArray(chain.sealedPolls) ? chain.sealedPolls : [];
-  chain.seenBlockHashes = Array.isArray(chain.seenBlockHashes) ? chain.seenBlockHashes : [];
-  chain.ingestedTxHashes = Array.isArray(chain.ingestedTxHashes) ? chain.ingestedTxHashes : [];
-  if (!chain.ingestedTxByBlock || typeof chain.ingestedTxByBlock !== 'object' || Array.isArray(chain.ingestedTxByBlock)) {
-    chain.ingestedTxByBlock = {};
-  }
-  chain.ingestedOutcomeKeys = Array.isArray(chain.ingestedOutcomeKeys) ? chain.ingestedOutcomeKeys : [];
+  // Left by the removed L2 → explorer ingest; nothing reads them now.
+  delete chain.seenBlockHashes;
+  delete chain.ingestedTxHashes;
+  delete chain.ingestedTxByBlock;
+  delete chain.ingestedOutcomeKeys;
   if (!chain.supersededBy || typeof chain.supersededBy !== 'object' || Array.isArray(chain.supersededBy)) {
     chain.supersededBy = {};
   }
@@ -566,194 +492,9 @@ export class Explorer {
     return published;
   }
 
-  async ingest(body, now, intervalSeconds) {
-    if (this.writerActive === false) {
-      const err = new Error('maintenance handover');
-      err.status = 503;
-      throw err;
-    }
-    const src = body && typeof body === 'object' ? body : {};
-    const block = src.block && typeof src.block === 'object' ? src.block : null;
-    const outcomes = src.outcomes && typeof src.outcomes === 'object' ? src.outcomes : {};
-    await this.refresh();
-    this.chain.seenBlockHashes = Array.isArray(this.chain.seenBlockHashes) ? this.chain.seenBlockHashes : [];
-    this.chain.ingestedTxHashes = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
-    const blockHash = block && block.hash ? String(block.hash).toLowerCase() : '';
-    if (blockHash && this.chain.seenBlockHashes.some((h) => String(h).toLowerCase() === blockHash)) {
-      return { ok: true, imported: 0, duplicate: true };
-    }
-    let imported = 0;
 
-    const fromOutcomes = [];
-    for (const [type, rows] of Object.entries(outcomes)) {
-      if (!Array.isArray(rows)) continue;
-      for (const row of rows) {
-        fromOutcomes.push({ type: String(type).toLowerCase(), payload: row });
-      }
-    }
-    const fromBlock = [];
-    const rawTxs = block ? block.transactions || block.txs || [] : [];
-    for (const tx of rawTxs) {
-      if (!tx || typeof tx === 'string') continue;
-      const civic = tx.civic || tx.payload || {};
-      const type = String(tx.civicType || civic.type || tx.type || '').toLowerCase();
-      fromBlock.push({ type, payload: { ...civic, ...tx.payload, hash: tx.hash } });
-    }
 
-    const rows = fromOutcomes.length ? fromOutcomes : fromBlock;
-    const l2Delayed = src.source === 'zk-voting-l2';
-    const blockTs = block?.timestamp != null ? Number(block.timestamp) : now;
-    let skipped = 0;
-    this.loadIngestedTxs();
 
-    for (let index = 0; index < rows.length; index += 1) {
-      const row = rows[index];
-      const type = String(row.type || '').toLowerCase();
-      if (!type) continue;
-      const payload = row.payload || row;
-      const rowIndex = row.index == null ? index : row.index;
-      if (choiceRowBlocked(this, type, payload, blockTs)) {
-        skipped += 1;
-        continue;
-      }
-      if ((type === 'vote' || type === 'vote_superseded') && l2Delayed && voteImportBlocked(this, payload)) {
-        skipped += 1;
-        continue;
-      }
-      if (type === 'vote' || type === 'vote_superseded') {
-        row.payload = withoutChoiceFields(payload);
-      }
-      if (type === 'poll_vote' || type === 'poll_params' || type === 'poll_tally') {
-        const body = row.payload || row;
-        let order = null;
-        if (type === 'poll_params' || type === 'poll_tally') {
-          // Source order first, so a late copy of an earlier row is not appended.
-          order = sourceOrderOf(body, block, rowIndex);
-          const pollId = body?.pollId ?? body?.electionId;
-          const id = pollId != null ? String(pollId) : '';
-          const cmp = this.compareWithLatest(type, body, order);
-          if (cmp === 0 && type === 'poll_tally' && id && !this.storedPayload(type, body)) {
-            const latest = this.latestPollRecord(type, id);
-            await this.noteAlert({ kind: 'poll_tally_conflict', pollId: id, hash: latest?.hash || '' });
-            this.noteIngestedTx(type, body, blockHash, rowIndex);
-            continue;
-          }
-          if (type === 'poll_params' && id && !this.storedPayload(type, body)) {
-            const latest = this.latestPollRecord(type, id);
-            const latestOrder = latest
-              ? this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0)
-              : null;
-            if (sharesSequence(order, latestOrder)) {
-              await this.noteAlert({ kind: 'poll_params_conflict', pollId: id, hash: latest?.hash || '' });
-              if (!(cmp > 0)) {
-                this.noteIngestedTx(type, body, blockHash, rowIndex);
-                continue;
-              }
-            }
-          }
-          if (this.olderThanLatestPoll(type, body, order)) {
-            this.noteIngestedTx(type, body, blockHash, rowIndex);
-            continue;
-          }
-        }
-        // A, then B, then A: the final A matches a stored payload and is older than B.
-        // Source order already ran, so this fallback cannot make that older A the latest.
-        if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
-        if (type === 'poll_vote' && !l2Delayed) {
-          await this.recordPollVote(body, now, intervalSeconds);
-        } else if (type === 'poll_params' || type === 'poll_tally') {
-          const pollId = body?.pollId ?? body?.electionId;
-          const id = pollId != null ? String(pollId) : '';
-          const previous = id ? this.latestPollRecord(type, id) : null;
-          const appended = await this.append(type, body, { timestamp: blockTs || now });
-          const hash = appended?.tx?.hash;
-          if (hash) {
-            this.noteSource(hash, order);
-            this.noteTrackedTx(type, body, hash, { number: Number(appended.block?.number), index: 0 });
-          }
-          const latestOrder = previous
-            ? this.chain.sourceOrder?.[previous.hash] || sourceOrderOf(this.chain.txs?.[previous.hash]?.payload, null, 0)
-            : null;
-          const ranked = compareSource(order, latestOrder);
-          if (previous?.hash && hash && ranked == null) {
-            await this.noteAlert({ kind: 'poll_order_unknown', pollId: id, hash });
-          } else if (previous?.hash && hash && previous.hash !== hash && ranked > 0) {
-            this.noteSuperseded(previous.hash, hash);
-          }
-        } else {
-          await this.append(type, body, { timestamp: blockTs || now });
-        }
-        this.noteIngestedTx(type, body, blockHash, rowIndex);
-        imported += 1;
-      } else if (isDelayedPublicType(type) || type === 'vote_superseded') {
-        const body = votePayload(row.payload);
-        if (!body.nullifier) continue;
-        if (this.findByNullifier(body.nullifier) || this.sealedHasNullifier(body.nullifier)) continue;
-        if (l2Delayed) {
-          await this.append('vote', body, { timestamp: blockTs || now });
-          imported += 1;
-        } else {
-          await this.recordVote(body, now, intervalSeconds);
-          imported += 1;
-        }
-      } else if (type && type !== 'userop') {
-        const body = row.payload || row;
-        if (this.txAlreadyIngested(type, body, blockHash, rowIndex)) continue;
-        await this.append(type, body);
-        this.noteIngestedTx(type, body, blockHash, rowIndex);
-        imported += 1;
-      }
-    }
-    if (blockHash && skipped === 0) {
-      this.pruneIngestedBlock(blockHash);
-      if (!this.chain.seenBlockHashes.some((item) => String(item).toLowerCase() === blockHash)) {
-        this.chain.seenBlockHashes.push(blockHash);
-      }
-    }
-    await this.flushIngestedTxs();
-    await this.disclose(now, intervalSeconds);
-    return { ok: true, imported, duplicate: false };
-  }
-
-  loadIngestedTxs() {
-    const list = Array.isArray(this.chain.ingestedTxHashes) ? this.chain.ingestedTxHashes : [];
-    this._ingestedTxs = new Set(list.map((item) => String(item).toLowerCase()));
-    this._ingestedByBlock = new Map();
-    this._outcomeKeys = [];
-    const owners = this.chain.ingestedTxByBlock;
-    if (owners && typeof owners === 'object' && !Array.isArray(owners)) {
-      for (const [block, keys] of Object.entries(owners)) {
-        if (!Array.isArray(keys)) continue;
-        const bucket = new Set();
-        for (const key of keys) {
-          const clean = String(key).toLowerCase();
-          if (this._ingestedTxs.has(clean)) bucket.add(clean);
-        }
-        if (bucket.size) this._ingestedByBlock.set(String(block).toLowerCase(), bucket);
-      }
-    }
-    const savedOutcomes = Array.isArray(this.chain.ingestedOutcomeKeys) ? this.chain.ingestedOutcomeKeys : [];
-    for (const key of savedOutcomes) {
-      const clean = String(key).toLowerCase();
-      if (clean && this._ingestedTxs.has(clean)) this._outcomeKeys.push(clean);
-    }
-    this.trimOutcomeKeys();
-    this.indexStoredPayloads();
-  }
-
-  txAlreadyIngested(type, payload, blockHash, index) {
-    const key = ingestKey(type, payload, blockHash, index);
-    if (!key) return false;
-    if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
-    if (this._ingestedTxs.has(key)) return true;
-    return this.storedPayload(type, payload);
-  }
-
-  /** True when this type and canonical payload are already in the chain log. */
-  storedPayload(type, payload) {
-    if (!(this._payloadIndex instanceof Map)) this.indexStoredPayloads();
-    return this._payloadIndex.has(payloadIndexKey(type, payload));
-  }
 
   /**
    * type|stable(payload) → earliest tx hash, plus the latest poll row per id.
@@ -816,28 +557,7 @@ export class Explorer {
     }
   }
 
-  /** Ids only. This stays off the block hash. */
-  async noteAlert(alert) {
-    const row = {
-      kind: alert?.kind != null ? String(alert.kind) : 'poll_order_unknown',
-      pollId: alert?.pollId != null ? String(alert.pollId) : '',
-      hash: alert?.hash != null ? String(alert.hash) : '',
-    };
-    if (!Array.isArray(this.chain.alerts)) this.chain.alerts = [];
-    this.chain.alerts.push(row);
-    if (this.chain.alerts.length > 20) this.chain.alerts.splice(0, this.chain.alerts.length - 20);
-  }
 
-  /** Side index only. Block and transaction hashes do not cover this map. */
-  noteSuperseded(oldHash, newHash) {
-    if (!this.chain.supersededBy || typeof this.chain.supersededBy !== 'object' || Array.isArray(this.chain.supersededBy)) {
-      this.chain.supersededBy = {};
-    }
-    const from = String(oldHash || '');
-    const to = String(newHash || '');
-    if (!from || !to || from === to) return;
-    this.chain.supersededBy[from] = to;
-  }
 
   /** Side index only. Source order is not part of the block hash. */
   noteSource(hash, order) {
@@ -848,12 +568,6 @@ export class Explorer {
     this.chain.sourceOrder[String(hash)] = order;
   }
 
-  blockPosition(hash) {
-    const want = String(hash || '');
-    if (!want) return null;
-    if (!(this._txAt instanceof Map)) this.indexStoredPayloads();
-    return this._txAt.get(want) || null;
-  }
 
   /**
    * Latest poll_params or poll_tally for one poll. Tally order is closeBlock.
@@ -871,143 +585,13 @@ export class Explorer {
     return this.chain.txs?.[hit.hash] || null;
   }
 
-  /**
-   * True when this row's source order is not strictly newer than the latest
-   * stored row for that poll. Appending it would make the older row win.
-   */
-  olderThanLatestPoll(type, payload, order) {
-    const name = String(type || '').toLowerCase();
-    if (name !== 'poll_params' && name !== 'poll_tally') return false;
-    const id = payload?.pollId ?? payload?.electionId;
-    if (id == null || id === '') return false;
-    const latest = this.latestPollRecord(name, id);
-    if (!latest) return false;
-    const latestOrder =
-      this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0);
-    const cmp = compareSource(order, latestOrder);
-    if (cmp == null) return false;
-    return cmp <= 0;
-  }
 
-  /** Null when there is no latest row or the orders cannot be compared. */
-  compareWithLatest(type, payload, order) {
-    const name = String(type || '').toLowerCase();
-    if (name !== 'poll_params' && name !== 'poll_tally') return null;
-    const id = payload?.pollId ?? payload?.electionId;
-    if (id == null || id === '') return null;
-    const latest = this.latestPollRecord(name, id);
-    if (!latest) return null;
-    const latestOrder =
-      this.chain.sourceOrder?.[latest.hash] || sourceOrderOf(this.chain.txs?.[latest.hash]?.payload, null, 0);
-    return compareSource(order, latestOrder);
-  }
 
-  /** Recompute every published block and transaction hash. */
-  verifyBlockHashes() {
-    let parent = this.chain.genesisHash;
-    for (const block of this.chain.blocks || []) {
-      if (block.parentHash !== parent) return false;
-      const hashes = Array.isArray(block.transactions) ? block.transactions : [];
-      if (hashes.length !== Number(block.txCount)) return false;
-      for (let index = 0; index < hashes.length; index += 1) {
-        const listed = hashes[index];
-        const tx = this.chain.txs[listed];
-        if (!tx) return false;
-        const body = {
-          type: tx.type,
-          payload: tx.payload,
-          number: block.number,
-          timestamp: block.timestamp,
-          parentHash: block.parentHash,
-          index,
-        };
-        const hash = keccak256(stringToHex(stable(body)));
-        if (hash !== listed || hash !== tx.hash) return false;
-      }
-      const blockHash = keccak256(
-        stringToHex(
-          stable({
-            number: block.number,
-            parentHash: block.parentHash,
-            timestamp: block.timestamp,
-            transactions: hashes,
-          }),
-        ),
-      );
-      if (blockHash !== block.hash) return false;
-      parent = block.hash;
-    }
-    return true;
-  }
 
-  noteIngestedTx(type, payload, blockHash, index) {
-    const key = ingestKey(type, payload, blockHash, index);
-    if (!key) return;
-    if (!(this._ingestedTxs instanceof Set)) this.loadIngestedTxs();
-    this._ingestedTxs.add(key);
-    const block = blockHash ? String(blockHash).toLowerCase() : '';
-    if (!block) {
-      this.noteOutcomeKey(key);
-      return;
-    }
-    let bucket = this._ingestedByBlock.get(block);
-    if (!bucket) {
-      bucket = new Set();
-      this._ingestedByBlock.set(block, bucket);
-    }
-    bucket.add(key);
-  }
 
-  noteOutcomeKey(key) {
-    if (!Array.isArray(this._outcomeKeys)) this._outcomeKeys = [];
-    const existing = this._outcomeKeys.indexOf(key);
-    if (existing !== -1) this._outcomeKeys.splice(existing, 1);
-    this._outcomeKeys.push(key);
-    this.trimOutcomeKeys();
-  }
 
-  trimOutcomeKeys() {
-    if (!Array.isArray(this._outcomeKeys)) this._outcomeKeys = [];
-    const buckets = this._ingestedByBlock instanceof Map ? this._ingestedByBlock : new Map();
-    while (this._outcomeKeys.length > OUTCOMES_ONLY_KEY_CAP) {
-      const dropped = this._outcomeKeys.shift();
-      let still = false;
-      for (const other of buckets.values()) {
-        if (other.has(dropped)) {
-          still = true;
-          break;
-        }
-      }
-      if (!still && this._ingestedTxs instanceof Set) this._ingestedTxs.delete(dropped);
-    }
-  }
 
-  pruneIngestedBlock(blockHash) {
-    const block = String(blockHash || '').toLowerCase();
-    const bucket = this._ingestedByBlock?.get(block);
-    if (!bucket) return;
-    this._ingestedByBlock.delete(block);
-    for (const key of bucket) {
-      let still = false;
-      for (const other of this._ingestedByBlock.values()) {
-        if (other.has(key)) {
-          still = true;
-          break;
-        }
-      }
-      if (!still) this._ingestedTxs.delete(key);
-    }
-  }
 
-  async flushIngestedTxs() {
-    if (!(this._ingestedTxs instanceof Set)) return;
-    this.chain.ingestedTxHashes = [...this._ingestedTxs];
-    this.chain.ingestedOutcomeKeys = [...(this._outcomeKeys || [])];
-    const owners = {};
-    for (const [block, keys] of this._ingestedByBlock) owners[block] = [...keys];
-    this.chain.ingestedTxByBlock = owners;
-    await this.persist();
-  }
 
   presentTx(tx) {
     if (!tx) return null;

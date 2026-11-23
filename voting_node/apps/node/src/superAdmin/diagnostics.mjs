@@ -156,7 +156,6 @@ function electionMeta(election, now, store) {
     tallied: sealed ? false : Boolean(election.tally),
     excludedCount: publicExclusion(election).count,
     excludedReasons: publicExclusion(election).reasons,
-    pendingReleases: (election.excludedBallots || []).filter((row) => row && row.releasePending === true).length,
   };
 }
 

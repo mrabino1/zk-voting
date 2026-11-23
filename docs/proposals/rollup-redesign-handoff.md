@@ -228,17 +228,17 @@ These still describe the old stack: root `README.md`, `voting_node/README.md`, `
 
 ## Other follow-ups
 
-- **Store.** `store.mjs` still carries the old chain vote queue and exclusion machinery, which
-  nothing reaches any more: `chainVoteDeadLetter` / `chainVoteSupplementary`,
-  `exclusionApprovals`, `excludedBallots.releasePending`, and the `pendingReleases` check in
-  `POST /:id/tally` and diagnostics. Remove it with the remaining revote-flag tests that use it.
-  Decide whether polls keep `TALLY_CHALLENGE_SECONDS` (`supplementaryBatch.mjs`).
+- **Store and explorer cleanup (done).** Removed `Explorer.ingest()` and its helpers and test,
+  the chain vote queue (`chainVote*`, `chain-vote-queue.json`), `chainBallotPayloads`, the
+  `l2OpenStatus` pending-open machinery, and the `EXCLUSION_RELEASE_PENDING` tally check (nothing
+  could clear it any more). `dropRetiredChainState` deletes those keys from stored data on load.
+  Kept: the `excludedBallots` readers, for older records. Still open: whether polls keep
+  `TALLY_CHALLENGE_SECONDS`.
 - **Auditor tools.** `tools/auditor/export.mjs` and `cli.mjs` read the old ElectionFactory over RPC.
   Rewrite them for ZkVotingRollup.
 - **Terms of Use.** `apps/node/legal/terms.md` still mentions a paymaster and an L1 tally mirror.
   Editing it changes the Terms hash and re-prompts every user, so it was left for the user.
 - **Batch interval.** Decide a public-chain default for `L2_BATCH_SECONDS` (see the gas finding).
-- **`Explorer.ingest()`** and its tests (`explorer-ingest`, `rolling-handover`) can go.
 - **Operator updates.** The L2 operator has no writer lease, so there is no overlap update for it.
   Recreate the container instead; the node answers 503 while it is down, and voters retry.
 - **`l1-deploy` network.** It compiles the contracts on each fresh deploy, so it needs network once,

@@ -382,7 +382,6 @@ describe('ALLOW_REVOTE', () => {
         votes: created.store.listVotes(id),
         receipts: created.store.data.receipts,
         envelopes: created.store.listEnvelopes(id),
-        payloads: created.store.data.chainBallotPayloads,
       });
       for (const row of created.store.listVotes(id)) {
         assert.equal(Object.hasOwn(row, 'spentPassHash'), false);
@@ -685,7 +684,7 @@ describe('ALLOW_REVOTE', () => {
     }
   });
 
-  test('diagnostics list pending exclusion releases', () => {
+  test('diagnostics count excluded ballots from older records', () => {
     const store = {
       data: {
         elections: [
@@ -711,7 +710,6 @@ describe('ALLOW_REVOTE', () => {
     };
     const diag = electionsDiag(store, 10);
     const row = diag.elections[0];
-    assert.equal(row.pendingReleases, 1);
     assert.equal(row.excludedCount, 2);
   });
 

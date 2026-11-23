@@ -399,3 +399,21 @@ describe('localElectionId rename', () => {
     assert.equal(renameLocalElectionIds(data), false);
   });
 });
+
+describe('retired chain state', () => {
+  test('load drops the old ballot queue, inbox payloads and sequencer-open fields', async () => {
+    const { dropRetiredChainState } = await import('../src/store.mjs');
+    const data = {
+      chainVoteQueue: [{ n: 1 }],
+      chainVoteDeadLetter: [],
+      chainBallotPayloads: [{ nullifier: '0x01' }],
+      heldChainBallots: [],
+      votes: [{ nullifier: '0x01' }],
+      elections: [{ id: 'a', l2OpenStatus: 'pending', l2OpenFingerprint: 'f' }, { id: 'b' }],
+    };
+    assert.equal(dropRetiredChainState(data), true);
+    assert.deepEqual(Object.keys(data).sort(), ['elections', 'votes']);
+    assert.deepEqual(data.elections, [{ id: 'a' }, { id: 'b' }]);
+    assert.equal(dropRetiredChainState(data), false);
+  });
+});
