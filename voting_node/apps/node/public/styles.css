@@ -3974,6 +3974,10 @@ html[data-client-host="1"] .site-footer {
   margin: 0 0 0.4rem;
 }
 
+.notice.vote-blockers > h2:first-child {
+  margin-top: 0;
+}
+
 .vote-blockers ol {
   margin: 0 0 0.5rem;
   padding-inline-start: 1.25rem;

@@ -530,3 +530,13 @@ textarea.builder-body {
 .poll-guardians {
   margin-bottom: 1rem;
 }
+
+/* `hidden` must win over the display rules of .field-hint and friends. */
+#tally [hidden] {
+  display: none !important;
+}
+
+#form-ru-prepare,
+#form-ru-guardian {
+  margin-bottom: 1rem;
+}

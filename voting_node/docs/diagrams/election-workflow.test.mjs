@@ -17,19 +17,21 @@ const readmePath = join(root, 'README.md');
 const privacyPath = join(root, 'docs', 'how_voters_privacy_is_protected.md');
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const REQUIRED_PHRASES = [
+  'publish',
   'register',
-  'freeze',
   'vote',
   'nullifier',
-  'relayer',
-  'hourly disclosure',
-  'tally',
+  'guardians',
+  'encrypted sum',
+  'withheld',
   'results',
+  'polls',
   'zk-voting node',
-  'zk-voting l2',
+  'l2 operator',
   'ethereum l1',
+  'zkvotingrollup',
   'identity is not the ballot',
-];
+]
 
 describe('election workflow diagram artifacts', () => {
   test('mermaid source exists and names the lifecycle, layers, and identity split', () => {
@@ -51,7 +53,7 @@ describe('election workflow diagram artifacts', () => {
   });
 
   test('README and privacy brief embed the PNG', () => {
-    const embed = 'docs/images/election-workflow.png';
+    const embed = "images/election-workflow.png";
     const readme = readFileSync(readmePath, 'utf8');
     const privacy = readFileSync(privacyPath, 'utf8');
     assert.ok(readme.includes(embed), 'README.md does not embed the workflow PNG');

@@ -207,7 +207,7 @@ The Node builds the same chain with `keccak-dev-v1`; the circuit builds it with 
 3. `prf.eval` **identity** salt → HKDF → `(identityTrapdoor, nullifierSecret)`.
    Separate domain from the account key ([`PASSKEYS.md`](./PASSKEYS.md)).
 4. Signing: get account PRF, unwrap seed, HMAC-sign, immediately drop plaintext
-   from memory. **Today** this is not a secp256k1 UserOp signature.
+   from memory. **Today** this is not a secp256k1 signature.
 5. Fallback if PRF is unavailable: still create the passkey for login, and
    keep an encrypted key wrapped with a key derived from the assertion
    signature (documented as weaker). Never display a mnemonic. Never use

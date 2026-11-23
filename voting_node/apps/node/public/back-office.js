@@ -960,14 +960,13 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
-    const chain = pick(row, ["localElectionId"]);
     const short = pick(row, ["shortCode"]);
     const id = electionIdOf(row);
     const ref = short ? short : String(id).slice(0, 8);
     const nq = pick(row, ["questionCount"]) || (Array.isArray(row.questions) ? row.questions.length : "");
     const qbit = nq ? " · " + nq + " q" : "";
-    const chainBit = chain ? " · chain #" + chain : "";
-    return title + " · " + ref + chainBit + (state ? " · " + state : "") + qbit;
+    const kind = isCivicVoteRow(row) ? " · civic vote" : " · poll";
+    return title + " · " + ref + kind + (state ? " · " + state : "") + qbit;
   }
 
   function markRole(el, ok) {

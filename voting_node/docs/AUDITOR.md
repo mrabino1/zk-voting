@@ -4,7 +4,13 @@
 
 This pack lets an observer, losing candidate, or court **export public election artifacts** and **verify tally / uniqueness invariants offline** without the Node’s private database (`apps/node/data/zk-voting.json`). The Node is allowed to be down. Canonical truth is the chain; the Node may publish a convenience JSON pack of already-public fields.
 
-This is the roadmap auditor slice (item 10). It does **not** replace a Groth16 ceremony or Poseidon hasher.
+> **Out of date for civic votes.** The `export-chain` path reads the pre-rollup contracts
+> (`ElectionFactory`, `VoteAccepted` logs) and has not been rewritten for ZkVotingRollup. Until it
+> is, verify a civic result from ZkVotingRollup's events (the guardians' decryption shares and
+> `finalizeResult`) and `GET /api/elections/:id/rollup`. The `export-node` and `verify` paths still
+> check poll packs.
+
+It does **not** replace a trusted-setup ceremony.
 
 ---
 
@@ -72,7 +78,7 @@ GET /api/outcomes/:id
 6. Receipts cannot prove choice (`coercion.receiptsProveChoice === false` when the field is present). If `coercion.policy` is present it must be `one-ballot-per-nullifier`.
 7. `startTime < cutoffTime`; NFP label; schema id. Contract addresses are included when known (chain export / configured Node); Node-only demo packs may omit them and still check uniqueness and tally.
 
-The inbox rejects a second `submitVote` (`NullifierUsed`). The Node keeps one current `ballotHash` per nullifier, the latest. Double voting remains impossible. Auditors do not see a previous hash or a marker that ties two ballots together.
+The Node rejects a second ballot for a nullifier (`NULLIFIER_USED`) unless re-vote is enabled for a poll, and keeps one current `ballotHash` per nullifier. Double voting remains impossible. Auditors do not see a previous hash or a marker that ties two ballots together.
 
 ---
 

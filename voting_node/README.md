@@ -111,6 +111,9 @@ The creator of each contest picks one:
 | Token weighting | No | ERC-20 token polls (`POLLS_ENABLED`) |
 | Privacy | Strongest this stack offers | Weaker, and the app labels it so |
 
+![ZK-Voting civic vote workflow: identity is not the ballot; publish, register, vote, close, decrypt the sum, results; Node, L2 operator and Ethereum L1](./docs/images/election-workflow.png)
+
+Diagram source: [`docs/diagrams/election-workflow.mmd`](./docs/diagrams/election-workflow.mmd) (`npm run docs:workflow`).
 Design of the civic path: [`smart-contracts/docs/ROLLUP.md`](../smart-contracts/docs/ROLLUP.md).
 Polls: [`docs/POLLS.md`](./docs/POLLS.md).
 
