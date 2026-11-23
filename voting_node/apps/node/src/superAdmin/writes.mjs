@@ -13,10 +13,8 @@ import { isRole } from '../roles.mjs';
 import { HttpError } from '../http.mjs';
 import { resolveFeedbackRateWindow } from '../config.mjs';
 import { LOG_LEVELS, setLogLevel, getLogLevel } from './logs.mjs';
-import { loadArchiveConfig } from '../../../../l2/archive/config.mjs';
-import { runArchiveJob } from '../../../../l2/archive/job.mjs';
 
-const CONFIG_ALLOW = new Set(['feedbackRateWindowSeconds', 'logLevel', 'archiveEnabled']);
+const CONFIG_ALLOW = new Set(['feedbackRateWindowSeconds', 'logLevel']);
 
 export function dryRunRequested(req) {
   const query = String(req.query?.dryRun || '');
@@ -39,7 +37,6 @@ function windowSummary(config) {
   return {
     feedbackRateWindowSeconds: config.feedbackRateWindowSeconds,
     logLevel: config.logLevel || getLogLevel(),
-    archiveEnabled: config.archiveEnabled !== false,
   };
 }
 
@@ -64,16 +61,9 @@ export async function writeConfig(deps, body, { dryRun }) {
     }
     next.logLevel = name;
   }
-  if (body.archiveEnabled != null) {
-    if (typeof body.archiveEnabled !== 'boolean') {
-      throw new HttpError(400, 'archiveEnabled must be a boolean', { code: 'CONFIG_REJECTED' });
-    }
-    next.archiveEnabled = body.archiveEnabled;
-  }
   if (!dryRun) {
     config.feedbackRateWindowSeconds = next.feedbackRateWindowSeconds;
     config.logLevel = next.logLevel;
-    config.archiveEnabled = next.archiveEnabled;
     setLogLevel(next.logLevel);
     deps.store.data.runtime = deps.store.data.runtime || {};
     Object.assign(deps.store.data.runtime, next);
@@ -329,11 +319,10 @@ function blockDigests(dataDir) {
 
 export async function writeL2(deps, action, { dryRun }) {
   const name = String(action || '').trim().toLowerCase();
-  if (!['archive', 'verify', 'heartbeat'].includes(name)) {
-    throw new HttpError(400, 'action must be archive, verify, or heartbeat', { code: 'L2_ACTION' });
+  if (!['verify', 'heartbeat'].includes(name)) {
+    throw new HttpError(400, 'action must be verify or heartbeat', { code: 'L2_ACTION' });
   }
   const before = {
-    archiveEnabled: deps.config.archiveEnabled !== false,
     mode: deps.writer?.mode?.() || 'active',
     hashCheck: deps.store.data.runtime?.lastArchiveHashCheck?.status || 'not-run',
   };
@@ -388,51 +377,7 @@ export async function writeL2(deps, action, { dryRun }) {
       after: summary,
     };
   }
-  const env = {
-    ARCHIVE_ENABLED: deps.config.archiveEnabled === false ? '0' : '1',
-    ARCHIVE_S3_BUCKET: '',
-    ARCHIVE_S3_ENDPOINT: '',
-    ARCHIVE_S3_ACCESS_KEY_ID: '',
-    ARCHIVE_S3_SECRET_ACCESS_KEY: '',
-    ARCHIVE_EXPLORER_SNAPSHOT: '0',
-  };
-  if (dryRun) {
-    const after = { action: 'archive', wouldRun: env.ARCHIVE_ENABLED === '1', chainSealed: false };
-    return {
-      status: 200,
-      body: { ok: true, nfp: true, dryRun: true, applied: false, ...after },
-      before,
-      after,
-    };
-  }
-  let result;
-  try {
-    result = await runArchiveJob({
-      env,
-      l2Config: {
-        dataDir: deps.config.dataDir,
-        chainId: deps.config.chainId,
-        disclosureIntervalSeconds: deps.config.disclosureIntervalSeconds,
-      },
-      skipWriterLease: false,
-    });
-  } catch {
-    throw new HttpError(502, 'archive job failed', { code: 'ARCHIVE_FAILED' });
-  }
-  const after = {
-    action: 'archive',
-    ok: Boolean(result?.ok),
-    skipped: Boolean(result?.skipped),
-    reason: result?.reason ? String(result.reason).slice(0, 180) : null,
-    hourCount: Array.isArray(result?.hours) ? result.hours.length : 0,
-    chainSealed: false,
-  };
-  return {
-    status: 200,
-    body: { ok: true, nfp: true, dryRun: false, applied: true, ...after },
-    before,
-    after,
-  };
+  throw new HttpError(400, 'unknown action', { code: 'L2_ACTION' });
 }
 
 export async function writeLogLevel(deps, body, { dryRun }) {

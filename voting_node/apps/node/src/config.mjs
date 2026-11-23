@@ -410,6 +410,19 @@ export function getConfig(overrides = {}) {
     origins: authority.origins,
     adminHandle: process.env.ADMIN_HANDLE || 'admin',
     chainRpc: process.env.CHAIN_RPC || '',
+    // ZkVotingRollup (smart-contracts/docs/ROLLUP.md). Civic votes run there; polls stay here.
+    // NODE_ENV=test connects only when a test passes `overrides.rollup`.
+    rollup: overrides.rollup ?? (isTest
+      ? null
+      : {
+          l1Rpc: process.env.L1_RPC || process.env.L1_RPC_URL || '',
+          chainId: Number(process.env.L1_CHAIN_ID || 31337),
+          address: process.env.ROLLUP_ADDRESS || '',
+          privateKey: process.env.ROLLUP_PRIVATE_KEY || '',
+          jurisdictionId: process.env.ROLLUP_JURISDICTION_ID || '',
+          l2Url: process.env.L2_URL || 'http://l2:8546',
+          l2Token: process.env.L2_BALLOT_TOKEN || '',
+        }),
     rankedBatchGas: process.env.RANKED_BATCH_GAS || '',
     ballotInboxAddress: process.env.BALLOT_INBOX_ADDRESS || '',
     electionFactoryAddress: process.env.ELECTION_FACTORY_ADDRESS || process.env.FACTORY || '',

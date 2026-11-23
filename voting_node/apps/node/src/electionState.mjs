@@ -13,27 +13,6 @@ import {
   voteResultsSealed,
 } from './electionType.mjs';
 
-/** Writer-only clock for BallotInbox batches. Reads do not flush. */
-export function startVoteFlushTimer(deps, { intervalMs = 60_000, setIntervalFn = setInterval } = {}) {
-  if (typeof deps.chain?.flushVoteQueue !== 'function') return { stop() {} };
-  const timer = setIntervalFn(async () => {
-    const writer = deps.writer;
-    if (writer && writer.enabled !== false && !writer.acceptingWrites()) return;
-    if (deps.store?.writerActive === false) return;
-    const now = deps.config.nowFn();
-    try {
-      await deps.chain.flushVoteQueue(now);
-    } catch (err) {
-      if (!deps.config?.quiet) console.warn(`chain batch flush failed: ${err.message || err}`);
-    }
-  }, intervalMs);
-  if (typeof timer.unref === 'function') timer.unref();
-  return {
-    stop() {
-      clearInterval(timer);
-    },
-  };
-}
 
 export const STATE_NAMES = ['Created', 'RollFrozen', 'Open', 'Closed', 'Tallied'];
 
@@ -46,9 +25,9 @@ export function electionState(election, now = Math.floor(Date.now() / 1000)) {
 }
 
 /** Demo still allocates a uint256 circuit id; onchain means factory mapping exists. */
+/** `rollup` once a civic vote is on L1 (ZkVotingRollup); `node` for everything else. */
 export function electionChainMode(election) {
-  if (election?.createTxHash || election?.onChainElectionAddress) return 'onchain';
-  return 'demo';
+  return election?.rollup?.electionId ? 'rollup' : 'node';
 }
 
 /**

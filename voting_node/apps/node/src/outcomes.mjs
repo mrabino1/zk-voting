@@ -6,7 +6,7 @@
 
 import { brandName } from './branding.mjs';
 import { presentAspects } from './ballot.mjs';
-import { publicIdFields, publicIdMatchesScope, l1IdentityOf } from './electionIds.mjs';
+import { publicIdFields, publicIdMatchesScope } from './electionIds.mjs';
 import {
   STATE_NAMES,
   electionChainMode,
@@ -78,23 +78,6 @@ function checkBag() {
   return { errors, checks, check };
 }
 
-function l1IsPosted(l1) {
-  if (!l1 || typeof l1 !== 'object') return false;
-  return Boolean(
-    l1.posted ||
-      l1.alreadyPosted ||
-      l1.status === 'posted' ||
-      l1.status === 'already_posted',
-  );
-}
-
-function l1StatusOf(election) {
-  if (!election?.tally) return null;
-  const l1 = election.tally.l1;
-  if (!l1) return 'not_posted';
-  return l1.status || (l1IsPosted(l1) ? 'posted' : l1.skipped ? 'skipped' : 'unknown');
-}
-
 /**
  * Chain-clock and freeze/L1 invariants for the outcomes monitor.
  * Independent of the auditor pack (unique nullifiers / tally sum).
@@ -131,21 +114,11 @@ export function verifyChainStatus(election, deps, now, state, phase) {
   }
 
   const mode = electionChainMode(election);
-  const onchainEvidence = Boolean(election.createTxHash || election.onChainElectionAddress);
   check(
-    'chainModeConsistent',
-    (mode === 'onchain') === onchainEvidence,
-    'chainMode must match createTxHash / onChainElectionAddress',
+    'rollupModeConsistent',
+    (mode === 'rollup') === Boolean(election.rollup?.electionId),
+    'chainMode rollup must match a published rollup election id',
   );
-  if (mode === 'onchain') {
-    check(
-      'onChainElectionId',
-      election.onChainElectionId != null && String(election.onChainElectionId) !== '',
-      'on-chain contests need onChainElectionId',
-    );
-  } else {
-    checks.onChainElectionId = true;
-  }
 
   if (election.rollFrozen && !election.lateUpdateAllowed) {
     check(
@@ -164,19 +137,6 @@ export function verifyChainStatus(election, deps, now, state, phase) {
     checks.frozenDisqualificationRoot = true;
   }
 
-  const l1 = election.tally?.l1 || null;
-  const countsHash = election.tally?.countsHash || null;
-  if (l1IsPosted(l1)) {
-    check(
-      'l1HashMatchesTally',
-      Boolean(l1.resultHash) && Boolean(countsHash) && hexEq(l1.resultHash, countsHash),
-      'L1 resultHash must match the posted tally countsHash',
-    );
-  } else {
-    checks.l1HashMatchesTally = true;
-  }
-
-  const identity = l1IdentityOf(election, deps.config || {});
   const pinned = String(deps.config?.electionFactoryAddress || '').trim();
   const scope = {
     factoryAddress: election.factoryAddress || pinned || null,
@@ -191,58 +151,19 @@ export function verifyChainStatus(election, deps, now, state, phase) {
     'public UUID must be bound to factory, on-chain id, and jurisdiction (a copied UUID fails)',
   );
 
-  if (l1IsPosted(l1)) {
-    check(
-      'l1CertificationIdMatches',
-      !l1.certificationId || hexEq(l1.certificationId, identity.certificationId),
-      'L1 certificationId must be keccak(factory, electionId, jurisdictionId), not the public UUID',
-    );
-    check(
-      'l1PublicIdHashMatches',
-      !l1.publicIdHash || hexEq(l1.publicIdHash, identity.publicIdHash),
-      'L1 publicIdHash must match this contest’s UUID',
-    );
-    const postedFactory = l1.factory || identity.factory;
-    if (pinned) {
-      check(
-        'l1FactoryMatchesPinned',
-        Boolean(postedFactory) &&
-          String(postedFactory).toLowerCase() === String(pinned).toLowerCase(),
-        'on-chain factory must be the pinned shared ElectionFactory',
-      );
-    } else {
-      checks.l1FactoryMatchesPinned = true;
-    }
-  } else {
-    checks.l1CertificationIdMatches = true;
-    checks.l1PublicIdHashMatches = true;
-    checks.l1FactoryMatchesPinned = true;
-  }
-
   return { ok: errors.length === 0, errors, checks };
 }
 
 function chainStatusView(election, deps) {
-  const mode = electionChainMode(election);
-  const l1 = election.tally?.l1 || null;
   return {
-    mode,
-    chainId: election.chainId ?? deps.config.chainId ?? null,
-    configured: Boolean(deps.chain?.isConfigured?.()),
-    l1Configured: Boolean(deps.l1?.isConfigured?.()),
-    l1SkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
-    createTxHash: election.createTxHash || null,
-    onChainElectionAddress: election.onChainElectionAddress || null,
-    factoryAddress: election.factoryAddress || deps.config.electionFactoryAddress || null,
-    onChainElectionId: election.onChainElectionId != null ? String(election.onChainElectionId) : null,
-    l1Status: l1StatusOf(election),
-    l1Posted: l1IsPosted(l1),
-    l1TxHash: l1?.txHash || null,
-    l1ResultHash: l1?.resultHash || null,
-    certificationId: l1?.certificationId || null,
-    publicIdHash: l1?.publicIdHash || null,
-    l1Factory: l1?.factory || election.factoryAddress || deps.config.electionFactoryAddress || null,
-    l1JurisdictionId: l1?.jurisdictionId || null,
+    mode: electionChainMode(election),
+    rollup: election.rollup?.electionId
+      ? {
+          electionId: election.rollup.electionId,
+          address: deps.rollup?.client?.address || null,
+          chainId: deps.rollup?.client?.chainId || null,
+        }
+      : null,
   };
 }
 
@@ -344,7 +265,7 @@ export function presentOutcomeSummary(election, deps, opts = {}) {
     eligibleCount:
       typeof election.eligibleCount === 'number' ? election.eligibleCount : election.participantCount,
     verificationOk: verification.ok,
-    l1Status: l1StatusOf(election),
+    onRollup: Boolean(election.rollup?.electionId),
     officialReport: official
       ? {
           id: official.id,

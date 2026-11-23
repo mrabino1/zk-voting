@@ -40,9 +40,7 @@ export function healthRouter(deps) {
       product: 'zk-voting',
       voteFqdn: deps.config.voteFqdn || null,
       sharedDeployment: true,
-      electionFactoryAddress: contracts.factory || '',
-      chainConfigured: deps.chain.isConfigured(),
-      l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
+      rollupConfigured: Boolean(deps.rollup?.enabled),
       disclosure: publicDisclosureView(now, deps.config.disclosureIntervalSeconds, {
         delaySeconds: deps.config.disclosureDelaySeconds,
         resultsMinVotes: deps.config.resultsMinVotes,
@@ -60,9 +58,6 @@ export function configRouter(deps) {
     '/config',
     asyncHandler(async (_req, res) => {
       const now = deps.config.nowFn();
-      const chainConfigured = deps.chain.isConfigured();
-      const factoryReady =
-        typeof deps.chain.isFactoryReady === 'function' ? deps.chain.isFactoryReady() : false;
       const contracts = mergePublicContracts(deps.config, deps.store?.getSite?.());
       res.json({
         nfp: true,
@@ -91,24 +86,15 @@ export function configRouter(deps) {
           readOnly: true,
         },
         origins: deps.config.origins,
-        chainConfigured,
         sharedDeployment: true,
         sharedDeploymentNote: SHARED_DEPLOYMENT_NOTE,
-        electionFactoryAddress: contracts.factory || '',
-        factoryReady,
-        chain: {
-          configured: chainConfigured,
-          factoryAddress: contracts.factory || '',
-          factoryReady,
-          voteReady: deps.chain.isReady(),
-          note: chainConfigured
-            ? 'POST /api/elections calls the one shared ElectionFactory. Fork the Node UI; do not deploy a new factory per jurisdiction. JSON-only demo is disabled while CHAIN_RPC is set. Factory failures return 502/503 to the clerk.'
-            : 'CHAIN_RPC unset. POST /api/elections writes zk-voting.json only (demo). Pin the shared factory on /office/site when you connect a chain.',
-        },
-        addresses: {
-          factory: contracts.factory || null,
-          ballotInbox: contracts.ballotInbox || null,
-          verifier: contracts.verifier || null,
+        rollup: {
+          configured: Boolean(deps.rollup?.enabled),
+          address: deps.rollup?.client?.address || null,
+          chainId: deps.rollup?.client?.chainId || null,
+          note: deps.rollup?.enabled
+            ? 'Civic votes settle on ZkVotingRollup, the one L1 contract. Results are decrypted only as the final sum and certified on L1. Polls stay on this node.'
+            : 'No rollup connection (ROLLUP_ADDRESS, L1_RPC). Polls work; civic votes cannot be published until the node is connected.',
         },
         contracts,
         allowRevote: deps.config.allowRevote === true,
@@ -153,8 +139,6 @@ export function configRouter(deps) {
           },
           note: 'Public monitor of every election, grouped before / during / after voting from chain and election state. Runs the auditor pack plus freeze-root and L1 checks. Final tally option counts appear only after a tally. Excluded ballots are not counted. Separate from /receipt and from unofficial horse-race totals.',
         },
-        l1CertificationConfigured: Boolean(deps.l1?.isConfigured?.()),
-        l1CertificationSkipReason: deps.l1?.isConfigured?.() ? null : deps.l1?.skipReason?.() || 'L1 env unset',
         disclosure: publicDisclosureView(now, deps.config.disclosureIntervalSeconds, {
           delaySeconds: deps.config.disclosureDelaySeconds,
           resultsMinVotes: deps.config.resultsMinVotes,

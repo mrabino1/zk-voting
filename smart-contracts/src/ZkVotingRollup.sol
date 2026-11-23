@@ -548,6 +548,18 @@ contract ZkVotingRollup is IZkVotingRollup {
         return (c.cx[index], c.cy[index]);
     }
 
+    /// @notice The `D = s · c1` points guardian `index` posted, one per option (empty before).
+    ///         With the accumulator they let anyone compute the totals `finalizeResult` checks.
+    function decryptionShares(uint32 electionId, uint8 index) external view returns (uint256[2][] memory out) {
+        Guardians.Committee storage c = _committees[electionId];
+        if (c.sharesPosted & (uint32(1) << index) == 0) return out;
+        uint256 options = _accumulators[electionId].length;
+        out = new uint256[2][](options);
+        for (uint256 o; o < options; ++o) {
+            out[o] = c.share[index][o];
+        }
+    }
+
     /// @notice Guardian `index`'s public decryption key `PK = s · G`.
     function guardianPublicShare(uint32 electionId, uint8 index) external view returns (uint256 x, uint256 y) {
         return Guardians.publicShare(_committees[electionId], index);

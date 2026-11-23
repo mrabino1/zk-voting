@@ -465,6 +465,30 @@
   },
   {
     "type": "function",
+    "name": "decryptionShares",
+    "inputs": [
+      {
+        "name": "electionId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "index",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out",
+        "type": "uint256[2][]",
+        "internalType": "uint256[2][]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "desertClose",
     "inputs": [
       {

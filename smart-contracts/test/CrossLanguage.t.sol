@@ -43,12 +43,10 @@ contract CrossLanguageTest is RollupTest {
 
         // JS commitments, proofs of knowledge and identity signatures, relayed by anyone.
         for (uint256 i; i < 3; ++i) {
-            Guardians.Schnorr memory pok = Guardians.Schnorr(
-                _u(_key(i, "pok.rX")), _u(_key(i, "pok.rY")), _u(_key(i, "pok.z"))
-            );
-            Guardians.Schnorr memory auth = Guardians.Schnorr(
-                _u(_key(i, "auth.rX")), _u(_key(i, "auth.rY")), _u(_key(i, "auth.z"))
-            );
+            Guardians.Schnorr memory pok =
+                Guardians.Schnorr(_u(_key(i, "pok.rX")), _u(_key(i, "pok.rY")), _u(_key(i, "pok.z")));
+            Guardians.Schnorr memory auth =
+                Guardians.Schnorr(_u(_key(i, "auth.rX")), _u(_key(i, "auth.rY")), _u(_key(i, "auth.z")));
             vm.prank(relayer);
             rollup.commitGuardian(
                 electionId,
@@ -76,10 +74,7 @@ contract CrossLanguageTest is RollupTest {
             pubdata = bytes.concat(
                 pubdata,
                 abi.encodePacked(
-                    Ops.BALLOT,
-                    electionId,
-                    _u(string.concat(b, ".nullifier")),
-                    _u(string.concat(b, ".commitment"))
+                    Ops.BALLOT, electionId, _u(string.concat(b, ".nullifier")), _u(string.concat(b, ".commitment"))
                 )
             );
         }

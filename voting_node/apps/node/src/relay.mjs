@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// A poll and a vote are both relayed to BallotInbox when CHAIN_RPC is set.
-// The interval batch is the same for both. Never writes passkey user id onto a ballot.
+// Off-chain ballots on this node: polls (and votes not on the rollup). Civic votes on the
+// rollup go through src/rollup/service.mjs instead. Never writes passkey user id onto a ballot.
 // The vote body is the relay envelope only. Identity, wallet, and plaintext
 // choice keys are stripped before this function reads the body. Per-leaf
 // exclusion is not decided from the POST (that would require the leaf).
@@ -12,7 +12,6 @@ import { keccak256, toHex } from 'viem';
 
 import proofHelpers from '@zk-voting/proof-helpers';
 
-import { ALLOW_REVOTE_CHAIN_CONFIGURED } from './config.mjs';
 import { HttpError, sanitizeVoteBody, stripBallotPii } from './http.mjs';
 import { isUnsafeObjectKey } from './safeKeys.mjs';
 import { chainElectionId, electionMatchesRef } from './electionIds.mjs';
@@ -32,37 +31,6 @@ import { isRankingEnvelope, parseRankingEnvelope, rankingEnvelopeBytes, rankingH
 import { sealedRankingAllowed } from './rankedTally.mjs';
 
 const { PUBLIC_INPUT_KEYS, publicInputsToHex } = proofHelpers;
-
-/** One repair attempt per nullifier per minute, or per disclosure interval. */
-const REPAIR_COOLDOWN_SECONDS = 60;
-const repairAttemptAt = new Map();
-
-/**
- * Drop marks whose cooldown has elapsed, and every mark for one election
- * once that election is tallied. The map stores the expiry time.
- */
-export function expireRepairAttempts(now, electionId = null) {
-  const at = Number(now) || Math.floor(Date.now() / 1000);
-  const prefix = electionId == null ? null : `${String(electionId)}:`;
-  for (const [key, until] of repairAttemptAt) {
-    if (prefix && key.startsWith(prefix)) {
-      repairAttemptAt.delete(key);
-      continue;
-    }
-    if ((Number(until) || 0) <= at) repairAttemptAt.delete(key);
-  }
-}
-
-function repairAllowed(electionId, nullifier, now, intervalSeconds) {
-  const key = `${String(electionId)}:${String(nullifier)}`;
-  const cooldown = Math.max(REPAIR_COOLDOWN_SECONDS, Number(intervalSeconds) || 0);
-  const at = Number(now) || 0;
-  expireRepairAttempts(at);
-  const until = repairAttemptAt.get(key) || 0;
-  if (until > at) return false;
-  repairAttemptAt.set(key, at + cooldown);
-  return true;
-}
 
 /** Vote circuit / BallotInbox instance: [eligibleRoot, disqRoot, nullifier, ballotHash, electionId]. */
 export const VOTE_PUBLIC_INPUT_COUNT = PUBLIC_INPUT_KEYS.length;
@@ -297,7 +265,7 @@ export async function sealedRankingFromBody(election, body) {
   return { rankingEnvelope, rankingHash: await rankingHash(rankingEnvelope) };
 }
 
-export async function relayVote({ store, explorer, chain, electionId, body, now, intervalSeconds, config, spentPassHash = null }) {
+export async function relayVote({ store, explorer, electionId, body, now, intervalSeconds, config, spentPassHash = null }) {
   const election = store.requireElection(electionId);
   const envelope = sanitizeVoteBody(body);
   const parsed = parseVoteBody(envelope, election);
@@ -334,7 +302,6 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       );
     }
   }
-  const chainConfigured = Boolean(chain?.isConfigured?.());
   const onChainId = chainElectionId(election);
 
   const bound = assertBoundRoots(election, parsed, store);
@@ -346,85 +313,15 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     electionId: onChainId,
   });
 
-  // A second proof is rejected unless allowRevote is on. That flag stays
-  // off until the inbox can store the latest ballot. A replacement is not
-  // submitted again and does not rewrite a published block.
-  // The spent-nullifier check runs before the proof so a replay does not
-  // pay for verification, and so a mined proof cannot be re-queued.
+  // A second ballot under the same nullifier is refused unless allowRevote is on.
+  // The spent-nullifier check runs before the proof so a replay does not pay for verification.
   const already = store.findVote(election.id, parsed.nullifier);
   const replacing = Boolean(already) && config?.allowRevote === true;
-  if (replacing && chainConfigured) {
-    // TODO(#113): remove this refusal once the inbox contracts accept a replacement ballot.
-    throw new HttpError(503, ALLOW_REVOTE_CHAIN_CONFIGURED, { code: 'ALLOW_REVOTE_CHAIN_CONFIGURED' });
-  }
   if (already && !replacing) {
-    // Repair only a stored ballot the queue and the chain have both forgotten.
-    // A ballot already marked queued is left alone. Repairs are rate-limited.
-    // Anything queued, in flight, spent, or already recorded is a 409.
-    const payload = typeof store.chainBallotPayload === 'function'
-      ? store.chainBallotPayload(election.id, parsed.nullifier)
-      : null;
-    const markedQueued = Boolean(payload?.chainQueuedAt || payload?.chainTxHash);
-    if (
-      !markedQueued
-      && payload
-      && chainConfigured
-      && interval > 0
-      && typeof chain.nullifierChainState === 'function'
-      && repairAllowed(election.id, parsed.nullifier, ts, interval)
-    ) {
-      const state = await chain.nullifierChainState(onChainId, parsed.nullifier);
-      const absent = state
-        && !state.queued
-        && !state.inFlight
-        && !state.spent
-        && !state.chainRecord
-        && !state.deadLetter
-        && state.spentKnown !== false;
-      if (absent && payload) {
-        try {
-          await chain.submitVote({
-            electionId: onChainId,
-            proof: payload.proof,
-            publicInputs: payload.publicInputs,
-            encryptedBallot: payload.encryptedBallot,
-            ...(payload.rankingHash ? { rankingHash: payload.rankingHash } : {}),
-            startTime: payload.startTime,
-            cutoffTime: payload.cutoffTime,
-            now: ts,
-          });
-          if (typeof store.markChainBallotQueued === 'function') {
-            await store.markChainBallotQueued(election.id, parsed.nullifier, ts);
-          }
-        } catch (err) {
-          if (!(config || {}).quiet) {
-            console.warn(`[zk-voting] could not queue an already accepted ballot: ${err.message || err}`);
-          }
-        }
-      }
-    }
     throw new HttpError(409, 'nullifier already used', { code: 'NULLIFIER_USED' });
   }
 
   await assertVoteProof({ proof: parsed.proof, publicSignals: publicInputs, config });
-
-  const chainBallot = {
-    electionId: onChainId,
-    proof: parsed.proof,
-    publicInputs,
-    encryptedBallot: parsed.encryptedBallot,
-    ...(sealedRanking?.rankingHash ? { rankingHash: sealedRanking.rankingHash } : {}),
-    startTime: election.startTime,
-    cutoffTime: election.cutoffTime,
-    now: ts,
-  };
-
-  // Interval 0 is one transaction, not a durable queue. It has to succeed
-  // before the node records the ballot. A positive interval records first
-  // and enqueues after, so a ballot the node rejects is not left on the queue.
-  if (chainConfigured && interval <= 0 && !replacing) {
-    await chain.submitVote(chainBallot);
-  }
 
   const holder = mintHolderToken();
   // No userOpHash: the passkey wallet's hash is bound to the smart-account
@@ -455,18 +352,6 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     spentPassHash,
     pdfSha256: artifact.pdfSha256,
     pdfIntegrity: artifact.integrity,
-    ...(chainConfigured && interval > 0
-      ? {
-          chainPayload: {
-            proof: parsed.proof,
-            publicInputs,
-            encryptedBallot: parsed.encryptedBallot,
-            ...(sealedRanking?.rankingHash ? { rankingHash: sealedRanking.rankingHash } : {}),
-            startTime: election.startTime,
-            cutoffTime: election.cutoffTime,
-          },
-        }
-      : {}),
   };
   const storedEnvelope = { encryptedBallot: parsed.encryptedBallot, ...(sealedRanking || {}) };
   const vote = replacing
@@ -474,7 +359,6 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
     : await store.acceptVote(storedBallot, storedEnvelope);
 
   let recorded = null;
-  let addedToQueue = false;
   try {
     if (!replacing) recorded = await explorer.recordVote(
       {
@@ -486,39 +370,8 @@ export async function relayVote({ store, explorer, chain, electionId, body, now,
       acceptedAt,
       interval,
     );
-    if (!replacing && chainConfigured && interval > 0) {
-      const outcome = await chain.submitVote(chainBallot);
-      // A duplicate must not drop both copies. Replace the queued row and
-      // succeed, or leave the stored ballot in place and ask for a retry.
-      if (outcome?.duplicate) {
-        const replaced = typeof chain.replaceQueuedVote === 'function'
-          ? await chain.replaceQueuedVote(chainBallot)
-          : null;
-        if (!replaced?.replaced) {
-          throw new HttpError(503, 'ballot queue is busy; retry', { code: 'CHAIN_QUEUE_BUSY', keepVote: true });
-        }
-      } else {
-        addedToQueue = true;
-      }
-      if (typeof store.markChainBallotQueued === 'function') {
-        await store.markChainBallotQueued(election.id, parsed.nullifier, ts);
-      }
-    }
   } catch (err) {
-    // Interval 0 may already have published a block and mined a transaction.
     // Published blocks stay. A replacement is not rolled back into a delete.
-    // A busy queue keeps this ballot: rolling it back would store it nowhere.
-    // Only an unpublished queue ballot is rolled back.
-    if (err instanceof HttpError && err.extra?.keepVote) throw err;
-    if (addedToQueue && typeof chain.dropQueuedVote === 'function') {
-      try {
-        await chain.dropQueuedVote(onChainId, parsed.nullifier);
-      } catch (undoErr) {
-        if (!(config || {}).quiet) {
-          console.warn(`[zk-voting] could not roll back a queued ballot: ${undoErr.message || undoErr}`);
-        }
-      }
-    }
     if (!replacing && interval > 0) {
       if (recorded?.sealed && typeof explorer.dropSealedVote === 'function') {
         try {

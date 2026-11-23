@@ -9,11 +9,41 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const {
-  certificationId,
-  jurisdictionBytes32,
-  publicIdHash,
-} = require('@zk-voting/chain-client');
+const { keccak256, toHex32 } = require('@zk-voting/proof-helpers');
+
+const ZERO_HASH = `0x${'00'.repeat(32)}`;
+const IDENTITY_DOMAIN_STRING = 'zk-voting.election.identity.v1';
+
+function asBytes32(value) {
+  if (value == null || value === '') return ZERO_HASH;
+  if (typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)) return value.toLowerCase();
+  return toHex32(value);
+}
+
+/** Jurisdiction id → bytes32: `keccak256(utf8(id))` unless already 32-byte hex. */
+function jurisdictionBytes32(id) {
+  const s = String(id || '').trim();
+  if (!s) return ZERO_HASH;
+  if (/^0x[0-9a-fA-F]{64}$/.test(s)) return s.toLowerCase();
+  return keccak256(s);
+}
+
+/** `keccak256(abi.encode(DOMAIN, factory, electionId, jurisdictionId))`, the scope of a public id. */
+function certificationId(factory, electionId, jurisdictionId) {
+  const fac = factory && String(factory).trim()
+    ? `0x${String(factory).replace(/^0x/i, '').toLowerCase().padStart(40, '0')}`
+    : `0x${'00'.repeat(20)}`;
+  const encoded = `${keccak256(IDENTITY_DOMAIN_STRING)}${toHex32(fac).slice(2)}${toHex32(
+    electionId == null || electionId === '' ? 0 : electionId,
+  ).slice(2)}${asBytes32(jurisdictionId).slice(2)}`;
+  return keccak256(encoded);
+}
+
+/** keccak256 of the lowercase advertised UUID. */
+function publicIdHash(uuid) {
+  if (uuid == null || String(uuid).trim() === '') return ZERO_HASH;
+  return keccak256(String(uuid).trim().toLowerCase());
+}
 
 /** UUID v4 (RFC 4122). */
 export const UUID_V4_RE =

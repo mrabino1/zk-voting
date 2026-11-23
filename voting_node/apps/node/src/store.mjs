@@ -3036,6 +3036,12 @@ export class Store {
     return Array.isArray(list) && list.includes(String(hash).toLowerCase());
   }
 
+  /** Spend a vote pass for a ballot that lives on the rollup, not in this store. */
+  async spendVotePass(electionId, passHash) {
+    this._rememberSpentPass(electionId, passHash);
+    await this.persist();
+  }
+
   /** Add a pass hash to the election's unlinked spent set. Not stored on a ballot. */
   _rememberSpentPass(electionId, passHash) {
     const hash = String(passHash || '').toLowerCase();

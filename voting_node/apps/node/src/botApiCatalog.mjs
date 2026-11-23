@@ -381,24 +381,6 @@ export const BOT_OPERATIONS = [
     summary: 'Clerk creates an election in a jurisdiction they already serve.',
     body: 'title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable'
   }),
-  O('POST', '/api/elections/:id/l2-open', {
-    tag: 'Elections',
-    auth: true,
-    summary: 'Retry the sequencer open for one election. Idempotent: an open election is not opened again.',
-  }),
-  O('POST', '/api/elections/:id/chain-dead-letter/replay', {
-    tag: 'Elections',
-    auth: true,
-    summary: 'Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row.',
-    body: 'nullifier (optional)',
-  }),
-  O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
-    tag: 'Elections',
-    auth: true,
-    gate: 'tally_operator',
-    summary: 'Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted.',
-    body: 'nullifier, reason',
-  }),
   R('/api/elections/:id', {
     tag: 'Elections',
     summary: 'One election. When the caller is signed in, includes that person’s registration status. Choice is never included.',
@@ -443,10 +425,6 @@ export const BOT_OPERATIONS = [
   R('/api/elections/:id/artifacts', {
     tag: 'Elections',
     summary: 'Auditor pack: roots, counts, and public checks. No Node private database.',
-  }),
-  R('/api/elections/:id/l1', {
-    tag: 'Elections',
-    summary: 'L1 certification status for the tally, when a tally exists.',
   }),
   R('/api/elections/:id/tally-key', {
     tag: 'Elections',
@@ -559,10 +537,55 @@ export const BOT_OPERATIONS = [
     auth: true,
     summary: 'Tally operator posts the tally after cutoff. Invented counts that do not match opened ballots are rejected for opens-ballots.',
   }),
-  O('POST', '/api/elections/:id/certify-l1', {
-    tag: 'Elections',
+
+  R('/api/elections/:id/rollup', {
+    tag: 'Rollup',
+    summary: 'A civic vote on ZkVotingRollup: L1 status, guardians and their commitments, the final sum once closed, and the certified totals.',
+  }),
+  R('/api/elections/:id/rollup/ballot-context', {
+    tag: 'Rollup',
+    summary: 'What a browser needs to encrypt a ballot: L1 election id, chain id, rollup address, joint key, options.',
+  }),
+  R('/api/elections/:id/rollup/receipts/:nullifier', {
+    tag: 'Rollup',
+    summary: 'Where a ballot is: pending, committed or settled on L1 (batch number and transaction), or rejected.',
+  }),
+  O('POST', '/api/elections/:id/rollup/guardians', {
+    tag: 'Rollup',
     auth: true,
-    summary: 'Tally operator asks the Node to mirror the tally to L1 when L1 env is set.',
+    gate: 'tally_operator',
+    summary: 'Enroll a guardian by Baby Jubjub identity key before the vote is published.',
+    body: 'label, identityKey [x, y]',
+  }),
+  O('POST', '/api/elections/:id/rollup/publish', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'clerk',
+    summary: 'Create the vote on L1 (createElection) with its guardians, threshold, window and anonymity floor.',
+  }),
+  O('POST', '/api/elections/:id/rollup/guardians/:index/commit', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Relay a guardian-signed Feldman commitment to L1. The node cannot forge it.',
+  }),
+  O('POST', '/api/elections/:id/rollup/finalize-key', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Fix the joint key on L1 and send the roll.',
+  }),
+  O('POST', '/api/elections/:id/rollup/guardians/:index/shares', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Relay a guardian\'s Chaum-Pedersen decryption shares for the final sum.',
+    body: 'shares',
+  }),
+  O('POST', '/api/elections/:id/rollup/finalize', {
+    tag: 'Rollup',
+    auth: true,
+    summary: 'Compute the totals from public L1 data and have L1 check and certify them.',
   }),
 
   R('/api/elections/:id/parties', {

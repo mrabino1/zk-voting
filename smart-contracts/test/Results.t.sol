@@ -42,6 +42,17 @@ contract ResultsTest is RollupTest {
         assertEq(uint8(info(id).status), uint8(IZkVotingRollup.Status.Finalized));
     }
 
+    function test_PostedSharesAreReadable() public {
+        uint32 id = runElection(_votes());
+        assertEq(rollup.decryptionShares(id, 1).length, 0);
+        postShares(id, 1);
+        uint256[2][] memory d = rollup.decryptionShares(id, 1);
+        Guardians.Share[] memory s = decryptionShares(id, 1);
+        assertEq(d.length, 3);
+        assertEq(d[2][0], s[2].dX);
+        assertEq(d[2][1], s[2].dY);
+    }
+
     function test_AnyThresholdSubsetOpensTheSameSum() public {
         uint32 id = runElection(_votes());
         postShares(id, 2);

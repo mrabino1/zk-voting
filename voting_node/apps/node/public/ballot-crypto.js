@@ -495,3 +495,32 @@ export function fromJSONSafe(value) {
   }
   return value;
 }
+
+// ------------------------------------------------------------------ share boxes
+
+async function boxKey(sharedPoint, info) {
+  const material = abiEncode([sharedPoint[0], sharedPoint[1], keccakWord(new TextEncoder().encode(info))]);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", material);
+  return globalThis.crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+/**
+ * Encrypt a dealt share (and its dealer signature) for one recipient guardian:
+ * ECDH between the sender's identity secret and the recipient's identity key, AES-GCM.
+ * The node only relays the box. `context` binds it to the election and the pair.
+ */
+export async function sealBox({ senderSecret, recipientKey, payload, context }) {
+  const key = await boxKey(mul(recipientKey, senderSecret), context);
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const plain = new TextEncoder().encode(JSON.stringify(toJSONSafe(payload)));
+  const ct = new Uint8Array(await globalThis.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
+  const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return { iv: hex(iv), ct: hex(ct) };
+}
+
+export async function openBox({ recipientSecret, senderKey, box, context }) {
+  const key = await boxKey(mul(senderKey, recipientSecret), context);
+  const bytes = (h) => Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+  const plain = await globalThis.crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes(box.iv) }, key, bytes(box.ct));
+  return fromJSONSafe(JSON.parse(new TextDecoder().decode(plain)));
+}

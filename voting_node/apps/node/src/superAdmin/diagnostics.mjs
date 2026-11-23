@@ -10,7 +10,6 @@ import { electionState, STATE_NAMES } from '../electionState.mjs';
 import { electionTypeName, electionTypeOf, voteResultsSealed } from '../electionType.mjs';
 import { publicExclusion } from '../store.mjs';
 import { countPasskeys, emailHint } from '../identity.mjs';
-import { readArchiveIndex } from '../../../../l2/archive/job.mjs';
 
 const require = createRequire(import.meta.url);
 const nodePkg = require('../../package.json');
@@ -95,7 +94,6 @@ export function configDiag(deps) {
     feedbackMinSubmitMs: config.feedbackMinSubmitMs,
     feedbackMaxBodyBytes: config.feedbackMaxBodyBytes,
     logLevel: config.logLevel || 'info',
-    archiveEnabled: config.archiveEnabled !== false,
     hashScheme: config.hashScheme || null,
     provingPath: Boolean(config.provingPath),
     useMockVerifier: config.useMockVerifier === true,
@@ -159,7 +157,7 @@ function electionMeta(election, now, store) {
     ballotMethod: election.ballotMethod || 'plurality',
     lateUpdateAllowed: Boolean(election.lateUpdateAllowed),
     jurisdictionId: election.jurisdictionId || null,
-    chainMode: election.createTxHash || election.onChainElectionAddress ? 'onchain' : 'demo',
+    chainMode: election.rollup?.electionId ? 'rollup' : 'node',
     tallied: sealed ? false : Boolean(election.tally),
     excludedCount: publicExclusion(election).count,
     excludedReasons: publicExclusion(election).reasons,
@@ -233,19 +231,6 @@ export function l2Diag(deps) {
   const blocks = Array.isArray(chain.blocks) ? chain.blocks : [];
   const head = blocks.length ? blocks[blocks.length - 1] : null;
   const headTs = Number(head?.timestamp || 0);
-  let archive = { present: false, hours: 0, archivedThrough: null };
-  try {
-    const index = readArchiveIndex(deps.config.dataDir);
-    const hours = index?.hours && typeof index.hours === 'object' ? Object.keys(index.hours).length : 0;
-    archive = {
-      present: hours > 0 || Number(index?.archivedThrough) >= 0,
-      hours,
-      archivedThrough: index?.archivedThrough ?? null,
-    };
-  } catch {
-    archive = { present: false, hours: 0, archivedThrough: null };
-  }
-  const check = deps.store?.data?.runtime?.lastArchiveHashCheck || null;
   return {
     nfp: true,
     node: {
@@ -253,26 +238,11 @@ export function l2Diag(deps) {
       acceptingWrites: deps.writer ? deps.writer.acceptingWrites() : true,
       epoch: deps.writer?.epoch?.() || 0,
     },
-    sequencer: {
-      attached: false,
-      heartbeatSeconds: Number(process.env.L2_HEARTBEAT_SECONDS || 3600),
-    },
-    prover: {
-      attached: false,
-      l1Configured: Boolean(deps.l1?.isConfigured?.()),
-    },
-    archive: {
-      enabled: deps.config.archiveEnabled !== false,
-      ...archive,
-      hashCheck: check
-        ? {
-            at: check.at,
-            status: check.status,
-            checked: check.checked,
-            matched: check.matched,
-            mismatched: check.mismatched,
-          }
-        : { status: 'not-run', checked: 0, matched: 0, mismatched: 0 },
+    rollup: {
+      enabled: Boolean(deps.rollup?.enabled),
+      address: deps.rollup?.client?.address || null,
+      chainId: deps.rollup?.client?.chainId || null,
+      l2Url: deps.config.rollup?.l2Url || null,
     },
     explorer: {
       height: blocks.length,
@@ -281,9 +251,6 @@ export function l2Diag(deps) {
       sealedCount: count(chain.sealed),
       alerts: Array.isArray(chain.alerts) ? chain.alerts.slice(-20) : [],
     },
-    inbox: typeof deps.chain?.diagnostics === 'function'
-      ? deps.chain.diagnostics()
-      : { deadLetter: [], alerts: [] },
   };
 }
 
@@ -305,31 +272,23 @@ function deploymentRecord(config) {
 
 export function l1Diag(deps) {
   const config = deps.config || {};
-  const site = deps.store?.getSite?.() || {};
-  const contracts = site.contracts || {};
-  const settlement = { posted: 0, skipped: 0, failed: 0, none: 0 };
+  const rollup = { published: 0, finalized: 0 };
   for (const election of deps.store?.data?.elections || []) {
-    const status = election?.tally?.l1?.status || null;
-    if (status === 'posted' || status === 'already_posted') settlement.posted += 1;
-    else if (status === 'skipped') settlement.skipped += 1;
-    else if (status === 'failed') settlement.failed += 1;
-    else settlement.none += 1;
+    if (election?.rollup?.electionId) rollup.published += 1;
   }
   return {
     nfp: true,
-    addresses: {
-      factory: contracts.factory || config.electionFactoryAddress || null,
-      ballotInbox: contracts.ballotInbox || config.ballotInboxAddress || null,
-      verifier: contracts.verifier || config.verifierAddress || null,
-      mirror: config.l1TallyMirrorAddress || null,
-      settlement: config.l1SettlementAddress || null,
+    rollup: {
+      enabled: Boolean(deps.rollup?.enabled),
+      address: deps.rollup?.client?.address || null,
+      chainId: deps.rollup?.client?.chainId || null,
+      nodeAccount: deps.rollup?.client?.account || null,
+      rpcSet: Boolean(String(config.rollup?.l1Rpc || '').trim()),
+      keySet: Boolean(String(config.rollup?.privateKey || '').trim()),
+      l2Url: config.rollup?.l2Url || null,
     },
-    chainId: config.l1ChainId || null,
-    rpcSet: Boolean(String(config.l1Rpc || '').trim()),
-    publisherKeySet: Boolean(String(config.l1PublisherPrivateKey || '').trim()),
-    configured: Boolean(deps.l1?.isConfigured?.()),
+    elections: rollup,
     deployment: deploymentRecord(config),
-    settlement,
   };
 }
 
