@@ -71,6 +71,7 @@ npm run l2:operator
 | `L2_BATCH_SECONDS` | `10` | Batch interval |
 | `L2_BALLOT_TOKEN` | unset | Bearer token for `POST /v1/ballots` |
 | `ZK_VOTING_ALLOW_MOCK_PROOFS` | unset | `1`: accept ballots without an eligibility proof (chain 31337 only) |
+| `L2_STANDBY_WHEN_UNCONFIGURED` | unset | `true`: when the rollup is not usable (unset, no genesis, L1 unreachable, no batch prover), serve `/health` as `"status":"standby"` and 503 elsewhere instead of exiting. No ballots, batches or L1 transactions |
 
 ## Test
 

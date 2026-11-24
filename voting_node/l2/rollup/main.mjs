@@ -17,72 +17,127 @@
 //                              chain 31337, 600 elsewhere); each batch costs L1 gas
 //   L2_BALLOT_TOKEN            bearer token the node uses to submit ballots
 //   ZK_VOTING_ALLOW_MOCK_PROOFS=1  accept ballots without an eligibility proof (local only)
+//   L2_STANDBY_WHEN_UNCONFIGURED=true  opt-in: when the rollup is not usable (unset, no
+//                              genesis on L1, L1 unreachable, or no batch prover for this
+//                              chain), serve /health in standby instead of exiting. Standby
+//                              accepts no ballots, builds no batches and sends nothing to L1.
+//                              Safety refusals (mock proofs off chain 31337, an Anvil key off
+//                              chain 31337) still exit. Restart l2 once the rollup is configured.
 
 import { createRequire } from 'node:module';
 
 import { redactL1RpcAuth } from '../l1RpcAuth.js';
 import { createL1, readL1ChainId } from './l1.mjs';
 import { Operator } from './operator.mjs';
-import { createApi } from './server.mjs';
+import { createApi, createStandbyApi } from './server.mjs';
 
 const env = process.env;
+const host = env.L2_RPC_HOST || '127.0.0.1';
+const port = Number(env.L2_RPC_PORT || 8546);
+const standbyAllowed = /^(1|true|yes|on)$/i.test(String(env.L2_STANDBY_WHEN_UNCONFIGURED || '').trim());
+const log = (...a) => console.log(new Date().toISOString(), ...a);
+
+/** A safety refusal: always exits, standby or not. */
+const refuse = (message) => {
+  console.error(message);
+  process.exit(2);
+};
+
+/** The rollup is not usable. Exit as before, or (opt-in) stay up in standby. */
+class Unusable extends Error {}
 const need = (name) => {
-  if (!env[name]) {
-    console.error(`${name} is required`);
-    process.exit(2);
-  }
+  if (!env[name]) throw new Unusable(`${name} is required`);
   return env[name];
 };
 
 const { assertKeyAllowedOnChain, readDeployment } = createRequire(import.meta.url)('../../packages/chain-client/index.js');
-const deployment = readDeployment(env.ROLLUP_DEPLOYMENT_FILE);
-if (env.ROLLUP_DEPLOYMENT_FILE && !deployment) {
-  console.error(`ROLLUP_DEPLOYMENT_FILE ${env.ROLLUP_DEPLOYMENT_FILE} does not exist yet`);
-  process.exit(2);
-}
-if (!env.ROLLUP_ADDRESS && deployment) env.ROLLUP_ADDRESS = deployment.rollup;
-
-const rpcUrl = need('L1_RPC');
-const chainId = Number(env.L1_CHAIN_ID || (await readL1ChainId(rpcUrl, env)));
-try {
-  assertKeyAllowedOnChain(env.OPERATOR_PRIVATE_KEY, chainId, 'OPERATOR_PRIVATE_KEY');
-} catch (err) {
-  console.error(err.message);
-  process.exit(2);
-}
 const allowMockProofs = env.ZK_VOTING_ALLOW_MOCK_PROOFS === '1';
-if (allowMockProofs && chainId !== 31337) {
-  console.error('ZK_VOTING_ALLOW_MOCK_PROOFS is for chain 31337 only');
-  process.exit(2);
+let chainId = env.L1_CHAIN_ID ? Number(env.L1_CHAIN_ID) : null;
+
+async function start() {
+  let deployment;
+  try {
+    deployment = readDeployment(env.ROLLUP_DEPLOYMENT_FILE);
+  } catch (err) {
+    throw new Unusable(err.message);
+  }
+  if (env.ROLLUP_DEPLOYMENT_FILE && !deployment) {
+    throw new Unusable(`ROLLUP_DEPLOYMENT_FILE ${env.ROLLUP_DEPLOYMENT_FILE} does not exist yet`);
+  }
+  if (!env.ROLLUP_ADDRESS && deployment) env.ROLLUP_ADDRESS = deployment.rollup;
+
+  const rpcUrl = need('L1_RPC');
+  if (chainId == null) {
+    try {
+      chainId = Number(await readL1ChainId(rpcUrl, env));
+    } catch (err) {
+      throw new Unusable(`L1 chain id unavailable: ${err.shortMessage || err.message}`);
+    }
+  }
+  try {
+    assertKeyAllowedOnChain(env.OPERATOR_PRIVATE_KEY, chainId, 'OPERATOR_PRIVATE_KEY');
+  } catch (err) {
+    refuse(err.message);
+  }
+  if (allowMockProofs && chainId !== 31337) refuse('ZK_VOTING_ALLOW_MOCK_PROOFS is for chain 31337 only');
+
+  const l1 = createL1({ rpcUrl, chainId, rollup: need('ROLLUP_ADDRESS'), privateKey: need('OPERATOR_PRIVATE_KEY') });
+  let operator;
+  try {
+    operator = await new Operator({
+      l1,
+      chainId,
+      dataDir: env.L2_DATA_DIR || './data',
+      allowMockProofs,
+      batchMaxWaitSeconds:
+        env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
+          ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
+          : chainId === 31337
+            ? 0
+            : 600,
+      log,
+    }).init();
+  } catch (err) {
+    if (!standbyAllowed) throw err;
+    throw new Unusable(`rollup at ${l1.address} is not usable: ${err.shortMessage || err.message}`);
+  }
+
+  let mock;
+  try {
+    mock = await l1.isMockVerifier();
+  } catch (err) {
+    if (!standbyAllowed) throw err;
+    throw new Unusable(`cannot read the rollup's batch verifier: ${err.shortMessage || err.message}`);
+  }
+  if (!mock) throw new Unusable('This operator has no batch prover yet; it can only settle against MockBatchVerifier.');
+  return { l1, operator };
 }
 
-const l1 = createL1({ rpcUrl, chainId, rollup: need('ROLLUP_ADDRESS'), privateKey: need('OPERATOR_PRIVATE_KEY') });
-const operator = await new Operator({
-  l1,
-  chainId,
-  dataDir: env.L2_DATA_DIR || './data',
-  allowMockProofs,
-  batchMaxWaitSeconds:
-    env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
-      ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
-      : chainId === 31337
-        ? 0
-        : 600,
-  log: (...a) => console.log(new Date().toISOString(), ...a),
-}).init();
-
-if (!(await l1.isMockVerifier())) {
-  console.error('This operator has no batch prover yet; it can only settle against MockBatchVerifier.');
-  process.exit(2);
+let started;
+try {
+  started = await start();
+} catch (err) {
+  if (!(err instanceof Unusable)) throw err;
+  const reason = redactL1RpcAuth(err.message, env);
+  if (!standbyAllowed) refuse(reason);
+  // Standby: liveness only. No Operator, no batch loop, no L1 writes.
+  console.error(`L2 STANDBY (not ready): ${reason}`);
+  console.error('L2 STANDBY: no ballots are accepted and nothing is sent to L1. Fix the rollup settings and restart l2.');
+  createStandbyApi({ reason, chainId: Number.isFinite(chainId) ? chainId : null, rollup: env.ROLLUP_ADDRESS || null }).listen(
+    port,
+    host,
+    () => log(`L2 operator in STANDBY on http://${host}:${port} (/health answers status "standby")`),
+  );
 }
 
-const host = env.L2_RPC_HOST || '127.0.0.1';
-const port = Number(env.L2_RPC_PORT || 8546);
-createApi(operator, { ballotToken: env.L2_BALLOT_TOKEN }).listen(port, host, () => {
-  console.log(`L2 operator for ${l1.address} on http://${host}:${port}`);
-});
+if (started) {
+  const { l1, operator } = started;
+  createApi(operator, { ballotToken: env.L2_BALLOT_TOKEN }).listen(port, host, () => {
+    console.log(`L2 operator for ${l1.address} on http://${host}:${port}`);
+  });
 
-const interval = Math.max(1, Number(env.L2_BATCH_SECONDS || 10)) * 1000;
-setInterval(() => {
-  operator.tick().catch((err) => console.error('batch failed:', redactL1RpcAuth(err.shortMessage || err.message, env)));
-}, interval);
+  const interval = Math.max(1, Number(env.L2_BATCH_SECONDS || 10)) * 1000;
+  setInterval(() => {
+    operator.tick().catch((err) => console.error('batch failed:', redactL1RpcAuth(err.shortMessage || err.message, env)));
+  }, interval);
+}
