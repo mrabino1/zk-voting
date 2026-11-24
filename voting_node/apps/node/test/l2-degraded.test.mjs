@@ -27,8 +27,8 @@ after(async () => {
 
 function listen(server) {
   return new Promise((resolve, reject) => {
-    server.listen(0, '127.0.0.1', () => resolve(server));
-    server.on('error', reject);
+    const listening = server.listen(0, '127.0.0.1', () => resolve(listening));
+    listening.on('error', reject);
   });
 }
 

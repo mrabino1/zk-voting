@@ -126,6 +126,12 @@ describe('terms notice service', () => {
       await writeFile(filePath, `${header}# Test\n\nSecond wording.\n`, 'utf8');
       current = loadTermsDocument({ filePath });
       assert.notEqual(alice.termsNotifiedHash, current.plainTextSha256);
+      // The notice stamp is an ISO millisecond. Wait for the clock to move so a
+      // rewritten stamp cannot collide with the first one.
+      const clockDeadline = Date.now() + 2000;
+      while (new Date().toISOString() === stamped && Date.now() < clockDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
       const changed = await terms.maybeNotifyTermsUpdated(alice);
       assert.equal(changed.sent, true);
       assert.equal(alice.termsNotifiedHash, current.plainTextSha256);
