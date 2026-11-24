@@ -705,7 +705,6 @@ export function superAdminRouter(deps) {
   writeRoute('/elections/:id/lifecycle', 'write:elections', (req, dryRun) =>
     writeElectionLifecycle(deps, req.params.id, req.body || {}, { dryRun }),
   );
-  writeRoute('/l2/archive', 'write:l2', (_req, dryRun) => writeL2(deps, 'archive', { dryRun }));
   writeRoute('/l2/verify', 'write:l2', (_req, dryRun) => writeL2(deps, 'verify', { dryRun }));
   writeRoute('/l2/heartbeat', 'write:l2', (_req, dryRun) => writeL2(deps, 'heartbeat', { dryRun }));
   writeRoute('/logs/level', 'write:logs', (req, dryRun) => writeLogLevel(deps, req.body || {}, { dryRun }));

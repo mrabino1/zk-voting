@@ -1,5 +1,5 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Public outcomes monitor: before / during / after from chain status, with verification.
+// Public outcomes monitor: before / during / after from election status, with verification.
 
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -137,7 +137,7 @@ describe('outcome phase helpers', () => {
       eligibleRoot: '0x02',
       frozenDisqualificationRoot: '0xaa',
       disqualificationRoot: '0xaa',
-      onChainElectionId: '1',
+      localElectionId: '1',
     };
     const state = electionState(election, NOW);
     assert.equal(state, 2);
@@ -149,9 +149,8 @@ describe('outcome phase helpers', () => {
 
   test('copied UUID from another jurisdiction fails publicIdMatchesScope', () => {
     const honest = mintScopedPublicId({
-      factoryAddress: '0x1111111111111111111111111111111111111111',
-      chainId: 27427,
-      onChainElectionId: '1',
+      nodeId: 'node-a',
+      localElectionId: '1',
       jurisdictionId: 'north',
     });
     const election = {
@@ -164,55 +163,16 @@ describe('outcome phase helpers', () => {
       eligibleRoot: '0x01',
       frozenDisqualificationRoot: '0xaa',
       disqualificationRoot: '0xaa',
-      onChainElectionId: '1',
+      localElectionId: '1',
       jurisdictionId: 'south',
-      factoryAddress: '0x1111111111111111111111111111111111111111',
-      chainId: 27427,
     };
+    const deps = { config: { chainId: 27427 }, store: { data: { meta: { nodeId: 'node-a' } } } };
     const state = electionState(election, NOW);
-    const result = verifyChainStatus(election, { config: { chainId: 27427 } }, NOW, state, 'during');
+    const result = verifyChainStatus(election, deps, NOW, state, 'during');
     assert.equal(result.checks.publicIdMatchesScope, false);
     assert.equal(result.ok, false);
-  });
-
-  test('posted L1 factory that is not the pin fails l1FactoryMatchesPinned', () => {
-    const pin = '0x1111111111111111111111111111111111111111';
-    const rogue = '0x2222222222222222222222222222222222222222';
-    const hash = `0x${'ab'.repeat(32)}`;
-    const election = {
-      id: mintScopedPublicId({
-        factoryAddress: rogue,
-        chainId: 27427,
-        onChainElectionId: '1',
-        jurisdictionId: 'north',
-      }),
-      startTime: NOW - 100,
-      cutoffTime: NOW + 100,
-      rollFrozen: true,
-      lateUpdateAllowed: false,
-      frozenEligibleRoot: '0x01',
-      eligibleRoot: '0x01',
-      frozenDisqualificationRoot: '0xaa',
-      disqualificationRoot: '0xaa',
-      onChainElectionId: '1',
-      jurisdictionId: 'north',
-      factoryAddress: rogue,
-      chainId: 27427,
-      tally: {
-        countsHash: hash,
-        l1: { posted: true, status: 'posted', resultHash: hash, factory: rogue },
-      },
-    };
-    const state = electionState(election, NOW);
-    const result = verifyChainStatus(
-      election,
-      { config: { chainId: 27427, electionFactoryAddress: pin } },
-      NOW,
-      state,
-      'during',
-    );
-    assert.equal(result.checks.l1FactoryMatchesPinned, false);
-    assert.equal(result.ok, false);
+    const home = verifyChainStatus({ ...election, jurisdictionId: 'north' }, deps, NOW, state, 'during');
+    assert.equal(home.checks.publicIdMatchesScope, true);
   });
 });
 
@@ -227,7 +187,6 @@ describe('outcomes monitor HTTP', () => {
       quiet: true,
       port: 0,
       disclosureIntervalSeconds: 0,
-      electionFactoryAddress: '0x1111111111111111111111111111111111111111',
       nowFn: () => clock,
     });
     app = created.app;
@@ -302,7 +261,7 @@ describe('outcomes monitor HTTP', () => {
     assert.equal(before.json.certified, null);
     assert.equal(before.json.verification.ok, true, before.json.verification.errors?.join('; '));
     assert.equal(before.json.coercion.receiptsProveChoice, false);
-    assert.equal(before.json.chain.mode, 'demo');
+    assert.equal(before.json.chain.mode, 'node');
     assert.deepEqual(unofficialCounts(before.json), []);
     assert.deepEqual(leakChoice(before.json), []);
 
@@ -389,13 +348,12 @@ describe('outcomes monitor HTTP', () => {
     });
     await api('POST', `/api/elections/${afterId}/freeze`, { jar: adminJar });
 
-    const onchainId = await createElection('Board onchain', {
+    const onchainId = await createElection('Board rollup', {
       startTime: clock + 5000,
       cutoffTime: clock + 8000,
     });
     const onchain = store.requireElection(onchainId);
-    onchain.createTxHash = `0x${'ab'.repeat(32)}`;
-    onchain.onChainElectionAddress = '0x3333333333333333333333333333333333333333';
+    onchain.rollup = { electionId: 9, guardians: [], synced: { commitments: [], disqualified: [] }, receipts: {}, mailbox: [] };
     await store.persist();
 
     const board = await api('GET', '/api/outcomes');
@@ -406,7 +364,8 @@ describe('outcomes monitor HTTP', () => {
     assert.ok(ids(board.json.phases.during).includes(duringId));
     assert.ok(ids(board.json.phases.after).includes(afterId));
     const onchainRow = board.json.elections.find((e) => e.id === onchainId);
-    assert.equal(onchainRow.chainMode, 'onchain');
+    assert.equal(onchainRow.chainMode, 'rollup');
+    assert.equal(onchainRow.rollupElectionId, '9');
     assert.equal(onchainRow.phase, 'before');
     assert.equal(onchainRow.verificationOk, true);
 
@@ -415,47 +374,8 @@ describe('outcomes monitor HTTP', () => {
     assert.equal(duringDetail.json.certified, null);
 
     const onchainDetail = await api('GET', `/api/outcomes/${onchainId}`);
-    assert.equal(onchainDetail.json.chain.mode, 'onchain');
-    assert.equal(onchainDetail.json.verification.chain.checks.chainModeConsistent, true);
-  });
-
-  test('mismatched L1 hash fails verification after tally', async () => {
-    clock = NOW + 20_000;
-    const id = await createElection('L1 mismatch', {
-      startTime: clock - 100,
-      cutoffTime: clock + 500,
-    });
-    await api('POST', `/api/elections/${id}/register`, {
-      jar: adminJar,
-      body: { identityCommitment: '0x0c01' },
-    });
-    await api('POST', `/api/elections/${id}/freeze`, { jar: adminJar });
-    const voted = await api('POST', `/api/elections/${id}/vote`, {
-      body: {
-        proof: { accept: true },
-        publicInputs: { nullifier: '0x0c02', electionId: id },
-        encryptedBallot: '0x01',
-        identityCommitment: '0x0c01',
-      },
-    });
-    assert.equal(voted.status, 201, voted.json?.error);
-    clock = NOW + 20_600;
-    const tally = await api('POST', `/api/elections/${id}/tally`, {
-      jar: adminJar,
-      body: { counts: [1, 0] },
-    });
-    assert.equal(tally.status, 200, tally.json?.error);
-    const election = store.requireElection(id);
-    election.tally.l1 = {
-      status: 'posted',
-      posted: true,
-      resultHash: `0x${'ff'.repeat(32)}`,
-      countsHash: election.tally.countsHash,
-    };
-    await store.persist();
-    const detail = await api('GET', `/api/outcomes/${id}`);
-    assert.equal(detail.json.phase, 'after');
-    assert.equal(detail.json.verification.ok, false);
-    assert.equal(detail.json.verification.chain.checks.l1HashMatchesTally, false);
+    assert.equal(onchainDetail.json.chain.mode, 'rollup');
+    assert.equal(onchainDetail.json.chain.rollup.electionId, 9);
+    assert.equal(onchainDetail.json.verification.chain.checks.rollupModeConsistent, true);
   });
 });

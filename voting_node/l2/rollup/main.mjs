@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+// NOT FOR PROFIT — civic public good, not a commercial product.
+// Run the L2 operator: follow ZkVotingRollup on L1, accept ballots, settle batches.
+//
+// Environment:
+//   L1_RPC                     L1 JSON-RPC (Anvil locally)
+//   L1_RPC_AUTH_TOKEN          optional bearer token; empty sends no Authorization header
+//   L1_CHAIN_ID                defaults to the RPC's chain id
+//   ROLLUP_ADDRESS             ZkVotingRollup
+//   ROLLUP_DEPLOYMENT_FILE     deployment record (DeployLocal output); fills ROLLUP_ADDRESS
+//                              and L1_CHAIN_ID when they are unset
+//   OPERATOR_PRIVATE_KEY       an operator registered with setOperator
+//   L2_DATA_DIR                private operator state (default ./data)
+//   L2_RPC_HOST / L2_RPC_PORT  API bind (default 127.0.0.1:8546)
+//   L2_BATCH_SECONDS           how often the operator checks for work (default 10)
+//   L2_BATCH_MAX_WAIT_SECONDS  how long ballots may wait for a fuller batch (default 0 on
+//                              chain 31337, 600 elsewhere); each batch costs L1 gas
+//   L2_BALLOT_TOKEN            bearer token the node uses to submit ballots
+//   ZK_VOTING_ALLOW_MOCK_PROOFS=1  accept ballots without an eligibility proof (local only)
+
+import { createRequire } from 'node:module';
+
+import { redactL1RpcAuth } from '../l1RpcAuth.js';
+import { createL1, readL1ChainId } from './l1.mjs';
+import { Operator } from './operator.mjs';
+import { createApi } from './server.mjs';
+
+const env = process.env;
+const need = (name) => {
+  if (!env[name]) {
+    console.error(`${name} is required`);
+    process.exit(2);
+  }
+  return env[name];
+};
+
+const { assertKeyAllowedOnChain, readDeployment } = createRequire(import.meta.url)('../../packages/chain-client/index.js');
+const deployment = readDeployment(env.ROLLUP_DEPLOYMENT_FILE);
+if (env.ROLLUP_DEPLOYMENT_FILE && !deployment) {
+  console.error(`ROLLUP_DEPLOYMENT_FILE ${env.ROLLUP_DEPLOYMENT_FILE} does not exist yet`);
+  process.exit(2);
+}
+if (!env.ROLLUP_ADDRESS && deployment) env.ROLLUP_ADDRESS = deployment.rollup;
+
+const rpcUrl = need('L1_RPC');
+const chainId = Number(env.L1_CHAIN_ID || (await readL1ChainId(rpcUrl, env)));
+try {
+  assertKeyAllowedOnChain(env.OPERATOR_PRIVATE_KEY, chainId, 'OPERATOR_PRIVATE_KEY');
+} catch (err) {
+  console.error(err.message);
+  process.exit(2);
+}
+const allowMockProofs = env.ZK_VOTING_ALLOW_MOCK_PROOFS === '1';
+if (allowMockProofs && chainId !== 31337) {
+  console.error('ZK_VOTING_ALLOW_MOCK_PROOFS is for chain 31337 only');
+  process.exit(2);
+}
+
+const l1 = createL1({ rpcUrl, chainId, rollup: need('ROLLUP_ADDRESS'), privateKey: need('OPERATOR_PRIVATE_KEY') });
+const operator = await new Operator({
+  l1,
+  chainId,
+  dataDir: env.L2_DATA_DIR || './data',
+  allowMockProofs,
+  batchMaxWaitSeconds:
+    env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
+      ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
+      : chainId === 31337
+        ? 0
+        : 600,
+  log: (...a) => console.log(new Date().toISOString(), ...a),
+}).init();
+
+if (!(await l1.isMockVerifier())) {
+  console.error('This operator has no batch prover yet; it can only settle against MockBatchVerifier.');
+  process.exit(2);
+}
+
+const host = env.L2_RPC_HOST || '127.0.0.1';
+const port = Number(env.L2_RPC_PORT || 8546);
+createApi(operator, { ballotToken: env.L2_BALLOT_TOKEN }).listen(port, host, () => {
+  console.log(`L2 operator for ${l1.address} on http://${host}:${port}`);
+});
+
+const interval = Math.max(1, Number(env.L2_BATCH_SECONDS || 10)) * 1000;
+setInterval(() => {
+  operator.tick().catch((err) => console.error('batch failed:', redactL1RpcAuth(err.shortMessage || err.message, env)));
+}, interval);

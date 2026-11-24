@@ -1,11 +1,11 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Jurisdiction CMS: fork the Node UI; pin one shared contract deployment.
+// Jurisdiction CMS: fork the Node UI; every Node settles on the one shared rollup contract.
 
 import { LEGACY_DEFAULT_NAMES, brandName } from './branding.mjs';
 import { isPlatformOperator } from './roles.mjs';
 
 export const SHARED_DEPLOYMENT_NOTE =
-  'Fork this Node for a clerk desk. Do not deploy a new ElectionFactory for each jurisdiction. Pin the one shared factory, inbox, and verifier; officers update pages here.';
+  'Fork this Node for a clerk desk. Every jurisdiction settles civic votes on the one ZkVotingRollup contract on L1. Its address comes from ROLLUP_ADDRESS on the host, not from this page; officers update pages here.';
 
 export const PAGE_KINDS = ['home', 'about', 'faq', 'custom'];
 export const PAGE_STATUSES = ['draft', 'published'];
@@ -50,11 +50,6 @@ export function defaultSite() {
     // Empty = follow the product name from site admin (Branding).
     title: '',
     tagline: '',
-    contracts: {
-      factory: '',
-      ballotInbox: '',
-      verifier: '',
-    },
   };
 }
 
@@ -185,50 +180,15 @@ export function canManagePages(store, user, page) {
   return false;
 }
 
-export function envContractsOf(config) {
-  if (config?.envContracts) return config.envContracts;
-  return {
-    factory: config?.electionFactoryAddress || '',
-    ballotInbox: config?.ballotInboxAddress || '',
-    verifier: config?.verifierAddress || '',
-  };
-}
-
-/** Snapshot env addresses, then fill blanks from the site pin (forked Node, one factory). */
-export function applySiteContractPins(config, site) {
-  if (!config.envContracts) {
-    config.envContracts = {
-      factory: config.electionFactoryAddress || '',
-      ballotInbox: config.ballotInboxAddress || '',
-      verifier: config.verifierAddress || '',
-    };
-  }
-  const env = config.envContracts;
-  const stored = site?.contracts || {};
-  config.electionFactoryAddress = env.factory || stored.factory || '';
-  config.ballotInboxAddress = env.ballotInbox || stored.ballotInbox || '';
-  config.verifierAddress = env.verifier || stored.verifier || '';
-  return config;
-}
-
-export function mergePublicContracts(config, site) {
-  const env = envContractsOf(config);
-  const stored = site?.contracts || {};
-  const factory = env.factory || stored.factory || '';
-  const ballotInbox = env.ballotInbox || stored.ballotInbox || '';
-  const verifier = env.verifier || stored.verifier || '';
+/** The one L1 contract this Node settles on. Read-only: it comes from the host env. */
+export function publicRollupView(config) {
+  const rollup = config?.rollup || null;
   return {
     sharedDeployment: true,
-    chainId: config.chainId,
-    factory,
-    ballotInbox,
-    verifier,
-    source: env.factory ? 'env' : stored.factory ? 'site' : 'unset',
-    pinnedByEnv: {
-      factory: Boolean(env.factory),
-      ballotInbox: Boolean(env.ballotInbox),
-      verifier: Boolean(env.verifier),
-    },
+    configured: Boolean(rollup?.address && rollup?.l1Rpc),
+    address: rollup?.address || null,
+    chainId: rollup?.chainId ?? null,
+    jurisdictionId: rollup?.jurisdictionId || null,
     note: SHARED_DEPLOYMENT_NOTE,
   };
 }
@@ -240,21 +200,15 @@ export function publicSiteView(site, config) {
     title: (row.title && !LEGACY_DEFAULT_NAMES.includes(row.title) && row.title) || brandName(),
     tagline: row.tagline || '',
     sharedDeployment: true,
-    contracts: mergePublicContracts(config, row),
+    rollup: publicRollupView(config),
     note: SHARED_DEPLOYMENT_NOTE,
     updatedAt: row.updatedAt || null,
   };
 }
 
-export function canPinContracts(user) {
+/** Site title and tagline are host copy shared by every body on this Node. */
+export function canEditSiteIdentity(user) {
   return isPlatformOperator(user);
-}
-
-export function sanitizeAddress(value) {
-  const s = String(value || '').trim();
-  if (!s) return '';
-  if (!/^0x[a-fA-F0-9]{40}$/.test(s)) return null;
-  return s;
 }
 
 export function navItemsFromPages(pages) {

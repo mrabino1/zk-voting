@@ -188,29 +188,11 @@ describe('choice block planner', () => {
     assert.equal(closed.publish[0].hourEnd, H2);
   });
 
-  test('allowRevote is refused when a chain is configured', async () => {
-    assert.throws(
-      () => getConfig({ allowRevote: true, chainRpc: 'http://127.0.0.1:8545' }),
-      /ALLOW_REVOTE cannot be on while a chain is configured/,
-    );
-    assert.equal(getConfig({ allowRevote: false, chainRpc: 'http://127.0.0.1:8545' }).allowRevote, false);
-    assert.equal(getConfig({ allowRevote: true }).allowRevote, true);
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'poll-blocks-'));
-    try {
-      await assert.rejects(
-        () => createApp({
-          dataDir: tmp,
-          allowDevLogin: true,
-          quiet: true,
-          port: 0,
-          allowRevote: true,
-          chain: { isConfigured() { return true; } },
-        }),
-        /ALLOW_REVOTE cannot be on while a chain is configured/,
-      );
-    } finally {
-      await rm(tmp, { recursive: true, force: true });
-    }
+  test('allowRevote is accepted with a rollup configured', () => {
+    // The rollup replaces a ballot under the same nullifier (ROLLUP.md), so no chain refusal remains.
+    const rollup = { l1Rpc: 'http://127.0.0.1:8545', address: `0x${'11'.repeat(20)}`, chainId: 31337 };
+    assert.equal(getConfig({ allowRevote: true, rollup }).allowRevote, true);
+    assert.equal(getConfig({ allowRevote: false, rollup }).allowRevote, false);
   });
 
   test('publicVoteRecord returns the stored hash and nullifier', () => {

@@ -43,7 +43,7 @@ Foundry unit tests and the demo Node tree still use `KeccakHasher` (`keccak-dev-
 - `choice` — one option index in 0..15
 - `choiceRandomness` — private, so `Poseidon(choice, choiceRandomness)` does not reveal the option
 
-Public instance — **same order** as `@zk-voting/proof-helpers` `serializePublicInputs` and `IBallotInbox.submitVote`:
+Public instance — **same order** as `@zk-voting/proof-helpers` `serializePublicInputs` and the Node's poll proof check (`apps/node/src/voteProof.mjs`):
 
 ```text
 [root, disqRoot, nullifier, ballotHash, electionId]
@@ -54,12 +54,12 @@ Constraints:
 1. `leaf = Hash(identityTrapdoor, nullifierSecret)` (Poseidon).
 2. Merkle inclusion of `leaf` under `root` (the **eligible** tree: registered ∩ ¬disqualified).
 3. `nullifier = Hash(nullifierSecret, electionId)`.
-4. Non-membership of `leaf` in the disqualification chain under `disqRoot`. The chain is sorted currently-disqualified commitments with a 0 sentinel: `Hash(0, v0) … Hash(vLast, 0)`, or `Hash(0, 0)` when nobody is disqualified. The witness is one link whose open interval contains `leaf`. A disqualified leaf is a boundary, so the range check fails. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). `MockVerifier` evaluates this only when a test arms the witness.
+4. Non-membership of `leaf` in the disqualification chain under `disqRoot`. The chain is sorted currently-disqualified commitments with a 0 sentinel: `Hash(0, v0) … Hash(vLast, 0)`, or `Hash(0, 0)` when nobody is disqualified. The witness is one link whose open interval contains `leaf`. A disqualified leaf is a boundary, so the range check fails. See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
 5. `ballotHash = Poseidon(choice, choiceRandomness)`, with `choice` in 0..15. Choice is not a public input. The ElGamal body after an `AG` tag is not constrained in this circuit.
 
-The **nullifier still uniquely identifies the voter** and is spent **once**. `BallotInbox` rejects a second proof for that nullifier, including a new `ballotHash` (roadmap item 10: one accepted nullifier). The node also rejects a second ballot unless re-vote is enabled, and it does not submit a replacement. The circuit public-input list does not change; MockVerifier tests that resubmit any second ballot still revert.
+The **nullifier still uniquely identifies the voter** and is spent **once**: the Node rejects a second ballot for it unless re-vote is enabled for the poll.
 
-Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to match a given election. The Solidity incremental tree and this template argument **must agree**.
+Default `component main` compiles `Vote(20)`. Recompile at 16, 24, or 32 to match a given election. The Node's tree depth and this template argument **must agree**.
 
 ---
 
@@ -164,8 +164,10 @@ Witness inputs for `vote` (JSON for snarkjs) look like:
 
 ---
 
-## What the Node and contracts expect
+## What the Node expects
 
-The Node (`apps/node`) may orchestrate proving in the browser or a helper; it must not be the only place a proof can be produced. `BallotInbox.submitVote` takes Groth16 `(a,b,c)` plus `publicInputs` and `encryptedBallot`. Relayer / bundler is `msg.sender`. The voter’s passkey smart-account address is **not** the Merkle leaf and is **not** sitting next to the ballot.
+The Node (`apps/node`) may orchestrate proving in the browser or a helper; it must not be the only place a proof can be produced. `POST /api/elections/:id/vote` takes the Groth16 proof plus `publicInputs` and `encryptedBallot`, with a vote pass and no cookies. The voter's account is **not** the Merkle leaf and is **not** sitting next to the ballot.
+
+These circuits are the **poll** path. Civic votes use ZkVotingRollup, whose ballot proofs (0/1 and sum-to-one, in `apps/node/public/ballot-crypto.js`) are checked by the L2 operator; its batch circuit is not built yet ([`smart-contracts/docs/ROLLUP.md`](../../smart-contracts/docs/ROLLUP.md)).
 
 See [`HASH_SCHEME.md`](./HASH_SCHEME.md), [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), [`docs/PASSKEYS.md`](../docs/PASSKEYS.md), and [`packages/proof-helpers`](../packages/proof-helpers).

@@ -2,7 +2,7 @@
 
 **NOT FOR PROFIT** — civic public good, not a commercial product. AGPL-3.0-or-later. ZK-Voting issues **no token** and does not sell one. This feature **reads** one ERC-20 on **Ethereum mainnet** (chain id 1) as vote weight. An optional `SignalVotes` contract exists for an operator who wants a dedicated token. The Node does not deploy it. Results are **signal only** and **non-binding**. They trigger no on-chain action.
 
-Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes and no poll nav entry. `balance_hold` may still post `poll_params`, `poll_vote`, and `poll_tally` on the civic L2. `erc20_votes` does not.
+Phase 1 ships behind `POLLS_ENABLED=1`. With the flag unset there are no poll HTTP routes and no poll nav entry. `balance_hold` records `poll_params`, `poll_vote` and `poll_tally` in the Node's explorer log. `erc20_votes` does not.
 
 Every poll reads one host token: `VOTING_TOKEN_ADDRESS`. Production accepts chain id **1** only. Any other chain id leaves polls disabled (`not_ethereum_l1`). The Node never sends a token transaction. If the address is unset or not an address, polls stay disabled and `/admin#deployment` shows that message. Creating a poll is on that host admin page, not the civic back office. A deployment is one mode: this ERC-20, or civic elections with no ERC-20. `pollParamsHash` commits the token address, the chain id, and the weight source that were in force when the poll was scheduled.
 
@@ -55,7 +55,7 @@ Address-hiding weighted voting conflicts with hold-through-close, because the ta
 
 ## Where the token lives
 
-ZK-Voting L2 (chainId **27427**) is a civic JSON sequencer, not an EVM. It cannot hold an ERC-20, and `erc20_votes` does not post to it. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Chain id 31337 is allowed only when `NODE_ENV` is not `production`, for the in-memory fixture. Every other chain id is refused. Tests do not use a public testnet or a live RPC.
+The token is read from Ethereum mainnet; nothing about a token poll touches the rollup. Production reads Ethereum mainnet through `TOKEN_RPC_1`. An optional `TOKEN_RPC_1_2` must agree with the first when both are set. The Node never writes to Ethereum. Chain id 31337 is allowed only when `NODE_ENV` is not `production`, for the in-memory fixture. Every other chain id is refused. Tests do not use a public testnet or a live RPC.
 
 ## Math
 
@@ -78,9 +78,9 @@ A plurality poll's `decisionRule` is `simple_majority`: one option wins only whe
 
 `zk-voting.auditor.poll.v1` is a separate pack from the civic `zk-voting.auditor.v1`. `tools/auditor verify --offline` checks signatures, one address, choices, the math, `resultHash`, and `ballotsRoot`. With `--rpc` it re-derives every final weight. See [`AUDITOR.md`](./AUDITOR.md).
 
-## L1 mirror (follow-up)
+## Anchoring on L1 (not done)
 
-`L1TallyMirror.postResult` keys a **uint256** civic election id. A token poll id is a string, so writing a poll result into that slot would change the existing mirror contract. Phase 1 skips the mirror (`l1Mirror: "skipped"`). Anchoring a poll `resultHash` is a later change.
+A token poll's result is not anchored on L1 (`l1Mirror: "skipped"`). ZkVotingRollup certifies civic votes only; anchoring a poll `resultHash` would be a separate change.
 
 ## Threats
 
@@ -88,4 +88,4 @@ Flash loans, rented tokens, whales, lying RPCs, reorgs, rebasing tokens, and ope
 
 ## What phase 1 does not change
 
-No change to `ElectionParams`, the Vote circuit, `BallotInbox`, `Tally`, `VoterRegistry`, civic `vote` validation, or `computeIrv`. Civic elections stay on their existing path.
+No change to the poll circuit, civic votes, ZkVotingRollup, or `computeIrv`.

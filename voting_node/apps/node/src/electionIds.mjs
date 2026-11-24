@@ -1,19 +1,16 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Public election ids are UUID v5 bound to (factory, on-chain id, jurisdiction)
-// so two bodies cannot advertise the same id for different L1 identities.
+// Public election ids are UUID v5 bound to (node, jurisdiction, local sequence),
+// so a UUID copied from another Node or jurisdiction does not verify.
 // UUID v4 remains as a random helper and for legacy records.
-// Solidity ElectionFactory still uses uint256 (`++electionCount`); that value
-// is stored as onChainElectionId and is what Groth16 / BallotInbox consume.
+// The local sequence is stored as `localElectionId`. It is
+// the numeric electionId in the node's poll proofs. A civic vote's L1 id is
+// separate: `election.rollup.electionId`, assigned by ZkVotingRollup on publish.
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const {
-  certificationId,
-  jurisdictionBytes32,
-  publicIdHash,
-} = require('@zk-voting/chain-client');
+const { keccak256 } = require('@zk-voting/proof-helpers');
 
 /** UUID v4 (RFC 4122). */
 export const UUID_V4_RE =
@@ -27,10 +24,7 @@ export const UUID_V5_RE =
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/**
- * Name-based namespace for ZK-Voting public election ids (UUID v5).
- * Independent of the on-chain DOMAIN used for L1 certificationId.
- */
+/** Name-based namespace for ZK-Voting public election ids (UUID v5). */
 export const ZK_VOTING_ELECTION_NAMESPACE = '7c3a1f10-9e2b-5c4d-8a71-0b9d4e6f2a11';
 
 /**
@@ -39,8 +33,6 @@ export const ZK_VOTING_ELECTION_NAMESPACE = '7c3a1f10-9e2b-5c4d-8a71-0b9d4e6f2a1
  */
 export const SHORT_CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const SHORT_CODE_LENGTH = 10;
-
-export { certificationId, jurisdictionBytes32, publicIdHash };
 
 export function isUuid(value) {
   return UUID_RE.test(String(value || ''));
@@ -75,25 +67,21 @@ export function uuidV5(namespaceUuid, name) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-function isZeroAddress(value) {
-  if (!value) return true;
-  const hex = String(value).replace(/^0x/i, '').toLowerCase();
-  return hex.length === 0 || /^0+$/.test(hex);
+/** Jurisdiction id → bytes32: `keccak256(utf8(id))` unless already 32-byte hex. */
+function jurisdictionBytes32(id) {
+  const s = String(id || '').trim();
+  if (!s) return `0x${'00'.repeat(32)}`;
+  if (/^0x[0-9a-fA-F]{64}$/.test(s)) return s.toLowerCase();
+  return keccak256(s);
 }
 
 /**
- * Canonical name hashed into the public UUID. On-chain contests bind to the
- * shared factory; demo Nodes bind to `nodeId` so two forks do not collide.
+ * Canonical name hashed into the public UUID. The `demo:` prefix is historical
+ * and kept so ids already issued still verify.
  */
 export function scopedPublicIdName(scope = {}) {
-  const electionId = String(scope.onChainElectionId ?? '').trim();
+  const electionId = String(scope.localElectionId ?? '').trim();
   const jurisdiction = jurisdictionBytes32(scope.jurisdictionId);
-  const factory = String(scope.factoryAddress || '').trim().toLowerCase();
-  const chainId =
-    scope.chainId != null && String(scope.chainId) !== '' ? String(scope.chainId) : '0';
-  if (factory && !isZeroAddress(factory)) {
-    return `onchain:${chainId}:${factory}:${electionId}:${jurisdiction}`;
-  }
   const nodeId = String(scope.nodeId || '').trim().toLowerCase();
   return `demo:${nodeId}:${jurisdiction}:${electionId}`;
 }
@@ -104,11 +92,7 @@ export function mintScopedPublicId(scope = {}) {
 
 export function publicIdMatchesScope(uuid, scope = {}) {
   if (!uuid) return false;
-  if (uuidVersion(uuid) !== 5) {
-    const factory = String(scope.factoryAddress || '').trim();
-    if (factory && !isZeroAddress(factory)) return false;
-    return true;
-  }
+  if (uuidVersion(uuid) !== 5) return true;
   return String(uuid).toLowerCase() === mintScopedPublicId(scope);
 }
 
@@ -139,13 +123,13 @@ export function isShortCodeShape(value) {
 }
 
 /**
- * Decimal uint256 used on chain (factory electionId / circuit public input).
+ * Decimal uint256 used as the electionId public input of the node's poll proofs.
  * @param {object} election
  * @returns {string}
  */
-export function chainElectionId(election) {
-  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== '') {
-    return String(election.onChainElectionId);
+export function localElectionIdOf(election) {
+  if (election?.localElectionId != null && String(election.localElectionId) !== '') {
+    return String(election.localElectionId);
   }
   return String(election?.id ?? '');
 }
@@ -163,8 +147,8 @@ export function refsOf(election) {
   if (election.code) refs.add(String(election.code));
   if (election.publicId) refs.add(String(election.publicId));
   if (election.shortCode) refs.add(String(election.shortCode));
-  if (election.onChainElectionId != null && election.onChainElectionId !== '') {
-    refs.add(String(election.onChainElectionId));
+  if (election.localElectionId != null && election.localElectionId !== '') {
+    refs.add(String(election.localElectionId));
   }
   for (const alias of election.aliases || []) {
     if (alias != null && alias !== '') refs.add(String(alias));
@@ -177,24 +161,24 @@ export function electionMatchesRef(election, ref) {
   return refsOf(election).has(String(ref));
 }
 
-export function parseOnChainElectionId(value) {
+export function parseLocalElectionId(value) {
   if (value == null || value === '') return null;
   const s = String(value).trim();
   if (!/^\d+$/.test(s)) {
-    const err = new Error('onChainElectionId must be a decimal uint256');
+    const err = new Error('localElectionId must be a decimal uint256');
     err.status = 400;
     throw err;
   }
   try {
     const n = BigInt(s);
     if (n < 0n || n >= 1n << 256n) {
-      const err = new Error('onChainElectionId out of uint256 range');
+      const err = new Error('localElectionId out of uint256 range');
       err.status = 400;
       throw err;
     }
   } catch (err) {
     if (err.status) throw err;
-    const wrapped = new Error('onChainElectionId out of uint256 range');
+    const wrapped = new Error('localElectionId out of uint256 range');
     wrapped.status = 400;
     throw wrapped;
   }
@@ -205,54 +189,16 @@ export function publicIdFields(election) {
   if (!election) return {};
   const id = String(election.id);
   const shortCode = election.shortCode || null;
-  const factory = election.factoryAddress || null;
-  const onChainElectionId = election.onChainElectionId != null ? String(election.onChainElectionId) : null;
-  const jurisdictionKey = election.jurisdictionId != null ? jurisdictionBytes32(election.jurisdictionId) : null;
+  const localElectionId = election.localElectionId != null ? String(election.localElectionId) : null;
   return {
     id,
     shortCode,
-    onChainElectionId,
+    localElectionId,
     publicIdScheme: election.publicIdScheme || (uuidVersion(id) === 5 ? 'uuid-v5-jurisdiction' : null),
-    certificationId:
-      onChainElectionId != null
-        ? certificationId(factory, onChainElectionId, jurisdictionKey || election.jurisdictionId)
-        : null,
-    publicIdHash: publicIdHash(id),
     links: {
       vote: `/vote/${encodeURIComponent(id)}`,
       short: shortCode ? `/v/${encodeURIComponent(shortCode)}` : null,
       election: shortCode ? `/e/${encodeURIComponent(shortCode)}` : `/vote/${encodeURIComponent(id)}`,
     },
-  };
-}
-
-export function l1IdentityOf(election, config = {}) {
-  const fromElection = election?.factoryAddress;
-  const fromConfig = config.electionFactoryAddress || config.factoryAddress;
-  const factory =
-    fromElection && !isZeroAddress(fromElection)
-      ? fromElection
-      : fromConfig && !isZeroAddress(fromConfig)
-        ? fromConfig
-        : fromElection || null;
-  let electionId = null;
-  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== '') {
-    electionId = String(election.onChainElectionId);
-  } else if (election?.id != null && /^\d+$/.test(String(election.id))) {
-    electionId = String(election.id);
-  }
-  const jurisdictionId = jurisdictionBytes32(election?.jurisdictionId);
-  const publicId = election?.id != null ? String(election.id) : '';
-  return {
-    electionId,
-    publicId,
-    publicIdHash: publicId ? publicIdHash(publicId) : null,
-    factory,
-    pinnedFactory: config.electionFactoryAddress || null,
-    electionAddress: election?.onChainElectionAddress || null,
-    jurisdictionId,
-    ballotSpecHash: election?.ballotSpecHash || null,
-    certificationId: electionId != null ? certificationId(factory, electionId, jurisdictionId) : null,
-    chainId: election?.chainId ?? config.chainId ?? null,
   };
 }

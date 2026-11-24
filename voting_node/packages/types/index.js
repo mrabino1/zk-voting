@@ -154,7 +154,7 @@ const REASON_CODE_LABELS = Object.freeze({
 
 /**
  * Node / SPA election record. Public URLs use `id` (UUID). Circuit and
- * `BallotInbox` use `onChainElectionId` (`uint256`).
+ * `BallotInbox` use `localElectionId` (`uint256`).
  *
  * @typedef {Object} ElectionRecord
  * @property {string} id Canonical public id (UUID v5 bound to factory +
@@ -162,10 +162,10 @@ const REASON_CODE_LABELS = Object.freeze({
  *   `/vote/:id` and `GET /api/elections/:id`.
  * @property {string} shortCode Opaque url-safe alias (10 chars). `/v/:shortCode`
  *   and `/e/:shortCode` resolve to the same election.
- * @property {string} onChainElectionId Decimal string of the Solidity
+ * @property {string} localElectionId Decimal string of the Solidity
  *   `uint256 electionId` assigned by `ElectionFactory` (`++electionCount`).
  * @property {string|null} [factoryAddress] Shared ElectionFactory. L1
- *   certification keys by this address plus `onChainElectionId` plus
+ *   certification keys by this address plus `localElectionId` plus
  *   `jurisdictionId`, never by the public UUID.
  * @property {string|null} [certificationId] `keccak256(abi.encode(DOMAIN,
  *   factory, electionId, jurisdictionId))`.
@@ -246,7 +246,7 @@ const REASON_CODE_LABELS = Object.freeze({
  *
  * @typedef {Object} VoteEnvelope
  * @property {string|bigint} electionId On-chain election id (`uint256`),
- *   not the public UUID. See `ElectionRecord.onChainElectionId`.
+ *   not the public UUID. See `ElectionRecord.localElectionId`.
  * @property {string} root Eligible-set Merkle root (bytes32 / uint256 hex).
  * @property {string} disqRoot Disqualification-set Merkle root.
  * @property {string} nullifier Unique per (voter, election). Spent at most once;

@@ -198,14 +198,14 @@ export function electionRefEquals(election, ref) {
   const r = String(ref);
   if (String(election.id) === r) return true;
   if (election.shortCode && String(election.shortCode) === r) return true;
-  if (election.onChainElectionId != null && String(election.onChainElectionId) === r) return true;
+  if (election.localElectionId != null && String(election.localElectionId) === r) return true;
   if (Array.isArray(election.aliases) && election.aliases.some((a) => String(a) === r)) return true;
   return false;
 }
 
-export function chainElectionId(election) {
-  if (election?.onChainElectionId != null && String(election.onChainElectionId) !== "") {
-    return String(election.onChainElectionId);
+export function localElectionIdOf(election) {
+  if (election?.localElectionId != null && String(election.localElectionId) !== "") {
+    return String(election.localElectionId);
   }
   return String(election?.id ?? "");
 }
@@ -253,9 +253,9 @@ export function normalizeElection(raw, now = Math.floor(Date.now() / 1000)) {
     ...raw,
     id,
     shortCode: raw.shortCode || raw.short_code || null,
-    onChainElectionId:
-      raw.onChainElectionId != null
-        ? String(raw.onChainElectionId)
+    localElectionId:
+      raw.localElectionId != null
+        ? String(raw.localElectionId)
         : raw.on_chain_election_id != null
           ? String(raw.on_chain_election_id)
           : null,
@@ -289,7 +289,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "3f1c0a6e-9b2d-4e11-8c7a-1a2b3c4d5e01",
       shortCode: "nbrdge2k3m",
-      onChainElectionId: "1",
+      localElectionId: "1",
       aliases: ["1"],
       title: "City of Northbridge General Municipal Election",
       jurisdiction: "City of Northbridge",
@@ -308,7 +308,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "7a8b9c0d-1e2f-4a3b-9c4d-5e6f70819202",
       shortCode: "ctymeas4n8",
-      onChainElectionId: "2",
+      localElectionId: "2",
       aliases: ["2"],
       title: "County Measure A — Public Library Bond",
       jurisdiction: "Northbridge County",
@@ -326,7 +326,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "4b5c6d7e-8f90-41a2-a3b4-c5d6e7f80903",
       shortCode: "schbrd5p2q",
-      onChainElectionId: "3",
+      localElectionId: "3",
       aliases: ["3"],
       title: "School Board, District 4",
       jurisdiction: "Northbridge Unified School District",
@@ -344,7 +344,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "90ab12cd-34ef-4a56-8b78-90abcdef0404",
       shortCode: "stref6q3r4",
-      onChainElectionId: "4",
+      localElectionId: "4",
       aliases: ["4"],
       title: "Statewide special referendum — transit authority",
       jurisdiction: "State of example",
@@ -362,7 +362,7 @@ export function sampleElections(now = Math.floor(Date.now() / 1000)) {
     {
       id: "11223344-5566-4777-8899-aabbccdde505",
       shortCode: "wrkcbd7s4t",
-      onChainElectionId: "5",
+      localElectionId: "5",
       aliases: ["5"],
       title: "Workers’ cooperative board (annual)",
       jurisdiction: "Northbridge Food Cooperative",
@@ -447,7 +447,7 @@ export function reasonLabel(code) {
 function voterKeys(election) {
   const keys = [String(election.id)];
   if (election.shortCode) keys.push(String(election.shortCode));
-  if (election.onChainElectionId != null) keys.push(String(election.onChainElectionId));
+  if (election.localElectionId != null) keys.push(String(election.localElectionId));
   for (const a of election.aliases || []) keys.push(String(a));
   return keys;
 }
@@ -580,7 +580,7 @@ function ctx() {
     formatTime,
     electionStateInfo,
     electionRefEquals,
-    chainElectionId,
+    localElectionIdOf,
     normalizeElection,
     loadElections,
     loadElection,

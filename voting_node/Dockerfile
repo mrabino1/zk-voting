@@ -55,18 +55,13 @@ COPY --chown=node:node plugins ./plugins
 COPY --chown=node:node docs/self-hosting ./docs/self-hosting
 # outcomes.mjs imports the offline auditor from the repo-root tools/ path.
 COPY --chown=node:node tools/auditor/verify.mjs ./tools/auditor/verify.mjs
+COPY --chown=node:node tools/auditor/rollup.mjs ./tools/auditor/rollup.mjs
+COPY --chown=node:node l2/rollup/pubdata.mjs ./l2/rollup/pubdata.mjs
 # Fails the image build when a runtime import is missing from this stage.
 COPY --chown=node:node scripts/image-import-smoke.mjs ./scripts/image-import-smoke.mjs
+# The writer lease (src/writerMode.mjs) and the optional L1 RPC bearer helper.
 COPY --chown=node:node l2/lease ./l2/lease
-# Super-admin write:l2 runs the archive job (credentials blanked). That module
-# imports the sequencer state helper and the disclosure clock; nothing else.
-COPY --chown=node:node l2/archive ./l2/archive
-COPY --chown=node:node l2/disclosure.mjs ./l2/disclosure.mjs
-COPY --chown=node:node l2/sequencer/state.mjs ./l2/sequencer/state.mjs
-# L2 identity, operator auth and L1 funding helpers (state.mjs imports adminAuth).
-COPY --chown=node:node l2/adminAuth.mjs l2/identity.mjs ./l2/
 COPY --chown=node:node l2/l1RpcAuth.js ./l2/l1RpcAuth.js
-COPY --chown=node:node l2/prover/funding.mjs ./l2/prover/funding.mjs
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 

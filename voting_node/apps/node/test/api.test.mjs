@@ -219,11 +219,9 @@ describe('ZK-Voting Node API', () => {
     assert.equal(json.election.stateName, 'Created');
     assert.equal(json.election.rollFrozen, false);
     assert.ok(json.election.ballotSpecHash);
-    assert.equal(json.chainMode, 'demo');
-    assert.match(String(json.onChainElectionId), /^\d+$/);
-    assert.equal(json.election.chainMode, 'demo');
-    assert.equal(json.election.onChainElectionId, json.onChainElectionId);
-    assert.equal(json.onChainElectionAddress, null);
+    assert.equal(json.election.chainMode, 'node');
+    assert.match(String(json.election.localElectionId), /^\d+$/);
+    assert.equal(json.election.rollupElectionId, null);
   });
 
   test('voter cannot create an election', async () => {
@@ -414,8 +412,7 @@ describe('ZK-Voting Node API', () => {
     assert.equal(ok.status, 200, ok.json?.error);
     assert.equal(ok.json.election.stateName, 'Tallied');
     assert.deepEqual(ok.json.election.tally.counts, [2, 0]);
-    assert.equal(ok.json.l1Certification.status, 'skipped');
-    assert.equal(ok.json.election.tally.l1.status, 'skipped');
+    assert.equal(ok.json.election.tally.l1, undefined);
   });
 
   test('disqualify after freeze is rejected', async () => {

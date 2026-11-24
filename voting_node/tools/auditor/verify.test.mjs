@@ -90,3 +90,47 @@ describe('auditor verify', () => {
     assert.ok(result.errors.some((e) => /supersededHashes|generation/.test(e)));
   });
 });
+
+describe('rollup audit helpers', async () => {
+  const { countBallots, subsets, resultHashOf } = await import('./rollup.mjs');
+  const { OP, encodeBallot, concat, toHex } = await import('../../l2/rollup/pubdata.mjs');
+  const forced = (electionId, nullifier, accepted) => {
+    const b = new Uint8Array(102);
+    b[0] = OP.FORCED_BALLOT;
+    new DataView(b.buffer).setUint32(1, electionId);
+    b[36] = nullifier;
+    b[101] = accepted ? 1 : 0;
+    return b;
+  };
+
+  test('ballots count once per nullifier; a rejected forced ballot and other elections do not count', () => {
+    const pubdata = toHex(
+      concat([
+        encodeBallot({ electionId: 3, nullifier: 1n, commitment: 9n }),
+        encodeBallot({ electionId: 3, nullifier: 2n, commitment: 9n }),
+        encodeBallot({ electionId: 3, nullifier: 1n, commitment: 8n }),
+        encodeBallot({ electionId: 4, nullifier: 5n, commitment: 9n }),
+        forced(3, 7, true),
+        forced(3, 8, false),
+      ]),
+    );
+    const r = countBallots([pubdata], 3);
+    assert.equal(r.nullifiers.size, 3);
+    assert.equal(r.replaced, 1);
+    assert.equal(r.forced, 1);
+  });
+
+  test('subsets enumerate k of n and respect the cap', () => {
+    assert.deepEqual(subsets([1, 2, 3], 2), [[1, 2], [1, 3], [2, 3]]);
+    assert.equal(subsets([1, 2, 3, 4, 5, 6, 7, 8], 4, 10).length, 10);
+  });
+
+  test('the result hash binds chain, rollup, election and counts', () => {
+    const base = { chainId: 31337, rollup: '0x00000000000000000000000000000000000000aa', electionId: 1, counts: [1n, 2n] };
+    const h = resultHashOf(base);
+    assert.match(h, /^0x[0-9a-f]{64}$/);
+    assert.notEqual(resultHashOf({ ...base, electionId: 2 }), h);
+    assert.notEqual(resultHashOf({ ...base, chainId: 1 }), h);
+    assert.notEqual(resultHashOf({ ...base, counts: [2n, 1n] }), h);
+  });
+});

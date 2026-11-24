@@ -381,24 +381,6 @@ export const BOT_OPERATIONS = [
     summary: 'Clerk creates an election in a jurisdiction they already serve.',
     body: 'title, jurisdictionId, startTime, cutoffTime, questions or ballot, electionType (0 poll, 1 vote; omitted means poll). electionType is immutable'
   }),
-  O('POST', '/api/elections/:id/l2-open', {
-    tag: 'Elections',
-    auth: true,
-    summary: 'Retry the sequencer open for one election. Idempotent: an open election is not opened again.',
-  }),
-  O('POST', '/api/elections/:id/chain-dead-letter/replay', {
-    tag: 'Elections',
-    auth: true,
-    summary: 'Writer puts dead-lettered ballots back on the queue. The tally stays blocked while any remain. Optional body nullifier replays one row.',
-    body: 'nullifier (optional)',
-  }),
-  O('POST', '/api/elections/:id/chain-dead-letter/exclude', {
-    tag: 'Elections',
-    auth: true,
-    gate: 'tally_operator',
-    summary: 'Two different tally operators exclude a dead-lettered ballot after the deadline. A failed replay is required, except a supplementary hold, which can be excluded once the deadline has passed. The public audit log stores the count and the fixed reason code. The operator note stays private. Excluded ballots are not counted. The ballot is not deleted.',
-    body: 'nullifier, reason',
-  }),
   R('/api/elections/:id', {
     tag: 'Elections',
     summary: 'One election. When the caller is signed in, includes that person’s registration status. Choice is never included.',
@@ -417,7 +399,7 @@ export const BOT_OPERATIONS = [
     tag: 'Elections',
     auth: true,
     summary:
-      'Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or a factory transaction.',
+      'Clerk deletes an unused election. Body confirmTitle must match the saved title. Refused after freeze, registration, a ballot, or publication on the rollup.',
     body: 'confirmTitle',
   }),
   R('/api/elections/:id/info', {
@@ -443,10 +425,6 @@ export const BOT_OPERATIONS = [
   R('/api/elections/:id/artifacts', {
     tag: 'Elections',
     summary: 'Auditor pack: roots, counts, and public checks. No Node private database.',
-  }),
-  R('/api/elections/:id/l1', {
-    tag: 'Elections',
-    summary: 'L1 certification status for the tally, when a tally exists.',
   }),
   R('/api/elections/:id/tally-key', {
     tag: 'Elections',
@@ -559,10 +537,92 @@ export const BOT_OPERATIONS = [
     auth: true,
     summary: 'Tally operator posts the tally after cutoff. Invented counts that do not match opened ballots are rejected for opens-ballots.',
   }),
-  O('POST', '/api/elections/:id/certify-l1', {
-    tag: 'Elections',
+
+  R('/api/elections/:id/rollup', {
+    tag: 'Rollup',
+    summary: 'A civic vote on ZkVotingRollup: L1 status, guardians and their commitments, the final sum once closed, and the certified totals.',
+  }),
+  R('/api/elections/:id/rollup/ballot-context', {
+    tag: 'Rollup',
+    summary: 'What a browser needs to encrypt a ballot: L1 election id, chain id, rollup address, joint key, options.',
+  }),
+  R('/api/elections/:id/rollup/receipts/:nullifier', {
+    tag: 'Rollup',
+    summary: 'Where a ballot is: pending, committed or settled on L1 (batch number and transaction), or rejected.',
+  }),
+  O('POST', '/api/elections/:id/rollup/prepare', {
+    tag: 'Rollup',
     auth: true,
-    summary: 'Tally operator asks the Node to mirror the tally to L1 when L1 env is set.',
+    gate: 'clerk or tally_operator',
+    summary: 'Set the guardian threshold and the anonymity floor of a civic vote before it is published.',
+    body: 'threshold, minBallots',
+  }),
+  O('POST', '/api/elections/:id/rollup/guardians', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Enroll a guardian by Baby Jubjub identity key before the vote is published.',
+    body: 'label, identityKey [x, y]',
+  }),
+  O('POST', '/api/elections/:id/rollup/publish', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'clerk',
+    summary: 'Create the vote on L1 (createElection) with its guardians, threshold, window and anonymity floor.',
+  }),
+  O('POST', '/api/elections/:id/rollup/guardians/:index/commit', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Relay a guardian-signed Feldman commitment to L1. The node cannot forge it.',
+  }),
+  O('POST', '/api/elections/:id/rollup/mailbox', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Leave a sealed key-ceremony share for another guardian. Only that guardian can open it.',
+    body: 'from, to, box',
+  }),
+  O('GET', '/api/elections/:id/rollup/mailbox/:index', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'The sealed key-ceremony shares addressed to one guardian.',
+  }),
+  O('POST', '/api/elections/:id/rollup/disputes/:action', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Relay a guardian-signed key-ceremony dispute to L1: open, complain, reveal or expire.',
+  }),
+  O('POST', '/api/elections/:id/rollup/finalize-key', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Fix the joint key on L1 and send the roll.',
+  }),
+  O('POST', '/api/elections/:id/rollup/roll/sync', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'registrar or clerk',
+    summary: 'Send new registrations and disqualifications to L1 now (the node also does this on its tick until voting opens).',
+  }),
+  V('POST', '/api/elections/:id/rollup/close', {
+    tag: 'Rollup',
+    auth: true,
+    summary: 'Close a civic vote on L1 after its cutoff. Anyone may; the node also does this on its tick.',
+  }),
+  O('POST', '/api/elections/:id/rollup/guardians/:index/shares', {
+    tag: 'Rollup',
+    auth: true,
+    gate: 'tally_operator',
+    summary: 'Relay a guardian\'s Chaum-Pedersen decryption shares for the final sum.',
+    body: 'shares',
+  }),
+  V('POST', '/api/elections/:id/rollup/finalize', {
+    tag: 'Rollup',
+    auth: true,
+    summary: 'Compute the totals from public L1 data and have L1 check and certify them. Anyone signed in may; the node also does this on its tick.',
   }),
 
   R('/api/elections/:id/parties', {
@@ -836,15 +896,15 @@ export const BOT_OPERATIONS = [
   }),
   R('/api/explorer/blocks', {
     tag: 'Explorer',
-    summary: 'Civic L2 blocks.',
+    summary: 'Poll explorer blocks.',
   }),
   R('/api/explorer/blocks/:n', {
     tag: 'Explorer',
-    summary: 'One civic L2 block.',
+    summary: 'One poll explorer block.',
   }),
   R('/api/explorer/txs/:hash', {
     tag: 'Explorer',
-    summary: 'One civic L2 transaction. Ballot plaintext is not a field.',
+    summary: 'One poll explorer row. Ballot plaintext is not a field.',
   }),
   R('/api/explorer/nullifiers/:value', {
     tag: 'Explorer',
@@ -858,10 +918,9 @@ export const BOT_OPERATIONS = [
     tag: 'Explorer',
     summary: 'Explorer view of one election.',
   }),
-  O('POST', '/api/explorer/ingest', {
+  R('/api/explorer/rollup', {
     tag: 'Explorer',
-    summary:
-      `Operator ingest of civic L2 events. Send the host ingest secret in X-ZK-Voting-Ingest-Secret. A personal API key does not replace that secret. Minimum key level when a key is also sent: officer.`,
+    summary: 'Rollup batches from the L2 operator: number, state root, operations, and the L1 commit and execute transactions. No live ballot count.',
   }),
 
   R('/api/polls', {
@@ -917,7 +976,7 @@ export const BOT_OPERATIONS = [
   R('/api/mail/templates', {
     tag: 'Mail',
     auth: true,
-    summary: 'Platform admin lists operator mail templates stored on the Node. Mail is never written to civic L2.',
+    summary: 'Platform admin lists operator mail templates stored on the Node. Mail is never written on chain.',
   }),
   R('/api/mail/templates/:id', {
     tag: 'Mail',
@@ -1201,7 +1260,7 @@ function guideBody() {
   );
   lines.push('');
   lines.push(
-    'The on-chain election id is a circuit uint256 inside the election object. It is not a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.',
+    'The numeric `localElectionId` (the poll circuit’s uint256) and a civic vote’s `rollupElectionId` on L1 are fields inside the election object. Neither is a path id. Human short links `/v/{code}` and `/e/{code}` redirect to `/vote/{uuid}` and are not accepted on `/api/elections/:id`.',
   );
   lines.push('');
   lines.push(
@@ -1289,9 +1348,9 @@ export function renderRepoLlmsTxt() {
     '- `docs/BOT_API.md` — every bot route',
     '- `docs/IDENTITY.md` — person, emails, passkeys, vote PIN',
     '- `apps/node` — Express API and vanilla JS pages',
-    '- `smart-contracts/` — Solidity',
+    '- `smart-contracts/` — ZkVotingRollup, the one L1 contract',
     '- `circuits/` — vote, tally, identity',
-    '- `l2/` — civic sequencer, chain id 27427',
+    '- `l2/rollup/` — L2 operator that batches civic-vote ballots for ZkVotingRollup',
     '',
     'Ballot choice is never printed on a receipt or in an API response.',
     '',
@@ -1407,7 +1466,7 @@ export function renderBotHtml() {
 X-Api-Key: rk_…</code></pre>
       <p>The secret starts with <code>rk_</code>. It is shown once, with a copy button, and cannot be shown again. The Node stores only a SHA-256 hash. The email does not contain the API key.</p>
       <h2 id="ids-heading">Identifiers</h2>
-      <p>Path parameters named <code>id</code>, <code>partyId</code>, <code>requestId</code>, <code>methodId</code>, and <code>electionId</code> are UUIDs. A sequential integer is rejected with <code>400</code> and <code>ID_NOT_UUID</code>, so the path does not reveal how many people or records exist. The on-chain election id stays inside the election object for the circuit. Short links <code>/v/{code}</code> and <code>/e/{code}</code> redirect to <code>/vote/{uuid}</code> and are not accepted as <code>/api/elections/:id</code>.</p>
+      <p>Path parameters named <code>id</code>, <code>partyId</code>, <code>requestId</code>, <code>methodId</code>, and <code>electionId</code> are UUIDs. A sequential integer is rejected with <code>400</code> and <code>ID_NOT_UUID</code>, so the path does not reveal how many people or records exist. The numeric <code>localElectionId</code> and <code>rollupElectionId</code> stay inside the election object. Short links <code>/v/{code}</code> and <code>/e/{code}</code> redirect to <code>/vote/{uuid}</code> and are not accepted as <code>/api/elections/:id</code>.</p>
       <p>Ballot labels (<code>questionId</code>, <code>optionId</code>), guardian slots (<code>:index</code>), mail template names, and page slugs are not record counts. A new jurisdiction is assigned a UUID.</p>
       <pre><code>curl -sS \\
   -H "Authorization: Bearer $ZK_VOTING_API_KEY" \\

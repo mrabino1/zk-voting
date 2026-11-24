@@ -37,7 +37,7 @@ import {
   electionMatchesRef,
   mintScopedPublicId,
   mintShortCode,
-  parseOnChainElectionId,
+  parseLocalElectionId,
 } from './electionIds.mjs';
 import { DEMO_JURISDICTION_ID, canonicalJurisdictionId } from './recordIds.mjs';
 import { HttpError } from './http.mjs';
@@ -59,7 +59,6 @@ import {
   isAuthMethodType,
   normalizeEmail,
   normalizeEthAddress,
-  normalizeFingerprint,
   personEmailMethods,
   publicIdentity,
   sameEmail,
@@ -76,7 +75,6 @@ import {
   normalizeSlug,
   normalizeStatus,
   pageSlugForKind,
-  sanitizeAddress,
   sanitizeBlocks,
   sanitizeText,
 } from './cms.mjs';
@@ -171,22 +169,6 @@ function emptyData() {
     votes: [],
     receipts: [],
     envelopes: [],
-    // Ballots waiting for the next BallotInbox batch. Proof points only.
-    // The JSON backend's live copy is chain-vote-queue.json; these fields are
-    // the copy a full persist writes, and the postgres collections.
-    chainVoteQueue: [],
-    chainVoteBatchAt: {},
-    chainVoteInFlight: {},
-    chainVoteDeadLetter: [],
-    chainVoteAttempts: {},
-    chainVoteBackoff: {},
-    chainVoteSplit: {},
-    chainVoteAlerts: [],
-    chainVoteTransportStrikes: {},
-    // Dead letters offered to the supplementary batch and not yet mined.
-    chainVoteSupplementary: [],
-    // Proof payload for a crash between accept and the queue write. Not a public row.
-    chainBallotPayloads: [],
     notifications: [],
     tallyGuardians: [],
     pages: [],
@@ -211,45 +193,15 @@ function emptyData() {
     // electionId -> sorted hashes of spent vote passes. An unlinked set:
     // a hash is never stored on, or keyed by, a nullifier or a ballot.
     votePassSpent: {},
+    // electionId -> sorted hashes of the voters who took a vote pass (a poll book).
+    // It says who took part, never which pass or ballot is theirs: the pass is blind.
+    votePassIssued: {},
     runtime: {},
   };
 }
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
-}
-
-/** Keep a successful L1 post if a later retry fails or is AlreadyPosted. */
-export function mergeTallyL1(prev, next) {
-  if (!next || typeof next !== 'object') return prev || next;
-  if (!prev || typeof prev !== 'object') return next;
-  const prevOnChain = prev.posted || prev.alreadyPosted;
-  if (prevOnChain && next.status === 'failed') {
-    return { ...prev, lastError: next.error || null };
-  }
-  if (
-    next.alreadyPosted ||
-    next.status === 'already_posted' ||
-    next.status === 'already_posted_mismatch'
-  ) {
-    return {
-      ...next,
-      txHash: next.txHash || prev.txHash || null,
-      chainId: next.chainId || prev.chainId || null,
-      mirror: next.mirror || prev.mirror || null,
-      settlement: next.settlement || prev.settlement || null,
-      certificationId: next.certificationId || prev.certificationId || null,
-      factory: next.factory || prev.factory || null,
-      jurisdictionId: next.jurisdictionId || prev.jurisdictionId || null,
-      publicIdHash: next.publicIdHash || prev.publicIdHash || null,
-      publicId: next.publicId || prev.publicId || null,
-      electionAddress: next.electionAddress || prev.electionAddress || null,
-      ballotSpecHash: next.ballotSpecHash || prev.ballotSpecHash || null,
-      hashMismatch: Boolean(next.hashMismatch),
-      requestedHash: next.requestedHash || prev.requestedHash || null,
-    };
-  }
-  return next;
 }
 
 /** Fill defaults and repair collection shapes on a loaded document. */
@@ -260,13 +212,69 @@ function normalizeLoadedData(parsed) {
   }
   data.site = { ...defaultSite(), ...(data.site || {}) };
   data.site.contracts = { ...defaultSite().contracts, ...(data.site.contracts || {}) };
-  delete data.heldChainBallots;
+  dropRetiredChainState(data);
+  renameLocalElectionIds(data);
   ensureSuperAdminCollections(data);
   ensureSiteAdminCollections(data);
   data.meta = data.meta || {};
   scrubBallotLinkage(data);
   migratePasskeyCoseAlgs(data);
   return data;
+}
+
+/** Keys the old per-election contracts used (ballot queue, inbox payloads, sequencer opens). */
+const RETIRED_STORE_KEYS = [
+  'heldChainBallots',
+  'chainVoteQueue',
+  'chainVoteBatchAt',
+  'chainVoteInFlight',
+  'chainVoteDeadLetter',
+  'chainVoteAttempts',
+  'chainVoteBackoff',
+  'chainVoteSplit',
+  'chainVoteAlerts',
+  'chainVoteTransportStrikes',
+  'chainVoteSupplementary',
+  'chainBallotPayloads',
+];
+
+/** Drop state nothing reads since the rollup redesign. Returns true when something went. */
+export function dropRetiredChainState(data) {
+  let changed = false;
+  for (const key of RETIRED_STORE_KEYS) {
+    if (key in data) {
+      delete data[key];
+      changed = true;
+    }
+  }
+  for (const election of data.elections || []) {
+    if (!election || typeof election !== 'object') continue;
+    for (const key of ['l2OpenStatus', 'l2OpenFingerprint']) {
+      if (key in election) {
+        delete election[key];
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+/**
+ * The node's local election sequence (the poll proof's electionId) was stored as
+ * `onChainElectionId`, a name left from the old per-election contracts. Move it to
+ * `localElectionId` on load. Returns true when a record changed.
+ */
+export function renameLocalElectionIds(data) {
+  let changed = false;
+  for (const election of data.elections || []) {
+    if (!election || typeof election !== 'object' || !('onChainElectionId' in election)) continue;
+    if (election.localElectionId == null || election.localElectionId === '') {
+      election.localElectionId = election.onChainElectionId;
+    }
+    delete election.onChainElectionId;
+    changed = true;
+  }
+  return changed;
 }
 
 /**
@@ -278,6 +286,7 @@ export function scrubBallotLinkage(data) {
   if (!data.votePassSpent || typeof data.votePassSpent !== 'object' || Array.isArray(data.votePassSpent)) {
     data.votePassSpent = {};
   }
+  if (!plainObject(data.votePassIssued)) data.votePassIssued = {};
   if (dropPassToBallotLinks(data)) markPassLinksDirty(data);
   const hour = (t) => (Number.isFinite(Number(t)) ? Math.floor(Number(t) / 3600) * 3600 : t);
   for (const r of data.receipts || []) {
@@ -326,8 +335,6 @@ const ARRAY_COLLECTIONS = [
   'votes',
   'receipts',
   'envelopes',
-  'chainBallotPayloads',
-  'chainVoteAlerts',
   'notifications',
   'tallyGuardians',
   'pages',
@@ -355,6 +362,7 @@ export const BALLOT_TIMING_COLLECTIONS = [
   'receipts',
   'envelopes',
   'votePassSpent',
+  'votePassIssued',
   'elections',
 ];
 
@@ -371,65 +379,6 @@ function plainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Queue document. Rows are proof points; the chain layer owns the meaning. */
-export function normalizeChainVoteQueue(doc) {
-  const src = doc && typeof doc === 'object' ? doc : {};
-  const batchAt = {};
-  if (plainObject(src.batchAt)) {
-    for (const [id, at] of Object.entries(src.batchAt)) batchAt[id] = Number(at) || 0;
-  }
-  const inFlight = {};
-  if (plainObject(src.inFlight)) {
-    for (const [id, marker] of Object.entries(src.inFlight)) {
-      if (!plainObject(marker)) continue;
-      inFlight[id] = {
-        txHash: marker.txHash ? String(marker.txHash) : null,
-        nullifiers: Array.isArray(marker.nullifiers) ? marker.nullifiers.map((n) => String(n)) : [],
-        sentAt: Number(marker.sentAt) || 0,
-      };
-    }
-  }
-  const attempts = {};
-  if (plainObject(src.attempts)) {
-    for (const [id, n] of Object.entries(src.attempts)) {
-      const num = Number(n);
-      if (Number.isFinite(num) && num > 0) attempts[id] = Math.floor(num);
-    }
-  }
-  const backoffUntil = {};
-  if (plainObject(src.backoffUntil)) {
-    for (const [id, at] of Object.entries(src.backoffUntil)) {
-      const num = Number(at);
-      if (Number.isFinite(num) && num > 0) backoffUntil[id] = Math.floor(num);
-    }
-  }
-  const splitLimit = {};
-  if (plainObject(src.splitLimit)) {
-    for (const [id, n] of Object.entries(src.splitLimit)) {
-      const num = Number(n);
-      if (Number.isFinite(num) && num > 0) splitLimit[id] = Math.floor(num);
-    }
-  }
-  const transportStrikes = {};
-  if (plainObject(src.transportStrikes)) {
-    for (const [id, n] of Object.entries(src.transportStrikes)) {
-      const num = Number(n);
-      if (Number.isFinite(num) && num > 0) transportStrikes[id] = Math.floor(num);
-    }
-  }
-  return {
-    rows: Array.isArray(src.rows) ? src.rows : [],
-    batchAt,
-    inFlight,
-    deadLetter: Array.isArray(src.deadLetter) ? src.deadLetter.filter((item) => plainObject(item)) : [],
-    attempts,
-    backoffUntil,
-    splitLimit,
-    transportStrikes,
-    alerts: Array.isArray(src.alerts) ? src.alerts.filter((item) => plainObject(item)).slice(-20) : [],
-    supplementary: Array.isArray(src.supplementary) ? src.supplementary.filter((item) => plainObject(item)) : [],
-  };
-}
 
 function markPassLinksDirty(data) {
   Object.defineProperty(data, '__passLinksDirty', {
@@ -451,7 +400,7 @@ export function dropPassToBallotLinks(data) {
     delete data.votePassTags;
     dirty = true;
   }
-  for (const key of ['votes', 'receipts', 'envelopes', 'chainBallotPayloads']) {
+  for (const key of ['votes', 'receipts', 'envelopes']) {
     for (const row of data[key] || []) {
       if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'spentPassHash')) {
         delete row.spentPassHash;
@@ -495,9 +444,6 @@ export function dropPassToBallotLinks(data) {
 /** Public reason code. Free text stays in the private operator note. */
 export const EXCLUSION_REASON_CODE = 'excluded';
 
-/** A pending exclusion approval expires after one day. */
-export const EXCLUSION_APPROVAL_TTL_SECONDS = 24 * 60 * 60;
-
 /** Public exclusion summary: a count and a fixed reason code, not a nullifier or a note. */
 export function publicExclusion(election) {
   const rows = Array.isArray(election?.excludedBallots) ? election.excludedBallots : [];
@@ -515,29 +461,12 @@ export function publicExclusion(election) {
   };
 }
 
-function chainVoteQueueFromData(data) {
-  return normalizeChainVoteQueue({
-    rows: data?.chainVoteQueue,
-    batchAt: data?.chainVoteBatchAt,
-    inFlight: data?.chainVoteInFlight,
-    deadLetter: data?.chainVoteDeadLetter,
-    attempts: data?.chainVoteAttempts,
-    backoffUntil: data?.chainVoteBackoff,
-    splitLimit: data?.chainVoteSplit,
-    transportStrikes: data?.chainVoteTransportStrikes,
-    alerts: data?.chainVoteAlerts,
-    supplementary: data?.chainVoteSupplementary,
-  });
-}
 
 export class Store {
   constructor(filePath, data) {
     this.filePath = filePath;
-    this.queuePath = path.join(path.dirname(filePath), 'chain-vote-queue.json');
     this.data = data;
     this._write = Promise.resolve();
-    this._queueWrite = Promise.resolve();
-    this._chainQueue = chainVoteQueueFromData(data);
     /** 'json' (DATA_DIR file, dev fallback) or 'postgres' (DATABASE_URL). */
     this.backend = 'json';
     this.pg = null;
@@ -607,7 +536,6 @@ export class Store {
     store.data.meta = store.data.meta || {};
     if (!store.data.meta.nodeId) store.data.meta.nodeId = randomUUID();
     store.data.meta.version = Math.max(Number(store.data.meta.version || 0), PASSKEY_SCHEMA_VERSION);
-    await store.loadChainQueueFromDisk();
     if (store.writerActive) {
       if (store.pg) await store.pg.claimWriter();
       await store.persist();
@@ -657,7 +585,6 @@ export class Store {
     this.data = data;
     this.ensureJurisdictionIds();
     this.rebuildAllEligibility();
-    await this.loadChainQueueFromDisk();
   }
 
   async persist() {
@@ -809,10 +736,10 @@ export class Store {
     throw new HttpError(500, 'could not mint election short code');
   }
 
-  _allocateOnChainElectionId(requested) {
+  _allocateLocalElectionId(requested) {
     let value;
     try {
-      value = parseOnChainElectionId(requested);
+      value = parseLocalElectionId(requested);
     } catch (err) {
       throw new HttpError(err.status || 400, err.message);
     }
@@ -820,8 +747,8 @@ export class Store {
       value = String(this.data.meta.nextElectionId || 1);
       this.data.meta.nextElectionId = Number(this.data.meta.nextElectionId || 1) + 1;
     } else {
-      const taken = this.data.elections.some((e) => String(e.onChainElectionId) === value);
-      if (taken) throw new HttpError(409, 'onChainElectionId taken');
+      const taken = this.data.elections.some((e) => String(e.localElectionId) === value);
+      if (taken) throw new HttpError(409, 'localElectionId taken');
       try {
         const n = BigInt(value);
         const next = BigInt(this.data.meta.nextElectionId || 1);
@@ -836,7 +763,7 @@ export class Store {
   }
 
   /**
-   * Backfill shortCode / onChainElectionId on elections created before UUID
+   * Backfill shortCode / localElectionId on elections created before UUID
    * public ids. Existing non-UUID ids are kept so old bookmarks still resolve.
    */
   ensureElectionPublicIds() {
@@ -847,9 +774,9 @@ export class Store {
       if (!election.shortCode) {
         election.shortCode = this._uniqueShortCode();
       }
-      if (election.onChainElectionId == null || election.onChainElectionId === '') {
+      if (election.localElectionId == null || election.localElectionId === '') {
         if (/^\d+$/.test(String(election.id))) {
-          election.onChainElectionId = String(election.id);
+          election.localElectionId = String(election.id);
           try {
             const n = BigInt(election.id);
             const next = BigInt(this.data.meta.nextElectionId || 1);
@@ -860,17 +787,17 @@ export class Store {
             /* ignore */
           }
         } else {
-          election.onChainElectionId = this._allocateOnChainElectionId(null);
+          election.localElectionId = this._allocateLocalElectionId(null);
         }
       }
     }
   }
 
-  getElectionByOnChainId(onChainId) {
+  getElectionByLocalId(onChainId) {
     if (onChainId == null || onChainId === '') return null;
     const key = String(onChainId);
     return (
-      this.data.elections.find((e) => e.onChainElectionId != null && String(e.onChainElectionId) === key) ||
+      this.data.elections.find((e) => e.localElectionId != null && String(e.localElectionId) === key) ||
       null
     );
   }
@@ -879,89 +806,13 @@ export class Store {
     return this.data.elections.slice();
   }
 
-  /** Public lists omit a row whose sequencer open has not finished. */
   listPublicElections() {
-    return this.listElections().filter((row) => row && !isSoftDeleted(row) && row.l2OpenStatus !== 'pending');
+    return this.listElections().filter((row) => row && !isSoftDeleted(row));
   }
 
-  applyChainVoteQueue(doc) {
-    const next = normalizeChainVoteQueue(doc);
-    this._chainQueue = next;
-    this.data.chainVoteQueue = next.rows;
-    this.data.chainVoteBatchAt = next.batchAt;
-    this.data.chainVoteInFlight = next.inFlight;
-    this.data.chainVoteDeadLetter = next.deadLetter;
-    this.data.chainVoteAttempts = next.attempts;
-    this.data.chainVoteBackoff = next.backoffUntil;
-    this.data.chainVoteSplit = next.splitLimit;
-    this.data.chainVoteAlerts = next.alerts;
-    this.data.chainVoteTransportStrikes = next.transportStrikes;
-    this.data.chainVoteSupplementary = next.supplementary;
-    return next;
-  }
 
-  /**
-   * JSON: chain-vote-queue.json wins over the embedded copy so a crash between
-   * a ballot and the next full persist still has the queue. Postgres keeps the
-   * queue in its own collections; the sidecar is not read there.
-   */
-  async loadChainQueueFromDisk() {
-    if (!this.pg) {
-      const sidecar = await readJsonFile(this.queuePath);
-      if (sidecar && typeof sidecar === 'object') {
-        this.applyChainVoteQueue(sidecar);
-        return this._chainQueue;
-      }
-    }
-    this.applyChainVoteQueue(chainVoteQueueFromData(this.data));
-    return this._chainQueue;
-  }
 
-  loadChainVoteQueue() {
-    return this._chainQueue || chainVoteQueueFromData(this.data);
-  }
 
-  /**
-   * Persist the ballot queue only. The JSON backend rewrites chain-vote-queue.json.
-   * Postgres writes the queue collections. Neither path rewrites the whole store.
-   */
-  async saveChainVoteQueue(doc) {
-    this.refuseIfStandby();
-    const next = this.applyChainVoteQueue(doc);
-    if (this.pg) {
-      await this.pg.saveCollections({
-        chainVoteQueue: next.rows,
-        chainVoteBatchAt: next.batchAt,
-        chainVoteInFlight: next.inFlight,
-        chainVoteDeadLetter: next.deadLetter,
-        chainVoteAttempts: next.attempts,
-        chainVoteBackoff: next.backoffUntil,
-        chainVoteSplit: next.splitLimit,
-        chainVoteAlerts: next.alerts,
-        chainVoteTransportStrikes: next.transportStrikes,
-        chainVoteSupplementary: next.supplementary,
-      });
-      return;
-    }
-    this._queueWrite = this._queueWrite.then(async () => {
-      const tmp = `${this.queuePath}.${process.pid}.tmp`;
-      const handle = await fs.open(tmp, 'w');
-      try {
-        await handle.writeFile(JSON.stringify(next));
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      await fs.rename(tmp, this.queuePath);
-      const dir = await fs.open(path.dirname(this.queuePath), 'r');
-      try {
-        await dir.sync();
-      } finally {
-        await dir.close();
-      }
-    });
-    return this._queueWrite;
-  }
 
   getUser(id) {
     const user = this.data.users.find((u) => u.id === id && !isSoftDeleted(u)) || null;
@@ -1602,28 +1453,17 @@ export class Store {
 
   async createElection(params) {
     // Never honor a client-supplied public id (copied UUID / squatting).
-    const onChainElectionId = this._allocateOnChainElectionId(params.onChainElectionId);
+    // `onChainElectionId` is the field's old name; API clients written against it still work.
+    const localElectionId = this._allocateLocalElectionId(params.localElectionId ?? params.onChainElectionId);
     const scope = {
-      factoryAddress: params.factoryAddress || null,
-      onChainElectionId,
+      localElectionId,
       jurisdictionId: params.jurisdictionId,
-      chainId: params.chainId,
       nodeId: this.nodeId(),
     };
     const id = mintScopedPublicId(scope);
     const existing = this.getElection(id);
     if (existing) {
-      const sameIdentity =
-        String(existing.onChainElectionId) === String(onChainElectionId) &&
-        String(existing.jurisdictionId) === String(params.jurisdictionId) &&
-        String(existing.factoryAddress || '') === String(params.factoryAddress || '');
-      throw new HttpError(
-        409,
-        sameIdentity
-          ? 'election already exists for this factory, jurisdiction, and on-chain id'
-          : 'election public id collision',
-        { code: 'ELECTION_ID_COLLISION' },
-      );
+      throw new HttpError(409, 'election public id collision', { code: 'ELECTION_ID_COLLISION' });
     }
     const shortCode = this._uniqueShortCode();
     const tree = emptyTree(params.treeDepth);
@@ -1687,7 +1527,7 @@ export class Store {
     const election = {
       id,
       shortCode,
-      onChainElectionId,
+      localElectionId,
       publicIdScheme: 'uuid-v5-jurisdiction',
       aliases: [],
       title: params.title,
@@ -1714,10 +1554,6 @@ export class Store {
       tallyPubKeyX,
       tallyPubKeyY,
       tallyCeremony,
-      onChainElectionAddress: params.onChainElectionAddress || null,
-      factoryAddress: params.factoryAddress || null,
-      createTxHash: params.createTxHash || null,
-      chainId: params.chainId != null ? Number(params.chainId) : null,
       rollFrozen: false,
       frozenAt: null,
       frozenEligibleRoot: null,
@@ -1733,38 +1569,13 @@ export class Store {
       createdBy: params.createdBy || null,
       createdAt: new Date().toISOString(),
       staff: [],
-      l2OpenStatus:
-        params.l2OpenStatus === 'pending' || params.l2OpenStatus === 'open'
-          ? params.l2OpenStatus
-          : 'unconfigured',
-      l2OpenFingerprint: params.l2OpenFingerprint || null,
     };
     this.data.elections.push(election);
     await this.persist();
     return election;
   }
 
-  /** A create whose sequencer open failed. A matching retry reuses this row. */
-  findPendingL2Open(fingerprint) {
-    const want = String(fingerprint || '');
-    if (!want) return null;
-    return (
-      (this.data.elections || []).find(
-        (row) =>
-          row &&
-          !isSoftDeleted(row) &&
-          row.l2OpenStatus === 'pending' &&
-          String(row.l2OpenFingerprint || '') === want,
-      ) || null
-    );
-  }
 
-  async setL2OpenStatus(id, status) {
-    const election = this.requireElection(id);
-    election.l2OpenStatus = status;
-    await this.persist();
-    return election;
-  }
 
   /**
    * Update ballot title / questions / metadata URI before the roll is frozen.
@@ -1811,8 +1622,8 @@ export class Store {
     if (election.tally) {
       throw new HttpError(409, 'election already tallied', { code: 'TALLIED' });
     }
-    if (election.createTxHash || election.onChainElectionAddress) {
-      throw new HttpError(409, 'election was created on chain and cannot be deleted here', {
+    if (election.rollup?.electionId) {
+      throw new HttpError(409, 'election is published on the rollup and cannot be deleted here', {
         code: 'ON_CHAIN',
       });
     }
@@ -2620,9 +2431,6 @@ export class Store {
       relayer: vote.relayer || 'node',
       acceptedAt,
     };
-    if (vote.chainPayload && typeof vote.chainPayload === 'object') {
-      this.upsertChainBallotPayload(record.electionId, record.nullifier, vote.chainPayload);
-    }
     // Each collection gets its own random insert position, so array order (and
     // the zkv_rows `pos` column) is not arrival order and the three rows of
     // one ballot do not share an index. No userOpHash, no email fields.
@@ -2765,9 +2573,6 @@ export class Store {
         env.tallyRankingId = newRankingId();
       }
     }
-    if (vote.chainPayload && typeof vote.chainPayload === 'object') {
-      this.upsertChainBallotPayload(electionId, nullifier, vote.chainPayload);
-    }
     if (vote.receiptTokenHash) {
       let pdfSha256 = null;
       if (vote.pdfSha256) {
@@ -2820,9 +2625,6 @@ export class Store {
       const list = this.data.votePassSpent?.[electionKey];
       if (Array.isArray(list)) this.data.votePassSpent[electionKey] = list.filter((item) => item !== hash);
     }
-    this.data.chainBallotPayloads = (this.data.chainBallotPayloads || []).filter(
-      (row) => !row || String(row.electionId) !== electionKey || toBytes32(row.nullifier) !== key,
-    );
     const election = this.getElection(electionId);
     if (election) election.acceptedBallots = Math.max(0, Number(election.acceptedBallots || 0) - removed);
     // resultsGateOpenedAt stays set. Dropping acceptedBallots must not close the gate.
@@ -2830,87 +2632,8 @@ export class Store {
     return true;
   }
 
-  upsertChainBallotPayload(electionId, nullifier, payload) {
-    if (!Array.isArray(this.data.chainBallotPayloads)) this.data.chainBallotPayloads = [];
-    const electionKey = String(electionId);
-    const id = toBytes32(nullifier);
-    let row = this.data.chainBallotPayloads.find(
-      (item) => item && String(item.electionId) === electionKey && toBytes32(item.nullifier) === id,
-    );
-    if (!row) {
-      row = { electionId: electionKey, nullifier: id };
-      insertAtRandom(this.data.chainBallotPayloads, row);
-    }
-    row.proof = payload.proof;
-    row.publicInputs = payload.publicInputs;
-    row.encryptedBallot = payload.encryptedBallot;
-    row.startTime = payload.startTime ?? 0;
-    row.cutoffTime = payload.cutoffTime ?? null;
-    return row;
-  }
 
-  chainBallotPayload(electionId, nullifier) {
-    const electionKey = String(electionId);
-    let id;
-    try {
-      id = toBytes32(nullifier);
-    } catch {
-      return null;
-    }
-    return (
-      (this.data.chainBallotPayloads || []).find(
-        (item) => item && String(item.electionId) === electionKey && toBytes32(item.nullifier) === id,
-      ) || null
-    );
-  }
 
-  async markChainBallotQueued(electionId, nullifier, at, txHash = null) {
-    const row = this.chainBallotPayload(electionId, nullifier);
-    if (!row) return null;
-    row.chainQueuedAt = Math.floor(Number(at) || Date.now() / 1000);
-    if (txHash) row.chainTxHash = String(txHash);
-    await this.persist();
-    return row;
-  }
-
-  /**
-   * Drop proof payloads once the inbox has the nullifier. Matches the app
-   * election id or the on-chain id the queue uses.
-   */
-  async dropChainBallotPayloads(electionKey, nullifiers) {
-    if (!Array.isArray(this.data.chainBallotPayloads) || !this.data.chainBallotPayloads.length) return 0;
-    const ids = new Set();
-    for (const n of nullifiers || []) {
-      try {
-        ids.add(toBytes32(n));
-      } catch {
-        /* skip a nullifier this store cannot name */
-      }
-    }
-    if (!ids.size) return 0;
-    const electionIds = new Set([String(electionKey)]);
-    for (const election of this.data.elections || []) {
-      if (!election) continue;
-      const appId = String(election.id);
-      const chainId = election.onChainElectionId != null ? String(election.onChainElectionId) : '';
-      if (appId === String(electionKey) || (chainId && chainId === String(electionKey))) {
-        electionIds.add(appId);
-        if (chainId) electionIds.add(chainId);
-      }
-    }
-    const before = this.data.chainBallotPayloads.length;
-    this.data.chainBallotPayloads = this.data.chainBallotPayloads.filter((row) => {
-      if (!row || !electionIds.has(String(row.electionId))) return true;
-      try {
-        return !ids.has(toBytes32(row.nullifier));
-      } catch {
-        return true;
-      }
-    });
-    const removed = before - this.data.chainBallotPayloads.length;
-    if (removed) await this.persist();
-    return removed;
-  }
 
   excludedNullifiers(electionId) {
     const election = this.getElection(electionId);
@@ -2918,122 +2641,45 @@ export class Store {
     return rows.map((row) => row.nullifier);
   }
 
-  /**
-   * First tally operator records intent. A second, different operator must
-   * call again before the ballot is excluded. The pending row expires after
-   * 24 hours and stays tied to the public reason code. The second operator
-   * receives the first operator's note.
-   */
-  async noteExclusionApproval(electionId, { nullifier, userId, reason, at } = {}) {
-    this.refuseIfStandby();
-    const election = this.requireElection(electionId);
-    const clean = String(reason || '').trim();
-    if (!clean) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
-    if (clean.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
-    const uid = String(userId || '').trim();
-    if (!uid) throw new HttpError(400, 'operator is required', { code: 'OPERATOR_REQUIRED' });
-    const id = toBytes32(nullifier);
-    const when = Math.floor(Number(at) || Date.now() / 1000);
-    if (!Array.isArray(election.exclusionApprovals)) election.exclusionApprovals = [];
-    const pending = election.exclusionApprovals.find((row) => row && toBytes32(row.nullifier) === id);
-    const age = pending ? when - Number(pending.at) : 0;
-    const expired = Boolean(pending) && (!Number.isFinite(age) || age >= EXCLUSION_APPROVAL_TTL_SECONDS);
-    const unbound = Boolean(pending) && pending.reasonCode !== EXCLUSION_REASON_CODE;
-    if (!pending || expired || unbound) {
-      election.exclusionApprovals = election.exclusionApprovals.filter(
-        (row) => !(row && toBytes32(row.nullifier) === id),
-      );
-      election.exclusionApprovals.push({
-        nullifier: id,
-        userId: uid,
-        reason: clean,
-        reasonCode: EXCLUSION_REASON_CODE,
-        at: when,
-      });
-      await this.persist();
-      return { status: 'pending', reason: clean, reasonCode: EXCLUSION_REASON_CODE };
-    }
-    if (String(pending.userId) === uid) {
-      throw new HttpError(409, 'a second tally operator must approve this exclusion', { code: 'SAME_OPERATOR' });
-    }
-    return {
-      status: 'ready',
-      approverIds: [String(pending.userId), uid],
-      reason: pending.reason,
-      reasonCode: pending.reasonCode,
-    };
-  }
-
-  /**
-   * Writer record that a dead-lettered ballot will not be forced onto the
-   * chain. The vote row stays. The public tally copies the count and the
-   * fixed reason code. The operator's note stays on exclusionNotes.
-   */
-  async recordBallotExclusion(electionId, { nullifier, reason, notes, at, approverIds } = {}) {
-    this.refuseIfStandby();
-    const election = this.requireElection(electionId);
-    const list = Array.isArray(notes) && notes.length
-      ? notes.map((entry) => ({
-          reason: String(entry?.reason || '').trim(),
-          userId: entry?.userId != null ? String(entry.userId) : '',
-        }))
-      : [{ reason: String(reason || '').trim(), userId: '' }];
-    for (const entry of list) {
-      if (!entry.reason) throw new HttpError(400, 'a reason is required', { code: 'EXCLUSION_REASON' });
-      if (entry.reason.length > 280) throw new HttpError(400, 'reason is too long', { code: 'EXCLUSION_REASON' });
-    }
-    const id = toBytes32(nullifier);
-    if (!Array.isArray(election.excludedBallots)) election.excludedBallots = [];
-    if (!election.excludedBallots.some((row) => row && toBytes32(row.nullifier) === id)) {
-      const when = Math.floor(Number(at) || Date.now() / 1000);
-      const ids = Array.isArray(approverIds) ? approverIds.map((item) => String(item)) : [];
-      election.excludedBallots.push({
-        nullifier: id,
-        reasonCode: EXCLUSION_REASON_CODE,
-        at: when,
-      });
-      if (!Array.isArray(election.exclusionNotes)) election.exclusionNotes = [];
-      for (const entry of list) {
-        election.exclusionNotes.push({
-          nullifier: id,
-          reason: entry.reason,
-          at: when,
-          ...(entry.userId ? { userId: entry.userId } : {}),
-          approverIds: ids,
-        });
-      }
-      if (Array.isArray(election.exclusionApprovals)) {
-        election.exclusionApprovals = election.exclusionApprovals.filter(
-          (row) => !(row && toBytes32(row.nullifier) === id),
-        );
-      }
-      await this.persist();
-    }
-    return publicExclusion(election);
-  }
-
-  /** Keep the exclusion record when the dead letter could not be released. */
-  async setExclusionReleasePending(electionId, nullifier, pending) {
-    this.refuseIfStandby();
-    const election = this.requireElection(electionId);
-    const id = toBytes32(nullifier);
-    const row = (election.excludedBallots || []).find((item) => item && toBytes32(item.nullifier) === id);
-    if (!row) return false;
-    if (pending) {
-      if (row.releasePending === true) return true;
-      row.releasePending = true;
-    } else if (row.releasePending) {
-      delete row.releasePending;
-    } else {
-      return false;
-    }
-    await this.persist();
-    return true;
-  }
-
   votePassSpent(electionId, hash) {
     const list = this.data.votePassSpent?.[String(electionId)];
     return Array.isArray(list) && list.includes(String(hash).toLowerCase());
+  }
+
+  /** Spend a vote pass for a ballot that lives on the rollup, not in this store. */
+  async spendVotePass(electionId, passHash) {
+    this._rememberSpentPass(electionId, passHash);
+    await this.persist();
+  }
+
+  /** Whether this poll-book key (see votePass.issueKey) already took a pass in the election. */
+  votePassIssued(electionId, issueKey) {
+    const list = this.data.votePassIssued?.[String(electionId)];
+    return Array.isArray(list) && list.includes(String(issueKey).toLowerCase());
+  }
+
+  /**
+   * Record that a voter took a vote pass, so a restart cannot issue a second one.
+   * The check and the write happen before any await, so concurrent requests
+   * cannot both pass. The entry is rolled back when the save fails.
+   */
+  async recordVotePassIssue(electionId, issueKey) {
+    const hash = String(issueKey || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error('vote pass issue key must be a sha256 hex digest');
+    const key = String(electionId);
+    if (!plainObject(this.data.votePassIssued)) this.data.votePassIssued = {};
+    const list = Array.isArray(this.data.votePassIssued[key]) ? this.data.votePassIssued[key] : [];
+    if (list.includes(hash)) return false;
+    list.push(hash);
+    list.sort();
+    this.data.votePassIssued[key] = list;
+    try {
+      await this.persist();
+    } catch (err) {
+      this.data.votePassIssued[key] = (this.data.votePassIssued[key] || []).filter((item) => item !== hash);
+      throw err;
+    }
+    return true;
   }
 
   /** Add a pass hash to the election's unlinked spent set. Not stored on a ballot. */
@@ -3508,7 +3154,6 @@ export class Store {
       aggregation: extras.aggregation || null,
       guardianThreshold: extras.guardianThreshold ?? null,
       countsHash: extras.countsHash || null,
-      l1: extras.l1 || null,
       ballotMethod: extras.ballotMethod || election.ballotMethod || 'plurality',
     };
     const excluded = publicExclusion(election);
@@ -3517,17 +3162,6 @@ export class Store {
       election.tally.questions = extras.questions;
     }
     if (extras.ranked && typeof extras.ranked === 'object') election.tally.ranked = { ...extras.ranked };
-    await this.persist();
-    return election;
-  }
-
-  async setTallyL1(id, l1) {
-    const election = this.requireElection(id);
-    if (!election.tally) throw new HttpError(409, 'election not yet tallied');
-    election.tally.l1 = mergeTallyL1(election.tally.l1, l1);
-    if (l1?.resultHash && !election.tally.countsHash) {
-      election.tally.countsHash = l1.resultHash;
-    }
     await this.persist();
     return election;
   }
@@ -3692,7 +3326,7 @@ export class Store {
   getSite() {
     if (!this.data.site) this.data.site = defaultSite();
     this.data.site = { ...defaultSite(), ...this.data.site };
-    this.data.site.contracts = { ...defaultSite().contracts, ...(this.data.site.contracts || {}) };
+    delete this.data.site.contracts;
     this.data.site.sharedDeployment = true;
     this.data.site.nfp = true;
     return this.data.site;
@@ -3706,16 +3340,6 @@ export class Store {
       site.title = title && title !== brandName() && !LEGACY_DEFAULT_NAMES.includes(title) ? title : '';
     }
     if (patch.tagline != null) site.tagline = sanitizeText(patch.tagline, 400);
-    if (patch.contracts && typeof patch.contracts === 'object') {
-      for (const key of ['factory', 'ballotInbox', 'verifier']) {
-        if (patch.contracts[key] == null) continue;
-        const addr = sanitizeAddress(patch.contracts[key]);
-        if (patch.contracts[key] !== '' && addr === null) {
-          throw new HttpError(400, `invalid ${key} address`);
-        }
-        site.contracts[key] = addr || '';
-      }
-    }
     site.sharedDeployment = true;
     site.updatedAt = new Date().toISOString();
     if (actor?.id) site.updatedBy = actor.id;

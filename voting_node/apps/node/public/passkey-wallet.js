@@ -29,6 +29,7 @@
 import { brandName } from "./brand.js";
 import { encryptAggregateBallot } from "./aggregate-ballot.js";
 import { P256_G, p256Mul, pointToRaw, randomScalar } from "./p256-math.js";
+import { keccak256, keccak256Hex } from "./keccak.js";
 import { POSEIDON_HASH_SCHEME, poseidonCommitmentHex } from "./poseidon.js";
 const DB_NAME = "zk-voting-wallet";
 const DB_VERSION = 2;
@@ -163,144 +164,8 @@ function zeroFill(arr) {
   if (arr && arr.fill) arr.fill(0);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Keccak-256 (Ethereum; not NIST SHA-3)                                      */
-/*                                                                          */
-/* Test vectors:                                                              */
-/*   keccak256("")    = c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 */
-/*   keccak256("abc") = 4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45 */
-/* -------------------------------------------------------------------------- */
-
-const KECCAK_RC = [
-  0x0000000000000001n,
-  0x0000000000008082n,
-  0x800000000000808an,
-  0x8000000080008000n,
-  0x000000000000808bn,
-  0x0000000080000001n,
-  0x8000000080008081n,
-  0x8000000000008009n,
-  0x000000000000008an,
-  0x0000000000000088n,
-  0x0000000080008009n,
-  0x000000008000000an,
-  0x000000008000808bn,
-  0x800000000000008bn,
-  0x8000000000008089n,
-  0x8000000000008003n,
-  0x8000000000008002n,
-  0x8000000000000080n,
-  0x000000000000800an,
-  0x800000008000000an,
-  0x8000000080008081n,
-  0x8000000000008080n,
-  0x0000000080000001n,
-  0x8000000080008008n,
-];
-
-const KECCAK_RHO = [
-  0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14,
-];
-
-const MASK64 = 0xffffffffffffffffn;
-
-function rotl64(x, n) {
-  const s = BigInt(n % 64);
-  if (s === 0n) return x;
-  return ((x << s) | (x >> (64n - s))) & MASK64;
-}
-
-function keccakF1600(a) {
-  for (let round = 0; round < 24; round++) {
-    const c = new Array(5);
-    for (let x = 0; x < 5; x++) {
-      c[x] = a[x] ^ a[x + 5] ^ a[x + 10] ^ a[x + 15] ^ a[x + 20];
-    }
-    const d = new Array(5);
-    for (let x = 0; x < 5; x++) {
-      d[x] = c[(x + 4) % 5] ^ rotl64(c[(x + 1) % 5], 1);
-    }
-    for (let i = 0; i < 25; i++) a[i] ^= d[i % 5];
-
-    const b = new Array(25);
-    for (let x = 0; x < 5; x++) {
-      for (let y = 0; y < 5; y++) {
-        const src = x + 5 * y;
-        const destX = y;
-        const destY = (2 * x + 3 * y) % 5;
-        b[destX + 5 * destY] = rotl64(a[src], KECCAK_RHO[src]);
-      }
-    }
-
-    for (let x = 0; x < 5; x++) {
-      for (let y = 0; y < 5; y++) {
-        const i = x + 5 * y;
-        a[i] = b[i] ^ (~b[((x + 1) % 5) + 5 * y] & b[((x + 2) % 5) + 5 * y]);
-        a[i] &= MASK64;
-      }
-    }
-    a[0] ^= KECCAK_RC[round];
-  }
-}
-
-/**
- * @param {BufferSource | Uint8Array | number[] | string} input bytes, or UTF-8 string
- * @returns {Uint8Array} 32-byte digest
- */
-export function keccak256(input) {
-  const data =
-    typeof input === "string" ? textEncoder.encode(input) : coerceBytes(input);
-  const rate = 136;
-  const state = new Array(25).fill(0n);
-  const block = new Uint8Array(rate);
-  let offset = 0;
-  while (offset < data.length) {
-    const n = Math.min(rate, data.length - offset);
-    block.fill(0);
-    block.set(data.subarray(offset, offset + n));
-    if (n < rate) {
-      block[n] ^= 0x01;
-      block[rate - 1] ^= 0x80;
-      xorBlock(state, block);
-      keccakF1600(state);
-      offset = data.length;
-      break;
-    }
-    xorBlock(state, block);
-    keccakF1600(state);
-    offset += n;
-  }
-  if (data.length % rate === 0) {
-    block.fill(0);
-    block[0] ^= 0x01;
-    block[rate - 1] ^= 0x80;
-    xorBlock(state, block);
-    keccakF1600(state);
-  }
-  const out = new Uint8Array(32);
-  for (let i = 0; i < 4; i++) store64(out, i * 8, state[i]);
-  return out;
-}
-
-function xorBlock(state, block) {
-  for (let i = 0; i < 17; i++) {
-    state[i] ^= load64(block, i * 8);
-  }
-}
-
-function load64(bytes, offset) {
-  let x = 0n;
-  for (let i = 0; i < 8; i++) x |= BigInt(bytes[offset + i]) << BigInt(8 * i);
-  return x;
-}
-
-function store64(bytes, offset, x) {
-  for (let i = 0; i < 8; i++) bytes[offset + i] = Number((x >> BigInt(8 * i)) & 0xffn);
-}
-
-export function keccak256Hex(input) {
-  return "0x" + bytesToHex(keccak256(input));
-}
+/** Keccak-256 lives in keccak.js; re-exported for existing callers. */
+export { keccak256, keccak256Hex } from "./keccak.js";
 
 /** BN254 scalar field modulus r. */
 export const SNARK_SCALAR_FIELD =
@@ -1454,13 +1319,13 @@ export async function signUserOp(hash) {
 
 /**
  * Unlock identity secrets under the identity PRF domain and compute the
- * circuit nullifier Poseidon(nullifierSecret, chainElectionId). A plurality
+ * circuit nullifier Poseidon(nullifierSecret, localElectionId). A plurality
  * choice is sealed as an AG aggregate envelope. The return value has no
  * account address, credential id, or userOp hash.
  */
 export async function authorizeBallot({
   electionId,
-  chainElectionId,
+  localElectionId,
   ballotBytes,
   tallyPubKey,
   choiceIndex,
@@ -1475,7 +1340,7 @@ export async function authorizeBallot({
     if (!identity?.nullifierSecret) {
       throw new Error("IDENTITY_PRF_REQUIRED. Refusing to vote without an identity-domain PRF output.");
     }
-    const idForNullifier = chainElectionId ?? electionId;
+    const idForNullifier = localElectionId ?? electionId;
     let nullifier = null;
     if (idForNullifier != null && !String(idForNullifier).includes("-")) {
       nullifier = electionNullifierHex(nullifierSecret, idForNullifier);
@@ -1519,6 +1384,30 @@ export async function authorizeBallot({
     zeroFill(seed);
     zeroFill(trapdoor);
     zeroFill(nullifierSecret);
+  }
+}
+
+/**
+ * Civic vote on the rollup: unlock the identity secrets under the identity PRF domain and
+ * return only the nullifier Poseidon(nullifierSecret, l1ElectionId), as a decimal string.
+ * The ballot itself is encrypted by ballot-crypto.js and needs no secret. The return value
+ * has no account address, credential id, trapdoor or nullifier secret.
+ */
+export async function rollupNullifier(l1ElectionId) {
+  if (l1ElectionId == null || !/^\d+$/.test(String(l1ElectionId))) {
+    throw new Error("rollupNullifier needs the L1 election id (an integer).");
+  }
+  const { seed, identity } = await unwrapWalletMaterial({ needIdentity: true });
+  try {
+    if (!identity?.nullifierSecret) {
+      throw new Error("IDENTITY_PRF_REQUIRED. Refusing to vote without an identity-domain PRF output.");
+    }
+    const nullifier = BigInt(electionNullifierHex(identity.nullifierSecret, String(l1ElectionId))).toString();
+    return { nullifier, identityCommitment: identity.commitment };
+  } finally {
+    zeroFill(seed);
+    zeroFill(identity?.trapdoor);
+    zeroFill(identity?.nullifierSecret);
   }
 }
 

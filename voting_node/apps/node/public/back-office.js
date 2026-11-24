@@ -960,14 +960,13 @@
   function electionLabel(row) {
     const title = pick(row, ["title", "name", "stateName"]) || "Election";
     const state = pick(row, ["stateName"]) || "";
-    const chain = pick(row, ["onChainElectionId"]);
     const short = pick(row, ["shortCode"]);
     const id = electionIdOf(row);
     const ref = short ? short : String(id).slice(0, 8);
     const nq = pick(row, ["questionCount"]) || (Array.isArray(row.questions) ? row.questions.length : "");
     const qbit = nq ? " · " + nq + " q" : "";
-    const chainBit = chain ? " · chain #" + chain : "";
-    return title + " · " + ref + chainBit + (state ? " · " + state : "") + qbit;
+    const kind = isCivicVoteRow(row) ? " · civic vote" : " · poll";
+    return title + " · " + ref + kind + (state ? " · " + state : "") + qbit;
   }
 
   function markRole(el, ok) {
@@ -1048,8 +1047,8 @@
           banner.textContent = cfg.disclosure.note + (when ? " Next publish: " + when + "." : "");
         }
         const chainNote = $("chain-election-note");
-        if (chainNote && cfg.chain && cfg.chain.note) {
-          chainNote.textContent = cfg.chain.note;
+        if (chainNote && cfg.rollup && cfg.rollup.note) {
+          chainNote.textContent = cfg.rollup.note;
         }
       } catch {
         /* banner keeps static copy */
@@ -1097,14 +1096,43 @@
     $("link-explorer").href = "/explorer#/election/" + encodeURIComponent(id);
   }
 
+  /** electionId -> "civic" | "poll", from the last election list. Picks the tally tools. */
+  const electionKinds = new Map();
+
+  function isCivicVoteRow(row) {
+    return row.electionTypeName === "vote" || Number(row.electionType) === 1;
+  }
+
+  /** Show the civic (L1) or the poll tools for the election picked under "Guardians and tally". */
+  async function showTallyMode() {
+    const id = $("t-election").value;
+    const kind = id ? electionKinds.get(String(id)) || "poll" : null;
+    $("tally-civic").hidden = kind !== "civic";
+    $("tally-poll").hidden = kind !== "poll";
+    $("tally-none").hidden = Boolean(kind);
+    $("t-election-kind").textContent =
+      kind === "civic"
+        ? "Civic vote: counted on L1, final sum only."
+        : kind === "poll"
+          ? "Poll: counted on this Node."
+          : "";
+    if (kind === "civic") await loadRollup();
+    else if (kind === "poll") await loadTallyElection(id);
+  }
+
   async function loadElections() {
     try {
       const data = await request("/api/elections");
       const rows = asList(data, ["elections", "items"]);
-      const selects = [$("f-election"), $("r-election"), $("d-election"), $("t-election"), $("rr-election")];
+      const selects = [$("r-election"), $("d-election"), $("t-election"), $("rr-election")];
       for (const sel of selects) {
         if (sel) fillSelect(sel, rows, electionIdOf, electionLabel);
       }
+      // Civic votes run on the rollup and their roll is held on L1; only polls freeze here.
+      electionKinds.clear();
+      for (const row of rows) electionKinds.set(String(electionIdOf(row)), isCivicVoteRow(row) ? "civic" : "poll");
+      if ($("f-election")) fillSelect($("f-election"), rows.filter((row) => !isCivicVoteRow(row)), electionIdOf, electionLabel);
+      await showTallyMode();
       const loader = $("e-load");
       if (loader) {
         const current = loader.value;
@@ -1310,21 +1338,18 @@
     try {
       const created = await request("/api/elections", { method: "POST", body });
       const id = pick(created, ["election.id", "id"]) || "";
-      const chainMode = pick(created, ["chainMode", "election.chainMode"]);
-      const onChainId = pick(created, ["onChainElectionId", "election.onChainElectionId"]);
-      const addr = pick(created, ["onChainElectionAddress", "election.onChainElectionAddress"]);
-      const tx = pick(created, ["createTxHash", "election.createTxHash"]);
+      const isVote = Number(pick(created, ["election.electionType"])) === 1;
       const short = pick(created, ["election.shortCode", "shortCode"]) || "";
       const bits = ["Created election " + id];
       if (short) bits.push("short /v/" + short);
-      if (chainMode === "onchain") {
-        bits.push("factory #" + onChainId);
-        if (addr) bits.push(addr);
-        if (tx) bits.push("tx " + tx);
-      } else if (onChainId) {
-        bits.push("circuit id " + onChainId + " (JSON demo)");
-      }
-      flash($("flash-election"), "ok", bits.join(" · ") + ". Freeze the roll before opening.");
+      flash(
+        $("flash-election"),
+        "ok",
+        bits.join(" · ") +
+          (isVote
+            ? ". A civic vote runs on L1: set it up under Civic vote on L1 (guardians, then publish)."
+            : ". Freeze the roll before opening.")
+      );
       if (id) {
         $("e-load").value = String(id);
         storedElectionTitle = $("e-title").value.trim();
@@ -1761,34 +1786,124 @@
     }
   });
 
-  $("btn-certify-l1").addEventListener("click", async () => {
-    const id = $("t-election").value;
+  // ---------------------------------------------------------------- civic vote on L1
+
+  function parseIdentityKey(raw) {
+    const text = String(raw || "").trim();
+    let parts;
+    try {
+      parts = JSON.parse(text);
+    } catch {
+      parts = text.replace(/[[\]"\s]/g, "").split(",");
+    }
+    if (!Array.isArray(parts) || parts.length !== 2 || !parts.every((p) => /^\d+$/.test(String(p)))) {
+      throw new Error('Identity key must be two decimal numbers, as guardian:rollup init prints: ["x", "y"].');
+    }
+    return parts.map(String);
+  }
+
+  function rollupStatusHtml(view) {
+    if (!view || (!view.published && !(view.guardians || []).length && view.threshold == null)) {
+      return '<p class="field-hint">Not set up for the rollup yet. Save the settings or enroll a guardian to start.</p>';
+    }
+    const l1 = view.l1 || null;
+    const guardians = view.guardians || [];
+    const rows = guardians
+      .map((g) => {
+        const marks = l1
+          ? [g.committed ? "committed" : "not committed", g.sharesPosted ? "share posted" : null, g.excluded ? "excluded" : null]
+              .filter(Boolean)
+              .join(" · ")
+          : "enrolled";
+        return `<li><span class="lbl">${esc(g.index)}. ${esc(g.label || "Guardian")}</span><span>${esc(marks)}</span></li>`;
+      })
+      .join("");
+    const closed = l1 && ["closed", "finalized", "withheld"].includes(l1.status);
+    const facts = [
+      ["Status", l1 ? `${l1.status} on L1 (election ${l1.electionId})` : view.enabled ? "draft, not on L1" : "draft (node not connected to the rollup)"],
+      ["Guardians needed", view.threshold ? `${view.threshold} of ${guardians.length}` : `majority of ${guardians.length}`],
+      ["Anonymity floor", view.minBallots ? `${view.minBallots} ballots` : "—"],
+      ["Roll on L1", String(view.rollSynced ?? 0)],
+      closed ? ["Ballots", String(l1.ballotCount)] : null,
+      view.result ? ["Certified totals", (view.result.counts || []).join(" · ")] : null,
+    ]
+      .filter(Boolean)
+      .map(([k, v]) => `<li><span class="lbl">${esc(k)}</span><span>${esc(v)}</span></li>`)
+      .join("");
+    return `<ul class="meta-list">${facts}</ul>${rows ? `<h3>Guardians</h3><ul class="meta-list">${rows}</ul>` : ""}`;
+  }
+
+  async function loadRollup() {
+    const id = electionKinds.get(String($("t-election").value)) === "civic" ? $("t-election").value : "";
+    const host = $("ru-status");
+    if (!host) return;
     if (!id) {
-      flash($("flash-tally"), "err", "Choose an election first.");
+      host.innerHTML = '<p class="field-hint">Choose a civic vote.</p>';
       return;
     }
     try {
-      const data = await request("/api/elections/" + encodeURIComponent(id) + "/certify-l1", {
-        method: "POST",
-        body: {},
-      });
-      const cert = data && data.l1Certification;
-      if (cert && cert.status === "skipped") {
-        flash($("flash-tally"), "ok", "L1 no-op: " + (cert.reason || "L1 env unset"));
-      } else if (cert && (cert.status === "posted" || cert.status === "already_posted")) {
-        flash($("flash-tally"), "ok", "L1 certification " + cert.status + (cert.txHash ? " tx=" + cert.txHash : ""));
-      } else {
-        flash($("flash-tally"), "err", (cert && (cert.error || cert.reason)) || "L1 certification did not post");
-      }
+      const view = await request("/api/elections/" + encodeURIComponent(id) + "/rollup");
+      host.innerHTML = rollupStatusHtml(view);
+      if (view.threshold) $("ru-threshold").value = view.threshold;
+      if (view.minBallots) $("ru-min-ballots").value = view.minBallots;
     } catch (err) {
-      flash($("flash-tally"), "err", errText(err));
+      host.innerHTML = `<p class="field-hint">${esc(errText(err))}</p>`;
     }
-  });
+  }
+
+  async function rollupPost(path, body, okText) {
+    const id = electionKinds.get(String($("t-election").value)) === "civic" ? $("t-election").value : "";
+    if (!id) {
+      flash($("flash-rollup"), "err", "Choose a civic vote first.");
+      return;
+    }
+    try {
+      await request("/api/elections/" + encodeURIComponent(id) + "/rollup/" + path, { method: "POST", body: body || {} });
+      flash($("flash-rollup"), "ok", okText);
+    } catch (err) {
+      flash($("flash-rollup"), "err", errText(err));
+    }
+    await loadRollup();
+  }
+
+  const ROLLUP_ACTION_TEXT = {
+    publish: "Published to L1. Guardians can now commit (guardian:rollup commit).",
+    "finalize-key": "Joint key fixed on L1. The roll is sent next.",
+    "roll/sync": "Roll synced to L1.",
+    close: "Closed on L1. Guardians can post their decryption shares.",
+    finalize: "Totals certified on L1.",
+  };
+
+  if ($("ru-actions")) {
+    $("ru-refresh").addEventListener("click", loadRollup);
+    $("ru-actions").addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-ru-action]");
+      if (!btn) return;
+      const action = btn.getAttribute("data-ru-action");
+      rollupPost(action, {}, ROLLUP_ACTION_TEXT[action] || "Done.");
+    });
+    $("form-ru-prepare").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const threshold = $("ru-threshold").value ? Number($("ru-threshold").value) : undefined;
+      const minBallots = Number($("ru-min-ballots").value || 5);
+      rollupPost("prepare", { threshold, minBallots }, "Settings saved.");
+    });
+    $("form-ru-guardian").addEventListener("submit", (event) => {
+      event.preventDefault();
+      let identityKey;
+      try {
+        identityKey = parseIdentityKey($("ru-g-key").value);
+      } catch (err) {
+        flash($("flash-rollup"), "err", err.message);
+        return;
+      }
+      rollupPost("guardians", { label: $("ru-g-label").value.trim(), identityKey }, "Guardian enrolled.");
+    });
+  }
 
   $("t-election").addEventListener("change", () => {
-    const id = $("t-election").value;
-    wireExplorerLinks(id);
-    loadTallyElection(id);
+    wireExplorerLinks($("t-election").value);
+    showTallyMode();
   });
 
   $("btn-refresh-notices").addEventListener("click", async () => {
@@ -1910,7 +2025,6 @@
   (async function init() {
     const me = await loadMe();
     await Promise.all([loadJurisdictions(me), loadElections(), loadNotifications(), loadReasonCodes()]);
-    if ($("t-election").value) await loadTallyElection($("t-election").value);
     noteErc20Deployment();
   })();
 })();

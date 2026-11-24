@@ -32,7 +32,7 @@ export function mailRouter(deps) {
         nfp: true,
         templates,
         transactional: [describeApiKeyTemplate()],
-        note: 'Role-promotion mail is queued on the Node. It is never written to civic L2 transactions.',
+        note: 'Role-promotion mail is queued on the Node. It is never written on chain.',
       });
     },
   );

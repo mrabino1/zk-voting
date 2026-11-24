@@ -9,10 +9,11 @@
 //   4. Is it closed? Then paste its validated output. Otherwise generate local
 //      entropy now, or skip
 //   5. Public hostname, port, proxy, database, product name
-//   6. L2 identity and L1 settlement: L1_RPC, the L1 submitter key, L2_UUID,
-//      L2_SALT, L2_ADMIN_SECRET (minted like `npm run l2:identity -- init`),
-//      then L2_OPERATOR_ADDRESS and L2_ID (as `show`) and a balance check
-//      (as `check-funding`) with a low-balance warning. Then how you run it.
+//   6. Rollup: a local L1 (Anvil + one-shot deploy in Docker Compose, public
+//      dev keys) or an existing ZkVotingRollup deployment (L1_RPC,
+//      ROLLUP_ADDRESS, ROLLUP_JURISDICTION_ID, the node key and the operator
+//      key), with an L1 balance check of both accounts. L2_BALLOT_TOKEN is
+//      minted. Then how you run it.
 // Writes voting_node/.env (created from .env.example on the first run). Re-running it
 // keeps your answers as defaults and changes nothing you do not change.
 // Secrets (setup token, database URL, entropy, generated keys) are read with
@@ -25,13 +26,14 @@ import readline from 'node:readline';
 import { Writable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 import { parseIsDemo } from '../../apps/node/src/config.mjs';
 import { normalizeCeremonyUrl, parseEntropyString } from '../../apps/node/src/entropy.mjs';
 import { ADMIN_HANDLE_RE, CHAIN_ID_PRESETS, DEFAULT_CHAIN_ID, parseChainId } from '../../apps/node/src/setup.mjs';
 import { EntropyPool } from '../../apps/node/public/vendor/zk-entropy.js';
-import { isUuid, mintAdminSecret, mintSalt, mintUuid, resolveIdentity, resolveOperatorAddress } from '../../l2/identity.mjs';
-import { checkSubmitterFunding } from '../../l2/prover/funding.mjs';
+import { rollupFundingLevel } from '../../apps/node/src/routes/setup.mjs';
+import { l1RpcHeaders } from '../../l2/l1RpcAuth.js';
 import { parseEnvText, updateEnvText } from './envfile.mjs';
 
 const DEMO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -40,12 +42,12 @@ const DEMO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const SECRET_KEYS = Object.freeze([
   'SETUP_TOKEN',
   'DATABASE_URL',
+  'POSTGRES_PASSWORD',
   'ZK_ENTROPY',
-  'EXPLORER_INGEST_SECRET',
   'RECEIPT_PDF_SECRET',
-  'L1_SUBMITTER_PRIVATE_KEY',
-  'L2_SALT',
-  'L2_ADMIN_SECRET',
+  'ROLLUP_PRIVATE_KEY',
+  'OPERATOR_PRIVATE_KEY',
+  'L2_BALLOT_TOKEN',
   'L1_RPC_AUTH_TOKEN',
 ]);
 
@@ -61,17 +63,41 @@ export const MANAGED_KEYS = Object.freeze([
   'ZK_VOTING_PORT',
   'TRUST_PROXY',
   'DATABASE_URL',
+  'POSTGRES_USER',
+  'POSTGRES_PASSWORD',
+  'POSTGRES_DB',
   'BRAND_NAME',
-  'EXPLORER_INGEST_SECRET',
   'RECEIPT_PDF_SECRET',
+  'COMPOSE_PROFILES',
   'L1_RPC',
-  'L1_SUBMITTER_PRIVATE_KEY',
-  'L2_UUID',
-  'L2_SALT',
-  'L2_ADMIN_SECRET',
-  'L2_OPERATOR_ADDRESS',
-  'L2_ID',
+  'L1_RPC_AUTH_TOKEN',
+  'L1_CHAIN_ID',
+  'ROLLUP_ADDRESS',
+  'ROLLUP_DEPLOYMENT_FILE',
+  'ROLLUP_JURISDICTION_ID',
+  'ROLLUP_PRIVATE_KEY',
+  'OPERATOR_PRIVATE_KEY',
+  'L2_BALLOT_TOKEN',
+  'ZK_VOTING_ALLOW_MOCK_PROOFS',
 ]);
+
+const require = createRequire(import.meta.url);
+const { ANVIL_DEV_KEYS, isAnvilDevKey } = require('../../packages/chain-client/index.js');
+
+/** Docker Compose's local stack: Anvil accounts 2 (node clerk) and 1 (operator). Public keys. */
+export const LOCAL_ROLLUP = Object.freeze({
+  COMPOSE_PROFILES: 'local-l1',
+  L1_RPC: 'http://l1:8545',
+  L1_CHAIN_ID: '',
+  ROLLUP_ADDRESS: '',
+  ROLLUP_DEPLOYMENT_FILE: '/deployments/local.json',
+  ROLLUP_JURISDICTION_ID: '',
+  ROLLUP_PRIVATE_KEY: ANVIL_DEV_KEYS[2],
+  OPERATOR_PRIVATE_KEY: ANVIL_DEV_KEYS[1],
+  ZK_VOTING_ALLOW_MOCK_PROOFS: '1',
+});
+
+const KEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
 const HELP = `Guided setup for a zk-voting install. Writes voting_node/.env.
 
@@ -365,16 +391,31 @@ export async function runSetup(opts = {}) {
       next.TRUST_PROXY = proxied ? get('TRUST_PROXY') || '1' : '';
     } else next.TRUST_PROXY = get('TRUST_PROXY');
     const hasDb = Boolean(get('DATABASE_URL'));
+    next.POSTGRES_USER = get('POSTGRES_USER');
+    next.POSTGRES_PASSWORD = get('POSTGRES_PASSWORD');
+    next.POSTGRES_DB = get('POSTGRES_DB');
     const dbPick = await choose(
       '  Database',
       hasDb
         ? [{ key: 'k', label: 'keep current Postgres URL' }, { key: 'c', label: 'change' }, { key: 'j', label: 'JSON files in the data volume' }]
-        : [{ key: 'j', label: 'JSON files in the data volume' }, { key: 'p', label: 'Postgres' }],
-      hasDb ? 'k' : 'j',
+        : [
+            { key: 'b', label: 'the Postgres bundled with Docker Compose (a password is generated)' },
+            { key: 'p', label: 'my own Postgres' },
+            { key: 'j', label: 'JSON files in the data volume (no Docker Compose)' },
+          ],
+      // A re-run keeps an earlier JSON choice; a first run defaults to the bundled Postgres.
+      hasDb ? 'k' : existed || args.deploy === 'node' ? 'j' : 'b',
     );
     if (dbPick === 'k') next.DATABASE_URL = get('DATABASE_URL');
     else if (dbPick === 'j') next.DATABASE_URL = '';
-    else {
+    else if (dbPick === 'b') {
+      // The db service in docker-compose.yml. Hex keeps the password URL-safe.
+      next.POSTGRES_USER = get('POSTGRES_USER') || 'zkvote';
+      next.POSTGRES_DB = get('POSTGRES_DB') || 'zkvote';
+      next.POSTGRES_PASSWORD = get('POSTGRES_PASSWORD') || newSecretHex(24);
+      next.DATABASE_URL = `postgres://${next.POSTGRES_USER}:${next.POSTGRES_PASSWORD}@db:5432/${next.POSTGRES_DB}`;
+      if (!get('POSTGRES_PASSWORD')) notes.push('POSTGRES_PASSWORD');
+    } else {
       next.DATABASE_URL = await ask('  Postgres URL, postgres://user:pass@host:5432/db (hidden)', '', {
         secret: true,
         validate: (v) => (/^postgres(ql)?:\/\/[^\s]+$/.test(v) ? { ok: true, value: v } : { ok: false, error: 'must start with postgres:// or postgresql://' }),
@@ -383,80 +424,74 @@ export async function runSetup(opts = {}) {
     next.BRAND_NAME = await ask('  Product name (optional; Site admin can change it later, "-" to clear)', get('BRAND_NAME'), {
       validate: (v) => (v === '-' || v === '' ? { ok: true, value: '' } : v.length <= 64 && !BRAND_BAD.test(v) ? { ok: true, value: v } : { ok: false, error: 'up to 64 characters, no < > { } " ` \\' }),
     });
-    for (const k of ['EXPLORER_INGEST_SECRET', 'RECEIPT_PDF_SECRET']) {
+    for (const k of ['RECEIPT_PDF_SECRET']) {
       next[k] = get(k) || newSecretHex(32);
       if (!get(k)) notes.push(k);
     }
-    /* 6. L2 identity and L1 settlement ------------------------------------ */
-    p.say('\n6/6  L2 identity and L1 settlement');
-    p.say('  Voters never pay. The operator key pays L1 gas for vote batches: keep a little ETH on it, not a lot.');
-    next.L1_RPC = await ask('  L1 RPC URL (https://…; empty = no L1 settlement yet, "-" to clear)', get('L1_RPC') ? 'keep' : '', {
-      validate: (v) => {
-        if (v === 'keep') return { ok: true, value: get('L1_RPC') };
-        if (v === '-' || v === '') return { ok: true, value: '' };
-        return /^https?:\/\/[^\s]+$/.test(v) ? { ok: true, value: v } : { ok: false, error: 'an http(s) URL' };
-      },
-    });
-    const hasKey = Boolean(get('L1_SUBMITTER_PRIVATE_KEY'));
-    const keyPick = await choose(
-      '  L1 submitter private key',
-      hasKey
-        ? [{ key: 'k', label: 'keep' }, { key: 'e', label: 'enter a different key' }, { key: 'r', label: 'remove' }]
-        : [{ key: 'n', label: 'not now' }, { key: 'e', label: 'enter it (hidden)' }],
-      hasKey ? 'k' : 'n',
-    );
-    if (keyPick === 'k') next.L1_SUBMITTER_PRIVATE_KEY = get('L1_SUBMITTER_PRIVATE_KEY');
-    else if (keyPick === 'e') {
-      next.L1_SUBMITTER_PRIVATE_KEY = await ask('  Private key, 0x + 64 hex (hidden)', '', {
-        secret: true,
-        validate: (v) => (/^(0x)?[0-9a-fA-F]{64}$/.test(v) ? { ok: true, value: v.startsWith('0x') ? v : `0x${v}` } : { ok: false, error: 'must be 32 bytes of hex (0x + 64 hex)' }),
-      });
-    } else next.L1_SUBMITTER_PRIVATE_KEY = '';
-    // Same values as `npm run l2:identity -- init`, written straight into .env
-    // instead of printed. Existing values are kept: changing them changes l2Id.
-    next.L2_UUID = isUuid(get('L2_UUID')) ? get('L2_UUID').toLowerCase() : mintUuid();
-    next.L2_SALT = /^0x[0-9a-fA-F]{64}$/.test(get('L2_SALT')) ? get('L2_SALT') : mintSalt();
-    next.L2_ADMIN_SECRET = get('L2_ADMIN_SECRET') || mintAdminSecret();
-    for (const k of ['L2_UUID', 'L2_SALT', 'L2_ADMIN_SECRET']) if (next[k] !== get(k)) notes.push(k);
-    // Operator address: derived from the key (as `show` does); else keep or ask.
-    let operator = next.L1_SUBMITTER_PRIVATE_KEY
-      ? await resolveOperatorAddress({ L1_SUBMITTER_PRIVATE_KEY: next.L1_SUBMITTER_PRIVATE_KEY })
-      : '';
-    if (next.L1_SUBMITTER_PRIVATE_KEY && !operator) p.say('  Could not derive an address from that key (is viem installed? run npm install in voting_node/).');
-    if (!operator) {
-      operator = await ask('  Operator L1 address (0x…, optional when the key is set later)', get('L2_OPERATOR_ADDRESS'), {
-        validate: (v) => (v === '' || v === '-' ? { ok: true, value: '' } : /^0x[0-9a-fA-F]{40}$/.test(v) ? { ok: true, value: v.toLowerCase() } : { ok: false, error: 'an 0x address (40 hex)' }),
-      });
-    }
-    next.L2_OPERATOR_ADDRESS = operator;
-    const pinned = get('L2_ID');
-    const derived = resolveIdentity({ L2_UUID: next.L2_UUID, L2_SALT: next.L2_SALT }, { operator });
-    const l2Id = operator ? derived.l2Id : '';
-    if (pinned && l2Id && pinned.toLowerCase() !== l2Id) {
-      p.say('  The pinned L2_ID does not match this operator, L2_UUID and L2_SALT; it is replaced by the derived id.');
-    }
-    next.L2_ID = l2Id || (operator ? '' : pinned);
-    p.say(`  L2_UUID ${next.L2_UUID}`);
-    p.say(`  Operator ${operator || '(not set yet)'}`);
-    p.say(`  L2_ID ${next.L2_ID || '(derived once the operator key or address is set)'}`);
-    if (!derived.saltSet) p.say('  L2_SALT is missing.');
-    if (next.L1_RPC && operator) {
-      const f = await checkSubmitterFunding({
-        l1Rpc: next.L1_RPC,
-        address: operator,
-        fetchImpl: opts.fetchImpl || fetch,
-        env: { L1_RPC_AUTH_TOKEN: get('L1_RPC_AUTH_TOKEN') },
-        gasPerBatch: BigInt(get('L1_SUBMITTER_GAS_PER_BATCH') || 250000),
-        minBatches: BigInt(get('L1_SUBMITTER_MIN_BATCHES') || 20),
-      });
-      const msg = safeFundingMessage(f);
-      if (f.level === 'ok') p.say(`  Funding: ${msg}`);
-      else p.say(`  WARNING (${f.level}): ${msg}`);
-      if (f.level === 'low' || f.level === 'empty') p.say(`  Top up ${operator} on L1. The prover holds batches (nothing is lost) while it cannot pay for one.`);
-    } else p.say('  Funding not checked (needs L1_RPC and the submitter key or address). Later: npm run l2:identity -- check-funding');
+    /* 6. Rollup ----------------------------------------------------------- */
+    p.say('\n6/6  Rollup (ZkVotingRollup on L1, and the L2 operator)');
+    p.say('  Civic votes settle on the one L1 contract; polls stay on this node. Voters never pay.');
     // Not prompted. Kept when already in the env file. Listed by name only
     // on the Coolify plan when it is set; the value is never printed.
     next.L1_RPC_AUTH_TOKEN = get('L1_RPC_AUTH_TOKEN');
+    const wasLocal = String(get('COMPOSE_PROFILES')).split(',').map((x) => x.trim()).includes('local-l1');
+    const mode = await choose(
+      '  Which L1?',
+      [{ key: 'l', label: 'local chain in Docker Compose (Anvil, test keys)' }, { key: 'e', label: 'an existing deployment' }],
+      wasLocal || !get('ROLLUP_ADDRESS') ? 'l' : 'e',
+    );
+    if (mode === 'l') {
+      Object.assign(next, LOCAL_ROLLUP);
+      p.say('  Local: Compose starts Anvil (chain 31337) and deploys the rollup once. The node and');
+      p.say('  operator use Anvil\'s PUBLIC dev keys, which are refused on any other chain.');
+    } else {
+      const keep = (k) => (get(k) && !(k.endsWith('_PRIVATE_KEY') && isAnvilDevKey(get(k))) ? get(k) : '');
+      next.COMPOSE_PROFILES = '';
+      next.ROLLUP_DEPLOYMENT_FILE = '';
+      next.ZK_VOTING_ALLOW_MOCK_PROOFS = '';
+      const rpcDefault = get('L1_RPC') && get('L1_RPC') !== LOCAL_ROLLUP.L1_RPC ? 'keep' : '';
+      next.L1_RPC = await ask('  L1 RPC URL (https://…)', rpcDefault, {
+        validate: (v) => {
+          if (v === 'keep') return { ok: true, value: get('L1_RPC') };
+          return /^https?:\/\/[^\s]+$/.test(v) ? { ok: true, value: v } : { ok: false, error: 'an http(s) URL' };
+        },
+      });
+      next.ROLLUP_ADDRESS = await ask('  ZkVotingRollup address (0x…; ./scripts/deploy.sh prints it)', get('ROLLUP_ADDRESS'), {
+        validate: (v) => (/^0x[0-9a-fA-F]{40}$/.test(v) ? { ok: true, value: v } : { ok: false, error: 'an 0x address (40 hex)' }),
+      });
+      next.ROLLUP_JURISDICTION_ID = await ask('  Jurisdiction id on the rollup (0x + 64 hex)', get('ROLLUP_JURISDICTION_ID'), {
+        validate: (v) => (/^0x[0-9a-fA-F]{64}$/.test(v) ? { ok: true, value: v.toLowerCase() } : { ok: false, error: 'a bytes32 (0x + 64 hex)' }),
+      });
+      for (const [k, label] of [
+        ['ROLLUP_PRIVATE_KEY', 'Node key (the jurisdiction clerk on L1)'],
+        ['OPERATOR_PRIVATE_KEY', 'L2 operator key (registered with setOperator)'],
+      ]) {
+        const current = keep(k);
+        const pick = await choose(
+          `  ${label}`,
+          current ? [{ key: 'k', label: 'keep' }, { key: 'e', label: 'enter a different key' }] : [{ key: 'e', label: 'enter it (hidden)' }, { key: 'n', label: 'not now' }],
+          current ? 'k' : 'e',
+        );
+        if (pick === 'k') next[k] = current;
+        else if (pick === 'n') next[k] = '';
+        else {
+          next[k] = await ask('  Private key, 0x + 64 hex (hidden)', '', {
+            secret: true,
+            validate: (v) => {
+              if (!KEY_RE.test(v)) return { ok: false, error: 'must be 32 bytes of hex (0x + 64 hex)' };
+              const key = v.startsWith('0x') ? v : `0x${v}`;
+              if (isAnvilDevKey(key)) return { ok: false, error: 'that is a public Anvil test key; use it only with the local chain' };
+              return { ok: true, value: key };
+            },
+          });
+        }
+      }
+      const checked = await checkRollupAccounts(next, opts.fetchImpl || fetch);
+      next.L1_CHAIN_ID = checked.chainId ? String(checked.chainId) : get('L1_CHAIN_ID');
+      for (const line of checked.lines) p.say(`  ${line}`);
+    }
+    next.L2_BALLOT_TOKEN = get('L2_BALLOT_TOKEN') || newSecretHex(32);
+    if (!get('L2_BALLOT_TOKEN')) notes.push('L2_BALLOT_TOKEN');
 
     const deploy =
       args.deploy ||
@@ -506,7 +541,6 @@ export async function runSetup(opts = {}) {
       p.say(`Saved ${envFile} (mode 600).`);
       for (const k of changed) p.say(`  ${k}: ${describeValue(k, next[k])}`);
     }
-    if (notes.some((n) => n.startsWith('L2_'))) p.say('  New L2 identity written (L2_UUID, L2_SALT, L2_ADMIN_SECRET). Back up voting_node/.env: losing L2_SALT or the key loses this l2Id.');
     if (notes.includes('setup-token')) p.say('  A setup token is in .env as SETUP_TOKEN. You type it on /setup; read it yourself from the file.');
     if (!next.SETUP_TOKEN) p.say('  SETUP_TOKEN is empty. On boot the server prints a one-time setup token. Type it on /setup. Restarting before the super admin is created replaces it.');
     p.say('');
@@ -517,10 +551,49 @@ export async function runSetup(opts = {}) {
   }
 }
 
-/** Funding message without the RPC URL (it often carries a provider API key). */
-export function safeFundingMessage(f) {
-  if (f.level === 'unreachable') return 'the L1 RPC did not answer (check L1_RPC)';
-  return String(f.message || f.level);
+async function rpcCall(url, method, params, fetchImpl, env = {}) {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: l1RpcHeaders(env),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    signal: AbortSignal.timeout(8000),
+  });
+  const body = await res.json();
+  if (body.error) throw new Error(body.error.message || method);
+  return body.result;
+}
+
+/**
+ * L1 chain id and the balance of the node and operator accounts. Lines never contain the RPC
+ * URL (providers embed API keys in it) or a key.
+ */
+export async function checkRollupAccounts(next, fetchImpl = fetch) {
+  const { privateKeyToAccount } = await import('viem/accounts');
+  const env = { L1_RPC_AUTH_TOKEN: next.L1_RPC_AUTH_TOKEN || '' };
+  const lines = [];
+  let chainId = null;
+  try {
+    chainId = Number(BigInt(await rpcCall(next.L1_RPC, 'eth_chainId', [], fetchImpl, env)));
+    lines.push(`L1 chain id ${chainId}.`);
+    const code = await rpcCall(next.L1_RPC, 'eth_getCode', [next.ROLLUP_ADDRESS, 'latest'], fetchImpl, env);
+    if (!code || code === '0x') lines.push(`WARNING: no contract at ${next.ROLLUP_ADDRESS} on this chain.`);
+    const gasPriceWei = BigInt(await rpcCall(next.L1_RPC, 'eth_gasPrice', [], fetchImpl, env));
+    for (const [k, who] of [['ROLLUP_PRIVATE_KEY', 'Node account'], ['OPERATOR_PRIVATE_KEY', 'Operator account']]) {
+      if (!next[k]) {
+        lines.push(`${who}: no key yet; balance not checked.`);
+        continue;
+      }
+      const address = privateKeyToAccount(next[k]).address;
+      const balanceWei = BigInt(await rpcCall(next.L1_RPC, 'eth_getBalance', [address, 'latest'], fetchImpl, env));
+      const f = rollupFundingLevel({ balanceWei, gasPriceWei });
+      const eth = `${balanceWei / 10n ** 18n}.${(balanceWei % 10n ** 18n).toString().padStart(18, '0').slice(0, 6)} ETH`;
+      if (f.level === 'ok') lines.push(`${who} ${address}: ${eth} (about ${f.callsLeft} L1 calls).`);
+      else lines.push(`WARNING (${f.level}): ${who} ${address} has ${eth}, about ${f.callsLeft} L1 calls. Top it up on L1.`);
+    }
+  } catch {
+    lines.push('The L1 RPC did not answer (check L1_RPC); chain id and balances not checked.');
+  }
+  return { chainId, lines };
 }
 
 async function generateLocal(p, opts) {
@@ -560,12 +633,13 @@ export function launchPlan({ deploy, next }) {
   const site = next.VOTE_FQDN ? `https://${next.VOTE_FQDN}` : `http://localhost:${port}`;
   if (deploy === 'node') {
     return {
-      commands: ['cd voting_node', 'npm install', 'set -a; . ./.env; set +a; CHAIN_RPC= npm run dev'],
+      commands: ['cd voting_node', 'npm install', 'set -a; . ./.env; set +a; L1_RPC= npm run dev'],
       open: `http://localhost:${port}/setup`,
     };
   }
   if (deploy === 'coolify') {
-    const plain = ['ADMIN_HANDLE', 'SUPER_ADMIN_EMAIL', 'CHAIN_ID', 'ENTROPY_CEREMONY_URL', 'VOTE_FQDN', 'TRUST_PROXY', 'BRAND_NAME', 'L2_UUID', 'L2_ID', 'L2_OPERATOR_ADDRESS'];
+    const plain = ['ADMIN_HANDLE', 'SUPER_ADMIN_EMAIL', 'CHAIN_ID', 'ENTROPY_CEREMONY_URL', 'VOTE_FQDN', 'TRUST_PROXY', 'BRAND_NAME',
+      'COMPOSE_PROFILES', 'L1_CHAIN_ID', 'ROLLUP_ADDRESS', 'ROLLUP_DEPLOYMENT_FILE', 'ROLLUP_JURISDICTION_ID', 'ZK_VOTING_ALLOW_MOCK_PROOFS'];
     return {
       coolify: [
         'New resource → Public (or Private) Repository → this repository, branch test/unstable (staging) or master (production)',
@@ -607,10 +681,15 @@ function printLaunch(p, { deploy, next }) {
   p.say(`  ${plan.commands.join(' && ')}`);
   p.say('');
   if (deploy !== 'node' && !next.DATABASE_URL) {
-    p.say('  Compose will not start until POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and DATABASE_URL are set. There is no default password.');
+    p.say('  Compose will not start until POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and DATABASE_URL are set.');
+    p.say('  Run ./setup.sh again and pick the bundled Postgres to have them generated.');
     p.say('');
   }
-  if (deploy === 'node') p.say('  (Node only runs without the bundled L2 chain; use docker compose for the full stack.)');
+  if (deploy === 'node' && /@db:5432\//.test(next.DATABASE_URL || '')) {
+    p.say('  DATABASE_URL points at the Compose db service, which only resolves inside Docker Compose.');
+    p.say('');
+  }
+  if (deploy === 'node') p.say('  (Node only runs without the rollup: polls work, civic votes need docker compose or an L1.)');
   p.say(`Then open ${plan.open} and finish the remaining steps in the browser.`);
 }
 

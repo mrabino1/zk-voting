@@ -1,6 +1,6 @@
 /**
  * NOT FOR PROFIT — ZK-Voting is a civic public good. Not a commercial product.
- * Public FAQ copy. Keep answers honest to README on test/unstable (demo crypto).
+ * Public FAQ copy. Keep answers honest to the README (known limits).
  */
 
 import { brandName } from "./brand.js";
@@ -11,9 +11,9 @@ export const FAQ_ENTRIES = [
     topic: "zk-voting",
     q: "What is zero-knowledge voting here?",
     a: [
-      `${brandName()} uses zero-knowledge proofs so the chain can check facts about a voter without putting the ballot in the clear. A valid vote proof is supposed to show: you are in the eligible set for that election, you are not on the disqualification set, and this ciphertext is a well-formed ballot. A nullifier marks that you already voted, without naming you.`,
+      `${brandName()} uses encryption and zero-knowledge proofs so ballots can be checked and counted without anyone reading one. In a civic vote your choice is encrypted on your device with proofs that it is exactly one valid choice; Ethereum adds up the encrypted ballots, and after the cutoff the guardians decrypt only the final sum, which Ethereum checks. A nullifier marks that you already voted, without naming you.`,
       "ZK does not mean nobody is in charge. A jurisdiction still maintains the legal roll. ZK means that once that roll and the disqualification list are committed, counting and eligibility checks are not meant to be a second, invisible trust sink.",
-      "On this development line the product intent is that model. Implementation is incomplete: unit tests still default to a MockVerifier, and a production Groth16 ceremony has not been run. Poseidon(2) is the vote-circuit hasher and matches the JS and Solidity helpers. The checked Groth16 fixture is an untrusted local Vote(4) setup, not an election and not a ceremony. Do not treat a local demo accept as circuit-enforced exclusion.",
+      "The implementation is incomplete. The circuit that proves each batch of ballots (including that every voter is on the roll) is not built yet, so civic votes run only on a local test chain with a mock batch verifier, and this Node checks eligibility with a blind vote pass. Poll proofs use untrusted local keys; no trusted-setup ceremony has been run.",
     ],
   },
   {
@@ -22,7 +22,7 @@ export const FAQ_ENTRIES = [
     q: "How can a ballot stay private if the election is publicly verifiable?",
     a: [
       "Privacy is for the choice. Transparency is for the process. Registration events, disqualification actions (reason codes, not personal evidence), poll parameters, and the published tally are meant to be checkable. The option you marked is not an on-chain plaintext field.",
-      "Receipts list hashes only (ballot hash, nullifier, related transaction identifiers). They cannot prove “I voted for X.” After you vote you may email that receipt: the message body and a PDF attachment are the same evidence, still without your choices. Dashboards delay vote proofs by one closed hour so walking out of a polling place cannot be matched to a live tick.",
+      "Receipts list hashes only (nullifier, ballot hash or commitment). They cannot prove “I voted for X.” A civic vote has no interim results at all; a poll delays its public rows by at least one closed hour so walking out of a polling place cannot be matched to a live tick.",
     ],
   },
   {
@@ -30,8 +30,8 @@ export const FAQ_ENTRIES = [
     topic: "who-runs",
     q: "Do we deploy a new smart contract when we fork this Node?",
     a: [
-      "No. Fork the Node UI for your jurisdiction’s clerk desk and public pages. Pin the one shared ElectionFactory, BallotInbox, and verifier on Site & contracts (or with ELECTION_FACTORY_ADDRESS). Do not run a new factory deploy for each city.",
-      "The Node host (platform_admin) updates About, FAQ, home copy, and the site title. Clerks publish extra pages tagged to their own jurisdiction. A clerk of one body on a shared Node cannot rewrite the public record for every body. The chain addresses stay the shared deployment. This line is still a demo: MockVerifier, unwired Poseidon, no production ceremony.",
+      "No. Fork the Node UI for your jurisdiction’s clerk desk and public pages. Every jurisdiction settles civic votes on the one ZkVotingRollup contract on L1; the host sets its address with ROLLUP_ADDRESS. Do not deploy a new contract for each city.",
+      "The Node host (platform_admin) updates About, FAQ, home copy, and the site title. Clerks publish extra pages tagged to their own jurisdiction. A clerk of one body on a shared Node cannot rewrite the public record for every body. The rollup contract stays the shared deployment. This is still a demo: the batch validity circuit is not built, so only a mock batch verifier runs, on a local test chain.",
     ],
   },
   {
@@ -57,8 +57,8 @@ export const FAQ_ENTRIES = [
     topic: "one-vote",
     q: "Can I change my vote?",
     a: [
-      "Not by default. A second ballot for the same nullifier is rejected unless the operator has enabled re-vote. When that is on, a later ballot before the deadline updates the final tally only. A published poll block keeps the first ballot. After the deadline the Node rejects another ballot.",
-      "The receipt still cannot prove how you voted. The inbox accepts a nullifier once, so the Node does not submit a replacement again. This is not MACI.",
+      "Not in a civic vote: one ballot per nullifier, and nothing yet proves that a replacement comes from the same voter. In a poll, a second ballot is rejected unless the operator has enabled re-vote; when it is on, a later ballot before the deadline updates the final tally only, and a published poll block keeps the first ballot.",
+      "The receipt still cannot prove how you voted. This is not MACI.",
     ],
   },
   {
@@ -67,7 +67,7 @@ export const FAQ_ENTRIES = [
     q: "I am registered. Why might I still be barred?",
     a: [
       "Registered is not the same as eligible. A clerk or disqualification officer may bar a registered person for a coded reason: not of age, not resident, duplicate identity, deceased, moved out, district mismatch, already voted, court order, and others in the public catalog. The code is public so a mass purge cannot hide behind ZK. Personal evidence stays off-chain; only a hash of the evidence is posted.",
-      "A disqualified person is dropped from the eligible set (registered, and not currently disqualified) and placed on an indexed disqualification chain. The vote proof must show membership in the eligible set and a gap in that chain, so a disqualified leaf has no accepting witness. The vote POST does not carry the commitment; open-window roots must still match. An unarmed MockVerifier still accepts a dummy proof that copies the published roots. The dev Vote(20) key is untrusted until a ceremony.",
+      "In a civic vote the disqualification goes to Ethereum before voting opens and the voter gets no vote pass. In a poll, a disqualified person is dropped from the eligible set and placed on an indexed disqualification chain; the poll proof must show a gap in that chain, so a disqualified leaf has no accepting witness (with untrusted dev keys until a ceremony).",
     ],
   },
   {
@@ -95,7 +95,7 @@ export const FAQ_ENTRIES = [
     a: [
       "Open /elections for the list, or /elections/:id/results for one contest (UUID or short code). Results pages are public. Plurality winners are labeled per question. Ranked-choice contests show the IRV winner and round transcript when posted.",
       "Until a tally operator posts counts after cutoff, the page reports status (open, closed, not yet tallied). Choice plaintext never appears there.",
-      "A separate public monitor at /outcomes (alias /monitor) lists every election in before / during / after columns from chain and election state, and runs the auditor pack plus freeze-root and L1 checks. It is not the /receipt portal. During voting it still does not invent unofficial option counts.",
+      "A separate public monitor at /outcomes (alias /monitor) lists every election in before / during / after columns, and runs the public auditor checks (for a civic vote, an audit of the result straight from Ethereum). It is not the /receipt portal. During voting it still does not invent unofficial option counts.",
     ],
   },
   {
@@ -104,7 +104,7 @@ export const FAQ_ENTRIES = [
     q: "What is the /outcomes portal?",
     a: [
       "It is a public monitor of every election on this Node, separate from the final tally at /elections and from personal receipts at /receipt. Contests sit in before, during, or after columns according to chain and election state: created or roll-frozen, open for voting, or closed / tallied.",
-      "Each contest runs the same public auditor pack an independent observer can download (unique nullifiers, no choice leak, tally bounds when posted) plus freeze-root and L1 hash checks. While voting is open the page shows disclosed turnout only — never unofficial option totals. The final tally appears only after a tally is posted. Excluded ballots are not counted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
+      "Each contest runs the same public checks an independent observer can run. For a civic vote that includes an audit read from Ethereum: the ballots in the batches, the guardians' key, the anonymity floor, and the result against every set of k guardians' decryption shares. While voting is open the page shows disclosed turnout only — never unofficial option totals. The final tally appears only after a tally is posted. Excluded ballots are not counted. After cutoff and a tally, the locked official PDF is also published there for download and verification.",
     ],
   },
   {
@@ -121,7 +121,7 @@ export const FAQ_ENTRIES = [
     topic: "not-for-profit",
     q: "Is this a company or a token?",
     a: [
-      `No. ${brandName()} is not for profit: civic public good, not a commercial product. There is no token, no paid tier, and no vendor lock-in. Nobody is to make money off this repository. Jurisdictions may run it at cost (hosts, paymaster gas, paper notice). Voter data is not a product.`,
+      `No. ${brandName()} is not for profit: civic public good, not a commercial product. There is no token, no paid tier, and no vendor lock-in. Nobody is to make money off this repository. Jurisdictions may run it at cost (hosts, Ethereum gas, paper notice). Voter data is not a product.`,
       "The license is AGPL-3.0-or-later. Every document carries a visible NOT FOR PROFIT label. If a build adds a fee control, that is a bug.",
     ],
   },
@@ -157,7 +157,7 @@ export const FAQ_ENTRIES = [
     topic: "fees-gas",
     q: "Do voters pay fees or gas?",
     a: [
-      "No. Voters do not pay gas. You authorize a UserOp (for example with a passkey). The Node relays it; the jurisdiction paymaster sponsors L2 gas. The bundler is the visible sender, not your local address. Gas sponsorship is not a product fee.",
+      "No. Voters never send a transaction. The Node relays your ballot and the rollup operator puts it in a batch; the jurisdiction pays the Ethereum gas for that at cost. Polls cost no gas at all.",
       "Hosts and jurisdictions may pay real infrastructure cost. There is no paid tier in this software and no skimming of ETH beyond that sponsorship.",
     ],
   },
@@ -167,7 +167,7 @@ export const FAQ_ENTRIES = [
     q: `Is ${brandName()} open source?`,
     a: [
       "Yes. The license is GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). If you run a modified Node as a network service, AGPL requires you to offer the corresponding source to users of that service.",
-      `The monorepo holds the Node app, Solidity, circuits, ${brandName()} L2 sequencer, and operator docs together so a jurisdiction is not trapped in a vendor black box.`,
+      `The monorepo holds the Node app, the ZkVotingRollup contract, the L2 operator, circuits and operator docs together so a jurisdiction is not trapped in a vendor black box. Forking it is the intended way to run your own.`,
     ],
   },
   {
@@ -175,8 +175,8 @@ export const FAQ_ENTRIES = [
     topic: "security-limits",
     q: "What are the security limits on this branch? Is MockVerifier still used?",
     a: [
-      "Yes — be precise. Local Foundry unit tests still use MockVerifier. Poseidon(2) is the vote hasher, the proof helpers, PoseidonHasher, and the passkey commitment on this screen. A committed Groth16 check verifies an untrusted local Vote(4) proof and an untrusted Vote(20) dev proof. Those keys are not a ceremony.",
-      "Passkey demo addresses may be zk-voting-local-address, not production secp256k1. Tally that opens ballots uses a Feldman t-of-n guardian key (NON-PRODUCTION). Homomorphic aggregation versus a mixnet is not decided. Do not treat MockVerifier, a local circuits:setup zkey, or this guardian ceremony as production cryptography. This is not court-ready.",
+      "Yes — be precise. Civic votes settle only against a mock batch verifier (MockBatchVerifier, on a local test chain) because the batch circuit is not built. Eligibility is enforced by this Node's blind vote pass, not yet by a proof. Poll proofs use untrusted local keys (MockVerifier in development), not a ceremony.",
+      "What is real: ballots are encrypted on the device with proofs that each is one valid choice, Ethereum checks the final sum against the guardians' decryption shares, and only the sum is ever decrypted. The poll guardian tally (Feldman t-of-n) is NON-PRODUCTION. This is not court-ready.",
     ],
   },
   {
@@ -193,8 +193,7 @@ export const FAQ_ENTRIES = [
     topic: "explorer",
     q: "What is the block explorer for?",
     a: [
-      "The public explorer at /explorer reads the civic L2 record: registrations (commitments only), accepted ballots (nullifier + ballot hash, never the choice), disqualifications, tallies, and rollup batches. Vote proofs appear only after the hour that contained them closes and the disclosure delay elapses.",
-      `${brandName()} L2 as implemented is an application-specific civic sequencer (JSON transactions), chainId 27427. It is not a general-purpose EVM and it does not proxy to Anvil.`,
+      "The public explorer at /explorer has two views. Rollup batches show what the operator committed to Ethereum for civic votes: batch roots and counts, never a choice. Poll blocks show registrations (commitments only), accepted poll ballots (nullifier + ballot hash), disqualifications and tallies; poll ballots appear only after the hour that contained them closes and the disclosure delay elapses.",
     ],
   },
   {
@@ -230,7 +229,7 @@ export const FAQ_ENTRIES = [
     topic: "short-links",
     q: "Why do elections have UUIDs and short links?",
     a: [
-      "New elections mint a UUID v5 public id bound to the shared ElectionFactory, the factory uint256, and the jurisdiction (plus a short code such as /v/nbrdge2k3m). A second body that copies that UUID does not share the L1 proof: L1TallyMirror keys by factory + on-chain id + jurisdiction, not by the UUID. Results and info pages accept UUID, short code, or on-chain id.",
+      "New elections mint a UUID v5 public id bound to this Node, the jurisdiction, and a local number (plus a short code such as /v/nbrdge2k3m). A UUID copied by another Node or jurisdiction does not verify. A civic vote also gets an election number on L1 when it is published to the rollup; the results page shows it.",
       "Bookmark the UUID or the short link. Both should keep working as deep links even when the marketing home and the registered desk are different pages. Outcome verification recomputes the scoped UUID; a copied id fails.",
     ],
   },
@@ -239,8 +238,8 @@ export const FAQ_ENTRIES = [
     topic: "tally",
     q: "How are ballots opened and counted?",
     a: [
-      "Legacy sum_only still allows any partition of acceptedBallots (the operator cannot add or drop ballots, but they can rearrange which option received them). opens_ballots encrypts choices to a Feldman t-of-n public key. t guardians each publish a proved partial decryption; t-1 cannot open the envelopes. Invented counts[] that only match the sum are rejected. The ceremony is NON-PRODUCTION. Homomorphic aggregation and a mixnet are not selected.",
-      "Production remains homomorphic / mixnet decryption proofs plus a real Groth16 verifier. Do not run a binding election on the demo key. A corrupt tally operator can still stall (never submit a tally).",
+      "Civic votes: nobody opens a ballot. Encrypted ballots are added together; after the cutoff k of n guardians each post a proved share of the final sum's decryption, and Ethereum checks the totals. Below the anonymity floor the result is Withheld and never decrypted.",
+      "Polls: counted on this Node. opens_ballots polls encrypt choices to a Feldman t-of-n key; t guardians publish proved partial decryptions, and invented counts that only match the sum are rejected. That ceremony is NON-PRODUCTION.",
     ],
   },
   {
@@ -256,8 +255,8 @@ export const FAQ_ENTRIES = [
     topic: "maturity",
     q: "Is this ready for a binding public election?",
     a: [
-      "No. test/unstable is the development line. master is reserved for production when a jurisdiction pins addresses. Circuits, Node, L2, and contracts are in-tree, but Poseidon, a trusted setup ceremony, production passkey secp256k1, a chosen homomorphic or mixnet tally, and MACI-style coercion resistance are not done. Feldman t-of-n guardians are in this tree and are still NON-PRODUCTION.",
-      "Treat this Node as a working demo you can inspect, run locally, and improve. Do not tell a court, a clerk, or a voter that the current MockVerifier path is a finished, court-ready proving system.",
+      "No. The batch validity circuit, a public ZkVotingRollup deployment, a trusted-setup ceremony and MACI-style coercion resistance are not done. Until the batch circuit exists, civic votes run only on a local test chain.",
+      "Treat this Node as a working demo you can inspect, run locally, and improve. Do not tell a court, a clerk, or a voter that the current mock-verifier path is a finished, court-ready proving system.",
     ],
   },
   {

@@ -56,21 +56,3 @@ export function tallyAllowedAt(election, challengeSeconds = MIN_TALLY_CHALLENGE_
   const base = Number.isFinite(cutoff) ? cutoff : 0;
   return base + resolveTallyChallengeSeconds(challengeSeconds);
 }
-
-/**
- * Offer dead-lettered ballots to the forced-in supplementary batch.
- *
- * TODO: call the sealed-vote supplementary inbox once that contract is on
- * this branch. Until then the hook refuses. Callers must leave the dead
- * letter in place on a refusal. This function does not delete a ballot.
- *
- * @param {{ election: object, rows: object[], now: number, tallyAllowedAt: number }} _input
- * @returns {Promise<{ accepted: boolean, nullifiers: string[], reason: string }>}
- */
-export async function submitSupplementaryBatch(_input) {
-  return {
-    accepted: false,
-    nullifiers: [],
-    reason: 'SUPPLEMENTARY_BATCH_UNAVAILABLE',
-  };
-}

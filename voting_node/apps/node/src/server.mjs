@@ -12,16 +12,15 @@ import { attachAuth, enforceApiKeyAccess, isBallotRequest } from './auth.mjs';
 import { corsOptionsDelegate } from './corsPolicy.mjs';
 import { installConsoleCapture, recordLog, setLogLevel, watchSecrets } from './superAdmin/logs.mjs';
 import { superAdminRouter } from './routes/superAdmin.mjs';
-import { createChain } from './chain.mjs';
-import { startVoteFlushTimer } from './electionState.mjs';
-import { ALLOW_REVOTE_CHAIN_CONFIGURED, getConfig } from './config.mjs';
+import { createRollupClient } from './rollup/client.mjs';
+import { RollupService } from './rollup/service.mjs';
+import { rollupRouter } from './routes/rollup.mjs';
+import { getConfig } from './config.mjs';
 import { announceGeneratedSetupToken } from './setupToken.mjs';
-import { createL1Certifier } from './l1Certify.mjs';
 import { Explorer } from './explorer.mjs';
 import { errorHandler } from './http.mjs';
 import { openNodeWriter, standbyGuard } from './writerMode.mjs';
 import { createPasskeyService } from './passkey.mjs';
-import { applySiteContractPins } from './cms.mjs';
 import { createMailer } from './mailer.mjs';
 import { createMfaService } from './mfa.mjs';
 import { installChainIdAccessor } from './setup.mjs';
@@ -50,7 +49,6 @@ import { meRouter } from './routes/me.mjs';
 import { pagesRouter } from './routes/pages.mjs';
 import { receiptsRouter } from './routes/receipts.mjs';
 import { outcomesRouter } from './routes/outcomes.mjs';
-import { l2ResultsRouter } from './routes/l2Results.mjs';
 import { outcomeReportsRouter } from './routes/outcomeReports.mjs';
 import { termsApiRouter, termsPdfRouter } from './routes/terms.mjs';
 import { feedbackRouter } from './routes/feedback.mjs';
@@ -228,6 +226,12 @@ function brandHtml(html, branding) {
   return out;
 }
 
+/** `<html data-nav="top|sidebar">`, set before the page paints so the shell never jumps. */
+function withNavPlacement(html, placement) {
+  if (/<html\b[^>]*\bdata-nav=/i.test(html)) return html;
+  return html.replace(/<html\b/i, `<html data-nav="${placement === 'sidebar' ? 'sidebar' : 'top'}"`);
+}
+
 function spaFallback(config, layoutService) {
   const currentBranding = () => {
     const b = layoutService.effective().layout.branding;
@@ -249,12 +253,18 @@ function spaFallback(config, layoutService) {
     } catch {
       branding = getBranding();
     }
+    let placement = 'top';
+    try {
+      placement = layoutService.effective().layout.nav?.placement || 'top';
+    } catch {
+      /* keep the default */
+    }
     for (const file of htmlCandidate(config, req.path)) {
       if (fs.existsSync(file)) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
         fs.promises.readFile(file, 'utf8').then(
-          (html) => res.send(renderPublicHtml(brandHtml(html, branding), {
+          (html) => res.send(renderPublicHtml(withNavPlacement(brandHtml(html, branding), placement), {
             voteFqdn: config.voteFqdn,
             assetVersion: config.assetVersion,
             clientBrand: config.clientBrand,
@@ -272,10 +282,8 @@ function spaFallback(config, layoutService) {
 
 export async function createApp(overrides = {}) {
   const {
-    chain: chainOverride,
     passkeyHooks,
-    l1: l1Override,
-    l1Hooks,
+    rollupService: rollupOverride,
     tokenRegistry: tokenRegistryOverride,
     ...configOverrides
   } = overrides;
@@ -303,11 +311,9 @@ export async function createApp(overrides = {}) {
       /* ignore a corrupt runtime level */
     }
   }
-  if (typeof runtime.archiveEnabled === 'boolean') config.archiveEnabled = runtime.archiveEnabled;
   installConsoleCapture([config.superAdminEmail, config.superAdminApiPepper, config.setupToken]);
   config.receiptPdfSecret = await loadReceiptPdfSecret(config, { mint: writer.active });
   if (store.data.__passLinksDirty && store.writerActive !== false) await store.persist();
-  applySiteContractPins(config, store.getSite());
   const explorer = await Explorer.open(config);
   explorer.writerActive = writer.active;
   explorer.disclosurePolicy = () => ({
@@ -332,25 +338,26 @@ export async function createApp(overrides = {}) {
       };
     },
   });
-  const chain = chainOverride || createChain(config, { queueStore: store });
-  if (config.allowRevote === true && chain?.isConfigured?.()) {
-    // TODO(#113): remove the ALLOW_REVOTE chain refusal once the inbox contracts accept a replacement ballot.
-    throw new Error(ALLOW_REVOTE_CHAIN_CONFIGURED);
-  }
-  const l1 = l1Override || createL1Certifier(config, l1Hooks || {});
   const passkeys = createPasskeyService(config, store, passkeyHooks);
   const mailer = configOverrides.mailer || createMailer(config);
   const terms = configOverrides.terms || createTermsService({ store, mailer, config });
   const mfa = createMfaService({ config, store, mailer, terms });
   const pin = createPinService({ store, config });
-  const votePass = createVotePassService(config);
+  const votePass = createVotePassService(config, { store });
+  const rollup =
+    rollupOverride ||
+    new RollupService({
+      store,
+      client: createRollupClient(config.rollup),
+      config,
+      log: (msg) => console.warn(msg),
+    });
   const tokenRegistry = tokenRegistryOverride || createTokenRegistry(config);
   const deps = {
     config,
     store,
     explorer,
-    chain,
-    l1,
+    rollup,
     passkeys,
     mailer,
     mfa,
@@ -432,6 +439,7 @@ export async function createApp(overrides = {}) {
   app.use(termsPdfRouter(deps));
   app.use('/api/setup', setupRouter(deps));
   app.use('/api/auth', authRouter(deps));
+  app.use('/api/elections/:id/rollup', rollupRouter(deps));
   app.use('/api/elections', electionsRouter(deps));
   if (config.pollsReady) {
     app.use('/api/polls', pollsRouter(deps));
@@ -449,7 +457,6 @@ export async function createApp(overrides = {}) {
   app.use('/api', receiptsRouter(deps));
   app.use('/api', outcomeReportsRouter(deps));
   app.use('/api', outcomesRouter(deps));
-  app.use('/api', l2ResultsRouter(deps));
   app.use('/api', configRouter(deps));
   app.use('/api', botDocsRouter());
   app.use('/api/site-admin', siteAdminRouter(deps));
@@ -505,7 +512,7 @@ export async function createApp(overrides = {}) {
   });
 
   app.use(errorHandler);
-  return { app, store, explorer, chain, l1, config, mailer, mfa, terms, pin, votePass, writer, plugins, ceremonies: deps.ceremonies };
+  return { app, store, explorer, rollup, config, mailer, mfa, terms, pin, votePass, writer, plugins, ceremonies: deps.ceremonies };
 }
 
 export async function startServer(overrides = {}) {
@@ -523,14 +530,15 @@ export async function startServer(overrides = {}) {
     );
   }
   const demoPurge = registerDemoPurgeSchedule({ config, store: created.store });
-  let voteFlush = null;
-  const armVoteFlush = () => {
-    if (voteFlush) return;
-    if (created.store?.writerActive === false) return;
-    if (created.writer?.enabled && !created.writer.acceptingWrites()) return;
-    voteFlush = startVoteFlushTimer(created);
+  // Only the active writer sends L1 transactions; a standby arms this when it is promoted.
+  let rollupTimer = null;
+  const armRollupTick = () => {
+    if (rollupTimer || !created.rollup?.enabled || created.config.writerActive === false) return;
+    const seconds = Math.max(5, Number(process.env.ROLLUP_TICK_SECONDS || 15));
+    rollupTimer = setInterval(() => created.rollup.tick(), seconds * 1000);
+    if (typeof rollupTimer.unref === 'function') rollupTimer.unref();
   };
-  armVoteFlush();
+  armRollupTick();
   if (created.writer?.enabled && !created.writer.active) {
     const timer = setInterval(async () => {
       if (!created.writer.tryPromote()) return;
@@ -544,8 +552,7 @@ export async function startServer(overrides = {}) {
         created.store.writerActive = true;
         created.explorer.writerActive = true;
         created.config.writerActive = true;
-        if (typeof created.chain?.reloadVoteQueue === 'function') created.chain.reloadVoteQueue();
-        armVoteFlush();
+        armRollupTick();
         await created.store.adoptSuperAdminEmail(created.config);
         if (typeof created.plugins?.onPromoted === 'function') await created.plugins.onPromoted();
         console.log(`node writer active epoch=${created.writer.epoch()}`);
@@ -561,10 +568,6 @@ export async function startServer(overrides = {}) {
     server,
     port,
     demoPurge,
-    stopVoteFlush() {
-      voteFlush?.stop();
-      voteFlush = null;
-    },
   };
 }
 
@@ -578,7 +581,6 @@ if (isMain) {
         stopping = true;
         console.log('node stopping');
         created.demoPurge?.stop?.();
-        created.stopVoteFlush?.();
         created.plugins?.stop?.();
         created.writer?.beginDrain();
         const force = setTimeout(() => process.exit(0), 20_000);

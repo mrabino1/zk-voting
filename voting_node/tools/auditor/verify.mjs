@@ -58,17 +58,10 @@ export function verifyAuditorBundle(bundle) {
   const cutoff = Number(window.cutoffTime);
   check('window', Number.isFinite(start) && Number.isFinite(cutoff) && start < cutoff, 'startTime must be before cutoffTime');
 
-  const contracts = bundle.contracts || {};
-  const hasAddress = Boolean(
-    contracts.factory ||
-      contracts.ballotInbox ||
-      contracts.election ||
-      contracts.verifier ||
-      contracts.tallyVerifier,
-  );
-  checks.addressesPresent = hasAddress;
-  // Chain exports always include addresses. Node demo packs without CHAIN_RPC
-  // still verify uniqueness / tally / no-choice-leak offline.
+  // A civic vote's pack names the rollup contract and its L1 election id. A poll
+  // pack has none; it still verifies uniqueness / tally / no-choice-leak offline.
+  const rollup = bundle.rollup || {};
+  checks.addressesPresent = Boolean(rollup.address);
   checks.addresses = true;
 
   const ballots = Array.isArray(bundle.disclosedBallots) ? bundle.disclosedBallots : [];

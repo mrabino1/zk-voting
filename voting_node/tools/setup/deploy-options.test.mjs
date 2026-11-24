@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url';
 
 const DEMO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEPLOY = path.join(DEMO, 'scripts', 'deploy.sh');
-const FORK = path.join(DEMO, 'scripts', 'deploy-fork-dryrun.sh');
 const VERIFY = path.join(DEMO, 'scripts', 'lib', 'verify_targets.py');
 
 function run(cmd, args, env = {}) {
@@ -22,34 +21,26 @@ function run(cmd, args, env = {}) {
   });
 }
 
-test('deploy.sh --help documents --via-deployer, --verify and --code-size-limit', () => {
+test('deploy.sh --help documents the local and public targets', () => {
   const r = run('bash', [DEPLOY, '--help']);
   assert.equal(r.status, 0);
-  for (const flag of ['--via-deployer', '--verify', '--code-size-limit', 'ADMIN_TODO']) {
-    assert.match(r.stdout, new RegExp(flag));
+  for (const word of ['--target local\\|public', 'DeployLocal.s.sol', 'Deploy.s.sol', 'GOVERNOR', 'BATCH_VK', '--verify', '--dry-run']) {
+    assert.match(r.stdout, new RegExp(word));
   }
 });
 
-test('deploy.sh rejects a non-numeric --code-size-limit before touching any RPC', () => {
-  const r = run('bash', [DEPLOY, '--via-deployer', '--code-size-limit', 'big', '--rpc-url', 'http://127.0.0.1:1']);
+test('deploy.sh rejects an unknown target before touching any RPC', () => {
+  const r = run('bash', [DEPLOY, '--target', 'l1']);
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr + r.stdout, /--code-size-limit must be a number/);
+  assert.match(r.stderr + r.stdout, /--target must be local or public/);
 });
 
-test('deploy.sh rejects an unknown target with --via-deployer', () => {
-  const r = run('bash', [DEPLOY, '--via-deployer', '--target', 'l3']);
+test('deploy.sh public needs GOVERNOR and BATCH_VK before touching any RPC', () => {
+  const r = run('bash', [DEPLOY, '--target', 'public', '--rpc-url', 'http://127.0.0.1:1']);
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr + r.stdout, /--target must be local, l2, or l1/);
-});
-
-test('deploy-fork-dryrun.sh skips cleanly without MAINNET_FORK_RPC_URL', (t) => {
-  if (spawnSync('bash', ['-lc', 'command -v anvil && command -v cast'], { env: process.env }).status !== 0) {
-    t.skip('foundry not installed');
-    return;
-  }
-  const r = run('bash', [FORK], { MAINNET_FORK_RPC_URL: '' });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout + r.stderr, /skipping the mainnet-fork dry run/);
+  assert.match(r.stderr + r.stdout, /needs GOVERNOR/);
+  const vk = run('bash', [DEPLOY, '--target', 'public', '--rpc-url', 'http://127.0.0.1:1'], { GOVERNOR: `0x${'11'.repeat(20)}` });
+  assert.match(vk.stderr + vk.stdout, /needs BATCH_VK/);
 });
 
 test('verify_targets.py maps CREATE2 children to artifacts and splits constructor args', () => {

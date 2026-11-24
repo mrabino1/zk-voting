@@ -84,28 +84,6 @@ describe('node rolling handover', () => {
     assert.equal(deniedBody.error, 'maintenance handover');
     assert.equal(deniedBody.code, 'STANDBY');
 
-    const block = {
-      hash: '0x' + 'ab'.repeat(32),
-      number: 1,
-      timestamp: 10,
-      transactions: [
-        {
-          hash: '0x' + 'cd'.repeat(32),
-          civicType: 'register',
-          civic: { type: 'register', electionId: '1', identityCommitment: '0xabc' },
-        },
-      ],
-    };
-    const imported = await first.explorer.ingest({ block, source: 'zk-voting-l2' }, 10, 0);
-    assert.equal(imported.duplicate, false);
-    const again = await first.explorer.ingest({ block, source: 'zk-voting-l2' }, 10, 0);
-    assert.equal(again.duplicate, true);
-    assert.equal(again.imported, 0);
-    await assert.rejects(
-      () => second.explorer.ingest({ block, source: 'zk-voting-l2' }, 10, 0),
-      /maintenance handover/,
-    );
-
     first.writer.release();
     assert.equal(second.writer.tryPromote(), true);
     await second.store.reloadFromDisk();

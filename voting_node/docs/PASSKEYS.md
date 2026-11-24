@@ -4,10 +4,12 @@
 
 ZK-Voting voters do not handle seed phrases. A **WebAuthn** credential on the device is the root secret. Two independent derivations are taken from it:
 
-1. An **Ethereum smart-account** key (secp256k1), used only to authorize a UserOperation.
-2. A **ZK identity** `(identityTrapdoor, nullifierSecret)`, used only inside the vote circuit.
+1. An **account** seed, wrapped in IndexedDB and used to sign the voter's own operations.
+2. A **ZK identity** `(identityTrapdoor, nullifierSecret)`: the roll commitment and, per election,
+   the nullifier (`Poseidon(nullifierSecret, electionId)`), for civic votes and polls alike.
 
-The ballot is unlinkable from the smart-account address. L2 gas is **sponsored** (paymaster). This document is the implementation note for that construction; the package map
+The ballot is unlinkable from the account. Voters never pay gas: civic ballots are relayed by the
+Node to the L2 operator, which pays L1 gas for batches. This document is the implementation note for that construction; the package map
 is [`ARCHITECTURE.md`](./ARCHITECTURE.md). **Implemented today** in
 `apps/node/public/passkey-wallet.js`: WebAuthn + PRF wrap of a 32-byte seed in
 IndexedDB. `getAddress()` returns `zk-voting-local-address` (SHA-256 of the seed).
@@ -22,7 +24,7 @@ are **Future** in that helper — it does not ship a curve implementation.
 | --- | --- |
 | Seed phrases in a civic UX | Resident WebAuthn key; nothing to write down. |
 | Malware exfiltrating an unlocked private key | PRF / `hmac-secret` stays in the authenticator. Plaintext secp256k1 is unwrapped only in memory for one signature, then dropped. |
-| “The voter paid gas, so their EOA is next to the ballot” | Bundler submits the UserOp; paymaster pays; vote `msg.sender` is the relayer. |
+| “The voter paid gas, so their EOA is next to the ballot” | The voter never sends a transaction: the Node relays the ballot and the operator pays for the batch. |
 | Linking civil identity → wallet → choice | Wallet is not the Merkle leaf; choice is not a public field. |
 
 The browser never displays a mnemonic. ZK-Voting adds a second PRF domain for the ZK trapdoor so the **account key and the vote identity are not the same bytes**.
@@ -38,17 +40,17 @@ The browser never displays a mnemonic. ZK-Voting adds a second PRF domain for th
 3. `prf.eval` first output → **HKDF-SHA-256** → either:
    - **Wrap** a randomly generated secp256k1 private key (AES-GCM or equivalent) and store the blob in IndexedDB, or
    - **Derive** the secp256k1 key directly from HKDF (simpler; rotation means a new account).
-4. `PasskeyAccountFactory.createAccount(credIdHash, pubX, pubY, salt)` deploys the ERC-4337-style account whose owner is the **P-256 / WebAuthn** public key when the on-chain verifier checks assertions, **or** whose spending key is the wrapped secp256k1, depending on the account flavor in `src/account/`.
+No on-chain account is deployed: the rollup does not need one. An ERC-4337 passkey account is
+**Future**, if a jurisdiction ever wants voters to act on chain directly (for example to force a
+ballot themselves).
 
-ZK-Voting v1 may use secp256k1 inside the account for UserOp signatures (browser `viem` / `noble-curves`) while the WebAuthn assertion is what **unlocks** that key via PRF. A stricter flavor verifies WebAuthn on chain (`PasskeyAccount`). Both are gasless from the voter’s point of view.
-
-### Sign a UserOp
+### Sign
 
 1. `navigator.credentials.get` with `extensions.prf.eval` (same salts).
 2. HKDF → unwrap (or re-derive) secp256k1.
-3. Sign the UserOp hash.
+3. Sign.
 4. **Zero** the key material in memory (overwrite `Uint8Array`, drop closures).
-5. Hand the UserOp to the Node relayer / bundler. The voter does not broadcast from a personal RPC with a funded EOA.
+5. Hand the result to the Node. The voter does not broadcast from a personal RPC with a funded account.
 
 ### Fallback if PRF is unavailable
 
@@ -118,25 +120,18 @@ v1 wraps (single random PRF salt; trapdoor HKDF’d from the account seed) canno
 
 - The demo SPA commitment is **Poseidon(trapdoor, nullifierSecret)** (`poseidonCommitmentHex`), the same leaf as `circuits/identity.circom`. 32-byte HKDF outputs are reduced mod the bn254 scalar field. Foundry `IdentityCommitment.toLeaf` is still keccak for unit-test trees. Do not insert a keccak leaf into a Poseidon tree.
 - Account “address” is still `SHA-256(seed)[0:20]` (`zk-voting-local-address`), not secp256k1/keccak.
-- UserOp stand-in is HMAC-SHA256 of the seed, not an ERC-4337 secp256k1 signature.
+- The account signature is HMAC-SHA256 of the seed, not a secp256k1 signature.
 - When the identity-domain PRF output is missing, the device may still wrap an account seed. It does **not** derive a vote identity from the credential id. Voting throws `IDENTITY_PRF_REQUIRED`.
 - Node HTTP stores the credential id, the COSE public key, and that key's COSE algorithm (`coseAlg`). It does not see PRF output or trapdoors.
 
 ---
 
-## Gasless L2
+## Voters pay no gas
 
-Voters **never pay** ZK-Voting L2 gas. There is no token.
-
-| Piece | Role |
-| --- | --- |
-| `ZkVotingPaymaster` | Sponsors UserOps whose `callData` targets `BallotInbox`, `VoterRegistry.register`, or `PasskeyAccountFactory`. |
-| Bundler / relayer | `msg.sender` on those calls. `RELAYER_ROLE` where the contracts require it. |
-| Jurisdiction | Funds the paymaster **at cost** (sequencer/operator budget). |
-
-If the paymaster is empty, registration and voting stall (liveness). That is an operator problem (`docs/OPERATOR.md`), not a reason to ask voters for ETH.
-
-UserOp `sender` is the passkey account. Inbox events still record the **relayer**, not a “voter EOA voted”. The explorer must not collapse those fields into a public voter profile ([`BLOCK_EXPLORER.md`](./BLOCK_EXPLORER.md)).
+There is no token and no voter fee. The Node account (`ROLLUP_PRIVATE_KEY`) pays for publishing,
+roll sync, relays, close and finalize; the operator (`OPERATOR_PRIVATE_KEY`) pays for batches.
+Both are funded by the jurisdiction **at cost**. If they run dry, the vote stalls (liveness), and
+anyone can still close and finalize on L1. See [`voting_cost_estimate.md`](./voting_cost_estimate.md).
 
 ---
 
@@ -144,21 +139,21 @@ UserOp `sender` is the passkey account. Inbox events still record the **relayer*
 
 A coercer can observe:
 
-- That a passkey account exists (factory event, maybe a registration UserOp).
-- That **some** nullifier appeared in `VoteAccepted`.
-- The encrypted `ballotHash` (not the option).
+- That an identity commitment is on the roll.
+- That **some** nullifier appeared in a batch (civic) or a disclosure block (poll).
+- A hiding commitment or ballot hash (not the option).
 
 They cannot, from chain data alone:
 
-- Map `nullifier` → smart-account address.
-- Map `nullifier` → civil name.
-- Map `ballotHash` → option id.
+- Map a nullifier to the account or the commitment.
+- Map a nullifier to a civil name.
+- Map a ballot to an option.
 - Demand an “I voted for X” receipt from the Node (forbidden).
 
 Caveats (honest, not marketing):
 
 - **Registration UX** still ties a person to a commitment in the clerk’s off-chain file. That is a legal roll, not a public join.
-- **Timing / network metadata** (kiosk IP, bundler logs) can leak if operators keep identifying logs next to UserOp hashes. Do not.
+- **Timing / network metadata** (kiosk IP, proxy logs) can leak if operators keep identifying logs next to the `/vote` request. Do not.
 - **First versions** may be weaker on coercion resistance (a voter might still prove how they voted *off-chain* if they keep the witness). Last-vote-counts / MACI-style messaging is a later upgrade. Passkeys do not by themselves solve vote buying.
 - If PRF is skipped and the same secp256k1 key is used as the trapdoor, unlinkability **collapses**. Do not ship that.
 
@@ -178,7 +173,8 @@ POST /api/auth/web3/login
 POST /api/auth/logout
 POST /api/auth/dev-login              (ALLOW_DEV_LOGIN / NODE_ENV=test only)
 POST /api/elections/:id/register    (after passkey; commitment, not name)
-POST /api/elections/:id/vote        (relays UserOp / proof)
+POST /api/elections/:id/vote-pass   (signed in: blind vote pass)
+POST /api/elections/:id/vote        (no cookies: ballot + pass)
 GET  /api/identity/methods
 POST /api/identity/web3/challenge
 POST /api/identity/web3/verify

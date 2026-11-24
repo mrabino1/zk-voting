@@ -1,15 +1,13 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
-// Public pages + clerk CMS. Fork the Node; pin one shared factory.
+// Public pages + clerk CMS. Fork the Node; settle on the one shared rollup contract.
 
 import { Router } from 'express';
 
 import { requireAuth, requireAnyJurisdictionRole } from '../auth.mjs';
 import {
   SHARED_DEPLOYMENT_NOTE,
-  applySiteContractPins,
+  canEditSiteIdentity,
   canManagePages,
-  canPinContracts,
-  envContractsOf,
   navItemsFromPages,
   pageSummary,
   publicPage,
@@ -38,26 +36,6 @@ function assertCanManage(store, user, page) {
   }
 }
 
-function rejectEnvPinnedContracts(config, contracts) {
-  if (!contracts || typeof contracts !== 'object') return;
-  const env = envContractsOf(config);
-  const labels = {
-    factory: 'ELECTION_FACTORY_ADDRESS',
-    ballotInbox: 'BALLOT_INBOX_ADDRESS',
-    verifier: 'VERIFIER_ADDRESS',
-  };
-  for (const key of ['factory', 'ballotInbox', 'verifier']) {
-    if (contracts[key] == null) continue;
-    if (env[key]) {
-      throw new HttpError(
-        409,
-        `${key} is pinned by ${labels[key]} on this Node. Unset that env var to use the site pin, or keep the shared deploy.`,
-        { field: key, source: 'env' },
-      );
-    }
-  }
-}
-
 export function pagesRouter(deps) {
   const { store, config } = deps;
   const router = Router();
@@ -71,7 +49,6 @@ export function pagesRouter(deps) {
       sharedDeployment: true,
       note: SHARED_DEPLOYMENT_NOTE,
       site: publicSiteView(site, config),
-      contracts: publicSiteView(site, config).contracts,
       pages: published,
       nav: navItemsFromPages(published),
       overlays: {
@@ -115,7 +92,7 @@ export function pagesRouter(deps) {
         nfp: true,
         site: publicSiteView(site, config),
         raw: site,
-        canPinContracts: canPinContracts(req.user),
+        canEditSite: canEditSiteIdentity(req.user),
         note: SHARED_DEPLOYMENT_NOTE,
       });
     }),
@@ -127,26 +104,26 @@ export function pagesRouter(deps) {
     requireAnyJurisdictionRole(store, 'clerk'),
     asyncHandler(async (req, res) => {
       const patch = { ...req.body };
-      if (!canPinContracts(req.user)) {
-        throw new HttpError(403, 'only a platform admin or platform super admin can change site identity and contract pins');
+      if (!canEditSiteIdentity(req.user)) {
+        throw new HttpError(403, 'only a platform admin or platform super admin can change the site title and tagline');
       }
-      if (patch.contracts) {
-        rejectEnvPinnedContracts(config, patch.contracts);
+      if (patch.contracts != null) {
+        throw new HttpError(400, 'contract addresses are not set here: the rollup address comes from ROLLUP_ADDRESS on the host', {
+          code: 'CONTRACTS_FROM_ENV',
+        });
       }
       const site = await store.updateSite(
         {
           title: patch.title,
           tagline: patch.tagline,
-          contracts: patch.contracts,
         },
         req.user,
       );
-      applySiteContractPins(config, site);
       res.json({
         nfp: true,
         ok: true,
         site: publicSiteView(site, config),
-        canPinContracts: canPinContracts(req.user),
+        canEditSite: canEditSiteIdentity(req.user),
         note: SHARED_DEPLOYMENT_NOTE,
       });
     }),
@@ -168,7 +145,7 @@ export function pagesRouter(deps) {
           id: j.id,
           name: j.name,
         })),
-        canPinContracts: canPinContracts(req.user),
+        canEditSite: canEditSiteIdentity(req.user),
         note: SHARED_DEPLOYMENT_NOTE,
       });
     }),

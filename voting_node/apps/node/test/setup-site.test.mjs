@@ -1,6 +1,6 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // First-run setup steps 5–6: site and environment (read-only env, product
-// name) and the L2 identity step. Nothing here may return a secret.
+// name) and the rollup connection step. Nothing here may return a secret.
 
 import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import { createApp } from '../src/server.mjs';
+import { rollupFundingLevel } from '../src/routes/setup.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -192,24 +193,49 @@ describe('first-run setup steps 5–6', () => {
     assert.equal(late.json.code, 'SETUP_COMPLETE');
   });
 
-  test('GET /api/l2/identity never returns the salt, admin secret or submitter key', async () => {
-    const { api } = await boot();
-    const r = await api('GET', '/api/l2/identity');
-    assert.equal(r.status, 200);
-    for (const k of ['l2Salt', 'salt', 'adminSecret', 'privateKey', 'submitterKey']) assert.equal(k in r.json, false, k);
-    assert.equal(typeof r.json.submitterKeySet, 'boolean');
-    assert.equal(typeof r.json.adminWritesEnabled, 'boolean');
+  test('GET /api/setup/rollup is super-admin only and never returns the node key or L2 token', async () => {
+    const key = `0x${'5a'.repeat(32)}`;
+    const { api } = await boot({
+      allowDevLogin: true,
+      rollup: {
+        l1Rpc: 'http://127.0.0.1:9',
+        chainId: 31337,
+        address: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+        privateKey: key,
+        jurisdictionId: '',
+        l2Url: 'http://127.0.0.1:9',
+        l2Token: 'l2-token-secret-value',
+      },
+    });
+    assert.equal((await api('GET', '/api/setup/rollup')).status, 401);
+    const { jar } = await createAdmin(api);
+    const r = await api('GET', '/api/setup/rollup', { jar });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json.configured, true);
+    assert.equal(r.json.keySet, true);
+    assert.match(r.json.nodeAccount, /^0x[0-9a-fA-F]{40}$/);
+    assert.equal(r.json.l2Reachable, false);
+    assert.ok(r.json.problems.some((p) => /ROLLUP_JURISDICTION_ID/.test(p)));
+    assert.ok(r.json.problems.some((p) => /L1 unreachable/.test(p)));
+    assert.ok(!r.text.includes(key.slice(2)), 'node key leaked');
+    assert.ok(!r.text.includes('l2-token-secret-value'), 'L2 token leaked');
   });
 
-  test('setup page wires steps 5–6 with the low-balance warning and l2:identity hints', async () => {
+  test('rollupFundingLevel warns below about 20 L1 calls', () => {
+    const gasPriceWei = 1_000_000_000n; // 1 gwei: 0.0003 ETH a call
+    assert.equal(rollupFundingLevel({ balanceWei: 0n, gasPriceWei }).level, 'empty');
+    assert.equal(rollupFundingLevel({ balanceWei: 300_000n * gasPriceWei * 5n, gasPriceWei }).level, 'low');
+    assert.equal(rollupFundingLevel({ balanceWei: 300_000n * gasPriceWei * 20n, gasPriceWei }).level, 'ok');
+  });
+
+  test('setup page wires steps 5–6 with the rollup connection and low-balance warning', async () => {
     const app = await readFile(path.join(here, '../public/app.js'), 'utf8');
     assert.match(app, /import \{ siteSetupSteps \} from "\.\/setup-site\.js"/);
     const steps = await readFile(path.join(here, '../public/setup-site.js'), 'utf8');
-    assert.match(steps, /export const siteSetupSteps = \[siteStep, l2Step\]/);
-    assert.match(steps, /\/api\/l2\/identity\$\{funding \? "\?funding=1" : ""\}/);
+    assert.match(steps, /export const siteSetupSteps = \[siteStep, rollupStep\]/);
+    assert.match(steps, /\/api\/setup\/rollup/);
     assert.match(steps, /Warning: L1 balance/);
-    assert.match(steps, /npm run l2:identity -- check-funding/);
-    assert.doesNotMatch(steps, /L2_SALT"\s*\]|\.l2Salt|adminSecret\b/);
+    assert.doesNotMatch(steps, /\/api\/l2\/identity|L2_SALT|adminSecret\b/);
     assert.match(steps, /\/api\/setup\/site/);
   });
 });
