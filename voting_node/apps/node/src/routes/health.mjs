@@ -12,10 +12,26 @@ import { SHARED_DEPLOYMENT_NOTE } from '../cms.mjs';
 import { listAggregators } from '../guardians/aggregate.mjs';
 import { pingDatabase } from '../db.mjs';
 
+async function l2Probe(deps) {
+  const rollup = deps.rollup;
+  if (!rollup?.enabled) return { status: 'unconfigured', reason: null };
+  if (typeof rollup.l2Health !== 'function') return { status: 'unknown', reason: null };
+  try {
+    const body = await rollup.l2Health();
+    const status = ['ok', 'degraded', 'starting', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
+      ? body.status
+      : 'unknown';
+    const reason = typeof body?.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(body.reason) ? body.reason : null;
+    return { status, reason: status === 'ok' ? null : reason };
+  } catch {
+    return { status: 'unreachable', reason: 'unreachable' };
+  }
+}
+
 export function healthRouter(deps) {
   const router = Router();
   router.get(['/health', '/api/health'], asyncHandler(async (req, res) => {
-    const db = await pingDatabase(deps.config);
+    const [db, l2] = await Promise.all([pingDatabase(deps.config), l2Probe(deps)]);
     db.backend = deps.store?.backend || db.backend;
     const now = deps.config.nowFn();
     const acceptedBallotsDisclosed = deps.store?.publishedAcceptedBallotsAll
@@ -40,6 +56,7 @@ export function healthRouter(deps) {
       voteFqdn: deps.config.voteFqdn || null,
       sharedDeployment: true,
       rollupConfigured: Boolean(deps.rollup?.enabled),
+      l2,
       disclosure: publicDisclosureView(now, deps.config.disclosureIntervalSeconds, {
         delaySeconds: deps.config.disclosureDelaySeconds,
         resultsMinVotes: deps.config.resultsMinVotes,

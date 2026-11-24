@@ -96,6 +96,7 @@ Civic votes settle on ZkVotingRollup, one L1 contract shared by every jurisdicti
 | `L2_URL` | `http://l2:8546` | Where the node reaches the operator. |
 | `OPERATOR_PRIVATE_KEY` | Anvil key 1 | **Secret.** The L2 operator, registered with `setOperator`; pays L1 gas for batches. |
 | `L2_BATCH_SECONDS` | `10` | How often the operator checks for work. |
+| `L2_ALLOW_DEGRADED` | empty (off) | `1`: if the rollup is not usable at startup (genesis missing, rollup address or operator key missing or unusable, L1 chain id check failed, or no batch prover), the operator stays up. `/health` is HTTP 200 with `status: "degraded"` and a short `reason`, and init is retried. It does not batch or submit to L1 until init succeeds. Empty or `false` (the default) keeps the fail-fast exit, so a misconfigured operator does not look healthy. Set this when the stack should stay up while L1 is still coming online. The node stays up either way and shows the same status on its own `/health` (`l2.status`) and in diagnostics. |
 | `L2_BATCH_MAX_WAIT_SECONDS` | 0 on chain 31337, 600 elsewhere | How long ballots may wait for a fuller batch. Each batch costs L1 gas; a full batch (256 ballots), a waiting roll change or close, or an approaching cutoff seals at once. |
 | `L2_RPC_PORT`, `L2_RPC_BIND` | `8546`, `127.0.0.1` | Host port and interface for the operator. Its reads (`/v1/status`, `/v1/batches`) are public; the ballot API needs `L2_BALLOT_TOKEN`. |
 | `L1_RPC_PORT` | `8545` | Host loopback port of the local chain. |

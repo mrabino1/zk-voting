@@ -457,10 +457,30 @@ async function rollupSetupStatus(deps) {
     out.problems.push(`L1 unreachable: ${err?.shortMessage || err?.message || 'error'}`);
   }
   try {
-    out.l2Reachable = Boolean(await client.l2Status());
-  } catch {
+    if (typeof client.l2Health === 'function') {
+      const health = await client.l2Health();
+      const status = health?.status || 'unreachable';
+      const reason = typeof health?.reason === 'string' ? health.reason : null;
+      out.l2 = { status, reason };
+      out.l2Reachable = status === 'ok';
+      if (status === 'degraded') {
+        out.problems.push(`the L2 operator is degraded (${reason || 'degraded'})`);
+      } else if (status === 'starting') {
+        out.problems.push('the L2 operator is still starting');
+      } else if (status !== 'ok') {
+        out.problems.push('the L2 operator is unreachable at L2_URL');
+      }
+    } else {
+      out.l2Reachable = Boolean(await client.l2Status());
+    }
+  } catch (err) {
     out.l2Reachable = false;
-    out.problems.push('the L2 operator is unreachable at L2_URL');
+    if (err?.code === 'L2_DEGRADED') {
+      out.l2 = { status: 'degraded', reason: err.reason || 'degraded' };
+      out.problems.push(err.message);
+    } else {
+      out.problems.push('the L2 operator is unreachable at L2_URL');
+    }
   }
   return out;
 }

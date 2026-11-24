@@ -220,12 +220,29 @@ export function userDiag(store, handle) {
   return { nfp: true, user: maskedUser(user) };
 }
 
-export function l2Diag(deps) {
+async function operatorProbe(deps) {
+  const rollup = deps.rollup;
+  if (!rollup?.enabled) return { status: 'unconfigured', reason: null };
+  if (typeof rollup.l2Health !== 'function') return { status: 'unknown', reason: null };
+  try {
+    const body = await rollup.l2Health();
+    const status = ['ok', 'degraded', 'starting', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
+      ? body.status
+      : 'unknown';
+    const reason = typeof body?.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(body.reason) ? body.reason : null;
+    return { status, reason: status === 'ok' ? null : reason };
+  } catch {
+    return { status: 'unreachable', reason: 'unreachable' };
+  }
+}
+
+export async function l2Diag(deps) {
   const chain = deps.explorer?.chain || {};
   const now = Number(deps.config?.nowFn?.() || Math.floor(Date.now() / 1000));
   const blocks = Array.isArray(chain.blocks) ? chain.blocks : [];
   const head = blocks.length ? blocks[blocks.length - 1] : null;
   const headTs = Number(head?.timestamp || 0);
+  const operator = await operatorProbe(deps);
   return {
     nfp: true,
     node: {
@@ -239,6 +256,7 @@ export function l2Diag(deps) {
       chainId: deps.rollup?.client?.chainId || null,
       l2Url: deps.config.rollup?.l2Url || null,
     },
+    operator,
     explorer: {
       height: blocks.length,
       headTimestamp: headTs || null,

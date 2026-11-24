@@ -52,51 +52,75 @@ function bearerOk(req, token) {
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
+function safeReason(reason) {
+  const text = String(reason || '');
+  return /^[a-z][a-z0-9_]{0,63}$/.test(text) ? text : 'degraded';
+}
+
 /**
- * @param {import('./operator.mjs').Operator} operator
- * @param {{ ballotToken?: string }} [opts] when set, POST /v1/ballots needs `Authorization: Bearer <token>`
+ * @param {import('./operator.mjs').Operator | null} operator
+ * @param {{ ballotToken?: string, gate?: { health: () => object, operator: () => object | null } }} [opts]
+ *        when `ballotToken` is set, POST /v1/ballots needs `Authorization: Bearer <token>`
  *        (the node submits on behalf of voters it has authenticated).
+ *        `gate` serves /health before rollup init and answers other routes with 503 while degraded.
  */
-export function createApi(operator, { ballotToken } = {}) {
+export function createApi(operator, { ballotToken, gate } = {}) {
+  const live = () => {
+    if (!gate) return operator;
+    const current = gate.operator();
+    if (!current) {
+      const snap = gate.health();
+      throw Object.assign(new Error('the L2 operator is degraded'), {
+        status: 503,
+        degraded: true,
+        reason: snap.reason || (snap.status === 'starting' ? 'starting' : 'degraded'),
+      });
+    }
+    return current;
+  };
+
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://l2');
       const parts = url.pathname.split('/').filter(Boolean);
 
       if (req.method === 'GET' && url.pathname === '/health') {
-        return send(res, 200, { ok: true, ...operator.status() });
+        if (gate) return send(res, 200, gate.health());
+        return send(res, 200, { ok: true, status: 'ok', ...operator.status() });
       }
       if (req.method === 'GET' && url.pathname === '/v1/status') {
-        return send(res, 200, operator.status());
+        return send(res, 200, live().status());
       }
       if (req.method === 'GET' && url.pathname === '/v1/batches') {
         const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 50, 1), 500);
-        const batches = operator.batches.slice(-limit).reverse().map(({ included, ...b }) => b);
+        const batches = live().batches.slice(-limit).reverse().map(({ included, ...b }) => b);
         return send(res, 200, { batches });
       }
       if (req.method === 'GET' && parts[0] === 'v1' && parts[1] === 'elections' && parts[2]) {
+        const current = live();
         const id = Number(parts[2]);
         if (parts.length === 3) {
-          const view = operator.state.publicView(id);
+          const view = current.state.publicView(id);
           return view ? send(res, 200, view) : send(res, 404, { error: 'unknown election' });
         }
         if (parts[3] === 'roll' && parts[4]) {
-          const path = operator.state.rollPath(id, BigInt(parts[4]));
+          const path = current.state.rollPath(id, BigInt(parts[4]));
           return path ? send(res, 200, path) : send(res, 404, { error: 'not on the roll' });
         }
         if (parts[3] === 'desert-proof') {
-          if (!operator.desert) return send(res, 409, { error: 'only available in desert mode' });
-          return send(res, 200, operator.state.desertProof(id));
+          if (!current.desert) return send(res, 409, { error: 'only available in desert mode' });
+          return send(res, 200, current.state.desertProof(id));
         }
       }
       if (req.method === 'GET' && parts[0] === 'v1' && parts[1] === 'receipts' && parts[3]) {
-        const r = operator.receipt(Number(parts[2]), BigInt(parts[3]));
+        const r = live().receipt(Number(parts[2]), BigInt(parts[3]));
         return r ? send(res, 200, r) : send(res, 404, { error: 'no ballot under this nullifier' });
       }
       if (req.method === 'POST' && url.pathname === '/v1/ballots') {
         if (!bearerOk(req, ballotToken)) return send(res, 401, { error: 'unauthorized' });
+        const current = live();
         const body = fromJSONSafe(await readJson(req));
-        const receipt = await operator.submitBallot({
+        const receipt = await current.submitBallot({
           electionId: Number(body.electionId),
           nullifier: BigInt(body.nullifier),
           ciphertexts: body.ciphertexts,
@@ -107,6 +131,13 @@ export function createApi(operator, { ballotToken } = {}) {
       }
       return send(res, 404, { error: 'not found' });
     } catch (err) {
+      if (err.degraded) {
+        return send(res, 503, {
+          error: 'the L2 operator is degraded',
+          status: 'degraded',
+          reason: safeReason(err.reason),
+        });
+      }
       const status = err.status || 500;
       return send(res, status, { error: status === 500 ? 'internal error' : redactL1RpcAuth(err.message) });
     }
