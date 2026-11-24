@@ -33,17 +33,26 @@
 //   L2_STANDBY_WHEN_UNCONFIGURED=true  opt-in, and only when L2_ALLOW_DEGRADED is off
 
 import { createRequire } from 'node:module';
-import { allowDegraded, startOperator } from './boot.mjs';
+import { allowDegraded, startOperator, redactOperatorLog } from './boot.mjs';
 import { redactL1RpcAuth } from '../l1RpcAuth.js';
-import { createL1, readL1ChainId } from './l1.mjs';
-import { Operator } from './operator.mjs';
 import { createApi, createStandbyApi } from './server.mjs';
+
+// First line before loading l1.mjs (viem): names only, never RPC/key/token values.
+{
+  const has = (name) => (String(process.env[name] || '').trim() ? 'set' : 'unset');
+  const names = ['L1_RPC', 'L1_RPC_AUTH_TOKEN', 'L1_CHAIN_ID', 'ROLLUP_ADDRESS', 'ROLLUP_DEPLOYMENT_FILE', 'OPERATOR_PRIVATE_KEY'];
+  console.log(
+    `zk-voting l2 starting: node ${process.version}, degraded mode ${allowDegraded(process.env) ? 'on' : 'off'},`,
+    `standby flag ${has('L2_STANDBY_WHEN_UNCONFIGURED')},`,
+    names.map((n) => `${n} ${has(n)}`).join(', '),
+  );
+}
 
 if (allowDegraded(process.env)) {
   try {
     await startOperator({ env: process.env });
   } catch (err) {
-    console.error(err?.message || 'L2 operator failed to listen');
+    console.error('L2 operator failed to listen:', redactOperatorLog(err?.message || 'unknown error'));
     process.exit(2);
   }
 } else {
@@ -71,6 +80,8 @@ if (allowDegraded(process.env)) {
   let chainId = env.L1_CHAIN_ID ? Number(env.L1_CHAIN_ID) : null;
 
   async function start() {
+    const { createL1, readL1ChainId } = await import('./l1.mjs');
+    const { Operator } = await import('./operator.mjs');
     let deployment;
     try {
       deployment = readDeployment(env.ROLLUP_DEPLOYMENT_FILE);
@@ -133,7 +144,10 @@ if (allowDegraded(process.env)) {
   try {
     started = await start();
   } catch (err) {
-    if (!(err instanceof Unusable)) throw err;
+    if (!(err instanceof Unusable)) {
+      console.error('L2 startup failed:', redactOperatorLog(err?.message || 'unknown error', env));
+      throw err;
+    }
     const reason = redactL1RpcAuth(err.message, env);
     if (!standbyAllowed) refuse(reason);
     // Standby: liveness only. No Operator, no batch loop, no L1 writes.

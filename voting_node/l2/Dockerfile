@@ -16,6 +16,8 @@ RUN apt-get update \
 
 # The operator imports the ballot cryptography and the contract ABIs by relative
 # path (../../apps/node/public, ../../packages/chain-client); keep that layout.
+# ESM `import 'viem'` ignores NODE_PATH, so /node_modules links to /opt/deps/node_modules
+# (resolution walks up from /l2/rollup to /node_modules). NODE_PATH stays for require().
 COPY l2/ /l2/
 COPY apps/node/public/ballot-crypto.js apps/node/public/keccak.js apps/node/public/poseidon.js /apps/node/public/
 COPY packages/chain-client/ /packages/chain-client/
@@ -25,10 +27,11 @@ RUN mkdir -p /opt/deps /data \
     && cd /opt/deps \
     && npm init -y >/dev/null \
     && npm install --omit=dev --no-audit --no-fund viem@2.56.5 \
+    && ln -s /opt/deps/node_modules /node_modules \
     && printf '{"type":"module"}\n' > /apps/node/package.json \
     && chmod 755 /usr/local/bin/docker-entrypoint.sh \
     && chown -R node:node /l2 /apps /packages /data /opt/deps \
-    && node --input-type=module -e "await import('/l2/rollup/operator.mjs')"
+    && node --input-type=module -e "await import('/l2/rollup/operator.mjs'); await import('/l2/rollup/l1.mjs'); await import('/l2/rollup/server.mjs'); await import('/l2/rollup/boot.mjs')"
 
 WORKDIR /l2
 # Stay root so the entrypoint can hand a fresh volume to the node user, then drop it.
