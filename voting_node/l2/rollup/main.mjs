@@ -2,13 +2,17 @@
 // NOT FOR PROFIT — civic public good, not a commercial product.
 // Run the L2 operator: follow ZkVotingRollup on L1, accept ballots, settle batches.
 //
-// The HTTP server listens before Operator.init and before any L1 read. Startup
-// checks (missing or unusable ROLLUP_ADDRESS / OPERATOR_PRIVATE_KEY, L1 chain
-// id, rollup genesis, batch prover) still stop the process unless
-// L2_ALLOW_DEGRADED is 1, true, yes, or on. That flag is off by default:
-// empty or false keeps this fail-fast exit. When it is on, /health stays
-// HTTP 200 with status "degraded" and init is retried. Nothing is batched,
-// proved, or submitted to L1 until init succeeds.
+// Two opt-in flags, both off by default. They do not combine.
+//   L2_ALLOW_DEGRADED=1            listen first, then retry init. /health is
+//                                  "degraded" until the rollup is usable. This
+//                                  path owns the process when the flag is on,
+//                                  including safety failures that the standby
+//                                  path would exit on.
+//   L2_STANDBY_WHEN_UNCONFIGURED   only when L2_ALLOW_DEGRADED is off. Stay up
+//                                  with /health status "standby" and do not
+//                                  retry. Restart l2 after the rollup is fixed.
+//                                  Safety refusals still exit.
+// With both flags off, startup checks still exit the process.
 //
 // Environment:
 //   L1_RPC                     L1 JSON-RPC (Anvil locally)
@@ -24,14 +28,133 @@
 //   L2_BATCH_MAX_WAIT_SECONDS  how long ballots may wait for a fuller batch (default 0 on
 //                              chain 31337, 600 elsewhere); each batch costs L1 gas
 //   L2_BALLOT_TOKEN            bearer token the node uses to submit ballots
-//   L2_ALLOW_DEGRADED          empty/false: exit if startup checks fail. 1: stay up and retry
+//   L2_ALLOW_DEGRADED          empty/false: this path is off. 1: stay up and retry
 //   ZK_VOTING_ALLOW_MOCK_PROOFS=1  accept ballots without an eligibility proof (local only)
+//   L2_STANDBY_WHEN_UNCONFIGURED=true  opt-in, and only when L2_ALLOW_DEGRADED is off
 
-import { startOperator } from './boot.mjs';
+import { createRequire } from 'node:module';
+import { allowDegraded, startOperator } from './boot.mjs';
+import { redactL1RpcAuth } from '../l1RpcAuth.js';
+import { createL1, readL1ChainId } from './l1.mjs';
+import { Operator } from './operator.mjs';
+import { createApi, createStandbyApi } from './server.mjs';
 
-try {
-  await startOperator({ env: process.env });
-} catch (err) {
-  console.error(err?.message || 'L2 operator failed to listen');
-  process.exit(2);
+if (allowDegraded(process.env)) {
+  try {
+    await startOperator({ env: process.env });
+  } catch (err) {
+    console.error(err?.message || 'L2 operator failed to listen');
+    process.exit(2);
+  }
+} else {
+  const env = process.env;
+  const host = env.L2_RPC_HOST || '127.0.0.1';
+  const port = Number(env.L2_RPC_PORT || 8546);
+  const standbyAllowed = /^(1|true|yes|on)$/i.test(String(env.L2_STANDBY_WHEN_UNCONFIGURED || '').trim());
+  const log = (...a) => console.log(new Date().toISOString(), ...a);
+
+  /** A safety refusal: always exits, standby or not. */
+  const refuse = (message) => {
+    console.error(message);
+    process.exit(2);
+  };
+
+  /** The rollup is not usable. Exit as before, or (opt-in) stay up in standby. */
+  class Unusable extends Error {}
+  const need = (name) => {
+    if (!env[name]) throw new Unusable(`${name} is required`);
+    return env[name];
+  };
+
+  const { assertKeyAllowedOnChain, readDeployment } = createRequire(import.meta.url)('../../packages/chain-client/index.js');
+  const allowMockProofs = env.ZK_VOTING_ALLOW_MOCK_PROOFS === '1';
+  let chainId = env.L1_CHAIN_ID ? Number(env.L1_CHAIN_ID) : null;
+
+  async function start() {
+    let deployment;
+    try {
+      deployment = readDeployment(env.ROLLUP_DEPLOYMENT_FILE);
+    } catch (err) {
+      throw new Unusable(err.message);
+    }
+    if (env.ROLLUP_DEPLOYMENT_FILE && !deployment) {
+      throw new Unusable(`ROLLUP_DEPLOYMENT_FILE ${env.ROLLUP_DEPLOYMENT_FILE} does not exist yet`);
+    }
+    if (!env.ROLLUP_ADDRESS && deployment) env.ROLLUP_ADDRESS = deployment.rollup;
+
+    const rpcUrl = need('L1_RPC');
+    if (chainId == null) {
+      try {
+        chainId = Number(await readL1ChainId(rpcUrl, env));
+      } catch (err) {
+        throw new Unusable(`L1 chain id unavailable: ${err.shortMessage || err.message}`);
+      }
+    }
+    try {
+      assertKeyAllowedOnChain(env.OPERATOR_PRIVATE_KEY, chainId, 'OPERATOR_PRIVATE_KEY');
+    } catch (err) {
+      refuse(err.message);
+    }
+    if (allowMockProofs && chainId !== 31337) refuse('ZK_VOTING_ALLOW_MOCK_PROOFS is for chain 31337 only');
+
+    const l1 = createL1({ rpcUrl, chainId, rollup: need('ROLLUP_ADDRESS'), privateKey: need('OPERATOR_PRIVATE_KEY') });
+    let operator;
+    try {
+      operator = await new Operator({
+        l1,
+        chainId,
+        dataDir: env.L2_DATA_DIR || './data',
+        allowMockProofs,
+        batchMaxWaitSeconds:
+          env.L2_BATCH_MAX_WAIT_SECONDS != null && env.L2_BATCH_MAX_WAIT_SECONDS !== ''
+            ? Number(env.L2_BATCH_MAX_WAIT_SECONDS)
+            : chainId === 31337
+              ? 0
+              : 600,
+        log,
+      }).init();
+    } catch (err) {
+      if (!standbyAllowed) throw err;
+      throw new Unusable(`rollup at ${l1.address} is not usable: ${err.shortMessage || err.message}`);
+    }
+
+    let mock;
+    try {
+      mock = await l1.isMockVerifier();
+    } catch (err) {
+      if (!standbyAllowed) throw err;
+      throw new Unusable(`cannot read the rollup's batch verifier: ${err.shortMessage || err.message}`);
+    }
+    if (!mock) throw new Unusable('This operator has no batch prover yet; it can only settle against MockBatchVerifier.');
+    return { l1, operator };
+  }
+
+  let started;
+  try {
+    started = await start();
+  } catch (err) {
+    if (!(err instanceof Unusable)) throw err;
+    const reason = redactL1RpcAuth(err.message, env);
+    if (!standbyAllowed) refuse(reason);
+    // Standby: liveness only. No Operator, no batch loop, no L1 writes.
+    console.error(`L2 STANDBY (not ready): ${reason}`);
+    console.error('L2 STANDBY: no ballots are accepted and nothing is sent to L1. Fix the rollup settings and restart l2.');
+    createStandbyApi({ reason, chainId: Number.isFinite(chainId) ? chainId : null, rollup: env.ROLLUP_ADDRESS || null }).listen(
+      port,
+      host,
+      () => log(`L2 operator in STANDBY on http://${host}:${port} (/health answers status "standby")`),
+    );
+  }
+
+  if (started) {
+    const { l1, operator } = started;
+    createApi(operator, { ballotToken: env.L2_BALLOT_TOKEN }).listen(port, host, () => {
+      console.log(`L2 operator for ${l1.address} on http://${host}:${port}`);
+    });
+
+    const interval = Math.max(1, Number(env.L2_BATCH_SECONDS || 10)) * 1000;
+    setInterval(() => {
+      operator.tick().catch((err) => console.error('batch failed:', redactL1RpcAuth(err.shortMessage || err.message, env)));
+    }, interval);
+  }
 }

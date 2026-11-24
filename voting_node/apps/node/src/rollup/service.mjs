@@ -68,7 +68,7 @@ export class RollupService {
     if (typeof this.client.l2Health !== 'function') return { status: 'unknown', reason: null };
     try {
       const body = await this.client.l2Health();
-      const status = ['ok', 'degraded', 'starting', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
+      const status = ['ok', 'degraded', 'starting', 'standby', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
         ? body.status
         : 'unknown';
       const reason = typeof body?.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(body.reason) ? body.reason : null;

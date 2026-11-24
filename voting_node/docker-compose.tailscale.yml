@@ -155,8 +155,14 @@ services:
       ZK_VOTING_ALLOW_MOCK_PROOFS: ${ZK_VOTING_ALLOW_MOCK_PROOFS:-}
       # Empty or false (default): exit if genesis, the key, the chain id, or the
       # batch prover is not usable. 1: stay up, serve /health as degraded, and
-      # retry. No batches are submitted until init succeeds.
+      # retry. No batches are submitted until init succeeds. When this is set,
+      # it takes the process and L2_STANDBY_WHEN_UNCONFIGURED is not used.
       L2_ALLOW_DEGRADED: ${L2_ALLOW_DEGRADED:-}
+      # Opt-in, and only when L2_ALLOW_DEGRADED is off. true: when the rollup is
+      # not usable yet (unset, no genesis, no batch prover for this chain), stay
+      # up in standby (/health status "standby") instead of exiting. Standby
+      # accepts no ballots and sends nothing to L1. Empty keeps the exit.
+      L2_STANDBY_WHEN_UNCONFIGURED: ${L2_STANDBY_WHEN_UNCONFIGURED:-}
     volumes:
       - l2-data:/data
       - l1-deployment:/deployments:ro

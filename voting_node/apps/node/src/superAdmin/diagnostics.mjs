@@ -226,7 +226,7 @@ async function operatorProbe(deps) {
   if (typeof rollup.l2Health !== 'function') return { status: 'unknown', reason: null };
   try {
     const body = await rollup.l2Health();
-    const status = ['ok', 'degraded', 'starting', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
+    const status = ['ok', 'degraded', 'starting', 'standby', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
       ? body.status
       : 'unknown';
     const reason = typeof body?.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(body.reason) ? body.reason : null;

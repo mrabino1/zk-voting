@@ -467,6 +467,8 @@ async function rollupSetupStatus(deps) {
         out.problems.push(`the L2 operator is degraded (${reason || 'degraded'})`);
       } else if (status === 'starting') {
         out.problems.push('the L2 operator is still starting');
+      } else if (status === 'standby') {
+        out.problems.push('the L2 operator is in standby');
       } else if (status !== 'ok') {
         out.problems.push('the L2 operator is unreachable at L2_URL');
       }

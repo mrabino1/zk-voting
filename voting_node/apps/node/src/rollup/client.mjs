@@ -143,6 +143,9 @@ export function createRollupClient(cfg, { fetchImpl = globalThis.fetch } = {}) {
         { status: 503, code: 'L2_DEGRADED', reason },
       );
     }
+    if (json.status === 'standby') {
+      throw new RollupError('the L2 operator is in standby', { status: 503, code: 'L2_REJECTED' });
+    }
     if (!res.ok) {
       throw new RollupError(redactL1RpcAuth(json.error || `L2 answered ${res.status}`, authEnv), {
         status: res.status,
@@ -230,7 +233,7 @@ export function createRollupClient(cfg, { fetchImpl = globalThis.fetch } = {}) {
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) return { status: 'unreachable', reason: 'unreachable' };
-        if (json.status === 'degraded' || json.status === 'starting') {
+        if (json.status === 'degraded' || json.status === 'starting' || json.status === 'standby') {
           const reason = safeReason(json.reason) || json.status;
           return { status: json.status, reason };
         }

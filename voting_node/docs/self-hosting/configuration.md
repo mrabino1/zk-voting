@@ -101,6 +101,7 @@ Civic votes settle on ZkVotingRollup, one L1 contract shared by every jurisdicti
 | `L2_RPC_PORT`, `L2_RPC_BIND` | `8546`, `127.0.0.1` | Host port and interface for the operator. Its reads (`/v1/status`, `/v1/batches`) are public; the ballot API needs `L2_BALLOT_TOKEN`. |
 | `L1_RPC_PORT` | `8545` | Host loopback port of the local chain. |
 | `ZK_VOTING_ALLOW_MOCK_PROOFS` | `1` on the local stack | Chain 31337 only: the operator accepts ballots without a zero-knowledge eligibility proof (the node's vote pass still gates them). Refused on any other chain. |
+| `L2_STANDBY_WHEN_UNCONFIGURED` | empty | `true`, and only when `L2_ALLOW_DEGRADED` is off: if the rollup is not usable yet (unset, no genesis on L1, L1 unreachable, or no batch prover for the chain), the operator stays up in standby instead of exiting. `/health` answers 200 with `"status":"standby"` and a `reason`; every other route answers 503, so ballots are refused and nothing is sent to L1. It does not retry. Safety refusals still exit. Restart `l2` after configuring the rollup. |
 
 ## Polls and disclosure
 
