@@ -34,7 +34,13 @@ function parsePoint(raw, what) {
 }
 
 function asHttp(err) {
-  if (err instanceof RollupError) throw new HttpError(err.status, err.message, { code: err.code });
+  if (err instanceof RollupError) {
+    throw new HttpError(err.status, err.message, {
+      code: err.code,
+      ...(err.reason ? { reason: err.reason } : {}),
+      ...(err.code === 'L2_DEGRADED' ? { mode: 'degraded' } : {}),
+    });
+  }
   throw err;
 }
 
@@ -54,6 +60,22 @@ export class RollupService {
 
   get enabled() {
     return Boolean(this.client);
+  }
+
+  /** L2 /health. Never throws. `unconfigured` when this node has no rollup client. */
+  async l2Health() {
+    if (!this.client) return { status: 'unconfigured', reason: null };
+    if (typeof this.client.l2Health !== 'function') return { status: 'unknown', reason: null };
+    try {
+      const body = await this.client.l2Health();
+      const status = ['ok', 'degraded', 'starting', 'standby', 'unreachable', 'unconfigured', 'unknown'].includes(body?.status)
+        ? body.status
+        : 'unknown';
+      const reason = typeof body?.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(body.reason) ? body.reason : null;
+      return { status, reason: status === 'ok' ? null : reason };
+    } catch {
+      return { status: 'unreachable', reason: 'unreachable' };
+    }
   }
 
   requireEnabled() {

@@ -65,7 +65,7 @@ The Compose file already defines health checks for `node` and `l2` (a Node.js `f
 
 Do **not** require `"mode":"active"`. A new container starts in standby during a rolling update and would never pass. See [Rolling updates](./rolling-updates.md).
 
-`dependency failed to start: container l2-... is unhealthy` means the rollup operator never answered `GET /health` on port 8546. The node waits for it, so it does not start either. Leave Coolify's own HTTP check on the **node** service (path `/health`, port 3000). Do not point it at `l2`. After a failed deploy, the l2 container log is the next place to look. Common causes: a missing `OPERATOR_PRIVATE_KEY` or `L2_BALLOT_TOKEN`, an L1 RPC on the wrong chain, or a test key on a public chain (all refused at start).
+`dependency failed to start: container l2-... is unhealthy` means the rollup operator never answered `GET /health` on port 8546. The node waits for it, so it does not start either. Leave Coolify's own HTTP check on the **node** service (path `/health`, port 3000). Do not point it at `l2`. After a failed deploy, the l2 container log is the next place to look. With `L2_ALLOW_DEGRADED` left empty, a missing `OPERATOR_PRIVATE_KEY`, an L1 RPC on the wrong chain, or a test key on a public chain still exits the process at start. Set `L2_ALLOW_DEGRADED=1` to keep the operator up in degraded mode (`/health` stays HTTP 200 with `"status": "degraded"`) while that is being fixed. It does not submit batches until init succeeds.
 
 ## 5. Deploy
 

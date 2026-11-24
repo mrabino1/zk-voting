@@ -28,7 +28,8 @@ per-option sum, carried in the CLOSE response that L1 hands to the guardians.
 
 | Request | Answer |
 | --- | --- |
-| `GET /health`, `GET /v1/status` | L1 rollup, last batch, state root, queued requests, desert mode |
+| `GET /health` | HTTP 200. `status` is `ok` once the rollup is ready, `starting` before the first init attempt finishes, or `degraded` with a short `reason` when `L2_ALLOW_DEGRADED` is on and startup failed |
+| `GET /v1/status` | L1 rollup, last batch, state root, queued requests, desert mode. HTTP 503 with `status: "degraded"` until the rollup is ready |
 | `GET /v1/batches?limit=50` | Recent batches: number, time, root, commitment, op counts, L1 transactions |
 | `GET /v1/elections/:id` | Window, joint key, roll size and root, nullifier root; ballot count only after close |
 | `GET /v1/elections/:id/roll/:commitment` | Membership path for a voter's ballot proof |
@@ -70,8 +71,9 @@ npm run l2:operator
 | `L2_RPC_HOST`, `L2_RPC_PORT` | `127.0.0.1`, `8546` | API bind |
 | `L2_BATCH_SECONDS` | `10` | Batch interval |
 | `L2_BALLOT_TOKEN` | unset | Bearer token for `POST /v1/ballots` |
+| `L2_ALLOW_DEGRADED` | empty (off) | `1`, `true`, `yes`, or `on`: if genesis is missing, the rollup address or operator key is missing or unusable, the L1 chain id check fails, or there is no batch prover, stay up instead of exiting. `/health` is HTTP 200 with `status: "degraded"` and a short `reason`. The process does not batch, prove, or submit to L1, and it retries init (2s, then 4s, 8s, 16s, capped at 30s) until that succeeds. Empty, `false`, `0`, or `off` keeps the fail-fast exit. Set it when the stack should stay up while L1 is still coming online. |
 | `ZK_VOTING_ALLOW_MOCK_PROOFS` | unset | `1`: accept ballots without an eligibility proof (chain 31337 only) |
-| `L2_STANDBY_WHEN_UNCONFIGURED` | unset | `true`: when the rollup is not usable (unset, no genesis, L1 unreachable, no batch prover), serve `/health` as `"status":"standby"` and 503 elsewhere instead of exiting. No ballots, batches or L1 transactions |
+| `L2_STANDBY_WHEN_UNCONFIGURED` | unset | `true`, and only when `L2_ALLOW_DEGRADED` is off: when the rollup is not usable (unset, no genesis, L1 unreachable, no batch prover), serve `/health` as `"status":"standby"` and 503 elsewhere instead of exiting. No ballots, batches, L1 transactions, or retry. Restart `l2` after fixing the rollup |
 
 ## Test
 
@@ -80,6 +82,15 @@ npm run test:l2          # vectors, state rules, and the end-to-end run on Anvil
 npm run fixture:contracts   # regenerate the JS election that smart-contracts/test/CrossLanguage.t.sol settles
 ```
 
+With `L2_ALLOW_DEGRADED` on, the HTTP server listens before `Operator.init` and before any
+L1 read, so `/health` answers while startup is still in progress (`status: "starting"`).
+That flag takes the process. `L2_STANDBY_WHEN_UNCONFIGURED` applies only when
+`L2_ALLOW_DEGRADED` is off: the operator then stays in standby without retrying, and a
+restart is required after the rollup is fixed.
+
 The batch validity circuit is not built yet. The operator therefore settles only against
-`MockBatchVerifier`, which the contract accepts only on chain 31337. `main.mjs` refuses to
-start against a real verifier until a prover exists.
+`MockBatchVerifier`, which the contract accepts only on chain 31337. With both flags off,
+`main.mjs` exits if that verifier is not the one on L1, or if another startup check fails.
+With `L2_ALLOW_DEGRADED` on, it stays in degraded mode (no L1 submissions) and retries. Routes that need the rollup answer HTTP 503 with `status: "degraded"` and the same
+`reason` `/health` reports. The warning line names that reason and does not include the
+operator key, `L1_RPC_AUTH_TOKEN`, or an RPC URL that carries credentials.
